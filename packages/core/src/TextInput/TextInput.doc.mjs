@@ -10,9 +10,9 @@ export const docs = {
   props: [
     {
       name: 'type',
-      type: "'text' | 'password' | 'email'",
+      type: "'text' | 'password' | 'email' | 'search' | 'tel' | 'url'",
       description:
-        'The HTML input type.',
+        'The HTML input type. `email`, `tel` and `url` also bring up the matching touch keyboard (email, phone pad, URL); `search` makes the field a search box (pair it with `enterKeyHint="search"` for a Search key on iOS; Chrome on Android shows one for `type="search"` alone).',
       default: "'text'",
     },
     {
@@ -168,7 +168,37 @@ export const docs = {
       name: 'autoComplete',
       type: 'string',
       description:
-        'The native autocomplete attribute, forwarded to the input unchanged. Does not affect the controlled value.',
+        'The native autocomplete attribute, forwarded to the input unchanged. Does not affect the controlled value. It is also how AutoFill knows what a field holds: tag sign-in, address and payment fields (`username`, `new-password`, `one-time-code`, `email`, `tel`, `street-address`, …).',
+    },
+    {
+      name: 'enterKeyHint',
+      type: "'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'",
+      description:
+        'What the Return key of a touch keyboard says (the native `enterkeyhint`). iOS gives `done`, `go`, `next`, `search` and `send` their own key (a glyph on iOS 26: a checkmark, an arrow, a chevron, a magnifier, an up arrow); `enter` and `previous` keep the plain Return key. Chrome on Android (Gboard) gives every value its own key, `enter` and `previous` included; with no hint the key reads Next while another field follows and Go on the last one, and a `type="url"` field shows Next instead of `go` while another field follows. It only labels the key: what Enter does stays with your handlers.',
+    },
+    {
+      name: 'inputMode',
+      type: "'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url'",
+      description:
+        'Which touch keyboard the field asks for (the native `inputmode`) without changing what it accepts: `numeric` brings up the number pad, `decimal` the decimal pad, `tel` the phone pad, `search` the web-search keyboard (whose Return key reads Go on iOS even with `enterKeyHint="search"`; Chrome on Android shows the Enter key for `inputMode="search"` alone).',
+    },
+    {
+      name: 'autoCapitalize',
+      type: "'none' | 'sentences' | 'words' | 'characters'",
+      description:
+        'When a touch keyboard capitalizes as you type (the native `autocapitalize`). Unset, iOS capitalizes sentences, except in a URL field.',
+    },
+    {
+      name: 'hasAutoCorrect',
+      type: 'boolean',
+      description:
+        'Whether a touch keyboard corrects words as you type (the native `autocorrect`). Unset, the browser decides; turn it off for usernames, codes and other values that are not words.',
+    },
+    {
+      name: 'hasSpellCheck',
+      type: 'boolean',
+      description:
+        'Whether misspelled words are underlined (the native `spellcheck`). Unset, the browser decides.',
     },
     {
       name: 'containerXstyle',
@@ -216,6 +246,7 @@ export const docs = {
       {guidance: true, description: 'Use validation status with a message to explain what went wrong: "Email must include @" is better than just turning the border red.'},
       {guidance: true, description: 'Size the input to match the expected content length so users can gauge how much to type: small for zip codes, medium for names, large for URLs.'},
       {guidance: true, description: 'Add a clear button for search and filter inputs so users can quickly reset without selecting all text.'},
+      {guidance: true, description: 'Tell a touch keyboard what the field holds: `type="email"`, `"tel"` or `"url"` for those values, `inputMode="numeric"` for digits that are not a number (a one-time code), `enterKeyHint` for what Return does (Search, Send, Next), and `autoComplete` so AutoFill can fill it.'},
       {guidance: false, description: "Don't use placeholder text as a replacement for a label; placeholders disappear on focus and are not reliably read by screen readers."},
       {guidance: false, description: "Don't use TextInput for multi-line content like comments or descriptions; use TextArea instead."},
       {guidance: false, description: "Don't mark every field as required; only flag mandatory fields so users are not overwhelmed by validation errors."},
@@ -240,8 +271,9 @@ export const docsZh = {
   props: [
     {
       name: 'type',
-      type: "'text' | 'password' | 'email'",
-      description: 'HTML 输入框类型。',
+      type: "'text' | 'password' | 'email' | 'search' | 'tel' | 'url'",
+      description:
+        'HTML 输入框类型。`email`、`tel` 和 `url` 还会调出对应的触屏键盘（邮箱、电话键盘、URL）；`search` 让字段成为搜索框（在 iOS 上配合 `enterKeyHint="search"` 显示搜索键；Android 上的 Chrome 单独设置 `type="search"` 即显示搜索键）。',
       default: "'text'",
     },
     {
@@ -379,7 +411,37 @@ export const docsZh = {
       name: 'autoComplete',
       type: 'string',
       description:
-        '原生 autocomplete 属性，原样转发给输入框。不影响受控的值。',
+        '原生 autocomplete 属性，原样转发给输入框。不影响受控的值。自动填充也靠它判断字段的内容：请为登录、地址和支付字段设置对应的值（`username`、`new-password`、`one-time-code`、`email`、`tel`、`street-address` 等）。',
+    },
+    {
+      name: 'enterKeyHint',
+      type: "'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'",
+      description:
+        '触屏键盘回车键上显示的内容（原生 `enterkeyhint`）。iOS 为 `done`、`go`、`next`、`search` 和 `send` 显示各自的按键（iOS 26 上为图标：对勾、箭头、右尖括号、放大镜、上箭头）；`enter` 和 `previous` 保留普通的回车键。Android 上的 Chrome（Gboard）为每个值显示各自的按键，包括 `enter` 和 `previous`；未设置时，后面还有字段则显示“下一项”，最后一个字段显示“前往”；`type="url"` 的字段后面还有字段时，即使设为 `go` 也显示“下一项”。它只改变按键的标签：按下回车做什么仍由你的处理函数决定。',
+    },
+    {
+      name: 'inputMode',
+      type: "'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url'",
+      description:
+        '字段请求的触屏键盘（原生 `inputmode`），不改变字段接受的内容：`numeric` 显示数字键盘，`decimal` 显示带小数点的数字键盘，`tel` 显示电话键盘，`search` 显示网页搜索键盘（即使设置了 `enterKeyHint="search"`，iOS 上它的回车键仍显示为“前往”；Android 上的 Chrome 对单独的 `inputMode="search"` 显示回车键）。',
+    },
+    {
+      name: 'autoCapitalize',
+      type: "'none' | 'sentences' | 'words' | 'characters'",
+      description:
+        '触屏键盘在输入时何时自动大写（原生 `autocapitalize`）。未设置时，iOS 会将句首大写，但 URL 字段除外。',
+    },
+    {
+      name: 'hasAutoCorrect',
+      type: 'boolean',
+      description:
+        '触屏键盘是否在输入时自动更正单词（原生 `autocorrect`）。未设置时由浏览器决定；对用户名、验证码等不是单词的值请关闭它。',
+    },
+    {
+      name: 'hasSpellCheck',
+      type: 'boolean',
+      description:
+        '是否为拼错的单词加下划线（原生 `spellcheck`）。未设置时由浏览器决定。',
     },
     {
       name: 'containerXstyle',
@@ -427,6 +489,7 @@ export const docsZh = {
       {guidance: true, description: 'Use validation status with a message to explain what went wrong: "Email must include @" is better than just turning the border red.'},
       {guidance: true, description: 'Size the input to match the expected content length so users can gauge how much to type: small for zip codes, medium for names, large for URLs.'},
       {guidance: true, description: 'Add a clear button for search and filter inputs so users can quickly reset without selecting all text.'},
+      {guidance: true, description: 'Tell a touch keyboard what the field holds: `type="email"`, `"tel"` or `"url"` for those values, `inputMode="numeric"` for digits that are not a number (a one-time code), `enterKeyHint` for what Return does (Search, Send, Next), and `autoComplete` so AutoFill can fill it.'},
       {guidance: false, description: "Don't use placeholder text as a replacement for a label; placeholders disappear on focus and are not reliably read by screen readers."},
       {guidance: false, description: "Don't use TextInput for multi-line content like comments or descriptions; use TextArea instead."},
       {guidance: false, description: "Don't mark every field as required; only flag mandatory fields so users are not overwhelmed by validation errors."},
@@ -455,6 +518,7 @@ export const docsDense = {
       {guidance: true, description: 'Use validation status with a message to explain what went wrong: "Email must include @" is better than just turning the border red.'},
       {guidance: true, description: 'Size the input to match the expected content length so users can gauge how much to type: small for zip codes, medium for names, large for URLs.'},
       {guidance: true, description: 'Add a clear button for search and filter inputs so users can quickly reset without selecting all text.'},
+      {guidance: true, description: 'Tell a touch keyboard what the field holds: `type="email"`, `"tel"` or `"url"` for those values, `inputMode="numeric"` for digits that are not a number (a one-time code), `enterKeyHint` for what Return does (Search, Send, Next), and `autoComplete` so AutoFill can fill it.'},
       {guidance: false, description: "Don't use placeholder text as a replacement for a label; placeholders disappear on focus and are not reliably read by screen readers."},
       {guidance: false, description: "Don't use TextInput for multi-line content like comments or descriptions; use TextArea instead."},
       {guidance: false, description: "Don't mark every field as required; only flag mandatory fields so users are not overwhelmed by validation errors."},

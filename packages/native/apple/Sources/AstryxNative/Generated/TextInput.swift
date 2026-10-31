@@ -3,6 +3,9 @@ public enum TextInputType: String, CaseIterable, Codable, Sendable {
   case text = "text"
   case password = "password"
   case email = "email"
+  case search = "search"
+  case tel = "tel"
+  case url = "url"
 }
 public enum TextInputSize: String, CaseIterable, Codable, Sendable {
   case sm = "sm"
@@ -26,6 +29,31 @@ public enum TextInputStatusVariant: String, CaseIterable, Codable, Sendable {
   case attached = "attached"
   case detached = "detached"
   case tooltip = "tooltip"
+}
+public enum TextInputEnterKeyHint: String, CaseIterable, Codable, Sendable {
+  case enter = "enter"
+  case done = "done"
+  case go = "go"
+  case next = "next"
+  case previous = "previous"
+  case search = "search"
+  case send = "send"
+}
+public enum TextInputInputMode: String, CaseIterable, Codable, Sendable {
+  case none = "none"
+  case text = "text"
+  case decimal = "decimal"
+  case numeric = "numeric"
+  case tel = "tel"
+  case search = "search"
+  case email = "email"
+  case url = "url"
+}
+public enum TextInputAutoCapitalize: String, CaseIterable, Codable, Sendable {
+  case none = "none"
+  case sentences = "sentences"
+  case words = "words"
+  case characters = "characters"
 }
 #if os(iOS)
 public struct TextInputProps {
@@ -52,7 +80,12 @@ public struct TextInputProps {
   public var statusVariant: TextInputStatusVariant?
   public var hasClear: Bool?
   public var hasAutoFocus: Bool?
-  public init(type: TextInputType? = nil, label: String, value: String, onChange: ((String) -> Void)? = nil, size: TextInputSize? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, onEnter: (() -> Void)? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLoading: Bool? = nil, placeholder: String? = nil, labelTooltip: String? = nil, status: TextInputStatus? = nil, statusVariant: TextInputStatusVariant? = nil, hasClear: Bool? = nil, hasAutoFocus: Bool? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public var enterKeyHint: TextInputEnterKeyHint?
+  public var inputMode: TextInputInputMode?
+  public var autoCapitalize: TextInputAutoCapitalize?
+  public var hasAutoCorrect: Bool?
+  public var hasSpellCheck: Bool?
+  public init(type: TextInputType? = nil, label: String, value: String, onChange: ((String) -> Void)? = nil, size: TextInputSize? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, onEnter: (() -> Void)? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLoading: Bool? = nil, placeholder: String? = nil, labelTooltip: String? = nil, status: TextInputStatus? = nil, statusVariant: TextInputStatusVariant? = nil, hasClear: Bool? = nil, hasAutoFocus: Bool? = nil, enterKeyHint: TextInputEnterKeyHint? = nil, inputMode: TextInputInputMode? = nil, autoCapitalize: TextInputAutoCapitalize? = nil, hasAutoCorrect: Bool? = nil, hasSpellCheck: Bool? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.type = type
     self.label = label
     self.value = value
@@ -73,6 +106,11 @@ public struct TextInputProps {
     self.statusVariant = statusVariant
     self.hasClear = hasClear
     self.hasAutoFocus = hasAutoFocus
+    self.enterKeyHint = enterKeyHint
+    self.inputMode = inputMode
+    self.autoCapitalize = autoCapitalize
+    self.hasAutoCorrect = hasAutoCorrect
+    self.hasSpellCheck = hasSpellCheck
     self.base = base
   }
 }
@@ -96,6 +134,11 @@ public struct TextInputNode: Decodable, Equatable, Sendable {
     public var statusVariant: TextInputStatusVariant?
     public var hasClear: Bool?
     public var hasAutoFocus: Bool?
+    public var enterKeyHint: TextInputEnterKeyHint?
+    public var inputMode: TextInputInputMode?
+    public var autoCapitalize: TextInputAutoCapitalize?
+    public var hasAutoCorrect: Bool?
+    public var hasSpellCheck: Bool?
   }
   public let key: String
   public let base: AstryxBaseProps?
@@ -129,6 +172,11 @@ public struct TextInputNode: Decodable, Equatable, Sendable {
       statusVariant: props.statusVariant,
       hasClear: props.hasClear,
       hasAutoFocus: props.hasAutoFocus,
+      enterKeyHint: props.enterKeyHint,
+      inputMode: props.inputMode,
+      autoCapitalize: props.autoCapitalize,
+      hasAutoCorrect: props.hasAutoCorrect,
+      hasSpellCheck: props.hasSpellCheck,
       base: base ?? AstryxBaseProps()
     )
   }
@@ -159,7 +207,12 @@ public struct TextInputProps {
   public var statusVariant: TextInputStatusVariant?
   public var hasClear: Bool?
   public var hasAutoFocus: Bool?
-  public init(type: TextInputType? = nil, label: String, value: String, onChange: ((String) -> Void)? = nil, size: TextInputSize? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, onEnter: (() -> Void)? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLoading: Bool? = nil, placeholder: String? = nil, labelTooltip: String? = nil, status: TextInputStatus? = nil, statusVariant: TextInputStatusVariant? = nil, hasClear: Bool? = nil, hasAutoFocus: Bool? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
+  public var enterKeyHint: TextInputEnterKeyHint?
+  public var inputMode: TextInputInputMode?
+  public var autoCapitalize: TextInputAutoCapitalize?
+  public var hasAutoCorrect: Bool?
+  public var hasSpellCheck: Bool?
+  public init(type: TextInputType? = nil, label: String, value: String, onChange: ((String) -> Void)? = nil, size: TextInputSize? = nil, isLabelHidden: Bool? = nil, description: String? = nil, isOptional: Bool? = nil, isRequired: Bool? = nil, onEnter: (() -> Void)? = nil, isDisabled: Bool? = nil, isReadOnly: Bool? = nil, disabledMessage: String? = nil, isLoading: Bool? = nil, placeholder: String? = nil, labelTooltip: String? = nil, status: TextInputStatus? = nil, statusVariant: TextInputStatusVariant? = nil, hasClear: Bool? = nil, hasAutoFocus: Bool? = nil, enterKeyHint: TextInputEnterKeyHint? = nil, inputMode: TextInputInputMode? = nil, autoCapitalize: TextInputAutoCapitalize? = nil, hasAutoCorrect: Bool? = nil, hasSpellCheck: Bool? = nil, base: AstryxBaseProps = AstryxBaseProps()) {
     self.type = type
     self.label = label
     self.value = value
@@ -180,6 +233,11 @@ public struct TextInputProps {
     self.statusVariant = statusVariant
     self.hasClear = hasClear
     self.hasAutoFocus = hasAutoFocus
+    self.enterKeyHint = enterKeyHint
+    self.inputMode = inputMode
+    self.autoCapitalize = autoCapitalize
+    self.hasAutoCorrect = hasAutoCorrect
+    self.hasSpellCheck = hasSpellCheck
     self.base = base
   }
 }
@@ -203,6 +261,11 @@ public struct TextInputNode: Decodable, Equatable, Sendable {
     public var statusVariant: TextInputStatusVariant?
     public var hasClear: Bool?
     public var hasAutoFocus: Bool?
+    public var enterKeyHint: TextInputEnterKeyHint?
+    public var inputMode: TextInputInputMode?
+    public var autoCapitalize: TextInputAutoCapitalize?
+    public var hasAutoCorrect: Bool?
+    public var hasSpellCheck: Bool?
   }
   public let key: String
   public let base: AstryxBaseProps?
@@ -236,6 +299,11 @@ public struct TextInputNode: Decodable, Equatable, Sendable {
       statusVariant: props.statusVariant,
       hasClear: props.hasClear,
       hasAutoFocus: props.hasAutoFocus,
+      enterKeyHint: props.enterKeyHint,
+      inputMode: props.inputMode,
+      autoCapitalize: props.autoCapitalize,
+      hasAutoCorrect: props.hasAutoCorrect,
+      hasSpellCheck: props.hasSpellCheck,
       base: base ?? AstryxBaseProps()
     )
   }

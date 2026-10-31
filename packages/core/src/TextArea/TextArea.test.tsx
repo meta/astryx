@@ -971,6 +971,57 @@ describe('TextArea', () => {
     });
   });
 
+  describe('touch keyboard traits', () => {
+    it('renders no trait attribute when none is set, leaving the browser default', () => {
+      render(<TextArea label="Notes" value="" onChange={() => {}} />);
+      const textarea = screen.getByRole('textbox');
+      for (const attribute of [
+        'enterkeyhint',
+        'inputmode',
+        'autocapitalize',
+        'autocorrect',
+      ]) {
+        expect(textarea).not.toHaveAttribute(attribute);
+      }
+    });
+
+    it('forwards every trait to the native textarea', () => {
+      render(
+        <TextArea
+          label="Message"
+          value=""
+          onChange={() => {}}
+          enterKeyHint="send"
+          inputMode="text"
+          autoCapitalize="sentences"
+          hasAutoCorrect={false}
+          hasSpellCheck={false}
+        />,
+      );
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveAttribute('enterkeyhint', 'send');
+      expect(textarea).toHaveAttribute('inputmode', 'text');
+      expect(textarea).toHaveAttribute('autocapitalize', 'sentences');
+      expect(textarea).toHaveAttribute('autocorrect', 'off');
+      expect(textarea).toHaveAttribute('spellcheck', 'false');
+    });
+
+    it('keeps Return a line break whatever enterKeyHint says', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <TextArea
+          label="Message"
+          value="a"
+          onChange={onChange}
+          enterKeyHint="send"
+        />,
+      );
+      await user.type(screen.getByRole('textbox'), '{Enter}');
+      expect(onChange).toHaveBeenLastCalledWith('a\n', expect.anything());
+    });
+  });
+
   describe('autoComplete prop (#5638)', () => {
     it('forwards autoComplete to the native textarea unchanged', () => {
       render(
