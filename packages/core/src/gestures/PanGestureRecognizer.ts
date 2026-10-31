@@ -44,12 +44,7 @@ import {
   type GestureRecognizerOptions,
   type NativeTouchBehavior,
 } from './GestureRecognizer';
-import type {
-  GestureEventContext,
-  GestureTouch,
-  Point,
-  ScrollType,
-} from './types';
+import type {GestureEventContext, GestureTouch, Point} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
 export type PanDirection =
@@ -79,12 +74,13 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
    */
   lockAxis?: boolean;
   /**
-   * Take a trackpad's scroll as one step per swipe instead of following it:
-   * a swipe that travels 24 px plays one short flick and ends, so the pan's
-   * release settles one step (a pager's page, a row's swipe action), and a
-   * swipe back within the same gesture undoes it once. Default false.
+   * A trackpad's two-finger scroll (`continuous`) drives the pan where its
+   * owner allows it: along its own axis, after the scrollers under the
+   * pointer, as a contact moving with the content. A mouse wheel's notches
+   * never drive a pan; they scroll what is under the pointer
+   * (`spec:AST-094` FR43, DEC-24). @default [] (none)
    */
-  wheelStep?: boolean;
+  allowedScrollTypes?: ReadonlyArray<'continuous'>;
   /** Begin only when the native scrollers under the touch are at the edge. */
   scrollEdge?: boolean;
 }
@@ -108,22 +104,12 @@ export class PanGestureRecognizer extends GestureRecognizer {
     return 'pan';
   }
 
-  /**
-   * On the web a pan also takes wheel and trackpad scrolling, a mouse
-   * wheel's notches included (`spec:AST-094` FR43); a caller that passes
-   * `allowedScrollTypes: []` opts out.
-   */
-  protected override get defaultScrollTypes(): ReadonlyArray<ScrollType> {
-    return ['continuous', 'discrete'];
-  }
-
   minimumNumberOfTouches: number;
   maximumNumberOfTouches: number;
   hysteresis: number;
   direction: PanDirection;
   axisRatio: number;
   lockAxis: boolean;
-  wheelStep: boolean;
   scrollEdge: boolean;
   /** The axis a `lockAxis` pan locked to when it began. */
   lockedAxis: 'x' | 'y' | null = null;
@@ -150,7 +136,6 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.direction = options.direction ?? 'any';
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
-    this.wheelStep = options.wheelStep ?? false;
     this.scrollEdge = options.scrollEdge ?? false;
     this.tracker = new VelocityTracker();
   }
