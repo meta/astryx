@@ -904,6 +904,7 @@ export function createPager(
       measure();
       clearCatchTimer();
       const current = presentation();
+      const wasSettling = settleHandle != null;
       stopSettle();
       isDragging = true;
       // A track caught past an end is shown rubber-banded: the drag starts
@@ -918,7 +919,12 @@ export function createPager(
             pageWidth > 0 ? pageWidth : 1,
           );
       dragPosition = current;
-      dragStartIndex = nearestPage(current);
+      // Scratch: a swipe that lands while a trackpad swipe's settle runs
+      // starts from that settle's page, so back-to-back swipes page on.
+      dragStartIndex =
+        wasSettling && recognizer.trackedTouches[0]?.scrollType != null
+          ? target
+          : nearestPage(current);
       return;
     }
     if (state === 'changed') {
@@ -926,12 +932,11 @@ export function createPager(
       // Finger right (dx > 0) moves content toward earlier pages in LTR.
       let raw = dragStart + sign() * dx;
       if (!isLooping() && recognizer.trackedTouches[0]?.scrollType != null && pageWidth > 0) {
-        raw = rubberBandClamp(
-          raw,
-          offsetOf(Math.max(0, dragStartIndex - 1)),
-          offsetOf(Math.min(count() - 1, dragStartIndex + 1)),
-          pageWidth,
-        );
+        // Scratch: never more than one page from where the swipe began; the
+        // first and last pages keep their rubber band below.
+        const lo = dragStartIndex > 0 ? offsetOf(dragStartIndex - 1) : -Infinity;
+        const hi = dragStartIndex < count() - 1 ? offsetOf(dragStartIndex + 1) : Infinity;
+        raw = Math.min(Math.max(raw, Math.min(lo, hi)), Math.max(lo, hi));
       }
       dragPosition = isLooping()
         ? raw
