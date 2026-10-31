@@ -1331,7 +1331,7 @@ test.describe('under a fine primary pointer (spec:AST-094 FR43)', () => {
     expect(cancelled.every(Boolean)).toBe(true);
   });
 
-  test("a trackpad scroll that carries the track past a page stays the pager's while the next page moves under the still cursor, and pages one page", async ({
+  test("a trackpad scroll of more than a page stays the pager's while the next page moves under the still cursor, stops at that page, and pages one page", async ({
     page,
     browserName,
   }) => {
@@ -1350,14 +1350,17 @@ test.describe('under a fine primary pointer (spec:AST-094 FR43)', () => {
       requestAnimationFrame(sample);
     });
     // 30 steps of 17.5 px: 525 px, more than a page. The cursor stays put
-    // while page 2, then page 3's edge, slide under it.
+    // while the next page slides under it; the track stops there, one page
+    // from where the scroll began.
     for (let i = 0; i < 30; i++) {
       await input.wheel({x: 200, y: TOP + HEIGHT / 2, dx: 17.5});
     }
     // A trackpad scroll ends 220 ms after its last wheel.
     await page.waitForTimeout(300);
     await waitForRest(track);
-    expect(await page.evaluate(() => window.minTrackX)).toBeLessThan(-2 * PAGE);
+    const furthest = await page.evaluate(() => window.minTrackX);
+    expect(furthest).toBeGreaterThanOrEqual(-2 * PAGE - 0.5);
+    expect(furthest).toBeLessThanOrEqual(-2 * PAGE + 0.5);
     const cancelled = await page.evaluate(() => window.cancelledWheels);
     expect(cancelled.length).toBeGreaterThan(0);
     expect(cancelled.every(Boolean)).toBe(true);

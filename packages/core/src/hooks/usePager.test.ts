@@ -1179,7 +1179,11 @@ describe('createPager', () => {
 
   // spec:AST-094 FR43: on the web a pan also takes wheel and trackpad
   // scrolling, along its own axis.
-  async function wheelPager(defaultIndex: number, width = WIDTH) {
+  async function wheelPager(
+    defaultIndex: number,
+    width = WIDTH,
+    options: Partial<PagerOptions> = {},
+  ) {
     const f = setup({defaultIndex});
     stubMedia(false, false);
     f.pager.dispose();
@@ -1188,7 +1192,7 @@ describe('createPager', () => {
       configurable: true,
     });
     const pager = createPager(
-      {count: 3, defaultIndex},
+      {count: 3, defaultIndex, ...options},
       {host: f.host, animator: f.animator},
     );
     pager.attach(f.viewport, f.track);
@@ -1331,6 +1335,116 @@ describe('createPager', () => {
       mouse('pointerup', f.page, 270, 100, now);
       await frames(f, 2);
       expect(pager.index).toBe(2);
+    } finally {
+      pager.dispose();
+    }
+  });
+
+  // spec:AST-094 FR43, DEC-24: a pager follows a trackpad swipe at most one
+  // page from where it began, rubber-banded at its first and last page; it
+  // commits past half a page or on a flick, never on a speed spike that moved
+  // it less than a tenth of a page; and a swipe that lands during a settle
+  // starts from that settle's page.
+  it('a trackpad scroll never carries the track more than one page from the page it began on, and lands on that page', async () => {
+    const {f, pager} = await wheelPager(0);
+    try {
+      // 25 px every 8 ms, 1,000 px in all: two and a half pages.
+      let furthest = 0;
+      for (let i = 0; i < 40; i++) {
+        trackpad(f.page, {dx: 25, time: now});
+        await advance(8, f.clock);
+        furthest = Math.min(furthest, f.x());
+      }
+      // The track reaches the next page and stops there.
+      expect(furthest).toBeGreaterThanOrEqual(-WIDTH - 0.5);
+      expect(furthest).toBeLessThanOrEqual(-WIDTH + 0.5);
+      await endWheel(f);
+      expect(pager.index).toBe(1);
+    } finally {
+      pager.dispose();
+    }
+  });
+
+  // A looping pager has no first or last page: the cap holds across the loop
+  // too, from the last page onto the copy of the first.
+  it('in a looping pager, a trackpad scroll never carries the track more than one page from the page it began on, and lands on that page', async () => {
+    const {f, pager} = await wheelPager(2, WIDTH, {loop: true});
+    try {
+      // 25 px every 8 ms, 1,000 px in all, from the last page forward.
+      let furthest = 0;
+      for (let i = 0; i < 40; i++) {
+        trackpad(f.page, {dx: 25, time: now});
+        await advance(8, f.clock);
+        furthest = Math.min(furthest, f.x());
+      }
+      // The track reaches the copy of page 0 past the last page, and stops.
+      expect(furthest).toBeGreaterThanOrEqual(-3 * WIDTH - 0.5);
+      expect(furthest).toBeLessThanOrEqual(-3 * WIDTH + 0.5);
+      await endWheel(f);
+      expect(pager.virtualIndex).toBe(3);
+      expect(pager.index).toBe(0);
+    } finally {
+      pager.dispose();
+    }
+  });
+
+  // A trackpad swipe that moved the pager less than a tenth of a page
+  // releases still, whatever its speed: a speed spike is not a flick. A
+  // finger's or a mouse's flick still pages from a few percent (above).
+  it('a 42 px trackpad spike on a 480 px page releases still, whatever its speed', async () => {
+    const width = 480;
+    const {f, pager} = await wheelPager(1, width);
+    try {
+      // 7.5 px every 8 ms, then the fingers lift: the pan moves at their
+      // speed, about 940 px/s (past the advance speed), until the lift is
+      // read, and releases there with that speed. It moved the track 42 px:
+      // more than a tenth of a 400 px page, less than a tenth of this one.
+      let moved = 0;
+      for (const dx of [7.5, 7.5, 7.5, 7.125, 6.75, 6.375, 6]) {
+        trackpad(f.page, {dx, time: now});
+        // Read before any frame runs: the last read is where it released.
+        moved = Math.max(moved, -width - f.x());
+        await advance(8, f.clock);
+      }
+      expect(moved).toBeGreaterThan(40);
+      expect(moved).toBeLessThan(48);
+      await frames(f, 2);
+      expect(pager.index).toBe(1);
+      // As settle() waits: the rest lands on the frame after the settle.
+      for (let i = 0; i < 80 && pager.isSettling; i++) {
+        await advance(16, f.clock);
+      }
+      await advance(16, f.clock);
+      expect(f.x()).toBe(-width);
+    } finally {
+      pager.dispose();
+    }
+  });
+
+  it("a trackpad swipe that lands while the last swipe's settle runs starts from that settle's page: back-to-back swipes page on", async () => {
+    const {f, pager} = await wheelPager(0);
+    try {
+      // The first swipe: 78 px at about 810 px/s, then the fingers lift: a
+      // flick to page 1, settling from the lift.
+      await fling(f, 6.5, 12);
+      await frames(f, 2);
+      expect(pager.index).toBe(1);
+      expect(pager.isSettling).toBe(true);
+      // At once, early in that settle and nearer page 0 than page 1, a
+      // second swipe of 600 px: its first delta grows against the lift's
+      // decay, which momentum never does, so it is a new swipe. From page 1
+      // it may reach page 2, and lands there.
+      expect(f.x()).toBeGreaterThan(-WIDTH / 2);
+      for (let i = 0; i < 50; i++) {
+        trackpad(f.page, {dx: 12, time: now});
+        await advance(8, f.clock);
+      }
+      await endWheel(f);
+      expect(pager.index).toBe(2);
+      for (let i = 0; i < 80 && pager.isSettling; i++) {
+        await advance(16, f.clock);
+      }
+      expect(f.x()).toBe(-2 * WIDTH);
     } finally {
       pager.dispose();
     }
