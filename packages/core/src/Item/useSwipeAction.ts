@@ -1251,6 +1251,8 @@ export function useSwipeAction({
         // (DEC-7) through the pan's default scroll input (FR43): the same
         // contact, moving with the content.
         allowedPointerTypes: ['touch', 'pen'],
+        allowedScrollTypes: ['continuous'],
+        wheelStep: true,
         direction: 'horizontal',
         hysteresis: SWIPE.claim,
         maximumNumberOfTouches: 1,
