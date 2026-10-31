@@ -124,9 +124,10 @@ governs them in a touch presentation.
 - **FR4 — A leaving surface takes no input.** From the moment its close begins,
   no pointer press or key activates anything in a leaving surface's own content.
   Toasts that a leaving dialog hosts are not its content (FR13).
-- **FR5 — A leaving surface keeps its dismissal role.** Until it is hidden, a
-  leaving surface keeps the dismissal role it had while open (`spec:AST-003`
-  FR1). A leaving active or blocking owner stays present on the shared
+- **FR5 — A leaving surface keeps its dismissal role, apart from a closing
+  pinned layer.** Until it is hidden, a leaving surface keeps the dismissal role
+  it had while open (`spec:AST-003` FR1), except a closing pinned `Tooltip` or
+  `HoverCard`, below. A leaving active or blocking owner stays present on the shared
   dismissal stack (`family:overlay-dismissal` FR2), so an Escape press or
   platform close request during its exit does not reach an owner beneath it,
   except a closing pinned `Tooltip` or `HoverCard`, which leaves the stack when
