@@ -22,6 +22,7 @@ module.exports = {
       {
         dev: false,
         runtimeInjection: false,
+        propertyValidationMode: 'throw',
         genConditionalClasses: true,
         treeshakeCompensation: true,
         unstable_moduleResolution: resolution.stylexModuleResolution,
