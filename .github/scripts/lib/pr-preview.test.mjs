@@ -201,6 +201,7 @@ async function reconcile({
   fallbackMessage,
   execute,
   baseStats,
+  packageSize,
 } = {}) {
   const value = previewAvailable
     ? {...requested, headRepository: requested.baseRepository}
@@ -212,6 +213,12 @@ async function reconcile({
     'size-base.json',
   );
   if (baseStats) fs.writeFileSync(baseStatsPath, JSON.stringify(baseStats));
+  const packageSizePath = path.join(
+    path.dirname(paths.analysis),
+    'package-size.json',
+  );
+  if (packageSize)
+    fs.writeFileSync(packageSizePath, JSON.stringify(packageSize));
   const {github, state} = githubFixture({
     value: githubFixtureValue,
     comments,
@@ -228,6 +235,7 @@ async function reconcile({
     analysisPath: paths.analysis,
     metadataPath: paths.metadata,
     baseStatsPath,
+    packageSizePath,
     a11yPath: paths.a11y,
     visualPath: paths.visual,
     createIfMissing,
@@ -961,6 +969,25 @@ describe('PR comment preview reconciliation', () => {
       });
       expect(seen).toHaveLength(1);
       expect(seen[0].includes('--base-stats')).toBe(used);
+    },
+  );
+
+  it.each([
+    ['the exact head', HEAD, true],
+    ['another head', 'b'.repeat(40), false],
+  ])(
+    'passes the package size report only when it names %s',
+    async (_label, headSha, used) => {
+      const seen = [];
+      await reconcile({
+        packageSize: {headSha, packages: [], verdict: 'pass'},
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen).toHaveLength(1);
+      expect(seen[0].includes('--package-size')).toBe(used);
     },
   );
 

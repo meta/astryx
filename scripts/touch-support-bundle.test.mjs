@@ -176,44 +176,48 @@ function exportNamesOf(file) {
 
 /**
  * The gesture modules each of `imports` ships, with their bytes and the import
- * chain that brings the first of them, building each import on its own.
+ * chain that brings the first of them. Each import is an entry point of one
+ * build: without code splitting, each output holds only what its own entry
+ * reaches, so it is that import built on its own, and esbuild builds them all
+ * at once instead of one rebuild after another.
  */
 async function gestureCarriers(imports) {
-  const probe = path.join(scratch, 'public-import.ts');
-  fs.writeFileSync(probe, '');
-  const context = await esbuild.context({
-    ...BUILD_OPTIONS,
-    entryPoints: [probe],
+  const dir = fs.mkdtempSync(path.join(scratch, 'public-imports-'));
+  const entries = imports.map(({source}, index) => {
+    const file = path.join(dir, `${index}.ts`);
+    fs.writeFileSync(file, source);
+    return path.relative(REPO, file);
   });
+  const {metafile} = await esbuild.build({
+    ...BUILD_OPTIONS,
+    entryPoints: entries.map(entry => path.join(REPO, entry)),
+    splitting: false,
+  });
+  const outputs = new Map(
+    Object.values(metafile.outputs).map(output => [output.entryPoint, output]),
+  );
   const carriers = [];
-  try {
-    for (const {name, source} of imports) {
-      fs.writeFileSync(probe, source);
-      const {metafile} = await context.rebuild();
-      const [output] = Object.values(metafile.outputs);
-      const gestureModules = bytesOf(
-        Object.fromEntries(
-          Object.entries(output.inputs).map(([input, {bytesInOutput}]) => [
-            input,
-            bytesInOutput,
-          ]),
-        ),
-      );
-      if (gestureModules.length > 0) {
-        carriers.push({
-          name,
-          gestureModules,
-          chain: importChain(
-            metafile,
-            path.relative(REPO, probe),
-            gestureModules[0][0],
-          ),
-        });
-      }
+  imports.forEach(({name}, index) => {
+    const output = outputs.get(entries[index]);
+    if (output == null) {
+      throw new Error(`no output for the import of ${name}`);
     }
-  } finally {
-    await context.dispose();
-  }
+    const gestureModules = bytesOf(
+      Object.fromEntries(
+        Object.entries(output.inputs).map(([input, {bytesInOutput}]) => [
+          input,
+          bytesInOutput,
+        ]),
+      ),
+    );
+    if (gestureModules.length > 0) {
+      carriers.push({
+        name,
+        gestureModules,
+        chain: importChain(metafile, entries[index], gestureModules[0][0]),
+      });
+    }
+  });
   return carriers;
 }
 

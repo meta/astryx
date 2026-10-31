@@ -4885,6 +4885,145 @@ describe('Selector option descriptions and trigger value', () => {
   });
 });
 
+describe('Selector disabled selection transitions', () => {
+  it.each([
+    {presentation: 'popover', hasSearch: false, withReason: false},
+    {presentation: 'popover', hasSearch: true, withReason: true},
+    {presentation: 'bottom-sheet', hasSearch: false, withReason: true},
+    {presentation: 'bottom-sheet', hasSearch: true, withReason: false},
+  ] as const)(
+    'rejects a pointer selection from a popup opened before disablement ($presentation, search=$hasSearch, reason=$withReason)',
+    async ({presentation, hasSearch, withReason}) => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const changeAction = vi.fn();
+      function ControlledSelector({isDisabled}: {isDisabled: boolean}) {
+        const [value, setValue] = useState('Apple');
+        return (
+          <form aria-label="Fruit form">
+            <Selector
+              label="Fruit"
+              htmlName="fruit"
+              options={OPTIONS}
+              value={value}
+              isDisabled={isDisabled}
+              presentation={presentation}
+              hasSearch={hasSearch}
+              disabledMessage={withReason ? 'Unavailable reason' : undefined}
+              onChange={next => {
+                onChange(next);
+                setValue(next);
+              }}
+              changeAction={changeAction}
+            />
+          </form>
+        );
+      }
+      const {rerender} = render(<ControlledSelector isDisabled={false} />);
+      const trigger = screen.getByRole(hasSearch ? 'button' : 'combobox', {
+        name: 'Fruit',
+      });
+      const form = screen.getByRole<HTMLFormElement>('form', {
+        name: 'Fruit form',
+      });
+      await user.click(trigger);
+      // The bottom-sheet presentation loads lazily on its first opening.
+      const banana = await screen.findByRole('option', {name: 'Banana', ...h});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      if (hasSearch) {
+        await waitFor(() =>
+          expect(screen.getByRole('combobox', h)).toHaveFocus(),
+        );
+      }
+      const focused = document.activeElement;
+
+      rerender(<ControlledSelector isDisabled />);
+      expect(document.activeElement).toBe(focused);
+      expect(trigger).toHaveAttribute('aria-disabled', 'true');
+      expect(new FormData(form).getAll('fruit')).toEqual([]);
+      await user.click(banana);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(trigger).toHaveTextContent('Apple');
+      rerender(<ControlledSelector isDisabled={false} />);
+      expect(new FormData(form).getAll('fruit')).toEqual(['Apple']);
+      await user.click(banana);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith('Banana');
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith('Banana');
+      expect(new FormData(form).getAll('fruit')).toEqual(['Banana']);
+    },
+  );
+
+  it('rejects activation of a retained option after closing and disabling', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const selector = (isDisabled: boolean) => (
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        value="Apple"
+        isDisabled={isDisabled}
+        onChange={onChange}
+        changeAction={changeAction}
+      />
+    );
+    const {rerender} = render(selector(false));
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    await user.click(trigger);
+    const banana = screen.getByRole('option', {name: 'Banana', ...h});
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(banana).toBeInTheDocument();
+
+    rerender(selector(true));
+    fireEvent.click(banana, {detail: 0});
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+    expect(trigger).toHaveTextContent('Apple');
+    expect(trigger).toHaveFocus();
+  });
+
+  it.each(['mouse', 'touch', 'pen'])(
+    'rejects a %s gesture released after the selector becomes disabled',
+    async pointerType => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const changeAction = vi.fn();
+      const selector = (isDisabled: boolean) => (
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Apple"
+          isDisabled={isDisabled}
+          onChange={onChange}
+          changeAction={changeAction}
+        />
+      );
+      const {rerender} = render(selector(false));
+      const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+      await user.click(trigger);
+      const apple = screen.getByRole('option', {name: 'Apple', ...h});
+      const banana = screen.getByRole('option', {name: 'Banana', ...h});
+      const pointer = {pointerType, pointerId: 1, button: 0};
+      fireEvent.pointerDown(apple, pointer);
+      fireEvent.pointerMove(banana, pointer);
+      rerender(selector(true));
+      fireEvent.pointerUp(banana, pointer);
+      // Include the delayed click that a browser can send after the gesture.
+      fireEvent.click(apple, {detail: 1});
+      // Assistive activation reaches the same component-owned selection path.
+      fireEvent.click(banana, {detail: 0});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(trigger).toHaveTextContent('Apple');
+      expect(trigger).toHaveFocus();
+    },
+  );
+});
+
 describe('Selector press model', () => {
   const touch = {pointerType: 'touch', pointerId: 1};
   const h = {hidden: true};

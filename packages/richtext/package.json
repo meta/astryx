@@ -2,7 +2,7 @@
   "name": "@astryxdesign/richtext",
   "displayName": "Rich Text",
   "version": "0.7.6",
-  "description": "Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",
+  "description": "Astryx rich text \u2014 a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",
   "author": "Meta Open Source",
   "license": "MIT",
   "homepage": "https://github.com/meta/astryx#readme",
@@ -34,7 +34,20 @@
     "dist",
     "src",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "exports": {
     ".": {

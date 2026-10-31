@@ -21,33 +21,82 @@ const ci = read('ci.yml');
 const heavy = read('main-heavy-lanes.yml');
 const main = read('deploy.yml');
 
-const LABEL = 'ci:heavy-lanes';
-const HEAVY = [
-  'pr-a11y-guards',
-  'pr-a11y-specs',
-  'pr-a11y',
-  'visual-scout',
-  'pr-visual',
-  'pr-rtl-shard',
-  'pr-rtl-merge',
-  'pr-rtl',
-];
-const PR_CLAUSE = `(github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, '${LABEL}'))`;
+const SUITE = {
+  'pr-a11y-guards': 'a11y',
+  'pr-a11y-specs': 'a11y',
+  'pr-a11y': 'a11y',
+  'visual-scout': 'visual',
+  'pr-visual': 'visual',
+  'pr-rtl-shard': 'rtl',
+  'pr-rtl-merge': 'rtl',
+  'pr-rtl': 'rtl',
+};
+const HEAVY = Object.keys(SUITE);
+const prClause = suite =>
+  `(github.event_name == 'pull_request' && needs.run-labels.outputs.${suite} == 'true')`;
 
 describe('visual, accessibility and RTL owners', () => {
   // release-check-workflow.test.mjs evaluates them for release-check and
-  // visual-maintenance-workflow.test.mjs for labelled and unlabelled pull
+  // visual-maintenance-workflow.test.mjs for opted-in and other pull
   // requests; this pins the shape on every owner.
   it.each(HEAVY)(
-    '%s runs on a pull request only with the ci:heavy-lanes label',
+    '%s runs on a pull request only when run-labels opts in its own suite',
     name => {
       const condition = ungated(ci.jobs[name].if);
-      expect(condition).toContain(PR_CLAUSE);
-      expect(condition.replaceAll(PR_CLAUSE, '')).not.toContain(
+      expect(condition).toContain(prClause(SUITE[name]));
+      expect(condition.replaceAll(prClause(SUITE[name]), '')).not.toContain(
         "'pull_request'",
       );
+      // No other suite's decision, and no label read directly.
+      for (const other of ['visual', 'a11y', 'rtl']) {
+        if (other !== SUITE[name])
+          expect(condition).not.toContain(`outputs.${other}`);
+      }
+      expect(condition).not.toMatch(/labels\.\*\.name, 'ci:(heavy|run-)/);
+      expect([ci.jobs[name].needs].flat()).toContain('run-labels');
     },
   );
+
+  it('decides the suites in one gate job from the trusted decision script', () => {
+    const gate = ci.jobs['run-labels'];
+    expect(gate['runs-on']).toBe('ubuntu-slim');
+    expect(gate.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+    });
+    expect(gate.outputs).toEqual({
+      visual: '${{ steps.decide.outputs.visual }}',
+      a11y: '${{ steps.decide.outputs.a11y }}',
+      rtl: '${{ steps.decide.outputs.rtl }}',
+    });
+    expect(gate.steps[0].with).toMatchObject({
+      'sparse-checkout':
+        '.github/scripts/run-labels.cjs\n.github/scripts/review-signal-decision.cjs\n',
+      path: '.run-labels',
+      'persist-credentials': false,
+    });
+    expect(gate.steps[0].with.ref).toBeUndefined();
+    expect(gate.steps[1].with.script).toContain(
+      '.run-labels/.github/scripts/run-labels.cjs',
+    );
+    // It runs for the release check too, so its owners' needs succeed there.
+    expect(ungated(gate.if)).toBe(
+      "github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check'",
+    );
+  });
+
+  it('names no catch-all heavy label anywhere in the workflows', () => {
+    for (const name of fs.readdirSync(
+      new URL('../workflows/', import.meta.url),
+    ))
+      expect(
+        fs.readFileSync(
+          new URL(`../workflows/${name}`, import.meta.url),
+          'utf8',
+        ),
+        name,
+      ).not.toContain('ci:heavy-lanes');
+  });
 
   it('leaves the required joins without a heavy owner, so they still report on every pull request', () => {
     for (const join of ['test', 'build', 'docsite-test']) {

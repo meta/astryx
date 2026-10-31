@@ -10,6 +10,7 @@ import eslintReact from '@eslint-react/eslint-plugin';
 import reactCompiler from 'eslint-plugin-react-compiler';
 import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
 import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
+import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
 
 /* global process */
 
@@ -40,6 +41,19 @@ const internalBarrelBaseline = JSON.parse(
     path.join(
       import.meta.dirname,
       'internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Guarded values whose bare nullish JSX guard or hand-written isRenderable
+// check predates making `@astryx/no-nullish-jsx-guard` fail strict lint, by
+// repo-relative file, once per check. The list only shrinks.
+const nullishGuardBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-nullish-jsx-guard.baseline.json',
     ),
     'utf8',
   ),
@@ -880,6 +894,25 @@ export default defineConfig(
       '@astryx/no-internal-barrel-import': [
         reactSeverity,
         {baseline: internalBarrelBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A slot's presence is decided by `isRenderable`, never a bare `!= null`
+  // guard or a hand-written copy of its checks. The checks that predate this
+  // block are listed in the baseline, once per check of each value, and that
+  // many stay allowed until migrated; one more is reported (an error in
+  // strict mode, so a pull request that adds one fails lint, while main stays
+  // green).
+  {
+    files: nullishGuardScope.files,
+    ignores: nullishGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-nullish-jsx-guard': [
+        reactSeverity,
+        {baseline: nullishGuardBaseline, root: import.meta.dirname},
       ],
     },
   },
