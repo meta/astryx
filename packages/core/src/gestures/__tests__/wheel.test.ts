@@ -43,6 +43,10 @@ function wheel(
     dy?: number;
     mode?: number;
     ctrl?: boolean;
+    /** The legacy `wheelDeltaX`/`wheelDeltaY` Chromium and WebKit send. */
+    legacy?: {x: number; y: number};
+    /** A trackpad's wheel: its legacy delta three times its delta. */
+    trackpad?: boolean;
     time: number;
   },
 ): WheelEvent {
@@ -59,6 +63,15 @@ function wheel(
     ctrlKey: init.ctrl ?? false,
   });
   Object.defineProperty(event, 'timeStamp', {value: init.time});
+  const legacy =
+    init.legacy ??
+    (init.trackpad === true
+      ? {x: -3 * (init.dx ?? 0), y: -3 * (init.dy ?? 0)}
+      : null);
+  if (legacy != null) {
+    Object.defineProperty(event, 'wheelDeltaX', {value: legacy.x});
+    Object.defineProperty(event, 'wheelDeltaY', {value: legacy.y});
+  }
   target.dispatchEvent(event);
   return event;
 }
@@ -122,10 +135,16 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     // Right to left, scrollLeft runs from 0 at the start to minus the
     // overflow: at 0 the scroller cannot scroll right any further.
     scrollableX(scroller, {scrollLeft: 0, scrollWidth: 300, clientWidth: 200});
-    expect(wheel(item, {dx: -20, time: 0}).defaultPrevented).toBe(false);
+    expect(
+      wheel(item, {trackpad: true, dx: -20, time: 0}).defaultPrevented,
+    ).toBe(false);
     expect(states).toEqual([]);
-    expect(wheel(item, {dx: 20, time: 200}).defaultPrevented).toBe(true);
-    expect(wheel(item, {dx: 20, time: 216}).defaultPrevented).toBe(true);
+    expect(
+      wheel(item, {trackpad: true, dx: 20, time: 200}).defaultPrevented,
+    ).toBe(true);
+    expect(
+      wheel(item, {trackpad: true, dx: 20, time: 216}).defaultPrevented,
+    ).toBe(true);
     expect(states).toEqual(['began', 'changed']);
   });
 
@@ -145,8 +164,12 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       scrollWidth: 300,
       clientWidth: 200,
     });
-    expect(wheel(item, {dx: -20, time: 0}).defaultPrevented).toBe(true);
-    expect(wheel(item, {dx: -20, time: 16}).defaultPrevented).toBe(true);
+    expect(
+      wheel(item, {trackpad: true, dx: -20, time: 0}).defaultPrevented,
+    ).toBe(true);
+    expect(
+      wheel(item, {trackpad: true, dx: -20, time: 16}).defaultPrevented,
+    ).toBe(true);
     expect(states).toEqual(['began', 'changed']);
   });
 
@@ -181,15 +204,25 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     detachers.push(host.attach(content, pull));
     // Mid-scroll: a scroll up is the owner's.
     scrollableY(owner, {scrollTop: 50, scrollHeight: 300, clientHeight: 200});
-    expect(wheel(content, {dy: -20, time: 0}).defaultPrevented).toBe(false);
-    expect(wheel(content, {dy: -20, time: 16}).defaultPrevented).toBe(false);
+    expect(
+      wheel(content, {trackpad: true, dy: -20, time: 0}).defaultPrevented,
+    ).toBe(false);
+    expect(
+      wheel(content, {trackpad: true, dy: -20, time: 16}).defaultPrevented,
+    ).toBe(false);
     // At the top, a scroll down is the owner's too.
     scrollableY(owner, {scrollTop: 0, scrollHeight: 300, clientHeight: 200});
-    expect(wheel(content, {dy: 20, time: 200}).defaultPrevented).toBe(false);
+    expect(
+      wheel(content, {trackpad: true, dy: 20, time: 200}).defaultPrevented,
+    ).toBe(false);
     expect(states).toEqual([]);
     // At the top, pulling the content down: the pan's.
-    expect(wheel(content, {dy: -20, time: 400}).defaultPrevented).toBe(true);
-    expect(wheel(content, {dy: -20, time: 416}).defaultPrevented).toBe(true);
+    expect(
+      wheel(content, {trackpad: true, dy: -20, time: 400}).defaultPrevented,
+    ).toBe(true);
+    expect(
+      wheel(content, {trackpad: true, dy: -20, time: 416}).defaultPrevented,
+    ).toBe(true);
     expect(states).toEqual(['began', 'changed']);
   });
 
@@ -221,14 +254,20 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     const states = statesOf(pan);
     detachers.push(host.attach(card, pan));
     const added = vi.spyOn(document, 'addEventListener');
-    expect(wheel(card, {dx: 16, time: 0}).defaultPrevented).toBe(true);
-    expect(wheel(card, {dx: 16, time: 16}).defaultPrevented).toBe(true);
+    expect(
+      wheel(card, {trackpad: true, dx: 16, time: 0}).defaultPrevented,
+    ).toBe(true);
+    expect(
+      wheel(card, {trackpad: true, dx: 16, time: 16}).defaultPrevented,
+    ).toBe(true);
     expect(states).toEqual(['began', 'changed']);
     const afterTwo = pan.translation().x;
     // The card has moved out from under a still cursor: the next steps land
     // on the wrapper.
     for (const time of [32, 48, 64, 80]) {
-      expect(wheel(wrapper, {dx: 16, time}).defaultPrevented).toBe(true);
+      expect(
+        wheel(wrapper, {trackpad: true, dx: 16, time}).defaultPrevented,
+      ).toBe(true);
     }
     expect(pan.translation().x).toBe(afterTwo - 64);
     expect(states.at(-1)).toBe('changed');
@@ -236,13 +275,16 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
     ).toHaveLength(1);
     const removed = vi.spyOn(document, 'removeEventListener');
-    clock.runDue(80 + 100);
+    // A followed trackpad swipe ends 220 ms after its last wheel.
+    clock.runDue(80 + 220);
     expect(states.slice(-2)).toEqual(['ended', 'possible']);
     expect(
       (removed.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
     ).toHaveLength(1);
     // Over: a wheel on the wrapper is the page's again.
-    expect(wheel(wrapper, {dx: 16, time: 400}).defaultPrevented).toBe(false);
+    expect(
+      wheel(wrapper, {trackpad: true, dx: 16, time: 400}).defaultPrevented,
+    ).toBe(false);
   });
 
   it("ends a wheel gesture whose pan is detached mid-gesture at once, and takes the document's wheel listener with it (FR24)", () => {
@@ -252,17 +294,17 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       allowedScrollTypes: ['continuous'],
     });
     const detach = host.attach(card, pan);
-    wheel(card, {dx: 16, time: 0});
-    wheel(card, {dx: 16, time: 16});
+    wheel(card, {trackpad: true, dx: 16, time: 0});
+    wheel(card, {trackpad: true, dx: 16, time: 16});
     expect(pan.state).toBe('changed');
     const removed = vi.spyOn(document, 'removeEventListener');
     detach();
     expect(
       (removed.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
     ).toHaveLength(1);
-    expect(wheel(document.body, {dx: 16, time: 32}).defaultPrevented).toBe(
-      false,
-    );
+    expect(
+      wheel(document.body, {trackpad: true, dx: 16, time: 32}).defaultPrevented,
+    ).toBe(false);
   });
 
   it('arms nothing else for a recognizer that takes only scroll input (no pointer types): where the primary pointer is fine its element gets the wheel listener alone, and no finger, mouse or pen starts it', () => {
@@ -421,7 +463,7 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(false);
   });
 
-  it('takes a trackpad scroll along its axis on a pan that allows continuous scrolling: it begins past 10 px, follows the content, and ends 100 ms after the last wheel', () => {
+  it('takes a trackpad scroll along its axis on a pan that allows continuous scrolling: it begins past 10 px, follows the content, and ends 220 ms after the last wheel, a slow swipe pausing between its wheels', () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');
     const pan = new PanGestureRecognizer({
@@ -434,27 +476,28 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
     ).toEqual([['wheel', expect.any(Function), {passive: false}]]);
     const events = [0, 16, 32, 48].map(time =>
-      wheel(box, {dx: 6.5, dy: 0.5, time}),
+      wheel(box, {trackpad: true, dx: 6.5, dy: 0.5, time}),
     );
     expect(events.every(event => event.defaultPrevented)).toBe(true);
     expect(states[0]).toBe('began');
     // The content moves the way the fingers do: a scroll right drags it left.
     expect(pan.translation().x).toBeLessThan(0);
     expect(states).not.toContain('ended');
-    clock.runDue(48 + 99);
+    clock.runDue(48 + 219);
     expect(states).not.toContain('ended');
-    clock.runDue(48 + 100);
+    clock.runDue(48 + 220);
     expect(states).toContain('ended');
   });
 
-  it("releases a mouse wheel's notches still, so position alone decides, while a trackpad's scroll keeps its speed (coordinator ruling; FR43 is silent)", () => {
-    const {notched, smooth} = mount(
-      '<div id="notched"></div><div id="smooth"></div>',
+  it("releases a mouse wheel's notches still, so position alone decides, and a trackpad's scroll with the fingers' speed where they lift into momentum, still where they stop (coordinator ruling; FR43 is silent)", () => {
+    const {notched, smooth, stopped} = mount(
+      '<div id="notched"></div><div id="smooth"></div><div id="stopped"></div>',
     );
     const released: Record<string, {velocity: number; scroll: number}> = {};
     for (const [key, element] of [
       ['notched', notched],
       ['smooth', smooth],
+      ['stopped', stopped],
     ] as const) {
       const pan = new PanGestureRecognizer({direction: 'vertical'});
       pan.addTransitionListener((current, _from, to) => {
@@ -474,13 +517,23 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     clock.runDue(32 + 100);
     expect(Math.abs(released.notched.velocity)).toBe(0);
     expect(Math.abs(released.notched.scroll)).toBe(0);
-    // A trackpad's steady scroll keeps its speed at the release.
-    for (const time of [500, 516, 532, 548]) {
-      wheel(smooth, {dy: 8, time});
+    // A trackpad's fling: steady deltas, then shrinking ones as the fingers
+    // lift into momentum. It releases at the lift with the fingers' speed.
+    let time = 500;
+    for (const dy of [8, 8, 8, 8, 7.6, 7.2, 6.8, 6.4, 6, 5.6]) {
+      wheel(smooth, {trackpad: true, dy, time});
+      time += 16;
     }
-    clock.runDue(548 + 100);
+    clock.runDue(time + 200);
     expect(Math.abs(released.smooth.velocity)).toBeGreaterThan(0);
     expect(Math.abs(released.smooth.scroll)).toBeGreaterThan(0);
+    // Fingers that stop: the scroll ends 180 ms after its last wheel, still.
+    for (const at of [1500, 1516, 1532, 1548]) {
+      wheel(stopped, {trackpad: true, dy: 8, time: at});
+    }
+    clock.runDue(1548 + 180);
+    expect(Math.abs(released.stopped.velocity)).toBe(0);
+    expect(Math.abs(released.stopped.scroll)).toBe(0);
   });
 
   it("releases a mouse wheel's notches still whatever the host's clock reads: the release is stamped on the wheels' own times", () => {
@@ -523,12 +576,12 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     const states = statesOf(pan);
     detachers.push(host.attach(box, pan));
     for (const time of [0, 16, 32]) {
-      wheel(box, {dx: 8, time});
+      wheel(box, {trackpad: true, dx: 8, time});
     }
-    // The timer that would end it has not run: the next wheel, 150 ms later,
-    // ends it at its last wheel and begins another.
-    for (const time of [182, 198, 214]) {
-      wheel(box, {dx: 8, time});
+    // The timer that would end it has not run: the next wheel, 250 ms later
+    // (past a swipe's 220 ms), ends it and begins another.
+    for (const time of [282, 298, 314]) {
+      wheel(box, {trackpad: true, dx: 8, time});
     }
     expect(states.filter(state => state === 'began')).toHaveLength(2);
     expect(states).toContain('ended');
@@ -559,18 +612,30 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     const states = statesOf(pan);
     detachers.push(host.attach(box, pan));
     const native = [0, 16, 32].map(time =>
-      wheel(document.getElementById('row') as HTMLElement, {dx: 8, time}),
+      wheel(document.getElementById('row') as HTMLElement, {
+        trackpad: true,
+        dx: 8,
+        time,
+      }),
     );
     // Decided once, at the gesture's first wheel: the list scrolls.
     Object.defineProperty(list, 'scrollLeft', {configurable: true, value: 400});
     native.push(
-      wheel(document.getElementById('row') as HTMLElement, {dx: 8, time: 48}),
+      wheel(document.getElementById('row') as HTMLElement, {
+        trackpad: true,
+        dx: 8,
+        time: 48,
+      }),
     );
     expect(native.some(event => event.defaultPrevented)).toBe(false);
     expect(states).toEqual([]);
     clock.runDue(48 + 100);
     const taken = [500, 516, 532].map(time =>
-      wheel(document.getElementById('row') as HTMLElement, {dx: 8, time}),
+      wheel(document.getElementById('row') as HTMLElement, {
+        trackpad: true,
+        dx: 8,
+        time,
+      }),
     );
     expect(taken.every(event => event.defaultPrevented)).toBe(true);
     expect(states[0]).toBe('began');
@@ -637,7 +702,7 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     range.selectNodeContents(box);
     selection.addRange(range);
     for (const time of [0, 16, 32, 48]) {
-      wheel(box, {dx: 8, time});
+      wheel(box, {trackpad: true, dx: 8, time});
     }
     expect(pan.state).not.toBe('possible');
     expect(selection.rangeCount).toBe(1);
@@ -738,5 +803,100 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(removed.mock.calls.map(call => call[0])).toContain('wheel');
     expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(false);
     detach();
+  });
+});
+
+describe("a mouse's wheel and a trackpad's lift (spec:AST-094 FR43)", () => {
+  /** A pan that takes only a trackpad's scroll, horizontally. */
+  function trackpadPan(box: HTMLElement): PanGestureRecognizer {
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedPointerTypes: [],
+      allowedScrollTypes: ['continuous'],
+    });
+    detachers.push(host.attach(box, pan));
+    return pan;
+  }
+
+  for (const [name, init] of [
+    [
+      'deltas a hair off whole pixels, as a mouse wheel on Windows sends',
+      {dx: 100.0000015},
+    ],
+    [
+      'a legacy wheelDelta that is not three times the delta',
+      {dx: 10, legacy: {x: -120, y: 0}},
+    ],
+    [
+      'a 120 legacy tick over a 40 px delta, a notch',
+      {dx: 40, legacy: {x: -120, y: 0}},
+    ],
+  ] as const) {
+    it(`counts ${name} as a mouse's wheel: a pan that takes only a trackpad's scroll leaves it to the page`, () => {
+      const {box} = mount('<div id="box"></div>');
+      const pan = trackpadPan(box);
+      const states = statesOf(pan);
+      for (let step = 0; step < 3; step++) {
+        const event = wheel(box, {...init, time: step * 16});
+        expect(event.defaultPrevented).toBe(false);
+      }
+      expect(states).toEqual([]);
+    });
+  }
+
+  it("counts a pixel scroll that carries no legacy wheelDelta, as Firefox sends, as a mouse's wheel: a pan that takes only a trackpad's scroll leaves it to the page", () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = trackpadPan(box);
+    const states = statesOf(pan);
+    for (let step = 0; step < 3; step++) {
+      const event = wheel(box, {dx: 7, time: step * 16});
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(states).toEqual([]);
+  });
+
+  it("takes a trackpad's precise deltas, whose legacy wheelDelta is three times each", () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = trackpadPan(box);
+    const states = statesOf(pan);
+    for (let step = 0; step < 3; step++) {
+      wheel(box, {dx: 7, legacy: {x: -21, y: 0}, time: step * 16});
+    }
+    expect(states[0]).toBe('began');
+  });
+
+  it('ends a trackpad pan where the fingers lift: the shrinking deltas before the lift and the momentum after it never move it', () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = trackpadPan(box);
+    const states = statesOf(pan);
+    const ended: number[] = [];
+    pan.addTransitionListener((recognizer, _from, to) => {
+      if (to === 'ended') {
+        ended.push(recognizer.translation().x);
+      }
+    });
+    const finger = [10, 10, 10, 10];
+    const lifting = [9.5, 9, 8.5, 8];
+    const momentum = [7.5, 7, 6.5, 6, 5.5, 5];
+    let time = 0;
+    let endedAt = -1;
+    for (const dx of [...finger, ...lifting, ...momentum]) {
+      wheel(box, {trackpad: true, dx, time});
+      if (endedAt < 0 && states.includes('ended')) {
+        endedAt = time;
+      }
+      time += 16;
+    }
+    clock.runDue(time + 500);
+    // It ends at the lift, the fourth shrinking delta, at the fingers'
+    // travel: the four steady deltas against the content, counted from where
+    // the pan began past its 10 px hysteresis.
+    expect(endedAt).toBe((finger.length + lifting.length - 1) * 16);
+    expect(ended).toHaveLength(1);
+    expect(ended[0]).toBeCloseTo(-30, 6);
+    expect(states.slice(states.indexOf('ended'))).toEqual([
+      'ended',
+      'possible',
+    ]);
   });
 });
