@@ -205,6 +205,10 @@
           "name": "TransferList"
         },
         {
+          "kind": "component",
+          "name": "WeightedSVGIcon"
+        },
+        {
           "kind": "template",
           "name": "CommentComposerShowcase"
         },
