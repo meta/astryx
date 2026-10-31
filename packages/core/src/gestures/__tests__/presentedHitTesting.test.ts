@@ -70,12 +70,18 @@ let resolvedY: number;
 
 /**
  * A sheet whose animation started at `sheetBox` and is drawn `drawnY` px
- * from it, with a Done button at its top right, over a full-page scrim. Hit
- * tests answer where the engine last resolved the sheet, as iOS WebKit does
- * mid-animation: at the start until a style write (the registry's
- * `resolve`) moves it to where the sheet is drawn.
+ * from it (or `drawnY(time)` px, `time` on the `performance.now()` clock,
+ * for a sheet still moving), with a Done button at its top right, over a
+ * full-page scrim. Hit tests answer where the engine last resolved the sheet,
+ * as iOS WebKit does mid-animation: at the start until a style write (the
+ * registry's `resolve`) moves it to where the sheet is drawn.
  */
-function mount(sheetBox: Box, drawnY: number): void {
+function mount(
+  sheetBox: Box,
+  drawnY: number | ((time: number) => number),
+): void {
+  const drawnAt = (time: number) =>
+    typeof drawnY === 'number' ? drawnY : drawnY(time);
   document.body.innerHTML =
     '<div id="scrim"></div><div id="sheet"><button id="done">Done</button></div>';
   scrim = document.getElementById('scrim') as HTMLElement;
@@ -124,9 +130,12 @@ function mount(sheetBox: Box, drawnY: number): void {
   }
   cleanups.push(
     registerPresentedOffset(sheet, {
-      offset: () => ({x: 0, y: drawnY - resolvedY}),
+      offset: (time = window.performance.now()) => ({
+        x: 0,
+        y: drawnAt(time) - resolvedY,
+      }),
       resolve: () => {
-        resolvedY = drawnY;
+        resolvedY = drawnAt(window.performance.now());
       },
     }),
   );
@@ -200,6 +209,23 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     expect(clicks).toEqual(['done']);
     // One click only: the guard is spent.
     expect(late()).toBe(false);
+  });
+
+  it('sends a touch the host handles late to what was drawn under the finger when it landed (spec:AST-094 FR11)', () => {
+    // Presenting, still moving up at 160 px/s: at 1,000 ms the finger lands
+    // on the drawn Done; a busy main thread hands the host the touch 150 ms
+    // later, when Done is drawn 24 px higher and the finger's point is over
+    // the sheet's body.
+    mount({left: 0, top: 844, right: 390, bottom: 1244}, time => {
+      return -544 - 0.16 * (time - 1000);
+    });
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(1150);
+    host();
+    const onDone = {x: 340, y: 330};
+    touch('touchstart', scrim, onDone, 1000);
+    touch('touchend', scrim, onDone, 1080);
+    expect(clicks).toEqual(['done']);
+    now.mockRestore();
   });
 
   it("clicks the drawn button once with only watchers attached: the shared click guard swallows the engine's own click", () => {

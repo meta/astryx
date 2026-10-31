@@ -812,12 +812,15 @@ export class GestureHost {
    * a finger on a settling sheet lands on whatever sat under the sheet's
    * start (the scrim, which closes it), and a finger where the sheet was
    * lands on the sheet. UIKit keeps an interruptible animation hit-testable
-   * where it is drawn (UIViewPropertyAnimator).
+   * where it is drawn (UIViewPropertyAnimator). The touch goes to what was
+   * drawn under the finger when it landed (`time`, its event's timestamp),
+   * even when a busy main thread hands it over later (`spec:AST-094` FR11).
    */
   private presentedTarget(
     native: EventTarget | null,
     x: number,
     y: number,
+    time: number,
   ): EventTarget | null {
     if (!this.hitTestsLayout()) {
       return native;
@@ -836,15 +839,23 @@ export class GestureHost {
     // drawn now; the hit test below flushes them. The engine then gets
     // z-order, pointer-events and clipping right, which no box math would.
     resolvePresented(movers);
-    let hit = this.doc.elementFromPoint(x, y);
-    // The document answers a shadow host for anything inside its open root:
-    // descend to what is drawn there.
-    while (hit?.shadowRoot != null) {
-      const inner = hit.shadowRoot.elementFromPoint(x, y);
-      if (inner == null || inner === hit) {
-        break;
+    let hit = this.drawnAt(x, y);
+    // A mover kept going while the touch waited for the main thread: what
+    // was under the finger when it landed is now that far along. A timestamp
+    // on another clock, or older than a second, is not corrected.
+    const age = (this.doc.defaultView?.performance.now() ?? time) - time;
+    if (age > 0 && age < 1000) {
+      for (const mover of movers) {
+        const then = presentedOffsetOf(mover, time);
+        if (Math.abs(then.x) < 0.5 && Math.abs(then.y) < 0.5) {
+          continue;
+        }
+        const landed = this.drawnAt(x - then.x, y - then.y);
+        if (landed != null && containsAlongFlatTree(mover, landed)) {
+          hit = landed;
+          break;
+        }
       }
-      hit = inner;
     }
     if (hit == null || hit === native) {
       return native;
@@ -857,6 +868,21 @@ export class GestureHost {
         (node != null && containsAlongFlatTree(mover, node)),
     );
     return isAboutMover ? found : native;
+  }
+
+  /** What is drawn at a point, inside open shadow roots too. */
+  private drawnAt(x: number, y: number): Element | null {
+    let hit = this.doc.elementFromPoint(x, y);
+    // The document answers a shadow host for anything inside its open root:
+    // descend to what is drawn there.
+    while (hit?.shadowRoot != null) {
+      const inner = hit.shadowRoot.elementFromPoint(x, y);
+      if (inner == null || inner === hit) {
+        break;
+      }
+      hit = inner;
+    }
+    return hit;
   }
 
   /** The browser took these touches (a scroll): no click of ours for them. */
@@ -1843,7 +1869,12 @@ export class GestureHost {
         touch.target instanceof Node
           ? landedOn(event, touch.target)
           : landedOn(event);
-      const target = this.presentedTarget(native, touch.clientX, touch.clientY);
+      const target = this.presentedTarget(
+        native,
+        touch.clientX,
+        touch.clientY,
+        event.timeStamp,
+      );
       const {recognizers, consumer, consumerElement} = this.participantsAt(
         target,
         'touch',
@@ -2508,7 +2539,12 @@ export class GestureHost {
       return;
     }
     const landed = landedOn(event);
-    const target = this.presentedTarget(landed, event.clientX, event.clientY);
+    const target = this.presentedTarget(
+      landed,
+      event.clientX,
+      event.clientY,
+      event.timeStamp,
+    );
     const {recognizers, consumer, consumerElement} = this.participantsAt(
       target,
       event.pointerType,

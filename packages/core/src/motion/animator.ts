@@ -1121,9 +1121,8 @@ export function createAnimator(
   };
 
   const presentedSource: PresentedSource = {
-    offset: () => {
+    offset: (time = now()) => {
       syncPending();
-      const time = now();
       return {
         x: drawnTranslate('x', time) - hitTested.x,
         y: drawnTranslate('y', time) - hitTested.y,
