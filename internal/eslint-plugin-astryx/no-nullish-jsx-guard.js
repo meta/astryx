@@ -40,6 +40,22 @@
  *     {user != null && <Profile user={user} />}   // NOT flagged — `user` is a
  *                                                  // data object, only a prop
  *
+ * Hand-rolled isRenderable: a chain that tests one value for nullishness or
+ * the empty string AND for a boolean is `isRenderable` written out, wherever
+ * it appears (an assignment, a condition, a return):
+ *
+ *   const hasLabel = label !== '' && label != null && typeof label !== 'boolean';
+ *   if (rendered == null || typeof rendered === 'boolean') return null;
+ *
+ * The boolean test is what marks the value as a rendered node, so these are
+ * flagged even outside JSX (architecture:react-component-runtime: a shared
+ * concern is extended in its owner and called once).
+ *
+ * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
+ * baseline lists, per file, the guarded values whose checks predate the
+ * baseline; they stay allowed until migrated, and anything new is reported.
+ * `no-nullish-jsx-guard.baseline.mjs` writes it.
+ *
  * Known limitations (intentional, to keep precision high):
  *   - Bare assignments like `const hasFoo = foo != null` are not flagged;
  *     distinguishing a `ReactNode` slot from any other nullable value needs
@@ -47,6 +63,20 @@
  *   - Direct value renders such as `{foo != null && foo}` (no wrapper element)
  *     are not flagged — the guarded branch is not a JSX element.
  */
+
+import path from 'node:path';
+
+/**
+ * Where the repository config enforces the rule with its baseline; the
+ * baseline script lints the same files.
+ */
+export const scope = {
+  files: [
+    'packages/core/src/**/*.{ts,tsx}',
+    'packages/richtext/src/**/*.{ts,tsx}',
+  ],
+  ignores: ['packages/core/src/theme/**'],
+};
 
 // `!= null` / `!== null` / `!== undefined` — the "render when present" polarity.
 const NOT_EQUAL_OPERATORS = new Set(['!=', '!==']);
@@ -202,6 +232,59 @@ function flattenAnd(node) {
   return [node];
 }
 
+/** `typeof X !== 'boolean'` (or `===` when `equal`): the value, else null. */
+function parseBooleanTypeof(node, equal) {
+  if (node?.type !== 'BinaryExpression') {
+    return null;
+  }
+  const ops = equal ? EQUAL_OPERATORS : NOT_EQUAL_OPERATORS;
+  if (!ops.has(node.operator)) {
+    return null;
+  }
+  const [left, right] = [node.left, node.right];
+  const typeofSide =
+    left.type === 'UnaryExpression' && left.operator === 'typeof'
+      ? left
+      : right.type === 'UnaryExpression' && right.operator === 'typeof'
+        ? right
+        : null;
+  const other = typeofSide === left ? right : left;
+  if (
+    typeofSide == null ||
+    other.type !== 'Literal' ||
+    other.value !== 'boolean'
+  ) {
+    return null;
+  }
+  return typeofSide.argument;
+}
+
+/** `X !== <literal>` (or `===` when `equal`) for a literal in `values`. */
+function parseLiteralComparison(node, equal, values) {
+  if (node?.type !== 'BinaryExpression') {
+    return null;
+  }
+  const ops = equal ? EQUAL_OPERATORS : NOT_EQUAL_OPERATORS;
+  if (!ops.has(node.operator)) {
+    return null;
+  }
+  const isWanted = side => side?.type === 'Literal' && values.has(side.value);
+  if (isWanted(node.right) && !isWanted(node.left)) return node.left;
+  if (isWanted(node.left) && !isWanted(node.right)) return node.right;
+  return null;
+}
+
+/** Flatten a chain of one logical operator into its operands. */
+function flattenLogical(node, operator) {
+  if (node?.type === 'LogicalExpression' && node.operator === operator) {
+    return [
+      ...flattenLogical(node.left, operator),
+      ...flattenLogical(node.right, operator),
+    ];
+  }
+  return [node];
+}
+
 const rule = {
   meta: {
     type: 'problem',
@@ -219,8 +302,24 @@ const rule = {
         '`true`, and `""` all pass `!= null` — leaking an empty wrapper into the ' +
         'DOM. Use `isRenderable({{value}})` from `@astryxdesign/core/utils`, which ' +
         'also excludes boolean and empty-string values (0 stays renderable).',
+      handRolledRenderable:
+        '`{{code}}` writes out `isRenderable({{value}})` by hand. Call ' +
+        '`isRenderable` from `@astryxdesign/core/utils` so every slot ' +
+        'agrees on what renders nothing (null, undefined, true, false, "").',
     },
-    schema: [],
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          baseline: {
+            type: 'object',
+            additionalProperties: {type: 'array', items: {type: 'string'}},
+          },
+          root: {type: 'string'},
+        },
+        additionalProperties: false,
+      },
+    ],
   },
   create(context) {
     const filename = context.filename ?? context.getFilename();
@@ -228,10 +327,77 @@ const rule = {
     if (filename.includes('.test.') || filename.includes('.stories.')) {
       return {};
     }
+    // The shared utility itself is the one place the checks are written out.
+    if (/(?:^|[\\/])isRenderable\.[cm]?[jt]sx?$/.test(filename)) {
+      return {};
+    }
     const sourceCode = context.sourceCode ?? context.getSourceCode();
+    const options = context.options[0] ?? {};
+    const root = options.root ?? context.cwd;
+    const relative = path.relative(root, filename).split(path.sep).join('/');
+    const allowed = new Set(options.baseline?.[relative] ?? []);
+
+    function reportHandRolled(chain, value) {
+      const valueText = sourceCode.getText(value);
+      if (allowed.has(valueText)) {
+        return;
+      }
+      context.report({
+        node: chain,
+        messageId: 'handRolledRenderable',
+        data: {code: sourceCode.getText(chain), value: valueText},
+      });
+    }
+
+    /**
+     * `x != null && typeof x !== 'boolean'` (render when present) and
+     * `x == null || typeof x === 'boolean'` (nothing to render): a presence
+     * test (nullish or '') and a boolean test on the same value.
+     */
+    function checkHandRolled(node) {
+      if (node.operator !== '&&' && node.operator !== '||') {
+        return;
+      }
+      if (
+        node.parent?.type === 'LogicalExpression' &&
+        node.parent.operator === node.operator
+      ) {
+        return;
+      }
+      const equal = node.operator === '||';
+      const presence = new Set();
+      const booleans = new Map();
+      for (const operand of flattenLogical(node, node.operator)) {
+        const nullish = parseNullishComparison(operand);
+        if (nullish && nullish.equal === equal) {
+          presence.add(sourceCode.getText(nullish.value));
+          continue;
+        }
+        const empty = parseLiteralComparison(operand, equal, new Set(['']));
+        if (empty) {
+          presence.add(sourceCode.getText(empty));
+          continue;
+        }
+        const typed =
+          parseBooleanTypeof(operand, equal) ??
+          parseLiteralComparison(operand, equal, new Set([true, false]));
+        if (typed) {
+          booleans.set(sourceCode.getText(typed), typed);
+        }
+      }
+      for (const [text, value] of booleans) {
+        if (presence.has(text)) {
+          reportHandRolled(node, value);
+          return;
+        }
+      }
+    }
 
     function report(comparison, value, negate) {
       const valueText = sourceCode.getText(value);
+      if (allowed.has(valueText)) {
+        return;
+      }
       const replacement = `${negate ? '!' : ''}isRenderable(${valueText})`;
       context.report({
         node: comparison,
@@ -254,6 +420,7 @@ const rule = {
     return {
       // `{value != null && <El>{value}</El>}`
       LogicalExpression(node) {
+        checkHandRolled(node);
         if (node.operator !== '&&' || !isJSX(node.right)) {
           return;
         }

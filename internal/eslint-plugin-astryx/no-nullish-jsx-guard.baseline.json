@@ -1,0 +1,46 @@
+{
+  "packages/core/src/AppShell/AppShell.tsx": ["mobileNav"],
+  "packages/core/src/Badge/Badge.tsx": ["label"],
+  "packages/core/src/Chat/ChatLayout.tsx": ["children"],
+  "packages/core/src/Chat/ChatMessageList.tsx": ["children"],
+  "packages/core/src/Chat/ChatSystemMessage.tsx": ["icon"],
+  "packages/core/src/Chat/ChatToolCalls.tsx": [
+    "call.additions",
+    "call.deletions",
+    "call.duration",
+    "call.target",
+    "latestCall.target"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenuGroup.tsx": ["title"],
+  "packages/core/src/Item/Item.tsx": [
+    "description",
+    "endContent",
+    "startContent"
+  ],
+  "packages/core/src/Markdown/Markdown.tsx": ["rendered"],
+  "packages/core/src/Markdown/plugins/protocol.ts": ["value"],
+  "packages/core/src/Markdown/plugins/semanticFence.ts": ["value"],
+  "packages/core/src/MetadataList/MetadataList.tsx": ["title"],
+  "packages/core/src/MetadataList/MetadataListItem.tsx": ["icon"],
+  "packages/core/src/OverflowList/OverflowList.tsx": ["measureIndicator"],
+  "packages/core/src/Pagination/Pagination.tsx": ["computedTotalPages"],
+  "packages/core/src/PowerSearch/PowerSearch.tsx": ["resultCountText"],
+  "packages/core/src/Table/BaseTable.tsx": ["after"],
+  "packages/core/src/Table/plugins/sortable/useTableSortable.tsx": ["rank"],
+  "packages/core/src/TextArea/TextArea.tsx": ["maxLength"],
+  "packages/core/src/ToggleButton/ToggleButton.tsx": ["children"],
+  "packages/core/src/Tooltip/__tests__/TooltipTallContentTracking.a11y.browser.spec.ts": [
+    "value"
+  ],
+  "packages/core/src/TopNav/TopNavMegaMenu.tsx": ["featured", "items"],
+  "packages/core/src/TreeList/TreeList.tsx": ["header"],
+  "packages/core/src/TreeList/TreeListItem.tsx": [
+    "description",
+    "endContent",
+    "renderedChildren",
+    "startContent"
+  ],
+  "packages/core/src/utils/getNodeText.ts": ["node"],
+  "packages/richtext/src/RichTextEditor.tsx": ["maxLength", "toolbar"],
+  "packages/richtext/src/RichTextEditorToolbar.tsx": ["endContent"]
+}

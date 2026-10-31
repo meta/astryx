@@ -539,7 +539,15 @@ import {isRenderable} from '@astryxdesign/core/utils';
 }
 ```
 
-Ships as a **warning in both tiers** while core migrates its existing call sites; promote to `error` in strict mode once migrated. Provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
+It also flags `isRenderable` written out by hand anywhere (an assignment, a condition, a return): a chain that tests one value for nullishness or the empty string and for a boolean.
+
+```ts
+const hasLabel = label !== '' && label != null && typeof label !== 'boolean'; // flagged
+if (rendered == null || typeof rendered === 'boolean') return null; // flagged
+const hasLabel = isRenderable(label); // good
+```
+
+The presets ship it as a warning. The repository config enforces it in core and richtext with `{baseline, root}`: the checks that predated enforcement are listed per file in `no-nullish-jsx-guard.baseline.json` and stay allowed until migrated, while a new one is an error in strict mode. After migrating call sites, rewrite the baseline with `node internal/eslint-plugin-astryx/no-nullish-jsx-guard.baseline.mjs` (`--check` verifies it). For a JSX guard, the rule also provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
 
 See: https://github.com/meta/astryx/issues/2538
 

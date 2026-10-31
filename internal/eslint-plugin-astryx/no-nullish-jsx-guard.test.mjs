@@ -24,14 +24,44 @@ const tester = new RuleTester({
 // at the top level (Vitest 4 forbids calling suite functions inside an it()).
 tester.run('no-nullish-jsx-guard', rule, {
   valid: [
+    // ✅ The shared utility, or a presence test without a boolean test.
+    {code: `const hasLabel = isRenderable(label);`},
+    {code: `const hasValue = value != null && value !== '';`},
+    {code: `const isFlag = typeof flag === 'boolean' && flag;`},
+    // ✅ Different values in the presence and boolean tests.
+    {code: `const ok = a != null && typeof b !== 'boolean';`},
+    // ✅ The utility's own definition.
+    {
+      code: `export function isRenderable(node) { return node != null && typeof node !== 'boolean' && node !== ''; }`,
+      filename: '/repo/packages/core/src/utils/isRenderable.ts',
+    },
+    // ✅ Baselined values in their own file, for both checks.
+    {
+      code: `const hasLabel = label != null && typeof label !== 'boolean'; const C = () => <div>{slot != null && <b>{slot}</b>}</div>;`,
+      filename: '/repo/packages/core/src/Badge/Badge.tsx',
+      options: [
+        {
+          baseline: {'packages/core/src/Badge/Badge.tsx': ['label', 'slot']},
+          root: '/repo',
+        },
+      ],
+    },
     // ✅ Already using isRenderable — the shipped fix.
-    {code: `const C = () => <div>{isRenderable(sideNav) && <aside>{sideNav}</aside>}</div>;`},
-    {code: `const C = () => <div>{isRenderable(label) ? <span>{label}</span> : null}</div>;`},
+    {
+      code: `const C = () => <div>{isRenderable(sideNav) && <aside>{sideNav}</aside>}</div>;`,
+    },
+    {
+      code: `const C = () => <div>{isRenderable(label) ? <span>{label}</span> : null}</div>;`,
+    },
 
     // ✅ Guarded value is a data object used only as a prop, not rendered as a
     //    child — `!= null` is the correct guard, do not flag.
-    {code: `const C = () => <div>{user != null && <Profile user={user} />}</div>;`},
-    {code: `const C = () => <div>{config !== undefined ? <Widget config={config} /> : null}</div>;`},
+    {
+      code: `const C = () => <div>{user != null && <Profile user={user} />}</div>;`,
+    },
+    {
+      code: `const C = () => <div>{config !== undefined ? <Widget config={config} /> : null}</div>;`,
+    },
 
     // ✅ Boolean-style guard with no nullish comparison at all.
     {code: `const C = () => <div>{isOpen && <Menu />}</div>;`},
@@ -43,13 +73,19 @@ tester.run('no-nullish-jsx-guard', rule, {
 
     // ✅ Nullish comparison guarding JSX, but the guarded value is NOT the
     //    thing being rendered (a sibling value is).
-    {code: `const C = () => <div>{count != null && <Badge>{label}</Badge>}</div>;`},
+    {
+      code: `const C = () => <div>{count != null && <Badge>{label}</Badge>}</div>;`,
+    },
 
     // ✅ Non-nullish comparison (numeric) — out of scope.
-    {code: `const C = () => <div>{items.length > 0 && <List>{items}</List>}</div>;`},
+    {
+      code: `const C = () => <div>{items.length > 0 && <List>{items}</List>}</div>;`,
+    },
 
     // ✅ Equality nullish check whose rendered branch does not contain the value.
-    {code: `const C = () => <div>{value == null ? <Empty /> : <Filled />}</div>;`},
+    {
+      code: `const C = () => <div>{value == null ? <Empty /> : <Filled />}</div>;`,
+    },
 
     // ✅ Test fixtures are skipped.
     {
@@ -59,6 +95,36 @@ tester.run('no-nullish-jsx-guard', rule, {
   ],
 
   invalid: [
+    // ❌ isRenderable written out by hand (Badge's form), outside JSX.
+    {
+      code: `const hasLabel = label !== '' && label != null && typeof label !== 'boolean';`,
+      errors: [{messageId: 'handRolledRenderable'}],
+    },
+    {
+      code: `const hasTitle = title != null && title !== '' && title !== false;`,
+      errors: [{messageId: 'handRolledRenderable'}],
+    },
+    {
+      code: `const hasToolbar = props.toolbar != null && typeof props.toolbar !== 'boolean';`,
+      errors: [{messageId: 'handRolledRenderable'}],
+    },
+    // ❌ The negated form: nothing to render.
+    {
+      code: `function f(rendered) { if (rendered == null || typeof rendered === 'boolean') { return null; } return rendered; }`,
+      errors: [{messageId: 'handRolledRenderable'}],
+    },
+    // ❌ A baseline for another file or another value does not cover it.
+    {
+      code: `const hasLabel = label != null && typeof label !== 'boolean';`,
+      filename: '/repo/packages/core/src/Badge/Badge.tsx',
+      options: [
+        {
+          baseline: {'packages/core/src/Badge/Badge.tsx': ['title']},
+          root: '/repo',
+        },
+      ],
+      errors: [{messageId: 'handRolledRenderable'}],
+    },
     // ❌ Canonical slot leak: `x != null && <El>{x}</El>`.
     {
       code: `const C = () => <div>{sideNav != null && <aside>{sideNav}</aside>}</div>;`,
