@@ -14,11 +14,13 @@
 
 import {describe, expect, it} from 'vitest';
 import {sheet, springs} from '../motion/uikit';
+import type {ReleaseRule} from '../motion/interactive';
 import {solveSpring, toSpring} from '../motion/spring';
 import {
   limitOvershoot,
   resolveDefaultRelease,
   resolveSheetRelease,
+  sheetReleaseRule,
 } from './sheetRelease';
 
 /**
@@ -682,5 +684,80 @@ describe('limitOvershoot', () => {
   it('keeps a downward release from above the tallest detent as it is', () => {
     // Moving down from the wall it only falls back toward the detent.
     expect(limitOvershoot(springs.sheetReleaseFast, -48, 0, 600, 48)).toBe(600);
+  });
+});
+
+describe('sheetReleaseRule (the interactive-transition driver\u2019s rule)', () => {
+  const context = {
+    detents: [LARGE, MEDIUM],
+    dismissedOffset: GONE,
+    isUIKit: true,
+    shortestDetentHeight: GONE - MEDIUM,
+    startOffset: LARGE,
+    today: {direction: 0, travel: 0, velocity: 0},
+  };
+
+  it('is UIKit\u2019s rule under a finger, from where the drag began, for all 134 measured releases', () => {
+    for (const [, offset, velocity] of [
+      ...UIKIT_RELEASES,
+      ...UIKIT_FLICK_RELEASES,
+    ]) {
+      const release = resolveSheetRelease({
+        detents: [LARGE, MEDIUM],
+        dismissedOffset: GONE,
+        position: offset,
+        velocity,
+        start: context.startOffset,
+      });
+      expect(
+        sheetReleaseRule({position: offset, finger: offset, velocity}, context),
+      ).toEqual({
+        target: release.offset,
+        motion: release.spring,
+        outcome: release.kind,
+        index: release.index,
+        exits: release.kind === 'dismiss',
+      });
+    }
+  });
+
+  it('is today\u2019s rule under a mouse, and keeps a sheet that cannot be dismissed', () => {
+    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
+    const today = {direction: 1, travel: 300, velocity: 900};
+    const landing = sheetReleaseRule(
+      {position: 700, finger: 700, velocity: 1200},
+      {...context, isUIKit: false, today},
+    );
+    const release = resolveDefaultRelease({
+      detents: [LARGE, MEDIUM],
+      shortestDetentHeight: GONE - MEDIUM,
+      dismissible: true,
+      position: 700,
+      velocity: 900,
+      travel: 300,
+      direction: 1,
+      startOffset: LARGE,
+    });
+    expect(landing.target).toBe(release.offset);
+    expect(landing.outcome).toBe(release.kind);
+    const kept = sheetReleaseRule(
+      {position: 700, finger: 700, velocity: 1200},
+      {...context, isUIKit: false, today, dismissedOffset: null},
+    );
+    expect(kept.outcome).toBe('detent');
+    expect(kept.exits).toBe(false);
+  });
+
+  it('is a release rule the driver takes', () => {
+    const rule: ReleaseRule<
+      'detent' | 'dismiss',
+      Parameters<typeof sheetReleaseRule>[1]
+    > = sheetReleaseRule;
+    expect(
+      rule(
+        {position: 800, finger: 800, velocity: 1500},
+        {...context, track: undefined},
+      ).exits,
+    ).toBe(true);
   });
 });

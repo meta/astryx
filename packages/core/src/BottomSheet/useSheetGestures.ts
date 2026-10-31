@@ -117,23 +117,22 @@ import {useMediaQuery} from '../hooks';
 import {
   createAnimator,
   type Animator,
-  type MotionCurve,
   type MotionHandle,
 } from '../motion/animator';
 import {rubberBand} from '../motion/rubberBand';
-import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
+import type {SpringDescription} from '../motion/spring';
 import {sheet as sheetTable} from '../motion/uikit/sheet';
 import {SHEET_DETENT_SPRING} from '../motion/uikit/springs';
 import {
-  readReleaseMotion,
-  themeCurve,
-  type ReleaseMotion,
-} from './releaseMotion';
+  createInteractiveTransition,
+  type MapLayer,
+  type ReleaseRule,
+} from '../motion/interactive';
+import {readReleaseMotion, type ReleaseMotion} from './releaseMotion';
 import {
   DEFAULT_DISMISS_OVERSHOOT_RATIO,
   limitOvershoot,
-  resolveDefaultRelease,
-  resolveSheetRelease,
+  sheetReleaseRule,
 } from './sheetRelease';
 import {
   computeDetentOffsets,
@@ -148,6 +147,33 @@ import {
 interface SheetDetents {
   offsets: number[];
   peekOffset: number | null;
+}
+
+// The sheet's moves run on the interactive-transition driver
+// (motion/interactive.ts): its travel channel drives, and the dim on the
+// dialog's ::backdrop is a layer mapped from it. The sheet decides its own
+// targets (sheetRelease.ts) and plays them with `to`, so the driver's own
+// release rule is never consulted.
+const settleOnly: ReleaseRule<'settle'> = ({position}) => ({
+  target: position,
+  motion: SHEET_DETENT_SPRING,
+  outcome: 'settle',
+});
+
+/** The handle of a move the driver settled at once, playing nothing. */
+function settledHandle(finished: Promise<boolean>): MotionHandle {
+  const handle: MotionHandle = {
+    properties: [],
+    finished,
+    started: Promise.resolve(performance.now()),
+    value: () => 0,
+    velocity: () => 0,
+    // It played nothing: no curve for a companion to follow.
+    curve: () => null,
+    retarget: () => handle,
+    stop: () => {},
+  };
+  return handle;
 }
 
 // Gone: the sheet's top at the bottom of the screen. A release under a finger
@@ -860,46 +886,25 @@ export function useSheetGestures({
       onScrimTrackingRef.current?.(false);
     }
   }, [stopScrimFollow]);
-  // Plays the dim along the sheet's curve: `offsetAt(t)` is where the sheet
-  // is `t` s after `at`.
-  const followScrim = useCallback(
-    (
-      curve: {duration: number; offsetAt: (t: number) => number},
-      dimFor: (offset: number) => number,
-      at: number,
-      touchRelease = false,
-    ) => {
-      const dialog = sheetElRef.current?.closest('dialog');
-      // Only on the stack's visible backdrop: a transparent one stays clear.
-      if (
-        !isScrimTrackingRef.current ||
-        dialog == null ||
-        isScrimShownRef.current?.() === false
-      ) {
-        return;
-      }
-      stopScrimFollow();
-      const dim = (t: number) => dimFor(curve.offsetAt(t));
-      const dimCurve: MotionCurve = {
-        duration: curve.duration,
-        at: dim,
-        velocity: t => {
-          const h = 0.0005;
-          const a = Math.max(0, t - h);
-          const b = Math.min(curve.duration, t + h);
-          return b > a ? (dim(b) - dim(a)) / (b - a) : 0;
-        },
-      };
-      const scrim = createAnimator(dialog, {pseudoElement: '::backdrop'});
-      scrimAnimatorRef.current = scrim;
-      // Starts from the dim on screen, so a reduced-motion fade does too.
-      scrim.set({opacity: dim(0)});
-      // Under reduced motion the animator fades the dim to its end value
-      // (200 ms or less, or at once with a fine pointer; design:reduced-motion).
-      scrim.play({opacity: dimCurve}, {at, touchRelease});
-    },
-    [stopScrimFollow],
-  );
+  // The dim's own animator on the dialog's ::backdrop, for a release or a
+  // presentation to play the dim on as a layer of the sheet's travel (the
+  // interactive-transition driver): only while the dim is tracked, and a
+  // fresh one each time, so a release's dim never outlives its run.
+  const scrimLayerAnimator = useCallback((): Animator | null => {
+    const dialog = sheetElRef.current?.closest('dialog');
+    // Only on the stack's visible backdrop: a transparent one stays clear.
+    if (
+      !isScrimTrackingRef.current ||
+      dialog == null ||
+      isScrimShownRef.current?.() === false
+    ) {
+      return null;
+    }
+    stopScrimFollow();
+    const scrim = createAnimator(dialog, {pseudoElement: '::backdrop'});
+    scrimAnimatorRef.current = scrim;
+    return scrim;
+  }, [stopScrimFollow]);
   // The dim map of the last release, for a spring-back that interrupts it.
   const lastDimForRef = useRef<((offset: number) => number) | null>(null);
 
@@ -1295,61 +1300,57 @@ export function useSheetGestures({
     ): MotionHandle => {
       const base = layoutOffset + travelBaseRef.current;
       const to = offset - base;
-      const from = animator.get('y');
       const motion = releaseMotionRef.current;
       // One clock for the sheet and its dim.
       const at = performance.now();
+      const from = animator.get('y', at);
       // Under reduced motion the animator's own cross-fade replaces the
       // travel (design:reduced-motion). A finger started it, so it fades
       // whatever the primary pointer (DR2).
       const touchRelease = dragTouchRef.current;
-      let handle: MotionHandle;
-      if (motion.kind === 'theme') {
-        const curve = themeCurve(from, to, motion);
-        handle = animator.play({y: curve}, {at, crossfadeAs, touchRelease});
-        if (dimFor != null) {
+      // The dim rides the same curve on the dialog's ::backdrop.
+      const layers: MapLayer[] = [];
+      if (dimFor != null) {
+        const scrim = scrimLayerAnimator();
+        if (scrim != null) {
           scrimOwnerRef.current = 'release';
-          followScrim(
-            {duration: curve.duration, offsetAt: t => base + curve.at(t)},
-            dimFor,
-            at,
-            touchRelease,
-          );
-        }
-      } else {
-        // Thrown up onto the tallest detent, the 80 % damped spring overshoots
-        // above it; the sheet extends only its reserve below the screen, so
-        // the hand-off is capped to keep the page from showing under it.
-        const handed = velocity ?? animator.getVelocity('y');
-        const v =
-          offset === 0
-            ? limitOvershoot(
-                spring,
-                from,
-                to,
-                handed,
-                offscreenBlockEndInsetRef.current,
-              )
-            : handed;
-        handle = animator.animate(
-          {y: to},
-          {spring, velocity: {y: v}},
-          {at, crossfadeAs, touchRelease},
-        );
-        if (dimFor != null) {
-          const curve = solveSpring(toSpring(spring), {from, to, velocity: v});
-          scrimOwnerRef.current = 'release';
-          followScrim(
-            {
-              duration: curve.settleTime(0.5),
-              offsetAt: t => base + curve.value(t),
-            },
-            dimFor,
-            at,
-            touchRelease,
-          );
+          const map = (y: number) => dimFor(base + y);
+          // Starts from the dim on screen, so a reduced-motion fade does too.
+          scrim.set({opacity: map(from)});
+          layers.push({animator: scrim, property: 'opacity', map});
         }
       }
+      // Thrown up onto the tallest detent, the 80 % damped spring overshoots
+      // above it; the sheet extends only its reserve below the screen, so
+      // the hand-off is capped to keep the page from showing under it.
+      const handed = velocity ?? animator.getVelocity('y', at);
+      const v =
+        motion.kind === 'uikit' && offset === 0
+          ? limitOvershoot(
+              spring,
+              from,
+              to,
+              handed,
+              offscreenBlockEndInsetRef.current,
+            )
+          : handed;
+      const run = createInteractiveTransition({
+        driver: {animator, property: 'y'},
+        layers,
+        rule: settleOnly,
+      }).to(
+        to,
+        motion.kind === 'theme'
+          ? {durationMs: motion.durationMs, easing: motion.easing}
+          : spring,
+        {
+          velocity: motion.kind === 'theme' ? 0 : v,
+          touchRelease,
+          now: at,
+          ...(crossfadeAs == null ? {} : {crossfadeAs}),
+        },
+      );
+      const handle = run.handle ?? settledHandle(run.finished);
       travelHandleRef.current = handle;
       void handle.finished.then(finished => {
         if (travelHandleRef.current !== handle) {
@@ -1377,8 +1378,8 @@ export function useSheetGestures({
       animator,
       completeScrollAreaSettle,
       endScrimTracking,
-      followScrim,
       releaseScrimTracking,
+      scrimLayerAnimator,
     ],
   );
 
@@ -1591,29 +1592,21 @@ export function useSheetGestures({
       const dimFor = (o: number) =>
         scrimOpacityForOffset(o, offsets, clearOffset, peekOffset);
       lastDimForRef.current = dimFor;
-      // UIKit's rule under a finger; today's under a mouse (sheetRelease.ts).
-      const release = isUIKit
-        ? resolveSheetRelease({
-            detents: offsets,
-            dismissedOffset: canDismissRef.current ? dismissedOffset : null,
-            position: offset,
-            velocity,
-            // A release moving back toward where the drag began cancels
-            // (spec:AST-094 FR37).
-            start: baseOffset,
-          })
-        : resolveDefaultRelease({
-            detents: offsets,
-            shortestDetentHeight,
-            dismissible: canDismissRef.current,
-            position: offset,
-            velocity: today.velocity,
-            travel: today.travel,
-            direction: today.direction,
-            startOffset: baseOffset,
-          });
+      // UIKit's rule under a finger; today's under a mouse (sheetRelease.ts),
+      // as the interactive-transition driver's rule: offsets in, offsets out.
+      const release = sheetReleaseRule(
+        {position: offset, finger: offset, velocity},
+        {
+          detents: offsets,
+          dismissedOffset: canDismissRef.current ? dismissedOffset : null,
+          isUIKit,
+          shortestDetentHeight,
+          startOffset: baseOffset,
+          today,
+        },
+      );
 
-      if (release.kind === 'dismiss') {
+      if (release.outcome === 'dismiss') {
         prepareScrollAreaSettle(
           baseLayoutOffset,
           baseOffset,
@@ -1627,9 +1620,9 @@ export function useSheetGestures({
           // The release spring carries the sheet off screen at the finger's
           // velocity; the host's exit waits for it instead of running its own.
           const handle = springTravel(
-            dismissedOffset,
+            release.target,
             baseLayoutOffset,
-            release.spring,
+            release.motion,
             velocity,
             dimFor,
             'exit',
@@ -1650,7 +1643,7 @@ export function useSheetGestures({
         return;
       }
 
-      const target = release.offset;
+      const target = release.target;
       // A peek keeps the full layout height and slides below the viewport;
       // every taller detent resizes the scrolling area to what it shows.
       const targetLayoutOffset = target === peekOffset ? 0 : target;
@@ -1664,7 +1657,7 @@ export function useSheetGestures({
         releaseAnimates(),
       );
       if (settlingLayoutOffsetRef.current != null) {
-        springTravel(target, layoutOffset, release.spring, velocity, dimFor);
+        springTravel(target, layoutOffset, release.motion, velocity, dimFor);
       } else {
         endScrimTracking(dimFor(target));
       }
@@ -1877,10 +1870,11 @@ export function useSheetGestures({
 
       const raw = state.baseOffset + delta;
       // Under UIKit's presentation (a finger or a pen where the primary
-      // pointer is coarse, the same answer as the release's) the sheet tracks
-      // as UIKit's does, with the record's rubber band past fully open
-      // (spec:AST-094 FR3); otherwise today's pointer behavior (spec:AST-017
-      // FR59).
+      // pointer is coarse, the same answer as the release's): 1:1 between
+      // detents and into the dismiss zone, as UIKit's sheet tracks (the
+      // release, not the drag, picks the detent), and past fully open the
+      // record's rubber band (spec:AST-094 FR3). Otherwise today's pointer
+      // behavior (spec:AST-017 FR59).
       const next =
         releaseMotionRef.current.kind === 'uikit'
           ? fingerDragOffset(raw, state.height)

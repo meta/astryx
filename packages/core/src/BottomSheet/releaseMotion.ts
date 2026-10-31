@@ -4,8 +4,9 @@
  * @file releaseMotion.ts
  * @input The shared touch presentation resolver, the motion foundation's
  *   cubic-bézier and the sheet element's computed transition
- * @output Exports readReleaseMotion (which timing a sheet's release runs on)
- *   and themeCurve (a theme timing as a curve the animator plays)
+ * @output Exports readReleaseMotion (which timing a sheet's release runs on:
+ *   UIKit's springs, or the theme's timing for the interactive-transition
+ *   driver to play)
  * @position Internal to BottomSheet; read once per gesture by
  *   useSheetGestures
  *
@@ -26,7 +27,6 @@
  * SYNC: When modified, update /packages/core/src/BottomSheet/useSheetGestures.ts
  */
 
-import type {MotionCurve} from '../motion/animator';
 import {cubicBezier, type BezierPoints} from '../motion/bezier';
 import {readTouchPresentation} from './sheetTouch';
 
@@ -140,27 +140,4 @@ export function readReleaseMotion(
     parseEasing(pick(style.transitionTimingFunction)) ??
     ((progress: number) => progress);
   return {kind: 'theme', durationMs: Math.max(0, duration + delay), easing};
-}
-
-/** A theme timing from `from` to `to` as a curve the animator plays. */
-export function themeCurve(
-  from: number,
-  to: number,
-  {durationMs, easing}: {durationMs: number; easing: (p: number) => number},
-): MotionCurve {
-  const duration = durationMs / 1000;
-  const at = (t: number) =>
-    duration <= 0 || t >= duration
-      ? to
-      : from + (to - from) * easing(Math.max(0, t) / duration);
-  return {
-    duration,
-    at,
-    velocity: t => {
-      const h = 0.0005;
-      const a = Math.max(0, t - h);
-      const b = Math.min(duration, t + h);
-      return b > a ? (at(b) - at(a)) / (b - a) : 0;
-    },
-  };
 }

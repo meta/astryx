@@ -2,7 +2,7 @@
 
 /**
  * @file releaseMotion.test.ts
- * @input vitest, jsdom, readReleaseMotion and themeCurve
+ * @input vitest, jsdom and readReleaseMotion
  * @output Which timing a sheet's release runs on: UIKit's under a finger,
  *   the stylesheet's transform transition under a mouse or a finger on
  *   Android (lists, keywords, transitions turned off, unreadable values);
@@ -11,7 +11,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {readReleaseMotion, themeCurve} from './releaseMotion';
+import {readReleaseMotion} from './releaseMotion';
 
 /** A finger or a mouse; with `ios`, in WebKit on iOS (which changes nothing: one touch model). */
 function pointer(coarse: boolean, {ios = false}: {ios?: boolean} = {}) {
@@ -140,27 +140,5 @@ describe('readReleaseMotion', () => {
       kind: 'theme',
       durationMs: 0,
     });
-  });
-});
-
-describe('themeCurve', () => {
-  it('eases from one value to another over the duration', () => {
-    const curve = themeCurve(10, 110, {
-      durationMs: 400,
-      easing: progress => progress * progress,
-    });
-    expect(curve.duration).toBe(0.4);
-    expect(curve.at(0)).toBe(10);
-    expect(curve.at(0.2)).toBeCloseTo(35, 9);
-    expect(curve.at(0.4)).toBe(110);
-    expect(curve.at(1)).toBe(110);
-    // d/dt of 10 + 100 (t / 0.4)² at 0.2 s: 2 × 100 × 0.2 / 0.16 = 250.
-    expect(curve.velocity(0.2)).toBeCloseTo(250, 0);
-  });
-
-  it('jumps when the duration is zero', () => {
-    const curve = themeCurve(10, 110, {durationMs: 0, easing: p => p});
-    expect(curve.at(0)).toBe(110);
-    expect(curve.velocity(0)).toBe(0);
   });
 });

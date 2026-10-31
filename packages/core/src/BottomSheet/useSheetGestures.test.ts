@@ -9,7 +9,17 @@
  * SYNC: When useSheetGestures.ts changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {dirname, join} from 'node:path';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeEach,
+  afterEach,
+  afterAll,
+} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
 import {useState} from 'react';
 import {END_HOLD_MS} from '../motion/animator';
@@ -3568,5 +3578,231 @@ describe('useSheetGestures: a finger on the drawn sheet during a release', () =>
     dialog.dispatchEvent(click);
     expect(click.defaultPrevented).toBe(false);
     expect(hook.result.current.activeOffsetRef.current).toBe(0);
+  });
+});
+
+describe('useSheetGestures: the release storyboards (interactive-transition driver)', () => {
+  // Frame-by-frame values of each release: the sheet's travel and the dim on
+  // the ::backdrop, every 20 ms, against a fixture recorded from the release
+  // code before it moved onto the interactive-transition driver
+  // (motion/interactive.ts). UPDATE_STORYBOARDS=1 rewrites the fixture.
+  interface Played {
+    keyframes: Keyframe[];
+    options: KeyframeAnimationOptions & {pseudoElement?: string};
+  }
+  /** Per scenario: every curve played on the sheet and on its ::backdrop, sampled. */
+  type Storyboard = Record<string, {sheet: number[][]; backdrop: number[][]}>;
+  const FIXTURE = join(__dirname, '__fixtures__/release-storyboards.json');
+  const STEP_MS = 20;
+  const SPAN_MS = 800;
+  const recorded: Storyboard = {};
+
+  function recordAnimations(el: HTMLElement): Played[] {
+    const played: Played[] = [];
+    el.animate = vi.fn((keyframes, options) => {
+      played.push({
+        keyframes: keyframes as Keyframe[],
+        options: options as Played['options'],
+      });
+      return {cancel: vi.fn(), startTime: 0} as unknown as Animation;
+    });
+    return played;
+  }
+  function valueAt(
+    animation: Played,
+    ms: number,
+    read: (frame: Keyframe) => number,
+  ): number {
+    const duration = animation.options.duration as number;
+    const frames = animation.keyframes.map(frame => ({
+      t: (frame.offset as number) * duration,
+      v: read(frame),
+    }));
+    for (let i = 1; i < frames.length; i++) {
+      if (ms <= frames[i].t) {
+        const a = frames[i - 1];
+        const b = frames[i];
+        return b.t > a.t ? a.v + ((b.v - a.v) * (ms - a.t)) / (b.t - a.t) : b.v;
+      }
+    }
+    return frames[frames.length - 1].v;
+  }
+  const travelOf = (frame: Keyframe) =>
+    Number.parseFloat(String(frame.translate ?? '0px 0px').split(' ')[1]);
+  const opacityOf = (frame: Keyframe) => Number(frame.opacity);
+  const samples = (animation: Played, read: (f: Keyframe) => number) =>
+    Array.from(
+      {length: SPAN_MS / STEP_MS + 1},
+      (_, i) => Math.round(valueAt(animation, i * STEP_MS, read) * 1000) / 1000,
+    );
+  // A curve, not a one-step write: more than two keyframes.
+  const curves = (played: Played[]) =>
+    played.filter(p => p.keyframes.length > 2);
+  const readOf = (animation: Played) =>
+    animation.keyframes[0].translate != null ? travelOf : opacityOf;
+
+  function scenario(
+    name: string,
+    gesture: (hook: Hook, target: HTMLElement) => void,
+    {pointer = 'touch'}: {pointer?: 'touch' | 'mouse' | 'touch-rm'} = {},
+  ) {
+    it(name, () => {
+      if (pointer === 'mouse') {
+        vi.stubGlobal(
+          'matchMedia',
+          vi.fn(() => ({
+            matches: false,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          })),
+        );
+      } else {
+        stubIosIdiom({reducedMotion: pointer === 'touch-rm'});
+      }
+      const {hook} = setup({
+        snapHeights: () => [200],
+        onScrimOpacity: vi.fn(),
+        onScrimTracking: vi.fn(),
+      });
+      const dialog = document.createElement('dialog');
+      const target = makeTarget();
+      dialog.appendChild(target);
+      document.body.appendChild(dialog);
+      if (pointer === 'mouse') {
+        // The theme timing a mouse release reads off the stylesheet, set as
+        // longhands: the test DOM does not expand the `transition` shorthand,
+        // so with it the release read no duration and played no curve.
+        target.style.transitionProperty = 'transform';
+        target.style.transitionDuration = '410ms';
+        target.style.transitionTimingFunction = 'cubic-bezier(0.2, 0, 0, 1)';
+      }
+      const sheet = recordAnimations(target);
+      const backdrop = recordAnimations(dialog);
+      gesture(hook, target);
+      // Every scenario plays a curve on the sheet: a storyboard with none
+      // could not fail.
+      expect(curves(sheet).length).toBeGreaterThan(0);
+      recorded[name] = {
+        sheet: curves(sheet).map(animation =>
+          samples(animation, readOf(animation)),
+        ),
+        backdrop: curves(backdrop).map(animation =>
+          samples(animation, opacityOf),
+        ),
+      };
+      dialog.remove();
+    });
+  }
+
+  // A slow drag from tall to 2/3 of the way to the 200 detent: settles there.
+  scenario('slow settle onto the detent', (hook, target) => {
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 140, t0: 0, t1: 700});
+    restAt(hook, 140, 720, target);
+    up(hook, 140, 760, target);
+  });
+  // A throw: past 1008 px/s, the flick branch onto the next detent.
+  scenario('flick onto the next detent', (hook, target) => {
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 80, t0: 0, t1: 60});
+    up(hook, 80, 62, target);
+  });
+  // Below the 200 detent and back: the dim rides the spring back.
+  scenario('spring back from below the detent', (hook, target) => {
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 290, t0: 0, t1: 600});
+    restAt(hook, 290, 650, target);
+    up(hook, 290, 800, target);
+  });
+  // A flick down from the 200 detent: the release carries it off screen.
+  scenario('flick dismissal', (hook, target) => {
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 200, t0: 0, t1: 600});
+    restAt(hook, 200, 650, target);
+    up(hook, 200, 800, target);
+    land();
+    down(hook, 200, 2000, target);
+    stream(hook, target, {from: 200, to: 300, t0: 2000, t1: 2060});
+    up(hook, 300, 2062, target);
+  });
+  // A moderate throw up onto the tallest detent: the overshoot cap.
+  scenario('throw up onto the tallest detent', (hook, target) => {
+    down(hook, 0, 0, target);
+    stream(hook, target, {from: 0, to: 200, t0: 0, t1: 600});
+    restAt(hook, 200, 650, target);
+    up(hook, 200, 800, target);
+    land();
+    down(hook, 200, 2000, target);
+    stream(hook, target, {from: 200, to: 120, t0: 2000, t1: 2080});
+    up(hook, 120, 2082, target);
+  });
+  // A mouse: today's rule on the theme's timing.
+  scenario(
+    'mouse release on the theme timing',
+    (hook, target) => {
+      down(hook, 0, 0, target);
+      stream(hook, target, {from: 0, to: 140, t0: 0, t1: 700});
+      restAt(hook, 140, 720, target);
+      up(hook, 140, 760, target);
+    },
+    {pointer: 'mouse'},
+  );
+  // Reduced motion under a finger: the release cross-fades in place.
+  scenario(
+    'reduced-motion release',
+    (hook, target) => {
+      down(hook, 0, 0, target);
+      stream(hook, target, {from: 0, to: 140, t0: 0, t1: 700});
+      restAt(hook, 140, 720, target);
+      up(hook, 140, 760, target);
+    },
+    {pointer: 'touch-rm'},
+  );
+
+  afterAll(async () => {
+    if (process.env.UPDATE_STORYBOARDS === '1') {
+      // Written as the repository formats JSON, so the fixture stays stable.
+      const {format, resolveConfig} = await import('prettier');
+      const options = (await resolveConfig(FIXTURE)) ?? {};
+      mkdirSync(dirname(FIXTURE), {recursive: true});
+      writeFileSync(
+        FIXTURE,
+        await format(JSON.stringify(recorded), {...options, parser: 'json'}),
+      );
+    }
+  });
+
+  it('matches the storyboards recorded before the driver (within 0.5 px and 0.005 opacity)', () => {
+    if (process.env.UPDATE_STORYBOARDS === '1') {
+      // Recording: afterAll writes the fixture from this run.
+      return;
+    }
+    // A missing fixture fails: the proof is against curves recorded before
+    // the move, never against this run's own.
+    expect(
+      existsSync(FIXTURE),
+      'the storyboard fixture is missing (UPDATE_STORYBOARDS=1 records it)',
+    ).toBe(true);
+    const fixture = JSON.parse(readFileSync(FIXTURE, 'utf8')) as Storyboard;
+    expect(Object.keys(recorded).sort()).toEqual(Object.keys(fixture).sort());
+    for (const [name, before] of Object.entries(fixture)) {
+      const after = recorded[name];
+      for (const layer of ['sheet', 'backdrop'] as const) {
+        expect(after[layer].length, `${name}: ${layer} curves`).toBe(
+          before[layer].length,
+        );
+        before[layer].forEach((curve, k) => {
+          // Travel in px, opacity in 0–1.
+          const tolerance =
+            Math.max(...curve.map(Math.abs)) > 1.5 ? 0.5 : 0.005;
+          curve.forEach((value, i) => {
+            expect(
+              Math.abs(after[layer][k][i] - value),
+              `${name}: ${layer} curve ${k} at ${i * STEP_MS} ms`,
+            ).toBeLessThanOrEqual(tolerance);
+          });
+        });
+      }
+    }
   });
 });

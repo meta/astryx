@@ -35,6 +35,7 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                                                    |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down.                                  |
 | `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                                                            |
+| `interactive.ts`                                 | One driver for a transition a finger scrubs and a release settles: track and release rules, layers on one clock.                                                                                      |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop.                                  |
 
 Component-specific values (a sheet's detents, a switch's geometry, a context
