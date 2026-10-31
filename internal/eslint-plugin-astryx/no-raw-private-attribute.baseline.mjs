@@ -32,7 +32,8 @@ await runRuleBaseline({
   ),
   // Owner-module reports (an exported name) start differently and are never
   // baselined.
-  entryFromMessage: message => /^`(data-astryx-[^`]*)`/.exec(message)?.[1] ?? null,
+  entryFromMessage: message =>
+    /^`(data-astryx-[^`]*)`/.exec(message)?.[1] ?? null,
   unique: false,
   noun: 'private-attribute sites',
 });

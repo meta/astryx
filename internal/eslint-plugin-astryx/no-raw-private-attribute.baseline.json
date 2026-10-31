@@ -7,12 +7,8 @@
   "packages/core/src/Chat/ChatComposerInput.tsx": [
     "data-astryx-dictation-interim"
   ],
-  "packages/core/src/Chat/ChatLayout.tsx": [
-    "data-astryx-scrolling"
-  ],
-  "packages/core/src/Chat/useChatComposerTokens.ts": [
-    "data-astryx-token-id"
-  ],
+  "packages/core/src/Chat/ChatLayout.tsx": ["data-astryx-scrolling"],
+  "packages/core/src/Chat/useChatComposerTokens.ts": ["data-astryx-token-id"],
   "packages/core/src/Chat/useChatDictation.ts": [
     "data-astryx-dictation-interim"
   ],
@@ -20,9 +16,7 @@
     "data-astryx-chat-following",
     "data-astryx-chat-following-style"
   ],
-  "packages/core/src/Chat/useTriggerMenu.tsx": [
-    "data-astryx-trigger-anchor"
-  ],
+  "packages/core/src/Chat/useTriggerMenu.tsx": ["data-astryx-trigger-anchor"],
   "packages/core/src/CheckboxInput/CheckboxInput.tsx": [
     "data-astryx-press",
     "data-astryx-press"
@@ -121,28 +115,20 @@
     "data-astryx-press",
     "data-astryx-press"
   ],
-  "packages/core/src/Toast/useToast.tsx": [
-    "data-astryx-toast-fallback"
-  ],
+  "packages/core/src/Toast/useToast.tsx": ["data-astryx-toast-fallback"],
   "packages/core/src/TopNav/TopNavItem.tsx": [
     "data-astryx-press",
     "data-astryx-press",
     "data-astryx-press",
     "data-astryx-press"
   ],
-  "packages/core/src/gestures/haptics.ts": [
-    "data-astryx-haptic-switch"
-  ],
-  "packages/core/src/gestures/touchActionRule.ts": [
-    "data-astryx-touch-action"
-  ],
+  "packages/core/src/gestures/haptics.ts": ["data-astryx-haptic-switch"],
+  "packages/core/src/gestures/touchActionRule.ts": ["data-astryx-touch-action"],
   "packages/core/src/hooks/useAnnounce.ts": [
     "data-astryx-live-region",
     "data-astryx-modal-live-region"
   ],
-  "packages/core/src/hooks/useMenuPress.ts": [
-    "data-astryx-menu-press-surface"
-  ],
+  "packages/core/src/hooks/useMenuPress.ts": ["data-astryx-menu-press-surface"],
   "packages/core/src/theme/Theme.tsx": [
     "data-astryx-id",
     "data-astryx-id",
@@ -164,9 +150,7 @@
     "data-astryx-press",
     "data-astryx-press"
   ],
-  "packages/core/src/utils/pressFeedback.ts": [
-    "data-astryx-press"
-  ],
+  "packages/core/src/utils/pressFeedback.ts": ["data-astryx-press"],
   "packages/lab/src/Schedule/useScheduleViewPopover.ts": [
     "data-astryx-popover-fallback-close"
   ],

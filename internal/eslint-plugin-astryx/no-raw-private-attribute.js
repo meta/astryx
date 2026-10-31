@@ -93,7 +93,8 @@ const NAMESPACE_IDENTIFIERS = new Set(['dataAttrNamespace', 'NAMESPACE']);
 /** Stands in for an interpolated value whose text is unknown. */
 const UNKNOWN = '\u0000';
 
-const OWNER_MODULE = /(?:^|\/)packages\/[^/]+\/src\/privateAttributes\/([^/]+)\.stylex\.ts$/;
+const OWNER_MODULE =
+  /(?:^|\/)packages\/[^/]+\/src\/privateAttributes\/([^/]+)\.stylex\.ts$/;
 const PACKAGE_SOURCE = /(?:^|\/)packages\/([^/]+)\/src\//;
 const NAMING_MODULE = /(?:^|\/)packages\/core\/src\/naming\.ts$/;
 
@@ -289,7 +290,10 @@ const rule = {
       while (unwrap(holder) !== holder) {
         holder = holder.parent;
       }
-      if (holder?.type !== 'VariableDeclarator' || unwrap(holder.init) !== node) {
+      if (
+        holder?.type !== 'VariableDeclarator' ||
+        unwrap(holder.init) !== node
+      ) {
         return;
       }
       ownerExports.push({node, declarator: holder});
@@ -302,20 +306,30 @@ const rule = {
      */
     function checkImport(source) {
       const specifier = source?.value;
-      if (typeof specifier !== 'string' || !/(?:^|\/)privateAttributes(?:\/|$)/.test(specifier)) {
+      if (
+        typeof specifier !== 'string' ||
+        !/(?:^|\/)privateAttributes(?:\/|$)/.test(specifier)
+      ) {
         return;
       }
       let foreign = !specifier.startsWith('.');
       if (!foreign) {
         const target = path
-          .resolve(path.dirname(context.filename ?? context.getFilename()), specifier)
+          .resolve(
+            path.dirname(context.filename ?? context.getFilename()),
+            specifier,
+          )
           .split(path.sep)
           .join('/');
         const targetPackage = PACKAGE_SOURCE.exec(target)?.[1] ?? null;
         foreign = targetPackage != null && targetPackage !== packageName;
       }
       if (foreign) {
-        context.report({node: source, messageId: 'foreignPackage', data: {source: specifier}});
+        context.report({
+          node: source,
+          messageId: 'foreignPackage',
+          data: {source: specifier},
+        });
       }
     }
 

@@ -23,7 +23,10 @@ const tester = new RuleTester({
 const site = '/repo/packages/core/src/Button/Button.tsx';
 const owner = '/repo/packages/core/src/privateAttributes/press.stylex.ts';
 const baselined = attributes => [
-  {baseline: {'packages/core/src/Button/Button.tsx': attributes}, root: '/repo'},
+  {
+    baseline: {'packages/core/src/Button/Button.tsx': attributes},
+    root: '/repo',
+  },
 ];
 
 // RuleTester registers its own describe/it blocks internally, so it must run
@@ -33,11 +36,14 @@ tester.run('no-raw-private-attribute', rule, {
     // ✅ The public theme and media scopes, in every shape.
     {code: `const s = '[data-astryx-theme="dark"]';`, filename: site},
     {code: `const C = () => <div data-astryx-theme="dark" />;`, filename: site},
-    {code: `const C = () => <div data-astryx-media="photo" />;`, filename: site},
-    {code: `const p = {'data-astryx-media': surface};`, filename: site},
-    {code: "const s = `[data-astryx-theme=\"${name}\"]`;", filename: site},
     {
-      code: "const s = `[data-${dataAttrNamespace}-media=\"${surface}\"]`;",
+      code: `const C = () => <div data-astryx-media="photo" />;`,
+      filename: site,
+    },
+    {code: `const p = {'data-astryx-media': surface};`, filename: site},
+    {code: 'const s = `[data-astryx-theme="${name}"]`;', filename: site},
+    {
+      code: 'const s = `[data-${dataAttrNamespace}-media="${surface}"]`;',
       filename: site,
     },
     {code: `el.setAttribute(dataAttr('theme'), name);`, filename: site},
@@ -61,7 +67,10 @@ tester.run('no-raw-private-attribute', rule, {
       filename: site,
     },
     // ✅ Other data attributes and prose that only mentions the prefix's parts.
-    {code: `const C = () => <div data-testid="x" data-state="open" />;`, filename: site},
+    {
+      code: `const C = () => <div data-testid="x" data-state="open" />;`,
+      filename: site,
+    },
     {code: `const s = '[data-astryx]';`, filename: site},
     // ✅ The owner module writes its own attribute: selector, key and setter.
     {
@@ -78,7 +87,8 @@ tester.run('no-raw-private-attribute', rule, {
     // ✅ An owner module in another package writes its own attribute.
     {
       code: `export const syntaxOn = {'data-astryx-richtext-code-syntax': ''};`,
-      filename: '/repo/packages/richtext/src/privateAttributes/richtext-code-syntax.stylex.ts',
+      filename:
+        '/repo/packages/richtext/src/privateAttributes/richtext-code-syntax.stylex.ts',
     },
     // ✅ A file imports its own package's owner module.
     {
@@ -92,7 +102,7 @@ tester.run('no-raw-private-attribute', rule, {
     },
     // ✅ naming.ts builds every data-astryx-* name.
     {
-      code: "export function dataAttr(name) { return `data-${dataAttrNamespace}-${name}`; }",
+      code: 'export function dataAttr(name) { return `data-${dataAttrNamespace}-${name}`; }',
       filename: '/repo/packages/core/src/naming.ts',
     },
     // ✅ Baselined sites, once per site, in their own file.
@@ -102,7 +112,7 @@ tester.run('no-raw-private-attribute', rule, {
         const C = () => <div data-astryx-submenu-host="" />;
       `,
       filename: site,
-      options: baselined(["data-astryx-press", "data-astryx-submenu-host"]),
+      options: baselined(['data-astryx-press', 'data-astryx-submenu-host']),
     },
     {
       code: `const a = '[data-astryx-press="on"]'; const b = '[data-astryx-press="fading"]';`,
@@ -110,7 +120,7 @@ tester.run('no-raw-private-attribute', rule, {
       options: baselined(['data-astryx-press', 'data-astryx-press']),
     },
     {
-      code: "const s = `data-astryx-${part}`;",
+      code: 'const s = `data-astryx-${part}`;',
       filename: site,
       options: baselined(['data-astryx-*']),
     },
@@ -129,7 +139,7 @@ tester.run('no-raw-private-attribute', rule, {
     },
     // ❌ A template literal, plain or built from the namespace constant.
     {
-      code: "const s = `[data-astryx-cell-gliding=\"${state}\"]`;",
+      code: 'const s = `[data-astryx-cell-gliding="${state}"]`;',
       filename: site,
       errors: [
         {
@@ -142,7 +152,7 @@ tester.run('no-raw-private-attribute', rule, {
       ],
     },
     {
-      code: "const s = `[data-${dataAttrNamespace}-table-pinned]`;",
+      code: 'const s = `[data-${dataAttrNamespace}-table-pinned]`;',
       filename: site,
       errors: [{messageId: 'raw'}],
     },
@@ -210,7 +220,7 @@ tester.run('no-raw-private-attribute', rule, {
     },
     // ❌ An interpolated name, or the bare prefix.
     {
-      code: "const s = `data-astryx-${part}`;",
+      code: 'const s = `data-astryx-${part}`;',
       filename: site,
       errors: [
         {
@@ -236,7 +246,8 @@ tester.run('no-raw-private-attribute', rule, {
           messageId: 'raw',
           data: {
             attribute: 'data-astryx-popover-fallback-close',
-            owner: 'packages/lab/src/privateAttributes/popover-fallback-close.stylex.ts',
+            owner:
+              'packages/lab/src/privateAttributes/popover-fallback-close.stylex.ts',
           },
         },
       ],
@@ -253,7 +264,10 @@ tester.run('no-raw-private-attribute', rule, {
       code: `const s = '[data-astryx-press="on"]';`,
       filename: site,
       options: [
-        {baseline: {'packages/core/src/Tab/Tab.tsx': ['data-astryx-press']}, root: '/repo'},
+        {
+          baseline: {'packages/core/src/Tab/Tab.tsx': ['data-astryx-press']},
+          root: '/repo',
+        },
       ],
       errors: [{messageId: 'raw'}],
     },
