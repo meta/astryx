@@ -58,6 +58,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {TextFocusOwnerContext} from '../Text/TextFocusOwnerContext';
 // =============================================================================
 // Styles — only the interactive layer, Card handles everything else
 // =============================================================================
@@ -453,7 +454,9 @@ export function ClickableCard({
           {...stylex.props(styles.srOnly)}
         />
       )}
-      {children}
+      {/* The hidden control above takes focus for the whole card, so a
+          truncated Text inside adds no tab stop of its own. */}
+      <TextFocusOwnerContext value={true}>{children}</TextFocusOwnerContext>
     </Card>
   );
 }

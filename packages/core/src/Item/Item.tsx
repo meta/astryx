@@ -57,6 +57,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {useClickableContainer} from '../hooks/useClickableContainer';
+import {TextFocusOwnerContext} from '../Text/TextFocusOwnerContext';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -642,6 +643,7 @@ export function Item({
   );
 
   const isInteractive = onClick != null || href != null || isDelegate;
+  const isInsideFocusOwner = use(TextFocusOwnerContext);
   const {target, rel} = computeTargetAndRel(targetFromProps, relFromProps);
   // When a semantic role is provided (e.g. "menuitem"), a parent component
   // handles keyboard access. Skip the invisible button/anchor and put
@@ -928,21 +930,27 @@ export function Item({
       )}
       role={role}
       onClick={rootOnClick}>
-      <ItemDescriptionContext
-        value={hasRenderableDescription ? descriptionID : null}>
-        {isRenderable(marker) && marker}
-        {isRenderable(marker) && columnMarker === marker ? (
-          <span
-            {...stylex.props(
-              styles.markerContent,
-              align === 'first-line' && styles.markerContentFirstLine,
-            )}>
-            {content}
-          </span>
-        ) : (
-          content
-        )}
-      </ItemDescriptionContext>
+      {/* An interactive item takes focus through its own control (the row, or
+          the delegate a CheckboxListItem or RadioListItem passes as
+          interactiveRef), so a truncated Text inside adds no tab stop. A
+          non-interactive item passes the surrounding value through. */}
+      <TextFocusOwnerContext value={isInteractive || isInsideFocusOwner}>
+        <ItemDescriptionContext
+          value={hasRenderableDescription ? descriptionID : null}>
+          {isRenderable(marker) && marker}
+          {isRenderable(marker) && columnMarker === marker ? (
+            <span
+              {...stylex.props(
+                styles.markerContent,
+                align === 'first-line' && styles.markerContentFirstLine,
+              )}>
+              {content}
+            </span>
+          ) : (
+            content
+          )}
+        </ItemDescriptionContext>
+      </TextFocusOwnerContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one
         // the row had before the split. Suspense and lazy add no element, and

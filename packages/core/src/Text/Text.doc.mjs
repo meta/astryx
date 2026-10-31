@@ -104,14 +104,14 @@ export const docs = {
       name: 'maxLines',
       type: 'number',
       description:
-        'Maximum lines before truncation. 0 means no truncation. When set, shows a tooltip on hover if content is truncated.',
+        'Maximum lines before truncation. 0 means no truncation. When set, truncated content shows its full text in a tooltip on hover, and is a tab stop so the tooltip opens on keyboard focus too.',
       default: '0',
     },
     {
       name: 'hasTruncateTooltip',
       type: "boolean | 'above' | 'below' | 'start' | 'end'",
       description:
-        "Controls tooltip behavior for truncated text. true shows the tooltip at the default position, false disables it, or a placement string ('above' | 'below' | 'start' | 'end') sets a specific position.",
+        "Controls tooltip behavior for truncated text. true shows the tooltip at the default position, false disables it (and the tab stop that opens it from the keyboard), or a placement string ('above' | 'below' | 'start' | 'end') sets a specific position.",
       default: 'true',
     },
     {
@@ -182,7 +182,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use maxLines with a number to truncate long content; a tooltip appears automatically on hover so no text is lost.',
+          'Use maxLines with a number to truncate long content; a tooltip shows the full text on hover and keyboard focus, so no text is lost.',
       },
       {
         guidance: true,
@@ -237,7 +237,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Use maxLines with a number to truncate long content; a tooltip appears automatically on hover so no text is lost.',
+          'Use maxLines with a number to truncate long content; a tooltip shows the full text on hover and keyboard focus, so no text is lost.',
       },
       {
         guidance: true,
@@ -294,7 +294,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'maxLines for truncation; tooltip shows full text on hover.',
+          'maxLines for truncation; tooltip shows full text on hover and keyboard focus.',
       },
       {
         guidance: true,
