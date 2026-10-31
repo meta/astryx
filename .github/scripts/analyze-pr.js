@@ -4,11 +4,15 @@
 
 /**
  * @description Analyzes PR changes to detect new/modified components and gather stats
- * @input --base <branch> --head <ref> --output <file> [--base-root <dir> [--base-only]] [--force-full]
+ * @input --base <branch> --head <ref> --output <file> [--base-record <file>] [--force-full]
+ *   | --main-record --output <file>
  * @output JSON file with component analysis; exits non-zero if the base...head diff fails (e.g. shallow clone without a merge base).
- *   With --base-root (a built checkout of the merge base), the analysis also
- *   records baseComponentStats and baseBundlePackages measured in that tree;
- *   --base-only writes just those, with the head and base commits they belong to.
+ *   With --base-record (the merge base's record, which Main keeps for each
+ *   commit), the analysis also carries baseComponentStats, baseBundlePackages
+ *   and baseComponentSizes read from it.
+ *   --main-record writes that record for the current built tree: every public
+ *   component's import and CSS size, the source modules its bundle reaches and
+ *   its entry stats, and every component package's bundle stats.
  *   A changed module outside every component folder (a shared hook, the
  *   animator) owns the components whose bundle reaches it, so browser audits
  *   run for those reverse dependents; one no component reaches, or --force-full
@@ -42,13 +46,9 @@ const getArg = (name) => {
 const baseBranch = getArg('base') || 'main';
 const headRef = getArg('head') || 'HEAD';
 const outputFile = getArg('output') || 'analysis.json';
-const baseRoot = getArg('base-root');
-const baseOnly = args.includes('--base-only');
+const baseRecordFile = getArg('base-record');
+const mainRecordMode = args.includes('--main-record');
 const forceFull = args.includes('--force-full');
-if (baseOnly && !baseRoot) {
-  console.error('::error::--base-only needs --base-root');
-  process.exit(1);
-}
 
 const STORYBOOK_STORIES = 'apps/storybook/stories';
 
@@ -617,8 +617,9 @@ function packageTargets(pkg) {
 // collects each changed source path some component reaches (its folder, or a
 // module in its bundle) in `paths`, and in `measured` each package whose
 // bundles could be read: there, a module no bundle holds reaches nothing.
+const withoutExtension = (file) => file.replace(/\.(tsx?|jsx?|mjs)$/, '');
+
 function sizeTargets(changedFiles, reached = null) {
-  const withoutExtension = (file) => file.replace(/\.(tsx?|jsx?|mjs)$/, '');
   // Each package's changed modules, and its built dist to find them in: a
   // bundle in any package can reach them (Lab, Charts, Rich Text and Vega
   // import Core).
@@ -871,39 +872,47 @@ function analyze() {
     getPackageBundleStats(p),
   );
 
-  // Base measurements come from a built checkout of the merge base. Component
-  // and package lists stay the head's; only the stats are read in the base tree.
+  // Base measurements come from the merge base's record, which Main keeps for
+  // each commit (writeMainRecord). Component and package lists stay the
+  // head's; only the stats are read from the record.
   let baseComponentStats = null;
   let baseBundlePackages = null;
-  // Components a change can affect, by reach in the head build and, when the
-  // merge base is built, in the base build too: CI's size-base job builds only
-  // the base, and a module change can add or remove reach.
+  // Components a change can affect, by reach in the head build and, from the
+  // record, in the merge base's build too: a module change can add or remove
+  // reach.
   const reachedSources = { paths: new Set(), measured: new Set() };
   const headTargets = sizeTargets(changedFiles, reachedSources);
   let targets = headTargets;
   let baseComponentSizes = null;
-  if (baseRoot) {
-    const headDir = process.cwd();
-    process.chdir(path.resolve(headDir, baseRoot));
-    try {
-      baseComponentStats = {};
-      for (const key of modifiedComponents) {
-        const pkg = PACKAGES.find((p) => p.name === componentStats[key].package);
-        baseComponentStats[key] = getComponentStats(pkg, key);
-      }
-      baseBundlePackages = PACKAGES.filter((p) => changedPackages.has(p.name)).map((p) =>
-        getPackageBundleStats(p),
-      );
-      // Each tree is measured through its own defining modules, so a renamed
-      // module is not mistaken for a missing one.
-      const baseTargets = sizeTargets(changedFiles);
-      baseComponentSizes = measureSizes(unionTargets(baseTargets, headTargets));
-      targets = unionTargets(headTargets, baseTargets);
-    } finally {
-      process.chdir(headDir);
+  const baseRecord = readBaseRecord();
+  if (baseRecord) {
+    baseComponentStats = {};
+    for (const key of modifiedComponents) {
+      const pkg = PACKAGES.find((p) => p.name === componentStats[key].package);
+      const stats = baseRecord.componentStats?.[`${pkg.packageName}/${key}`];
+      if (stats) baseComponentStats[key] = stats;
+    }
+    baseBundlePackages = PACKAGES.filter((p) => changedPackages.has(p.name)).map(
+      (p) =>
+        (baseRecord.bundlePackages || []).find((entry) => entry.package === p.name) || {
+          package: p.name,
+        },
+    );
+    // Each tree is measured through its own defining modules, so a renamed
+    // module is not mistaken for a missing one.
+    const baseTargets = recordTargets(baseRecord, changedFiles);
+    targets = unionTargets(headTargets, baseTargets);
+    baseComponentSizes = {};
+    for (const target of unionTargets(baseTargets, headTargets)) {
+      const recorded = baseRecord.components?.[target.key];
+      baseComponentSizes[target.key] = {
+        package: target.pkg.name,
+        importGzipBytes: recorded?.importGzipBytes ?? null,
+        cssGzipBytes: recorded?.cssGzipBytes ?? null,
+      };
     }
   }
-  const componentSizes = baseOnly ? null : measureSizes(targets);
+  const componentSizes = measureSizes(targets);
 
   // Every changed module, inside a component folder or not (a shared hook,
   // the animator, a family folder), adds the components whose head bundle
@@ -930,7 +939,7 @@ function analyze() {
   const folderOf = (target) => target.distModule.split('/')[0].replace(/\.(tsx?|jsx?|mjs)$/, '');
   const dependentComponentFolders = [];
   const dependentComponentOwners = [];
-  if (!baseOnly) {
+  {
     const touched = new Set([...newComponentOwners, ...modifiedComponentOwners]);
     const addFolder = (pkg, folder) => {
       const qualified = `${pkg.packageName}/${folder}`;
@@ -958,20 +967,6 @@ function analyze() {
     console.log(`Reverse dependents: ${dependentComponentOwners.join(', ') || 'none'}`);
   }
 
-  if (baseOnly) {
-    const baseResult = {
-      headSha: execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim(),
-      baseSha: execSync('git rev-parse HEAD', { cwd: baseRoot, encoding: 'utf8' }).trim(),
-      baseComponentStats,
-      baseBundlePackages,
-      baseComponentSizes,
-      analyzedAt: new Date().toISOString(),
-    };
-    fs.writeFileSync(outputFile, JSON.stringify(baseResult, null, 2));
-    console.log(`Base stats written to ${outputFile}`);
-    return baseResult;
-  }
-
   const result = {
     newComponents,
     modifiedComponents,
@@ -994,7 +989,9 @@ function analyze() {
     diffMode,
     bundlePackages,
     componentSizes,
-    ...(baseRoot ? { baseComponentStats, baseBundlePackages, baseComponentSizes } : {}),
+    ...(baseRecord
+      ? { baseSha: baseRecord.sha, baseComponentStats, baseBundlePackages, baseComponentSizes }
+      : {}),
     // Back-compat: keep totalBundle pointed at core when core changed, so any
     // older consumer of this field still resolves.
     totalBundle: bundlePackages.find((b) => b.package === '@astryxdesign/core') || null,
@@ -1006,6 +1003,117 @@ function analyze() {
   return result;
 }
 
-if (require.main === module) analyze();
+// The merge base's record, or null when none was given or it cannot be read
+// (Before and Delta then stay N/A).
+function readBaseRecord() {
+  if (!baseRecordFile) return null;
+  try {
+    const record = JSON.parse(fs.readFileSync(baseRecordFile, 'utf8'));
+    return record?.schema === 1 ? record : null;
+  } catch (e) {
+    console.warn(`::warning::could not read the merge base's size record: ${e.message}`);
+    return null;
+  }
+}
+
+// The components a change can affect in the merge base's build, from its
+// record: as sizeTargets decides in a built tree, a component whose own folder
+// or file changed, or whose bundle reached a changed module of any package.
+function recordTargets(record, changedFiles) {
+  const changedSources = new Set(changedFiles.map(withoutExtension));
+  const targets = [];
+  for (const [key, component] of Object.entries(record.components || {})) {
+    const pkg = PACKAGES.find((candidate) => candidate.name === component.package);
+    if (!pkg) continue;
+    const prefix = pkgSrc(pkg) + '/';
+    const top = withoutExtension(component.distModule.split('/')[0]);
+    const isOwnFolder = changedFiles.some(
+      (file) =>
+        file.startsWith(prefix) &&
+        withoutExtension(file.slice(prefix.length)).split('/')[0] === top,
+    );
+    const reaches = (component.reaches || []).some((index) =>
+      changedSources.has(record.modules[index]),
+    );
+    if (isOwnFolder || reaches) {
+      targets.push({ key, pkg, name: component.name, distModule: component.distModule });
+    }
+  }
+  return targets;
+}
+
+// What a pull request needs from its merge base, measured once per main
+// commit in Main's build (deploy.yml) instead of in each pull request: every
+// public component's import and CSS size and the source modules its bundle
+// reaches (as `src` paths without extension, by index into `modules`), every
+// component folder's entry stats, and every component package's bundle stats.
+function writeMainRecord() {
+  const modules = [];
+  const moduleIndex = new Map();
+  const indexOf = (source) => {
+    if (!moduleIndex.has(source)) {
+      moduleIndex.set(source, modules.length);
+      modules.push(source);
+    }
+    return moduleIndex.get(source);
+  };
+  // esbuild reports inputs by real path.
+  const dists = PACKAGES.map((pkg) => {
+    const dist = path.join(process.cwd(), pkgDist(pkg));
+    return { pkg, distReal: fs.existsSync(dist) ? fs.realpathSync(dist) : dist };
+  });
+  const components = {};
+  const componentStats = {};
+  for (const pkg of PACKAGES) {
+    const dist = path.join(process.cwd(), pkgDist(pkg));
+    if (!fs.existsSync(dist)) continue;
+    const all = packageTargets(pkg);
+    const reach = bundleInputsByEntry(all.map((target) => path.join(dist, target.distModule)));
+    const sizes = measureSizes(all);
+    for (const target of all) {
+      const inputs = reach?.get(path.join(dist, target.distModule)) ?? [];
+      const reaches = new Set();
+      for (const input of inputs) {
+        for (const { pkg: owner, distReal } of dists) {
+          const relative = path.relative(distReal, input);
+          if (!relative.startsWith('..') && !path.isAbsolute(relative)) {
+            reaches.add(indexOf(pkgSrc(owner) + '/' + withoutExtension(relative)));
+          }
+        }
+      }
+      components[target.key] = {
+        package: pkg.name,
+        name: target.name,
+        distModule: target.distModule,
+        importGzipBytes: sizes[target.key].importGzipBytes,
+        cssGzipBytes: sizes[target.key].cssGzipBytes,
+        reaches: [...reaches].sort((a, b) => a - b),
+      };
+    }
+    for (const name of getComponentNames(pkg)) {
+      componentStats[`${pkg.packageName}/${name}`] = getComponentStats(pkg, name);
+    }
+  }
+  const record = {
+    schema: 1,
+    sha: execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim(),
+    modules,
+    components,
+    componentStats,
+    bundlePackages: PACKAGES.filter((pkg) =>
+      fs.existsSync(path.join(process.cwd(), pkgDist(pkg))),
+    ).map((pkg) => getPackageBundleStats(pkg)),
+  };
+  fs.writeFileSync(outputFile, JSON.stringify(record));
+  console.log(
+    `Main record written to ${outputFile}: ${Object.keys(components).length} components.`,
+  );
+  return record;
+}
+
+if (require.main === module) {
+  if (mainRecordMode) writeMainRecord();
+  else analyze();
+}
 
 module.exports = { folderComponents };

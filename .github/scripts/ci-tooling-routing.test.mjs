@@ -130,11 +130,8 @@ describe('Node-tooling CI routing', () => {
     ]) {
       expect(step(ci.jobs['test-build'], name).if).toBe(BROAD_ONLY);
     }
-    // The merge-base size build is heavy build work and stays off the
-    // Node-tooling, docsite, and spec lanes.
-    expect(step(ci.jobs['size-base'], 'Setup Node and pnpm').if).toContain(
-      BROAD_ONLY,
-    );
+    // No pull-request job builds the merge base: Main keeps its sizes.
+    expect(ci.jobs['size-base']).toBeUndefined();
     expect(rootScripts['test:theme-family'].split(' && ')).toEqual([
       'pnpm -F @astryxdesign/core build',
       'pnpm -F @astryxdesign/sandbox generate:theme-family',
@@ -235,41 +232,59 @@ describe('Node-tooling CI routing', () => {
     );
   });
 
-  it("measures the merge base from main's kept build, building it only without one", () => {
+  it("reads the merge base's sizes from main's kept records, never building the base", () => {
     const main = load('.github/workflows/deploy.yml');
-    const keep = step(
-      main.jobs.typecheck,
-      "Keep this commit's package builds for PR size reports",
+    expect(step(main.jobs.typecheck, 'Record component sizes').run).toBe(
+      'node .github/scripts/analyze-pr.js --main-record --output component-size.json',
     );
-    expect(keep.with.name).toBe(
-      'dists-main-${{ needs.main-commit.outputs.sha }}',
-    );
-    const job = ci.jobs['size-base'];
-    expect(job.permissions.actions).toBe('read');
     expect(
-      step(job, "Find main's build of the merge base")['continue-on-error'],
-    ).toBe(true);
-    const download = step(job, "Download main's build of the merge base");
+      step(
+        main.jobs.typecheck,
+        "Keep this commit's component sizes for PR size reports",
+      ).with.name,
+    ).toBe('component-size-main-${{ needs.main-commit.outputs.sha }}');
+    // Main no longer keeps whole package builds for pull requests.
+    expect(
+      step(
+        main.jobs.typecheck,
+        "Keep this commit's package builds for PR size reports",
+      ),
+    ).toBeUndefined();
+    const job = ci.jobs['build-storybook'];
+    expect(job.permissions.actions).toBe('read');
+    const find = step(job, "Find main's size records for the merge base");
+    expect(find['continue-on-error']).toBe(true);
+    const download = step(
+      job,
+      "Download main's component sizes for the merge base",
+    );
     expect(download['continue-on-error']).toBe(true);
     expect(download.with.name).toBe(
-      'dists-main-${{ steps.merge-base.outputs.sha }}',
+      'component-size-main-${{ steps.merge-base.outputs.sha }}',
     );
-    const build = step(job, "Build the merge base's component packages");
-    expect(build.if).toContain("steps.download.outcome != 'success'");
-    expect(build.run).not.toContain('pnpm install');
-    // Measuring needs the base's dependencies on both paths.
-    const install = step(job, "Install the merge base's dependencies");
-    expect(install.run).toBe('pnpm install --frozen-lockfile');
-    expect(install.if).not.toContain('steps.download');
+    // The analysis reads the record only when it was downloaded.
+    const analyze = step(job, 'Analyze components').run;
+    expect(analyze).toContain(
+      'if [ -f .component-size-base/component-size.json ]',
+    );
+    expect(analyze).toContain(
+      '--base-record .component-size-base/component-size.json',
+    );
     // Only Main's own run on main for the merge-base commit counts.
-    const find = step(job, "Find main's build of the merge base").with.script;
-    expect(find).toContain("candidate.workflow_run?.head_branch === 'main'");
-    expect(find).toContain(
+    expect(find.with.script).toContain(
+      "candidate.workflow_run?.head_branch === 'main'",
+    );
+    expect(find.with.script).toContain(
       'candidate.workflow_run?.head_sha === process.env.BASE_SHA',
     );
-    expect(find).toContain(
+    expect(find.with.script).toContain(
       'candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id',
     );
+    // The lookup and download come before the analysis that reads them.
+    const names = job.steps.map(entry => entry.name);
+    expect(
+      names.indexOf("Download main's component sizes for the merge base"),
+    ).toBeLessThan(names.indexOf('Analyze components'));
   });
 
   it('builds no Sandbox and builds Storybook once per pull-request run', () => {

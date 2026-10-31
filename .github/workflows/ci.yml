@@ -1015,6 +1015,50 @@ jobs:
             packages/core/dist/
           retention-days: 1
 
+      # Main keeps each commit's size records for 14 days (deploy.yml): every
+      # public component's sizes and every published package's. The merge
+      # base is compared from them, never built here.
+      - name: Find the merge base
+        id: merge-base
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: echo "sha=$(git merge-base "origin/$BASE_REF" HEAD || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Find main's size records for the merge base
+        id: size-records
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != ''
+        continue-on-error: true
+        uses: actions/github-script@v9
+        env:
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
+        with:
+          retries: 3
+          script: |
+            // Only Main's own run on main for this exact commit: a pull
+            // request's run can upload an artifact under any name.
+            for (const [output, prefix] of [['component_run_id', 'component-size-main'], ['package_run_id', 'package-size-main']]) {
+              const name = `${prefix}-${process.env.BASE_SHA}`;
+              const {data} = await github.rest.actions.listArtifactsForRepo({...context.repo, name, per_page: 100});
+              const artifact = data.artifacts.find(candidate =>
+                !candidate.expired &&
+                candidate.workflow_run?.head_branch === 'main' &&
+                candidate.workflow_run?.head_sha === process.env.BASE_SHA &&
+                candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id);
+              core.setOutput(output, artifact ? String(artifact.workflow_run.id) : '');
+              core.info(artifact ? `Using ${name} from run ${artifact.workflow_run.id}.` : `No ${name}; its Before and Delta stay empty.`);
+            }
+
+      - name: Download main's component sizes for the merge base
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.size-records.outputs.component_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: component-size-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.component_run_id }}
+          github-token: ${{ github.token }}
+          path: .component-size-base
+
       - name: Analyze components
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
         env:
@@ -1024,10 +1068,15 @@ jobs:
           # dependents, unless the change touches shared infrastructure.
           FORCE_FULL=()
           if [ "$FULL_SUITE" != false ]; then FORCE_FULL=(--force-full); fi
+          BASE_RECORD=()
+          if [ -f .component-size-base/component-size.json ]; then
+            BASE_RECORD=(--base-record .component-size-base/component-size.json)
+          fi
           node .github/scripts/analyze-pr.js \
             --base origin/${{ github.base_ref }} \
             --head HEAD \
             --output analysis.json \
+            "${BASE_RECORD[@]}" \
             "${FORCE_FULL[@]}"
 
       # Published package size: this head's packages are built above, and Main
@@ -1039,42 +1088,13 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.touches == 'true'
         run: node .github/scripts/package-size.mjs measure --output package-size-head.json
 
-      - name: Find the merge base for package size
-        id: package-size-merge-base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: echo "sha=$(git merge-base "origin/$BASE_REF" HEAD || true)" >> "$GITHUB_OUTPUT"
-
-      - name: Find main's package size for the merge base
-        id: package-size-cached
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size-merge-base.outputs.sha != ''
-        continue-on-error: true
-        uses: actions/github-script@v9
-        env:
-          BASE_SHA: ${{ steps.package-size-merge-base.outputs.sha }}
-        with:
-          retries: 3
-          script: |
-            const name = `package-size-main-${process.env.BASE_SHA}`;
-            const {data} = await github.rest.actions.listArtifactsForRepo({...context.repo, name, per_page: 100});
-            // Only Main's own run on main for this exact commit: a pull
-            // request's run can upload an artifact under any name.
-            const artifact = data.artifacts.find(candidate =>
-              !candidate.expired &&
-              candidate.workflow_run?.head_branch === 'main' &&
-              candidate.workflow_run?.head_sha === process.env.BASE_SHA &&
-              candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id);
-            core.setOutput('run_id', artifact ? String(artifact.workflow_run.id) : '');
-            core.info(artifact ? `Using ${name} from run ${artifact.workflow_run.id}.` : `No ${name}; sizes are shown without a budget.`);
-
       - name: Download main's package size for the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size-cached.outputs.run_id != ''
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success' && steps.size-records.outputs.package_run_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: package-size-main-${{ steps.package-size-merge-base.outputs.sha }}
-          run-id: ${{ steps.package-size-cached.outputs.run_id }}
+          name: package-size-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.package_run_id }}
           github-token: ${{ github.token }}
           path: .package-size-base
 
@@ -1086,7 +1106,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_SHA: ${{ steps.package-size-merge-base.outputs.sha }}
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" --jq '.body // ""' > pr-body.txt || : > pr-body.txt
           node .github/scripts/package-size.mjs compare \
@@ -1132,148 +1152,6 @@ jobs:
       - name: Enforce the package size budget
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
         run: node .github/scripts/package-size.mjs enforce --report package-size.json
-
-  # Measures the PR's merge base so the PR comment can show component and
-  # package sizes before and after. It runs beside build-storybook rather than
-  # inside it, so no browser lane waits for the second build; the head sizes
-  # still come from build-storybook's analysis.
-  size-base:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-    steps:
-      # This job decides its own scope (no separate scope job): the step
-      # reads the PR's file list and the base's trusted classifier, and
-      # everything is in scope when it cannot decide.
-      - name: Check out the scope action
-        uses: actions/checkout@v7
-        with:
-          sparse-checkout: .github/actions/test-scope
-          path: .test-scope
-          persist-credentials: false
-
-      - name: Decide this job's scope
-        id: scope
-        uses: ./.test-scope/.github/actions/test-scope
-
-      - name: Checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 50
-
-      - name: Fetch base branch
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        run: git fetch origin ${{ github.base_ref }} --depth=50
-
-      - name: Setup Node and pnpm
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: ./.github/actions/setup
-
-      # A branch far behind main may have no merge base within the fetched
-      # history even after deepening. The report then keeps Before and Delta
-      # as N/A rather than failing the run.
-      - name: Check out the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        id: merge-base
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          if ! BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD); then
-            git fetch --deepen=200 origin "$BASE_REF:refs/remotes/origin/$BASE_REF" || true
-            if ! BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD); then
-              echo "::warning::no merge base within the fetched history; skipping base size measurement"
-              echo "found=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-          git worktree add --detach .size-base "$BASE_SHA"
-          echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "found=true" >> "$GITHUB_OUTPUT"
-
-      # The merge base's dependencies install either way: measuring bundles
-      # each base component with esbuild, which resolves its imports there.
-      - name: Install the merge base's dependencies
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        working-directory: .size-base
-        run: pnpm install --frozen-lockfile
-
-      # Main keeps each commit's package builds for 14 days. A merge base on
-      # main within that window is measured from them, with no build.
-      - name: Find main's build of the merge base
-        id: cached
-        continue-on-error: true
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/github-script@v9
-        env:
-          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
-        with:
-          retries: 3
-          script: |
-            const name = `dists-main-${process.env.BASE_SHA}`;
-            const {data} = await github.rest.actions.listArtifactsForRepo({...context.repo, name, per_page: 100});
-            // Only Main's own run on main for this exact commit: a pull
-            // request's run can upload an artifact under any name.
-            const artifact = data.artifacts.find(candidate =>
-              !candidate.expired &&
-              candidate.workflow_run?.head_branch === 'main' &&
-              candidate.workflow_run?.head_sha === process.env.BASE_SHA &&
-              candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id);
-            core.setOutput('run_id', artifact ? String(artifact.workflow_run.id) : '');
-            core.info(artifact ? `Using ${name} from run ${artifact.workflow_run.id}.` : `No ${name}; building the merge base.`);
-
-      - name: Download main's build of the merge base
-        id: download
-        if: steps.cached.outputs.run_id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: dists-main-${{ steps.merge-base.outputs.sha }}
-          run-id: ${{ steps.cached.outputs.run_id }}
-          github-token: ${{ github.token }}
-          path: .size-base/packages
-
-      # Without a kept build: core and its build tooling always build, because
-      # the other component packages depend on them; another package builds
-      # only when the PR changes its source.
-      - name: Build the merge base's component packages
-        if: (steps.merge-base.outputs.found == 'true') && steps.download.outcome != 'success' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        working-directory: .size-base
-        env:
-          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          pnpm -F @astryxdesign/build build
-          pnpm -F @astryxdesign/core build
-          for pkg in lab charts richtext vega; do
-            if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src"; then
-              continue
-            fi
-            pnpm -F "@astryxdesign/$pkg" build
-          done
-
-      - name: Measure the merge base
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        run: |
-          node .github/scripts/analyze-pr.js \
-            --base origin/${{ github.base_ref }} \
-            --head HEAD \
-            --base-root .size-base \
-            --base-only \
-            --output size-base.json
-
-      - name: Upload base size stats
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr-size-base
-          path: size-base.json
-          retention-days: 1
 
   # Typechecks run beside build-storybook instead of before its Storybook
   # build, so the browser checks that wait on the Storybook artifact start
