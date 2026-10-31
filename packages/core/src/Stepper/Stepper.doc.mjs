@@ -120,8 +120,14 @@ export const docs = {
       },
       {className: 'astryx-stepper-frame'},
       {className: 'astryx-stepper-summary'},
-      {className: 'astryx-step', visualProps: ['progress', 'status']},
-      {className: 'astryx-step-indicator', visualProps: ['progress', 'status']},
+      {
+        className: 'astryx-step',
+        visualProps: ['progress', 'status', 'disabled'],
+      },
+      {
+        className: 'astryx-step-indicator',
+        visualProps: ['progress', 'status', 'disabled'],
+      },
       {
         className: 'astryx-step-label',
         visualProps: ['progress', 'status', 'disabled'],

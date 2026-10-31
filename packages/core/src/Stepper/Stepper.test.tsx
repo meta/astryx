@@ -2027,10 +2027,10 @@ describe('step-label and step-description theme targets', () => {
     expect(descriptions[2].dataset.status).toBe('error');
   });
 
-  it('reflects disabled on the label target and emits its theme selector', () => {
-    // The label owns disabled paint (`styles.labelDisabled`); the description
-    // does not. The selector follows that ownership instead of being copied to
-    // every text target for vocabulary symmetry.
+  it('reflects disabled on step, step-indicator, and label targets and emits theme selectors', () => {
+    // The indicator and label own disabled paint (`styles.numberDisabled` /
+    // `styles.labelDisabled`); the description does not. The owning step,
+    // indicator, and label targets reflect disabled (architecture:component-theming-surface INV6).
     const {container} = render(
       <Stepper activeStep={0}>
         <Step
@@ -2041,24 +2041,34 @@ describe('step-label and step-description theme targets', () => {
         />
       </Stepper>,
     );
+    const step = container.querySelector('.astryx-step');
+    const indicator = container.querySelector('.astryx-step-indicator');
     const label = container.querySelector('.astryx-step-label');
     const description = container.querySelector('.astryx-step-description');
+    expect(step).toHaveAttribute('data-disabled', 'disabled');
+    expect(indicator).toHaveAttribute('data-disabled', 'disabled');
     expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(label).toHaveAttribute('data-disabled', 'disabled');
-    expect(description).not.toHaveAttribute('data-disabled');
     expect(description).not.toHaveAttribute('data-disabled');
 
     // A DOM attribute alone would not prove the public defineTheme path accepts
     // and emits the state. Hold both halves of the contract.
     const theme = defineTheme({
-      name: 'step-label-disabled-state-test',
+      name: 'step-disabled-state-test',
       components: {
+        step: {
+          'disabled:disabled': {opacity: '0.6'},
+        },
+        'step-indicator': {
+          'disabled:disabled': {filter: 'grayscale(1)'},
+        },
         'step-label': {
           'disabled:disabled': {opacity: '0.4'},
         },
       },
     });
     const {component: css} = generateThemeCSS(theme);
+    expect(css).toContain('.astryx-step[data-disabled="disabled"]');
+    expect(css).toContain('.astryx-step-indicator[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
     expect(css).toContain('opacity: 0.4');
   });
