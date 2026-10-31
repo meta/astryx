@@ -391,7 +391,7 @@ interface WheelGesture {
   /** Scratch: the step's deferred contact, begun at its commit. */
   stepBegin?: Record<string, unknown> & {id: number; x: number; y: number};
   /** Scratch: a followed pan's lift detection (momentum onset). */
-  follow?: {previous: number; run: number; count: number; lifted: boolean; sign: number; heldX: number; heldY: number; endMs: number};
+  follow?: {previous: number; run: number; count: number; lifted: boolean; sign: number; heldX: number; heldY: number; endMs: number; lastMove: number};
 }
 
 /** Scratch (#8676 rescope): one swipe, one step. */
@@ -2100,7 +2100,12 @@ export class GestureHost {
         f.lifted = true;
         f.heldX = 0;
         f.heldY = 0;
-        this.arena.ended([{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]);
+        // Stamped at the fingers' last move, not at this wheel: the held
+        // momentum wheels between them would read as a stop and lose the
+        // fling's speed.
+        this.arena.ended([
+          {id: gesture.ids[0], x: gesture.x, y: gesture.y, time: f.lastMove},
+        ]);
         return;
       }
       if (decaying) {
@@ -2112,6 +2117,7 @@ export class GestureHost {
       gesture.y -= f.heldY;
       f.heldX = 0;
       f.heldY = 0;
+      f.lastMove = time;
     }
     if (gesture.kind === 'pan') {
       gesture.x -= dx;
@@ -2275,7 +2281,7 @@ export class GestureHost {
       kind === 'pan' ? [this.nextId++] : [this.nextId++, this.nextId++];
     const gesture: WheelGesture = {...kept, ids, takers};
     if (kind === 'pan' && type === 'continuous') {
-      gesture.follow = {previous: 0, run: 0, count: 0, lifted: false, sign: 0, heldX: 0, heldY: 0, endMs: isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS};
+      gesture.follow = {previous: 0, run: 0, count: 0, lifted: false, sign: 0, heldX: 0, heldY: 0, endMs: isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS, lastMove: time};
     }
     if (
       kind === 'pan' &&
