@@ -162,6 +162,36 @@ describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
     expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
   });
 
+  it('leaves no tab stop while every item is disabled, by default', () => {
+    render(<RovingToolbar disabledLabels={ROVING_LABELS} />);
+    for (const label of ROVING_LABELS) {
+      expect(screen.getByTestId(label)).not.toHaveAttribute('tabindex', '0');
+    }
+  });
+
+  it('keeps one tab stop while every item is disabled, by the first selector that matches', () => {
+    const {rerender} = render(
+      <RovingToolbar
+        disabledLabels={ROVING_LABELS}
+        disabledTabStopSelectors={['[data-testid="B"]', 'button']}
+      />,
+    );
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
+
+    // A preferred selector that matches nothing falls through to the next.
+    rerender(
+      <RovingToolbar
+        disabledLabels={ROVING_LABELS}
+        disabledTabStopSelectors={['[data-testid="Z"]', 'button']}
+      />,
+    );
+    expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '0');
+    expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '-1');
+    expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
+  });
+
   it('ArrowRight moves the tab stop to the next enabled item', () => {
     render(<RovingToolbar />);
     const toolbar = screen.getByRole('toolbar');

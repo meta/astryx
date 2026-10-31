@@ -36,17 +36,6 @@ export interface SegmentedControlContextValue {
    * described by the reason (spec:AST-085 FR5).
    */
   disabledReasonID?: string;
-  /**
-   * With a group `disabledMessage`, the segment that holds the Tab stop when
-   * no enabled segment is selected: the first enabled segment, else the first.
-   * Null when the selected segment holds it, or without a reason.
-   */
-  fallbackTabStop?: string | null;
-  /**
-   * Records whether a segment is itself `isDisabled`, so the group can pick
-   * the fallback Tab stop. Returns the cleanup that forgets it.
-   */
-  registerSegment?: (value: string, isDisabled: boolean) => () => void;
 }
 
 export const SegmentedControlContext =

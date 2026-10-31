@@ -16,7 +16,6 @@
  */
 
 import React, {type ReactNode} from 'react';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {joinAriaIDs} from '../utils/inputAria';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -206,16 +205,11 @@ export function SegmentedControlItem({
   // segment focusable so the group's reason tooltip is keyboard-discoverable.
   // Per-item disabling (`isDisabled` on the item) always drops out of the tab
   // order. Activation stays blocked by the isItemDisabled guard in handleClick.
-  // When no enabled segment is selected, the group names a fallback Tab stop
-  // instead (FR7).
+  // Disabled with a reason, the selected segment keeps the Tab stop even when
+  // it is itself disabled (FR4); with no selected segment, the group places
+  // the stop (SegmentedControl FR2).
   const keepsSelectedFocusable =
-    isSelected && (ctx.hasDisabledMessage ?? false) && !isDisabled;
-  const isFallbackTabStop = ctx.fallbackTabStop === value;
-  const {registerSegment} = ctx;
-  useIsomorphicLayoutEffect(
-    () => registerSegment?.(value, isDisabled),
-    [registerSegment, value, isDisabled],
-  );
+    isSelected && (ctx.hasDisabledMessage ?? false);
   const size: SegmentedControlSize = ctx.size;
   const isFill = ctx.layout === 'fill';
 
@@ -250,6 +244,8 @@ export function SegmentedControlItem({
       // describes each segment (FR7).
       aria-describedby={joinAriaIDs(ariaDescribedByProp, ctx.disabledReasonID)}
       data-value={value}
+      // The group's fallback Tab stop skips segments disabled on their own.
+      data-segment-disabled={isDisabled || undefined}
       {...(!isSelected && !isItemDisabled ? pressable : undefined)}
       // Disabled items (including when the whole group is disabled) are not tab
       // stops — otherwise the selected segment stays keyboard-focusable but is
@@ -257,11 +253,7 @@ export function SegmentedControlItem({
       // exception is a whole-group disabledMessage, where the selected segment
       // stays focusable so the reason tooltip is keyboard-discoverable.
       tabIndex={
-        (isSelected && !isItemDisabled) ||
-        keepsSelectedFocusable ||
-        isFallbackTabStop
-          ? 0
-          : -1
+        (isSelected && !isItemDisabled) || keepsSelectedFocusable ? 0 : -1
       }
       onClick={handleClick}
       {...mergeProps(

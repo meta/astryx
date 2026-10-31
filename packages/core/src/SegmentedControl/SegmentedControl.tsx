@@ -15,13 +15,7 @@
  * - /packages/cli/assets/templates/blocks/components/SegmentedControl/ (showcase blocks)
  */
 
-import React, {
-  useMemo,
-  useCallback,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
+import React, {useMemo, useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
@@ -39,7 +33,6 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 export interface SegmentedControlProps extends Omit<
   BaseProps<HTMLDivElement>,
   'onChange'
@@ -208,6 +201,12 @@ export function SegmentedControl({
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
     itemSelector: '[role="radio"]:not([aria-disabled="true"])',
     hasRovingTabIndex: true,
+    // Disabled with a reason, the control keeps one Tab stop so the reason is
+    // reachable (FR2, FR7): the selected segment, else the first segment not
+    // disabled by its own isDisabled, else the first.
+    disabledTabStopSelectors: showsDisabledMessage
+      ? DISABLED_TAB_STOP_SELECTORS
+      : undefined,
     wrap: true,
     orientation: 'horizontal',
   });
@@ -270,43 +269,6 @@ export function SegmentedControl({
     [onFocusProp, hint, handleFocus, isDisabled, onChange, value],
   );
 
-  // With a group reason the control keeps one Tab stop (FR7): the selected
-  // segment, or when no enabled segment is selected, the first enabled segment
-  // in document order, else the first. Segments report whether they are
-  // themselves disabled; the choice is made after they commit, before paint.
-  const groupRef = useRef<HTMLDivElement | null>(null);
-  const segmentDisabledRef = useRef(new Map<string, boolean>());
-  const registerSegment = useCallback(
-    (segmentValue: string, isSegmentDisabled: boolean) => {
-      const segments = segmentDisabledRef.current;
-      segments.set(segmentValue, isSegmentDisabled);
-      return () => {
-        segments.delete(segmentValue);
-      };
-    },
-    [],
-  );
-  const [fallbackTabStop, setFallbackTabStop] = useState<string | null>(null);
-  useIsomorphicLayoutEffect(() => {
-    let next: string | null = null;
-    const group = groupRef.current;
-    if (showsDisabledMessage && group != null) {
-      const segments = segmentDisabledRef.current;
-      if (!(segments.has(value) && segments.get(value) === false)) {
-        const values = Array.from(
-          group.querySelectorAll<HTMLElement>('[role="radio"][data-value]'),
-          radio => radio.dataset.value ?? '',
-        );
-        next =
-          values.find(segmentValue => segments.get(segmentValue) === false) ??
-          values[0] ??
-          null;
-      }
-    }
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from the committed segments' document order; settles before paint
-    setFallbackTabStop(previous => (previous === next ? previous : next));
-  });
-
   const contextValue = useMemo(
     () => ({
       value,
@@ -318,8 +280,6 @@ export function SegmentedControl({
       disabledReasonID: showsDisabledMessage
         ? disabledMessageTooltip.describedBy
         : undefined,
-      fallbackTabStop: showsDisabledMessage ? fallbackTabStop : null,
-      registerSegment,
     }),
     [
       value,
@@ -329,15 +289,13 @@ export function SegmentedControl({
       isDisabled,
       showsDisabledMessage,
       disabledMessageTooltip.describedBy,
-      fallbackTabStop,
-      registerSegment,
     ],
   );
 
   return (
     <SegmentedControlContext value={contextValue}>
       <div
-        ref={useMergedRefs(ref, listRef, groupRef, disabledMessageTooltip.ref)}
+        ref={useMergedRefs(ref, listRef, disabledMessageTooltip.ref)}
         {...rest}
         role="radiogroup"
         aria-label={label}
@@ -375,3 +333,9 @@ export function SegmentedControl({
 }
 
 SegmentedControl.displayName = 'SegmentedControl';
+
+const DISABLED_TAB_STOP_SELECTORS = [
+  '[role="radio"][aria-checked="true"]',
+  '[role="radio"]:not([data-segment-disabled])',
+  '[role="radio"]',
+] as const;

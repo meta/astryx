@@ -85,6 +85,13 @@ export const docs = {
       required: false,
     },
     {
+      name: 'options.disabledTabStopSelectors',
+      type: 'readonly string[]',
+      description:
+        'With hasRovingTabIndex, keeps one tab stop while every item is disabled: the selectors are tried in order within the list, the first match carries tabindex="0", and every other element the last selector matches carries -1. For a group that stays focusable while disabled, so its disabled reason is reachable by keyboard. Unset: no stop while every item is disabled.',
+      required: false,
+    },
+    {
       name: 'options.hasCaretGuard',
       type: 'boolean',
       description:
@@ -191,6 +198,8 @@ export const docsDense = {
       'whether PageDown/PageUp page through a scrolling list (last/first fully visible item, then one viewport further; never wraps).',
     'options.hasRovingTabIndex':
       'opt into roving-tabindex ownership: hook stamps + repairs a single tab stop across items.',
+    'options.disabledTabStopSelectors':
+      'with hasRovingTabIndex, selectors tried in order for the one tab stop while every item is disabled.',
     'options.hasCaretGuard':
       "when true, don't steal arrow keys from a nested text input/textarea mid-line or from a contenteditable.",
   },
