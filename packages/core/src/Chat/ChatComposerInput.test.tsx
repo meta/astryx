@@ -15,7 +15,10 @@ import {createStaticSource} from '../Typeahead/createStaticSource';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 
 const announce = vi.hoisted(() => vi.fn());
-vi.mock('../hooks/useAnnounce', () => ({useAnnounce: () => announce}));
+vi.mock('../hooks/useAnnounce', async importOriginal => ({
+  ...(await importOriginal<typeof import('../hooks/useAnnounce')>()),
+  useAnnounce: () => announce,
+}));
 
 // =============================================================================
 // Helpers
@@ -1988,7 +1991,7 @@ describe('ChatComposerInput trigger loading announcement (spec:AST-086)', () => 
 
   /**
    * Lets a settled search apply, as the browser would before the next frame,
-   * then lets the loading announcement's two frames run.
+   * then lets the busy announcement's frame run.
    */
   async function nextFrame() {
     await act(async () => {});
@@ -2067,7 +2070,7 @@ describe('ChatComposerInput trigger loading announcement (spec:AST-086)', () => 
     ]);
   });
 
-  it('announces nothing for a synchronous source, whose results are already listed (FR7)', async () => {
+  it('announces nothing for a synchronous source, whose results are already listed (FR8)', async () => {
     render(
       <ChatComposerInput triggers={[createMentionTrigger()]} debounceMs={0} />,
     );
@@ -2090,7 +2093,7 @@ describe('ChatComposerInput trigger loading announcement (spec:AST-086)', () => 
     expect(announce).not.toHaveBeenCalled();
   });
 
-  it('announces nothing for a search that settles before the row shows (FR7)', async () => {
+  it('a search whose outcome arrives before its busy message is out announces nothing (FR8)', async () => {
     const settled: SearchSource = {
       bootstrap: async () => [],
       search: async () => [{id: 'cindy', label: 'Cindy Zhang'}],
