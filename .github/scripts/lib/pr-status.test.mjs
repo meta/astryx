@@ -178,12 +178,45 @@ describe('buildComponentTable', () => {
   it('lists a modified component folder with no size', () => {
     const table = buildComponentTable({
       analysis: {
+        baseSha: 'a'.repeat(40),
         modifiedComponents: ['Card'],
         componentStats: {Card: {package: '@astryxdesign/lab', linesOfCode: 9}},
       },
       origin: '',
     });
     expect(table).toContain('| lab/Card | — | 9 (new) |');
+  });
+
+  it('says not measured, never new, when main has no sizes for the merge base', () => {
+    const table = buildComponentTable({
+      analysis: {
+        componentSizes: {
+          'core/Card': {importGzipBytes: 2048, cssGzipBytes: null},
+        },
+        componentStats: {Card: {linesOfCode: 9}},
+      },
+      origin: '',
+    });
+    expect(table).toContain(
+      '| Card | 2.0 kB (not measured) | 9 (not measured) |',
+    );
+  });
+
+  it('never shows a pass for a visual run that failed', () => {
+    const table = buildComponentTable({
+      analysis: {
+        baseSha: 'a'.repeat(40),
+        componentSizes: {
+          'core/Card': {importGzipBytes: 2048, cssGzipBytes: null},
+        },
+        baseComponentSizes: {
+          'core/Card': {importGzipBytes: 2048, cssGzipBytes: null},
+        },
+      },
+      origin: '',
+      visualVerdict: {status: 'failed', changes: []},
+    });
+    expect(table).toContain('| ✗ · — · — |');
   });
 
   it('renders nothing when no component changed', () => {
@@ -201,19 +234,17 @@ describe('buildVisualDeltas', () => {
     diffPixels,
   });
 
-  it('collapses the changed shots under their count, largest change first, with frames', () => {
+  it('collapses the changed shots under their count, largest change first', () => {
     const verdict = {
       status: 'changed',
       counts: {total: 20},
-      changes: [change('a', 1), change('b', 50), change('c', 9, 'Chip')],
+      changes: [change('a', 1), change('b', 1500), change('c', 9, 'Chip')],
       added: ['core-dialog--default__neutral-light'],
+      removed: ['core-old--default__neutral-light'],
     };
-    const section = buildVisualDeltas({
-      verdict,
-      imageBase: 'https://raw.example/frames',
-    });
+    const section = buildVisualDeltas({verdict});
     expect(section).toMatch(
-      /^<details>\n<summary>Visual changes: 4 snapshots in 3 components<\/summary>/,
+      /^<details>\n<summary>Visual changes: 5 snapshots in 4 components<\/summary>/,
     );
     expect(section.match(/^\| \S+ · [a-c] /gm)).toEqual([
       '| Card · b ',
@@ -221,38 +252,33 @@ describe('buildVisualDeltas', () => {
       '| Card · a ',
     ]);
     expect(section).toContain(
-      '<img src="https://raw.example/frames/before/b.png" height="120" alt="before frame">',
+      '| Card · b (neutral, light) | changed (1,500 px) |',
     );
-    // An added shot has an after frame only.
     expect(section).toContain(
-      '| — | <img src="https://raw.example/frames/after/core-dialog--default__neutral-light.png" height="120" alt="after frame"> | — |',
+      '| core-dialog--default\\_\\_neutral-light | added |',
     );
+    expect(section).toContain('| core-old--default\\_\\_neutral-light | removed |');
   });
 
-  it('frames only the shots publish-frames.mjs publishes, and counts the rest', () => {
+  it(`lists at most ${VISUAL_FRAME_LIMIT} shots and counts the rest`, () => {
     const changes = Array.from({length: VISUAL_FRAME_LIMIT + 3}, (_, i) =>
       change(`s${i}`, 100 - i),
     );
     const section = buildVisualDeltas({
       verdict: {status: 'changed', counts: {total: 99}, changes},
-      imageBase: 'https://raw.example/f/',
     });
-    expect(section.match(/<img /g)).toHaveLength(VISUAL_FRAME_LIMIT * 3);
+    expect(section.match(/\| changed \(/g)).toHaveLength(VISUAL_FRAME_LIMIT);
     expect(section).toContain("3 more are in the run's visual report.");
   });
 
-  it('is absent without changes, and names shots without frames', () => {
+  it('is absent without changes, or when the visual run failed', () => {
     expect(buildVisualDeltas({verdict: {status: 'ok', changes: []}})).toBe('');
     expect(buildVisualDeltas({verdict: null})).toBe('');
     expect(
       buildVisualDeltas({
-        verdict: {
-          status: 'changed',
-          changes: [change('a', 1)],
-          counts: {total: 1},
-        },
+        verdict: {status: 'failed', changes: [change('a', 1)]},
       }),
-    ).toContain('| frame unavailable |');
+    ).toBe('');
   });
 });
 
@@ -354,7 +380,7 @@ describe('notRunLine', () => {
         ],
       }),
     ).toBe(
-      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run a full suite.\n\n',
+      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.\n\n',
     );
   });
 

@@ -3,7 +3,7 @@
 
 /**
  * @description Generates the PR comment from the run's analysis results
- * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --visual-image-url <url> --preview <file> --jobs <file> --touched <file> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --preview <file> --jobs <file> --touched <file> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout, compact by design: this
  *   head's preview first, the modified components (preview links, size, lines
  *   of code, a mark per browser suite that ran; three rows visible, the rest
@@ -127,7 +127,6 @@ const report = buildCompactReport({
   a11yReport,
   visualVerdict,
   packageSize,
-  visualImageUrl: getArg('visual-image-url'),
 });
 const footerLinksStr = runUrl
   ? ` | ${extLink('View full report', runUrl)}`

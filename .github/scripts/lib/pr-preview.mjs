@@ -603,7 +603,6 @@ export async function reconcilePrComment({
   touchedPath = 'touched-components/touched-components.json',
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
-  visualImageUrl = null,
   createIfMissing = true,
   fallbackMessage,
   generator = GENERATOR,
@@ -693,13 +692,6 @@ export async function reconcilePrComment({
       // checks, or with the ci:run-a11y label); the comment says so.
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
-      // Frames publish-frames.mjs put on this PR's assets branch, and only
-      // from raw.githubusercontent.com.
-      ...(/^https:\/\/raw\.githubusercontent\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/assets\/pr-\d+\/visual\/[0-9a-f]{40}\/$/.test(
-        String(visualImageUrl ?? ''),
-      )
-        ? ['--visual-image-url', visualImageUrl]
-        : []),
       ...(trustedHeadReport({
         reportPath: touchedPath,
         label: 'touched-components report',
