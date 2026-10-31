@@ -219,37 +219,37 @@ guidance owns the process used to propose and test APIs.
   writes it, `packages/<package>/src/privateAttributes/<name>.stylex.ts`, that
   holds its name and values and writes each selector on it once, as a literal in
   its own `stylex.create` call; StyleX resolves a selector only where it is
-  written. The owner exports only ready-made styles that read the attribute and
-  the props or writer that set it, never the raw name or a selector. Every other
-  file in that package spreads those exports and never writes the attribute or
-  its selector, and no package imports another package's owner module through an
-  internal path. StyleX merges styles one whole property at a time, so an owner
-  style carries every condition of each property it sets, its rest state and
-  pointer states included, and a caller does not set those properties again on
-  the same element. Outside the owner modules and test files, a hand-typed
-  `data-astryx-` string, template, or JSX attribute name, or a `dataAttr()` call
-  that names a private attribute, fails the `@astryx/no-raw-private-attribute`
-  lint rule; sites that predate the rule sit in its baseline, which only
-  shrinks. Tests may name a private attribute, because they assert the DOM a
-  component renders. A private attribute appears in no public export,
-  `.doc.mjs`, or Changeset, carries no compatibility promise, and may change in
-  any release. The public data attributes are `data-astryx-theme`, the theme
-  scope (`spec:AST-066` FR6); `data-astryx-media`, the media-surface scope that
-  theme compilation emits; `data-astryx-aspect-ratio-override`
-  (`component:AspectRatio` FR3); `data-astryx-token` and
-  `data-astryx-token-value` (`component:ChatComposerTokenElement` FR1);
-  `data-astryx-menu-press`, the menu-root marker
-  (`module:DropdownMenu/useMenuPress`); `data-astryx-pressable`, the press
-  marker (`component:SegmentedControlItem` FR7); and `data-astryx-edge-comp`,
-  exported as `EDGE_COMP_ATTR` (INV12). They change only under INV9. The code
-  that owns them writes them at its own sites, among them Theme, MediaTheme,
-  `reset.css`, `generateThemeRules.ts`, the CLI theme build, AspectRatio, the
-  Chat composer, the press and menu-press hooks, and the edge-compensation
-  styles, and the lint rule allows their names.
+  written. The owner exports only ready-made styles that read the attribute, the
+  props or writer that set it, and the runtime readers its package needs, such
+  as a `closest` or `matches` helper or a getter; it never exports the raw name
+  or a selector. Every other file in that package spreads those exports and
+  never writes the attribute or its selector, and no package imports another
+  package's owner module through an internal path. StyleX merges styles one
+  whole property at a time, so an owner style carries every condition of each
+  property it sets, its rest state and pointer states included, and a caller
+  does not set those properties again on the same element. Outside the owner
+  modules and test files, a hand-typed `data-astryx-` string, template, or JSX
+  attribute name, or a `dataAttr()` call that names a private attribute, fails
+  the `@astryx/no-raw-private-attribute` lint rule; sites that predate the rule
+  sit in its baseline, which only shrinks. Tests may name a private attribute,
+  because they assert the DOM a component renders. A private attribute appears
+  in no public export, `.doc.mjs`, or Changeset, carries no compatibility
+  promise, and may change in any release. The public data attributes are
+  `data-astryx-theme`, the theme scope (`spec:AST-066` FR6);
+  `data-astryx-media`, the media-surface scope that theme compilation emits;
+  `data-astryx-aspect-ratio-override` (`component:AspectRatio` FR3);
+  `data-astryx-token` and `data-astryx-token-value`
+  (`component:ChatComposerTokenElement` FR1); `data-astryx-menu-press`, the
+  menu-root marker (`module:DropdownMenu/useMenuPress`);
+  `data-astryx-pressable`, the press marker (`component:SegmentedControlItem`
+  FR7); and `data-astryx-edge-comp`, exported as `EDGE_COMP_ATTR` (INV12). They
+  change only under INV9. The code that owns them writes them at its own sites,
+  among them Theme, MediaTheme, `reset.css`, `generateThemeRules.ts`, the CLI
+  theme build, AspectRatio, the Chat composer, the press and menu-press hooks,
+  and the edge-compensation styles, and the lint rule allows their names.
 
-This record applies to the published Core package, and INV23 also applies to
-Lab and RichText source. Lab components are not stable public promises until
-promotion.
+This record applies to stable public packages, and INV23 also applies to Lab
+source. Lab components are not stable public promises until promotion.
 
 ## Change coupling
 
@@ -368,15 +368,18 @@ Known verification gaps:
   TopNavHeading's `logoLabel`, conform only through replacement under INV9.
 - INV23: the `@astryx/no-raw-private-attribute` rule and its baseline do not
   exist yet, and no owner module exists yet; public-API review is the check
-  until they do. Private attributes still written at their sites include
-  `data-astryx-press`, `data-astryx-popover-fallback-close`,
-  `data-astryx-table-pinned` and `data-astryx-cell-gliding` (each named in two
-  files), `data-astryx-scrolling` (read but never written), the Chat composer's
-  `data-astryx-dictation-interim`, DropdownMenu's `data-astryx-submenu-regions`
-  and `data-astryx-submenu-host`, and RichText's
-  `data-astryx-richtext-code-syntax`; no full inventory exists yet. Each
-  conforms by moving into an owner module in its own package. Lab's Schedule
-  reads Core's `data-astryx-popover-fallback-close`, and conforms through Core's
-  public API or an attribute Lab owns.
+  until they do. The `data-astryx-press` selector is copied in 14 Core files.
+  Other private attributes still written at their sites include
+  `data-astryx-popover-fallback-close` and DropdownMenu's
+  `data-astryx-submenu-regions`, which Popover and DropdownMenuSubMenu also read
+  at runtime; `data-astryx-table-pinned` and `data-astryx-cell-gliding`, each
+  named in two files; `data-astryx-scrolling`, read but never written;
+  DropdownMenu's `data-astryx-submenu-host`; the Chat composer's
+  `data-astryx-dictation-interim`; and RichText's
+  `data-astryx-richtext-code-syntax`. No full inventory exists yet. Each
+  conforms by moving into an owner module in its own package, with a runtime
+  reader from that module where its package reads the attribute in code. Lab's
+  Schedule reads Core's `data-astryx-popover-fallback-close`, and conforms
+  through Core's public API or an attribute Lab owns.
 
 These gaps are named here rather than treating partial checks as complete proof.
