@@ -44,7 +44,12 @@ import {
   type GestureRecognizerOptions,
   type NativeTouchBehavior,
 } from './GestureRecognizer';
-import type {GestureEventContext, GestureTouch, Point} from './types';
+import type {
+  GestureEventContext,
+  GestureTouch,
+  Point,
+  ScrollType,
+} from './types';
 import {VelocityTracker} from './VelocityTracker';
 
 export type PanDirection =
@@ -94,6 +99,15 @@ export class PanGestureRecognizer extends GestureRecognizer {
   /** @internal The host's brand: a pan follows the one-finger rule (recognizerInternals). */
   protected get family(): 'pan' {
     return 'pan';
+  }
+
+  /**
+   * On the web a pan also takes wheel and trackpad scrolling, a mouse
+   * wheel's notches included (`spec:AST-094` FR43); a caller that passes
+   * `allowedScrollTypes: []` opts out.
+   */
+  protected override get defaultScrollTypes(): ReadonlyArray<ScrollType> {
+    return ['continuous', 'discrete'];
   }
 
   minimumNumberOfTouches: number;
