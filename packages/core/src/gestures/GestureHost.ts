@@ -814,7 +814,8 @@ export class GestureHost {
    * lands on the sheet. UIKit keeps an interruptible animation hit-testable
    * where it is drawn (UIViewPropertyAnimator). The touch goes to what was
    * drawn under the finger when it landed (`time`, its event's timestamp),
-   * even when a busy main thread hands it over later (`spec:AST-094` FR11).
+   * even when a busy main thread hands it over later, and content that slid
+   * under the finger since takes nothing (`spec:AST-094` FR11).
    */
   private presentedTarget(
     native: EventTarget | null,
@@ -845,16 +846,32 @@ export class GestureHost {
     // on another clock, or older than a second, is not corrected.
     const age = (this.doc.defaultView?.performance.now() ?? time) - time;
     if (age > 0 && age < 1000) {
-      for (const mover of movers) {
+      const movedSince = (mover: Element) => {
         const then = presentedOffsetOf(mover, time);
-        if (Math.abs(then.x) < 0.5 && Math.abs(then.y) < 0.5) {
+        return Math.abs(then.x) >= 0.5 || Math.abs(then.y) >= 0.5 ? then : null;
+      };
+      const now = hit;
+      const under =
+        now == null
+          ? undefined
+          : movers.find(mover => containsAlongFlatTree(mover, now));
+      let landedOnMover = false;
+      for (const mover of movers) {
+        const then = movedSince(mover);
+        if (then == null) {
           continue;
         }
         const landed = this.drawnAt(x - then.x, y - then.y);
         if (landed != null && containsAlongFlatTree(mover, landed)) {
           hit = landed;
+          landedOnMover = true;
           break;
         }
+      }
+      // Content that slid under the finger after it landed takes nothing:
+      // the touch goes to what was there, beneath it.
+      if (!landedOnMover && under != null && movedSince(under) != null) {
+        hit = this.drawnBeneath(x, y, movers);
       }
     }
     if (hit == null || hit === native) {
@@ -868,6 +885,25 @@ export class GestureHost {
         (node != null && containsAlongFlatTree(mover, node)),
     );
     return isAboutMover ? found : native;
+  }
+
+  /** What is drawn at a point beneath every mover. */
+  private drawnBeneath(
+    x: number,
+    y: number,
+    movers: ReadonlyArray<Element>,
+  ): Element | null {
+    if (typeof this.doc.elementsFromPoint !== 'function') {
+      return null;
+    }
+    return (
+      this.doc
+        .elementsFromPoint(x, y)
+        .find(
+          element =>
+            !movers.some(mover => containsAlongFlatTree(mover, element)),
+        ) ?? null
+    );
   }
 
   /** What is drawn at a point, inside open shadow roots too. */

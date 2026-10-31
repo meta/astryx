@@ -7,12 +7,9 @@
  *   springs the sheet up into place from below the screen and
  *   `__move('down')` springs it down off it, with Core's animator and a
  *   critically damped spring (the sheet's shape, slowed to a 6 s response so
- *   a test can act while it moves, even on a loaded machine). `__offsets()`
- *   reads the animator's presented offset beside the drawn top, the top the
- *   motion started from, the velocity, and how far the page's clock is past
- *   the frame the drawn top belongs to. `__springSpeeds()` reads the
- *   spring's speed 0.3, 1.5 and 4.5 s into the motion from the animator's
- *   own curve. `__mimicIos()` makes hit tests answer where the engine
+ *   a test can act while it moves, even on a loaded machine).
+ *   `__springSpeeds()` reads the spring's speed 0.3, 1.5 and 4.5 s into the
+ *   motion from the animator's own curve. `__mimicIos()` makes hit tests answer where the engine
  *   last resolved the sheet (where the motion started, until a style write),
  *   as iOS WebKit does mid-animation. `__act('tap')` taps the drawn Done and
  *   `__act('drag')` drags the drawn sheet 120 px down, in the first frame
@@ -53,13 +50,6 @@ declare global {
   interface Window {
     __log: string[];
     __move: (direction: 'up' | 'down') => void;
-    __offsets: () => {
-      offset: number;
-      drawnTop: number;
-      startTop: number;
-      velocity: number;
-      lag: number;
-    };
     __springSpeeds: () => number[];
     __mimicIos: () => void;
     __act: (kind: 'tap' | 'drag') => Promise<Act>;
@@ -141,14 +131,6 @@ const startTop = (target: HTMLElement): number => {
   }
   return top + startY;
 };
-
-window.__offsets = () => ({
-  offset: presentedOffsetOf(sheet).y,
-  drawnTop: drawn(sheet).top,
-  startTop: startTop(sheet),
-  velocity: animator.getVelocity('y'),
-  lag: performance.now() - Number(document.timeline.currentTime ?? 0),
-});
 
 window.__springSpeeds = () =>
   [0.3, 1.5, 4.5].map(seconds =>

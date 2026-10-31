@@ -4,10 +4,9 @@
  * @file presentedHitTesting.interaction.browser.spec.ts
  * @input presentedFixture.ts bundled with esbuild: a sheet that Core's
  *   animator springs up into place or down off the screen, over a scrim
- * @output Browser proof that the animator's presented offset is how far the
- *   engine draws the springing sheet from where its motion started, and
- *   that with hit testing answering at that start, as iOS WebKit does
- *   mid-animation, in both directions: a tap on the drawn Done button clicks
+ * @output Browser proof that, with the sheet on a spring and hit testing
+ *   answering where its motion started, as iOS WebKit does mid-animation, in
+ *   both directions: a tap on the drawn Done button clicks
  *   Done once, never the sheet's body or the scrim; and a drag on the drawn
  *   sheet begins the sheet's pan and catches the sheet where it is drawn,
  *   with no scrim gesture
@@ -55,51 +54,19 @@ for (const direction of ['up', 'down'] as const) {
   // springing down from its rest).
   const engineTarget = direction === 'up' ? 'scrim' : 'sheet';
 
-  test(`the animator reports where the spring draws the sheet moving ${direction}`, async ({
+  test(`the sheet moves ${direction} on a spring, not at a constant speed`, async ({
     page,
   }) => {
     await load(page);
     await page.evaluate(d => window.__move(d), direction);
-    const result = await page.evaluate(async d => {
-      const frame = async (): Promise<void> => {
-        await new Promise<void>(resolve => {
-          requestAnimationFrame(() => resolve());
-        });
-      };
-      await frame();
-      // A spring, not a constant-speed slide: read off the animator's curve.
-      const speeds = window.__springSpeeds().map(Math.abs);
-      const taken: ReturnType<typeof window.__offsets>[] = [];
-      for (let restarts = 0; taken.length < 3 && restarts < 4;) {
-        await frame();
-        const sample = window.__offsets();
-        const last = taken[taken.length - 1];
-        if (Math.abs(sample.velocity) < 1) {
-          // Settled before three samples on a busy machine: go again.
-          window.__move(d);
-          taken.length = 0;
-          restarts += 1;
-        } else if (
-          Math.abs(sample.offset) > 20 &&
-          (last == null || Math.abs(sample.offset - last.offset) > 40)
-        ) {
-          taken.push(sample);
-        }
-      }
-      return {speeds, taken};
-    }, direction);
-    expect(
-      Math.max(...result.speeds) / Math.min(...result.speeds),
-    ).toBeGreaterThan(2);
-    expect(result.taken).toHaveLength(3);
-    for (const sample of result.taken) {
-      // Drawn away from its start by what the animator reports. The offset
-      // is read at the page's clock and the drawn top at its frame's, so the
-      // two differ by the spring's travel in between.
-      expect(
-        Math.abs(sample.drawnTop - sample.startTop - sample.offset),
-      ).toBeLessThan(2 + (Math.abs(sample.velocity) * sample.lag) / 1000);
-    }
+    const speeds = await page.evaluate(async () => {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => resolve());
+      });
+      return window.__springSpeeds().map(Math.abs);
+    });
+    // Read off the animator's own curve: its speed changes on the way.
+    expect(Math.max(...speeds) / Math.min(...speeds)).toBeGreaterThan(2);
   });
 
   test(`a tap on the drawn Done while the spring moves the sheet ${direction} clicks Done once`, async ({

@@ -228,6 +228,25 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     now.mockRestore();
   });
 
+  it('keeps a touch the host handles late with what was under the finger when it landed, not content that slid under it since (spec:AST-094 FR11)', () => {
+    // Presenting, still moving up at 160 px/s: at 1,000 ms the finger lands
+    // on the scrim just above the sheet's drawn top (300); a busy main thread
+    // hands the host the touch 150 ms later, when the sheet has slid 24 px
+    // higher and its Done button is drawn under the finger's point.
+    mount({left: 0, top: 844, right: 390, bottom: 1244}, time => {
+      return -544 - 0.16 * (time - 1000);
+    });
+    const now = vi.spyOn(window.performance, 'now').mockReturnValue(1150);
+    const {scrimTap, sheetDrag} = host();
+    const aboveSheet = {x: 340, y: 290};
+    touch('touchstart', scrim, aboveSheet, 1000);
+    expect(scrimTap.numberOfTouches).toBe(1);
+    expect(sheetDrag.numberOfTouches).toBe(0);
+    touch('touchend', scrim, aboveSheet, 1080);
+    expect(clicks).toEqual([]);
+    now.mockRestore();
+  });
+
   it("clicks the drawn button once with only watchers attached: the shared click guard swallows the engine's own click", () => {
     mount({left: 0, top: 844, right: 390, bottom: 1244}, -544);
     // Nothing that claims: the host's touchend listener is passive, so the

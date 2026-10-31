@@ -29,7 +29,7 @@ import {createNativeScrollProbe} from '../nativeScroll';
 import {gestureHosts} from '../hostRegistry';
 import {holdPageScroll, type PageScrollDecision} from '../pageHold';
 import {ManualClock, RecordingConsumer} from './harness';
-import {COARSE_POINTER_QUERY} from '../../utils/coarsePointer';
+import {TOUCH_QUERY} from '../../utils/touchQueries';
 import {registerPresentedOffset} from '../../motion/presentation';
 import {__resetClickGuardForTest} from '../../utils/clickGuard';
 import {coarsePrimaryPointer, pointerQuery} from './pointerQuery';
@@ -3071,7 +3071,7 @@ describe('holdPageScroll', () => {
     const added = vi.spyOn(window, 'addEventListener');
     detachers.push(() => added.mockRestore());
     detachers.push(holdPageScroll(document, () => true));
-    expect(ask).toHaveBeenCalledWith(COARSE_POINTER_QUERY);
+    expect(ask).toHaveBeenCalledWith(TOUCH_QUERY);
     expect(
       touchListenersAdded(added).some(
         ([type, , options]) =>
