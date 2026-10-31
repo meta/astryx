@@ -289,10 +289,16 @@ function buildComponentTable({analysis, origin, a11yReport, visualVerdict}) {
  * each row shows its before/after/diff thumbnails, and only published frames;
  * without it, each row names its change.
  */
-function buildVisualDeltas({verdict, frames = null}) {
+/**
+ * The changed shots in report order: changed by pixels changed, largest first,
+ * then added, then removed. The report lists the first VISUAL_FRAME_LIMIT,
+ * and publish-frames.mjs publishes frames for the same ones, so thumbnails
+ * and rows cannot drift apart.
+ */
+function visualShots(verdict) {
   if (!verdict || verdict.status === 'skipped' || verdict.status === 'failed')
-    return '';
-  const all = [
+    return [];
+  return [
     ...[...(verdict.changes || [])]
       .sort((a, b) => Number(b.diffPixels ?? 0) - Number(a.diffPixels ?? 0))
       .map(change => ({...change, kinds: ['before', 'after', 'diff']})),
@@ -303,6 +309,10 @@ function buildVisualDeltas({verdict, frames = null}) {
       kinds: ['before'],
     })),
   ];
+}
+
+function buildVisualDeltas({verdict, frames = null}) {
+  const all = visualShots(verdict);
   if (all.length === 0) return '';
   const rows = all.slice(0, VISUAL_FRAME_LIMIT);
   const unshown = all.length - rows.length;
@@ -463,6 +473,7 @@ function buildCompactReport({
 }
 
 module.exports = {
+  visualShots,
   SUITES,
   VISUAL_FRAME_LIMIT,
   baseJobName,

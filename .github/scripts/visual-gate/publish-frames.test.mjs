@@ -66,7 +66,7 @@ function fakeGitHub({branchExists}) {
 }
 
 describe('framesToPublish', () => {
-  it('takes the largest changes first, then added and removed shots, up to the limit', () => {
+  it('takes the largest changes first, then added and removed shots, up to the limit, and never an unsafe key', () => {
     const verdict = {
       changes: [
         {key: 'a', diffPixels: 1},
@@ -76,12 +76,40 @@ describe('framesToPublish', () => {
       added: ['added'],
       removed: ['gone'],
     };
+    // The unsafe key keeps its report row (shown as not published).
     expect(framesToPublish(verdict, 3).map(shot => shot.key)).toEqual([
       'b',
       'a',
+    ]);
+    expect(framesToPublish(verdict, 5).map(shot => shot.key)).toEqual([
+      'b',
+      'a',
       'added',
+      'gone',
     ]);
     expect(framesToPublish({...verdict, status: 'skipped'}, 3)).toEqual([]);
+  });
+});
+
+describe('the same shots as the report', () => {
+  it("publishes exactly the report's rows, in its order", async () => {
+    const {createRequire} = await import('node:module');
+    const {visualShots, VISUAL_FRAME_LIMIT} = createRequire(import.meta.url)(
+      '../lib/pr-status.js',
+    );
+    const verdict = {
+      status: 'changed',
+      changes: Array.from({length: 20}, (_, i) => ({
+        key: `s${i}`,
+        diffPixels: i,
+      })),
+      added: ['new-shot'],
+    };
+    expect(framesToPublish(verdict, 100).map(shot => shot.key)).toEqual(
+      visualShots(verdict)
+        .slice(0, VISUAL_FRAME_LIMIT)
+        .map(shot => shot.key),
+    );
   });
 });
 

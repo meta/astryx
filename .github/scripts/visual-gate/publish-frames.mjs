@@ -12,21 +12,26 @@
  *   to the pull request's `assets/pr-<number>` branch (the path PR screenshots
  *   already use) under `visual/<head sha>/`, marking a branch it creates with
  *   MARKER so only such branches are pruned, and writes `image_base` (their
- *   raw URL prefix) to GITHUB_OUTPUT. Writes nothing when no shot changed.
- * @position The PR Comment workflow's comment job, after the visual report is
- *   prepared and before the report renders. It writes only that branch, and
- *   only frames the trusted publisher re-encoded.
+ *   raw URL prefix) and `published` (each frame's `<kind>/<key>.png`) to
+ *   GITHUB_OUTPUT. Writes nothing when no shot changed.
+ * @position The PR Comment workflow's frames job, after the visual report is
+ *   prepared; the comment job renders the thumbnails. It writes only that
+ *   branch, and only frames the trusted publisher re-encoded.
  */
 
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
 
+// The report's own shot order and limit (lib/pr-status.js).
+const {visualShots, VISUAL_FRAME_LIMIT} = createRequire(import.meta.url)(
+  '../lib/pr-status.js',
+);
 const KEY = /^(?!\.+$)[A-Za-z0-9._-]{1,240}$/;
-const KINDS = ['before', 'after', 'diff'];
-/** Shots published per head, whatever `--limit` asks for. */
-export const MAX_SHOTS = 12;
+/** Shots published per head, whatever `--limit` asks for: the report's rows. */
+export const MAX_SHOTS = VISUAL_FRAME_LIMIT;
 export const MAX_FRAME_BYTES = 500 * 1024;
 
 /** A PNG or WebP no larger than MAX_FRAME_BYTES, by its own bytes. */
@@ -58,19 +63,15 @@ export function assetsBranch(pr) {
   return `assets/pr-${pr}`;
 }
 
-/** The frames to publish: changed shots by pixels changed, then added and removed. */
+/**
+ * The frames to publish: the report's rows (visualShots), the first `limit`
+ * of them and at most MAX_SHOTS, and only shots whose key is a safe name.
+ */
 export function framesToPublish(verdict, limit) {
-  if (!verdict || verdict.status === 'skipped' || verdict.status === 'failed')
-    return [];
-  const changes = [...(verdict.changes || [])].sort(
-    (a, b) => Number(b.diffPixels ?? 0) - Number(a.diffPixels ?? 0),
-  );
-  const shots = [
-    ...changes.map(change => ({key: change.key, kinds: KINDS})),
-    ...(verdict.added || []).map(key => ({key, kinds: ['after']})),
-    ...(verdict.removed || []).map(key => ({key, kinds: ['before']})),
-  ].filter(shot => KEY.test(String(shot.key ?? '')));
-  return shots.slice(0, Math.min(Number(limit) || 0, MAX_SHOTS));
+  return visualShots(verdict)
+    .slice(0, Math.min(Number(limit) || 0, MAX_SHOTS))
+    .filter(shot => KEY.test(String(shot.key ?? '')))
+    .map(shot => ({key: shot.key, kinds: shot.kinds}));
 }
 
 async function api(request, method, route, body) {
