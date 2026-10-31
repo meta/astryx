@@ -89,6 +89,11 @@ export interface ResizableRegionSizing {
   shrinkOrder?: number;
 }
 
+/**
+ * @deprecated The configuration-object form's region. Pass the same options
+ * as `CreateResizableOptions` to `useResizable(handleRef, options)`, one call
+ * per region. Removed in the next minor.
+ */
 export type ResizableRegionConfig = ResizableRegionSizing &
   ResizableMinConfig &
   ResizableMaxConfig;
@@ -154,9 +159,20 @@ export interface UseResizableSingleOptions {
   onCollapseChange?: (isCollapsed: boolean) => void;
 }
 
+/**
+ * @deprecated The configuration-object form. Pass the same options to
+ * `useResizable(handleRef, options)` (`CreateResizableOptions`). Removed in the
+ * next minor.
+ */
 export type UseResizableSingleConfig = ResizableRegionConfig &
   UseResizableSingleOptions;
 
+/**
+ * @deprecated The configuration-object form for several regions. Call
+ * `useResizable(handleRef, options)` once per region, with the shared
+ * `containerRef` and `direction`; an `autoSaveId` of `<autoSaveId>:<region
+ * key>` keeps each region's saved size. Removed in the next minor.
+ */
 export interface UseResizableMultiConfig {
   /** Layout direction, shared by every region. @default 'horizontal' */
   direction?: ResizableDirection;
@@ -172,6 +188,12 @@ export interface UseResizableMultiConfig {
   autoSaveId?: string;
 }
 
+/**
+ * @deprecated What the configuration-object form returns.
+ * `useResizable(handleRef, options)` returns `UseResizableResult`: the same
+ * size, collapse state and controls, with no `props`. Removed in the next
+ * minor.
+ */
 export interface ResizableRegion {
   /** Current size in pixels. */
   size: number;
@@ -187,6 +209,11 @@ export interface ResizableRegion {
   props: ResizableProps;
 }
 
+/**
+ * @deprecated The configuration-object form's handle props. Give the handle's
+ * ref to `useResizable(handleRef, options)` instead, and pass LayoutPanel
+ * `width={region.size}`. Removed in the next minor.
+ */
 export interface ResizableProps {
   _size: number;
   // eslint-disable-next-line @astryx/boolean-prop-naming
@@ -1120,9 +1147,21 @@ export function useResizable(
   handleRef: RefObject<HTMLElement | null>,
   options?: CreateResizableOptions,
 ): UseResizableResult;
+/**
+ * @deprecated Pass the handle's ref first: `useResizable(handleRef, options)`
+ * with `<ResizeHandle ref={handleRef} />` in place of its `resizable` prop, and
+ * render the panel at `size` (`<LayoutPanel width={region.size}>`). Removed
+ * in the next minor.
+ */
 export function useResizable<const Config extends UseResizableSingleConfig>(
   config: SingleResizableArgument<Config>,
 ): ResizableRegion;
+/**
+ * @deprecated Call `useResizable(handleRef, options)` once per region, with
+ * the shared `containerRef` and `direction`; an `autoSaveId` of
+ * `<autoSaveId>:<region key>` keeps each region's saved size. Give each
+ * region's ref to its ResizeHandle. Removed in the next minor.
+ */
 export function useResizable<const Config extends UseResizableMultiConfig>(
   config: MultiResizableArgument<Config>,
 ): Record<string, ResizableRegion>;
