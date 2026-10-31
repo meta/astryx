@@ -41,7 +41,9 @@ ruleTester.run('no-classname-clobber', rule, {
     // A producer beside spreads that carry no className. `...rest` and a
     // hook's prop bag are the two shapes this must never flag.
     {code: `<div {...rest} {...stylex.props(styles.root)} />`},
-    {code: `<button {...popover.triggerProps} {...stylex.props(styles.root)} />`},
+    {
+      code: `<button {...popover.triggerProps} {...stylex.props(styles.root)} />`,
+    },
     {
       code: `<button {...rest} {...popover.triggerProps} {...stylex.props(styles.root)} />`,
     },
@@ -121,7 +123,10 @@ ruleTester.run('no-classname-clobber', rule, {
       errors: [
         {
           messageId: 'spreadClassNameClobber',
-          data: {earlier: 'themeProps()', later: 'focusOutlineProps.focusVisible()'},
+          data: {
+            earlier: 'themeProps()',
+            later: 'focusOutlineProps.focusVisible()',
+          },
         },
       ],
     },

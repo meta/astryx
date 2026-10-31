@@ -48,7 +48,7 @@ const internalBarrelBaseline = JSON.parse(
 
 // Guarded values whose bare nullish JSX guard or hand-written isRenderable
 // check predates making `@astryx/no-nullish-jsx-guard` fail strict lint, by
-// repo-relative file. The list only shrinks.
+// repo-relative file, once per check. The list only shrinks.
 const nullishGuardBaseline = JSON.parse(
   readFileSync(
     path.join(
@@ -899,9 +899,10 @@ export default defineConfig(
   },
   // A slot's presence is decided by `isRenderable`, never a bare `!= null`
   // guard or a hand-written copy of its checks. The checks that predate this
-  // block are listed in the baseline and stay allowed until migrated; a new
-  // one is reported (an error in strict mode, so a pull request that adds one
-  // fails lint, while main stays green).
+  // block are listed in the baseline, once per check of each value, and that
+  // many stay allowed until migrated; one more is reported (an error in
+  // strict mode, so a pull request that adds one fails lint, while main stays
+  // green).
   {
     files: nullishGuardScope.files,
     ignores: nullishGuardScope.ignores,

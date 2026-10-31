@@ -108,10 +108,7 @@ ruleTester.run('focus-outline-shared', rule, {
           },
         });
       `,
-      errors: [
-        {messageId: 'handRolledRing'},
-        {messageId: 'handRolledRing'},
-      ],
+      errors: [{messageId: 'handRolledRing'}, {messageId: 'handRolledRing'}],
     },
     // Reading the tokens directly is still a second definition of the ring.
     {

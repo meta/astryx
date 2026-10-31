@@ -48,12 +48,16 @@
  *   if (rendered == null || typeof rendered === 'boolean') return null;
  *
  * The boolean test is what marks the value as a rendered node, so these are
- * flagged even outside JSX (architecture:react-component-runtime: a shared
- * concern is extended in its owner and called once).
+ * flagged even outside JSX; the one definition is
+ * packages/core/src/utils/isRenderable.ts. A chain that also tests the value
+ * against another type (`typeof value === 'string'`, `isValidElement(value)`,
+ * `Array.isArray(value)`, `instanceof`) is a type switch, not a presence test,
+ * and is left alone.
  *
  * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
- * baseline lists, per file, the guarded values whose checks predate the
- * baseline; they stay allowed until migrated, and anything new is reported.
+ * baseline lists, per file, each guarded value once per check that predates
+ * enforcement. That many checks of the value stay allowed until migrated;
+ * one more is reported.
  * `no-nullish-jsx-guard.baseline.mjs` writes it.
  *
  * Known limitations (intentional, to keep precision high):
@@ -274,6 +278,53 @@ function parseLiteralComparison(node, equal, values) {
   return null;
 }
 
+const TYPE_TEST_CALLS = new Set(['isValidElement', 'isArray']);
+
+/**
+ * The value an operand tests against a type other than boolean
+ * (`typeof x === 'string'`, `isValidElement(x)`, `Array.isArray(x)`,
+ * `x instanceof Y`), negated or not; otherwise null.
+ */
+function otherTypeTestValue(node) {
+  let current = node;
+  while (current?.type === 'UnaryExpression' && current.operator === '!') {
+    current = current.argument;
+  }
+  if (current?.type === 'BinaryExpression') {
+    if (current.operator === 'instanceof') {
+      return current.left;
+    }
+    for (const [typeofSide, other] of [
+      [current.left, current.right],
+      [current.right, current.left],
+    ]) {
+      if (
+        typeofSide.type === 'UnaryExpression' &&
+        typeofSide.operator === 'typeof' &&
+        other.type === 'Literal' &&
+        typeof other.value === 'string' &&
+        other.value !== 'boolean'
+      ) {
+        return typeofSide.argument;
+      }
+    }
+    return null;
+  }
+  if (current?.type === 'CallExpression' && current.arguments.length > 0) {
+    const callee = current.callee;
+    const name =
+      callee.type === 'Identifier'
+        ? callee.name
+        : callee.type === 'MemberExpression' && !callee.computed
+          ? callee.property.name
+          : null;
+    if (name != null && TYPE_TEST_CALLS.has(name)) {
+      return current.arguments[0];
+    }
+  }
+  return null;
+}
+
 /** Flatten a chain of one logical operator into its operands. */
 function flattenLogical(node, operator) {
   if (node?.type === 'LogicalExpression' && node.operator === operator) {
@@ -335,11 +386,24 @@ const rule = {
     const options = context.options[0] ?? {};
     const root = options.root ?? context.cwd;
     const relative = path.relative(root, filename).split(path.sep).join('/');
-    const allowed = new Set(options.baseline?.[relative] ?? []);
+    // Each listed value allows as many checks as it is listed; the next one
+    // is reported.
+    const allowance = new Map();
+    for (const value of options.baseline?.[relative] ?? []) {
+      allowance.set(value, (allowance.get(value) ?? 0) + 1);
+    }
+    function isAllowed(valueText) {
+      const left = allowance.get(valueText) ?? 0;
+      if (left === 0) {
+        return false;
+      }
+      allowance.set(valueText, left - 1);
+      return true;
+    }
 
     function reportHandRolled(chain, value) {
       const valueText = sourceCode.getText(value);
-      if (allowed.has(valueText)) {
+      if (isAllowed(valueText)) {
         return;
       }
       context.report({
@@ -367,7 +431,13 @@ const rule = {
       const equal = node.operator === '||';
       const presence = new Set();
       const booleans = new Map();
+      const otherTypes = new Set();
       for (const operand of flattenLogical(node, node.operator)) {
+        const typed = otherTypeTestValue(operand);
+        if (typed) {
+          otherTypes.add(sourceCode.getText(typed));
+          continue;
+        }
         const nullish = parseNullishComparison(operand);
         if (nullish && nullish.equal === equal) {
           presence.add(sourceCode.getText(nullish.value));
@@ -378,15 +448,15 @@ const rule = {
           presence.add(sourceCode.getText(empty));
           continue;
         }
-        const typed =
+        const boolean =
           parseBooleanTypeof(operand, equal) ??
           parseLiteralComparison(operand, equal, new Set([true, false]));
-        if (typed) {
-          booleans.set(sourceCode.getText(typed), typed);
+        if (boolean) {
+          booleans.set(sourceCode.getText(boolean), boolean);
         }
       }
       for (const [text, value] of booleans) {
-        if (presence.has(text)) {
+        if (presence.has(text) && !otherTypes.has(text)) {
           reportHandRolled(node, value);
           return;
         }
@@ -395,7 +465,7 @@ const rule = {
 
     function report(comparison, value, negate) {
       const valueText = sourceCode.getText(value);
-      if (allowed.has(valueText)) {
+      if (isAllowed(valueText)) {
         return;
       }
       const replacement = `${negate ? '!' : ''}isRenderable(${valueText})`;

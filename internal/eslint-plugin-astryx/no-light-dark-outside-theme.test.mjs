@@ -23,7 +23,8 @@ const ruleTester = new RuleTester({
   },
 });
 
-const COMPONENT = 'packages/core/src/Table/plugins/stickyColumns/useTableStickyColumns.tsx';
+const COMPONENT =
+  'packages/core/src/Table/plugins/stickyColumns/useTableStickyColumns.tsx';
 
 // RuleTester registers its own describe/it blocks internally, so it
 // must run at the top level. Vitest 4 forbids calling suite functions
@@ -47,7 +48,7 @@ ruleTester.run('no-light-dark-outside-theme', noLightDarkOutsideThemeRule, {
       filename: 'packages/core/src/theme/tokens.stylex.ts',
     },
     {
-      code: "const ld = (light, dark) => `light-dark(${light}, ${dark})`;",
+      code: 'const ld = (light, dark) => `light-dark(${light}, ${dark})`;',
       filename: 'packages/core/src/theme/defineTheme.ts',
     },
     {

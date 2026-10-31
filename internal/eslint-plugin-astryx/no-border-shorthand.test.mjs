@@ -145,7 +145,8 @@ ruleTester.run('no-border-shorthand', rule, {
           messageId: 'noBorderShorthand',
           data: {
             prop: 'borderBottom',
-            replacements: 'borderBottomWidth, borderBottomStyle, borderBottomColor',
+            replacements:
+              'borderBottomWidth, borderBottomStyle, borderBottomColor',
           },
         },
       ],
@@ -163,7 +164,8 @@ ruleTester.run('no-border-shorthand', rule, {
           messageId: 'noBorderShorthand',
           data: {
             prop: 'borderRight',
-            replacements: 'borderRightWidth, borderRightStyle, borderRightColor',
+            replacements:
+              'borderRightWidth, borderRightStyle, borderRightColor',
           },
         },
       ],
@@ -181,7 +183,8 @@ ruleTester.run('no-border-shorthand', rule, {
           messageId: 'noBorderShorthand',
           data: {
             prop: 'borderInline',
-            replacements: 'borderInlineWidth, borderInlineStyle, borderInlineColor',
+            replacements:
+              'borderInlineWidth, borderInlineStyle, borderInlineColor',
           },
         },
       ],

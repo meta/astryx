@@ -30,6 +30,16 @@ tester.run('no-nullish-jsx-guard', rule, {
     {code: `const isFlag = typeof flag === 'boolean' && flag;`},
     // ✅ Different values in the presence and boolean tests.
     {code: `const ok = a != null && typeof b !== 'boolean';`},
+    // ✅ Type switches test the value against another type too.
+    {
+      code: `function f(value) { return value == null || typeof value === 'boolean' || typeof value === 'number'; }`,
+    },
+    {
+      code: `const isMenu = mobileNav != null && mobileNav !== false && !isValidElement(mobileNav);`,
+    },
+    {
+      code: `const isList = items != null && items !== false && Array.isArray(items);`,
+    },
     // ✅ The utility's own definition.
     {
       code: `export function isRenderable(node) { return node != null && typeof node !== 'boolean' && node !== ''; }`,
@@ -111,6 +121,18 @@ tester.run('no-nullish-jsx-guard', rule, {
     // ❌ The negated form: nothing to render.
     {
       code: `function f(rendered) { if (rendered == null || typeof rendered === 'boolean') { return null; } return rendered; }`,
+      errors: [{messageId: 'handRolledRenderable'}],
+    },
+    // ❌ One more check of a listed value than the baseline allows.
+    {
+      code: `const a = label != null && typeof label !== 'boolean'; const b = label != null && typeof label !== 'boolean';`,
+      filename: '/repo/packages/core/src/Badge/Badge.tsx',
+      options: [
+        {
+          baseline: {'packages/core/src/Badge/Badge.tsx': ['label']},
+          root: '/repo',
+        },
+      ],
       errors: [{messageId: 'handRolledRenderable'}],
     },
     // ❌ A baseline for another file or another value does not cover it.

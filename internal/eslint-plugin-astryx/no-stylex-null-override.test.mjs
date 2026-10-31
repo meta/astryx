@@ -63,7 +63,7 @@ ruleTester.run('no-stylex-null-override', rule, {
           },
         });
       `,
-      errors: [{ messageId: 'noNullOverride' }],
+      errors: [{messageId: 'noNullOverride'}],
     },
     // Direct null at property level
     {
@@ -78,7 +78,7 @@ ruleTester.run('no-stylex-null-override', rule, {
           },
         });
       `,
-      errors: [{ messageId: 'noNullOverride' }],
+      errors: [{messageId: 'noNullOverride'}],
     },
   ],
 });

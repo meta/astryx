@@ -78,10 +78,7 @@ ruleTester.run('no-raw-console-cli', rule, {
       code: `console.log('a'); console.log('b');`,
       filename: '/repo/packages/cli/clients/cli/commands/init.mjs',
       output: `humanLog('a'); humanLog('b');`,
-      errors: [
-        {messageId: 'noRawConsoleLog'},
-        {messageId: 'noRawConsoleLog'},
-      ],
+      errors: [{messageId: 'noRawConsoleLog'}, {messageId: 'noRawConsoleLog'}],
     },
     // Ban #2: humanLog() in a command file must funnel through emit()
     {
