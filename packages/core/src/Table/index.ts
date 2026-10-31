@@ -140,6 +140,7 @@ export type {
   UseTableFilteringConfig,
   TableFilterState,
   TableFilterVariant,
+  TableFilterPresentation,
   TableFilterValue,
   TableFilterFieldRef,
 } from './plugins/filtering';

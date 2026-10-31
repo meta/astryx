@@ -3,7 +3,7 @@
 'use client';
 /**
  * @file BaseTable.tsx
- * @input React, types.ts, columnUtils.ts
+ * @input React, types.ts, columnUtils.ts, TableColumnsContext.ts
  * @output Exports BaseTable component
  * @position Core structural component; wrapped by Table.tsx
  *
@@ -42,6 +42,7 @@ import {TableCell} from './TableCell';
 import {TableHeaderCell} from './TableHeaderCell';
 import {TableHeader} from './TableHeader';
 import {TableBody} from './TableBody';
+import {TableColumnsContext} from './TableColumnsContext';
 import {mergeProps} from '../utils';
 import {devError} from '../utils/devWarning';
 import {EmptyState} from '../EmptyState';
@@ -648,6 +649,18 @@ function BaseTableInner<T extends Record<string, unknown>>({
       }
     }
   }
+
+  // Outermost, so chrome a plugin renders in transformTableContext (a toolbar,
+  // a filter sheet) reads the final columns as render input rather than
+  // capturing them in its own transformColumns.
+  tableElement = (
+    <TableColumnsContext
+      value={
+        resolvedColumns as ReadonlyArray<TableColumn<Record<string, unknown>>>
+      }>
+      {tableElement}
+    </TableColumnsContext>
+  );
 
   return tableElement as ReactElement;
 }

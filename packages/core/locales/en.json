@@ -827,6 +827,22 @@
     "defaultMessage": "Apply",
     "description": "Primary button label inside a table's filter panel/popover; commits pending filter values. Imperative verb; pairs with `Reset`."
   },
+  "@astryx.table.filter.button": {
+    "defaultMessage": "Filter",
+    "description": "Label on the button above a table that opens the sheet holding the table's filter controls. Imperative verb (\"filter these rows\"), not the noun."
+  },
+  "@astryx.table.filter.buttonWithCount": {
+    "defaultMessage": "Filter, {count, number} active",
+    "description": "Accessible name for that same Filter button when filters are applied; the visible button shows the count as a badge. `count` is how many columns are currently filtered."
+  },
+  "@astryx.table.filter.title": {
+    "defaultMessage": "Filters",
+    "description": "Heading and accessible name of the bottom sheet holding a table's filter controls. Plural noun."
+  },
+  "@astryx.table.filter.done": {
+    "defaultMessage": "Done",
+    "description": "Primary button that closes a table's filter sheet. The filters are already applied, so this dismisses rather than commits — unlike `Apply` in the per-column popover."
+  },
   "@astryx.table.rowStatus.columnHeader": {
     "defaultMessage": "Row status",
     "description": "Screen-reader-only column header for the narrow status-indicator gutter a Table gains from useTableRowStatus. Sighted users see a blank gutter; assistive tech announces this as the column name."
