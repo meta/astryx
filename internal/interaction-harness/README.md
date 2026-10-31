@@ -290,8 +290,11 @@ steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
 listener received it (`wheelArrivals`). Two things can split a run past
 `maxGapMs`. When a step reached the page within one frame of its own wheel
-listeners finishing the step before, those listeners held it back: the burst
-throws `WheelPageStallError`, the page split the gesture, and the proof fails.
+listeners finishing the step before, and the gap is more than a frame wider
+than the harness's own spacing of those sends, those listeners held it back:
+the burst throws `WheelPageStallError`, the page split the gesture, and the
+proof fails. A page can only widen a gap, so one no wider than the send
+spacing is the dispatch's even when a starved renderer also held the step.
 Otherwise the dispatch stalled before the page (a loaded runner) and it throws
 `WheelPacingError` with the gaps. Wrap such a
 proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on
