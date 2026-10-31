@@ -32,6 +32,7 @@ import type {ResizableSize} from './utils';
 import {
   createResizable,
   readInitialResizableState,
+  readResizableSelection,
   type CreateResizableOptions,
   type ResizableController,
 } from './createResizable';
@@ -1033,25 +1034,32 @@ function useResizableElement(
   const [initial] = useState(() => readInitialResizableState(options));
   const [slot] = useState(createSlot);
   // The factory follows the element behind the ref. A ref is stable across
-  // an element swap, so its current node is compared after every commit: a
-  // new node gets a new factory, and the old one is destroyed.
+  // an element swap, so its current node is compared after every commit. A
+  // handle that goes away leaves the region where it is, still answering
+  // collapse, expand and resize; a new handle gets a new factory that starts
+  // where the old one stood, and the old one is destroyed.
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     const entry = slot.get();
-    if (entry?.element === element) {
+    if (element == null || entry?.element === element) {
       return;
     }
+    const previous =
+      entry == null ? undefined : readResizableSelection(entry.resizable);
     entry?.resizable.destroy();
-    const createdWith = optionsRef.current;
-    slot.set(
-      element == null
-        ? null
+    const createdWith =
+      previous == null
+        ? optionsRef.current
         : {
-            element,
-            resizable: createResizable(element, createdWith),
-            createdWith,
-          },
-    );
+            ...optionsRef.current,
+            defaultSize: previous.size,
+            defaultIsCollapsed: previous.isCollapsed,
+          };
+    slot.set({
+      element,
+      resizable: createResizable(element, createdWith),
+      createdWith,
+    });
   });
   useIsomorphicLayoutEffect(
     () => () => {

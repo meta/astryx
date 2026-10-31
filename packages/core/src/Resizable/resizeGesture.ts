@@ -379,3 +379,112 @@ export function createResizeGesture(
     },
   };
 }
+
+// =============================================================================
+// A factory bound to a ResizeHandle
+// =============================================================================
+
+/** What a ResizeHandle renders from the factory bound to it. */
+export interface ResizeHandleView {
+  readonly size: number;
+  readonly isCollapsed: boolean;
+  readonly minPx: number;
+  /** The maximum the handle reports, or undefined when there is none. */
+  readonly effectiveMaxPx: number | undefined;
+  readonly isDragging: boolean;
+  readonly direction: ResizableDirection;
+  readonly isReversed: boolean;
+  readonly isDisabled: boolean;
+}
+
+/**
+ * A factory driving a handle that ResizeHandle renders. ResizeHandle renders
+ * the separator's attributes and look from `read()`, and forwards its React
+ * events to `gesture`, so a caller's `onKeyDown` runs before the handle's own
+ * key handling (component:Resizable FR7); the factory adds no listener or
+ * attribute of its own to that element.
+ */
+export interface ResizeHandleBinding {
+  readonly gesture: ResizeGesture;
+  /** The current view, the same object until something in it changes. */
+  read(): ResizeHandleView;
+  /** Calls `listener` after every change to `read()`. */
+  subscribe(listener: () => void): () => void;
+}
+
+/** A ResizeHandle's claim on its element: the factory bound to it, if any. */
+export interface ResizeHandleClaim {
+  get(): ResizeHandleBinding | null;
+  set(binding: ResizeHandleBinding | null): void;
+  subscribe(listener: () => void): () => void;
+}
+
+export function createResizeHandleClaim(): ResizeHandleClaim {
+  let binding: ResizeHandleBinding | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => binding,
+    set(next) {
+      if (next === binding) {
+        return;
+      }
+      binding = next;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+const claims = new WeakMap<Element, ResizeHandleClaim>();
+
+/** ResizeHandle marks the element it renders as its own. */
+export function claimResizeHandle(
+  element: Element,
+  claim: ResizeHandleClaim,
+): void {
+  claims.set(element, claim);
+}
+
+/** ResizeHandle lets go of its element; a factory bound to it is unbound. */
+export function releaseResizeHandle(
+  element: Element,
+  claim: ResizeHandleClaim,
+): void {
+  if (claims.get(element) === claim) {
+    claims.delete(element);
+    claim.set(null);
+  }
+}
+
+/**
+ * Binds a factory to `element` when ResizeHandle renders it, returning the
+ * function that unbinds it; null for any other element, which the factory
+ * then drives itself.
+ */
+export function bindResizeHandle(
+  element: Element,
+  binding: ResizeHandleBinding,
+): (() => void) | null {
+  const claim = claims.get(element);
+  if (claim == null) {
+    return null;
+  }
+  claim.set(binding);
+  return () => {
+    if (claim.get() === binding) {
+      claim.set(null);
+    }
+  };
+}
+
+/** Whether ResizeHandle renders `element`. */
+export function isClaimedResizeHandle(element: Element): boolean {
+  return claims.has(element);
+}
