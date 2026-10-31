@@ -262,7 +262,9 @@ test.describe('touch input', () => {
     // is dispatched, so its spacing is the harness's real-time pacing. Every
     // take checks what holds under any load against the harness's own record:
     // no move left before its scripted time, and the page's timestamps follow
-    // the sends, in order and never before them.
+    // the sends, in order, never before them and never after WebKit answered
+    // the dispatch (it answers only once the page has the event), so a driver
+    // that holds the moves and sends them in a burst fails.
     //
     // The pacing is bounded from above too. The harness waits only while it
     // is ahead of the script and sends a late step at once, so a move it
@@ -301,6 +303,9 @@ test.describe('touch input', () => {
         // 2 ms of rounding between the two processes' clocks.
         expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
           sentAt[i] - 2,
+        );
+        expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
+          answeredAt[i] + 2,
         );
         if (m > 0) {
           expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
