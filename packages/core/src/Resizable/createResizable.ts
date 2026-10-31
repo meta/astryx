@@ -41,10 +41,14 @@ import {
   type ResizableDirection,
 } from './resizableModel';
 import {
+  bindResizeHandle,
   createResizeGesture,
+  isClaimedResizeHandle,
   type ResizeGesture,
   type ResizeGestureModel,
   type ResizeGestureState,
+  type ResizeHandleBinding,
+  type ResizeHandleView,
 } from './resizeGesture';
 import type {ResizableSize} from './utils';
 
@@ -219,6 +223,23 @@ export function readInitialResizableState(
   return {size: isCollapsed ? 0 : size, isCollapsed};
 }
 
+/** Each factory's selection: its expanded size and collapse state. */
+const selections = new WeakMap<
+  ResizableController,
+  () => {size: number; isCollapsed: boolean}
+>();
+
+/**
+ * Where a region stands: its size as expanded (not the 0 it reports while
+ * collapsed) and whether it is collapsed. A factory for a new handle of the
+ * same region starts from it, as its `defaultSize` and `defaultIsCollapsed`.
+ */
+export function readResizableSelection(
+  controller: ResizableController,
+): {size: number; isCollapsed: boolean} | undefined {
+  return selections.get(controller)?.();
+}
+
 /** The attributes the factory writes on a handle, restored by `destroy`. */
 const MANAGED_ATTRIBUTES = [
   'role',
@@ -268,6 +289,12 @@ export function createResizable(
   let opts = options;
   let isDestroyed = false;
   const listeners = new Set<() => void>();
+  // A handle ResizeHandle renders: the component renders the separator's
+  // attributes and forwards its events, so the factory adds neither.
+  const isRenderedByResizeHandle = isClaimedResizeHandle(handle);
+  let isDragging = false;
+  let view: ResizeHandleView | null = null;
+  const viewListeners = new Set<() => void>();
   const didWarn = {
     min: {current: false},
     max: {current: false},
@@ -507,7 +534,10 @@ export function createResizable(
         break;
       }
     }
-    announce();
+    if (!isRenderedByResizeHandle) {
+      announce();
+    }
+    refreshView();
     persist();
     const snapshot = {
       size: derived.isCollapsed ? 0 : derived.size,
@@ -551,10 +581,41 @@ export function createResizable(
     }
   }
 
+  /** The view a ResizeHandle renders, replaced only when it changes. */
+  function refreshView(): void {
+    if (!isRenderedByResizeHandle) {
+      return;
+    }
+    const next: ResizeHandleView = {
+      size: derived.isCollapsed ? 0 : derived.size,
+      isCollapsed: derived.isCollapsed,
+      minPx: derived.min,
+      effectiveMaxPx: derived.effectiveMax,
+      isDragging,
+      direction: direction(),
+      isReversed: opts.isReversed ?? false,
+      isDisabled: opts.isDisabled ?? false,
+    };
+    if (
+      view != null &&
+      (Object.keys(next) as (keyof ResizeHandleView)[]).every(
+        key => view?.[key] === next[key],
+      )
+    ) {
+      return;
+    }
+    view = next;
+    for (const listener of [...viewListeners]) {
+      listener();
+    }
+  }
+
   // --- The handle's attributes ---
   const original = new Map<string, string | null>();
-  for (const name of MANAGED_ATTRIBUTES) {
-    original.set(name, handle.getAttribute(name));
+  if (!isRenderedByResizeHandle) {
+    for (const name of MANAGED_ATTRIBUTES) {
+      original.set(name, handle.getAttribute(name));
+    }
   }
   const hasOwnName =
     handle.hasAttribute('aria-label') || handle.hasAttribute('aria-labelledby');
@@ -738,8 +799,13 @@ export function createResizable(
       isReversed: opts.isReversed ?? false,
       isDisabled: opts.isDisabled ?? false,
     }),
-    isDragging => {
-      setAttribute('data-resizing', isDragging ? '' : null);
+    dragging => {
+      isDragging = dragging;
+      if (isRenderedByResizeHandle) {
+        refreshView();
+      } else {
+        setAttribute('data-resizing', dragging ? '' : null);
+      }
     },
   );
 
@@ -762,17 +828,33 @@ export function createResizable(
   const onDoubleClick = () => {
     gesture.doubleClick();
   };
-  handle.addEventListener('pointerdown', onPointerDown);
-  handle.addEventListener('pointermove', onPointerMove);
-  handle.addEventListener('pointerup', onPointerUp);
-  handle.addEventListener('pointercancel', onPointerCancel);
-  handle.addEventListener('lostpointercapture', onPointerCancel);
-  handle.addEventListener('keydown', onKeyDown);
-  handle.addEventListener('dblclick', onDoubleClick);
+  if (!isRenderedByResizeHandle) {
+    handle.addEventListener('pointerdown', onPointerDown);
+    handle.addEventListener('pointermove', onPointerMove);
+    handle.addEventListener('pointerup', onPointerUp);
+    handle.addEventListener('pointercancel', onPointerCancel);
+    handle.addEventListener('lostpointercapture', onPointerCancel);
+    handle.addEventListener('keydown', onKeyDown);
+    handle.addEventListener('dblclick', onDoubleClick);
+  }
 
   commit();
 
-  return {
+  const binding: ResizeHandleBinding = {
+    gesture,
+    read: () => view as ResizeHandleView,
+    subscribe(listener) {
+      viewListeners.add(listener);
+      return () => {
+        viewListeners.delete(listener);
+      };
+    },
+  };
+  const unbind = isRenderedByResizeHandle
+    ? bindResizeHandle(handle, binding)
+    : null;
+
+  const controller: ResizableController = {
     get size() {
       return derived.isCollapsed ? 0 : derived.size;
     },
@@ -807,6 +889,8 @@ export function createResizable(
       // saved and the pointer and the body's cursor are released.
       gesture.interrupt();
       isDestroyed = true;
+      unbind?.();
+      viewListeners.clear();
       handle.removeEventListener('pointerdown', onPointerDown);
       handle.removeEventListener('pointermove', onPointerMove);
       handle.removeEventListener('pointerup', onPointerUp);
@@ -826,4 +910,9 @@ export function createResizable(
       listeners.clear();
     },
   };
+  selections.set(controller, () => ({
+    size: derived.size,
+    isCollapsed: derived.isCollapsed,
+  }));
+  return controller;
 }
