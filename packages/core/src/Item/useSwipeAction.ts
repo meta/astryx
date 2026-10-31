@@ -1129,7 +1129,9 @@ export function useSwipeAction({
     const along =
       pan.totalTranslation().x * physicalSign(layout.side, layout.inlineSign);
     // UIKit's dead zone: the swipe counts from where the finger crosses it.
-    const threshold = SWIPE.hysteresis;
+    // Scratch: a trackpad drag has no finger slop to absorb; its dead zone is
+    // the claim distance only.
+    const threshold = drag.viaScroll ? SWIPE.claim : SWIPE.hysteresis;
     if (!drag.started) {
       if (Math.abs(along) < threshold) {
         return;
