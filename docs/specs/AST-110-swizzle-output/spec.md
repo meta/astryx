@@ -44,7 +44,8 @@ and the repository proves it before a change that could break it merges.
 - Which component a name copies and what `swizzle --list` reports:
   `spec:AST-035` FR11–FR12 and `architecture:cli-surface` INV28.
 - Where the command runs: `spec:AST-081` FR3.
-- How a product compiles StyleX for its own code: `spec:AST-080`.
+- How a product configures StyleX for its own code: the build package's
+  options and the product's StyleX configuration own that.
 - Keeping a copy the product has edited in step with later Core releases.
 - Making Core's internal helpers public API (`spec:AST-017` FR21,
   `architecture:public-component-api` INV12).
@@ -60,7 +61,7 @@ and the repository proves it before a change that could break it merges.
 ## Requirements
 
 - **FR1 — An ejected component builds on its own.** In a project with the same
-  Core version and a StyleX compiler (`spec:AST-080`), the output of
+  Core version and a StyleX compiler, the output of
   `astryx swizzle <Name>` type-checks and bundles with no edits. It imports from
   its owner package only paths that package's `exports` lists, and never a
   `./internal/*` path. The npm packages the copied files import are the owner
@@ -104,9 +105,8 @@ and the repository proves it before a change that could break it merges.
   owner package and its version. `@astryxdesign/build` compiles every module
   under a marked directory in its library pass, with the library class prefix,
   into `astryx-base` below `astryx-theme`, so a theme's component overrides
-  apply to the copy as they do to the package component. A product that
-  compiles StyleX without the build package adds the output directory to its
-  library pass, as the styling overview states. The marker is a protocol
+  apply to the copy as they do to the package component. This placement holds
+  for products that build with `@astryxdesign/build`. The marker is a protocol
   between the swizzle copy and the build package; a path rule alone cannot
   tell a copy from the product's own code.
 - **FR6 — Behavior matches the package.** Until the product edits it, the copy's
@@ -127,19 +127,20 @@ and the repository proves it before a change that could break it merges.
 ### Platform support
 
 - Supported feature/engine floor: the product uses the same Core version the
-  copy came from and a StyleX compiler that `spec:AST-080` supports; browser
-  support is Core's.
+  copy came from and a StyleX compiler; FR5's cascade placement needs
+  `@astryxdesign/build`. Browser support is Core's.
 - Unsupported behavior: a project without a StyleX compiler fails at import, as
-  the command's output states. A copy kept across a Core upgrade is outside FR1
-  and FR6.
+  the command's output states. On the stock StyleX plugins a copy builds and
+  behaves as FR1 and FR6 state, but its rules land in the product's layer, above
+  `astryx-theme`. A copy kept across a Core upgrade is outside FR1 and FR6.
 - Browser evidence: a real-browser render of every copy at release time (FR7);
   server rendering is the pull-request smoke evidence.
 
 ## Current-state impact
 
 - The CLI's swizzle copy follows the component's module graph (FR1–FR2, FR4),
-  writes no test, story, spec, or doc file, and lists only component folders
-  (FR7). The CLI owner implements and owns these changes.
+  and writes no test, story, spec, or doc file. The CLI owner implements and
+  owns these changes.
 - The FR7 proof joins the repository's existing required test lane
   (`spec:AST-030` FR11), selected by the shared change-scope classification and
   reported in the single pull-request report, with the full proof at release
@@ -155,8 +156,9 @@ and the repository proves it before a change that could break it merges.
   never replaced, with or without `--overwrite` (FR2).
 - `@astryxdesign/build`'s Vite, PostCSS, Babel, and Next integrations compile
   modules under an `astryx-swizzle.json` directory in the library pass (FR5).
-- The styling overview states where a copy's rules land and the one setting a
-  product without the build package needs (FR5).
+- The styling overview states that a copy's rules land in `astryx-base` with
+  `@astryxdesign/build`, and above `astryx-theme` with the stock StyleX plugins
+  (FR5).
 - The `swizzle` command doc states FR1 and FR6 for product teams.
 
 ### Known gaps
@@ -181,22 +183,25 @@ and the repository proves it before a change that could break it merges.
 - Some names `swizzle --list` offers differ from their folder's export names
   (Chat, NavMenu, Indicator, Resizable) (`spec:AST-035` FR12).
 - No private data-attribute owner module exists yet (FR4).
-- `spec:AST-080` FR7 keeps every product rule, a copy's included, outside
-  `astryx-base`; its exception for a swizzled copy's rules (FR5) and the
-  `architecture:cli-surface` pointer to this record land when this record
-  becomes current.
+- Products on the stock StyleX plugins have no library-pass setting, so a
+  copy's rules land above `astryx-theme` there and theme component overrides do
+  not reach it (FR5).
+- `spec:AST-080` FR5 presents the stock StyleX path as the default for ejected
+  components, and its FR7 keeps every product rule, a copy's included, outside
+  `astryx-base`. Their swizzle cases (FR5) and the `architecture:cli-surface`
+  pointer to this record land when this record becomes current.
 
 ## Verification
 
-| Contract | Verification                                                                                                                                             | Representative states                                                                                                                                                                  | Mutation or failure expectation                                                                                                                                                                        |
-| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1      | Eject every offered component into a clean project; type-check and bundle                                                                                | Every component in `swizzle --list`; Core, Lab, Charts, RichText, Vega; a component that imports an npm dependency                                                                     | A type or resolve error, or an import of a path the owner's `exports` lacks or of `./internal/*`, fails, or a dependency the copy imports goes unreported                                              |
-| FR2      | Import graph of each output                                                                                                                              | Helpers in `utils`, `hooks`, `Layer`; nested folders; colocated tests and docs; a helper an earlier swizzle wrote, identical and different                                             | A copied file imports a module that is neither in the output nor a public export, or a test, story, spec, or doc is copied, or an existing helper is overwritten                                       |
-| FR3      | Render a copied and a package layer component together; inspect stores; open, stack, and Escape                                                          | Dialog over package Popover; BottomSheet over package Dialog; modality; a copied `useToast` under the package `LayerProvider`; a symbol-branded object passed between copy and package | Two stores of one protocol version exist in a document, or Escape and focus return differ from the package alone, or a copied consumer misses the package provider, or a brand check fails across them |
-| FR4      | Scan each output for private data-attribute names and selectors; compare copied owner modules with the package's                                         | Components that reach an owner module                                                                                                                                                  | A hand-written private attribute name or selector, or an edited owner module, in the output                                                                                                            |
-| FR5      | Render package and copy side by side under a theme with component overrides; compare                                                                     | Default; each variant; a theme component override; a copy built by the build package and by a plain StyleX setup                                                                       | A theme override, documented class name, data attribute, or theme target reaches one and not the other                                                                                                 |
-| FR6      | The component's own interaction and accessibility checks run against the copy                                                                            | Keyboard, pointer, screen-reader tree                                                                                                                                                  | A check that passes on the package fails on the copy                                                                                                                                                   |
-| FR7      | The required test lane's swizzle proof and the release-time proof; both cover Core's list and every integration package's components through `--package` | A change to component source; a change to the swizzle copy; an unrelated change; Core, Lab, Charts, RichText, Vega                                                                     | An offered component missing from the proof, a failure that does not block, a new required context, or the proof pushing its job past the pull-request time budget                                     |
+| Contract | Verification                                                                                                                                             | Representative states                                                                                                                                                                  | Mutation or failure expectation                                                                                                                                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Eject every offered component into a clean project; type-check and bundle                                                                                | Every component in `swizzle --list`; Core, Lab, Charts, RichText, Vega; a component that imports an npm dependency                                                                     | A type or resolve error, or an import of a path the owner's `exports` lacks or of `./internal/*`, fails, or a dependency the copy imports goes unreported                                                                          |
+| FR2      | Import graph of each output                                                                                                                              | Helpers in `utils`, `hooks`, `Layer`; nested folders; colocated tests and docs; a helper an earlier swizzle wrote, identical and different                                             | A copied file imports a module that is neither in the output nor a public export, or a test, story, spec, or doc is copied, or an existing helper is overwritten                                                                   |
+| FR3      | Render a copied and a package layer component together; inspect stores; open, stack, and Escape                                                          | Dialog over package Popover; BottomSheet over package Dialog; modality; a copied `useToast` under the package `LayerProvider`; a symbol-branded object passed between copy and package | Two stores of one protocol version exist in a document, or Escape and focus return differ from the package alone, or a copied consumer misses the package provider, or a brand check fails across them                             |
+| FR4      | Scan each output for private data-attribute names and selectors; compare copied owner modules with the package's                                         | Components that reach an owner module                                                                                                                                                  | A hand-written private attribute name or selector, or an edited owner module, in the output                                                                                                                                        |
+| FR5      | Render package and copy side by side under a theme with component overrides; compare                                                                     | Default; each variant; a theme component override; a copy built by `@astryxdesign/build`                                                                                               | A theme override, documented class name, data attribute, or theme target reaches one and not the other                                                                                                                             |
+| FR6      | The component's own interaction and accessibility checks run against the copy                                                                            | Keyboard, pointer, screen-reader tree                                                                                                                                                  | A check that passes on the package fails on the copy                                                                                                                                                                               |
+| FR7      | The required test lane's swizzle proof and the release-time proof; both cover Core's list and every integration package's components through `--package` | A change to component source; a change to the swizzle copy; an unrelated change; Core, Lab, Charts, RichText, Vega                                                                     | An offered component missing from the proof, a failure that does not block, a new required context, the proof adding wall-clock time to the slowest required check, or the proof pushing its job past the pull-request time budget |
 
 Known verification gap: none of these checks exist on `main`.
 
