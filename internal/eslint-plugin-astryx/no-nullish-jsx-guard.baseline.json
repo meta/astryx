@@ -39,7 +39,5 @@
     "renderedChildren",
     "startContent"
   ],
-  "packages/core/src/utils/getNodeText.ts": ["node"],
-  "packages/richtext/src/RichTextEditor.tsx": ["maxLength", "toolbar"],
-  "packages/richtext/src/RichTextEditorToolbar.tsx": ["endContent"]
+  "packages/core/src/utils/getNodeText.ts": ["node"]
 }
