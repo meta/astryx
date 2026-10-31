@@ -1,16 +1,19 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/Item/ ^packages/core/src/Token/ ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Item|Token)
+// @pr-a11y scope ^packages/core/src/(Item|Token|ClickableCard|SelectableCard)/ ^packages/core/src/utils/focusOutline ^apps/storybook/stories/(Item|Token|ClickableCard|SelectableCard)
 
 /**
  * @file FocusRingOwner.a11y.chromium.spec.ts
- * @input The built Item "With End Actions" and Token "Clickable With Remove"
- *   stories in real Chromium, focus moved with Tab, at desktop and phone
+ * @input The built Item "With End Actions", Token "Clickable With Remove",
+ *   ClickableCard "Nested Interactive Elements" and SelectableCard "With
+ *   Nested Button" stories in real Chromium, focus moved with Tab, at desktop and phone
  *   widths
  * @output Browser evidence for `architecture:interaction-modality` INV3: each
- *   tab stop in a row or token shows exactly one focus ring. A row or token
+ *   tab stop in a row, token or card shows exactly one focus ring. A wrapper
  *   rings for its own action only; a control inside it (an end action, a
- *   remove button) rings itself, and the wrapper stays unringed
- * @position Regression proof for focusWithinOwner in Item and Token
+ *   remove button, a button in a card) rings itself, and the wrapper stays
+ *   unringed
+ * @position Regression proof for focusWithinOwner in Item, Token,
+ *   ClickableCard and SelectableCard
  */
 
 import {expect, test, type Page} from '@playwright/test';
@@ -94,6 +97,26 @@ for (const width of [1280, 390]) {
     await open(page, 'core-token--clickable-with-remove', width);
     // Design, Remove Design, Docs, Remove Docs.
     for (const {focused, rings} of await ringsAtEachStop(page, 4)) {
+      expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
+    }
+  });
+
+  test(`at ${width} px, each tab stop in a ClickableCard shows one ring`, async ({
+    page,
+  }) => {
+    await open(page, 'core-clickablecard--nested-button', width);
+    // The card's link, then Add to cart.
+    for (const {focused, rings} of await ringsAtEachStop(page, 2)) {
+      expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
+    }
+  });
+
+  test(`at ${width} px, each tab stop in a SelectableCard shows one ring`, async ({
+    page,
+  }) => {
+    await open(page, 'core-selectablecard--with-nested-button', width);
+    // The card's checkbox, then Details.
+    for (const {focused, rings} of await ringsAtEachStop(page, 2)) {
       expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
     }
   });

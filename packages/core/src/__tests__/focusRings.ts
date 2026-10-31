@@ -20,8 +20,8 @@ export interface RingedElement {
 
 /**
  * Every element under `root` whose computed outline paints (a style other
- * than `none` and a width above zero). Read after moving focus with the
- * keyboard, so `:focus-visible` applies.
+ * than `none` and a width above zero) on a box a person can see. Read after
+ * moving focus with the keyboard, so `:focus-visible` applies.
  */
 export async function ringedElements(
   page: Page,
@@ -35,6 +35,17 @@ export async function ringedElements(
       if (
         style.outlineStyle === 'none' ||
         Number.parseFloat(style.outlineWidth) <= 0
+      ) {
+        continue;
+      }
+      // A visually hidden control (a card's screen-reader-only link) paints
+      // nothing a person can see, whatever its outline says.
+      const box = element.getBoundingClientRect();
+      if (
+        box.width <= 1 ||
+        box.height <= 1 ||
+        style.clipPath === 'inset(50%)' ||
+        style.clip === 'rect(0px, 0px, 0px, 0px)'
       ) {
         continue;
       }

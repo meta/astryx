@@ -4,6 +4,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
 import {SelectableCard} from '@astryxdesign/core/SelectableCard';
 import {Text} from '@astryxdesign/core/Text';
+import {Button} from '@astryxdesign/core/Button';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 
 const meta: Meta<typeof SelectableCard> = {
@@ -193,6 +194,31 @@ export const ColorVariants: Story = {
           'All color variants with selection. The accent border overlays the variant background.',
       },
     },
+  },
+};
+
+/**
+ * A selectable card holding a control of its own: the card rings for its
+ * selection, and the Details button rings itself, so each tab stop shows one
+ * focus ring.
+ */
+export const WithNestedButton: Story = {
+  render: function WithNestedButton() {
+    const [isSelected, setIsSelected] = useState(false);
+    return (
+      <SelectableCard
+        label="Pro plan"
+        isSelected={isSelected}
+        onChange={setIsSelected}
+        width={300}>
+        <VStack gap={2}>
+          <Text type="body" weight="bold">
+            Pro plan
+          </Text>
+          <Button label="Details" variant="secondary" onClick={() => {}} />
+        </VStack>
+      </SelectableCard>
+    );
   },
 };
 

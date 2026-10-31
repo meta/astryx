@@ -52,7 +52,10 @@ import {useClickableContainer} from '../hooks/useClickableContainer';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
-import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
@@ -408,7 +411,9 @@ export function ClickableCard({
       elevation={elevation}
       {...mergeProps(
         themeProps('clickable-card', {variant}),
-        focusOutlineProps.focusWithin(),
+        // Rings for the card's own link or button only; a control in its
+        // children rings itself (`architecture:interaction-modality` INV3).
+        stylex.props(focusWithinOwner),
         classNameProp,
         style,
       )}
@@ -439,6 +444,7 @@ export function ClickableCard({
           aria-disabled={isDisabled || undefined}
           // A disabled card keeps its Tab stop (spec:AST-085 FR1).
           tabIndex={0}
+          {...focusOwnerProps}
           {...stylex.props(styles.srOnly)}
         />
       ) : (
@@ -450,6 +456,7 @@ export function ClickableCard({
           onClick={onClickProp}
           // Focusable while disabled (FR1), but inert (FR2).
           {...(isDisabled ? disabledInteractionProps() : null)}
+          {...focusOwnerProps}
           {...stylex.props(styles.srOnly)}
         />
       )}
