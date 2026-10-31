@@ -13,6 +13,11 @@ import path from 'node:path';
 import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
 
+// The raw file host is offline here, so jobs read their helpers through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
+
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = fs.readFileSync(
   path.join(root, '.github/workflows/review-signal.yml'),

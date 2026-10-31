@@ -374,6 +374,21 @@ describe('spec owner workflow reconciliation', () => {
     });
   });
 
+  it('still reaches a terminal status when the changed-file count moves after the file list', async () => {
+    const harness = createHarness({
+      changedFile: {filename: 'README.md', status: 'modified'},
+      onPullGet: (count, state) => {
+        if (count >= 2) state.pr.changed_files = 2;
+      },
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestGateStatus(harness.state).description).not.toMatch(
+      /^Reconciling exact head/,
+    );
+  });
+
   it('still removes a stale review label from a pull request that changes no records', async () => {
     const harness = createHarness({
       changedFile: {filename: 'README.md', status: 'modified'},

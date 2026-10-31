@@ -2,8 +2,13 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
+
+// The raw file host is offline here, so the job reads its helper through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
 
 const root = path.resolve(import.meta.dirname, '../..');
 const workflowSource = fs.readFileSync(

@@ -82,6 +82,21 @@ describe('rateLimitWaitMs', () => {
     ).toBe(30_000);
   });
 
+  it('waits a minute for a secondary limit while the hourly budget remains', () => {
+    expect(
+      rateLimitWaitMs(
+        rateLimited({
+          message: 'You have exceeded a secondary rate limit.',
+          headers: {
+            'x-ratelimit-remaining': '4000',
+            'x-ratelimit-reset': String(NOW / 1000 + 3000),
+          },
+        }),
+        NOW,
+      ),
+    ).toBe(60_000);
+  });
+
   it('waits a minute for a rate-limit message without a reset time', () => {
     expect(
       rateLimitWaitMs(
@@ -215,15 +230,19 @@ describe('the gate and report jobs that share the API budget wait it out', () =>
     }
   });
 
-  it('reads the helper from a trusted commit, never the pull request', () => {
+  it('reads the helper from a trusted commit, never the pull request, without spending the budget first', () => {
     for (const [workflow, job] of [
       ['review-signal.yml', 'flag'],
       ['review-clear.yml', 'clear'],
       ['rerequest-review-on-update.yml', 'rerequest-review'],
     ]) {
-      expect(scripts(workflow, job)[0]).toMatch(
-        /ref: context\.sha, path: '\.github\/scripts\/lib\/rate-limit-backoff\.cjs'/,
+      const script = scripts(workflow, job)[0];
+      expect(script).toContain(
+        'https://raw.githubusercontent.com/${context.repo.owner}/${context.repo.repo}/${context.sha}/${helperPath}',
       );
+      expect(script).toContain('ref: context.sha, path: helperPath');
+      // The raw read comes before any API request.
+      expect(script.indexOf('fetch(')).toBeLessThan(script.indexOf('github.'));
     }
   });
 });

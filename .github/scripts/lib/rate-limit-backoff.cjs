@@ -50,8 +50,10 @@ function rateLimitWaitMs(error, now) {
   if (retryAfter != null && Number.isFinite(Number(retryAfter))) {
     return Math.max(1000, Number(retryAfter) * 1000);
   }
+  // Every response carries the hourly reset; it is the wait only when the
+  // hourly budget is spent, not for a secondary limit.
   const reset = Number(header('x-ratelimit-reset'));
-  if (Number.isFinite(reset) && reset > 0) {
+  if (exhausted && Number.isFinite(reset) && reset > 0) {
     return Math.max(1000, reset * 1000 - now);
   }
   return UNTIMED_WAIT_MS;

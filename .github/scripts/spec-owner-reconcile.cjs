@@ -501,39 +501,34 @@ async function reconcileSpecOwnerGate({
   async function fetchSnapshot() {
     const before = await getPullRequest();
     const headSha = before.head.sha;
-    const files = await github.paginate(github.rest.pulls.listFiles, {
-      owner,
-      repo,
-      pull_number: pullNumber,
-      per_page: 100,
-    });
-    // Owner reviews, commands and dismissals only decide a change to
-    // knowledge records; every other pull request skips those reads, which
-    // spend the repository's shared API budget on each event.
-    const touchesRecords = classifyChanges(files, {
-      expectedCount: before.changed_files,
-    }).touchesKnowledgeRecords;
-    const list = (method, issue) =>
-      touchesRecords
-        ? github.paginate(method, {
-            owner,
-            repo,
-            ...(issue ? {issue_number: pullNumber} : {pull_number: pullNumber}),
-            per_page: 100,
-          })
-        : Promise.resolve([]);
-    const [reviews, comments, timeline, statuses] = await Promise.all([
-      list(github.rest.pulls.listReviews, false),
-      list(github.rest.issues.listComments, true),
-      list(github.rest.issues.listEventsForTimeline, true),
+    const [files, statuses] = await Promise.all([
+      github.paginate(github.rest.pulls.listFiles, {
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 100,
+      }),
       listStatuses(headSha),
     ]);
     const after = await getPullRequest();
     if (after.head.sha !== headSha) return null;
 
     const scope = classifyChanges(files, {expectedCount: after.changed_files});
-    // A count that changed between the two reads may change the answer.
-    if (scope.touchesKnowledgeRecords && !touchesRecords) return null;
+    // Owner reviews, commands and dismissals only decide a change to
+    // knowledge records; every other pull request skips those reads, which
+    // spend the repository's shared API budget on each event. The head is
+    // confirmed again after them, below.
+    const list = (method, target) =>
+      scope.touchesKnowledgeRecords
+        ? github.paginate(method, {owner, repo, ...target, per_page: 100})
+        : Promise.resolve([]);
+    const [reviews, comments, timeline] = await Promise.all([
+      list(github.rest.pulls.listReviews, {pull_number: pullNumber}),
+      list(github.rest.issues.listComments, {issue_number: pullNumber}),
+      list(github.rest.issues.listEventsForTimeline, {
+        issue_number: pullNumber,
+      }),
+    ]);
     const knowledgeChanges = files.filter(
       file =>
         scope.complete &&
