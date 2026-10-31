@@ -247,6 +247,27 @@ export const UIKIT_PRESS = {
   momentumMemory: {value: 3000, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
+/**
+ * UIMenu presented by a button whose menu is its primary action: how far the
+ * finger that opened it travels before it picks (`spec:AST-094` FR29).
+ * Shared: the menu press model reads it for every menu surface.
+ */
+export const UIKIT_MENU_PRESS = {
+  /**
+   * After the menu opens under a still-held finger, the finger travels this
+   * far (a straight-line distance, counted from the first sample the menu
+   * receives after it opened) before it starts picking: until then nothing
+   * is lit and lifting acts on nothing.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, gesture-state hook, steps 150 ms apart, Oct 23 2026
+   *   (M-MN2): with the menu open under a held finger and a 1 pt first step,
+   *   moves of (0, 9) and (7, 7) picked nothing; (0, 10), (0, 11), (10, 0),
+   *   (9, 9) and (10, 10) picked; a 9 pt step followed by 3 pt more picked
+   *   nothing
+   */
+  handoff: {value: 10, unit: 'px'},
+} as const satisfies Record<string, GestureConstant>;
+
 export const UIKIT_VELOCITY = {
   /**
    * UIPanGestureRecognizer.velocity(in:) is this times the newest event's
@@ -310,6 +331,7 @@ export const UIKIT_GESTURES = {
   screenEdgePan: UIKIT_SCREEN_EDGE_PAN,
   control: UIKIT_CONTROL,
   press: UIKIT_PRESS,
+  menuPress: UIKIT_MENU_PRESS,
   velocity: UIKIT_VELOCITY,
   click: UIKIT_CLICK,
 } as const;

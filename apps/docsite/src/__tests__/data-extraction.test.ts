@@ -1428,7 +1428,10 @@ describe('DropdownMenu adaptive-presentation example', () => {
     );
 
     expect(presentation?.type).toBe("'popover' | 'bottom-sheet' | 'adaptive'");
-    expect(presentation?.default).toBe("'popover'");
+    // Unset by default: the menu is anchored, with the touch modes under a
+    // finger (spec:AST-094 FR29); 'popover' pins the pointer behavior.
+    expect(presentation?.default).toBeUndefined();
+    expect(presentation?.description).toContain("Pass 'popover'");
 
     const defaults = dropdownMenu?.playground?.defaults as
       Record<string, unknown> | undefined;
