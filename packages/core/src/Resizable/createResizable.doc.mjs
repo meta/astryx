@@ -200,6 +200,11 @@ export const docs = {
           'Call `destroy` when the handle leaves the page, so no listener outlives it.',
       },
       {
+        guidance: true,
+        description:
+          'In React, render the pane as a LayoutPanel beside its ResizeHandle at `size`: it slides closed and open from the edge facing the handle, focus inside it moves to the handle as it collapses, and it is inert while collapsed. A pane you size yourself does not slide.',
+      },
+      {
         guidance: false,
         description:
           'Size the panel in `onSizeChange` alone: it reports interactions, not a percentage resolved against a container measured late.',
@@ -289,6 +294,11 @@ export const docsDense = {
       {
         guidance: true,
         description: 'Call destroy when the handle leaves the page.',
+      },
+      {
+        guidance: true,
+        description:
+          'React: a LayoutPanel at size beside its ResizeHandle slides on collapse/open; focus moves to the handle; inert while collapsed.',
       },
       {
         guidance: false,

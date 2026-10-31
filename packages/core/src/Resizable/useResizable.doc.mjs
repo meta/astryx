@@ -22,7 +22,7 @@ export const docs = {
       name: 'handleRef',
       type: 'RefObject<HTMLElement | null>',
       description:
-        "The handle's ref, passed first: `useResizable(handleRef, options)` attaches createResizable to the element and returns its size, collapse state and controls. Give the same ref to ResizeHandle, which reports its element as it mounts, or to a plain element, which the hook reads when its own component renders, so render a plain element there. The options are createResizable's: the params below, plus isReversed, isDisabled and label. Without a ref, the hook takes the params as one configuration object, for one region or several under `regions`, and also returns `props` for ResizeHandle.",
+        "The handle's ref, passed first: `useResizable(handleRef, options)` attaches createResizable to the element and returns its size, collapse state and controls. Give the same ref to ResizeHandle, which reports its element as it mounts, or to a plain element, which the hook reads when its own component renders, so render a plain element there. A LayoutPanel beside the ResizeHandle, rendered at `size`, slides closed and open with the region, and focus inside it moves to the handle as it collapses. The options are createResizable's: the params below, plus isReversed, isDisabled and label. Without a ref, the hook takes the params as one configuration object, for one region or several under `regions`, and also returns `props` for ResizeHandle.",
     },
     {
       name: 'defaultSize',
