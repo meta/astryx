@@ -3,14 +3,22 @@
 
 /**
  * @description Generates and posts PR comment with analysis results
- * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --storybook-url <url> --sandbox-url <url> --preview-state <state> --source-conclusion <conclusion> --run-url <url>
- * @output Formatted markdown comment body to stdout
+ * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --preview <file> --jobs <file> --touched <file> --source-conclusion <conclusion> --run-url <url>
+ * @output Formatted markdown comment body to stdout: one status table first
+ *   (this head's preview, size, visual, accessibility, RTL, perf when it ran,
+ *   and the CI jobs), then the touched components with their preview links
+ *   and results, then the detail sections, collapsed
  */
 
 const fs = require('node:fs');
 const {buildA11ySection} = require('./lib/a11y-format');
 const {buildVisualSection} = require('./lib/visual-format');
 const {renderPackageSizeSection} = require('./lib/package-size');
+const {
+  buildStatusTable,
+  buildJobTable,
+  buildTouchedComponents,
+} = require('./lib/pr-status');
 // Report-file strings render as literal inline text, report numbers as
 // numbers — the comment's structure comes only from this file's literals.
 const {inline, num} = require('./lib/report-text');
@@ -28,10 +36,29 @@ const a11yFile = getArg('a11y') || 'a11y-report.json';
 const visualFile = getArg('visual');
 const runUrl = getArg('run-url') || '';
 const prNumber = getArg('pr-number') || '';
-const storybookUrl = getArg('storybook-url') || '';
-const sandboxUrl = getArg('sandbox-url') || '';
-const previewState = getArg('preview-state') || '';
 const sourceConclusion = getArg('source-conclusion') || '';
+
+// Optional JSON inputs the comment job writes: this head's preview
+// ({state, url, sha, aliasOrigin}), the source run's jobs, and the
+// touched-components report. A missing or unreadable file leaves its part out.
+function readOptionalJson(name) {
+  const file = getArg(name);
+  if (!file) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    console.error(`Warning: Could not read --${name}:`, e.message);
+    return null;
+  }
+}
+const preview = readOptionalJson('preview');
+const jobs = readOptionalJson('jobs');
+const touched = readOptionalJson('touched');
+// Links go to this head's own deployment when it is ready, else to the
+// branch alias (the latest ready deployment).
+const previewOrigin =
+  preview?.state === 'ready' ? preview.url : preview?.aliasOrigin || '';
+const storybookUrl = previewOrigin ? `${previewOrigin}/storybook/` : '';
 
 // Read analysis results
 let analysis = {
@@ -308,57 +335,66 @@ if (analysis.bundleDelta) {
 // and any runtime dependency added or removed. The caller has already matched
 // its head.
 let packageSizeSection = '';
+let packageSize = null;
 if (packageSizeFile) {
   try {
-    packageSizeSection = renderPackageSizeSection(
-      JSON.parse(fs.readFileSync(packageSizeFile, 'utf8')),
-      inline,
-    );
+    packageSize = JSON.parse(fs.readFileSync(packageSizeFile, 'utf8'));
+    packageSizeSection = renderPackageSizeSection(packageSize, inline);
   } catch (e) {
     console.error('Warning: Could not read package size report:', e.message);
   }
 }
 
-// Build storybook link section
-let storybookSection = '';
-if (storybookUrl) {
-  storybookSection = `### 📚 Storybook Preview
+// Footer links: the full CI run.
+const footerLinksStr = runUrl
+  ? ` | ${extLink('View full report', runUrl)}`
+  : '';
 
-**${extLink('View Storybook for this PR', storybookUrl)}**
+// A run that did not succeed may have published nothing for this head.
+const conclusionNote =
+  sourceConclusion && sourceConclusion !== 'success'
+    ? `> **Current run:** CI concluded ${inline(sourceConclusion)}; parts of this report may be missing.\n\n`
+    : '';
 
-`;
-}
+const statusTable = buildStatusTable({
+  preview,
+  analysis,
+  budgetFlags,
+  packageSize,
+  a11yReport,
+  visualVerdict,
+  jobs,
+});
+const touchedSection = buildTouchedComponents({
+  analysis,
+  origin: previewOrigin,
+  touched,
+  a11yReport,
+  visualVerdict,
+});
 
-// Build sandbox link section
-let sandboxSection = '';
-if (sandboxUrl) {
-  sandboxSection = `### 🧪 Sandbox Preview
-
-**${extLink('View Sandbox for this PR', sandboxUrl)}**
-
-`;
-}
-
-// Both previews come from the branch's Vercel alias, which serves the
-// branch's latest deployment; until a push's deployment is ready it still
-// shows the previous head. Vercel shortens a long alias with a hash, and then there are
-// no links.
-let previewAvailabilitySection = '';
-if (previewState) {
-  if (!storybookUrl || !sandboxUrl)
-    previewAvailabilitySection = `> **Preview availability:** this branch's preview address cannot be known in advance; open the preview from Vercel's comment on this pull request.${sourceConclusion && sourceConclusion !== 'success' ? ` CI concluded ${sourceConclusion}.` : ''}\n\n`;
-  else
-    previewAvailabilitySection =
-      "> **Preview:** the links below open this branch's latest Vercel deployment, which can trail a new push until that push's deployment is ready.\n\n";
-}
-
-// Build footer with links
-let footerLinks = [];
-if (storybookUrl) footerLinks.push(extLink('Storybook', storybookUrl));
-if (sandboxUrl) footerLinks.push(extLink('Sandbox', sandboxUrl));
-if (runUrl) footerLinks.push(extLink('View full report', runUrl));
-const footerLinksStr =
-  footerLinks.length > 0 ? ` | ${footerLinks.join(' | ')}` : '';
+// Detail sections, collapsed: the table above carries their verdicts.
+const details = (summary, content) =>
+  content
+    ? `<details>\n<summary>${summary}</summary>\n\n${content}\n</details>\n\n`
+    : '';
+const sizeDetails = details(
+  'Size details',
+  `${sizeSection}${budgetSection}${bundleSection}${packageSizeSection}`,
+);
+const componentDetails = details('Component details', componentSection);
+// Visual changes are a question for the reviewer: their frames stay open.
+const visualDetails = visualSection
+  ? visualVerdict?.changes?.length > 0
+    ? visualSection
+    : details('Visual regression', visualSection)
+  : '';
+// The accessibility detail only matters when the audit found something.
+const a11yViolations = Object.values(a11yReport?.components || {}).some(
+  component => (component.violations?.length || 0) > 0,
+);
+const a11yDetails = a11yViolations ? a11ySection : '';
+const jobTable = buildJobTable(jobs);
 
 // A one-line caveat shown when the analysis fell back to the approximate
 // two-dot diff. The file list may include base-only churn and, worse, may
@@ -373,10 +409,7 @@ const diffModeCaveat =
 const body = `## PR Analysis Report
 <!-- astryx-pr-analysis -->
 
-${diffModeCaveat}${previewAvailabilitySection}${storybookSection}${sandboxSection}${componentSection || (sizeSection ? '' : '_No new or modified components detected._\n\n')}
-${sizeSection}${budgetSection}${bundleSection}${packageSizeSection}
-${a11ySection}
-${visualSection}---
+${conclusionNote}${diffModeCaveat}${statusTable}${touchedSection}${sizeDetails}${componentDetails}${visualDetails}${a11yDetails}${jobTable}---
 
 <sub>Generated by PR Enrichment workflow${footerLinksStr}</sub>
 `;

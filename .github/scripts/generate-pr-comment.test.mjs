@@ -66,63 +66,103 @@ describe('generate-pr-comment diffMode caveat', () => {
   });
 });
 
-describe('generate-pr-comment preview availability', () => {
+describe('generate-pr-comment status table', () => {
+  function withInputs(inputs, analysis = baseAnalysis, extra = []) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-status-'));
+    try {
+      const args = [];
+      for (const [name, value] of Object.entries(inputs)) {
+        const file = path.join(dir, `${name}.json`);
+        fs.writeFileSync(file, JSON.stringify(value));
+        args.push(`--${name}`, file);
+      }
+      return runComment(analysis, [...args, ...extra]);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  }
+  const HEAD = 'a'.repeat(40);
+  const READY = 'https://astryx-abc123-fbopensource.vercel.app';
+  const ALIAS = 'https://astryx-git-my-branch-fbopensource.vercel.app';
+
+  it('leads with the status table, the preview first', () => {
+    const out = withInputs({preview: {state: 'ready', sha: HEAD, url: READY}});
+    const table = out.indexOf('| Check | Result |');
+    expect(table).toBeGreaterThan(out.indexOf('<!-- astryx-pr-analysis -->'));
+    expect(out.slice(table)).toMatch(
+      /^\| Check \| Result \|\n\|-------\|--------\|\n\| Preview \|/,
+    );
+    expect(out).toContain(
+      `| Preview | [Storybook](${READY}/storybook/) · [Sandbox](${READY}/sandbox/) · [Docs](${READY}/) · built from \`aaaaaaa\` |`,
+    );
+    expect(out).not.toMatch(/CodeBunny/i);
+  });
+
   it.each([
-    ['none', [], false, false],
     [
-      'storybook',
-      ['--storybook-url', 'https://example.test/pr/1/'],
-      true,
-      false,
+      'building',
+      {state: 'building', sha: HEAD, aliasOrigin: ALIAS},
+      `⏳ Preview building for \`aaaaaaa\`… Until it's ready, [Storybook](${ALIAS}/storybook/)`,
     ],
+    ['failed', {state: 'failed', sha: HEAD}, 'failed to build'],
     [
-      'sandbox',
-      ['--sandbox-url', 'https://example.test/pr/1/sandbox/'],
-      false,
-      true,
+      'fork',
+      {state: 'fork', sha: HEAD},
+      'No preview for pull requests from forks.',
     ],
-    [
-      'both',
-      [
-        '--storybook-url',
-        'https://example.test/pr/1/',
-        '--sandbox-url',
-        'https://example.test/pr/1/sandbox/',
+    ['unknown', {state: 'unknown', sha: HEAD}, 'cannot be known in advance'],
+  ])('says what a %s preview is, honestly', (_label, preview, text) => {
+    const out = withInputs({preview});
+    expect(out).toContain(text);
+    if (preview.state !== 'building') expect(out).not.toContain('/storybook/');
+  });
+
+  it('shows no preview row on a draft, which links no preview', () => {
+    const out = withInputs({});
+    expect(out).toContain('| Check | Result |');
+    expect(out).not.toContain('| Preview |');
+  });
+
+  it('says a heavy suite did not run, with the label that runs it', () => {
+    const out = withInputs({
+      jobs: [
+        {name: 'pr-visual', conclusion: 'skipped', steps: []},
+        {name: 'pr-rtl', conclusion: 'skipped', steps: []},
       ],
-      true,
-      true,
-    ],
-  ])(
-    'renders independent %s availability',
-    (state, urls, storybook, sandbox) => {
-      const stdout = runComment(baseAnalysis, [
-        ...urls,
-        '--preview-state',
-        state,
-        '--source-conclusion',
-        'success',
-      ]);
+    });
+    expect(out).toContain(
+      '| Visual | ⏭ Visual did not run on this pull request; add `ci:run-visual` to run it. |',
+    );
+    expect(out).toContain(
+      '| Accessibility | ⏭ Accessibility did not run on this pull request; add `ci:run-a11y` to run it. |',
+    );
+    expect(out).toContain(
+      '| RTL | ⏭ RTL did not run on this pull request; add `ci:run-rtl` to run it. |',
+    );
+    expect(out).not.toContain('| Perf |');
+  });
 
-      expect(stdout.includes('View Storybook for this PR')).toBe(storybook);
-      expect(stdout.includes('View Sandbox for this PR')).toBe(sandbox);
-      expect(stdout.includes('> **Preview availability:**')).toBe(
-        !storybook || !sandbox,
-      );
-      expect(stdout).toContain('<!-- astryx-pr-analysis -->');
-    },
-  );
+  it('notes a run that did not succeed', () => {
+    const out = runComment(baseAnalysis, ['--source-conclusion', 'failure']);
+    expect(out).toContain('CI concluded failure');
+  });
 
-  it('explains that failed CI published no previews', () => {
-    const stdout = runComment(baseAnalysis, [
-      '--preview-state',
-      'none',
-      '--source-conclusion',
-      'failure',
-    ]);
-
-    expect(stdout).toContain('CI concluded failure');
-    expect(stdout).not.toContain('View Storybook for this PR');
-    expect(stdout).not.toContain('View Sandbox for this PR');
+  it('collapses the size tables', () => {
+    const out = runComment({
+      ...baseAnalysis,
+      componentSizes: {
+        'core/Card': {
+          package: '@astryxdesign/core',
+          importGzipBytes: 2000,
+          cssGzipBytes: 100,
+        },
+      },
+    });
+    expect(out).toContain('<summary>Size details</summary>');
+    expect(out.indexOf('<summary>Size details</summary>')).toBeLessThan(
+      out.indexOf('### Component Size'),
+    );
+    expect(out).toMatch(/\| Size \| ✅ 1 component\(s\) within budget/);
   });
 });
 

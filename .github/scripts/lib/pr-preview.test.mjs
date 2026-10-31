@@ -815,14 +815,139 @@ describe('PR comment preview reconciliation', () => {
     ['alias known', true],
   ])('shows both or neither branch links: %s', async (_label, ready) => {
     const {result} = await reconcile({previewAvailable: ready});
-    expect(result.body.includes('View Storybook for this PR')).toBe(ready);
-    expect(result.body.includes('View Sandbox for this PR')).toBe(ready);
-    expect(result.body.includes('> **Preview availability:**')).toBe(!ready);
-    if (ready) {
-      expect(result.body).toContain(`${VERCEL_ORIGIN}/storybook/`);
-      expect(result.body).toContain(`${VERCEL_ORIGIN}/sandbox/`);
-    }
+    expect(
+      result.body.includes(`[Storybook](${VERCEL_ORIGIN}/storybook/)`),
+    ).toBe(ready);
+    expect(result.body.includes(`[Sandbox](${VERCEL_ORIGIN}/sandbox/)`)).toBe(
+      ready,
+    );
+    // identity() opens from a fork, which Vercel builds no preview for.
+    expect(
+      result.body.includes('No preview for pull requests from forks.'),
+    ).toBe(!ready);
     expect(result.body).not.toContain('facebook.github.io/astryx/pr/');
+  });
+
+  describe("this head's preview and the run's jobs", () => {
+    const deployment = (overrides = {}) => ({
+      id: 7,
+      environment: 'Preview',
+      creator: {login: 'vercel[bot]'},
+      ...overrides,
+    });
+    async function withGithub({deployments = [], statuses = [], jobs = []}) {
+      const value = identity({headRepository: 'meta/astryx'});
+      const harness = githubFixture({value});
+      harness.github.rest.repos = {
+        listDeployments: vi.fn(async () => ({data: deployments})),
+        listDeploymentStatuses: vi.fn(async () => ({data: statuses})),
+      };
+      harness.github.rest.actions.listJobsForWorkflowRun = vi.fn(async () => ({
+        data: jobs,
+      }));
+      const paths = fixture(value);
+      const seen = [];
+      const result = await reconcilePrComment({
+        github: harness.github,
+        core: {info: vi.fn(), warning: vi.fn()},
+        context: {
+          repo: {owner: 'meta', repo: 'astryx'},
+          serverUrl: 'https://github.com',
+        },
+        expectedIdentity: value,
+        analysisPath: paths.analysis,
+        metadataPath: paths.metadata,
+        a11yPath: paths.a11y,
+        visualPath: paths.visual,
+        execute: (node, args, options) => {
+          seen.push(args);
+          return execFileSync(node, args, options);
+        },
+      });
+      return {result, harness, args: seen[0]};
+    }
+
+    it("links Vercel's ready deployment of this exact head", async () => {
+      const {result, harness} = await withGithub({
+        deployments: [deployment()],
+        statuses: [
+          {
+            state: 'success',
+            environment_url: 'https://astryx-abc123-fbopensource.vercel.app',
+          },
+        ],
+      });
+      expect(harness.github.rest.repos.listDeployments).toHaveBeenCalledWith(
+        expect.objectContaining({sha: HEAD}),
+      );
+      expect(result.body).toContain(
+        '[Storybook](https://astryx-abc123-fbopensource.vercel.app/storybook/)',
+      );
+      expect(result.body).toContain('built from `aaaaaaa`');
+    });
+
+    it("ignores a deployment Vercel did not create, and an address that is not Vercel's", async () => {
+      for (const setup of [
+        {
+          deployments: [deployment({creator: {login: 'someone'}})],
+          statuses: [
+            {
+              state: 'success',
+              environment_url: 'https://astryx-abc123-fbopensource.vercel.app',
+            },
+          ],
+        },
+        {
+          deployments: [deployment()],
+          statuses: [
+            {state: 'success', environment_url: 'https://evil.example/'},
+          ],
+        },
+      ]) {
+        const {result} = await withGithub(setup);
+        expect(result.body).not.toContain('astryx-abc123');
+        expect(result.body).not.toContain('evil.example');
+        expect(result.body).toContain('Preview building');
+      }
+    });
+
+    it('says a failed preview failed', async () => {
+      const {result} = await withGithub({
+        deployments: [deployment()],
+        statuses: [{state: 'failure'}],
+      });
+      expect(result.body).toContain('failed to build');
+    });
+
+    it("passes the run's jobs, so the report says what ran and what path scoping skipped", async () => {
+      const {result, args} = await withGithub({
+        jobs: [
+          {
+            name: 'test-node (1/4)',
+            status: 'completed',
+            conclusion: 'success',
+            steps: [
+              {name: "Decide this job's scope", conclusion: 'success'},
+              {name: 'Run tests', conclusion: 'success'},
+            ],
+          },
+          {
+            name: 'docsite-test',
+            status: 'completed',
+            conclusion: 'success',
+            steps: [
+              {name: "Decide this job's scope", conclusion: 'success'},
+              {name: 'Build docsite', conclusion: 'skipped'},
+            ],
+          },
+        ],
+      });
+      expect(args).toContain('--jobs');
+      expect(result.body).toContain('| test-node | ✅ passed | |');
+      expect(result.body).toContain(
+        '| docsite-test | ⏭ skipped | nothing in its paths changed |',
+      );
+    });
   });
 
   describe('the fallback report, when there is no trusted analysis', () => {
@@ -1095,10 +1220,10 @@ describe('PR comment preview reconciliation', () => {
     expect(harness.state.updated).toHaveLength(1);
     expect(harness.state.comments).toHaveLength(1);
     expect(harness.state.comments[0].body).toContain(
-      'View Storybook for this PR',
+      `[Storybook](${VERCEL_ORIGIN}/storybook/)`,
     );
     expect(harness.state.comments[0].body).toContain(
-      'View Sandbox for this PR',
+      `[Sandbox](${VERCEL_ORIGIN}/sandbox/)`,
     );
     expect(harness.state.listedIssues).toEqual([5697, 5697]);
   });
