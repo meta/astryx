@@ -28,7 +28,7 @@ import {
 } from 'vitest';
 import {StrictMode, useLayoutEffect} from 'react';
 import {render, screen, fireEvent, act} from '@testing-library/react';
-import {MobileNav} from './MobileNav';
+import {MAX_EXIT_MS, MobileNav} from './MobileNav';
 import {AppShell} from '../AppShell/AppShell';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
 import {stubMatchMedia} from '../__tests__/stubMatchMedia';
@@ -279,6 +279,27 @@ describe('MobileNav close path edge cases', () => {
     }
   });
 
+  it('clips <body> instead of the root on a page whose <body> sets its own overflow, and gives it back', () => {
+    // A common reset: `body { overflow-x: hidden }` with the root's overflow
+    // left visible. The viewport then takes <body>'s overflow; a clip on the
+    // root would stop that propagation, so <body> would become a scroller of
+    // its own at offset 0 and the page would jump to its top.
+    document.body.style.overflowX = 'hidden';
+    try {
+      const {unmount} = render(<Drawer isOpen />);
+
+      expect(document.body.style.overflow).toBe('clip');
+      expect(document.documentElement.style.overflow).toBe('');
+
+      unmount();
+
+      expect(document.body.style.overflow).toBe('');
+      expect(document.body.style.overflowX).toBe('hidden');
+    } finally {
+      document.body.style.overflowX = '';
+    }
+  });
+
   it('restores documentElement overflow when unmounted while open', () => {
     const {unmount} = render(<Drawer isOpen />);
     expect(document.documentElement.style.overflow).toBe('clip');
@@ -523,8 +544,8 @@ describe('MobileNav close path edge cases', () => {
 
       // MobileNav's own close delay (capped at 250ms) runs first: about
       // 260ms after the click the dialog has closed on its own timing while
-      // AppShell's Activity boundary (held for 250ms + 50ms) still shows the
-      // subtree. Hiding first would cut off that close (#5701).
+      // AppShell's Activity boundary still shows the subtree. Hiding first
+      // would cut off that close (#5701).
       act(() => {
         vi.advanceTimersByTime(260);
       });
@@ -533,7 +554,15 @@ describe('MobileNav close path edge cases', () => {
       // dialog's own UA style does not count here.
       expect(dialog.style.display).not.toBe('none');
 
-      // After the hold, Activity hides the subtree.
+      // The slide-out keeps playing after the close, while the dialog's
+      // `display` transition holds it rendered (410ms by default, up to
+      // MAX_EXIT_MS): Activity must not cut it off at 300ms.
+      act(() => {
+        vi.advanceTimersByTime(MAX_EXIT_MS - 260);
+      });
+      expect(dialog.style.display).not.toBe('none');
+
+      // After the slide-out and the buffer, Activity hides the subtree.
       act(() => {
         vi.advanceTimersByTime(60);
       });
