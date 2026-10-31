@@ -6,10 +6,8 @@ import {useMemo} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Heading} from '@astryxdesign/core/Text';
-import type {
-  ReferenceSection,
-  ReferenceContentBlock,
-} from '@astryxdesign/cli/authoring';
+import type {DocsReadSection} from '@astryxdesign/cli/api';
+import type {ReferenceContentBlock} from '@astryxdesign/cli/authoring';
 import {ContentBlockRenderer} from './content-blocks';
 
 const styles = stylex.create({
@@ -57,7 +55,7 @@ function mergeDosDonts(
   return merged;
 }
 
-export function SectionRenderer({section}: {section: ReferenceSection}) {
+export function SectionRenderer({section}: {section: DocsReadSection}) {
   const mergedContent = useMemo(
     () => mergeDosDonts(section.content),
     [section.content],
