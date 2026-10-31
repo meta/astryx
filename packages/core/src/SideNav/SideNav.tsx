@@ -57,7 +57,11 @@ import {useTranslator} from '../i18n';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {getFocusableElements} from '../hooks/useFocusTrap';
-import {focusForLastInput, isFocusDetached} from '../utils/focusReturn';
+import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
   SideNavFocusTargetsContext,
@@ -584,19 +588,15 @@ export function SideNav({
     [],
   );
   const pendingFocusRef = useRef<{
+    focus: FocusWithin;
     rows: HTMLElement[];
     index: number;
   } | null>(null);
   const noteRailFocus = useCallback((wasCollapsed: boolean) => {
     pendingFocusRef.current = null;
     const nav = navRef.current;
-    const active = nav?.ownerDocument.activeElement;
-    if (
-      wasCollapsed ||
-      nav == null ||
-      active == null ||
-      !nav.contains(active)
-    ) {
+    const focus = wasCollapsed ? null : noteFocusWithin(nav);
+    if (focus == null || nav == null) {
       return;
     }
     const rows = [...rowsRef.current]
@@ -607,8 +607,9 @@ export function SideNav({
           : 1,
       );
     pendingFocusRef.current = {
+      focus,
       rows,
-      index: rows.findIndex(row => row.contains(active)),
+      index: rows.findIndex(row => row.contains(focus.element)),
     };
   }, []);
   useLayoutEffect(() => {
@@ -618,17 +619,13 @@ export function SideNav({
     if (pending == null || !collapsed || nav == null) {
       return;
     }
-    // Focus that survived the collapse is never moved.
-    if (!isFocusDetached(nav.ownerDocument)) {
-      return;
-    }
     const toggle = [...togglesRef.current].find(element =>
       nav.contains(element),
     );
-    const target = toggle ?? nearestRenderedRow(pending.rows, pending.index);
-    if (target != null) {
-      focusForLastInput(target);
-    }
+    moveFocusLeftBehind(
+      pending.focus,
+      toggle ?? nearestRenderedRow(pending.rows, pending.index),
+    );
   }, [collapsed]);
   const beforeRailChange = useCallback(
     (wasCollapsed: boolean) => {

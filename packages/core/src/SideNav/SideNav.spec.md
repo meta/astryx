@@ -163,10 +163,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR3 — Focus leaves a row the collapsed rail removes.** When the rail
   collapses while focus is on a row the collapsed rail does not render (FR2),
   focus moves to the collapse toggle rendered inside the SideNav, or, with
-  none, to the nearest row still in the rail, the preceding one first.
-  Focus anywhere else, a row the rail keeps included, is not moved
-  (WCAG 2.2 SC 2.4.3; as `component:LayoutPanel` AR2 does for a collapsing
-  panel).
+  none, to the nearest row still in the rail, the preceding one first. Focus
+  anywhere else, a row the rail keeps included, is not moved (WCAG 2.2 SC
+  2.4.3).
 
 ## Design relationships
 
