@@ -435,7 +435,11 @@ export const IncrementalResults: Story = {
 
     await userEvent.keyboard('{Enter}');
     // The selected person shows as the field's value.
-    await expect(await canvas.findByText('Benita Ruiz')).toBeInTheDocument();
+    // The field shows the selected person (its value text renders more than
+    // once: shown, and measured for sizing).
+    await expect(
+      (await canvas.findAllByText('Benita Ruiz'))[0],
+    ).toBeInTheDocument();
   },
 };
 
@@ -484,6 +488,203 @@ export const IncrementalResultsAboveField: Story = {
         page.getAllByRole('option')[0].getBoundingClientRect().top - firstTop,
       ),
     ).toBeLessThan(1);
+  },
+};
+
+/**
+ * A source with many local matches and more from the server, for the cases
+ * where the list outgrows its popup (spec:AST-092 FR6).
+ */
+const manyLocal: SearchableItem[] = Array.from({length: 12}, (_, index) => ({
+  id: `local-${index}`,
+  label: `Alex ${String.fromCharCode(65 + index)}. Local`,
+}));
+const manyServer: SearchableItem[] = Array.from({length: 8}, (_, index) => ({
+  id: `server-${index}`,
+  label: `Alex ${String.fromCharCode(77 + index)}. Server`,
+}));
+function delayedAppendSource(local: SearchableItem[]): SearchSource {
+  let pending: {
+    timer: ReturnType<typeof setTimeout>;
+    reject: (reason: Error) => void;
+  } | null = null;
+  return {
+    bootstrap: () => [],
+    cancel() {
+      if (pending != null) {
+        clearTimeout(pending.timer);
+        pending.reject(new Error('cancelled'));
+        pending = null;
+      }
+    },
+    async search(query, context) {
+      const shown = matchPeople(local, query);
+      context?.update(shown);
+      return await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending = null;
+          resolve([...shown, ...matchPeople(manyServer, query)]);
+        }, 800);
+        pending = {timer, reject};
+      });
+    },
+  };
+}
+const scrolledSource = delayedAppendSource(manyLocal);
+const shortListSource = delayedAppendSource(manyLocal.slice(0, 2));
+
+/**
+ * The user scrolls a partial list before the server answers: appended rows
+ * land below, and the scroll position and the rows shown stay put.
+ */
+export const IncrementalResultsScrolled: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem | null>(null);
+    return (
+      <Typeahead
+        label="Assign to"
+        placeholder="Search people"
+        searchSource={scrolledSource}
+        value={value}
+        onChange={setValue}
+        debounceMs={0}
+        maxMenuItems={30}
+      />
+    );
+  },
+  name: 'Incremental results in a scrolled list',
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('combobox', {name: 'Assign to'});
+    const page = within(document.body);
+
+    await userEvent.type(input, 'alex');
+    await waitFor(() => expect(page.queryAllByRole('option')).toHaveLength(12));
+    const listbox = page.getByRole('listbox');
+    const scroller =
+      listbox.scrollHeight > listbox.clientHeight
+        ? listbox
+        : (listbox.parentElement as HTMLElement);
+    scroller.scrollTop = scroller.scrollHeight;
+    const scrolledTo = scroller.scrollTop;
+    await expect(scrolledTo).toBeGreaterThan(0);
+    const lastShown = page.getByRole('option', {name: 'Alex L. Local'});
+    const lastShownTop = lastShown.getBoundingClientRect().top;
+
+    await waitFor(() => expect(input).not.toHaveAttribute('aria-busy'), {
+      timeout: 3000,
+    });
+    await expect(page.getAllByRole('option')).toHaveLength(20);
+    // The scroll offset and the shown rows' place on screen did not move.
+    await expect(Math.abs(scroller.scrollTop - scrolledTo)).toBeLessThan(1);
+    await expect(
+      Math.abs(lastShown.getBoundingClientRect().top - lastShownTop),
+    ).toBeLessThan(1);
+  },
+};
+
+/**
+ * The field sits low enough that the first, short list fits below it but the
+ * server's answer would not: the popup stays below and grows only within the
+ * room there, scrolling the rest (spec:AST-092 FR6).
+ */
+export const IncrementalResultsBelowFieldOverflow: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem | null>(null);
+    return (
+      <div style={{paddingBlockStart: 'calc(100vh - 280px)'}}>
+        <Typeahead
+          label="Assign to"
+          placeholder="Search people"
+          searchSource={shortListSource}
+          value={value}
+          onChange={setValue}
+          debounceMs={0}
+        />
+      </div>
+    );
+  },
+  name: 'Incremental results below the field, outgrowing the room',
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('combobox', {name: 'Assign to'});
+    const page = within(document.body);
+
+    await userEvent.type(input, 'alex');
+    await waitFor(() => expect(page.queryAllByRole('option')).toHaveLength(2));
+    const [first] = page.getAllByRole('option');
+    const firstTop = first.getBoundingClientRect().top;
+    // The first list opens below the field.
+    await expect(firstTop).toBeGreaterThanOrEqual(
+      input.getBoundingClientRect().bottom,
+    );
+
+    await waitFor(() => expect(input).not.toHaveAttribute('aria-busy'), {
+      timeout: 3000,
+    });
+    await expect(page.getAllByRole('option')).toHaveLength(10);
+    const popup = page.getByRole('listbox');
+    // Still below the field, inside the viewport, with the first row in place.
+    await expect(popup.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      input.getBoundingClientRect().bottom - 1,
+    );
+    await expect(popup.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      window.innerHeight,
+    );
+    await expect(
+      Math.abs(
+        page.getAllByRole('option')[0].getBoundingClientRect().top - firstTop,
+      ),
+    ).toBeLessThan(1);
+  },
+};
+
+/**
+ * A pointer resting where the server's rows land does not take the
+ * highlight: the rows arrive under it without the pointer moving, so Enter
+ * still picks the row the keyboard highlighted (spec:AST-092 FR6).
+ */
+export const IncrementalResultsRestingPointer: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem | null>(null);
+    return (
+      <Typeahead
+        label="Assign to"
+        placeholder="Search people"
+        searchSource={incrementalPeopleSource}
+        value={value}
+        onChange={setValue}
+        debounceMs={0}
+      />
+    );
+  },
+  name: 'Incremental results under a resting pointer',
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('combobox', {name: 'Assign to'});
+    const page = within(document.body);
+
+    await userEvent.type(input, 'ben');
+    await waitFor(() => expect(page.queryAllByRole('option')).toHaveLength(2));
+    await userEvent.keyboard('{ArrowDown}');
+    const activeId = input.getAttribute('aria-activedescendant');
+    await waitFor(() => expect(input).not.toHaveAttribute('aria-busy'), {
+      timeout: 3000,
+    });
+    // A row appearing under a still pointer gets boundary events, not a move.
+    const appended = page.getByRole('option', {name: 'Ben Shah'});
+    appended.dispatchEvent(new MouseEvent('mouseover', {bubbles: true}));
+    appended.dispatchEvent(new MouseEvent('mouseenter'));
+    await expect(input).toHaveAttribute(
+      'aria-activedescendant',
+      activeId ?? '',
+    );
+    await userEvent.keyboard('{Enter}');
+    // The field shows the selected person (its value text renders more than
+    // once: shown, and measured for sizing).
+    await expect(
+      (await canvas.findAllByText('Benita Ruiz'))[0],
+    ).toBeInTheDocument();
   },
 };
 

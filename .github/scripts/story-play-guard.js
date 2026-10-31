@@ -366,6 +366,24 @@ const TARGETS = [
     guards:
       'a popup above the field keeps its shown rows in place on screen while server rows append (spec:AST-092 FR6)',
   },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results-scrolled',
+    guards:
+      'a scrolled partial list keeps its scroll offset and shown rows in place while server rows append (spec:AST-092 FR6)',
+  },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results-below-field-overflow',
+    guards:
+      'a popup below the field stays below and grows only within the room there when the server list outgrows it (spec:AST-092 FR6)',
+  },
+  {
+    component: 'Typeahead',
+    story: 'core-typeahead--incremental-results-resting-pointer',
+    guards:
+      'rows appended under a resting pointer do not take the highlight; Enter selects the highlighted row (spec:AST-092 FR6)',
+  },
 ];
 
 const CONTENT_TYPES = {
