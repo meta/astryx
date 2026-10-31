@@ -1906,7 +1906,10 @@ export function useSheetGestures({
       }
       const {offsets, peekOffset} = resolveDetents(state.height);
 
-      const raw = state.baseOffset + translation;
+      const isScroll = state.pan?.trackedTouches[0]?.scrollType != null;
+      const raw = isScroll
+        ? Math.min(state.baseOffset + translation, state.baseOffset + state.height)
+        : state.baseOffset + translation;
       // Under UIKit's presentation (a finger or a pen where the primary
       // pointer is coarse, the same answer as the release's): 1:1 between
       // detents and into the dismiss zone, as UIKit's sheet tracks (the
