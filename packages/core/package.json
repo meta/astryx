@@ -828,11 +828,6 @@
       "source": "./src/internal/tokenizer-presentation.ts",
       "types": "./dist/internal/tokenizer-presentation.d.ts",
       "default": "./dist/internal/tokenizer-presentation.js"
-    },
-    "./internal/focusOutline.stylex": {
-      "source": "./src/internal/focusOutline.stylex.ts",
-      "types": "./dist/internal/focusOutline.stylex.d.ts",
-      "default": "./dist/internal/focusOutline.stylex.js"
     }
   },
   "files": [

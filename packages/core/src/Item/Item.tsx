@@ -57,12 +57,12 @@ import {useLinkComponent} from '../Link/useLinkComponent';
 import {useClickableContainer} from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
-import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
-  FOCUS_OWNER_ATTRIBUTE,
-  FOCUS_OWNER_GROUP_ATTRIBUTE,
-  focusWithinOwnerProps,
-} from '../internal/focusOutline.stylex';
+  focusOwnerGroupProps,
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
@@ -797,7 +797,7 @@ export function Item({
           rel={rel}
           aria-disabled={isDisabled || undefined}
           tabIndex={isDisabled ? -1 : undefined}
-          {...{[FOCUS_OWNER_ATTRIBUTE]: ''}}
+          {...focusOwnerProps}
           {...stylex.props(
             styles.invisibleAnchor,
             isInline && styles.inlineContent,
@@ -810,7 +810,7 @@ export function Item({
           type="button"
           onClick={onClick}
           disabled={isDisabled}
-          {...{[FOCUS_OWNER_ATTRIBUTE]: ''}}
+          {...focusOwnerProps}
           {...stylex.props(
             styles.invisibleButton,
             isInline && styles.inlineContent,
@@ -912,7 +912,8 @@ export function Item({
         // link, or in delegation mode the nested control that is its sole tab
         // stop. Any other control in it (a start or end slot) rings itself
         // (`architecture:interaction-modality` INV3).
-        (isDelegate ? focusOutlineProps.focusWithin : focusWithinOwnerProps)(
+        stylex.props(
+          isDelegate ? focusOutlineStyles.focusWithin : focusWithinOwner,
           styles.root,
           densityStyles[density],
           align === 'start' && styles.alignStart,
@@ -938,7 +939,7 @@ export function Item({
           <span
             // The row's own button or link sits in this cell, so the row's
             // ring reaches it here.
-            {...{[FOCUS_OWNER_GROUP_ATTRIBUTE]: ''}}
+            {...focusOwnerGroupProps}
             {...stylex.props(
               styles.markerContent,
               align === 'first-line' && styles.markerContentFirstLine,

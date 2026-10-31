@@ -78,6 +78,16 @@ for (const width of [1280, 390]) {
     }
   });
 
+  test(`at ${width} px, a Token inside an Item rings itself, not the row`, async ({
+    page,
+  }) => {
+    await open(page, 'core-item--with-token-action', width);
+    // The row's own action, then the Token's: one ring at each.
+    for (const {focused, rings} of await ringsAtEachStop(page, 2)) {
+      expect(rings, `rings while "${focused}" is focused`).toHaveLength(1);
+    }
+  });
+
   test(`at ${width} px, each tab stop in a Token shows one ring`, async ({
     page,
   }) => {
