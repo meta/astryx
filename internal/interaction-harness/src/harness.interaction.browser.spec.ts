@@ -53,6 +53,7 @@ import {
   freezeTimers,
   holdAnimations,
   installInputLog,
+  type InputRecord,
   installLongTaskLog,
   installTimerGate,
   markElement,
@@ -203,29 +204,47 @@ test.describe('touch input', () => {
   test('the page receives trusted touches and pointers at the scripted positions and times', async ({
     page,
     browserName,
-  }) => {
-    await fixture(page);
-    const driver = await touchDriver(page);
+  }, testInfo) => {
     const script = drag(
       {x: 100, y: 100},
       {x: 100, y: 220},
       {durationMs: 200, hz: 60, restMs: 120},
     );
-    await driver.play(script);
-    const log = await readInputLog(page);
-    const moves = log.filter(r => r.type === 'pointermove');
-    const down = log.find(r => r.type === 'pointerdown');
-    const up = log.find(r => r.type === 'pointerup');
-    expect(down?.isTrusted).toBe(true);
-    expect(down?.pointerType).toBe('touch');
-    expect(up, JSON.stringify(log.map(r => r.type))).toBeDefined();
-    // (Not `cancelable`: with only passive listeners an engine may dispatch
-    // touchmove as non-blocking, which reads cancelable false.)
-    expect(
-      log.filter(r => r.type === 'touchmove').every(r => r.isTrusted),
-    ).toBe(true);
-    expect(moves.at(-1)?.y).toBe(220);
+    // One take: a fresh page, the script played, and the harness's record of
+    // when each step left (`dispatchedAt`) and when its dispatch was answered.
+    const take = async () => {
+      await fixture(page);
+      const driver = await touchDriver(page);
+      const answeredAt: number[] = [];
+      // Taken before the harness reads its own clock to schedule the script.
+      const playStart = Date.now();
+      const played = await driver.play(script, {
+        onEvent: () => {
+          answeredAt.push(Date.now());
+        },
+      });
+      const log = await readInputLog(page);
+      return {played, answeredAt, playStart, log};
+    };
+    const checkInput = (log: readonly InputRecord[]) => {
+      const moves = log.filter(r => r.type === 'pointermove');
+      const down = log.find(r => r.type === 'pointerdown');
+      const up = log.find(r => r.type === 'pointerup');
+      expect(down?.isTrusted).toBe(true);
+      expect(down?.pointerType).toBe('touch');
+      expect(up, JSON.stringify(log.map(r => r.type))).toBeDefined();
+      // (Not `cancelable`: with only passive listeners an engine may dispatch
+      // touchmove as non-blocking, which reads cancelable false.)
+      expect(
+        log.filter(r => r.type === 'touchmove').every(r => r.isTrusted),
+      ).toBe(true);
+      expect(moves.at(-1)?.y).toBe(220);
+      return {moves, up};
+    };
+
     if (browserName === 'chromium') {
+      const {log} = await take();
+      const {moves, up} = checkInput(log);
       // The scripted 16.67 ms spacing arrives exactly, and the 120 ms rest
       // before the lift is in the timestamps too.
       const deltas = moves
@@ -237,14 +256,89 @@ test.describe('touch input', () => {
       expect(
         (up?.timeStamp ?? NaN) - (moves.at(-1)?.timeStamp ?? NaN),
       ).toBeCloseTo(120, 0);
-    } else {
-      // WebKit stamps the real dispatch time: real-time pacing keeps it close.
-      const deltas = moves
-        .slice(1)
-        .map((m, i) => m.timeStamp - moves[i].timeStamp);
-      const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
-      expect(mean).toBeGreaterThan(14);
-      expect(mean).toBeLessThan(20);
+      return;
+    }
+
+    // WebKit takes no timestamp: the page stamps each event with the time it
+    // is dispatched, so its spacing is the harness's real-time pacing. Every
+    // take checks what holds under any load against the harness's own record:
+    // no move left before its scripted time, and the page's timestamps follow
+    // the sends, in order, never before them and never after WebKit answered
+    // the dispatch (it answers only once the page has the event), so a driver
+    // that holds the moves and sends them in a burst fails.
+    //
+    // The pacing is bounded from above too. The harness waits only while it
+    // is ahead of the script and sends a late step at once, so a move it
+    // waited for (it left more than 2 ms after the step before was answered)
+    // must leave on time (no more than 2 ms after its scripted time). A harness
+    // that paces slowly waits past every move's time: sending each step at
+    // twice its time leaves every move both waited for and late. A harness
+    // whose send itself outlasts the step's spacing never waits, so a move
+    // behind such a send is off pace too. A runner whose CPU quota holds the
+    // test process also wakes the harness late from a wait, or holds a send,
+    // on a few moves (in a container capped at 3 CPUs, where the quota stalls
+    // the process for about 100 ms at a time), so a take is off pace when
+    // more than half its moves are. It is re-taken once, as wheel bursts are,
+    // and a second such take fails. The limits, both from real-time input
+    // under CPU starvation: a pacer the cap throttles falls behind and never
+    // waits, so no pacing check can see a slow pacer there (under a 3-CPU cap
+    // with 16 workers, sending each step at twice its time failed none of 20
+    // runs); and there the quota slows most sends past the step's spacing,
+    // which reads exactly like a harness whose send is slow, so the real test
+    // fails 10 of 40 runs under that cap (the CI lane's 4 CPUs with one
+    // worker passed 10 of 10).
+    for (const attempt of [1, 2] as const) {
+      const {played, answeredAt, playStart, log} = await take();
+      const {moves} = checkInput(log);
+      const sentAt = played.map(step => step.dispatchedAt);
+      const moveSteps = played.flatMap((step, i) =>
+        step.type === 'touchMove' ? [i] : [],
+      );
+      expect(moveSteps).toHaveLength(moves.length);
+      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+      for (const [m, i] of moveSteps.entries()) {
+        // Against the clock before play() started, not the start event's
+        // send, which can itself leave late. Date.now() counts whole
+        // milliseconds, hence the 1 ms.
+        expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
+        // 2 ms of rounding between the two processes' clocks.
+        expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
+          sentAt[i] - 2,
+        );
+        expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
+          answeredAt[i] + 2,
+        );
+        if (m > 0) {
+          expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
+            moves[m - 1].timeStamp,
+          );
+        }
+      }
+      // Lateness against the latest the play clock can have started: the
+      // start event's send.
+      const waitedLate = moveSteps.filter(
+        i =>
+          sentAt[i] - answeredAt[i - 1] > 2 &&
+          sentAt[i] - sentAt[0] - played[i].t > 2,
+      );
+      // A move behind a send that took longer than the step's spacing: a
+      // harness whose send itself is that slow never waits, and paces every
+      // move at the send's speed.
+      const slowSent = moveSteps.filter(
+        i => answeredAt[i - 1] - sentAt[i - 1] > played[i].t - played[i - 1].t,
+      );
+      const offPace = new Set([...waitedLate, ...slowSent]);
+      if (offPace.size <= moves.length / 2) {
+        return;
+      }
+      const lateMs = waitedLate.map(i =>
+        Math.round(sentAt[i] - sentAt[0] - played[i].t),
+      );
+      const note = `take ${attempt}: ${offPace.size} of ${moves.length} moves off pace: ${waitedLate.length} left late after the harness waited for them${lateMs.length > 0 ? ` (${lateMs.join(', ')} ms late)` : ''}, ${slowSent.length} followed a send slower than the step`;
+      if (attempt === 2) {
+        throw new Error(`touch pacing: ${note}`);
+      }
+      testInfo.annotations.push({type: 'touch-retake', description: note});
     }
   });
 
