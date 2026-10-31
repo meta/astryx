@@ -358,7 +358,8 @@ export function PlaygroundClient() {
   // re-post it (the iframe clears the custom theme on any string-only push).
   const customThemeRef = useRef<DefinedTheme | null>(null);
 
-  const editorPanel = useResizable({
+  const editorPanelHandleRef = useRef<HTMLDivElement>(null);
+  const editorPanel = useResizable(editorPanelHandleRef, {
     defaultSize: 440,
     minSize: 340,
     maxSize: 760,
@@ -1047,7 +1048,7 @@ export function PlaygroundClient() {
         {!isMobile && (
           <ResizeHandle
             label="Resize editor panel"
-            resizable={editorPanel.props}
+            ref={editorPanelHandleRef}
             pillPlacement="center"
             hasDivider
           />
