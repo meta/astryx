@@ -592,6 +592,41 @@ describe('MultiSelector', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('does not toggle options or select all after becoming disabled', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const selector = (isDisabled: boolean) => (
+      <MultiSelector
+        label="Fruit"
+        options={defaultOptions}
+        value={['Apple']}
+        onChange={onChange}
+        changeAction={changeAction}
+        isDisabled={isDisabled}
+        hasSelectAll
+      />
+    );
+    const {rerender} = render(selector(false));
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    await user.click(trigger);
+    const banana = screen.getByRole('option', {name: 'Banana', ...h});
+
+    rerender(selector(true));
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await user.click(banana);
+    await user.click(screen.getByRole('option', {name: 'Apple', ...h}));
+    await user.click(screen.getByRole('option', {name: /^Select all/, ...h}));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+
+    rerender(selector(false));
+    await user.click(banana);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(['Apple', 'Banana']);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(['Apple', 'Banana']);
+  });
+
   it('renders disabled state', () => {
     render(
       <MultiSelector
@@ -3835,6 +3870,46 @@ describe('MultiSelector hasCreate', () => {
       query: 'Urgent',
     });
     // The filter is cleared so the option the caller adds is visible.
+    expect(search).toHaveValue('');
+  });
+
+  it('does not create by Enter or click after becoming disabled', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const selector = (isDisabled: boolean) => (
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={['bug']}
+        onChange={onChange}
+        changeAction={changeAction}
+        isDisabled={isDisabled}
+        hasSearch
+        hasCreate
+      />
+    );
+    const {rerender} = render(selector(false));
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const search = screen.getByRole('combobox', h);
+    await user.type(search, 'Urgent');
+    const create = screen.getByRole('option', {name: 'Create "Urgent"', ...h});
+
+    rerender(selector(true));
+    expect(search).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.click(create);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+    expect(search).toHaveValue('Urgent');
+
+    rerender(selector(false));
+    await user.click(create);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(['bug', 'Urgent'], {
+      type: 'create',
+      query: 'Urgent',
+    });
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(['bug', 'Urgent']);
     expect(search).toHaveValue('');
   });
 

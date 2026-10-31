@@ -30,8 +30,9 @@ async function decide({
   eventName = 'pull_request',
   labels = [],
   events = labels.map(name => ({actor: {login: 'maintainer'}, label: {name}})),
-  roles = {maintainer: 'maintain'},
+  permissions = {maintainer: 'write'},
   failLookup = false,
+  failPermission = [],
 } = {}) {
   const outputs = {};
   const notices = [];
@@ -53,7 +54,8 @@ async function decide({
       repos: {
         getCollaboratorPermissionLevel: async ({username}) => {
           lookups.push(username);
-          return {data: {role_name: roles[username] ?? 'read'}};
+          if (failPermission.includes(username)) throw new Error('timeout');
+          return {data: {permission: permissions[username] ?? 'read'}};
         },
       },
     },
@@ -83,9 +85,6 @@ describe('run-labels decision', () => {
     expect(notRunSentence('rtl')).toBe(
       'RTL did not run on this pull request; add `ci:run-rtl` to run it.',
     );
-    expect(notRunSentence('perf')).toBe(
-      'Perf did not run on this pull request; add `ci:run-perf` to run it.',
-    );
   });
 
   it('names one label per suite', () => {
@@ -105,25 +104,40 @@ describe('run-labels decision', () => {
     },
   );
 
-  it('runs a suite when its label came from write, maintain or admin access', async () => {
-    for (const role of ['write', 'maintain', 'admin']) {
+  // GitHub reports maintain and custom write-based roles as `write`; the
+  // review gate's hasWritePermission decides, so labels and reviews agree.
+  it('runs a suite when its label came from write or admin access', async () => {
+    for (const permission of ['write', 'admin']) {
       const {outputs} = await decide({
         labels: ['ci:run-a11y'],
-        roles: {maintainer: role},
+        permissions: {maintainer: permission},
       });
-      expect(outputs.a11y, role).toBe('true');
+      expect(outputs.a11y, permission).toBe('true');
     }
   });
 
-  it('does not run a suite labelled with triage or read access, and says why', async () => {
-    for (const role of ['triage', 'read']) {
+  it('does not run a suite labelled with read or no access, and says why', async () => {
+    for (const permission of ['read', 'none']) {
       const {outputs, notices} = await decide({
         labels: ['ci:run-rtl'],
-        roles: {maintainer: role},
+        permissions: {maintainer: permission},
       });
-      expect(outputs.rtl, role).toBe('false');
+      expect(outputs.rtl, permission).toBe('false');
       expect(notices.join('\n')).toContain('maintainer');
     }
+  });
+
+  it('denies only the suites of a labeler whose access lookup fails', async () => {
+    const {outputs} = await decide({
+      labels: ['ci:run-visual', 'ci:run-rtl'],
+      events: [
+        {actor: {login: 'maintainer'}, label: {name: 'ci:run-visual'}},
+        {actor: {login: 'flaky'}, label: {name: 'ci:run-rtl'}},
+      ],
+      permissions: {maintainer: 'write', flaky: 'write'},
+      failPermission: ['flaky'],
+    });
+    expect(outputs).toEqual({visual: 'true', a11y: 'false', rtl: 'false'});
   });
 
   it("judges each label's newest application, not an earlier one", async () => {
@@ -134,7 +148,7 @@ describe('run-labels decision', () => {
         {actor: {login: 'maintainer'}, label: {name: 'ci:run-rtl'}},
         {actor: {login: 'triager'}, label: {name: 'ci:run-visual'}},
       ],
-      roles: {maintainer: 'maintain', triager: 'triage'},
+      permissions: {maintainer: 'write', triager: 'read'},
     });
     expect(outputs).toEqual({visual: 'false', a11y: 'false', rtl: 'true'});
   });

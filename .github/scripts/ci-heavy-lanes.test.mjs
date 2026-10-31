@@ -70,7 +70,8 @@ describe('visual, accessibility and RTL owners', () => {
       rtl: '${{ steps.decide.outputs.rtl }}',
     });
     expect(gate.steps[0].with).toMatchObject({
-      'sparse-checkout': '.github/scripts/run-labels.cjs',
+      'sparse-checkout':
+        '.github/scripts/run-labels.cjs\n.github/scripts/review-signal-decision.cjs\n',
       path: '.run-labels',
       'persist-credentials': false,
     });

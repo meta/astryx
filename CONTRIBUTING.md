@@ -930,8 +930,8 @@ Storybook story for anything you added or altered.
   access applies the label for the evidence a change needs before merging; a
   label applied without write access runs nothing. Like `ci:run`, a label
   takes effect on the next push or a close and reopen, and removing it stops
-  that suite from the next run. The pull-request comment names the label for
-  each suite that did not run.
+  that suite from the next run. When the accessibility audit did not run, the
+  pull-request comment names `ci:run-a11y`.
 - **A pull request that changes CI states its CI impact.** When it changes a
   workflow, a composite action or a CI script, its description carries a
   `CI impact:` line: each changed job's runner class (standard or

@@ -1215,11 +1215,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // (spec:AST-086 FR8).
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useMultiCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip listeners attach to the existing trigger container.
+  // The trigger stays focusable via aria-disabled. Trigger guards and the value
+  // commit guards below block activation, including from an already-open panel.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1626,6 +1624,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Clear all selected values. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
   const clearValues = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     onChange([]);
     announceSelection([]);
     if (changeAction) {
@@ -1635,6 +1636,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     onChange,
     changeAction,
     startTransition,
@@ -1663,6 +1665,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 
   const handleToggle = useCallback(
     (itemValue: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(itemValue)
         ? optimisticValue.filter(v => v !== itemValue)
         : [...optimisticValue, itemValue];
@@ -1677,6 +1682,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,
@@ -1711,6 +1717,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       : false;
 
   const handleSelectAll = useCallback(() => {
+    if (isDisabled) {
+      return;
+    }
     let newValue: string[];
     if (allEnabledSelected) {
       // Deselect all enabled items, keep disabled items that are selected
@@ -1736,6 +1745,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       });
     }
   }, [
+    isDisabled,
     allEnabledSelected,
     enabledItems,
     optimisticValue,
@@ -1752,6 +1762,9 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // the option the caller adds is visible.
   const commitCreate = useCallback(
     (query: string) => {
+      if (isDisabled) {
+        return;
+      }
       const newValue = optimisticValue.includes(query)
         ? optimisticValue
         : [...optimisticValue, query];
@@ -1766,6 +1779,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       }
     },
     [
+      isDisabled,
       optimisticValue,
       onChange,
       changeAction,

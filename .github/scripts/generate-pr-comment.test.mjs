@@ -250,3 +250,4 @@ describe('generate-pr-comment compact report', () => {
     expect(out).not.toContain('<img src=x>');
   });
 });
+
