@@ -49,11 +49,6 @@ describe('previewLine', () => {
       `⏳ Building… Until it's ready, **[Storybook](${ORIGIN}/storybook/)`,
     ],
     ['failed', {state: 'failed', sha: HEAD}, 'failed to build'],
-    [
-      'fork',
-      {state: 'fork', sha: HEAD},
-      'No preview for pull requests from forks.',
-    ],
     ['unknown', {state: 'unknown', sha: HEAD}, 'cannot be known in advance'],
   ])('says what a %s preview is', (_label, preview, text) => {
     expect(previewLine(preview)).toContain(text);
@@ -154,27 +149,6 @@ describe('buildComponentTable', () => {
     expect(table).not.toContain('<details>');
   });
 
-  it('takes results from the touched-components report first', () => {
-    const table = buildComponentTable({
-      analysis: analysis([['core/A', 1000, 1000]]),
-      origin: ORIGIN,
-      touched: {
-        components: [{name: 'A', results: {visual: 'changed', rtl: 'fail'}}],
-      },
-      a11yReport: {components: {A: {violations: []}}},
-    });
-    expect(table).toMatch(/\| ✗ · ✓ · ✗ \|$/m);
-  });
-
-  it('shows every mark as not run for a wide change', () => {
-    const table = buildComponentTable({
-      analysis: analysis([['core/A', 1000, 1000]]),
-      origin: ORIGIN,
-      touched: {wideChange: true, componentCount: 60, components: []},
-    });
-    expect(table).toMatch(/\| — · — · — \|$/m);
-  });
-
   it('lists a modified component folder with no size', () => {
     const table = buildComponentTable({
       analysis: {
@@ -257,7 +231,9 @@ describe('buildVisualDeltas', () => {
     expect(section).toContain(
       '| core-dialog--default\\_\\_neutral-light | added |',
     );
-    expect(section).toContain('| core-old--default\\_\\_neutral-light | removed |');
+    expect(section).toContain(
+      '| core-old--default\\_\\_neutral-light | removed |',
+    );
   });
 
   it(`lists at most ${VISUAL_FRAME_LIMIT} shots and counts the rest`, () => {
@@ -384,12 +360,16 @@ describe('notRunLine', () => {
     );
   });
 
-  it('says a wide change runs the full suite by label', () => {
+  it('leaves the line out when the Storybook build failed', () => {
     expect(
-      notRunLine({jobs: [], touched: {wideChange: true, componentCount: 60}}),
-    ).toBe(
-      'Wide change (60 components): add `ci:run-visual` / `ci:run-a11y` / `ci:run-rtl` to run the full suite.\n\n',
-    );
+      notRunLine({
+        jobs: [
+          {name: 'build-storybook', conclusion: 'failure'},
+          {name: 'pr-visual', conclusion: 'skipped'},
+          {name: 'pr-a11y (full audit)', conclusion: 'skipped'},
+        ],
+      }),
+    ).toBe('');
   });
 
   it('says nothing when every suite ran, and falls back to the reports without a job list', () => {

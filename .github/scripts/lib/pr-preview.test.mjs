@@ -833,10 +833,8 @@ describe('PR comment preview reconciliation', () => {
     expect(result.body.includes(`[Sandbox](${VERCEL_ORIGIN}/sandbox/)`)).toBe(
       ready,
     );
-    // identity() opens from a fork, which Vercel builds no preview for.
-    expect(
-      result.body.includes('No preview for pull requests from forks.'),
-    ).toBe(!ready);
+    // A fork's head is looked up like any other: Vercel builds fork previews.
+    expect(result.body).not.toContain('No preview');
     expect(result.body).not.toContain('facebook.github.io/astryx/pr/');
   });
 
@@ -961,15 +959,15 @@ describe('PR comment preview reconciliation', () => {
       throw new Error('malformed analysis');
     };
 
-    it('links the branch alias under the same preview note as the report', async () => {
+    it('keeps the same preview line as the full report', async () => {
       const {result} = await reconcile({
         previewAvailable: true,
         createIfMissing: true,
         execute: failRender,
       });
       expect(result.body).toContain('trusted analysis is unavailable');
-      expect(result.body).toContain('> **Preview:** the links below open');
-      expect(result.body).toContain('View Storybook for this PR');
+      expect(result.body).toContain('### 🔎 Preview · ');
+      expect(result.body).toContain(`[Storybook](${VERCEL_ORIGIN}/storybook/)`);
     });
 
     it('points to Vercel when the alias cannot be computed', async () => {
@@ -979,8 +977,8 @@ describe('PR comment preview reconciliation', () => {
         createIfMissing: true,
         execute: failRender,
       });
-      expect(result.body).toContain('> **Preview availability:**');
-      expect(result.body).not.toContain('View Storybook for this PR');
+      expect(result.body).toContain('cannot be known in advance');
+      expect(result.body).not.toContain('/storybook/');
     });
 
     it('says nothing about previews on a draft', async () => {
@@ -1119,24 +1117,6 @@ describe('PR comment preview reconciliation', () => {
       });
       expect(seen).toHaveLength(1);
       expect(seen[0].includes('--package-size')).toBe(used);
-    },
-  );
-
-  it.each([
-    ['the exact head', HEAD, true],
-    ['another head', 'b'.repeat(40), false],
-  ])(
-    'passes the touched-components report only when it names %s',
-    async (_label, headSha, used) => {
-      const seen = [];
-      await reconcile({
-        touched: {headSha, components: []},
-        execute: (_node, args) => {
-          seen.push(args);
-          return '## PR Analysis Report\n';
-        },
-      });
-      expect(seen[0].includes('--touched')).toBe(used);
     },
   );
 

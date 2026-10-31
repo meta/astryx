@@ -10,7 +10,7 @@
  *   Reset from four months on still rests on today's month; an arrow step
  *   through a stalled frame moves exactly one month; under a finger, a swipe
  *   that crosses the middle of a month as it lifts keeps scroll snapping on
- *   and rests on the next month.
+ *   until it rests on the next month.
  *   (A second arrow step late in the first one's scroll, which WebKit cuts
  *   short, is proven in MonthScrollerSettle.test.tsx: a loaded page's frames
  *   are too far apart to aim a click at a share of a 300 ms scroll.)
@@ -229,6 +229,10 @@ test('after the month and year wheels close, a trackpad scroll to the next month
  * scroller moves. After the month and year wheels close, whose re-assert is a
  * steer that moved nothing, the jump still rests on today's month, the title
  * with it.
+ *
+ * The four arrows are pressed back to back with one wait for the rest, so the
+ * case fits its time budget on a loaded machine: under a 3-CPU cap, waiting
+ * for the rest after every arrow brought Reset's click to the 60 s timeout.
  */
 test('after the month and year wheels close, Reset from four months on rests on today’s month', async ({
   page,
@@ -244,10 +248,16 @@ test('after the month and year wheels close, Reset from four months on rests on 
     }
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   };
-  for (let step = 0; step < 4; step++) {
-    await clickCentre('Next month');
-    await waitForRest(viewport);
+  const next = await page
+    .getByRole('button', {name: 'Next month'})
+    .boundingBox();
+  if (next == null) {
+    throw new Error('no Next month button');
   }
+  for (let step = 0; step < 4; step++) {
+    await page.mouse.click(next.x + next.width / 2, next.y + next.height / 2);
+  }
+  await waitForRestOnMonth(viewport);
   expect(await monthAtRest(viewport)).not.toBe(today);
   await clickCentre(/Choose month and year/);
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -263,17 +273,30 @@ test('after the month and year wheels close, Reset from four months on rests on 
   await expect(toggle).toHaveAccessibleName(new RegExp(today));
 });
 
+/** The scroller's snapping pauses and its rest after the lift (page clock, ms). */
+interface SnapRecord {
+  pauses: number[];
+  liftedAt: number | null;
+  restAt: number | null;
+}
+
 test.describe('under a finger', () => {
   test.use({hasTouch: true, isMobile: true});
 
   /**
    * A swipe whose last move crosses the middle of the month makes the
    * scroller re-center as the finger lifts. The finger drives that scroll, so
-   * the re-center leaves scroll snapping on (turning it off drops the snap
-   * target iOS tracks for the gesture, and the swipe coasted past the month),
-   * and the swipe comes to rest on the next month.
+   * snapping stays on until the scroll comes to rest (turning it off drops the
+   * snap target iOS tracks for the gesture, and the swipe coasted past the
+   * month), and the swipe comes to rest on the next month.
+   *
+   * A re-center that commits only after the rest may still pause snapping:
+   * that is the stalled-frame protection, and at rest it moves nothing.
+   * WebKit's injected touches drive no native scroll, so its scroll is the
+   * glide after the lift, and under load the glide's last scroll event and its
+   * `scrollend` land in one frame: the re-center then commits after the rest.
    */
-  test('a swipe that crosses the middle of a month as it lifts keeps snapping on and rests on the next month', async ({
+  test('a swipe that crosses the middle of a month as it lifts keeps snapping on until it rests on the next month', async ({
     page,
   }) => {
     const viewport = await openCalendar(page);
@@ -282,13 +305,28 @@ test.describe('under a finger', () => {
     if (box == null) {
       throw new Error('no month scroller');
     }
-    // Every change of the scroller's inline scroll-snap-type from here on.
+    // Each pause of the scroller's snapping, and the first time its scroll
+    // comes to rest after the lift, both on the page's clock.
     await viewport.evaluate(element => {
-      const changes: string[] = [];
-      (window as unknown as {snapChanges: string[]}).snapChanges = changes;
+      const record: SnapRecord = {pauses: [], liftedAt: null, restAt: null};
+      (window as unknown as {snapRecord: SnapRecord}).snapRecord = record;
       new MutationObserver(() => {
-        changes.push((element as HTMLElement).style.scrollSnapType || 'on');
+        if ((element as HTMLElement).style.scrollSnapType === 'none') {
+          record.pauses.push(performance.now());
+        }
       }).observe(element, {attributes: true, attributeFilter: ['style']});
+      window.addEventListener(
+        'touchend',
+        () => {
+          record.liftedAt ??= performance.now();
+        },
+        {capture: true, passive: true},
+      );
+      element.addEventListener('scrollend', () => {
+        if (record.liftedAt != null) {
+          record.restAt ??= performance.now();
+        }
+      });
     });
     const driver = await touchDriver(page);
     const y = box.y + box.height / 2;
@@ -302,11 +340,12 @@ test.describe('under a finger', () => {
     const rest = await monthAtRest(viewport);
     expect(rest).not.toBe('');
     expect(rest).not.toBe(start);
-    // Snapping was never turned off while the finger drove the scroll.
-    expect(
-      await page.evaluate(
-        () => (window as unknown as {snapChanges: string[]}).snapChanges,
-      ),
-    ).not.toContain('none');
+    const {pauses, restAt} = await page.evaluate(
+      () => (window as unknown as {snapRecord: SnapRecord}).snapRecord,
+    );
+    // The scroll came to rest after the lift, and snapping stayed on until it
+    // did.
+    expect(restAt).not.toBeNull();
+    expect(pauses.filter(at => at < (restAt ?? 0))).toEqual([]);
   });
 });

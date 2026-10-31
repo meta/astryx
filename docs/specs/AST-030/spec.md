@@ -73,8 +73,8 @@ they are separately named.
 - Define compatibility semantics or release-pair delta classes. Those belong to
   [`spec:AST-017`](../AST-017/spec.md); this record routes their checks and owns the
   exact-main release-check execution boundary.
-- Remove required check names (other than retiring the `spec-owner-approval`
-  mirror, FR15), branch protection, merge-queue coverage, or owner approval of
+- Remove required check names (other than dropping
+  `spec-owner-approval` from them, FR15), branch protection, merge-queue coverage, or owner approval of
   spec content.
 - Infer safety from file extensions, directory names, or the absence of a known
   risky path.
@@ -261,8 +261,7 @@ they are separately named.
   relevant on that trigger (`paths:`), and those paths name what the workflow
   reads or runs, never everything; a merge-group entry, which cannot filter by
   path, keeps running. A workflow that reports a required context (`build`,
-  `test`, `docsite-test`, `lint`, `review-required`, and the
-  `spec-owner-approval` mirror while it is required, FR15)
+  `test`, `docsite-test`, `lint`, `review-required`)
   starts on every pull request and is never path-filtered: the trusted
   classifier's positive surfaces (FR1–FR5) choose the work inside it, and a job
   whose suite does not apply reports success without running it (FR7). A push
@@ -275,8 +274,9 @@ they are separately named.
   review workflow (`review-signal.yml`) and `review-clear.yml` publish
   `review-required`, which carries both the code review and spec-owner approval
   (`architecture:knowledge-contracts` DEC-14); no other workflow publishes a
-  review or spec context. `spec-owner-approval` is published only as a mirror of
-  the spec half while branch protection still requires it. The spec-owner job
+  review or spec context. `spec-owner-approval` carries the spec-owner job's decision,
+  which the other writers of `review-required` read; it is not a required
+  check. The spec-owner job
   evaluates pull-request, review, and owner-command comment events, runs
   without cancel-in-progress, and publishes a terminal state for the head it
   read. It skips fork review events, whose tokens are read-only; fork approvals
@@ -545,8 +545,9 @@ required context (its check would never report).
 The spec-owner gate and the review gate read the same pull-request events, so
 they run in one workflow, and a contributor reads one review gate:
 `review-required` names whichever review is still missing, code first.
-`spec-owner-approval` remains a mirror until branch protection stops requiring
-it, so the merge rules change only when an administrator removes it.
+`spec-owner-approval` stays as the spec-owner job's decision record, which the
+other writers read; it is not a required check, so a contributor waits on
+`review-required` alone.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
