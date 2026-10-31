@@ -47,6 +47,8 @@ function wheel(
     legacy?: {x: number; y: number};
     /** A trackpad's wheel: its legacy delta three times its delta. */
     trackpad?: boolean;
+    /** Shift held, as Shift+wheel sends. */
+    shift?: boolean;
     time: number;
   },
 ): WheelEvent {
@@ -61,6 +63,7 @@ function wheel(
     deltaY: init.dy ?? 0,
     deltaMode: init.mode ?? 0,
     ctrlKey: init.ctrl ?? false,
+    shiftKey: init.shift ?? false,
   });
   Object.defineProperty(event, 'timeStamp', {value: init.time});
   const legacy =
@@ -397,34 +400,55 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     ).toEqual([]);
   });
 
-  it("takes wheel and trackpad scrolling on a pan by default, a mouse wheel's notches included (spec:AST-094 FR43)", () => {
+  it("takes no scroll on a pan by default: a pan follows a trackpad's scroll only where its owner allows it, so its element gets no wheel listener (spec:AST-094 FR43, DEC-24)", () => {
     const {box} = mount('<div id="box"></div>');
     const added = vi.spyOn(box, 'addEventListener');
     const pan = new PanGestureRecognizer({direction: 'horizontal'});
     const states = statesOf(pan);
     detachers.push(host.attach(box, pan));
+    expect(pan.allowedScrollTypes.size).toBe(0);
     expect(
       (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
-    ).toEqual([['wheel', expect.any(Function), {passive: false}]]);
-    expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(true);
-    expect(states[0]).toBe('began');
-    clock.runDue(200);
-    // A mouse wheel's notch, in lines (Firefox's).
-    expect(wheel(box, {dx: 1, mode: 1, time: 300}).defaultPrevented).toBe(true);
-    expect(states.filter(state => state === 'began')).toHaveLength(2);
+    ).toEqual([]);
+    expect(wheel(box, {trackpad: true, dx: 30, time: 0}).defaultPrevented).toBe(
+      false,
+    );
+    expect(states).toEqual([]);
+  });
+
+  it("never takes a mouse wheel's notches on a pan, even one a caller passes 'discrete': they scroll what is under the pointer (spec:AST-094 FR43, DEC-24)", () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      // @ts-expect-error a pan takes only a trackpad's scroll
+      allowedScrollTypes: ['continuous', 'discrete'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(box, pan));
+    // A notch in lines (Firefox's), a whole 100 px notch, and a 120 tick over
+    // 40 px (Chromium's).
+    expect(wheel(box, {dx: 1, mode: 1, time: 0}).defaultPrevented).toBe(false);
+    clock.runDue(300);
+    expect(wheel(box, {dx: 100, time: 400}).defaultPrevented).toBe(false);
+    clock.runDue(700);
+    expect(
+      wheel(box, {dx: 40, legacy: {x: -120, y: 0}, time: 800}).defaultPrevented,
+    ).toBe(false);
+    expect(states).toEqual([]);
   });
 
   it('leaves a wheel every taker declined to the page from its first step, as with no gesture system: a pan whose shouldReceiveTouch refuses it prevents nothing (spec:AST-094 FR43, FR19)', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({
       direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
       // A Toast declines a wheel a scroller under it can still take.
       shouldReceiveTouch: () => false,
     });
     const states = statesOf(pan);
     detachers.push(host.attach(box, pan));
     const prevented = [0, 16, 32, 48, 64, 80].map(
-      time => wheel(box, {dx: 16, time}).defaultPrevented,
+      time => wheel(box, {trackpad: true, dx: 16, time}).defaultPrevented,
     );
     expect(prevented).toEqual([false, false, false, false, false, false]);
     expect(states).toEqual([]);
@@ -489,17 +513,19 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states).toContain('ended');
   });
 
-  it("releases a mouse wheel's notches still, so position alone decides, and a trackpad's scroll with the fingers' speed where they lift into momentum, still where they stop (coordinator ruling; FR43 is silent)", () => {
-    const {notched, smooth, stopped} = mount(
-      '<div id="notched"></div><div id="smooth"></div><div id="stopped"></div>',
+  it("releases a trackpad's scroll with the fingers' speed where they lift into momentum, and still where they stop (spec:AST-094 FR43, DEC-24)", () => {
+    const {smooth, stopped} = mount(
+      '<div id="smooth"></div><div id="stopped"></div>',
     );
     const released: Record<string, {velocity: number; scroll: number}> = {};
     for (const [key, element] of [
-      ['notched', notched],
       ['smooth', smooth],
       ['stopped', stopped],
     ] as const) {
-      const pan = new PanGestureRecognizer({direction: 'vertical'});
+      const pan = new PanGestureRecognizer({
+        direction: 'vertical',
+        allowedScrollTypes: ['continuous'],
+      });
       pan.addTransitionListener((current, _from, to) => {
         if (to === 'ended') {
           released[key] = {
@@ -510,13 +536,6 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       });
       detachers.push(host.attach(element, pan));
     }
-    // Three quick 100 px notches, as a mouse wheel reports them.
-    for (const time of [0, 16, 32]) {
-      expect(wheel(notched, {dy: 100, time}).defaultPrevented).toBe(true);
-    }
-    clock.runDue(32 + 100);
-    expect(Math.abs(released.notched.velocity)).toBe(0);
-    expect(Math.abs(released.notched.scroll)).toBe(0);
     // A trackpad's fling: steady deltas, then shrinking ones as the fingers
     // lift into momentum. It releases at the lift with the fingers' speed.
     let time = 500;
@@ -536,34 +555,40 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(Math.abs(released.stopped.scroll)).toBe(0);
   });
 
-  it("releases a mouse wheel's notches still whatever the host's clock reads: the release is stamped on the wheels' own times", () => {
+  it("releases a trackpad scroll whose fingers stop still whatever the host's clock reads: the release is stamped on the wheels' own times", () => {
     // The host schedules a gesture's end on its clock, while the arena reads
     // the wheels' own timestamps, which need not share the clock's base: a
     // page whose clock a test fakes, as a sheet's tests do.
-    const {notched} = mount('<div id="notched"></div>');
+    const {pad} = mount('<div id="pad"></div>');
     const released: number[] = [];
-    const pan = new PanGestureRecognizer({direction: 'vertical'});
+    const pan = new PanGestureRecognizer({
+      direction: 'vertical',
+      allowedScrollTypes: ['continuous'],
+    });
     pan.addTransitionListener((current, _from, to) => {
       if (to === 'ended') {
         released.push(current.velocity().y);
       }
     });
-    detachers.push(host.attach(notched, pan));
+    detachers.push(host.attach(pad, pan));
     clock.time = 0;
-    for (const time of [1_000_000, 1_000_016, 1_000_032]) {
+    for (const time of [1_000_000, 1_000_016, 1_000_032, 1_000_048]) {
       const event = new WheelEvent('wheel', {
         bubbles: true,
         cancelable: true,
         composed: true,
         clientX: 20,
         clientY: 20,
-        deltaY: 100,
+        deltaY: 8,
       });
       Object.defineProperty(event, 'timeStamp', {value: time});
-      notched.dispatchEvent(event);
+      // A trackpad's signature: a legacy delta three times the delta.
+      Object.defineProperty(event, 'wheelDeltaX', {value: 0});
+      Object.defineProperty(event, 'wheelDeltaY', {value: -24});
+      pad.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
     }
-    clock.runDue(100);
+    clock.runDue(200);
     expect(released.map(Math.abs)).toEqual([0]);
   });
 
@@ -591,11 +616,13 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     const {box} = mount('<div id="box"></div>');
     const pan = new PanGestureRecognizer({
       direction: 'horizontal',
-      allowedScrollTypes: ['continuous', 'discrete'],
+      allowedScrollTypes: ['continuous'],
     });
     const states = statesOf(pan);
     detachers.push(host.attach(box, pan));
-    const events = [0, 16, 32].map(time => wheel(box, {dy: 12, time}));
+    const events = [0, 16, 32].map(time =>
+      wheel(box, {trackpad: true, dy: 12, time}),
+    );
     expect(events.some(event => event.defaultPrevented)).toBe(false);
     expect(states).toEqual([]);
   });
@@ -641,22 +668,14 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states[0]).toBe('began');
   });
 
-  it("tells a mouse wheel's notches from a trackpad: a pan that allows continuous scrolling only leaves them to the page, one that allows discrete takes them, a line at 40 px", () => {
-    const {smooth, notched} = mount(
-      '<div id="smooth"></div><div id="notched"></div>',
-    );
-    const trackpadOnly = new PanGestureRecognizer({
+  it("tells a mouse wheel's notches from a trackpad: a pan leaves lines and whole notches to the page and takes a trackpad's scroll (spec:AST-094 FR43, DEC-24)", () => {
+    const {smooth} = mount('<div id="smooth"></div>');
+    const pan = new PanGestureRecognizer({
       direction: 'vertical',
       allowedScrollTypes: ['continuous'],
     });
-    const wheelToo = new PanGestureRecognizer({
-      direction: 'vertical',
-      allowedScrollTypes: ['discrete'],
-    });
-    detachers.push(
-      host.attach(smooth, trackpadOnly),
-      host.attach(notched, wheelToo),
-    );
+    const states = statesOf(pan);
+    detachers.push(host.attach(smooth, pan));
     // Lines (Firefox's mouse wheel), and a whole notch in pixels (Chromium's).
     expect(wheel(smooth, {dy: 3, mode: 1, time: 0}).defaultPrevented).toBe(
       false,
@@ -664,13 +683,11 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     clock.runDue(200);
     expect(wheel(smooth, {dy: 100, time: 300}).defaultPrevented).toBe(false);
     clock.runDue(500);
-    const states = statesOf(wheelToo);
-    expect(wheel(notched, {dy: 1, mode: 1, time: 600}).defaultPrevented).toBe(
-      true,
-    );
+    expect(states).toEqual([]);
+    expect(
+      wheel(smooth, {trackpad: true, dy: 12, time: 600}).defaultPrevented,
+    ).toBe(true);
     expect(states[0]).toBe('began');
-    // One line is 40 px, past the 10 px start: the pan moved with it.
-    expect(Math.abs(wheelToo.translation().y)).toBeGreaterThan(0);
   });
 
   it('takes a ctrl-wheel on a pinch, a trackpad pinch or ctrl and a mouse wheel: the scale follows exp(-deltaY / 100), the page does not zoom, and it ends 100 ms after the last wheel', () => {
@@ -714,6 +731,7 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     const added = vi.spyOn(box, 'addEventListener');
     const watcher = new PanGestureRecognizer({
       direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
       claimsTouches: false,
     });
     const states = statesOf(watcher);
@@ -721,21 +739,28 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(
       (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
     ).toEqual([]);
-    expect(wheel(box, {dx: 30, time: 0}).defaultPrevented).toBe(false);
+    expect(wheel(box, {trackpad: true, dx: 30, time: 0}).defaultPrevented).toBe(
+      false,
+    );
     expect(states).toEqual([]);
   });
 
   it('leaves a first wheel already prevented, or one that cannot be cancelled, to the page for its whole gesture', () => {
     const {box, inner} = mount('<div id="box"><div id="inner"></div></div>');
-    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
     const states = statesOf(pan);
     detachers.push(host.attach(box, pan));
     // An app's own handler below the pan prevented the first wheel.
     inner.addEventListener('wheel', event => event.preventDefault(), {
       once: true,
     });
-    wheel(inner, {dx: 30, time: 0});
-    expect(wheel(inner, {dx: 30, time: 16}).defaultPrevented).toBe(false);
+    wheel(inner, {trackpad: true, dx: 30, time: 0});
+    expect(
+      wheel(inner, {trackpad: true, dx: 30, time: 16}).defaultPrevented,
+    ).toBe(false);
     expect(states).toEqual([]);
     clock.runDue(400);
     // A wheel the browser lets no one cancel.
@@ -748,16 +773,26 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       deltaX: 30,
     });
     Object.defineProperty(uncancelable, 'timeStamp', {value: 500});
+    Object.defineProperty(uncancelable, 'wheelDeltaX', {value: -90});
+    Object.defineProperty(uncancelable, 'wheelDeltaY', {value: 0});
     clock.time = 500;
     inner.dispatchEvent(uncancelable);
-    expect(wheel(inner, {dx: 30, time: 516}).defaultPrevented).toBe(false);
+    expect(
+      wheel(inner, {trackpad: true, dx: 30, time: 516}).defaultPrevented,
+    ).toBe(false);
     expect(states).toEqual([]);
   });
 
-  it("stamps a notch gesture's release no later than the press that ends it: a long press right after keeps its own clock (spec:AST-094 FR16)", () => {
+  it("stamps a trackpad gesture's release no later than the press that ends it: a long press right after keeps its own clock (spec:AST-094 FR16)", () => {
     const {box, other} = mount('<div id="box"></div><div id="other"></div>');
     detachers.push(
-      host.attach(box, new PanGestureRecognizer({direction: 'vertical'})),
+      host.attach(
+        box,
+        new PanGestureRecognizer({
+          direction: 'vertical',
+          allowedScrollTypes: ['continuous'],
+        }),
+      ),
     );
     const press = new LongPressGestureRecognizer({name: 'press'});
     const began: number[] = [];
@@ -767,8 +802,10 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       }
     });
     detachers.push(host.attach(other, press));
-    // A mouse wheel's notch.
-    expect(wheel(box, {dy: 100, time: 0}).defaultPrevented).toBe(true);
+    // A trackpad's scroll past the pan's 10 px start.
+    expect(wheel(box, {trackpad: true, dy: 12, time: 0}).defaultPrevented).toBe(
+      true,
+    );
     // A pen comes down 20 ms later, ending the wheel gesture.
     clock.time = 20;
     const down = new PointerEvent('pointerdown', {
@@ -786,7 +823,7 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     clock.runDue(519);
     expect(began).toEqual([]);
     clock.runDue(521);
-    // 500 ms after the pen landed, not after the notch's release time.
+    // 500 ms after the pen landed, not after the scroll's release time.
     expect(began).toHaveLength(1);
   });
 
@@ -850,6 +887,22 @@ describe("a mouse's wheel and a trackpad's lift (spec:AST-094 FR43)", () => {
     const states = statesOf(pan);
     for (let step = 0; step < 3; step++) {
       const event = wheel(box, {dx: 7, time: step * 16});
+      expect(event.defaultPrevented).toBe(false);
+    }
+    expect(states).toEqual([]);
+  });
+
+  it("counts a scroll with Shift held, as Shift+wheel sends, as a mouse's wheel even with a trackpad's deltas: a pan that takes only a trackpad's scroll leaves it to the page (spec:AST-094 FR43)", () => {
+    const {box} = mount('<div id="box"></div>');
+    const pan = trackpadPan(box);
+    const states = statesOf(pan);
+    for (let step = 0; step < 3; step++) {
+      const event = wheel(box, {
+        trackpad: true,
+        shift: true,
+        dx: 7,
+        time: step * 16,
+      });
       expect(event.defaultPrevented).toBe(false);
     }
     expect(states).toEqual([]);
@@ -948,5 +1001,69 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
     expect(changed.map(entry => entry.x).slice(-shrinking.length)).toEqual(
       shrinking.map((_, i) => -30 - 10 * (i + 1)),
     );
+  });
+});
+
+describe("the splitter's gestures on timed trackpad streams (spec:AST-094 FR43, DEC-24)", () => {
+  /** A pan that takes a trackpad's scroll, and how many gestures it began. */
+  function counted(direction: 'horizontal' | 'vertical') {
+    const {box} = mount('<div id="box"></div>');
+    const pan = new PanGestureRecognizer({
+      direction,
+      allowedPointerTypes: [],
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(box, pan));
+    return {box, began: () => states.filter(state => state === 'began').length};
+  }
+
+  /** Fingers, then a shrinking run whose fourth delta reads the lift. */
+  const SWIPE = [12, 12, 12, 12, 11, 10, 9, 8];
+
+  it("counts ten swipes that each start in the last one's momentum as ten gestures", () => {
+    const {box, began} = counted('horizontal');
+    let time = 0;
+    for (let swipe = 0; swipe < 10; swipe++) {
+      // The next swipe's first delta rises against the decay.
+      for (const dx of [...SWIPE, 7, 6, 5]) {
+        clock.runDue(time);
+        wheel(box, {trackpad: true, dx, time});
+        time += 16;
+      }
+    }
+    clock.runDue(time + 500);
+    expect(began()).toBe(10);
+  });
+
+  it('counts ten swipes whose momentum runs out as ten gestures', () => {
+    const {box, began} = counted('horizontal');
+    let time = 0;
+    for (let swipe = 0; swipe < 10; swipe++) {
+      for (const dx of [...SWIPE, 7, 6, 5, 4, 3, 2, 1]) {
+        clock.runDue(time);
+        wheel(box, {trackpad: true, dx, time});
+        time += 16;
+      }
+      time += 400;
+    }
+    clock.runDue(time + 500);
+    expect(began()).toBe(10);
+  });
+
+  it('counts a slow drag with 150 ms pauses as one gesture', () => {
+    const {box, began} = counted('vertical');
+    let time = 0;
+    for (let stretch = 0; stretch < 6; stretch++) {
+      for (let step = 0; step < 5; step++) {
+        clock.runDue(time);
+        wheel(box, {trackpad: true, dy: 4, time});
+        time += 16;
+      }
+      // A 150 ms pause from the stretch's last wheel to the next one's first.
+      time += 150 - 16;
+    }
+    clock.runDue(time + 500);
+    expect(began()).toBe(1);
   });
 });
