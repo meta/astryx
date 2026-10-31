@@ -18,7 +18,6 @@ import type {ReleaseRule} from '../motion/interactive';
 import {solveSpring, toSpring} from '../motion/spring';
 import {
   limitOvershoot,
-  resolveDefaultRelease,
   resolveSheetRelease,
   sheetReleaseRule,
 } from './sheetRelease';
@@ -555,93 +554,6 @@ describe('resolveSheetRelease', () => {
   });
 });
 
-describe("resolveDefaultRelease (under a mouse: today's rule)", () => {
-  const base = {
-    detents: [0, 300],
-    shortestDetentHeight: 340,
-    dismissible: true,
-    startOffset: 300,
-  };
-
-  it('dismisses a downward release projected past 40 % of the shortest detent', () => {
-    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
-    // 420 + 0.6 × 499 = 719 > 300 + 0.4 × 340 = 436.
-    expect(
-      resolveDefaultRelease({
-        ...base,
-        position: 420,
-        velocity: 600,
-        travel: 120,
-        direction: 1,
-      }),
-    ).toMatchObject({kind: 'dismiss', offset: 640});
-    // At rest it dismisses only past the line.
-    expect(
-      resolveDefaultRelease({
-        ...base,
-        position: 430,
-        velocity: 0,
-        travel: 130,
-        direction: 1,
-      }),
-    ).toMatchObject({kind: 'detent', offset: 300});
-    expect(
-      resolveDefaultRelease({
-        ...base,
-        position: 440,
-        velocity: 0,
-        travel: 140,
-        direction: 1,
-      }),
-    ).toMatchObject({kind: 'dismiss'});
-  });
-
-  it('holds the shortest detent instead when a drag may not dismiss', () => {
-    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
-    expect(
-      resolveDefaultRelease({
-        ...base,
-        dismissible: false,
-        position: 420,
-        velocity: 600,
-        travel: 120,
-        direction: 1,
-      }),
-    ).toMatchObject({kind: 'detent', index: 1, offset: 300});
-  });
-
-  it('projects nothing for a gesture under 48 px', () => {
-    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
-    // A fast 20 px nudge up from 300: no projection, back to 300.
-    expect(
-      resolveDefaultRelease({
-        ...base,
-        position: 280,
-        velocity: -2000,
-        travel: 20,
-        direction: -1,
-      }),
-    ).toMatchObject({kind: 'detent', offset: 300});
-  });
-
-  it('never settles past the detent a drag started from, against its direction', () => {
-    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
-    // Up 50 px net from 300, then thrown down at the lift: projected
-    // 250 + 0.6 × 499 = 549 would land on 500, but an upward drag stops at
-    // its start.
-    expect(
-      resolveDefaultRelease({
-        ...base,
-        detents: [0, 300, 500],
-        position: 250,
-        velocity: 600,
-        travel: 50,
-        direction: -1,
-      }),
-    ).toMatchObject({kind: 'detent', offset: 300});
-  });
-});
-
 describe('limitOvershoot', () => {
   /** How far the spring goes past `to`, px. */
   const overshootOf = (from: number, to: number, velocity: number) => {
@@ -691,13 +603,10 @@ describe('sheetReleaseRule (the interactive-transition driver\u2019s rule)', () 
   const context = {
     detents: [LARGE, MEDIUM],
     dismissedOffset: GONE,
-    isUIKit: true,
-    shortestDetentHeight: GONE - MEDIUM,
     startOffset: LARGE,
-    today: {direction: 0, travel: 0, velocity: 0},
   };
 
-  it('is UIKit\u2019s rule under a finger, from where the drag began, for all 134 measured releases', () => {
+  it('is UIKit\u2019s rule for every pointer, from where the drag began, for all 134 measured releases (spec:AST-094 FR36, FR43)', () => {
     for (const [, offset, velocity] of [
       ...UIKIT_RELEASES,
       ...UIKIT_FLICK_RELEASES,
@@ -721,28 +630,10 @@ describe('sheetReleaseRule (the interactive-transition driver\u2019s rule)', () 
     }
   });
 
-  it('is today\u2019s rule under a mouse, and keeps a sheet that cannot be dismissed', () => {
-    expect(matchMedia('(pointer: coarse)').matches).toBe(false);
-    const today = {direction: 1, travel: 300, velocity: 900};
-    const landing = sheetReleaseRule(
-      {position: 700, finger: 700, velocity: 1200},
-      {...context, isUIKit: false, today},
-    );
-    const release = resolveDefaultRelease({
-      detents: [LARGE, MEDIUM],
-      shortestDetentHeight: GONE - MEDIUM,
-      dismissible: true,
-      position: 700,
-      velocity: 900,
-      travel: 300,
-      direction: 1,
-      startOffset: LARGE,
-    });
-    expect(landing.target).toBe(release.offset);
-    expect(landing.outcome).toBe(release.kind);
+  it('keeps a sheet that cannot be dismissed', () => {
     const kept = sheetReleaseRule(
       {position: 700, finger: 700, velocity: 1200},
-      {...context, isUIKit: false, today, dismissedOffset: null},
+      {...context, dismissedOffset: null},
     );
     expect(kept.outcome).toBe('detent');
     expect(kept.exits).toBe(false);

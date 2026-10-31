@@ -282,19 +282,51 @@ function fireCancel(dialog: Element): Event {
 
 // Drive a pointer drag on a grab handle. jsdom PointerEvents don't carry
 // clientY, so dispatch plain events with the coords the handlers read.
+// A mouse drag on a sheet's grab handle, 16 ms between its events. The sheet
+// gets a measured box first (jsdom lays nothing out): the release decides by
+// where the sheet would come to rest against its height. Every pointer's pan
+// begins past its threshold (spec:AST-094 FR17, FR19, FR43), so the press
+// lands that far behind the first move.
+const PAN_THRESHOLD = 10;
+let dragClock = 0;
 function drag(handle: HTMLElement, points: {y: number}[]) {
-  const [down, ...rest] = points;
-  fireEvent.pointerDown(handle, {
-    pointerId: 1,
-    clientY: down.y,
-    button: 0,
-    isPrimary: true,
-  });
-  for (const point of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: point.y});
+  const panel = handle.parentElement;
+  if (panel != null) {
+    vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 16, width: 400, height: 784}),
+    );
   }
-  const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y});
+  dragClock += 10_000;
+  const fire = (
+    type: 'pointerdown' | 'pointermove' | 'pointerup',
+    y: number,
+    time: number,
+  ) => {
+    const event = new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      pointerId: 1,
+      pointerType: 'mouse',
+      isPrimary: true,
+      clientX: 50,
+      clientY: y,
+      button: type === 'pointermove' ? -1 : 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+    });
+    Object.defineProperty(event, 'timeStamp', {value: dragClock + time});
+    fireEvent(handle, event);
+  };
+  const direction =
+    points.length > 1 ? Math.sign(points[1].y - points[0].y) : 0;
+  points.forEach((point, i) =>
+    fire(
+      i === 0 ? 'pointerdown' : 'pointermove',
+      i === 0 ? point.y - direction * PAN_THRESHOLD : point.y,
+      i * 16,
+    ),
+  );
+  fire('pointerup', points[points.length - 1].y, points.length * 16);
 }
 
 function classes(element: Element): string {

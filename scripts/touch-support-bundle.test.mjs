@@ -118,7 +118,27 @@ function filesUnder(dir, pattern) {
  * gives a component its gesture adds that component's import, and each import
  * that reaches it, with a comment naming the gesture.
  */
-const GESTURE_USERS = new Set([]);
+const GESTURE_USERS = new Set([
+  // BottomSheet's drag: the handle's and the body's pans and the press that
+  // catches a settling sheet (BottomSheet/useSheetGestures.ts).
+  'BottomSheet',
+  // Each reaches BottomSheet's drag through the sheet it presents on touch.
+  'ContextMenu', // DropdownMenu's MenuBottomSheet
+  'DateInput', // TouchDateField
+  'DateTimeInput', // TouchDateTimeField
+  'DropdownMenu', // MenuBottomSheet, imported lazily
+  'Layer', // Popover's sheet, imported lazily
+  'Markdown', // Table's context menu
+  'MoreMenu', // DropdownMenu
+  'MultiSelector', // SelectorBottomSheet
+  'Pagination', // Selector
+  'Popover', // its sheet presentation, imported lazily
+  'PowerSearch', // Tokenizer's sheet
+  'Selector', // SelectorBottomSheet
+  'Table', // its context menu
+  'TimeInput', // TouchTimeField
+  'Tokenizer', // TokenizerBottomSheet
+]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
 const NEVER_GESTURE_USERS = ['Button', 'TextInput'];

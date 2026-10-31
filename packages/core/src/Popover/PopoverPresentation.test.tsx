@@ -593,18 +593,40 @@ describe('Popover presentation', () => {
       expect(element).not.toBeNull();
       return element!;
     });
-    // jsdom's PointerEvents carry no clientY, so these carry the coordinates
-    // the sheet's drag reads.
+    // A mouse drag on the handle, 16 ms between its events, on a measured
+    // sheet (jsdom lays nothing out; the release decides by where the sheet
+    // would come to rest against its height). The pan begins past its 10 px
+    // threshold (spec:AST-094 FR17), so the press lands that far above the
+    // first move.
+    const panel = handle.parentElement;
+    if (panel != null) {
+      vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue(
+        DOMRect.fromRect({x: 0, y: 16, width: 400, height: 784}),
+      );
+    }
+    const start = performance.now();
     act(() => {
-      fireEvent.pointerDown(handle, {
-        pointerId: 1,
-        clientY: 0,
-        button: 0,
-        isPrimary: true,
-      });
-      fireEvent.pointerMove(handle, {pointerId: 1, clientY: 40});
-      fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-      fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+      for (const [type, y, time] of [
+        ['pointerdown', -10, 0],
+        ['pointermove', 40, 16],
+        ['pointermove', 120, 32],
+        ['pointerup', 120, 48],
+      ] as const) {
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+          clientX: 50,
+          clientY: y,
+          button: type === 'pointermove' ? -1 : 0,
+          buttons: type === 'pointerup' ? 0 : 1,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: start + time});
+        fireEvent(handle, event);
+      }
     });
     expect(onOpenChange).toHaveBeenLastCalledWith(false);
   });

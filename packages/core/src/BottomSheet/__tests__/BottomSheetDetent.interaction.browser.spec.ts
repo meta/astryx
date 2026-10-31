@@ -78,6 +78,7 @@ import {END_HOLD_MS} from './specConstants';
 import {PROMOTION_LINGER_MS} from '../../motion/animator';
 import {sheet as sheetTable} from '../../motion/uikit/sheet';
 import {springs} from '../../motion/uikit/springs';
+import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {emulateIosWebKit} from './emulateIosWebKit';
 
 const storybook = withStorybook(test);
@@ -151,6 +152,10 @@ const sheetTop = async (sheet: Locator) =>
   sheet.evaluate(el => el.getBoundingClientRect().y);
 
 const SLOW_DRAG_MS = 400;
+
+// The handle's pan begins after this much travel and reports the travel past
+// it, as UIPanGestureRecognizer's translation does.
+const PAN_HYSTERESIS = UIKIT_GESTURES.pan.hysteresis.value;
 
 /**
  * A slow drag that rests one frame before the lift. A still finger sends no
@@ -378,12 +383,14 @@ test('a slow drag follows the finger and settles on the nearest detent', async (
       }
     },
   });
-  // 1:1 with the finger at every move, no pull toward a detent (within the
-  // pixel WebKit rounds touch positions to).
+  // 1:1 with the finger's travel past the pan's hysteresis at every move, no
+  // pull toward a detent (within the pixel WebKit rounds touch positions to).
   for (const {top, finger} of tracked) {
-    expect(Math.abs(top - tallTop - finger)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(top - tallTop - Math.max(0, finger - PAN_HYSTERESIS)),
+    ).toBeLessThanOrEqual(1);
   }
-  expect(restingTop).toBeCloseTo(tallTop + dy, 0);
+  expect(restingTop).toBeCloseTo(tallTop + dy - PAN_HYSTERESIS, 0);
   await waitForRest(sheet);
   expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
   // No long task from the gesture or the settle (the story's own load is
@@ -415,7 +422,8 @@ test('pulled up past the tallest detent, the sheet stretches by the rubber band 
           await frames(page, 1);
           pulled.push({
             top: await sheetTop(sheet),
-            past: handle.y - step.changed[0].y,
+            // The handle's pan reports the travel past its hysteresis.
+            past: Math.max(0, handle.y - step.changed[0].y - PAN_HYSTERESIS),
           });
         }
       },
@@ -454,7 +462,9 @@ test('on Android too, the drag tracks the finger 1:1 and stretches past the tall
   );
   expect(tracked.length).toBeGreaterThan(0);
   for (const {top, finger} of tracked) {
-    expect(Math.abs(top - tallTop - finger)).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(top - tallTop - Math.max(0, finger - PAN_HYSTERESIS)),
+    ).toBeLessThanOrEqual(1);
   }
   await waitForRest(sheet);
   const restTop = await sheetTop(sheet);
@@ -521,7 +531,8 @@ test('the dim follows the sheet: at once under the finger, in lockstep with the 
       },
     },
   );
-  expect(tracked.at(-1)?.top).toBeGreaterThan(halfTop + 90);
+  // 100 px of finger, less the pan's hysteresis.
+  expect(tracked.at(-1)?.top).toBeGreaterThan(halfTop + 80);
   for (const {top, dim} of tracked) {
     expect(dim).toBeCloseTo(dimAt(top), 2);
   }
@@ -730,11 +741,15 @@ test('on Android the dim follows the sheet too, pinned (one touch model)', async
       },
     },
   );
-  expect(tracked.at(-1)?.top).toBeGreaterThan(halfTop + 90);
+  // 100 px of finger, less the pan's hysteresis.
+  expect(tracked.at(-1)?.top).toBeGreaterThan(halfTop + 80);
   for (const {top, opacity, duration} of tracked) {
     expect(opacity).toBeCloseTo(uikitDimAt(top), 1);
-    // Pinned to 0 s: the dim moves with the finger, not behind it.
-    expect(duration).toBe('0s');
+    // Pinned to 0 s once the drag has begun (within the pan's hysteresis
+    // nothing moves): the dim moves with the finger, not behind it.
+    if (top > halfTop + 0.5) {
+      expect(duration).toBe('0s');
+    }
   }
 });
 
@@ -928,8 +943,11 @@ test('a finger catches the settling sheet where it is', async ({page}) => {
   expect(Math.abs(pressed - caughtAt)).toBeLessThanOrEqual(2 * perFrame + 1);
   // ... and it stays there while the finger holds still,
   expect(Math.abs(held - pressed)).toBeLessThan(0.5);
-  // then follows the pull.
-  expect(tops[tops.length - 1]).toBeCloseTo(pressed - 40, -1);
+  // then follows the pull past the pan's hysteresis.
+  expect(tops[tops.length - 1]).toBeCloseTo(
+    pressed - (40 - PAN_HYSTERESIS),
+    -1,
+  );
 });
 
 test('a finger on the drawn sheet catches it even when the hit test lands on the scrim, as WebKit does', async ({
@@ -959,7 +977,9 @@ test('a finger on the drawn sheet catches it even when the hit test lands on the
           clientX: 200,
           clientY,
         });
-        dialog.dispatchEvent(
+        // Whether the page cancelled it: a cancelled touchend sends the
+        // engine no click.
+        return !dialog.dispatchEvent(
           new TouchEvent(kind, {
             bubbles: true,
             cancelable: true,
@@ -967,11 +987,6 @@ test('a finger on the drawn sheet catches it even when the hit test lands on the
             changedTouches: [touch],
           }),
         );
-        if (kind === 'touchend') {
-          dialog.dispatchEvent(
-            new MouseEvent('click', {bubbles: true, cancelable: true}),
-          );
-        }
       },
       {kind: type, clientY: y},
     );
@@ -991,9 +1006,10 @@ test('a finger on the drawn sheet catches it even when the hit test lands on the
   // between the read and the press), and it stays there while held.
   expect(Math.abs(pressed - drawn)).toBeLessThanOrEqual(2 * perFrame + 1);
   expect(Math.abs(held - pressed)).toBeLessThan(0.5);
-  // The lift settles it from there, and the tap's click on the dialog is not
-  // a scrim tap: the sheet stays open.
-  await fire('touchend', pressed + 20);
+  // The lift settles it from there. The tap's engine click would land on the
+  // scrim and close the sheet: the gesture host cancels it, and the sheet
+  // stays open.
+  expect(await fire('touchend', pressed + 20)).toBe(true);
   await waitForRest(sheet);
   await expect(sheet).toBeVisible();
   expect(await sheet.evaluate(el => el.closest('dialog')?.open)).toBe(true);
