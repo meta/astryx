@@ -38,6 +38,12 @@ import {themeProps} from '../utils/themeProps';
 import {useTreeFocusInternal} from '../hooks/useTreeFocus';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
   applyLayoutChangeTransition,
   holdLayoutExit,
   playLayoutChange,
@@ -380,6 +386,53 @@ export function TreeList({
     },
     [animatedLayout, expandedIds],
   );
+  // Focus inside a branch's child group when it collapses would be lost once
+  // the group goes (or turns inert for its exit). It moves to the collapsing
+  // row itself (AR2); focus anywhere else is not moved. Noted in the commit
+  // before the DOM changes, moved from the layout effect below.
+  useInteractionModalityTracking();
+  const collapsingFocusRef = useRef<{focus: FocusWithin; id: string} | null>(
+    null,
+  );
+  const beforeExpansionChange = useCallback(
+    (previous: ReadonlySet<string>) => {
+      collapsingFocusRef.current = null;
+      for (const id of previous) {
+        if (expandedIds.has(id)) {
+          continue;
+        }
+        const group = treeElementRef.current?.querySelector<HTMLElement>(
+          `[data-tree-id="${CSS.escape(id)}"] > [role="group"]`,
+        );
+        const focus = noteFocusWithin(group);
+        // The outermost collapsing row holding focus wins: a row inside it
+        // goes with it.
+        if (focus != null) {
+          collapsingFocusRef.current = {focus, id};
+          break;
+        }
+      }
+      if (animatedLayout != null) {
+        measureChanges(previous);
+      }
+    },
+    [animatedLayout, expandedIds, measureChanges],
+  );
+  useLayoutEffect(() => {
+    const collapsing = collapsingFocusRef.current;
+    collapsingFocusRef.current = null;
+    if (collapsing == null) {
+      return;
+    }
+    const row = treeElementRef.current?.querySelector<HTMLElement>(
+      `[data-tree-id="${CSS.escape(collapsing.id)}"]`,
+    );
+    moveFocusLeftBehind(
+      collapsing.focus,
+      row,
+      row?.querySelector(':scope > [role="group"]') ?? null,
+    );
+  }, [expandedIds]);
   // Without a handle the chevrons keep the theme's own turn: a spring a
   // handle set stays only while it is passed (`spec:AST-105` FR2).
   useLayoutEffect(() => {
@@ -602,12 +655,10 @@ export function TreeList({
           {header}
         </div>
       )}
-      {animatedLayout != null && (
-        <LayoutChangeSnapshot
-          value={expandedIds}
-          onBeforeChange={measureChanges}
-        />
-      )}
+      <LayoutChangeSnapshot
+        value={expandedIds}
+        onBeforeChange={beforeExpansionChange}
+      />
       <ul
         ref={treeRef}
         role="tree"

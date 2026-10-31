@@ -1735,3 +1735,48 @@ describe('TreeList', () => {
     expect(items[0]).toHaveAttribute('tabindex', '0');
   });
 });
+
+describe('TreeList collapse focus (AR2)', () => {
+  function Example({isExpanded}: {isExpanded: boolean}) {
+    return (
+      <>
+        <TreeList
+          aria-label="Files"
+          items={[
+            {
+              id: 'src',
+              label: 'src',
+              isExpanded,
+              children: [{id: 'index', label: 'index.ts'}],
+            },
+            {id: 'readme', label: 'README.md'},
+          ]}
+        />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+  const row = (id: string) =>
+    document.querySelector<HTMLElement>(`[data-tree-id="${id}"]`);
+
+  it('moves focus inside a collapsing branch to its row', () => {
+    const {rerender} = render(<Example isExpanded />);
+    row('index')?.focus();
+    expect(row('index')).toHaveFocus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('index')).toBeNull();
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('moves no focus that is outside the collapsing branch', () => {
+    const {rerender} = render(<Example isExpanded />);
+    row('readme')?.focus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('readme')).toHaveFocus();
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(<Example isExpanded />);
+    rerender(<Example isExpanded={false} />);
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+  });
+});
