@@ -1234,6 +1234,36 @@ describe('swipeActions', () => {
       expect(onClick).not.toHaveBeenCalled();
     });
 
+    it('keeps a disabled entry focusable but inert on an open row (spec:AST-085 FR1, FR2)', () => {
+      const onActivate = vi.fn();
+      const onClick = vi.fn();
+      const {row} = renderRow({
+        leading: [{label: 'Unread', onActivate, isDisabled: true}],
+        onClick,
+      });
+      touch(row, 'pointerDown', 10);
+      touch(row, 'pointerMove', 30);
+      touch(row, 'pointerMove', 45);
+      touch(row, 'pointerMove', 60);
+      touch(row, 'pointerUp', 60);
+      settled();
+      expect(travelOf(row)).toBe('72px');
+      const button = screen.getByRole('button', {name: 'Unread'});
+      // Exposed through aria-disabled, never the native attribute, so it
+      // keeps its place in the focus order.
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).not.toHaveAttribute('disabled');
+      button.focus();
+      expect(button).toHaveFocus();
+      // Inert: the click Enter and Space send runs nothing, leaves the row
+      // open, and does not reach the row's own primary.
+      fireEvent.click(button);
+      settled();
+      expect(onActivate).not.toHaveBeenCalled();
+      expect(travelOf(row)).toBe('72px');
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
     it('holds the row out after a tapped entry with hasRemoval', () => {
       const onActivate = vi.fn();
       const {row} = renderRow({
