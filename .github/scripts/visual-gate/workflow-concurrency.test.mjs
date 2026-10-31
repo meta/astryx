@@ -64,7 +64,11 @@ describe('PR report and deployment workflow contracts', () => {
       expect(value.jobs[job].concurrency['cancel-in-progress']).toBe(false);
     }
     expect(value.jobs.comment.needs).toBe('resolve');
-    expect(value.jobs.comment.permissions.deployments).toBeUndefined();
+    // The comment job reads this head's preview state once; no job runs on a
+    // deployment event, and none waits for one.
+    expect(value.jobs.comment.permissions.deployments).toBe('read');
+    // It writes no repository contents.
+    expect(value.jobs.comment.permissions.contents).toBeUndefined();
     expect(workflow('pr-comment.yml')).toContain(
       'validateAnalysisMetadata(metadata, {',
     );
@@ -89,7 +93,7 @@ describe('PR report and deployment workflow contracts', () => {
       value.indexOf('  pr-rtl-shard:'),
     );
     expect(visual).toContain(
-      '[build-storybook, maintenance-request, visual-scout]',
+      '[build-storybook, maintenance-request, visual-scout, run-labels]',
     );
     expect(visual).toContain(
       'name: storybook-${{ needs.build-storybook.outputs.short_hash }}',
@@ -137,8 +141,12 @@ describe('PR report and deployment workflow contracts', () => {
       'utf8',
     );
     expect(reconciler).toContain('branchPreviewOrigin(identity)');
-    expect(reconciler).toContain('`${previewOrigin}/storybook/`');
-    expect(reconciler).toContain('`${previewOrigin}/sandbox/`');
+    const status = fs.readFileSync(
+      path.join(ROOT, '.github/scripts/lib/pr-status.js'),
+      'utf8',
+    );
+    expect(status).toContain('[Storybook](${origin}/storybook/)');
+    expect(status).toContain('[Sandbox](${origin}/sandbox/)');
   });
 
   it('publishes only the static compatibility landing to GitHub Pages', () => {

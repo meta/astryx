@@ -37,8 +37,8 @@ function step(job, name) {
 describe('Node-tooling CI routing', () => {
   it('publishes the tooling output from the trusted-base classifier', () => {
     // ci.yml jobs each run the scope action, which reads the classifier and
-    // both dependencies from the PR's base commit.
-    expect(scopeAction).toContain('ref: pr.base.sha');
+    // both dependencies from the PR's base commit, in one GraphQL query.
+    expect(scopeAction).toContain('`${pr.base.sha}:${file}`');
     for (const file of [
       '.github/scripts/change-scope.cjs',
       '.github/scripts/knowledge-paths.cjs',
@@ -263,15 +263,17 @@ describe('Node-tooling CI routing', () => {
     const install = step(job, "Install the merge base's dependencies");
     expect(install.run).toBe('pnpm install --frozen-lockfile');
     expect(install.if).not.toContain('steps.download');
-    // Only Main's own run on main for the merge-base commit counts.
+    // Only Main's own run on main for the merge-base commit counts; both
+    // merge-base lookups share one helper (main-artifact.test.mjs).
     const find = step(job, "Find main's build of the merge base").with.script;
-    expect(find).toContain("candidate.workflow_run?.head_branch === 'main'");
-    expect(find).toContain(
-      'candidate.workflow_run?.head_sha === process.env.BASE_SHA',
-    );
-    expect(find).toContain(
-      'candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id',
-    );
+    expect(find).toContain('.github/scripts/lib/main-artifact.cjs');
+    expect(find).toContain('sha: process.env.BASE_SHA');
+    const packageFind = step(
+      ci.jobs['build-storybook'],
+      "Find main's package size for the merge base",
+    ).with.script;
+    expect(packageFind).toContain('.github/scripts/lib/main-artifact.cjs');
+    expect(packageFind).toContain('sha: process.env.BASE_SHA');
   });
 
   it('builds no Sandbox and builds Storybook once per pull-request run', () => {
