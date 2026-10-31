@@ -56,10 +56,11 @@ Consumer usage lives in `HoverCard.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`; `pressTrigger` defaults to `none`, which
-  keeps every shipped behavior
+- Released default preserved: the defaults stay `pressTrigger="none"` and
+  `touchTrigger="auto"`, but FR5 changes what a tap does under `touchTrigger="auto"`: a tap that already acts does not open the layer, where the released `auto` opens it on any trigger that does not itself act, and a disabled control's reason opens on a tap. That change ships in a patch as `[fix]` under `spec:AST-017` FR53, because it restores `architecture:interaction-modality` INV4 (a tap on an action trigger performs the action, and every modality reaches the reason); a tap destination INV4 does not cover would ship as a `[feat]` patch
 - Compatibility class: additive `pressTrigger`; `touchTrigger="tap"` is
-  deprecated; without `pressTrigger`, no runtime, DOM, or styling change
+  deprecated; FR5's `auto` change above is caller-visible; no DOM or styling
+  change without `pressTrigger`
 - Controlled/uncontrolled behavior: uncontrolled by default; `isOpen` forces the
   state, and a controlled card reports close requests through
   `onOpenChange(false)` without closing itself (FR7); under
@@ -67,7 +68,7 @@ Consumer usage lives in `HoverCard.doc.mjs`.
   value through `onOpenChange` and does not change the state itself (FR9)
 - Migration decision: `component:Tooltip` DEP-0016, then CLN-0024 in the next
   minor; both cover HoverCard's and `useHoverCard`'s `touchTrigger`, with the
-  same codemods
+  same codemods, and CLN-0024's `auto` keeps FR5's rule
 
 Consumer migration instructions belong in consumer docs and release notes.
 
