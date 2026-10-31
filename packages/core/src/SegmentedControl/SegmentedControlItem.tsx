@@ -83,7 +83,14 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
-    color: colorVars['--color-text-secondary'],
+    // Primary, not secondary: the container paints a translucent
+    // --color-neutral overlay, so the effective segment background tracks the
+    // consumer's page background. Secondary (#ababb0 in dark themes) drops to
+    // 3.66:1 over it on mid-tone backdrops — below the 4.5:1 the component
+    // doc requires for labels — while primary holds >=7:1 wherever the
+    // page's own text passes. Selection stays carried by the surface fill,
+    // shadow, and weight, not by dimming the label.
+    color: colorVars['--color-text-primary'],
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',

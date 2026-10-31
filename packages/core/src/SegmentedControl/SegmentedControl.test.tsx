@@ -904,6 +904,61 @@ describe('forced colors (WCAG 1.4.11)', () => {
   });
 });
 
+// The container surface is a translucent --color-neutral overlay, so the
+// effective segment background tracks the consumer's page background. A
+// secondary-token label drops to 3.66:1 over it on mid-tone dark backdrops
+// (#ababb0 on #4d4d51, measured in #6469), below the documented 4.5:1
+// requirement. jsdom cannot compute contrast, so the label token is pinned
+// in the compiled output: primary holds >=7:1 wherever the page's own text
+// passes, and themes that want a dimmed label can override the target.
+describe('label contrast (WCAG 1.4.3)', () => {
+  // The container surface is a translucent --color-neutral overlay, so the
+  // effective segment background tracks the consumer's page background. A
+  // secondary-token label drops to 3.66:1 over it on mid-tone dark backdrops
+  // (#ababb0 on #4d4d51, measured in #6469), below the 4.5:1 the component
+  // doc requires for every label. jsdom cannot compute contrast over the
+  // composited surface, so the label color token is pinned instead: primary
+  // holds >=7:1 wherever the page's own text passes, and selection stays
+  // carried by the surface fill, shadow, and weight. The StyleX dev runtime
+  // injects one rule per declaration, so the color declaration is found by
+  // matching the rendered element's own classes against the stylesheet.
+  function colorDeclarationsFor(el: Element): string[] {
+    const classes = Array.from(el.classList);
+    const found: string[] = [];
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRule[];
+      try {
+        rules = Array.from(sheet.cssRules);
+      } catch {
+        continue;
+      }
+      for (const rule of rules) {
+        const selector = (rule as CSSStyleRule).selectorText;
+        if (selector != null && classes.some(c => selector.includes(c))) {
+          found.push(
+            ...(rule.cssText.match(/color:\s*var\(--color-text-[a-z]+\)/g) ??
+              []),
+          );
+        }
+      }
+    }
+    return found;
+  }
+
+  it('compiles the unselected label to the primary text token, never secondary', () => {
+    render(
+      <SegmentedControl value="grid" onChange={() => {}} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+    const unselected = screen.getByRole('radio', {name: 'List'});
+    const colors = colorDeclarationsFor(unselected);
+    expect(colors).toContain('color: var(--color-text-primary)');
+    expect(colors).not.toContain('color: var(--color-text-secondary)');
+  });
+});
+
 describe('pressed state', () => {
   it('paints the pressed overlay on a segment while it is pressed', () => {
     render(
