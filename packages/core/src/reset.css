@@ -63,6 +63,18 @@
     border-color: currentColor;
   }
 
+  /*
+   * The same box model for `::backdrop`, the layer behind a modal dialog, a
+   * popover or a fullscreen element, which `*` does not reach. It gets its
+   * own rule, so a browser that does not know it drops only this one.
+   */
+  :where(*)::backdrop {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: currentColor;
+  }
+
   /* ===========================================================================
      Document
      =========================================================================== */
