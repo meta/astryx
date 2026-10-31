@@ -270,16 +270,10 @@ describe('Node-tooling CI routing', () => {
     expect(analyze).toContain(
       '--base-record .component-size-base/component-size.json',
     );
-    // Only Main's own run on main for the merge-base commit counts.
-    expect(find.with.script).toContain(
-      "candidate.workflow_run?.head_branch === 'main'",
-    );
-    expect(find.with.script).toContain(
-      'candidate.workflow_run?.head_sha === process.env.BASE_SHA',
-    );
-    expect(find.with.script).toContain(
-      'candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id',
-    );
+    // Only Main's own run on main for the merge-base commit counts, through
+    // the shared lookup helper (main-artifact.test.mjs).
+    expect(find.with.script).toContain('.github/scripts/lib/main-artifact.cjs');
+    expect(find.with.script).toContain('sha: process.env.BASE_SHA');
     // The lookup and download come before the analysis that reads them.
     const names = job.steps.map(entry => entry.name);
     expect(
