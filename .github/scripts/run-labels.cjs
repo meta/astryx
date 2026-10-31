@@ -16,6 +16,10 @@
 
 'use strict';
 
+// The review gate's own write-access rule, so a label and a review answer the
+// same question the same way (custom write-based roles report `write`).
+const {hasWritePermission} = require('./review-signal-decision.cjs');
+
 /** Suites a pull request can opt into, by output name and label. */
 const SUITE_LABELS = Object.freeze({
   visual: 'ci:run-visual',
@@ -23,14 +27,11 @@ const SUITE_LABELS = Object.freeze({
   rtl: 'ci:run-rtl',
 });
 
-const WRITE_ROLES = new Set(['admin', 'maintain', 'write']);
-
 /** Display names for the pull-request comment's not-run sentence. */
 const SUITE_NAMES = Object.freeze({
   visual: 'Visual',
   a11y: 'Accessibility',
   rtl: 'RTL',
-  perf: 'Perf',
 });
 
 /**
@@ -84,39 +85,52 @@ async function decideRunLabels({github, context, core}) {
     if (wanted.length > 0) {
       const {owner, repo} = context.repo;
       let labelers = new Map();
-      const roles = new Map();
       try {
         labelers = await newestLabelers(github, {
           owner,
           repo,
           number: pr.number,
         });
-        for (const [, label] of wanted) {
-          const login = labelers.get(label);
-          if (login != null && !roles.has(login)) {
+      } catch (error) {
+        core.warning(
+          `Could not read who applied the ci:run labels: ${error.message}`,
+        );
+      }
+      // One lookup per labeler; a failed lookup denies only that labeler's
+      // suites.
+      const access = new Map();
+      const accessOf = async login => {
+        if (!access.has(login)) {
+          try {
             const {data} =
               await github.rest.repos.getCollaboratorPermissionLevel({
                 owner,
                 repo,
                 username: login,
               });
-            roles.set(login, data.role_name);
+            access.set(login, {
+              writes: hasWritePermission(data),
+              permission: data?.permission ?? null,
+            });
+          } catch (error) {
+            core.warning(`Could not check ${login}'s access: ${error.message}`);
+            access.set(login, {writes: false, permission: null});
           }
         }
-      } catch (error) {
-        core.warning(
-          `Could not check who applied the ci:run labels: ${error.message}`,
-        );
-      }
+        return access.get(login);
+      };
       for (const [suite, label] of wanted) {
         const login = labelers.get(label) ?? null;
-        const role = login == null ? null : (roles.get(login) ?? null);
-        decisions[suite] = WRITE_ROLES.has(role);
-        if (!decisions[suite]) {
+        const {writes, permission} =
+          login == null
+            ? {writes: false, permission: null}
+            : await accessOf(login);
+        decisions[suite] = writes;
+        if (!writes) {
           core.notice(
             login == null
               ? `No ${label} label event could be read; the ${suite} suite does not run.`
-              : `${label} was applied by ${login} (${role ?? 'unknown role'}); only write, maintain or admin access runs the ${suite} suite.`,
+              : `${label} was applied by ${login} (${permission ?? 'unknown access'}); only write access runs the ${suite} suite.`,
           );
         }
       }

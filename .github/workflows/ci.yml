@@ -899,7 +899,9 @@ jobs:
       - name: Check out the decision script
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/scripts/run-labels.cjs
+          sparse-checkout: |
+            .github/scripts/run-labels.cjs
+            .github/scripts/review-signal-decision.cjs
           sparse-checkout-cone-mode: false
           path: .run-labels
           persist-credentials: false
