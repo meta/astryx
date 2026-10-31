@@ -787,7 +787,10 @@ describe('concern routing', () => {
       short.some(line => /^ {2}Records: .*component:Popover/.test(line)),
     ).toBe(true);
     expect(short.join('\n')).not.toContain('via ');
-    expect(formatResult(result, {records: true})).toContain('via ');
+    const long = formatResult(result, {records: true}).split('\n');
+    expect(long.join('\n')).toContain('via ');
+    // --records prints the same concern claims first.
+    expect(long.slice(1, 3)).toEqual(short.slice(1, 3));
   });
 });
 

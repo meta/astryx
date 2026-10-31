@@ -761,10 +761,39 @@ function trackedFiles(root) {
     .filter(Boolean);
 }
 
+/**
+ * The claims a diff's concerns route, grouped per record and concern, with
+ * the line that matched. Both views print them first.
+ */
+function formatConcernLines(result) {
+  if (result.concernClaims.length === 0) return [];
+  const lines = [];
+  lines.push('  Follow first (the change touches a shared concern):');
+  const byConcern = new Map();
+  for (const item of result.concernClaims) {
+    const key = `${item.recordId}\0${item.concern}`;
+    const entry = byConcern.get(key) ?? {...item, claimIds: []};
+    entry.claimIds.push(item.claimId);
+    byConcern.set(key, entry);
+  }
+  for (const entry of byConcern.values()) {
+    const where = entry.evidence[0];
+    const shared =
+      entry.utilities.length > 0
+        ? `; shared: ${entry.utilities.join(', ')}`
+        : '';
+    lines.push(
+      `    ${entry.recordId}  ${entry.claimIds.join(', ')}  ← ${entry.concern} (line ${where.line}: ${where.matched}${shared})`,
+    );
+  }
+  return lines;
+}
+
 export function formatResult(result, {records: listRecords = false} = {}) {
   if (!listRecords) return formatShortResult(result);
   const lines = [
     `${result.file}${result.exists ? '' : ' (not in the working tree)'}`,
+    ...formatConcernLines(result),
   ];
   if (result.records.length === 0) {
     lines.push(
@@ -830,26 +859,7 @@ function formatShortResult(result) {
   const lines = [
     `${result.file}${result.exists ? '' : ' (not in the working tree)'}`,
   ];
-  if (result.concernClaims.length > 0) {
-    lines.push('  Follow first (the change touches a shared concern):');
-    const byConcern = new Map();
-    for (const item of result.concernClaims) {
-      const key = `${item.recordId}\0${item.concern}`;
-      const entry = byConcern.get(key) ?? {...item, claimIds: []};
-      entry.claimIds.push(item.claimId);
-      byConcern.set(key, entry);
-    }
-    for (const entry of byConcern.values()) {
-      const where = entry.evidence[0];
-      const shared =
-        entry.utilities.length > 0
-          ? `; shared: ${entry.utilities.join(', ')}`
-          : '';
-      lines.push(
-        `    ${entry.recordId}  ${entry.claimIds.join(', ')}  ← ${entry.concern} (line ${where.line}: ${where.matched}${shared})`,
-      );
-    }
-  }
+  lines.push(...formatConcernLines(result));
   const byRecord = new Map();
   for (const claim of result.globalClaims) {
     const list = byRecord.get(claim.recordId) ?? [];
