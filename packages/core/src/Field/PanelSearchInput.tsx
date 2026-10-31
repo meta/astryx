@@ -39,16 +39,14 @@
  * that use it, not public API.
  */
 
-import {useCallback, useState, type Ref} from 'react';
+import {useCallback, useRef, useState, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {Icon} from '../Icon/Icon';
 import {InputClearButton} from './InputClearButton';
 import {mergeProps} from '../utils/mergeProps';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   colorVars,
   durationVars,
@@ -220,14 +218,16 @@ export function PanelSearchInput({
   // stays `:focus-visible`, this only narrows it.
   const [isKeyboardFocus, setIsKeyboardFocus] = useState(false);
 
-  useInteractionModalityTracking();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const mergedInputRef = useMergedRefs(ref, inputRef);
+  const readModality = useInteractionModalityTracking(inputRef);
 
   const handleFocus = useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
-      setIsKeyboardFocus(getInteractionModality() === 'keyboard');
+      setIsKeyboardFocus(readModality() === 'keyboard');
       onFocus?.(e);
     },
-    [onFocus],
+    [onFocus, readModality],
   );
 
   const handleBlur = useCallback(
@@ -272,7 +272,7 @@ export function PanelSearchInput({
         )}>
         <Icon icon="search" size="sm" color="secondary" xstyle={styles.icon} />
         <input
-          ref={ref}
+          ref={mergedInputRef}
           type="text"
           aria-label={label}
           placeholder={placeholder}

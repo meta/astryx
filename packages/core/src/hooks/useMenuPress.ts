@@ -340,8 +340,8 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   // The highlight, and the hover focus of the rows in this menu, follow the
-  // last input, which this tracks for the document.
-  useInteractionModalityTracking();
+  // last input, which this tracks for the menu's own document.
+  useInteractionModalityTracking(options.menuRef);
 
   const gestureRef = useRef<MenuPressGesture<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);

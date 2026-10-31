@@ -711,7 +711,7 @@ function StandaloneBottomSheet({
     [finalFocusRef, hasScrim, isOpen],
   );
 
-  useInteractionModalityTracking();
+  useInteractionModalityTracking(dialogRef);
   useScrollLock(shouldPresent && hasScrim);
   useDevWarning(
     'BottomSheet',

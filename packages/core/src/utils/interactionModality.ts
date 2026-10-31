@@ -5,10 +5,11 @@
 /**
  * @file interactionModality.ts
  * @input Global pointerdown/keydown events
- * @output `useInteractionModalityTracking()` activates document-lifetime tracking;
- *   `getInteractionModality()` reads how the user last interacted;
- *   `trackInteractionModalityIn(doc)` and `getInteractionModality(doc)` do the
- *   same for a second document
+ * @output `useInteractionModalityTracking(ref?)` activates tracking for the page
+ *   and, when the ref's element lives in a second document, for that document,
+ *   and returns a reader for the element's own document;
+ *   `getInteractionModality(target?)` reads how the user last interacted in a
+ *   node's or document's own document (the page by default)
  * @position Internal document-wide singleton; used where `:focus-visible` alone
  *   is too broad
  *
@@ -31,12 +32,14 @@
  * between consumers is not lost. A second document (a same-origin iframe, a
  * Document Picture-in-Picture window) gets its own store when a component
  * tracks it, since input there never reaches the page's listeners; its
- * listeners stay only while a consumer there is mounted. Importing this module
+ * listeners stay only while a consumer there is mounted. A component passes its
+ * element's ref to the one hook and gets both; it never tracks a document
+ * itself. Importing this module
  * has no DOM side effects, and server rendering keeps the keyboard-safe
  * default.
  */
 
-import {useEffect} from 'react';
+import {useCallback, useEffect, useRef, type RefObject} from 'react';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
@@ -86,15 +89,20 @@ function getStore(targetDocument: Document): InteractionModalityStore {
   return store;
 }
 
-function trackInteractionModality(): () => void {
-  if (typeof document === 'undefined') {
-    return () => {};
+/**
+ * Start or stop hearing a document's input. The one place that listens, so a
+ * change in how input is heard touches nothing else.
+ */
+function setListening(
+  targetDocument: Document,
+  store: InteractionModalityStore,
+  isListening: boolean,
+): void {
+  if (store.isListening === isListening) {
+    return;
   }
-
-  const targetDocument = document;
-  const store = getStore(targetDocument);
-  if (!store.isListening) {
-    store.isListening = true;
+  store.isListening = isListening;
+  if (isListening) {
     targetDocument.addEventListener('pointerdown', store.onPointerDown, {
       capture: true,
       passive: true,
@@ -103,16 +111,26 @@ function trackInteractionModality(): () => void {
       capture: true,
       passive: true,
     });
+  } else {
+    targetDocument.removeEventListener('pointerdown', store.onPointerDown, {
+      capture: true,
+    });
+    targetDocument.removeEventListener('keydown', store.onKeyDown, {
+      capture: true,
+    });
   }
+}
+
+function trackInteractionModality(): () => void {
+  if (typeof document === 'undefined') {
+    return () => {};
+  }
+
+  setListening(document, getStore(document), true);
 
   // The document owns these listeners once activated. Removing them when the
   // last consumer unmounts would miss input before the next consumer mounts.
   return () => {};
-}
-
-/** Activate shared modality tracking when the first consumer mounts. */
-export function useInteractionModalityTracking(): void {
-  useEffect(() => trackInteractionModality(), []);
 }
 
 /**
@@ -120,28 +138,15 @@ export function useInteractionModalityTracking(): void {
  * app renders into a same-origin iframe or a Document Picture-in-Picture
  * window gets input there that never reaches the page's listeners. The first
  * consumer installs the document's listener pair and the last one's cleanup
- * removes it. Read the value with `getInteractionModality(doc)`. The page's
- * own document keeps its document-lifetime listeners.
+ * removes it. The page's own document keeps its document-lifetime listeners.
  */
-export function trackInteractionModalityIn(
-  targetDocument: Document,
-): () => void {
+function trackInteractionModalityIn(targetDocument: Document): () => void {
   if (typeof document !== 'undefined' && targetDocument === document) {
     return trackInteractionModality();
   }
   const store = getStore(targetDocument);
   store.consumers = (store.consumers ?? 0) + 1;
-  if (store.consumers === 1) {
-    store.isListening = true;
-    targetDocument.addEventListener('pointerdown', store.onPointerDown, {
-      capture: true,
-      passive: true,
-    });
-    targetDocument.addEventListener('keydown', store.onKeyDown, {
-      capture: true,
-      passive: true,
-    });
-  }
+  setListening(targetDocument, store, true);
   let isReleased = false;
   return () => {
     if (isReleased) {
@@ -150,21 +155,86 @@ export function trackInteractionModalityIn(
     isReleased = true;
     store.consumers = (store.consumers ?? 1) - 1;
     if (store.consumers === 0) {
-      store.isListening = false;
-      targetDocument.removeEventListener('pointerdown', store.onPointerDown, {
-        capture: true,
-      });
-      targetDocument.removeEventListener('keydown', store.onKeyDown, {
-        capture: true,
-      });
+      setListening(targetDocument, store, false);
     }
   };
 }
 
-/** How the user last interacted with the page, or with `targetDocument`. */
+/**
+ * Activate shared modality tracking when the first consumer mounts, and read
+ * it. Pass the component's element ref: when the element renders into a
+ * second document (a same-origin iframe, a Document Picture-in-Picture
+ * window), that document is tracked too while the component is mounted, and
+ * the returned reader answers for the element's own document rather than the
+ * page's. The component makes this one call and needs no effect of its own.
+ */
+export function useInteractionModalityTracking(
+  elementRef?: RefObject<Element | null>,
+): () => InteractionModality {
+  useEffect(() => trackInteractionModality(), []);
+
+  // The one owner of this component's hold on a second document: attach,
+  // `null` detachment and replacement all go through `hold`, which releases
+  // the old document before it tracks the new one (INV6), and unmount
+  // releases it (INV5).
+  const holdRef = useRef<SecondDocumentHold | null>(null);
+  holdRef.current ??= createSecondDocumentHold();
+  const hold = holdRef.current;
+  // Synchronizes the per-document listener registry with the element's
+  // CURRENT owner document. It re-reads the ref after every commit, so a node
+  // that is detached, replaced or moved to another document re-targets the
+  // hold. `hold` is idempotent, so an unchanged commit and a StrictMode replay
+  // are free. A callback ref cannot do this here: useMenuPress, useTouchTrigger
+  // and useFocusReturnVisibility receive object refs their callers own.
+  useEffect(() => {
+    hold(elementRef?.current?.ownerDocument ?? null);
+  });
+  useEffect(() => () => hold(null), [hold]);
+
+  return useCallback(
+    () => getInteractionModality(elementRef?.current),
+    [elementRef],
+  );
+}
+
+/** Holds at most one second document, re-targeted idempotently. */
+type SecondDocumentHold = (ownerDocument: Document | null) => void;
+
+function createSecondDocumentHold(): SecondDocumentHold {
+  let heldDocument: Document | null = null;
+  let release: (() => void) | null = null;
+  return ownerDocument => {
+    const secondDocument =
+      ownerDocument != null &&
+      (typeof document === 'undefined' || ownerDocument !== document)
+        ? ownerDocument
+        : null;
+    if (secondDocument === heldDocument) {
+      return;
+    }
+    release?.();
+    release =
+      secondDocument == null
+        ? null
+        : trackInteractionModalityIn(secondDocument);
+    heldDocument = secondDocument;
+  };
+}
+
+/**
+ * How the user last interacted with the page, or in `target`'s own document
+ * (a document, or any node in one: an element in a same-origin iframe or a
+ * Document Picture-in-Picture window answers for that document).
+ */
 export function getInteractionModality(
-  targetDocument?: Document,
+  target?: Document | Node | null,
 ): InteractionModality {
+  const targetDocument =
+    target == null
+      ? null
+      : target.nodeType === 9
+        ? (target as Document)
+        : target.ownerDocument;
   if (targetDocument != null) {
     return getStore(targetDocument).modality;
   }
@@ -183,3 +253,6 @@ export function __resetInteractionModalityForTest(): void {
 /** Test-only: activate the tracker without rendering a hook. */
 export const __startInteractionModalityTrackingForTest =
   trackInteractionModality;
+
+/** Test-only: track a second document without rendering a hook. */
+export const __trackInteractionModalityInForTest = trackInteractionModalityIn;

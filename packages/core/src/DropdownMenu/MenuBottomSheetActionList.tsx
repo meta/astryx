@@ -19,7 +19,7 @@ import {ListItem} from '../List/ListItem';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
-import {getInteractionModality} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import type {DropdownMenuItemData, DropdownMenuOption} from './DropdownMenu';
 import {isModifiedClick} from './menuItemRoles';
 
@@ -68,6 +68,7 @@ export function MenuBottomSheetActionList({
   onOpenSubmenu: (item: DropdownMenuItemData) => void;
 }) {
   const listRef = useRef<HTMLUListElement>(null);
+  const readModality = useInteractionModalityTracking(listRef);
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
@@ -90,7 +91,7 @@ export function MenuBottomSheetActionList({
         event.preventDefault();
         return;
       }
-      if (getInteractionModality() === 'pointer') {
+      if (readModality() === 'pointer') {
         (event.currentTarget as HTMLElement).blur();
       }
       if (isSubmenu) {
