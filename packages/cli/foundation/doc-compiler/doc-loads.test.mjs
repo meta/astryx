@@ -65,17 +65,18 @@ const RUNNERS = {
     sites: ['importThemeArtifact'],
   },
   'api/theme/build/build.mjs': {
-    runs: "theme source modules, through jiti; the project's installed Core",
+    runs: "theme source modules, through jiti; the project's installed Core; a require that resolves the CLI's own Core root entry",
     sites: [
       '.evalModule() ×2',
       '.import()',
       'createJiti ×5',
-      'import(<computed>) ×3',
+      'createRequire',
+      'import(<computed>) ×2',
     ],
   },
   'api/theme/build/core-interception.mjs': {
-    runs: "@astryxdesign/core as a theme's CommonJS dependencies require it, to wrap defineTheme",
-    sites: ['require(<computed>)'],
+    runs: "@astryxdesign/core/theme beside a theme whose CommonJS dependencies may require Core, to wrap defineTheme; Module._load is watched during the load so the root is wrapped only as the load requires it; Core's root entry, only when a theme module requires it; require.resolve for Core's entries",
+    sites: ['module', 'require ×2', 'require(<computed>) ×2'],
   },
   'api/upgrade/_adapter.mjs': {
     runs: 'the commands a codemod declares as its post-codemod hooks',

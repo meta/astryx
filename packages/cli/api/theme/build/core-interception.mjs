@@ -67,7 +67,7 @@
  * SYNC: packages/cli/api/theme/build/build.mjs (importThemeModule)
  */
 
-import {createRequire} from 'node:module';
+import Module, {createRequire} from 'node:module';
 import * as path from 'node:path';
 
 import {findInstalledPackage} from '../../../foundation/fs/paths.mjs';
@@ -222,6 +222,52 @@ function mergeGenerativeAxes(inherited, own) {
 }
 
 /**
+ * The file `specifier` resolves to through `require`, or null when Core has
+ * no such entry: no file where its `exports` points (`MODULE_NOT_FOUND`), or
+ * no such subpath in them (`ERR_PACKAGE_PATH_NOT_EXPORTED`). Any other error
+ * is thrown.
+ * @param {NodeJS.Require} require
+ * @param {string} specifier
+ * @returns {string | null}
+ */
+export function resolveEntry(require, specifier) {
+  try {
+    return require.resolve(specifier);
+  } catch (error) {
+    const {code} = /** @type {NodeJS.ErrnoException} */ (error);
+    if (
+      code === 'MODULE_NOT_FOUND' ||
+      code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Core's root entry, loaded once, the first time a theme module requires
+ * `@astryxdesign/core`. The root loads all of Core and React (thousands of
+ * modules), and most themes import only the theme subpath, so nothing loads
+ * it before a theme asks (the CommonJS patch for a theme's `.cjs` dependencies
+ * wraps an installed root only when the load requires it, too). jiti asks for
+ * a virtual module synchronously, so it loads through `require` of an ES
+ * module, which the CLI's Node floor supports. An entry that fails to load
+ * throws to the theme that imports it. Only a Core with no root entry has no
+ * loader, and the theme namespace stands in for its root.
+ * @param {string} file - The root entry's file
+ * @returns {() => any}
+ */
+export function lazyCoreRoot(file) {
+  /** @type {{root: any} | null} */
+  let loaded = null;
+  return () => {
+    loaded ??= {root: createRequire(file)(file)};
+    return loaded.root;
+  };
+}
+
+/**
  * Wrap an installed core module so every `defineTheme()` call records the raw
  * input against the theme it produced.
  *
@@ -236,7 +282,9 @@ function mergeGenerativeAxes(inherited, own) {
  * standalone builds with current Core do not.
  *
  * @param {any} coreThemeModule - The installed `@astryxdesign/core/theme` namespace.
- * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace.
+ * @param {any} [coreRootModule] - The installed `@astryxdesign/core` namespace,
+ *   or a function that loads it, called the first time a theme module
+ *   requires the root.
  * @returns {CoreInterception}
  */
 export function interceptCore(coreThemeModule, coreRootModule) {
@@ -287,14 +335,35 @@ export function interceptCore(coreThemeModule, coreRootModule) {
     };
   };
 
-  return {
-    modules: {
-      '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
-      // Falls back to the theme namespace only when the root could not be
-      // imported at all; a partial root is better than none, and a core
-      // missing its own root entry is already broken.
-      '@astryxdesign/core': wrapNamespace(coreRootModule ?? coreThemeModule),
+  /** @type {Record<string, any>} */
+  const modules = {
+    '@astryxdesign/core/theme': wrapNamespace(coreThemeModule),
+  };
+  // The root loads all of Core and React, so it is read only when a theme
+  // module requires it: jiti reads a virtual module when the specifier is
+  // required, not before. Falls back to the theme namespace only when the
+  // root could not be loaded at all; a partial root is better than none, and
+  // a core missing its own root entry is already broken.
+  /** @type {any} */
+  let rootNamespace;
+  let rootRead = false;
+  Object.defineProperty(modules, '@astryxdesign/core', {
+    enumerable: true,
+    get() {
+      if (!rootRead) {
+        rootRead = true;
+        const root =
+          typeof coreRootModule === 'function'
+            ? coreRootModule()
+            : coreRootModule;
+        rootNamespace = wrapNamespace(root ?? coreThemeModule);
+      }
+      return rootNamespace;
     },
+  });
+
+  return {
+    modules,
 
     // prettier-ignore
     observed(theme) { return wasObserved(theme, byReference); },
@@ -451,28 +520,19 @@ export function interceptCore(coreThemeModule, coreRootModule) {
         return {covered, undo: () => {}};
       }
 
-      for (const specifier of [
-        '@astryxdesign/core/theme',
-        '@astryxdesign/core',
-      ]) {
-        /** @type {any} */
-        let cjs;
-        try {
-          cjs = createRequire(fromFile)(specifier);
-        } catch {
-          // A specifier that CommonJS cannot resolve cannot be used by a `.cjs`
-          // source dependency either, so it creates no unobserved path.
-          continue;
-        }
-
+      const requireFromTheme = createRequire(fromFile);
+      /**
+       * Wraps `defineTheme` on a CommonJS exports object in place, so a call
+       * from a `.cjs` dependency is recorded. False when it cannot be wrapped.
+       * @param {any} cjs
+       */
+      const wrap = cjs => {
         const real = cjs?.defineTheme;
-        if (typeof real !== 'function') continue;
+        if (typeof real !== 'function') return true;
         const descriptor = Object.getOwnPropertyDescriptor(cjs, 'defineTheme');
         if (!descriptor || !(descriptor.writable || descriptor.configurable)) {
-          covered = false;
-          continue;
+          return false;
         }
-
         try {
           Object.defineProperty(cjs, 'defineTheme', {
             ...descriptor,
@@ -485,16 +545,69 @@ export function interceptCore(coreThemeModule, coreRootModule) {
           undo.push(() =>
             Object.defineProperty(cjs, 'defineTheme', descriptor),
           );
+          return true;
         } catch {
           // ESM namespace exotic objects may report a writable descriptor but
           // still reject redefinition. This is a real coverage failure, not an
           // absent CommonJS entry: a `.cjs` dependency can call the function
           // while the recorder cannot wrap it.
-          covered = false;
+          return false;
         }
+      };
+
+      // A specifier that CommonJS cannot resolve cannot be used by a `.cjs`
+      // source dependency either, so it creates no unobserved path. Both are
+      // resolved before anything is patched, so an error leaves nothing to
+      // undo.
+      const themeFile = resolveEntry(
+        requireFromTheme,
+        '@astryxdesign/core/theme',
+      );
+      const rootFile = resolveEntry(requireFromTheme, '@astryxdesign/core');
+
+      // The theme subpath is small, so it is wrapped now. It loads here, and
+      // its error, if it throws, is the build's.
+      if (themeFile && !wrap(requireFromTheme(themeFile))) covered = false;
+
+      // The root loads all of Core, so it is wrapped when this load first
+      // requires it (a `.cjs` dependency, or the virtual module's own loader),
+      // not before: every CommonJS require goes through `Module._load`, which
+      // is watched for the load's duration. A load that never requires the
+      // root leaves no path through it to observe.
+      if (rootFile) {
+        /** @type {any} */
+        const loader = Module;
+        const load = loader._load;
+        let seen = false;
+        loader._load = function (
+          /** @type {string} */ request,
+          /** @type {any} */ parent,
+          /** @type {boolean} */ isMain,
+        ) {
+          const exports = load.apply(this, arguments);
+          if (
+            !seen &&
+            typeof request === 'string' &&
+            request.includes('@astryxdesign/core')
+          ) {
+            // The request just loaded, so it resolves.
+            const resolved = loader._resolveFilename(request, parent, isMain);
+            if (resolved === rootFile) {
+              seen = true;
+              if (!wrap(exports)) covered = false;
+            }
+          }
+          return exports;
+        };
+        undo.push(() => {
+          loader._load = load;
+        });
       }
       return {
-        covered,
+        /** Read after the load: a root required during it counts. */
+        get covered() {
+          return covered;
+        },
         undo() {
           for (const restore of undo.reverse()) {
             try {

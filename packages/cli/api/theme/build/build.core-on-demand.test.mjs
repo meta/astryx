@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The theme build imports Core when a build runs, not when the CLI starts.
+ * @file The theme build imports Core when a build runs, not when the CLI starts,
+ * and Core's root entry only when a theme module asks for it.
  *
  * The CLI loads the theme build module for every command, and Core's root
  * entry pulls in all of Core and React. So a command that builds no theme must
@@ -109,5 +110,21 @@ describe('theme build imports Core on demand', () => {
     expect(requested['@astryxdesign/core/theme']).toMatch(
       /\/api\/theme\/build\/build\.mjs$/,
     );
+  });
+
+  it("theme build never asks for Core's root when the theme does not import it", () => {
+    // The root loads all of Core (thousands of modules); a theme that never
+    // asks for it must not pay for it (the doctor's theme checks evaluate
+    // such themes). The theme subpath brings React only for its <Theme>.
+    const {status, requested} = run([
+      'theme',
+      'build',
+      'ocean.mjs',
+      '--check',
+      '--json',
+    ]);
+    expect(status).not.toBeNull();
+    expect(requested['@astryxdesign/core/theme']).toBeDefined();
+    expect(requested).not.toHaveProperty(['@astryxdesign/core']);
   });
 });
