@@ -760,8 +760,9 @@ describe('deploy.yml push gating', () => {
     const resolve = workflow.jobs['main-commit'];
     expect(resolve.outputs.sha).toBe('${{ steps.resolve.outputs.sha }}');
     const script = resolve.steps[0].with.script;
-    expect(script).toContain('context.sha');
-    expect(script).toContain("branch: 'main'");
+    // The event's own commit: the pushed one, or main's tip at dispatch, so a
+    // run's result is that exact commit's (spec:AST-030 FR21).
+    expect(script).toContain("core.setOutput('sha', context.sha)");
     for (const lane of ['test-ui', 'test-node', 'typecheck']) {
       expect(workflow.jobs[lane].needs).toEqual(['main-commit']);
       const checkout = workflow.jobs[lane].steps.find(step =>
