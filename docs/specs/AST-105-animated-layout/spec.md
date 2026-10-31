@@ -136,8 +136,8 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   from the shown state springs from where it is. Under Reduce Motion it follows
   `design:reduced-motion` DR2 under a coarse primary pointer and DR3 otherwise.
   Every edge reveal in Core is this one:
-  - Collapsible and TreeList keep its block-end form (`component:Collapsible`,
-    `component:TreeList`).
+  - Collapsible, TreeList and Table's row expansion keep its block-end form
+    (`component:Collapsible`, `component:TreeList`, `component:Table` FR15).
   - The SideNav rail conceals and reveals by its inline edge in the two-state
     form, and keeps only its labels' and icons' fades of its own
     (`component:SideNav` FR6).
@@ -157,8 +157,8 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   the collapsed pane is inert and hidden from assistive technology until it
   opens, under any resize controller (`component:LayoutPanel` AR2);
   opening moves no focus. This focus rule covers only a collapsing pane: the
-  SideNav rail follows its own record, and Collapsible and TreeList keep their
-  records' behavior. The edge reveal is internal: `useAnimatedLayout`'s public
+  SideNav rail follows its own record, and Collapsible, TreeList and Table's
+  row expansion keep their records' behavior. The edge reveal is internal: `useAnimatedLayout`'s public
   contract is unchanged, and no prop or option is added.
 
 ## Coverage
