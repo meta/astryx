@@ -284,7 +284,34 @@ they are separately named.
   cancel group. Each writer of `review-required` composes both halves and links
   a spec wait to the spec decision's details. Comments that are not owner
   commands start no runner, and no scheduled job reads approvals.
-- **FR16 — One author's pull requests share the heavy suites.** On a pull request, the heavy browser suites (the interaction proofs and the Build package's browser and fixture-contrast contracts) run only when the pull request is among its author's fifteen oldest open non-draft pull requests and the author has had at most one hundred heavy runs that UTC day. A heavy run is a CI run on one of those pull requests in which a heavy suite ran; a cancelled run does not count, and neither does a run whose heavy suites were held. Pull requests from the shared agent login count per branch prefix, and that login as a whole is also held to its five oldest pull requests and forty heavy runs a day. Engineering owners listed in `.github/ENGOWNERS`, as the pull request's base commit lists them, are exempt from all of these limits, the shared login's included, and so are bot accounts. Across all of CI, a heavy suite also starts only while fewer than ninety jobs of any run (pull requests, `main`'s full checks and release re-checks) are in progress or queued, not counting its own; otherwise it waits up to five minutes for room. This ceiling holds engineering owners too (DEC-16). A held suite's check fails with "Queued behind your 15 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.", "Queued behind the shared login's 5 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.", "Daily heavy-run cap reached, runs tomorrow or at pre-merge." or "CI is full (90 jobs running or queued): runs on a later push, or at the pre-merge re-run.", so no pull request passes the required checks without its heavy suites. A re-run, which is the pre-merge restart, is exempt from these limits, and when the limits cannot be looked up the suite runs. Merge-queue entries, `main`, release checks and the visual, accessibility and RTL owners a maintainer opts a pull request into with their `ci:run-*` labels are unaffected.
+- **FR16 — One author's pull requests share the heavy suites.** On a pull
+  request, the heavy browser suites (the interaction proofs and the Build
+  package's browser and fixture-contrast contracts) run only when the pull
+  request is among its author's fifteen oldest open non-draft pull requests and
+  the author has had at most one hundred heavy runs that UTC day. A heavy run is
+  a CI run on one of those pull requests in which a heavy suite ran; a cancelled
+  run does not count, and neither does a run whose heavy suites were held. Pull
+  requests from the shared agent login count per branch prefix, and that login
+  as a whole is also held to its five oldest pull requests and forty heavy runs
+  a day. Engineering owners listed in `.github/ENGOWNERS`, as the pull request's
+  base commit lists them, are exempt from all of these limits, the shared
+  login's included, and so are bot accounts. Across all of CI, a heavy suite
+  also starts only while fewer than ninety jobs of any run (pull requests,
+  `main`'s full checks and release re-checks) are in progress or queued, not
+  counting its own; otherwise it looks once more two minutes later, and reads
+  each active run's jobs once per look, so the check never polls the API per
+  job. This ceiling holds engineering owners too (DEC-16). A held suite's check
+  fails with "Queued behind your 15 oldest PRs: runs on a push once it is among
+  them, or at the pre-merge re-run.", "Queued behind the shared login's 5 oldest
+  PRs: runs on a push once it is among them, or at the pre-merge re-run.",
+  "Daily heavy-run cap reached, runs tomorrow or at pre-merge." or "CI is full
+  (90 jobs running or queued): runs on a later push, or at the pre-merge
+  re-run.", so no pull request passes the required checks without its heavy
+  suites. A re-run, which is the pre-merge restart, is exempt from these limits,
+  and when the limits cannot be looked up the suite runs. Merge-queue entries,
+  `main`, release checks and the visual, accessibility and RTL owners a
+  maintainer opts a pull request into with their `ci:run-*` labels are
+  unaffected.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,

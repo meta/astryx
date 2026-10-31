@@ -65,12 +65,16 @@ async function check({
   // Every run in progress or queued, of any event, with its jobs' statuses;
   // a function gets the poll number, so room can free up while waiting.
   active = [],
+  onJobs = () => {},
 } = {}) {
   let polls = 0;
-  const activeRuns = () =>
-    typeof active === 'function' ? active(polls) : active;
+  const activeRuns = () => {
+    if (active instanceof Error) throw active;
+    return typeof active === 'function' ? active(polls) : active;
+  };
   const messages = {failed: [], warning: []};
   const core = {
+    info: () => {},
     setFailed: message => messages.failed.push(message),
     warning: message => messages.warning.push(message),
   };
@@ -115,7 +119,10 @@ async function check({
         listJobsForWorkflowRun: async ({run_id, per_page = 30}) => {
           if (per_page < 100) throw new Error('read one default page of jobs');
           const live = activeRuns().find(run => run.id === run_id);
-          if (live) return {data: {jobs: live.jobs.map(status => ({status}))}};
+          if (live) {
+            onJobs(run_id);
+            return {data: {jobs: live.jobs.map(status => ({status}))}};
+          }
           const heavy = runs.find(run => run.id === run_id).heavy !== false;
           return {
             data: {
@@ -391,7 +398,7 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
       jobs,
     });
     const busy = count => Array.from({length: count}, () => 'in_progress');
-    /** Runs the check with fake timers, letting its five-minute wait pass. */
+    /** Runs the check with fake timers, letting its two-minute re-check pass. */
     async function waited(options) {
       vi.useFakeTimers();
       const result = check({open: [me], ...options});
@@ -438,13 +445,44 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
       expect(own.failed).toEqual([]);
     });
 
-    it('starts when room frees up during the wait', async () => {
+    it('looks twice at most, two minutes apart, and starts when room frees by the second look', async () => {
       const freed = await waited({
         active: poll => [
-          runOf(50, busy(poll < 3 ? CI_CEILING : CI_CEILING - 1)),
+          runOf(50, busy(poll < 2 ? CI_CEILING : CI_CEILING - 1)),
         ],
       });
       expect(freed.failed).toEqual([]);
+      let looks = 0;
+      const full = await waited({
+        active: poll => {
+          looks = Math.max(looks, poll);
+          return [runOf(50, busy(CI_CEILING))];
+        },
+      });
+      expect(full.failed).toEqual([FULL]);
+      expect(looks).toBe(2);
+    });
+
+    it('reads each active run once per look', async () => {
+      const reads = new Map();
+      const counted = await waited({
+        active: [
+          runOf(50, busy(CI_CEILING - 1)),
+          // A run listed as both in progress and queued is still one run.
+          {...runOf(50, busy(CI_CEILING - 1)), status: 'queued'},
+        ],
+        onJobs: id => reads.set(id, (reads.get(id) ?? 0) + 1),
+      });
+      expect(counted.failed).toEqual([]);
+      expect(reads.get(50)).toBe(1);
+    });
+
+    it('runs the suite when the ceiling is rate-limited', async () => {
+      const limited = await waited({
+        active: new Error('API rate limit exceeded'),
+      });
+      expect(limited.failed).toEqual([]);
+      expect(limited.warning[0]).toContain('running the heavy suite');
     });
 
     it('holds an engineering owner too, but exempts the pre-merge re-run', async () => {

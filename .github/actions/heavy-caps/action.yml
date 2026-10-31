@@ -13,7 +13,7 @@
 #   exempt from these per-author limits.
 # - Across all of CI, a heavy suite starts only while fewer than CI_CEILING
 #   jobs of any run are in progress or queued, not counting its own; otherwise
-#   it waits up to five minutes for room. `main`'s full checks and release
+#   it looks once more two minutes later. `main`'s full checks and release
 #   re-checks never run this, so they take what they need and pull requests
 #   get whatever is left.
 # - A re-run (the pre-merge restart) and a bot are exempt from every limit; a
@@ -57,8 +57,10 @@ runs:
           // Jobs in progress or queued across all of CI, every run included,
           // before a heavy suite waits (spec:AST-030 FR16, DEC-16).
           const CI_CEILING = 90;
-          const CEILING_WAIT_MS = 5 * 60_000;
-          const CEILING_POLL_MS = 60_000;
+          // Two looks at most, two minutes apart: the installation's API budget
+          // is shared by every job, so the ceiling never polls per job.
+          const CEILING_LOOKS = 2;
+          const CEILING_RECHECK_MS = 2 * 60_000;
           const limits = [
             // Pull request numbers rise with creation, and the search returns
             // the oldest, so it holds every older one that could queue this.
@@ -111,28 +113,40 @@ runs:
 
           // Jobs of every run in progress or queued, whatever started it
           // (pull requests, `main`'s full checks, release re-checks), except
-          // this job itself.
+          // this job itself. Each look reads each active run's jobs once (one
+          // page of 100), so a look costs two run listings plus one call per
+          // run. A rate-limited look cannot decide, so the suite runs (the
+          // catch below), as for any failed lookup.
           async function ciCeiling() {
-            const deadline = Date.now() + CEILING_WAIT_MS;
-            for (;;) {
-              let active = 0;
-              for (const status of ['in_progress', 'queued']) {
-                const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
-                  ...context.repo, status, per_page: 100,
-                });
-                for (const run of runs) {
-                  const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
-                    ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+            let calls = 0;
+            try {
+              for (let look = 1; ; look += 1) {
+                const seen = new Set();
+                let active = 0;
+                for (const status of ['in_progress', 'queued']) {
+                  calls += 1;
+                  const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+                    ...context.repo, status, per_page: 100,
                   });
-                  active += jobs.filter(job => job.status === 'in_progress' || job.status === 'queued').length;
-                  if (run.id === context.runId) active -= 1;
+                  for (const run of runs) {
+                    if (seen.has(run.id)) continue;
+                    seen.add(run.id);
+                    calls += 1;
+                    const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, {
+                      ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+                    });
+                    active += jobs.filter(job => job.status === 'in_progress' || job.status === 'queued').length;
+                    if (run.id === context.runId) active -= 1;
+                  }
                 }
+                if (active < CI_CEILING) return;
+                if (look >= CEILING_LOOKS) {
+                  return `CI is full (${CI_CEILING} jobs running or queued): runs on a later push, or at the pre-merge re-run.`;
+                }
+                await new Promise(resolve => setTimeout(resolve, CEILING_RECHECK_MS));
               }
-              if (active < CI_CEILING) return;
-              if (Date.now() >= deadline) {
-                return `CI is full (${CI_CEILING} jobs running or queued): runs on a later push, or at the pre-merge re-run.`;
-              }
-              await new Promise(resolve => setTimeout(resolve, CEILING_POLL_MS));
+            } finally {
+              core.info(`CI ceiling: ${calls} API calls.`);
             }
           }
 
