@@ -1,0 +1,162 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file scenes.perf.spec.ts
+ * @input The built Sandbox's perf scenes page (apps/sandbox/out, served by
+ *   playwright.perf.config.ts), PERF_SAMPLES (default 5), PERF_RESULTS_DIR
+ *   (default test-results/perf)
+ * @output One JSON file per scene: every sample and the per-metric median
+ * @position The nightly perf workflow's measurement step
+ *   (.github/workflows/perf-nightly.yml). Run locally with
+ *   `pnpm build && pnpm -F @astryxdesign/sandbox build` then
+ *   `pnpm exec playwright test --config playwright.perf.config.ts`.
+ *
+ * Each sample loads the scene in a fresh browser context, so no sample
+ * inherits another's heap, caches or listeners. One warm-up sample per scene
+ * is discarded: it pays for code loading and the first compilation.
+ *
+ * SYNC: Scenes come from apps/sandbox/src/app/(raw)/pages/perf-scenes/sceneIds.ts.
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+import {expect, test, type Page} from '@playwright/test';
+import {frames} from '../../../internal/interaction-harness/src/index';
+import {
+  PERF_SCENES,
+  type PerfSceneId,
+} from '../src/app/(raw)/pages/perf-scenes/sceneIds';
+import {
+  EVENT_TIMING_LOG,
+  animationsSettled,
+  measureScene,
+  type SceneSample,
+} from './measure';
+
+const SAMPLES = positiveInteger('PERF_SAMPLES', 5);
+const WARMUPS = 1;
+const RESULTS_DIR = path.resolve(
+  process.env.PERF_RESULTS_DIR ?? 'test-results/perf',
+);
+const OVERLAY_CYCLES = 50;
+
+function positiveInteger(name: string, fallback: number): number {
+  const raw = process.env[name];
+  const value = raw ? Number(raw) : fallback;
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${name} must be a positive integer, got "${raw}"`);
+  }
+  return value;
+}
+
+/** Plays one open/close of an overlay with real input. */
+async function openAndClose(
+  page: Page,
+  trigger: string,
+  shown: ReturnType<Page['locator']>,
+): Promise<void> {
+  await page.getByRole('button', {name: trigger, exact: true}).click();
+  await shown.waitFor({state: 'visible'});
+  await page.keyboard.press('Escape');
+  await shown.waitFor({state: 'hidden'});
+}
+
+/** Each scene's interaction, played with real input after it mounted. */
+const INTERACTIONS: Readonly<
+  Record<PerfSceneId, (page: Page) => Promise<void>>
+> = {
+  // Narrow and widen the panel: every truncated row measures again.
+  'comments-panel': async page => {
+    const resize = page.getByRole('button', {
+      name: 'Resize panel',
+      exact: true,
+    });
+    await resize.click();
+    await frames(page, 2);
+    await resize.click();
+    await frames(page, 2);
+  },
+  // Sort by name, then filter by typing two characters.
+  table: async page => {
+    await page.getByRole('button', {name: /^Name/}).first().click();
+    await frames(page, 2);
+    await page
+      .getByRole('textbox', {name: 'Filter by name', exact: true})
+      .pressSequentially('an', {delay: 50});
+    await frames(page, 2);
+  },
+  // Expand all 50 folders at once and let the layout glide finish.
+  'tree-list': async page => {
+    await page.getByRole('button', {name: 'Expand all', exact: true}).click();
+    await animationsSettled(page);
+  },
+  // Append a section to the long document.
+  markdown: async page => {
+    await page
+      .getByRole('button', {name: 'Append section', exact: true})
+      .click();
+    await frames(page, 2);
+  },
+  // Open and close each overlay, OVERLAY_CYCLES times.
+  'overlay-churn': async page => {
+    const popover = page.getByText('Popover content');
+    const menu = page.getByRole('menuitem', {name: 'Rename', exact: true});
+    const dialog = page.getByRole('dialog', {name: 'Perf dialog', exact: true});
+    for (let cycle = 0; cycle < OVERLAY_CYCLES; cycle++) {
+      await openAndClose(page, 'Open popover', popover);
+      await openAndClose(page, 'Open menu', menu);
+      await openAndClose(page, 'Open dialog', dialog);
+    }
+  },
+};
+
+function median(values: readonly number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+for (const scene of PERF_SCENES) {
+  test(scene, async ({browser}, testInfo) => {
+    const samples: SceneSample[] = [];
+    for (let run = 0; run < WARMUPS + SAMPLES; run++) {
+      const context = await browser.newContext({
+        viewport: {width: 1280, height: 800},
+      });
+      try {
+        const page = await context.newPage();
+        await page.addInitScript(EVENT_TIMING_LOG);
+        await page.goto(`/pages/perf-scenes/?scene=${scene}`);
+        await page
+          .getByRole('button', {name: 'Mount scene', exact: true})
+          .waitFor();
+        await page.evaluate(() => document.fonts.ready);
+        const sample = await measureScene(page, INTERACTIONS[scene]);
+        if (run >= WARMUPS) {
+          samples.push(sample);
+        }
+      } finally {
+        await context.close();
+      }
+    }
+
+    const metrics = Object.keys(samples[0]) as (keyof SceneSample)[];
+    const result = {
+      scene,
+      samples,
+      median: Object.fromEntries(
+        metrics.map(metric => [
+          metric,
+          median(samples.map(sample => sample[metric])),
+        ]),
+      ),
+    };
+    fs.mkdirSync(RESULTS_DIR, {recursive: true});
+    const file = path.join(RESULTS_DIR, `${scene}.json`);
+    fs.writeFileSync(file, `${JSON.stringify(result, null, 2)}\n`);
+    await testInfo.attach(`${scene}.json`, {path: file});
+    expect(samples).toHaveLength(SAMPLES);
+  });
+}

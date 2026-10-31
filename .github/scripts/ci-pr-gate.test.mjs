@@ -145,6 +145,7 @@ describe('pull-request CI gate (spec:AST-030 FR17)', () => {
       'crowdin-download.yml',
       'internal-registry.yml',
       'lint.yml',
+      'perf-nightly.yml',
     ]);
   });
 
