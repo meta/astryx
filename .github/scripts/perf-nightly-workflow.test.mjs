@@ -60,6 +60,7 @@ describe('triggers', () => {
         'packages/core/**',
         'apps/sandbox/src/app/(raw)/pages/perf-scenes/**',
         'apps/sandbox/perf/**',
+        'internal/a11y-spec/src/storybook.ts',
         'playwright.perf.config.ts',
         '.github/workflows/perf-nightly.yml',
       ]),
@@ -125,9 +126,11 @@ describe('the label gate', () => {
   });
 
   it('puts every other job behind the gate', () => {
-    expect(workflow.jobs.build.needs).toEqual(['gate']);
-    expect(workflow.jobs.build.if).toBe("needs.gate.outputs.run == 'true'");
-    expect(workflow.jobs.measure.needs).toEqual(['build']);
+    expect(workflow.jobs['build-scenes'].needs).toEqual(['gate']);
+    expect(workflow.jobs['build-scenes'].if).toBe(
+      "needs.gate.outputs.run == 'true'",
+    );
+    expect(workflow.jobs.measure.needs).toEqual(['build-scenes']);
     expect(workflow.jobs.report.needs).toEqual(['measure']);
     for (const id of ['measure', 'report']) {
       expect(workflow.jobs[id].if, id).toBeUndefined();
@@ -271,6 +274,26 @@ describe("the labeler's access check", () => {
 describe('jobs', () => {
   const jobs = Object.entries(workflow.jobs);
 
+  // A job named like a required context (`build`, `test`, `lint`, …) would
+  // report a second, often skipped, check under that name (spec:AST-030 FR7).
+  it('share no name with a required context', () => {
+    for (const [id, job] of jobs) {
+      for (const name of [id, job.name].filter(Boolean)) {
+        expect(
+          [
+            'build',
+            'test',
+            'docsite-test',
+            'lint',
+            'spec-owner-approval',
+            'review-required',
+          ],
+          `${id}`,
+        ).not.toContain(name);
+      }
+    }
+  });
+
   it('use standard runners within the 15-minute budget', () => {
     for (const [id, job] of jobs) {
       expect(['ubuntu-latest', 'ubuntu-slim'], id).toContain(job['runs-on']);
@@ -284,7 +307,9 @@ describe('jobs', () => {
       contents: 'read',
       'pull-requests': 'read',
     });
-    expect(workflow.jobs.build.permissions).toEqual({contents: 'read'});
+    expect(workflow.jobs['build-scenes'].permissions).toEqual({
+      contents: 'read',
+    });
     expect(workflow.jobs.measure.permissions).toEqual({contents: 'read'});
     expect(workflow.jobs.report.permissions).toEqual({
       actions: 'read',

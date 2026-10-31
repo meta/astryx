@@ -202,21 +202,36 @@ export function renderSummary({
   regressions,
   pending = [],
   range,
+  recorded = true,
 }) {
-  const confirmed = new Set(regressions.map(metricKey));
-  const first = new Set(pending.map(metricKey));
+  // A run that is not recorded (a pull request's) confirms nothing: every
+  // metric over the threshold is simply over it.
+  const confirmed = new Set(
+    (recorded ? regressions : [...regressions, ...pending]).map(metricKey),
+  );
+  const first = new Set(recorded ? pending.map(metricKey) : []);
+  const over = regressions.length + pending.length;
+  const headline = recorded
+    ? [
+        regressions.length === 0
+          ? 'No metric is more than 10% worse than its 7-day median on two recorded runs in a row.'
+          : `**${regressions.length} metric(s) regressed** against the 7-day median on two recorded runs in a row.`,
+        ...(pending.length === 0
+          ? []
+          : [
+              '',
+              `${pending.length} metric(s) are over the threshold for the first time (⏳); the next recorded run confirms or clears them.`,
+            ]),
+      ]
+    : [
+        over === 0
+          ? "Compared with `main`'s 7-day median: no metric is more than 10% worse. This run is not recorded."
+          : `Compared with \`main\`'s 7-day median: **${over} metric(s) are more than 10% worse** (⚠️). This run is not recorded.`,
+      ];
   const lines = [
     '## Nightly perf scenes',
     '',
-    regressions.length === 0
-      ? 'No metric is more than 10% worse than its 7-day median on two recorded runs in a row.'
-      : `**${regressions.length} metric(s) regressed** against the 7-day median on two recorded runs in a row.`,
-    ...(pending.length === 0
-      ? []
-      : [
-          '',
-          `${pending.length} metric(s) are over the threshold for the first time (⏳); the next recorded run confirms or clears them.`,
-        ]),
+    ...headline,
     '',
     `| Scene | ${Object.values(METRICS)
       .map(m => m.label)
@@ -302,6 +317,7 @@ export function runReport({resultsDir, historyFile, outDir, run}) {
     regressions: report.regressions,
     pending: report.pending,
     range: report.range,
+    recorded: report.recorded,
   });
   fs.mkdirSync(outDir, {recursive: true});
   fs.writeFileSync(

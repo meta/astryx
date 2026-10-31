@@ -11,7 +11,8 @@
 #   next push or a close and reopen, and applying a label starts no run
 #   (FR12, FR17). The pull request's paths must also touch what the
 #   scenes measure (spec:AST-030 FR14).
-# - build: the packages and the Sandbox, once. measure: every scene, five
+# - build-scenes: the packages and the Sandbox, once (not `build`, which is
+#   CI's required context). measure: every scene, five
 #   samples after a warm-up, the median kept (playwright.perf.config.ts).
 #   report: compares each metric with the 7-day median of main's recorded
 #   runs; a nightly or dispatched run on main appends itself to the history
@@ -48,6 +49,7 @@ on:
       - 'apps/sandbox/src/app/(sandbox)/pages/table-lab/tableLabData.ts'
       - 'apps/sandbox/perf/**'
       - 'internal/interaction-harness/src/**'
+      - 'internal/a11y-spec/src/storybook.ts'
       - 'playwright.perf.config.ts'
       - '.github/scripts/perf-*.mjs'
       - '.github/scripts/run-labels.cjs'
@@ -114,7 +116,7 @@ jobs:
             });
             core.setOutput('run', String(runs));
 
-  build:
+  build-scenes:
     needs: [gate]
     if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
@@ -144,7 +146,7 @@ jobs:
           if-no-files-found: error
 
   measure:
-    needs: [build]
+    needs: [build-scenes]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

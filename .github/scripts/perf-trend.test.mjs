@@ -330,6 +330,28 @@ describe('runReport', () => {
 });
 
 describe('renderSummary', () => {
+  it('marks every metric over the threshold alike on a run that is not recorded', () => {
+    const summary = renderSummary({
+      scenes: {table: {...SCENE, mountLayouts: 20, interactionMs: 200}},
+      baseline: {
+        table: {
+          mountLayouts: {median: 10, runs: 5},
+          interactionMs: {median: 80, runs: 5},
+        },
+      },
+      regressions: [{scene: 'table', metric: 'mountLayouts'}],
+      pending: [{scene: 'table', metric: 'interactionMs'}],
+      range: null,
+      recorded: false,
+    });
+    expect(summary).toContain('**2 metric(s) are more than 10% worse**');
+    expect(summary).toContain('This run is not recorded.');
+    expect(summary).toContain('20 (7d 10) ⚠️');
+    expect(summary).toContain('200 ms (7d 80 ms) ⚠️');
+    expect(summary).not.toContain('⏳');
+    expect(summary).not.toContain('next recorded run');
+  });
+
   it('marks a metric over the threshold for the first time as pending', () => {
     const summary = renderSummary({
       scenes: {table: {...SCENE, mountLayouts: 20}},
