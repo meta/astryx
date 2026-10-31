@@ -221,8 +221,8 @@ they are separately named.
   to the newer push. That release-check run is main's result, and a failure is
   fixed forward by an atomic pull request. Main's own fast
   checks (typecheck, the package build with its per-commit size record, and
-  export sync) still run for every push; its full unit suites run as FR21
-  says. Release checks MUST NOT capture
+  export sync) still run for every push; its full unit suites run about hourly
+  on their own schedule, and with every release-check, as FR21 says. Release checks MUST NOT capture
   baseline candidates, publish baselines, or use a separate daily workflow or
   retroactive acceptance status.
   Deployment, accessibility, RTL, and vibe evidence MAY retain their workflows
@@ -326,9 +326,11 @@ they are separately named.
 - **FR21 — Main's full unit run is about hourly and always finishes.** The
   Main workflow runs its unit suites (every Vitest project of every package,
   never scoped to a change) only in a run that main's heavy-lane workflow
-  dispatches for `main`'s tip, on the same cadence as FR12's release-check and
-  always with one, so a commit with a release-check also has a unit run. That
-  run reports one pass or fail for that exact commit. It runs to completion: it
+  dispatches for `main`'s tip about once an hour, on its own schedule: a push
+  dispatches it at once when none started in the last 55 minutes, and the
+  quarter-hourly schedule picks up the tip a burst left. Every commit that gets
+  a release-check (FR12) also gets a unit run. That run reports one pass or
+  fail for that exact commit. It runs to completion: it
   has its own concurrency group, which no push cancels, and a newer dispatch
   queues behind it. A unit run that is skipped, cancelled or otherwise does not
   complete makes the next one dispatch at once and is reported in the
