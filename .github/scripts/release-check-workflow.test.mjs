@@ -25,6 +25,9 @@ const packageJson = JSON.parse(
 const releaseJobs = [
   'release-authority',
   'test-registry-e2e',
+  // Decides the pull-request opt-ins; on a release check it opts nothing in
+  // and succeeds, so the owners that need it run.
+  'run-labels',
   'build-storybook',
   'typecheck',
   'visual-scout',
