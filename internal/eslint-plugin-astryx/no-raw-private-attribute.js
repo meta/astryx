@@ -25,7 +25,12 @@
  * reported as `data-astryx-*`: it cannot be shown to be public.
  *
  * Inside an owner module, only its own attribute may be written, and the
- * module may not export the raw name or a selector as a string. Anywhere, an
+ * module may not export the raw name or a selector as a string: not as an
+ * exported or default-exported value, not inside an exported object, array or
+ * function's return value, and not through a module constant that one of
+ * those uses. The name stays allowed as an object key (setter props and
+ * `stylex.create` selectors) and as a call argument (a writer or a
+ * `closest`/`matches` reader). Anywhere, an
  * import of another package's owner module is reported: a private attribute
  * stays inside the package that writes it.
  *
@@ -44,6 +49,7 @@
  */
 
 import path from 'node:path';
+import {baselineAllowance} from './rule-baseline.mjs';
 
 /**
  * Where the repository config enforces the rule with its baseline: shipped
@@ -162,17 +168,87 @@ function isDataAttrCall(node) {
   );
 }
 
-/** Skip parentheses-free wrappers TypeScript adds around an initializer. */
-function unwrap(node) {
+/** Wrappers that pass their operand's value through unchanged. */
+const PASS_THROUGH = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+  'ChainExpression',
+  'AwaitExpression',
+  'LogicalExpression',
+  'ArrayExpression',
+  'ObjectExpression',
+  'SpreadElement',
+]);
+
+const FUNCTIONS = new Set([
+  'FunctionDeclaration',
+  'FunctionExpression',
+  'ArrowFunctionExpression',
+]);
+
+/**
+ * Where the value of `node` ends up, following it out through wrappers,
+ * object property values, array elements and function return values:
+ * `{exported: true}` when it reaches an export, `{binding}` when it is bound
+ * to a name (a variable declarator or a function declaration) whose uses
+ * decide, or `null` when it is consumed some other way (an object key, a call
+ * argument, a member access).
+ */
+function valueDestination(node) {
   let current = node;
-  while (
-    current?.type === 'TSAsExpression' ||
-    current?.type === 'TSSatisfiesExpression' ||
-    current?.type === 'TSNonNullExpression'
-  ) {
-    current = current.expression;
+  for (;;) {
+    const parent = current.parent;
+    if (parent == null) {
+      return null;
+    }
+    if (
+      PASS_THROUGH.has(parent.type) ||
+      (parent.type === 'ConditionalExpression' && parent.test !== current) ||
+      (parent.type === 'SequenceExpression' &&
+        parent.expressions.at(-1) === current) ||
+      (parent.type === 'Property' && parent.value === current) ||
+      (parent.type === 'ArrowFunctionExpression' && parent.body === current)
+    ) {
+      current = parent;
+      continue;
+    }
+    if (parent.type === 'ReturnStatement') {
+      let fn = parent.parent;
+      while (fn != null && !FUNCTIONS.has(fn.type)) {
+        fn = fn.parent;
+      }
+      if (fn == null) {
+        return null;
+      }
+      if (fn.type === 'FunctionDeclaration') {
+        const holder = fn.parent?.type;
+        if (
+          holder === 'ExportNamedDeclaration' ||
+          holder === 'ExportDefaultDeclaration'
+        ) {
+          return {exported: true};
+        }
+        return fn.id == null ? null : {binding: fn};
+      }
+      current = fn;
+      continue;
+    }
+    if (parent.type === 'VariableDeclarator' && parent.init === current) {
+      if (parent.parent?.parent?.type === 'ExportNamedDeclaration') {
+        return {exported: true};
+      }
+      return parent.id.type === 'Identifier' ? {binding: parent} : null;
+    }
+    if (
+      parent.type === 'ExportDefaultDeclaration' ||
+      parent.type === 'ExportSpecifier'
+    ) {
+      return {exported: true};
+    }
+    return null;
   }
-  return current;
 }
 
 const rule = {
@@ -212,7 +288,7 @@ const rule = {
         'attribute stays inside the package that writes it; reach it through that ' +
         "package's public API.",
       exportedName:
-        'An owner module exports styles and setter props, never its attribute name ' +
+        'An owner module exports styles, setter props and readers, never its attribute name ' +
         'or a selector on it as a string ({{attribute}}).',
     },
   },
@@ -227,26 +303,10 @@ const rule = {
     const packageName = PACKAGE_SOURCE.exec(filename)?.[1] ?? null;
     const ownerDirectory = `packages/${packageName ?? '<package>'}/src/privateAttributes`;
     const ownerOf = name => `${ownerDirectory}/${name}.stylex.ts`;
-    const options = context.options[0] ?? {};
-    const root = options.root ?? context.cwd;
-    const relative = path
-      .relative(root, context.filename ?? context.getFilename())
-      .split(path.sep)
-      .join('/');
+    const sourceCode = context.sourceCode ?? context.getSourceCode();
     // Each listed attribute allows as many sites as it is listed; the next
     // one is reported.
-    const allowance = new Map();
-    for (const attribute of options.baseline?.[relative] ?? []) {
-      allowance.set(attribute, (allowance.get(attribute) ?? 0) + 1);
-    }
-    function isAllowed(attribute) {
-      const left = allowance.get(attribute) ?? 0;
-      if (left === 0) {
-        return false;
-      }
-      allowance.set(attribute, left - 1);
-      return true;
-    }
+    const isAllowed = baselineAllowance(context);
 
     // Local names an owner module exports, by `export {name}`.
     const exportedLocals = new Set();
@@ -280,23 +340,46 @@ const rule = {
       });
     }
 
-    // In an owner module: is this string the whole value of an export?
-    const ownerExports = [];
-    function noteOwnerExport(node, names) {
-      if (ownedName == null || !names.includes(ownedName)) {
-        return;
+    // In an owner module: strings (and `dataAttr()` calls) that spell its
+    // own attribute, checked at the end for a path to an export.
+    const ownerValues = [];
+    function noteOwnerValue(node, names) {
+      if (ownedName != null && names.includes(ownedName)) {
+        ownerValues.push(node);
       }
-      let holder = node.parent;
-      while (unwrap(holder) !== holder) {
-        holder = holder.parent;
+    }
+
+    /** Does the value of `node` reach an export, directly or through a name? */
+    function reachesExport(node, seen) {
+      const destination = valueDestination(node);
+      if (destination == null) {
+        return false;
       }
-      if (
-        holder?.type !== 'VariableDeclarator' ||
-        unwrap(holder.init) !== node
-      ) {
-        return;
+      if (destination.exported) {
+        return true;
       }
-      ownerExports.push({node, declarator: holder});
+      const {binding} = destination;
+      if (seen.has(binding)) {
+        return false;
+      }
+      seen.add(binding);
+      const name = binding.id.name;
+      const scopeHolder =
+        binding.type === 'VariableDeclarator' ? binding.parent : binding;
+      if (exportedLocals.has(name) && scopeHolder.parent?.type === 'Program') {
+        return true;
+      }
+      return sourceCode
+        .getDeclaredVariables(binding)
+        .filter(variable => variable.name === name)
+        .some(variable =>
+          variable.references.some(
+            reference =>
+              reference.identifier !== binding.id &&
+              reference.isRead() &&
+              reachesExport(reference.identifier, seen),
+          ),
+        );
     }
 
     /**
@@ -338,7 +421,7 @@ const rule = {
       for (const name of names) {
         report(node, name);
       }
-      noteOwnerExport(node, names);
+      noteOwnerValue(node, names);
     }
 
     return {
@@ -387,6 +470,7 @@ const rule = {
           return;
         }
         report(node, name);
+        noteOwnerValue(node, [name]);
       },
       ExportSpecifier(node) {
         if (node.local.type === 'Identifier') {
@@ -394,13 +478,8 @@ const rule = {
         }
       },
       'Program:exit'() {
-        for (const {node, declarator} of ownerExports) {
-          const declaration = declarator.parent;
-          const isExported =
-            declaration?.parent?.type === 'ExportNamedDeclaration' ||
-            (declarator.id.type === 'Identifier' &&
-              exportedLocals.has(declarator.id.name));
-          if (isExported) {
+        for (const node of ownerValues) {
+          if (reachesExport(node, new Set())) {
             context.report({
               node,
               messageId: 'exportedName',

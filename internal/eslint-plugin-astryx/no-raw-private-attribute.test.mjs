@@ -100,6 +100,20 @@ tester.run('no-raw-private-attribute', rule, {
       code: `const ATTRIBUTE = 'data-astryx-press'; export function setPress(el) { el.setAttribute(ATTRIBUTE, 'on'); }`,
       filename: owner,
     },
+    // ✅ Owner-module readers and writers take the name as a call argument,
+    //    and setter props use it as a key, including through a constant.
+    {
+      code: `
+        const ATTRIBUTE = 'data-astryx-press';
+        const PRESSED = '[data-astryx-press="on"]';
+        export const pressOn = {[ATTRIBUTE]: 'on'};
+        export function isPressed(element) { return element.matches(PRESSED); }
+        export const closestPressed = element => element.closest(PRESSED);
+        export function setPress(element, value) { element.setAttribute(ATTRIBUTE, value); }
+        export const styles = stylex.create({base: {opacity: {default: 1, [PRESSED]: 0.8}}});
+      `,
+      filename: owner,
+    },
     // ✅ naming.ts builds every data-astryx-* name.
     {
       code: 'export function dataAttr(name) { return `data-${dataAttrNamespace}-${name}`; }',
@@ -299,6 +313,49 @@ tester.run('no-raw-private-attribute', rule, {
     },
     {
       code: `const PRESSED = '[data-astryx-press="on"]' as const; export {PRESSED};`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    // ❌ The owner's name or a selector leaving the module as a string, by
+    //    every route: default export, object value, array, return value,
+    //    module constant, dataAttr().
+    {
+      code: `export default 'data-astryx-press';`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: `export const selectors = {pressed: '[data-astryx-press="on"]'};`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: `export const names = ['data-astryx-press'];`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: `export function pressSelector() { return '[data-astryx-press="on"]'; }`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: `export const pressAttribute = () => 'data-astryx-press';`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: `const PRESSED = '[data-astryx-press="on"]'; export function pressSelector() { return PRESSED; }`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: `const ATTRIBUTE = 'data-astryx-press'; export default ATTRIBUTE;`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: `export const PRESS_ATTRIBUTE = dataAttr('press');`,
       filename: owner,
       errors: [{messageId: 'exportedName'}],
     },

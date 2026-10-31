@@ -240,7 +240,11 @@ template literals (including `data-${dataAttrNamespace}-…`), JSX attribute
 names, and `dataAttr()` calls. A name it cannot read (`data-astryx-${part}`,
 `dataAttr(name)`) is reported as `data-astryx-*`. Inside an owner module only
 its own attribute may be written, and the module may not export the raw name or
-a selector as a string. An import of another package's owner module is
+a selector as a string: not as an exported or default-exported value, not inside
+an exported object, array or function's return value, and not through a module
+constant one of those uses. The name stays allowed there as an object key
+(setter props and `stylex.create` selectors) and as a call argument (a writer,
+or a `closest`/`matches` reader). An import of another package's owner module is
 reported. The public attributes INV23 lists are never reported: `theme`,
 `media`, `aspect-ratio-override`, `token`, `token-value`, `menu-press`,
 `pressable` and `edge-comp`, each after `data-astryx-`. `naming.ts`, which
