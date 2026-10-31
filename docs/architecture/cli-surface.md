@@ -665,8 +665,6 @@ non-interactive guarantee.
   verification.
 - `foundation/discovery/theme-discovery.mjs` and `api/theme` — typed integration
   theme descriptor discovery, package-aware selection, source copy, and build.
-- `api/swizzle` — the component source copy; what a copy contains and promises
-  is `spec:AST-110`'s.
 - `foundation/agent-docs` — the shared expected-block renderer and managed-file
   writer used by init and upgrade, and the layout that decides which files hold
   the block (INV31).
