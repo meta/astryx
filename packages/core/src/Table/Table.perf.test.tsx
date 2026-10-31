@@ -14,7 +14,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, act} from '@testing-library/react';
-import {useMemo, useState} from 'react';
+import {useMemo, useState, type ReactElement} from 'react';
 import {Table} from './Table';
 import {useTableRowStatus} from './plugins/rowStatus';
 import type {UseTableRowStatusConfig} from './index';
@@ -44,6 +44,40 @@ const testColumns: TableColumn<TestRow>[] = [
 ];
 
 const ciBudgetMultiplier = process.env.CI === 'true' ? 1.5 : 1;
+
+/**
+ * Milliseconds of CPU this worker spends in `work`. The budgets below are CPU
+ * time, not elapsed time: in a full parallel run the rest of the machine
+ * stretches elapsed time (a 500-row render that takes 160 ms alone measured
+ * 571 ms there) but not the CPU the render itself uses.
+ */
+async function cpuTimeOf(work: () => unknown): Promise<number> {
+  const started = process.cpuUsage();
+  await work();
+  const used = process.cpuUsage(started);
+  return (used.user + used.system) / 1000;
+}
+
+/**
+ * The CPU time of one initial render of `element`: the least of five fresh
+ * mounts, after a warm-up mount that also pays for compiling the code paths.
+ */
+async function initialRenderCpuTime(element: ReactElement): Promise<number> {
+  const mount = async () => {
+    let unmount = () => {};
+    const time = await cpuTimeOf(() => {
+      ({unmount} = render(element));
+    });
+    unmount();
+    return time;
+  };
+  await mount();
+  let least = Number.POSITIVE_INFINITY;
+  for (let round = 0; round < 5; round++) {
+    least = Math.min(least, await mount());
+  }
+  return least;
+}
 
 // =============================================================================
 // Test: Table doesn't re-render when unrelated state changes
@@ -439,29 +473,25 @@ describe('Table render performance', () => {
   // ===========================================================================
 
   describe('render benchmarks', () => {
-    it('should render 100 rows within performance budget', () => {
+    it('should render 100 rows within performance budget', async () => {
       const data = createTestData(100);
 
-      const startTime = performance.now();
-      render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = await initialRenderCpuTime(
+        <Table data={data} columns={testColumns} idKey="id" />,
+      );
+      console.log(`100 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // Should render within 200ms (generous budget for CI variance)
       expect(renderTime).toBeLessThan(200);
     });
 
-    it('should render 500 rows within performance budget', () => {
+    it('should render 500 rows within performance budget', async () => {
       const data = createTestData(500);
 
-      const startTime = performance.now();
-      render(<Table data={data} columns={testColumns} idKey="id" />);
-      const endTime = performance.now();
-
-      const renderTime = endTime - startTime;
-      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms`);
+      const renderTime = await initialRenderCpuTime(
+        <Table data={data} columns={testColumns} idKey="id" />,
+      );
+      console.log(`500 rows initial render: ${renderTime.toFixed(2)}ms CPU`);
 
       // CI runners vary more than local machines, so keep the local budget
       // strict while allowing headroom for shared-runner noise.
@@ -499,18 +529,18 @@ describe('Table render performance', () => {
         );
       }
 
-      const renderStart = performance.now();
-      render(<TestComponent />);
-      const renderTime = performance.now() - renderStart;
+      const renderTime = await cpuTimeOf(() => {
+        render(<TestComponent />);
+      });
 
       expect(getStatus).toHaveBeenCalledTimes(6);
       expect(renderTime).toBeLessThan(1500 * ciBudgetMultiplier);
 
-      const updateStart = performance.now();
-      await act(async () => {
-        screen.getByRole('button', {name: 'No-op update'}).click();
-      });
-      const updateTime = performance.now() - updateStart;
+      const updateTime = await cpuTimeOf(async () =>
+        act(async () => {
+          screen.getByRole('button', {name: 'No-op update'}).click();
+        }),
+      );
 
       expect(getStatus).toHaveBeenCalledTimes(6);
       expect(updateTime).toBeLessThan(1000 * ciBudgetMultiplier);
