@@ -23,9 +23,13 @@ jobs:
   main-commit:
     runs-on: ubuntu-slim
     permissions:
+      # The lane decision reads main's last passing validation run.
+      actions: read
       contents: read
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
+      test_ui: ${{ steps.lanes.outputs.test_ui }}
+      test_node: ${{ steps.lanes.outputs.test_node }}
     steps:
       - name: Resolve the commit under test
         id: resolve
@@ -38,6 +42,72 @@ jobs:
               sha = data.commit.sha;
             }
             core.setOutput('sha', sha);
+
+      # The Vitest lanes skip what a pull request's skip (spec:AST-030 FR13,
+      # DEC-13): test-ui for a spec, docsite or Node-tooling change and
+      # test-node for a spec or docsite change. The change is everything since
+      # main's last passing validation, so a commit whose run was replaced
+      # while waiting is still counted. The classifier is the commit's own.
+      - name: Check out the change classifier
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.resolve.outputs.sha }}
+          sparse-checkout: |
+            .github/scripts/change-scope.cjs
+            .github/scripts/knowledge-paths.cjs
+            scripts/component-packages.cjs
+          sparse-checkout-cone-mode: false
+          path: .main-scope
+          persist-credentials: false
+
+      - name: Decide the Vitest lanes
+        id: lanes
+        uses: actions/github-script@v9
+        env:
+          SHA: ${{ steps.resolve.outputs.sha }}
+        with:
+          retries: 3
+          script: |
+            const path = require('node:path');
+            const lanes = (ui, node) => {
+              core.setOutput('test_ui', String(ui));
+              core.setOutput('test_node', String(node));
+            };
+            if (context.eventName !== 'push') {
+              core.info(`${context.eventName}: every lane runs.`);
+              return lanes(true, true);
+            }
+            try {
+              const sha = process.env.SHA;
+              const {data} = await github.rest.actions.listWorkflowRuns({
+                ...context.repo, workflow_id: 'deploy.yml', branch: 'main', event: 'push', status: 'success', per_page: 20,
+              });
+              const last = data.workflow_runs.find(run => run.id !== context.runId && run.head_sha !== sha);
+              if (last == null) {
+                core.info('No passing validation of main to compare with: every lane runs.');
+                return lanes(true, true);
+              }
+              const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead({
+                ...context.repo, basehead: `${last.head_sha}...${sha}`,
+              });
+              const files = comparison.files ?? [];
+              // GitHub lists at most 300 files in a comparison.
+              if (comparison.status !== 'ahead' || files.length === 0 || files.length >= 300) {
+                core.info(`The change since ${last.head_sha} cannot be listed whole: every lane runs.`);
+                return lanes(true, true);
+              }
+              const {classifyChanges} = require(path.join(process.env.GITHUB_WORKSPACE, '.main-scope/.github/scripts/change-scope.cjs'));
+              const scope = classifyChanges(files);
+              const ui = !(scope.specOnly || scope.docsiteOnly || scope.toolingOnly);
+              const node = !(scope.specOnly || scope.docsiteOnly);
+              if (!ui || !node) {
+                core.notice(`Since main's last passing validation (${last.head_sha.slice(0, 7)}) only ${scope.specOnly ? 'spec records' : scope.docsiteOnly ? 'the docsite' : 'Node tooling'} changed: ${!ui && !node ? 'test-ui and test-node skip' : 'test-ui skips'}.`);
+              }
+              return lanes(ui, node);
+            } catch (error) {
+              core.warning(`The change since main's last passing validation could not be classified (${error.message}): every lane runs.`);
+              return lanes(true, true);
+            }
 
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
@@ -69,6 +139,7 @@ jobs:
   # an hour while the PR gate took under fifteen. `test` joins the legs.
   test-ui:
     needs: [main-commit]
+    if: needs.main-commit.outputs.test_ui != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -94,6 +165,7 @@ jobs:
 
   test-node:
     needs: [main-commit]
+    if: needs.main-commit.outputs.test_node != 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -163,16 +235,25 @@ jobs:
 
   # Stable join for the three post-merge validation lanes.
   test:
-    needs: [test-ui, test-node, typecheck]
+    needs: [main-commit, test-ui, test-node, typecheck]
     if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-slim
     permissions: {}
     steps:
+      # A lane the change does not reach is skipped by decision; any other
+      # result than success fails the join.
       - name: Assert every push gate succeeded
+        env:
+          TEST_UI: ${{ needs.test-ui.result }}
+          TEST_NODE: ${{ needs.test-node.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
+          RUN_UI: ${{ needs.main-commit.outputs.test_ui }}
+          RUN_NODE: ${{ needs.main-commit.outputs.test_node }}
         run: |
-          echo "test-ui:    ${{ needs.test-ui.result }}"
-          echo "test-node:  ${{ needs.test-node.result }}"
-          echo "typecheck:  ${{ needs.typecheck.result }}"
-          [ "${{ needs.test-ui.result }}" = "success" ] || exit 1
-          [ "${{ needs.test-node.result }}" = "success" ] || exit 1
-          [ "${{ needs.typecheck.result }}" = "success" ] || exit 1
+          echo "test-ui:    $TEST_UI (runs: $RUN_UI)"
+          echo "test-node:  $TEST_NODE (runs: $RUN_NODE)"
+          echo "typecheck:  $TYPECHECK"
+          ok() { [ "$1" = success ] || { [ "$2" = false ] && [ "$1" = skipped ]; }; }
+          ok "$TEST_UI" "$RUN_UI" || exit 1
+          ok "$TEST_NODE" "$RUN_NODE" || exit 1
+          [ "$TYPECHECK" = success ] || exit 1

@@ -253,7 +253,11 @@ they are separately named.
   `shared-or-unknown` path except Changesets. Every fail-closed
   condition of FR3–FR4 also runs the full suite. `main`, release branches,
   merge-group entries and `release-check` dispatches always run the full suite,
-  and release checks keep FR12's full scope.
+  and release checks keep FR12's full scope. Main's post-merge Vitest lanes
+  skip what a pull request's skip, judged on everything since main's last
+  passing validation (DEC-13): test-ui for a spec, docsite or Node-tooling
+  change, test-node for a spec or docsite change. A change that cannot be
+  listed whole runs every lane.
 - **FR14 — Every workflow declares when it runs, as an allowlist.** Each
   workflow in `.github/workflows` states the positive condition that makes it
   relevant, and runs only when that condition holds. A workflow whose push or
@@ -538,6 +542,23 @@ it, so the merge rules change only when an administrator removes it.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+### DEC-13 — Main's Vitest lanes skip what a pull request's skip
+
+**Reference:** `spec:AST-030/DEC-13`
+**Decider:** `cixzhang`
+
+About a quarter of main's post-merge validations follow a push that only
+changes spec records, and each one ran both Vitest suites in full, about 48
+runner-minutes, on a change that a pull request's own CI does not test with
+them. Main now skips each lane exactly when a pull request would. The change is
+measured from main's last passing validation, not from the push before, because
+a queued validation can be replaced while it waits; counting from the last pass
+keeps every code change in some run that tests it.
+
+Rejected: comparing with the previous push only (a replaced run's code change
+would go untested); skipping typecheck as well (its build is what pull requests
+reuse to measure size).
 
 ## Open questions
 
