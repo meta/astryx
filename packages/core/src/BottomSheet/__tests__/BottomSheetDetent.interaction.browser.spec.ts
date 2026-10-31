@@ -17,8 +17,8 @@
  *   on Android gets the same (one touch model, AST-094); a mouse keeps today's
  *   rule and the theme's timing (unit tests). Under reduced motion a touch release cross-fades in place
  *   in 200 ms or less (design:reduced-motion DR2).
- * @position The exemplar for `*.interaction.browser.spec.ts`: component lanes
- *   copy this shape. Each test names the instrument it uses from
+ * @position The exemplar for `*.interaction.browser.spec.ts`: other components'
+ *   specs copy this shape. Each test names the instrument it uses from
  *   @astryxdesign/interaction-harness, so the evidence layer is explicit.
  *
  * The sheet moves on the `translate` property while a gesture or its release
@@ -962,8 +962,13 @@ test('a finger on the drawn sheet catches it even when the hit test lands on the
     try {
       void new Touch({identifier: 1, target: document.body});
       return true;
-    } catch {
-      return false;
+    } catch (error) {
+      // WebKit has the interface but no script constructor ("Illegal
+      // constructor"); any other error is real and throws.
+      if (error instanceof TypeError) {
+        return false;
+      }
+      throw error;
     }
   });
   test.skip(!canTouch, 'this engine cannot construct touch events');

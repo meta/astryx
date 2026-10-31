@@ -41,11 +41,15 @@ export async function emulateIosWebKit(page: Page): Promise<void> {
     };
     const rewrite = () => {
       for (const sheet of Array.from(document.styleSheets)) {
-        try {
-          visit(sheet);
-        } catch {
-          // A cross-origin sheet.
+        // A cross-origin sheet's rules cannot be read: skip only that one,
+        // so any other error in the walk still throws.
+        if (
+          sheet.href != null &&
+          new URL(sheet.href, location.href).origin !== location.origin
+        ) {
+          continue;
         }
+        visit(sheet);
       }
     };
     // Sheets arrive as the story's modules load.
