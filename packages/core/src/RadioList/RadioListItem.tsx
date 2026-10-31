@@ -23,6 +23,8 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
+import {RadioListReasonContext} from './RadioListReasonContext';
+import {joinAriaIDs} from '../utils/inputAria';
 import {colorVars, radiusVars} from '../theme/tokens.stylex';
 import {mergeProps, isRenderable, rtlStyles} from '../utils';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
@@ -265,6 +267,7 @@ export function RadioListItem({
   // the touch press controller (pressableCoverage.test.ts).
   const pressable = usePressFeedback();
   const context = use(RadioListContext);
+  const disabledReasonID = use(RadioListReasonContext);
   if (!context) {
     throw new Error('RadioListItem must be used within an RadioList');
   }
@@ -353,11 +356,10 @@ export function RadioListItem({
         aria-labelledby={ariaLabel == null ? labelID : undefined}
         // The item's own description, then the group's disabled reason
         // (RadioList's disabledMessage), which describes each radio (FR5).
-        aria-describedby={
-          [hasDescription ? descriptionID : null, context.disabledMessageID]
-            .filter(Boolean)
-            .join(' ') || undefined
-        }
+        aria-describedby={joinAriaIDs(
+          hasDescription ? descriptionID : undefined,
+          disabledReasonID,
+        )}
         {...stylex.props(
           styles.input,
           rtlStyles.centerInline('-50%'),

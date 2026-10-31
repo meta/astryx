@@ -16,6 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/RadioList/ (showcase blocks)
  */
 
+import {RadioListReasonContext} from './RadioListReasonContext';
 import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 import React, {
   useCallback,
@@ -56,14 +57,6 @@ export interface RadioListContextValue {
    * AT-discoverable; selection is still blocked in the item's onChange guard.
    */
   hasDisabledMessage: boolean;
-  /**
-   * The id of the group's reason tooltip while `hasDisabledMessage` is true.
-   * The reason describes the radiogroup (FR1) and every radio adds it to its
-   * own `aria-describedby` (FR5): a screen reader announces a radio's
-   * description when the radio takes focus, which it does not reliably do for
-   * a description on the radiogroup.
-   */
-  disabledMessageID?: string;
   isRequired: boolean;
   size: RadioListSize;
   status?: InputStatus;
@@ -255,7 +248,7 @@ export function RadioList({
   // radiogroup container and the radios stay perceivable via aria-disabled
   // instead of the disabled attribute. Selection is blocked in the item's
   // onChange guard. The reason describes the radiogroup and each radio (see
-  // RadioListContextValue.disabledMessageID).
+  // RadioListReasonContext).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -272,9 +265,6 @@ export function RadioList({
       onChange,
       isDisabled,
       hasDisabledMessage: showsDisabledMessage,
-      disabledMessageID: showsDisabledMessage
-        ? disabledMessageTooltip.describedBy
-        : undefined,
       isRequired,
       size,
       status,
@@ -285,7 +275,6 @@ export function RadioList({
       onChange,
       isDisabled,
       showsDisabledMessage,
-      disabledMessageTooltip.describedBy,
       isRequired,
       size,
       status,
@@ -439,7 +428,16 @@ export function RadioList({
           controlClassName,
           controlStyle,
         )}>
-        <RadioListContext value={contextValue}>{children}</RadioListContext>
+        <RadioListContext value={contextValue}>
+          <RadioListReasonContext
+            value={
+              showsDisabledMessage
+                ? disabledMessageTooltip.describedBy
+                : undefined
+            }>
+            {children}
+          </RadioListReasonContext>
+        </RadioListContext>
       </div>
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
