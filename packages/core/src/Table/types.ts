@@ -471,11 +471,19 @@ export interface TablePlugin<
     columnIndex: number,
     columns: ReadonlyArray<TableColumn<T>>,
   ) => HeaderCellRenderProps;
-  /** Transform each body `<tr>` props */
+  /** Transform each body `<tr>` props.
+   *
+   * The fourth argument is the row's resolved canonical key: the `String`
+   * coercion of `item[idKey]` for a property-name `idKey`, or the function's
+   * returned key for a function `idKey`. It is `undefined` when the table
+   * has no explicit `idKey` (index-keyed rows carry no stable identity), so
+   * plugins that need stable identity can stay inert instead of guessing.
+   */
   transformBodyRow?: (
     props: BodyRowRenderProps,
     item: T,
     index: number,
+    rowKey?: string | number,
   ) => BodyRowRenderProps;
   /**
    * Transform each body `<td>` props.

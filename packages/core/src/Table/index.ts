@@ -49,6 +49,7 @@ export {useTableGroupedRows} from './plugins/groupedRows';
 export {useTableRowIndex} from './plugins/rowIndex';
 export {useTableRowStatus} from './plugins/rowStatus';
 export {useTableRowExpansion} from './plugins/rowExpansion';
+export {useTableActivation} from './plugins/activation';
 export {useTableTreeData, useTableTreeState} from './plugins/tree';
 export {resolveContextActions} from './tableContextMenu';
 export {
@@ -124,6 +125,7 @@ export type {
 export type {UseTableColumnResizeConfig} from './plugins/columnResize';
 export type {UseTableStickyColumnsConfig} from './plugins/stickyColumns';
 export type {UseTableRowExpansionConfig} from './plugins/rowExpansion';
+export type {UseTableActivationConfig} from './plugins/activation';
 export type {UseTableRowIndexConfig} from './plugins/rowIndex';
 export type {
   UseTableGroupedRowsConfig,

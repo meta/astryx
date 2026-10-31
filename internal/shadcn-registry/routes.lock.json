@@ -3940,6 +3940,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-table-activation",
+      "path": "hooks/use-table-activation",
+      "aliases": []
+    },
+    {
       "name": "hook-use-table-column-resize",
       "path": "hooks/use-table-column-resize",
       "aliases": []

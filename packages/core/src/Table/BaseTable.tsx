@@ -130,6 +130,13 @@ interface TableRowProps<T extends Record<string, unknown>> {
   item: T;
   rowIndex: number;
   rowKey: string | number;
+  /**
+   * The resolved canonical key for plugin consumption (`transformBodyRow`'s
+   * fourth argument). `undefined` when the table has no explicit `idKey` —
+   * index-keyed rows carry no stable identity, so identity-dependent plugins
+   * stay inert instead of keying by position.
+   */
+  resolvedRowKey: string | number | undefined;
   columns: TableColumn<T>[];
   plugins: TablePlugin<T>[];
   textOverflow: 'wrap' | 'truncate';
@@ -152,6 +159,7 @@ function TableRowInner<T extends Record<string, unknown>>({
   item,
   rowIndex,
   rowKey,
+  resolvedRowKey,
   columns,
   plugins,
   textOverflow,
@@ -235,6 +243,7 @@ function TableRowInner<T extends Record<string, unknown>>({
     } satisfies BodyRowRenderProps,
     item,
     rowIndex,
+    resolvedRowKey,
   );
 
   const row = (
@@ -275,6 +284,9 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
   nextProps: TableRowProps<T>,
 ): boolean {
   if (prevProps.rowKey !== nextProps.rowKey) {
+    return false;
+  }
+  if (prevProps.resolvedRowKey !== nextProps.resolvedRowKey) {
     return false;
   }
   if (prevProps.rowIndex !== nextProps.rowIndex) {
@@ -573,6 +585,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
                       item={item}
                       rowIndex={rowIndex}
                       rowKey={rowKey}
+                      resolvedRowKey={idKey == null ? undefined : rowKey}
                       columns={resolvedColumns}
                       plugins={plugins}
                       textOverflow={textOverflow}
