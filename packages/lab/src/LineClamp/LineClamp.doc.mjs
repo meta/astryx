@@ -59,7 +59,7 @@ export const docs = {
           "Use Text's own maxLines prop when clamping a single Text node — no need to wrap it in LineClamp.",
       },
       {
-        guidance: false,
+        guidance: true,
         description:
           'Disable the tooltip (hasTooltip={false}) when the clamped content is already reachable elsewhere on the page, to avoid a redundant announcement.',
       },
@@ -119,7 +119,7 @@ export const docsZh = {
           '截断单个 Text 节点时使用 Text 自身的 maxLines 属性，无需用 LineClamp 包裹。',
       },
       {
-        guidance: false,
+        guidance: true,
         description:
           '当截断内容已在页面其他位置可访问时，禁用工具提示（hasTooltip={false}）以避免重复播报。',
       },
@@ -150,7 +150,7 @@ export const docsDense = {
         description: "Use Text's own maxLines for a single Text node instead.",
       },
       {
-        guidance: false,
+        guidance: true,
         description:
           'Disable tooltip when content is reachable elsewhere, to avoid redundant announcement.',
       },

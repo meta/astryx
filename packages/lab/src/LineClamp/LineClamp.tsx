@@ -129,7 +129,9 @@ const MUTATION_OPTIONS: MutationObserverInit = {
   childList: true,
   subtree: true,
   attributes: true,
-  attributeFilter: ['tabindex', 'disabled', 'href'],
+  attributeFilter: ['tabindex', 'disabled', 'href', 'inert'],
+  // An `inert` written while the attribute is already there is the caller's.
+  attributeOldValue: true,
 };
 
 // One observer for every clamp on the page: a list of N clamps would
@@ -141,6 +143,20 @@ let sharedMutations: MutationObserver | null = null;
 function dispatchMutations(records: ReadonlyArray<MutationRecord>) {
   const due = new Set<() => void>();
   for (const record of records) {
+    // The caller rendered `inert` on a link this clamp had already hidden: the
+    // attribute was present before the write, and this clamp only ever writes
+    // it when absent. Hand ownership back, so un-clipping the link leaves it
+    // inert as the caller asked.
+    if (
+      record.type === 'attributes' &&
+      record.attributeName === 'inert' &&
+      record.oldValue !== null &&
+      record.target instanceof HTMLElement &&
+      record.target.hasAttribute(HIDDEN_ATTRIBUTE) &&
+      record.target.hasAttribute('inert')
+    ) {
+      record.target.removeAttribute(HIDDEN_ATTRIBUTE);
+    }
     for (const [root, sync] of mutationRoots) {
       if (root.contains(record.target)) {
         due.add(sync);

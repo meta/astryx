@@ -292,6 +292,49 @@ describe('LineClamp', () => {
       expect(link).toHaveAttribute('inert');
     });
 
+    it("keeps a caller's inert that is set while the link is clipped", async () => {
+      const rectMap = new Map<Element, {top: number; bottom: number}>();
+      const props = {maxLines: 2, 'data-testid': 'clamp', hasTooltip: false};
+      const {rerender} = render(
+        <LineClamp {...props}>
+          <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      const link = screen.getByText('Read more');
+      rectMap.set(screen.getByTestId('clamp'), {top: 0, bottom: 40});
+      rectMap.set(link, {top: 40, bottom: 56});
+      mockRects(rectMap);
+      rerender(
+        <LineClamp {...props}>
+          <a href="/more">Read more</a>
+        </LineClamp>,
+      );
+      expect(link).toHaveAttribute('data-line-clamp-hidden');
+
+      // The caller makes the link inert while it is clipped.
+      rerender(
+        <LineClamp {...props}>
+          <a href="/more" inert>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      await waitFor(() => {
+        expect(link).not.toHaveAttribute('data-line-clamp-hidden');
+      });
+
+      // The clamp widens: the link is visible, and still inert.
+      rectMap.set(link, {top: 10, bottom: 26});
+      rerender(
+        <LineClamp {...props} maxLines={3}>
+          <a href="/more" inert>
+            Read more
+          </a>
+        </LineClamp>,
+      );
+      expect(link).toHaveAttribute('inert');
+    });
+
     it('never hides the element that holds focus', () => {
       const rectMap = new Map<Element, {top: number; bottom: number}>();
       const {rerender} = render(
