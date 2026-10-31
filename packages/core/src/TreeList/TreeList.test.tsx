@@ -1743,13 +1743,13 @@ describe('TreeList collapse focus (AR2)', () => {
         <TreeList
           aria-label="Files"
           items={[
+            {id: 'readme', label: 'README.md'},
             {
               id: 'src',
               label: 'src',
               isExpanded,
               children: [{id: 'index', label: 'index.ts'}],
             },
-            {id: 'readme', label: 'README.md'},
           ]}
         />
         <button type="button">Elsewhere</button>
@@ -1761,12 +1761,15 @@ describe('TreeList collapse focus (AR2)', () => {
 
   it('moves focus inside a collapsing branch to its row', () => {
     const {rerender} = render(<Example isExpanded />);
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
     row('index')?.focus();
     expect(row('index')).toHaveFocus();
     rerender(<Example isExpanded={false} />);
     expect(row('index')).toBeNull();
     expect(row('src')).toHaveFocus();
+    // It holds the one Tab stop, which was on README.md.
     expect(row('src')).toHaveAttribute('tabindex', '0');
+    expect(row('readme')).toHaveAttribute('tabindex', '-1');
   });
 
   it('moves no focus that is outside the collapsing branch', () => {

@@ -427,11 +427,21 @@ export function TreeList({
     const row = treeElementRef.current?.querySelector<HTMLElement>(
       `[data-tree-id="${CSS.escape(collapsing.id)}"]`,
     );
-    moveFocusLeftBehind(
+    const moved = moveFocusLeftBehind(
       collapsing.focus,
       row,
       row?.querySelector(':scope > [role="group"]') ?? null,
     );
+    // The row focus moved to holds the tree's one Tab stop; the roving pass
+    // that runs after this effect keeps an existing stop (AR1, AR2).
+    if (moved && row != null) {
+      for (const stop of treeElementRef.current?.querySelectorAll<HTMLElement>(
+        '[role="treeitem"][tabindex="0"]',
+      ) ?? []) {
+        stop.setAttribute('tabindex', '-1');
+      }
+      row.setAttribute('tabindex', '0');
+    }
   }, [expandedIds]);
   // Without a handle the chevrons keep the theme's own turn: a spring a
   // handle set stays only while it is passed (`spec:AST-105` FR2).

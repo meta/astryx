@@ -563,13 +563,13 @@ function CollapseFocusDemo() {
       <TreeList
         aria-label="Files"
         items={[
+          {id: 'readme', label: 'README.md'},
           {
             id: 'src',
             label: 'src',
             isExpanded,
             children: [{id: 'index', label: 'index.ts'}],
           },
-          {id: 'readme', label: 'README.md'},
         ]}
       />
       <Button label="Elsewhere" variant="secondary" />

@@ -46,7 +46,12 @@ test('focus inside a collapsing branch moves to its row', async ({page}) => {
   await expect(child).toHaveCount(0);
   const src = page.getByRole('treeitem', {name: 'src'});
   await expect(src).toBeFocused();
+  // It holds the tree's one Tab stop, which started on README.md.
   await expect(src).toHaveAttribute('tabindex', '0');
+  await expect(page.getByRole('treeitem', {name: 'README.md'})).toHaveAttribute(
+    'tabindex',
+    '-1',
+  );
 });
 
 test('focus outside the collapsing branch is not moved', async ({page}) => {
