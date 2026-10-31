@@ -342,9 +342,13 @@ describe('BaseTypeahead', () => {
     const user = userEvent.setup();
     const originalSource: SearchSource<SearchableItem> = {
       search: () => [resultItem],
+      bootstrap: () => [],
     };
     const updatedSearch = vi.fn(() => [{id: '2', label: 'Updated result'}]);
-    const updatedSource: SearchSource<SearchableItem> = {search: updatedSearch};
+    const updatedSource: SearchSource<SearchableItem> = {
+      search: updatedSearch,
+      bootstrap: () => [],
+    };
     const renderField = (searchSource: SearchSource<SearchableItem>) => (
       <BaseTypeahead
         searchSource={searchSource}
