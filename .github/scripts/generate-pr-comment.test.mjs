@@ -66,9 +66,9 @@ describe('generate-pr-comment diffMode caveat', () => {
   });
 });
 
-describe('generate-pr-comment status table', () => {
+describe('generate-pr-comment compact report', () => {
   function withInputs(inputs, analysis = baseAnalysis, extra = []) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-status-'));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-report-'));
     try {
       const args = [];
       for (const [name, value] of Object.entries(inputs)) {
@@ -83,63 +83,158 @@ describe('generate-pr-comment status table', () => {
   }
   const HEAD = 'a'.repeat(40);
   const READY = 'https://astryx-abc123-fbopensource.vercel.app';
-  const ALIAS = 'https://astryx-git-my-branch-fbopensource.vercel.app';
+  const size = (importGzipBytes, cssGzipBytes = 1000) => ({
+    package: '@astryxdesign/core',
+    importGzipBytes,
+    cssGzipBytes,
+  });
+  const sized = names => ({
+    ...baseAnalysis,
+    modifiedComponents: [],
+    componentSizes: Object.fromEntries(
+      names.map(([key, after]) => [key, size(after)]),
+    ),
+    baseComponentSizes: Object.fromEntries(
+      names.map(([key, , before]) => [key, size(before)]),
+    ),
+  });
 
-  it('leads with the status table, the preview first', () => {
+  it("opens with this head's preview, before anything else", () => {
     const out = withInputs({preview: {state: 'ready', sha: HEAD, url: READY}});
-    const table = out.indexOf('| Check | Result |');
-    expect(table).toBeGreaterThan(out.indexOf('<!-- astryx-pr-analysis -->'));
-    expect(out.slice(table)).toMatch(
-      /^\| Check \| Result \|\n\|-------\|--------\|\n\| Preview \|/,
+    const body = out.slice(out.indexOf('<!-- astryx-pr-analysis -->'));
+    expect(body.split('\n')[2]).toBe('### 🔎 Preview · `aaaaaaa`');
+    expect(body.split('\n')[4]).toBe(
+      `**[Storybook](${READY}/storybook/) · [Sandbox](${READY}/sandbox/)** · built from this PR's head`,
     );
+  });
+
+  it('shows three components and collapses the rest, the biggest growth first', () => {
+    const out = withInputs(
+      {preview: {state: 'ready', sha: HEAD, url: READY}},
+      sized([
+        ['core/A', 5000, 5000],
+        ['core/B', 9000, 8000],
+        ['core/C', 7000, 6900],
+        ['core/D', 4000, 4100],
+        ['core/E', 3000, 2990],
+      ]),
+    );
+    const visible = out.slice(0, out.indexOf('<details>'));
+    expect(visible).toContain('### Modified components');
+    expect(visible.match(/^\| \[[A-E]\]/gm)).toHaveLength(3);
+    expect(visible.indexOf('[B]')).toBeLessThan(visible.indexOf('[C]'));
+    expect(visible.indexOf('[C]')).toBeLessThan(visible.indexOf('[E]'));
+    expect(out).toContain('<summary>2 more components</summary>');
+    expect(out.slice(out.indexOf('<details>'))).toContain(
+      `| [D](${READY}/components/D) |`,
+    );
+    expect(out).toContain(`| [B](${READY}/components/B) |`);
+  });
+
+  it('flags growth past the touch-only budget, family folders included', () => {
+    const out = runComment({
+      ...baseAnalysis,
+      componentSizes: {'core/Chat': size(9000, 1000)},
+      baseComponentSizes: {'core/Chat': size(6000, 1000)},
+    });
     expect(out).toContain(
-      `| Preview | [Storybook](${READY}/storybook/) · [Sandbox](${READY}/sandbox/) · [Docs](${READY}/) · built from \`aaaaaaa\` |`,
+      '| Chat | 🔴 8.8 kB (**+2.9 kB**) · 1.0 kB CSS (0) |',
     );
-    expect(out).not.toMatch(/CodeBunny/i);
   });
 
-  it.each([
-    [
-      'building',
-      {state: 'building', sha: HEAD, aliasOrigin: ALIAS},
-      `⏳ Preview building for \`aaaaaaa\`… Until it's ready, [Storybook](${ALIAS}/storybook/)`,
-    ],
-    ['failed', {state: 'failed', sha: HEAD}, 'failed to build'],
-    [
-      'fork',
-      {state: 'fork', sha: HEAD},
-      'No preview for pull requests from forks.',
-    ],
-    ['unknown', {state: 'unknown', sha: HEAD}, 'cannot be known in advance'],
-  ])('says what a %s preview is, honestly', (_label, preview, text) => {
-    const out = withInputs({preview});
-    expect(out).toContain(text);
-    if (preview.state !== 'building') expect(out).not.toContain('/storybook/');
+  it('never reports a delta for an unmeasured size', () => {
+    const out = runComment({
+      ...baseAnalysis,
+      componentSizes: {'core/Card': size(null), 'core/New': size(3000)},
+      baseComponentSizes: {'core/Card': size(2000)},
+    });
+    expect(out).toContain('| Card | 1.0 kB CSS (0) |');
+    expect(out).toContain('| New | 2.9 kB (new) · 1.0 kB CSS (new) |');
   });
 
-  it('shows no preview row on a draft, which links no preview', () => {
-    const out = withInputs({});
-    expect(out).toContain('| Check | Result |');
-    expect(out).not.toContain('| Preview |');
+  it('fills the base from base stats', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-'));
+    try {
+      const baseFile = path.join(dir, 'base.json');
+      fs.writeFileSync(
+        baseFile,
+        JSON.stringify({baseComponentSizes: {'core/Card': size(2000)}}),
+      );
+      const out = runComment(
+        {...baseAnalysis, componentSizes: {'core/Card': size(1500)}},
+        ['--base-stats', baseFile],
+      );
+      expect(out).toContain('| Card | 1.5 kB (−500 B) · 1.0 kB CSS (0) |');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
-  it('says a heavy suite did not run, with the label that runs it', () => {
+  it('says in one line which suites did not run and how to run them', () => {
     const out = withInputs({
       jobs: [
-        {name: 'pr-visual', conclusion: 'skipped', steps: []},
+        {name: 'Stable visual regression', conclusion: 'skipped', steps: []},
+        {name: 'pr-a11y (browser specs)', conclusion: 'skipped', steps: []},
         {name: 'pr-rtl', conclusion: 'skipped', steps: []},
       ],
     });
     expect(out).toContain(
-      '| Visual | ⏭ Visual did not run on this pull request; add `ci:run-visual` to run it. |',
+      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run a full suite.',
     );
+    expect(out).not.toContain('| Check |');
+    expect(out).not.toMatch(/CodeBunny/i);
+  });
+
+  it('puts package size on one line, with new dependencies', () => {
+    const entry = (name, before, after) => ({
+      name,
+      base: {packedBytes: before},
+      head: {packedBytes: after},
+      overBudget: false,
+    });
+    const out = withInputs({
+      'package-size': {
+        headSha: HEAD,
+        verdict: 'pass',
+        packages: [
+          entry('@astryxdesign/core', 100000, 101229),
+          entry('@astryxdesign/build', 5000, 5000),
+        ],
+        addedDependencies: [
+          {
+            package: '@astryxdesign/core',
+            field: 'dependencies',
+            name: 'left-pad',
+            range: '1',
+          },
+        ],
+      },
+    });
     expect(out).toContain(
-      '| Accessibility | ⏭ Accessibility did not run on this pull request; add `ci:run-a11y` to run it. |',
+      '**Package size:** @astryxdesign/core 98.9 kB packed (**+1.2 kB**); new dependency: left-pad.',
     );
-    expect(out).toContain(
-      '| RTL | ⏭ RTL did not run on this pull request; add `ci:run-rtl` to run it. |',
-    );
-    expect(out).not.toContain('| Perf |');
+  });
+
+  it('collapses accessibility violations', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-a11y-'));
+    try {
+      const file = path.join(dir, 'a11y.json');
+      fs.writeFileSync(
+        file,
+        JSON.stringify({
+          components: {
+            Card: {
+              violations: [{id: 'label', impact: 'serious', description: 'x'}],
+            },
+          },
+        }),
+      );
+      const out = runComment(baseAnalysis, ['--a11y', file]);
+      expect(out).toContain('<summary>Accessibility: 1 violation(s)</summary>');
+      expect(out).toContain('| Card | — | — | — · ✗ · — |');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it('notes a run that did not succeed', () => {
@@ -147,280 +242,11 @@ describe('generate-pr-comment status table', () => {
     expect(out).toContain('CI concluded failure');
   });
 
-  it('collapses the size tables', () => {
+  it('renders report strings as literal text', () => {
     const out = runComment({
       ...baseAnalysis,
-      componentSizes: {
-        'core/Card': {
-          package: '@astryxdesign/core',
-          importGzipBytes: 2000,
-          cssGzipBytes: 100,
-        },
-      },
+      componentSizes: {'core/<img src=x>': size(1000)},
     });
-    expect(out).toContain('<summary>Size details</summary>');
-    expect(out.indexOf('<summary>Size details</summary>')).toBeLessThan(
-      out.indexOf('### Component Size'),
-    );
-    expect(out).toMatch(/\| Size \| ✅ 1 component\(s\) within budget/);
-  });
-});
-
-describe('generate-pr-comment base sizes', () => {
-  const sized = {
-    ...baseAnalysis,
-    componentStats: {
-      Card: {package: '@astryxdesign/core', esmSize: '160B', esmBytes: 160},
-    },
-    bundlePackages: [
-      {
-        package: '@astryxdesign/core',
-        esmSize: '900B',
-        gzipSize: '300B',
-        gzipBytes: 300,
-      },
-    ],
-  };
-
-  it('fills Before and Delta from base stats', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-stats-'));
-    try {
-      const baseFile = path.join(dir, 'size-base.json');
-      fs.writeFileSync(
-        baseFile,
-        JSON.stringify({
-          baseComponentStats: {
-            Card: {
-              package: '@astryxdesign/core',
-              esmSize: '100B',
-              esmBytes: 100,
-            },
-          },
-          baseBundlePackages: [
-            {package: '@astryxdesign/core', gzipSize: '280B', gzipBytes: 280},
-          ],
-        }),
-      );
-      const out = runComment(sized, ['--base-stats', baseFile]);
-      expect(out).toContain('| Entry File (ESM) | 100B | 160B | +60B |');
-      expect(out).toContain(
-        '| @astryxdesign/core | 900B | 280B | 300B | +20B |',
-      );
-    } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
-  });
-
-  it('never reports a delta for an unmeasured size', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-base-null-'));
-    try {
-      const baseFile = path.join(dir, 'size-base.json');
-      fs.writeFileSync(
-        baseFile,
-        JSON.stringify({
-          baseComponentStats: {
-            Card: {
-              package: '@astryxdesign/charts',
-              esmSize: null,
-              esmBytes: null,
-            },
-          },
-          baseBundlePackages: [
-            {package: '@astryxdesign/core', gzipSize: null, gzipBytes: null},
-          ],
-        }),
-      );
-      const out = runComment(
-        {
-          ...sized,
-          componentStats: {
-            Card: {
-              package: '@astryxdesign/charts',
-              esmSize: null,
-              esmBytes: null,
-            },
-          },
-          bundlePackages: [
-            {
-              package: '@astryxdesign/core',
-              esmSize: '900B',
-              gzipSize: '300B',
-              gzipBytes: 300,
-            },
-          ],
-        },
-        ['--base-stats', baseFile],
-      );
-      expect(out).toContain('| Entry File (ESM) | N/A | N/A | N/A |');
-      expect(out).toContain('| @astryxdesign/core | 900B | N/A | 300B | N/A |');
-      expect(out).not.toMatch(/\| [+-]?0B \|/);
-    } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
-  });
-
-  it('keeps N/A without base stats', () => {
-    const out = runComment(sized);
-    expect(out).toContain('| Entry File (ESM) | N/A | 160B | N/A |');
-    expect(out).toContain('| Package | Size (ESM) | Size (CJS) | Gzipped |');
-  });
-});
-
-describe('generate-pr-comment touch-only budget', () => {
-  function withBase(head, base) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-budget-'));
-    try {
-      const baseFile = path.join(dir, 'size-base.json');
-      fs.writeFileSync(
-        baseFile,
-        JSON.stringify({
-          baseComponentSizes: {'core/BottomSheet': base},
-          baseBundlePackages: [],
-        }),
-      );
-      return runComment(
-        {
-          ...baseAnalysis,
-          modifiedComponents: [],
-          componentSizes: {'core/BottomSheet': head},
-          bundlePackages: [],
-        },
-        ['--base-stats', baseFile],
-      );
-    } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
-  }
-
-  it('flags JavaScript growth over 2 KB and CSS growth over 1 KB, family folders included', () => {
-    const out = withBase(
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 10000,
-        cssGzipBytes: 3000,
-      },
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 7000,
-        cssGzipBytes: 1900,
-      },
-    );
-    expect(out).toContain('### ⚠️ Touch-only size budget');
-    expect(out).toContain(
-      '| core/BottomSheet | 6.8KB | 9.8KB | +2.9KB ⚠️ | 1.9KB | 2.9KB | +1.1KB ⚠️ |',
-    );
-  });
-
-  it('does not flag growth within budget', () => {
-    const out = withBase(
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 9000,
-        cssGzipBytes: 2900,
-      },
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 7000,
-        cssGzipBytes: 1900,
-      },
-    );
-    expect(out).not.toContain('Touch-only size budget');
-    expect(out).toContain(
-      '| core/BottomSheet | 6.8KB | 8.8KB | +2.0KB | 1.9KB | 2.8KB | +1000B |',
-    );
-  });
-
-  it('does not flag a component that is new at head', () => {
-    const out = withBase(
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: 90000,
-        cssGzipBytes: 9000,
-      },
-      {
-        package: '@astryxdesign/core',
-        importGzipBytes: null,
-        cssGzipBytes: null,
-      },
-    );
-    expect(out).not.toContain('Touch-only size budget');
-  });
-});
-
-describe('published package size', () => {
-  function withPackageSize(report) {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-package-size-'));
-    try {
-      const file = path.join(dir, 'package-size.json');
-      fs.writeFileSync(file, JSON.stringify(report));
-      return runComment({newComponents: [], modifiedComponents: []}, [
-        '--package-size',
-        file,
-      ]);
-    } finally {
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
-  }
-
-  const sizes = (packedBytes, files = 10) => ({
-    packedBytes,
-    unpackedBytes: packedBytes * 4,
-    files,
-  });
-
-  it('renders the section after the bundle summary, with new dependencies', () => {
-    const out = withPackageSize({
-      headSha: 'a'.repeat(40),
-      budget: {packedPercent: 5, packedMinBytes: 1024},
-      packages: [
-        {
-          name: '@astryxdesign/core',
-          base: sizes(100000, 10),
-          head: sizes(110000, 12),
-          overBudget: true,
-        },
-      ],
-      addedDependencies: [
-        {
-          package: '@astryxdesign/core',
-          field: 'dependencies',
-          name: 'left-pad',
-          range: '^1.3.0',
-        },
-      ],
-      removedDependencies: [],
-      verdict: 'over-budget',
-    });
-    expect(out.indexOf('### Bundle Size Summary')).toBeLessThan(
-      out.indexOf('### Published Package Size'),
-    );
-    expect(out).toContain(
-      '| @astryxdesign/core | 97.7KB | 107.4KB | +9.8KB (+10.0%) ⚠️ |',
-    );
-    expect(out).toContain('| 10 → 12 |');
-    expect(out).toContain('left-pad');
-    expect(out).toContain('**⚠️ Over the package budget:**');
-  });
-
-  it('renders report strings as literal text', () => {
-    const out = withPackageSize({
-      packages: [
-        {
-          name: '<img src=x onerror=alert(1)>',
-          base: sizes(1000),
-          head: sizes(2000),
-          overBudget: false,
-        },
-      ],
-      addedDependencies: [],
-      removedDependencies: [],
-      verdict: 'pass',
-    });
-    expect(out).not.toContain('<img src=x');
-  });
-
-  it('leaves the section out without a report', () => {
-    const out = runComment({newComponents: [], modifiedComponents: []});
-    expect(out).not.toContain('Published Package Size');
+    expect(out).not.toContain('<img src=x>');
   });
 });

@@ -202,6 +202,8 @@ async function reconcile({
   execute,
   baseStats,
   packageSize,
+  touched,
+  visualImageUrl,
 } = {}) {
   const value = previewAvailable
     ? {...requested, headRepository: requested.baseRepository}
@@ -219,6 +221,11 @@ async function reconcile({
   );
   if (packageSize)
     fs.writeFileSync(packageSizePath, JSON.stringify(packageSize));
+  const touchedPath = path.join(
+    path.dirname(paths.analysis),
+    'touched-components.json',
+  );
+  if (touched) fs.writeFileSync(touchedPath, JSON.stringify(touched));
   const {github, state} = githubFixture({
     value: githubFixtureValue,
     comments,
@@ -236,6 +243,8 @@ async function reconcile({
     metadataPath: paths.metadata,
     baseStatsPath,
     packageSizePath,
+    touchedPath,
+    visualImageUrl,
     a11yPath: paths.a11y,
     visualPath: paths.visual,
     createIfMissing,
@@ -883,7 +892,8 @@ describe('PR comment preview reconciliation', () => {
       expect(result.body).toContain(
         '[Storybook](https://astryx-abc123-fbopensource.vercel.app/storybook/)',
       );
-      expect(result.body).toContain('built from `aaaaaaa`');
+      expect(result.body).toContain('### 🔎 Preview · `aaaaaaa`');
+      expect(result.body).toContain("built from this PR's head");
     });
 
     it("ignores a deployment Vercel did not create, and an address that is not Vercel's", async () => {
@@ -907,7 +917,7 @@ describe('PR comment preview reconciliation', () => {
         const {result} = await withGithub(setup);
         expect(result.body).not.toContain('astryx-abc123');
         expect(result.body).not.toContain('evil.example');
-        expect(result.body).toContain('Preview building');
+        expect(result.body).toContain('⏳ Building…');
       }
     });
 
@@ -919,33 +929,26 @@ describe('PR comment preview reconciliation', () => {
       expect(result.body).toContain('failed to build');
     });
 
-    it("passes the run's jobs, so the report says what ran and what path scoping skipped", async () => {
+    it("passes the run's jobs, so the report says which suites did not run", async () => {
       const {result, args} = await withGithub({
         jobs: [
           {
             name: 'test-node (1/4)',
             status: 'completed',
             conclusion: 'success',
-            steps: [
-              {name: "Decide this job's scope", conclusion: 'success'},
-              {name: 'Run tests', conclusion: 'success'},
-            ],
+            steps: [],
           },
           {
-            name: 'docsite-test',
+            name: 'pr-rtl (core)',
             status: 'completed',
-            conclusion: 'success',
-            steps: [
-              {name: "Decide this job's scope", conclusion: 'success'},
-              {name: 'Build docsite', conclusion: 'skipped'},
-            ],
+            conclusion: 'skipped',
+            steps: [],
           },
         ],
       });
       expect(args).toContain('--jobs');
-      expect(result.body).toContain('| test-node | ✅ passed | |');
       expect(result.body).toContain(
-        '| docsite-test | ⏭ skipped | nothing in its paths changed |',
+        'Not run on this PR: add `ci:run-rtl` to run it.',
       );
     });
   });
@@ -999,7 +1002,7 @@ describe('PR comment preview reconciliation', () => {
 
   it('says the accessibility audit did not run when there is no report', async () => {
     const {result} = await reconcile({a11y: false});
-    expect(result.body).toContain('did not run on this pull request');
+    expect(result.body).toMatch(/Not run on this PR: add [^\n]*`ci:run-a11y`/);
     expect(result.body).not.toContain('No accessibility violations detected');
   });
 
@@ -1007,7 +1010,7 @@ describe('PR comment preview reconciliation', () => {
     const value = identity({sourceConclusion: 'failure'});
     const {result} = await reconcile({value});
 
-    expect(result.body).toContain('Modified Components');
+    expect(result.body).toContain('Modified components');
     expect(result.body).toContain('Card');
     expect(result.body).toContain('CI concluded failure');
     expect(result.body).not.toContain('View Storybook for this PR');
@@ -1113,6 +1116,49 @@ describe('PR comment preview reconciliation', () => {
       });
       expect(seen).toHaveLength(1);
       expect(seen[0].includes('--package-size')).toBe(used);
+    },
+  );
+
+  it.each([
+    ['the exact head', HEAD, true],
+    ['another head', 'b'.repeat(40), false],
+  ])(
+    'passes the touched-components report only when it names %s',
+    async (_label, headSha, used) => {
+      const seen = [];
+      await reconcile({
+        touched: {headSha, components: []},
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--touched')).toBe(used);
+    },
+  );
+
+  it.each([
+    [
+      `https://raw.githubusercontent.com/meta/astryx/assets/pr-5697/visual/${HEAD}/`,
+      true,
+    ],
+    ['https://evil.example/visual/', false],
+    [
+      `https://raw.githubusercontent.com/meta/astryx/main/visual/${HEAD}/`,
+      false,
+    ],
+  ])(
+    'passes visual frames only from a PR assets branch: %s',
+    async (url, used) => {
+      const seen = [];
+      await reconcile({
+        visualImageUrl: url,
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--visual-image-url')).toBe(used);
     },
   );
 

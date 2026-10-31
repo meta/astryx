@@ -2,337 +2,389 @@
 
 /**
  * @file pr-status.test.mjs
- * Pins the PR report's top: the status table (preview first, no review-bot
- * row, a heavy suite that did not run names its label), how a job is read as
- * ran / skipped by path / not run, the touched components' preview links and
- * results, and the collapsed CI job table.
+ * Pins the compact PR report: the preview line's states; one table of
+ * modified components (the name linking its docs page, a Storybook link, JS
+ * and CSS size and lines of code against main with growth in bold, and the
+ * fixed-position Visual · A11y · RTL marks only when a suite ran), three rows
+ * visible and the rest collapsed, most important first; the visual deltas
+ * with frames for the published shots only; the package line; and the one
+ * not-run or wide-change line.
  */
 
 import {describe, expect, it} from 'vitest';
 import status from './pr-status.js';
 
 const {
-  notRunSentence,
-  classifyJob,
-  summarizeJobs,
-  buildStatusTable,
-  buildJobTable,
-  buildTouchedComponents,
+  baseJobName,
+  suiteRunState,
+  sizeCell,
+  locCell,
+  checksCell,
+  buildComponentTable,
+  buildVisualDeltas,
+  previewLine,
+  packagesLine,
+  notRunLine,
   SUITES,
+  VISUAL_FRAME_LIMIT,
 } = status;
 
-const SCOPE = "Decide this job's scope";
-const job = (name, conclusion, steps = []) => ({
-  name,
-  status: 'completed',
-  conclusion,
-  steps: steps.map(([stepName, stepConclusion]) => ({
-    name: stepName,
-    conclusion: stepConclusion,
-  })),
+const HEAD = 'a'.repeat(40);
+const ORIGIN = 'https://astryx-abc123-fbopensource.vercel.app';
+const size = (importGzipBytes, cssGzipBytes = 1024) => ({
+  importGzipBytes,
+  cssGzipBytes,
 });
 
-describe('classifyJob', () => {
-  it('reads a job whose condition was false as not run', () => {
-    expect(classifyJob(job('pr-visual', 'skipped'))).toEqual({
-      state: 'not-run',
-    });
+describe('previewLine', () => {
+  it.each([
+    [
+      'ready',
+      {state: 'ready', sha: HEAD, url: ORIGIN},
+      `### 🔎 Preview · \`aaaaaaa\`\n\n**[Storybook](${ORIGIN}/storybook/) · [Sandbox](${ORIGIN}/sandbox/)** · built from this PR's head`,
+    ],
+    [
+      'building',
+      {state: 'building', sha: HEAD, aliasOrigin: ORIGIN},
+      `⏳ Building… Until it's ready, **[Storybook](${ORIGIN}/storybook/)`,
+    ],
+    ['failed', {state: 'failed', sha: HEAD}, 'failed to build'],
+    [
+      'fork',
+      {state: 'fork', sha: HEAD},
+      'No preview for pull requests from forks.',
+    ],
+    ['unknown', {state: 'unknown', sha: HEAD}, 'cannot be known in advance'],
+  ])('says what a %s preview is', (_label, preview, text) => {
+    expect(previewLine(preview)).toContain(text);
   });
 
-  it('reads a job that decided its scope and skipped every work step as skipped by path', () => {
-    const scoped = job('docsite-test', 'success', [
-      ['Set up job', 'success'],
-      [SCOPE, 'success'],
-      ['Checkout', 'skipped'],
-      ['Build', 'skipped'],
-      ['Post Checkout', 'success'],
-      ['Complete job', 'success'],
-    ]);
-    expect(classifyJob(scoped)).toEqual({
-      state: 'scoped-out',
-      reason: 'nothing in its paths changed',
-    });
+  it('says nothing on a draft', () => {
+    expect(previewLine(null)).toBe('');
+  });
+});
+
+describe('sizeCell and locCell', () => {
+  it('shows JS and CSS with their change, growth in bold', () => {
+    expect(sizeCell(size(105_370, 25_600), size(105_062, 25_700))).toBe(
+      '102.9 kB (**+308 B**) · 25.0 kB CSS (−100 B)',
+    );
+    expect(sizeCell(size(1024, 1024), size(1024, 1024))).toBe(
+      '1.0 kB (0) · 1.0 kB CSS (0)',
+    );
   });
 
-  it('reads a job that ran any work step as ran', () => {
-    const ran = job('test-node', 'success', [
-      [SCOPE, 'success'],
-      ['Checkout', 'success'],
-      ['Test', 'skipped'],
-    ]);
-    expect(classifyJob(ran)).toEqual({state: 'ran', conclusion: 'success'});
-    expect(classifyJob(job('lint', 'failure', [['Lint', 'failure']]))).toEqual({
-      state: 'ran',
-      conclusion: 'failure',
-    });
+  it('marks growth past the touch-only budget, JavaScript or CSS', () => {
+    expect(sizeCell(size(5000), size(2000))).toMatch(/^🔴 /);
+    expect(sizeCell(size(1000, 3000), size(1000, 1000))).toMatch(/^🔴 /);
+    expect(sizeCell(size(4000), size(2000))).not.toMatch(/🔴/);
   });
 
-  it('reads a specialized-lane skip as skipped by path', () => {
-    const skipped = job('build-storybook', 'success', [
-      [SCOPE, 'success'],
-      ['Skip heavy work for a specialized lane', 'success'],
-      ['Checkout', 'skipped'],
-    ]);
-    expect(classifyJob(skipped)).toEqual({
-      state: 'scoped-out',
-      reason: 'Skip heavy work for a specialized lane',
+  it('shows a new component as new, and an unmeasured one as a dash', () => {
+    expect(sizeCell(size(1024), {})).toBe('1.0 kB (new) · 1.0 kB CSS (new)');
+    expect(sizeCell({}, size(1))).toBe('—');
+  });
+
+  it('counts lines of code against main', () => {
+    expect(locCell(124, 120)).toBe('124 (**+4**)');
+    expect(locCell(120, 124)).toBe('120 (−4)');
+    expect(locCell(120, undefined)).toBe('120 (new)');
+    expect(locCell(undefined, 1)).toBe('—');
+  });
+});
+
+describe('checksCell', () => {
+  it('keeps Visual · A11y · RTL in fixed positions', () => {
+    expect(checksCell({visual: 'pass', a11y: null, rtl: 'fail'})).toBe(
+      '✓ · — · ✗',
+    );
+    expect(checksCell({visual: 'changed'})).toBe('✗ · — · —');
+  });
+});
+
+describe('buildComponentTable', () => {
+  const analysis = rows => ({
+    componentSizes: Object.fromEntries(
+      rows.map(([key, after]) => [key, size(after)]),
+    ),
+    baseComponentSizes: Object.fromEntries(
+      rows.map(([key, , before]) => [key, size(before)]),
+    ),
+    componentStats: {B: {storyTitle: 'Core/B', linesOfCode: 50}},
+    baseComponentStats: {B: {linesOfCode: 40}},
+  });
+
+  it('shows three rows, the most important first, and collapses the rest', () => {
+    const table = buildComponentTable({
+      analysis: analysis([
+        ['core/A', 1000, 1000],
+        ['core/B', 2000, 1500],
+        ['core/C', 1200, 1100],
+        ['core/D', 900, 1000],
+      ]),
+      origin: ORIGIN,
+      a11yReport: {components: {D: {violations: [{id: 'x'}]}}},
     });
+    const [visible, rest] = table.split('<details>');
+    // D's failed accessibility result comes first, then the biggest growth.
+    expect(visible.match(/^\| \[[A-D]\]/gm)).toEqual([
+      '| [D]',
+      '| [B]',
+      '| [C]',
+    ]);
+    expect(visible).toContain('### Modified components');
+    expect(visible).toContain(
+      '| Component | Size | LoC | Visual · A11y · RTL |',
+    );
+    expect(rest).toContain('<summary>1 more component</summary>');
+    expect(rest).toContain('| [A]');
+    expect(table).toContain(
+      `| [B](${ORIGIN}/components/B) · [Storybook](${ORIGIN}/storybook/?path=/docs/core-b--docs) | 2.0 kB (**+500 B**) · 1.0 kB CSS (0) | 50 (**+10**) | — · — · — |`,
+    );
+    expect(table).toContain('| — · ✗ · — |');
+  });
+
+  it('has no checks column when no suite ran, and no disclosure for three rows', () => {
+    const table = buildComponentTable({
+      analysis: analysis([['core/A', 1000, 1000]]),
+      origin: '',
+    });
+    expect(table).toContain('| Component | Size | LoC |\n');
+    expect(table).toContain('| A |');
+    expect(table).not.toContain('<details>');
+  });
+
+  it('takes results from the touched-components report first', () => {
+    const table = buildComponentTable({
+      analysis: analysis([['core/A', 1000, 1000]]),
+      origin: ORIGIN,
+      touched: {
+        components: [{name: 'A', results: {visual: 'changed', rtl: 'fail'}}],
+      },
+      a11yReport: {components: {A: {violations: []}}},
+    });
+    expect(table).toMatch(/\| ✗ · ✓ · ✗ \|$/m);
+  });
+
+  it('shows every mark as not run for a wide change', () => {
+    const table = buildComponentTable({
+      analysis: analysis([['core/A', 1000, 1000]]),
+      origin: ORIGIN,
+      touched: {wideChange: true, componentCount: 60, components: []},
+    });
+    expect(table).toMatch(/\| — · — · — \|$/m);
+  });
+
+  it('lists a modified component folder with no size', () => {
+    const table = buildComponentTable({
+      analysis: {
+        modifiedComponents: ['Card'],
+        componentStats: {Card: {package: '@astryxdesign/lab', linesOfCode: 9}},
+      },
+      origin: '',
+    });
+    expect(table).toContain('| lab/Card | — | 9 (new) |');
+  });
+
+  it('renders nothing when no component changed', () => {
+    expect(buildComponentTable({analysis: {}, origin: ORIGIN})).toBe('');
+  });
+});
+
+describe('buildVisualDeltas', () => {
+  const change = (key, diffPixels, component = 'Card') => ({
+    key,
+    component,
+    name: key,
+    theme: 'neutral',
+    mode: 'light',
+    diffPixels,
+  });
+
+  it('collapses the changed shots under their count, largest change first, with frames', () => {
+    const verdict = {
+      status: 'changed',
+      counts: {total: 20},
+      changes: [change('a', 1), change('b', 50), change('c', 9, 'Chip')],
+      added: ['core-dialog--default__neutral-light'],
+    };
+    const section = buildVisualDeltas({
+      verdict,
+      imageBase: 'https://raw.example/frames',
+    });
+    expect(section).toMatch(
+      /^<details>\n<summary>Visual changes: 4 snapshots in 3 components<\/summary>/,
+    );
+    expect(section.match(/^\| \S+ · [a-c] /gm)).toEqual([
+      '| Card · b ',
+      '| Chip · c ',
+      '| Card · a ',
+    ]);
+    expect(section).toContain(
+      '<img src="https://raw.example/frames/before/b.png" height="120" alt="before frame">',
+    );
+    // An added shot has an after frame only.
+    expect(section).toContain(
+      '| — | <img src="https://raw.example/frames/after/core-dialog--default__neutral-light.png" height="120" alt="after frame"> | — |',
+    );
+  });
+
+  it('frames only the shots publish-frames.mjs publishes, and counts the rest', () => {
+    const changes = Array.from({length: VISUAL_FRAME_LIMIT + 3}, (_, i) =>
+      change(`s${i}`, 100 - i),
+    );
+    const section = buildVisualDeltas({
+      verdict: {status: 'changed', counts: {total: 99}, changes},
+      imageBase: 'https://raw.example/f/',
+    });
+    expect(section.match(/<img /g)).toHaveLength(VISUAL_FRAME_LIMIT * 3);
+    expect(section).toContain("3 more are in the run's visual report.");
+  });
+
+  it('is absent without changes, and names shots without frames', () => {
+    expect(buildVisualDeltas({verdict: {status: 'ok', changes: []}})).toBe('');
+    expect(buildVisualDeltas({verdict: null})).toBe('');
+    expect(
+      buildVisualDeltas({
+        verdict: {
+          status: 'changed',
+          changes: [change('a', 1)],
+          counts: {total: 1},
+        },
+      }),
+    ).toContain('| frame unavailable |');
+  });
+});
+
+describe('packagesLine', () => {
+  const entry = (name, before, after, overBudget = false) => ({
+    name,
+    base: {packedBytes: before},
+    head: {packedBytes: after},
+    overBudget,
+  });
+
+  it('puts one changed package on one line', () => {
+    expect(
+      packagesLine({
+        verdict: 'pass',
+        packages: [
+          entry('@astryxdesign/core', 3_570_000, 3_574_096),
+          entry('@astryxdesign/build', 5000, 5000),
+        ],
+        addedDependencies: [],
+      }),
+    ).toBe(
+      '**Package size:** @astryxdesign/core 3.41 MB packed (**+4.0 kB**); no new dependencies.\n\n',
+    );
+  });
+
+  it('lists several changed packages, three then the rest collapsed, unchanged ones left out', () => {
+    const line = packagesLine({
+      verdict: 'over-budget',
+      packages: [
+        entry('@astryxdesign/core', 100000, 120000, true),
+        entry('@astryxdesign/richtext', 5000, 4000),
+        entry('@astryxdesign/cli', 9000, 9100),
+        entry('@astryxdesign/theme-neutral', 9000, 9000),
+        entry('@astryxdesign/build', 9000, 9200),
+      ],
+      addedDependencies: [
+        {
+          package: '@astryxdesign/cli',
+          field: 'dependencies',
+          name: 'left-pad',
+          range: '1',
+        },
+      ],
+    });
+    expect(line).toContain(
+      '- @astryxdesign/core 117.2 kB packed (**+19.5 kB**) 🔴; no new dependencies',
+    );
+    expect(line).toContain(
+      '- @astryxdesign/richtext 3.9 kB packed (−1000 B); no new dependencies',
+    );
+    expect(line).toContain(
+      '- @astryxdesign/cli 8.9 kB packed (**+100 B**); new dependency: left-pad',
+    );
+    expect(line).toContain('<summary>1 more package</summary>');
+    expect(line).not.toContain('theme-neutral');
+  });
+
+  it('says when nothing changed, and when main has no base yet', () => {
+    expect(
+      packagesLine({
+        verdict: 'pass',
+        packages: [entry('@astryxdesign/core', 1, 1)],
+      }),
+    ).toBe(
+      '**Package size:** no published package changed; no new dependencies.\n\n',
+    );
+    expect(packagesLine({verdict: 'no-base', packages: []})).toContain(
+      'no measurement of the merge base',
+    );
+    expect(packagesLine(null)).toBe('');
+  });
+});
+
+describe('notRunLine', () => {
+  const skipped = name => ({name, conclusion: 'skipped', steps: []});
+
+  it('names the label for one suite', () => {
+    expect(
+      notRunLine({
+        jobs: [
+          skipped('pr-rtl'),
+          {name: 'Stable visual regression', conclusion: 'success'},
+          {name: 'pr-a11y', conclusion: 'success'},
+        ],
+      }),
+    ).toBe('Not run on this PR: add `ci:run-rtl` to run it.\n\n');
+  });
+
+  it('names several suites in one line', () => {
+    expect(
+      notRunLine({
+        jobs: [
+          skipped(
+            'Stable visual scout (${{ matrix.shard }}/${{ strategy.job-total }})',
+          ),
+          skipped('Accessibility spec-test contracts'),
+          skipped('pr-rtl (core)'),
+        ],
+      }),
+    ).toBe(
+      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run a full suite.\n\n',
+    );
+  });
+
+  it('says a wide change runs the full suite by label', () => {
+    expect(
+      notRunLine({jobs: [], touched: {wideChange: true, componentCount: 60}}),
+    ).toBe(
+      'Wide change (60 components): add `ci:run-visual` / `ci:run-a11y` / `ci:run-rtl` to run the full suite.\n\n',
+    );
+  });
+
+  it('says nothing when every suite ran, and falls back to the reports without a job list', () => {
+    expect(notRunLine({jobs: []})).toBe('');
+    expect(notRunLine({jobs: null, a11yReport: {components: {}}})).toBe(
+      'Not run on this PR: add `ci:run-visual` to run it.\n\n',
+    );
   });
 });
 
 describe('job names', () => {
   it("folds a skipped matrix's unexpanded name, parentheses and all", () => {
-    const summary = summarizeJobs([
-      job('pr-rtl', 'skipped'),
-      job(
+    expect(
+      baseJobName(
         "pr-rtl (${{ matrix.package }}${{ (((matrix.parts > 1) && format(' {0}/{1}', matrix.part, matrix.parts)) || '') }})",
-        'skipped',
       ),
-    ]);
-    expect(summary).toEqual([{name: 'pr-rtl', state: 'not-run'}]);
-  });
-});
-
-describe('suite jobs by display name', () => {
-  it.each([
-    ['Stable visual regression', 'Visual'],
-    [
-      'Stable visual scout (${{ matrix.shard }}/${{ strategy.job-total }})',
-      'Visual',
-    ],
-    ['pr-a11y (browser specs)', 'Accessibility'],
-    ['Accessibility spec-test contracts', 'Accessibility'],
-    ['pr-rtl (core)', 'RTL'],
-  ])('reads a skipped %s as the %s suite not running', (name, label) => {
-    const table = buildStatusTable({
-      analysis: {newComponents: [], modifiedComponents: []},
-      jobs: [job(name, 'skipped')],
-    });
-    expect(table).toContain(
-      `| ${label} | ⏭ ${label} did not run on this pull request;`,
-    );
-  });
-});
-
-describe('summarizeJobs', () => {
-  it('folds matrix legs into one row; any failed leg fails it', () => {
-    const summary = summarizeJobs([
-      job('test-node (1/2)', 'success', [['Test', 'success']]),
-      job('test-node (2/2)', 'failure', [['Test', 'failure']]),
-    ]);
-    expect(summary).toEqual([
-      {name: 'test-node', state: 'ran', conclusion: 'failure'},
-    ]);
-  });
-});
-
-describe('notRunSentence', () => {
-  it.each([
-    [
-      'visual',
-      'Visual did not run on this pull request; add `ci:run-visual` to run it.',
-    ],
-    [
-      'a11y',
-      'Accessibility did not run on this pull request; add `ci:run-a11y` to run it.',
-    ],
-    [
-      'rtl',
-      'RTL did not run on this pull request; add `ci:run-rtl` to run it.',
-    ],
-    [
-      'perf',
-      'Perf did not run on this pull request; add `ci:run-perf` to run it.',
-    ],
-  ])('names the %s label', (id, sentence) => {
-    expect(notRunSentence(SUITES.find(suite => suite.id === id))).toBe(
-      sentence,
-    );
-  });
-});
-
-describe('buildStatusTable', () => {
-  const analysis = {newComponents: [], modifiedComponents: []};
-
-  it('puts the preview first and has no review-bot row', () => {
-    const table = buildStatusTable({
-      preview: {
-        state: 'ready',
-        sha: 'a'.repeat(40),
-        url: 'https://x.vercel.app',
-      },
-      analysis,
-    });
-    const rows = table
-      .trim()
-      .split('\n')
-      .slice(2)
-      .map(row => row.split(' | ')[0]);
-    expect(rows).toEqual([
-      '| Preview',
-      '| Size',
-      '| Visual',
-      '| Accessibility',
-      '| RTL',
-    ]);
-    expect(table).not.toMatch(/CodeBunny|\| Review/i);
-  });
-
-  it('shows perf only when it ran', () => {
-    const ran = buildStatusTable({
-      analysis,
-      jobs: [job('perf', 'success', [['Measure', 'success']])],
-    });
-    expect(ran).toContain('| Perf | ✅ passed |');
+    ).toBe('pr-rtl');
+    const rtl = SUITES.find(suite => suite.id === 'rtl');
     expect(
-      buildStatusTable({analysis, jobs: [job('perf', 'skipped')]}),
-    ).not.toContain('| Perf |');
-  });
-
-  it('reads the visual verdict and the accessibility report before the jobs', () => {
-    const table = buildStatusTable({
-      analysis,
-      visualVerdict: {status: 'ok', changes: [{}, {}], counts: {total: 10}},
-      a11yReport: {components: {Card: {violations: [{id: 'x'}]}}},
-      jobs: [job('pr-visual', 'success', [['Run', 'success']])],
-    });
-    expect(table).toContain(
-      '| Visual | 🔍 2 of 10 shots changed: review below |',
-    );
-    expect(table).toContain(
-      '| Accessibility | ❌ 1 violation(s): details below |',
-    );
-  });
-
-  it('summarizes size: components against the touch budget, packages and new dependencies', () => {
-    const table = buildStatusTable({
-      analysis: {
-        ...analysis,
-        componentSizes: {
-          'core/Card': {importGzipBytes: 5000},
-          'core/Chip': {importGzipBytes: 900},
-        },
-        baseComponentSizes: {
-          'core/Card': {importGzipBytes: 2000},
-          'core/Chip': {importGzipBytes: 900},
-        },
-      },
-      budgetFlags: [{comp: 'core/Card'}],
-      packageSize: {
-        verdict: 'pass',
-        addedDependencies: [{name: 'left-pad'}],
-      },
-    });
-    expect(table).toContain(
-      '| Size | ⚠️ 1 component(s) over the touch-only budget, largest +2.9KB (core/Card) · packages within budget · new dependencies: left-pad |',
-    );
-  });
-
-  it('counts the CI jobs and names a failed one', () => {
-    const table = buildStatusTable({
-      analysis,
-      jobs: [
-        job('lint', 'failure', [['Lint', 'failure']]),
-        job('test-ui', 'success', [['Test', 'success']]),
-        job('docsite-test', 'success', [
-          [SCOPE, 'success'],
-          ['Build', 'skipped'],
-        ]),
-        job('release-check', 'skipped'),
-      ],
-    });
-    expect(table).toContain(
-      '| CI jobs | 2 ran · ❌ failed: lint · 1 skipped by path (table below) |',
-    );
-  });
-});
-
-describe('buildJobTable', () => {
-  it('lists what each job did and why, collapsed, and leaves out release-only jobs', () => {
-    const table = buildJobTable([
-      job('test-ui', 'success', [['Test', 'success']]),
-      job('docsite-test', 'success', [
-        [SCOPE, 'success'],
-        ['Build', 'skipped'],
-      ]),
-      job('pr-rtl', 'skipped'),
-      job('release-check', 'skipped'),
-    ]);
-    expect(table).toMatch(
-      /^<details>\n<summary>CI jobs: 1 ran, 1 skipped by path<\/summary>/,
-    );
-    expect(table).toContain('| test-ui | ✅ passed | |');
-    expect(table).toContain(
-      '| docsite-test | ⏭ skipped | nothing in its paths changed |',
-    );
-    expect(table).toContain(
-      '| pr-rtl | ⏭ not run | RTL did not run on this pull request; add `ci:run-rtl` to run it. |',
-    );
-    expect(table).not.toContain('release-check');
-    expect(table).toContain(
-      '1 release-only job(s) do not apply to pull requests.',
-    );
-  });
-});
-
-describe('buildTouchedComponents', () => {
-  const origin = 'https://astryx-abc123-fbopensource.vercel.app';
-  const analysis = {
-    newComponents: [],
-    modifiedComponents: ['Button'],
-    componentStats: {
-      Button: {package: '@astryxdesign/core', storyTitle: 'Core/Button'},
-    },
-  };
-
-  it("links each touched component's docs page and stories in this head's preview", () => {
-    const table = buildTouchedComponents({analysis, origin});
-    expect(table).toContain(
-      `| Button | [Docs](${origin}/components/Button) | [Stories](${origin}/storybook/?path=/docs/core-button--docs) | — | — | — |`,
-    );
-  });
-
-  it('takes per-component results from the touched-components report first', () => {
-    const table = buildTouchedComponents({
-      analysis,
-      origin,
-      touched: {
-        components: [
-          {
-            name: 'Button',
-            results: {visual: 'changed', a11y: 'pass', rtl: 'fail'},
-          },
-        ],
-      },
-      a11yReport: {components: {Button: {violations: [{id: 'x'}]}}},
-    });
-    expect(table).toContain('| 🔍 changed | ✅ | ❌ |');
-  });
-
-  it('falls back to the accessibility report and visual verdict', () => {
-    const table = buildTouchedComponents({
-      analysis,
-      origin,
-      a11yReport: {components: {Button: {violations: []}}},
-      visualVerdict: {status: 'ok', changes: [{component: 'Button'}]},
-    });
-    expect(table).toContain('| 🔍 changed | ✅ | — |');
-  });
-
-  it('renders nothing when no component was touched', () => {
-    expect(
-      buildTouchedComponents({
-        analysis: {newComponents: [], modifiedComponents: []},
-        origin,
-      }),
-    ).toBe('');
-  });
-
-  it('renders component names as literal text', () => {
-    const table = buildTouchedComponents({
-      analysis: {modifiedComponents: ['<img src=x>'], componentStats: {}},
-      origin,
-    });
-    expect(table).not.toContain('<img src=x>');
+      suiteRunState(rtl, [{name: 'pr-rtl (core)', conclusion: 'success'}]),
+    ).toBe('ran');
+    expect(suiteRunState(rtl, [])).toBeNull();
   });
 });
