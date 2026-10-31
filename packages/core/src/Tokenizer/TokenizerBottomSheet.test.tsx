@@ -1806,9 +1806,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // changes until the sheet closes.
     compact = false;
     act(() => {
-      for (const cb of listeners) {
-        cb();
-      }
+      for (const cb of listeners) {cb();}
     });
     expect(screen.getByRole('dialog', {name: 'Tags'})).toBe(dialog);
     expect(trigger).toBeInTheDocument();
@@ -2552,9 +2550,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // the hand-off inside the field reports neither a blur nor a focus.
     compact = false;
     act(() => {
-      for (const cb of listeners) {
-        cb();
-      }
+      for (const cb of listeners) {cb();}
     });
     expect(screen.getByRole('combobox')).toHaveFocus();
     expect(onFocus).toHaveBeenCalledTimes(1);
@@ -2562,18 +2558,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // And back: the input focused, the screen becomes compact again.
     compact = true;
     act(() => {
-      for (const cb of listeners) {
-        cb();
-      }
+      for (const cb of listeners) {cb();}
     });
     expect(openTrigger()).toHaveFocus();
     // Unfocused, a change moves nothing.
     openTrigger().blur();
     compact = false;
     act(() => {
-      for (const cb of listeners) {
-        cb();
-      }
+      for (const cb of listeners) {cb();}
     });
     expect(document.body).toHaveFocus();
   });
