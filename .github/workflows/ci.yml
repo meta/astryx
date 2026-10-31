@@ -57,9 +57,11 @@ permissions: {}
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates: they run for release-check,
 # which the Main heavy lanes workflow (main-heavy-lanes.yml) dispatches on every
-# push to main and the release gate dispatches before a cut, and on a pull request labelled `ci:heavy-lanes` (add the label,
-# then push or close and reopen). A main failure is fixed forward
-# (spec:AST-030 FR12, DEC-7).
+# push to main and the release gate dispatches before a cut. A pull request
+# opts into one suite with its label, `ci:run-visual`, `ci:run-a11y` or
+# `ci:run-rtl`, applied by someone with write access (add the label, then push
+# or close and reopen); run-labels decides. A main failure is fixed forward
+# (spec:AST-030 FR12, FR17, DEC-7).
 #
 # Runners: every job uses GitHub's standard hosted runners, except the release
 # path's long jobs, which take a paid larger-runner pool so pull request load
@@ -810,9 +812,9 @@ jobs:
         run: node internal/shadcn-registry/verify-full-catalog.mjs
 
   # Historical required check name. The Vitest lanes, the Build test owner,
-  # native Swift and the interaction proofs always report (each skips its own
-  # work outside its scope), so this join projects their combined result
-  # without creating another surface lane.
+  # native Swift and the interaction proofs (Chromium and WebKit) always
+  # report (each skips its own work outside its scope), so this join projects
+  # their combined result without creating another surface lane.
   test:
     needs:
       [
@@ -822,6 +824,7 @@ jobs:
         test-build,
         test-native-swift,
         pr-interaction,
+        pr-interaction-webkit,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     runs-on: ubuntu-slim
@@ -866,12 +869,54 @@ jobs:
           TEST_BUILD_RESULT: ${{ needs.test-build.result }}
           TEST_NATIVE_SWIFT_RESULT: ${{ needs.test-native-swift.result }}
           PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}
+          PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
   # test). Uploads the storybook preview and analysis artifacts for downstream
   # jobs. Sandbox previews come from the exact-head Vercel deployment, so CI
   # builds no Sandbox of its own.
+  # Which heavy suites this pull request opted into: one output per suite,
+  # `true` while the pull request carries that suite's `ci:run-<suite>` label
+  # and its newest application came from someone with write, maintain or
+  # admin access (spec:AST-030 FR12). It reads the event that started the run,
+  # so a label takes effect on the next push or reopen (FR17). Outside a pull
+  # request every output is `false`; the release check runs every suite on its
+  # own terms. The decision script comes from the merge commit's trusted
+  # sparse checkout, and a lookup that fails denies the suite.
+  run-labels:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      visual: ${{ steps.decide.outputs.visual }}
+      a11y: ${{ steps.decide.outputs.a11y }}
+      rtl: ${{ steps.decide.outputs.rtl }}
+    steps:
+      - name: Check out the decision script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/run-labels.cjs
+            .github/scripts/review-signal-decision.cjs
+          sparse-checkout-cone-mode: false
+          path: .run-labels
+          persist-credentials: false
+
+      - name: Decide which suites run
+        id: decide
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const {decideRunLabels} = require(
+              `${process.env.GITHUB_WORKSPACE}/.run-labels/.github/scripts/run-labels.cjs`,
+            );
+            await decideRunLabels({github, context, core});
+
   build-storybook:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
     # Every browser lane waits for this job, and the package builds and the
@@ -1401,8 +1446,8 @@ jobs:
 
   pr-a11y-guards:
     name: pr-a11y (audit and guards)
-    needs: [build-storybook]
-    if: ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
+    needs: [build-storybook, run-labels]
+    if: ((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
@@ -1532,8 +1577,8 @@ jobs:
   # inside the budget without weakening the stable pr-a11y join.
   pr-a11y-specs:
     name: pr-a11y (browser specs)
-    needs: [build-storybook]
-    if: ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
+    needs: [build-storybook, run-labels]
+    if: ((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
@@ -1622,8 +1667,8 @@ jobs:
 
   # Stable required context joining the scoped audit/guards and browser specs.
   pr-a11y:
-    needs: [pr-a11y-guards, pr-a11y-specs]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
+    needs: [pr-a11y-guards, pr-a11y-specs, run-labels]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && ((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -1861,6 +1906,129 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The gesture, motion and harness interaction proofs in WebKit, the engine
+  # of every iOS browser, for the code where WebKit and Chromium differ on
+  # touch: the gesture host and recognizers, the motion runtime, the touch and
+  # press helpers and the menu press model, plus the harness and the shared
+  # setup that runs them (spec:AST-030 FR13). The run is limited to the specs
+  # whose bundles reach only that same code, so a WebKit break elsewhere never
+  # turns an unrelated pull request red; the motion adopters spec renders
+  # Storybook components and stays with the Chromium proofs. Out of scope every step after the scope step skips and
+  # the job reports success, so the `test` join reads it without a new
+  # required context. Specs that need Chromium-only evidence skip themselves
+  # in WebKit.
+  pr-interaction-webkit:
+    needs: [build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    # Frame evidence measures timing: four cores, one Playwright worker.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # The heavy-suite caps read the author's pull requests and runs.
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      # This job decides its own scope (no separate scope job): the step
+      # reads the PR's file list and the base's trusted classifier, and
+      # everything is in scope when it cannot decide.
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform)|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          outside-pull-request: skip
+          requires-head-file: playwright.interaction.config.ts
+
+      - name: Require this pull request's Storybook build
+        if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The proofs read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      - name: Skip the WebKit proofs outside their scope
+        if: steps.scope.outputs.applies != 'true'
+        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
+
+      # The caps step comes from the merge commit, not the pull request's
+      # head: a head that predates the step does not have it. The head
+      # checkout below replaces this directory.
+      - name: Check out the heavy-suite caps
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          path: .heavy-caps
+          sparse-checkout: .github/actions/heavy-caps
+          persist-credentials: false
+
+      - name: Per-author heavy-suite caps
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.heavy-caps/.github/actions/heavy-caps
+
+      # The daily heavy-run cap counts this step (spec:AST-030 FR16).
+      - name: Heavy suite runs
+        if: steps.scope.outputs.applies == 'true'
+        run: 'true'
+
+      - name: Checkout
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify evidence checkout
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Setup Node and pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      # WebKit needs system libraries the runner image lacks; --with-deps
+      # installs them.
+      - name: Install Playwright WebKit
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
+
+      - name: Run WebKit interaction proofs
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/gestures/ \
+            packages/core/src/motion/__tests__/animatedLayout.interaction \
+            packages/core/src/motion/__tests__/animator.interaction \
+            internal/interaction-harness/ \
+            --config playwright.interaction.config.ts \
+            --project webkit \
+            --output interaction-proof-output-webkit
+
+      - name: Upload WebKit interaction evidence
+        if: always() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-evidence-webkit
+          path: test-results/interaction-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration
   # paints after Vite emits the final bundle. The `test-build` name makes that
@@ -1934,11 +2102,11 @@ jobs:
   # joins them only when every shard succeeded, and otherwise scouts inline.
   visual-scout:
     name: Stable visual scout (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [build-storybook]
+    needs: [build-storybook, run-labels]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() &&
       needs.build-storybook.result == 'success' &&
-      ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) ||
+      ((github.event_name == 'pull_request' && needs.run-labels.outputs.visual == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')))
     # Five legs: at three, each leg's scout took ~4.5 minutes and the visual
     # regression waited for the slowest one.
@@ -2049,10 +2217,10 @@ jobs:
   # Audit and interaction fixtures stay with their existing browser checks.
   pr-visual:
     name: Stable visual regression
-    needs: [build-storybook, maintenance-request, visual-scout]
+    needs: [build-storybook, maintenance-request, visual-scout, run-labels]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() &&
-      (((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) &&
+      (((github.event_name == 'pull_request' && needs.run-labels.outputs.visual == 'true') &&
         needs.build-storybook.result == 'success') ||
        (github.event_name == 'workflow_dispatch' &&
         ((inputs.operation == 'release-check' &&
@@ -2367,9 +2535,9 @@ jobs:
   # To promote findings too, remove the audit step's continue-on-error.
   pr-rtl-shard:
     name: pr-rtl (${{ matrix.package }}${{ matrix.parts > 1 && format(' {0}/{1}', matrix.part, matrix.parts) || '' }})
-    needs: [build-storybook]
+    needs: [build-storybook, run-labels]
     if: >-
-      ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) ||
+      ((github.event_name == 'pull_request' && needs.run-labels.outputs.rtl == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
     # Core is the largest package, so its audit is split three ways
     # (`--shard`) and joined by pr-rtl-merge; every other package runs whole.
@@ -2569,10 +2737,10 @@ jobs:
   # part fails here.
   pr-rtl-merge:
     name: pr-rtl (core)
-    needs: [build-storybook, pr-rtl-shard]
+    needs: [build-storybook, pr-rtl-shard, run-labels]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && !cancelled() &&
-      ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) ||
+      ((github.event_name == 'pull_request' && needs.run-labels.outputs.rtl == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')))
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 15
@@ -2677,8 +2845,8 @@ jobs:
 
   # Stable required context joining the five package shards above.
   pr-rtl:
-    needs: [pr-rtl-shard, pr-rtl-merge]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && !cancelled() && ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
+    needs: [pr-rtl-shard, pr-rtl-merge, run-labels]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && !cancelled() && ((github.event_name == 'pull_request' && needs.run-labels.outputs.rtl == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:

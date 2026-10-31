@@ -191,10 +191,13 @@ they are separately named.
   visual plan and unfiltered accessibility/RTL component rosters. Changed-file,
   focused, smoke, and no-op paths MUST NOT narrow release checks. On a pull
   request, the visual (`visual-scout`, `pr-visual`), accessibility (`pr-a11y`
-  with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST run
-  only when the pull request carries the `ci:heavy-lanes` label at the event; a
-  pull request update without it runs none of them, and no required context
-  depends on them. An opted-in PR's a11y MUST remain scoped to changed components
+  with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST each
+  run only when the pull request carries that suite's label at the event:
+  `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
+  someone with write, maintain or admin access, and a lookup that cannot
+  confirm that runs nothing. A label runs only its own suite; a pull request
+  update without one runs none of them, and no required context depends on
+  them. An opted-in PR's a11y MUST remain scoped to changed components
   plus fast interaction guards; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
@@ -232,7 +235,7 @@ they are separately named.
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
   sources; and every test that loads a changed workspace package from its build,
   by the package's name or a path into its `dist/`. When a pull request runs
-  them (FR12: only with the `ci:heavy-lanes` label), the visual and RTL owners
+  them (FR12: only with their `ci:run-visual` or `ci:run-rtl` label), the visual and RTL owners
   audit one affected set of component folders: the changed components
   and their reverse dependents, the folders of the components, in any package,
   whose built bundle, `import()` targets included, reaches a changed module.
@@ -241,8 +244,8 @@ they are separately named.
   audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
   a readable build the audits run in full. PR accessibility, when it runs, stays
   scoped to changed components (FR12). Shared infrastructure runs the full suite of
-  the owners the pull request runs (visual, accessibility and RTL only with the
-  `ci:heavy-lanes` label, FR12): root
+  the owners the pull request runs (visual, accessibility and RTL only with
+  their `ci:run-*` labels, FR12): root
   dependency manifests and lockfile, root configuration, a package's manifest,
   build or test configuration and test setup, `internal/` (the test harness
   included), `theme-build` paths (tokens and themes), Storybook configuration,
@@ -301,7 +304,8 @@ they are separately named.
   suites. A re-run, which is the pre-merge restart, is exempt from both limits,
   and when the limits cannot be looked up the suite runs. Merge-queue entries,
   `main`, release checks and the visual, accessibility and RTL owners a
-  maintainer opts a pull request into with `ci:heavy-lanes` are unaffected.
+  maintainer opts a pull request into with their `ci:run-*` labels are
+  unaffected.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -472,7 +476,7 @@ retroactive status as release evidence.
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
-a pull request runs them only when it opts in with the `ci:heavy-lanes` label. Main-push checks are throttled: one runs at a time, a
+a pull request runs each only when it opts in with that suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label. Main-push checks are throttled: one runs at a time, a
 burst of pushes collapses to its newest commit, and a running check is never
 cancelled, so every check that starts finishes.
 Pull request updates keep the fast checks and every required context; the
@@ -500,7 +504,7 @@ read sources through the file system run whole, because no import reaches what
 they read. Shared infrastructure, uncertainty, `main`, merge-group entries and
 release checks run everything, so no landing or release gate narrows; a pull
 request runs the visual, accessibility and RTL owners only with the
-`ci:heavy-lanes` label (DEC-7).
+suite's `ci:run-*` label (DEC-7).
 
 Rejected: a full run triggered by approval, a label or a draft-to-ready change,
 which tests the pull request's head rather than the merged result.
