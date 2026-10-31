@@ -311,7 +311,7 @@ describe('renderPackageSizeSection', () => {
     const markdown = renderPackageSizeSection(
       comparePackageSizes({head: base, base: null}),
     );
-    expect(markdown).toContain('no budget applies');
+    expect(markdown).toContain('with no budget');
     expect(markdown).toContain('theme-stone');
   });
 
@@ -374,6 +374,19 @@ describe('package-size.mjs', () => {
       '::warning title=Package size over budget::',
     );
     expect(result.stdout).not.toContain('::error');
+  });
+
+  it.each([
+    ['no-merge-base', 'not within the fetched history'],
+    ['not-kept', 'could not be found or read'],
+  ])('names why there is no base: %s', (reason, text) => {
+    const report = comparePackageSizes({
+      head: grown,
+      base: null,
+      baseReason: reason,
+    });
+    expect(report.baseReason).toBe(reason);
+    expect(renderPackageSizeSection(report)).toContain(text);
   });
 
   it('compares without a base, with a notice and no flag', () => {

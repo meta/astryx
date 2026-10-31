@@ -7,8 +7,9 @@
  * @input `measure --output <file> [--root <dir>]`: a workspace whose packages
  *   are built.
  *   `compare --head <file> [--base <file>] --output <file>
- *   [--summary <file>] [--head-sha <sha>] [--base-sha <sha>]`: two
- *   measurements (a missing or unreadable base compares nothing).
+ *   [--summary <file>] [--head-sha <sha>] [--base-sha <sha>]
+ *   [--base-reason no-merge-base|not-kept]`: two measurements (a missing or
+ *   unreadable base compares nothing, and the reason says why).
  * @output `measure` writes each published package's sizes and runtime
  *   dependencies. `compare` writes the comparison, appends it to the job
  *   summary, and flags (never fails) a package over its budget.
@@ -65,6 +66,7 @@ if (command === 'measure') {
     base,
     headSha: getArg('head-sha') || '',
     baseSha: getArg('base-sha') || '',
+    baseReason: getArg('base-reason') || '',
   });
   fs.writeFileSync(output, `${JSON.stringify(report, null, 2)}\n`);
   const markdown = renderPackageSizeSection(report);
