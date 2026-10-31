@@ -64,13 +64,13 @@ export const docs = {
       name: 'width',
       type: 'number | string',
       description:
-        'Width of the panel. Numbers are treated as pixels, strings are used as-is. Ignored when resizable is provided; the hook controls width.',
+        'Width of the panel. Numbers are treated as pixels, strings are used as-is. For a resizable panel, pass the size useResizable(handleRef, options) reports (width={region.size}) and give the ref to the adjacent ResizeHandle. Ignored when the deprecated resizable prop is provided.',
     },
     {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "Resize props from useResizable(). When provided, the hook drives the panel width and a ResizeHandle should be placed adjacent to the panel. Carries the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction.",
+        "Deprecated: resize props from useResizable's configuration-object form; the panel width is the hook's size. They carry the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction. Pass width={region.size} from useResizable(handleRef, options) instead. Removed in the next minor.",
     },
   ],
 };
@@ -117,13 +117,13 @@ export const docsZh = {
       name: 'width',
       type: 'number | string',
       description:
-        '面板宽度。数字按像素处理，字符串按原样使用。提供 resizable 时忽略，宽度由 hook 控制。',
+        '面板宽度。数字按像素处理，字符串按原样使用。可调整大小的面板传入 useResizable(handleRef, options) 报告的尺寸（width={region.size}），并把 ref 交给相邻的 ResizeHandle。提供已弃用的 resizable 时忽略。',
     },
     {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "来自 useResizable() 的调整大小属性。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。",
+        "已弃用：来自 useResizable 配置对象形式的调整大小属性，面板宽度即 hook 的尺寸。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。请改为传入 useResizable(handleRef, options) 的 width={region.size}。将在下一个次版本中移除。",
     },
   ],
 };
@@ -142,8 +142,8 @@ export const docsDense = {
     label: 'Accessible label for landmark element.',
     role: 'ARIA landmark role.',
     width:
-      'Panel width. Numbers = pixels, strings as-is. Ignored when resizable provided; hook controls width.',
+      'Panel width. Numbers = pixels, strings as-is. Resizable panel: width={region.size} from useResizable(handleRef, options). Ignored when deprecated resizable provided.',
     resizable:
-      'Resize props from useResizable(). Hook drives panel width; place ResizeHandle adjacent.',
+      'Deprecated: config-object useResizable props. Use width={region.size} instead. Removed next minor.',
   },
 };

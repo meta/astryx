@@ -1,0 +1,133 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file useResizableRef.test.tsx
+ * @input vitest (jsdom), Testing Library, the ref-taking useResizable over a
+ *   stand-in createResizable
+ * @output Checks that the ref-taking useResizable only delegates to
+ *   createResizable (spec:AST-107 FR6): it creates the factory on the element
+ *   with the options it was given, passes later options through update(),
+ *   destroys it on unmount, and returns what the factory reports
+ * @position Unit tests for the ref-taking signature of useResizable.ts
+ */
+
+import {act, render} from '@testing-library/react';
+import {useRef} from 'react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import type * as CreateResizableModule from './createResizable';
+import type {
+  CreateResizableOptions,
+  ResizableController,
+} from './createResizable';
+import type {UseResizableResult} from './useResizable';
+
+interface FakeController extends ResizableController {
+  emit(): void;
+  setState(next: {size?: number; isCollapsed?: boolean}): void;
+}
+
+const created: {element: HTMLElement; options: CreateResizableOptions}[] = [];
+let fake: FakeController;
+
+vi.mock('./createResizable', async importOriginal => {
+  const original = await importOriginal<typeof CreateResizableModule>();
+  return {
+    ...original,
+    createResizable: vi.fn(
+      (element: HTMLElement, options: CreateResizableOptions = {}) => {
+        created.push({element, options});
+        const listeners = new Set<() => void>();
+        let state = {size: 123, isCollapsed: false};
+        fake = {
+          get size() {
+            return state.size;
+          },
+          get isCollapsed() {
+            return state.isCollapsed;
+          },
+          collapse: vi.fn(),
+          expand: vi.fn(),
+          resize: vi.fn(),
+          update: vi.fn(),
+          destroy: vi.fn(),
+          subscribe: (listener: () => void) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+          },
+          emit: () => {
+            for (const listener of listeners) {
+              listener();
+            }
+          },
+          setState: next => {
+            state = {...state, ...next};
+          },
+        };
+        return fake;
+      },
+    ),
+  };
+});
+
+const {useResizable} = await import('./useResizable');
+type Region = UseResizableResult;
+
+afterEach(() => {
+  created.length = 0;
+});
+
+function Split({
+  options,
+  onRegion,
+}: {
+  options: CreateResizableOptions;
+  onRegion: (region: Region) => void;
+}) {
+  const handleRef = useRef<HTMLDivElement>(null);
+  const region = useResizable(handleRef, options);
+  onRegion(region);
+  return <div ref={handleRef} data-testid="handle" />;
+}
+
+describe('useResizable(ref, options) only delegates to createResizable (spec:AST-107 FR6)', () => {
+  it('creates the factory on the element with the options it was given, updates it, and destroys it on unmount', () => {
+    const first: CreateResizableOptions = {defaultSize: 200, minSize: 100};
+    const view = render(<Split options={first} onRegion={() => {}} />);
+    expect(created).toHaveLength(1);
+    expect(created[0].element).toBe(view.getByTestId('handle'));
+    expect(created[0].options).toBe(first);
+
+    const second: CreateResizableOptions = {defaultSize: 200, minSize: 150};
+    view.rerender(<Split options={second} onRegion={() => {}} />);
+    expect(created).toHaveLength(1);
+    expect(fake.update).toHaveBeenLastCalledWith(second);
+
+    view.unmount();
+    expect(fake.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns what the factory reports, and its methods call the factory', () => {
+    let region: Region | undefined;
+    render(
+      <Split
+        options={{defaultSize: 200}}
+        onRegion={next => {
+          region = next;
+        }}
+      />,
+    );
+    expect(region?.size).toBe(123);
+    act(() => {
+      fake.setState({size: 321, isCollapsed: true});
+      fake.emit();
+    });
+    expect(region?.size).toBe(321);
+    expect(region?.isCollapsed).toBe(true);
+    region?.collapse();
+    region?.expand();
+    region?.resize(250);
+    expect(fake.collapse).toHaveBeenCalledTimes(1);
+    expect(fake.expand).toHaveBeenCalledTimes(1);
+    expect(fake.resize).toHaveBeenCalledWith(250);
+  });
+});

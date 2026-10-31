@@ -2226,7 +2226,8 @@ export default function TableFilterTemplate() {
   // The floor keeps the MetadataList's 104px label column from squeezing its
   // values below a readable line; the ceiling stops the panel from taking so
   // much room that the table loses its sortable columns.
-  const detailWidth = useResizable({
+  const detailWidthHandleRef = useRef<HTMLDivElement>(null);
+  const detailWidth = useResizable(detailWidthHandleRef, {
     defaultSize: 380,
     minSize: 320,
     maxSize: 560,
@@ -4289,7 +4290,7 @@ export default function TableFilterTemplate() {
         {/* The panel owns the separator, so the handle stays divider-less and
             hides its pill at rest rather than floating a stray stub. */}
         <ResizeHandle
-          resizable={detailWidth.props}
+          ref={detailWidthHandleRef}
           isReversed
           isAlwaysVisible={false}
           label="Resize job details"
@@ -4298,7 +4299,7 @@ export default function TableFilterTemplate() {
             inside re-adds the 16px gutter to keep its content on the same
             line. */}
         <LayoutPanel
-          resizable={detailWidth.props}
+          width={detailWidth.size}
           hasDivider
           padding={0}
           label="Job details">

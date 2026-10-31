@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useRef} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -47,7 +48,8 @@ type Story = StoryObj<typeof ResizeHandle>;
 /** Basic horizontal split with divider line. */
 export const HorizontalSplit: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 250,
       minSize: 150,
       maxSize: 500,
@@ -72,7 +74,7 @@ export const HorizontalSplit: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -94,7 +96,8 @@ export const HorizontalSplit: Story = {
 /** Vertical split with divider line. */
 export const VerticalSplit: Story = {
   render: () => {
-    const top = useResizable({
+    const topHandleRef = useRef<HTMLDivElement>(null);
+    const top = useResizable(topHandleRef, {
       defaultSize: 250,
       minSize: 100,
       maxSize: 350,
@@ -117,7 +120,7 @@ export const VerticalSplit: Story = {
               <ResizeHandle
                 direction="vertical"
                 hasDivider
-                resizable={top.props}
+                ref={topHandleRef}
                 label="Resize editor"
               />
             </div>
@@ -139,7 +142,8 @@ export const VerticalSplit: Story = {
 /** Collapsible sidebar — drag past threshold or double-click to collapse. */
 export const Collapsible: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 260,
       minSize: 180,
       collapsible: true,
@@ -165,7 +169,7 @@ export const Collapsible: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -196,12 +200,14 @@ export const Collapsible: Story = {
 /** Three-panel IDE layout with nested horizontal + vertical splits. */
 export const ThreePanelIDE: Story = {
   render: () => {
-    const explorer = useResizable({
+    const explorerHandleRef = useRef<HTMLDivElement>(null);
+    const explorer = useResizable(explorerHandleRef, {
       defaultSize: 220,
       minSize: 150,
       maxSize: 400,
     });
-    const editor = useResizable({
+    const editorHandleRef = useRef<HTMLDivElement>(null);
+    const editor = useResizable(editorHandleRef, {
       defaultSize: 280,
       minSize: 100,
       maxSize: 350,
@@ -224,7 +230,7 @@ export const ThreePanelIDE: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={explorer.props}
+                ref={explorerHandleRef}
                 label="Resize explorer"
               />
             </>
@@ -248,7 +254,7 @@ export const ThreePanelIDE: Story = {
                 <ResizeHandle
                   direction="vertical"
                   hasDivider
-                  resizable={editor.props}
+                  ref={editorHandleRef}
                   label="Resize editor"
                 />
                 <div style={{flex: 1, padding: 16}}>
@@ -266,7 +272,8 @@ export const ThreePanelIDE: Story = {
 /** Snap points — sidebar snaps to predefined widths. */
 export const SnapPoints: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 260,
       minSize: 56,
       maxSize: 600,
@@ -295,7 +302,7 @@ export const SnapPoints: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -314,7 +321,8 @@ export const SnapPoints: Story = {
 /** Pill hidden at rest — only appears on hover/focus. */
 export const HiddenPill: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 250,
       minSize: 150,
       maxSize: 500,
@@ -338,7 +346,7 @@ export const HiddenPill: Story = {
                 direction="horizontal"
                 hasDivider
                 isAlwaysVisible={false}
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -357,7 +365,11 @@ export const HiddenPill: Story = {
 /** Disabled handle — divider visible but non-interactive. */
 export const Disabled: Story = {
   render: () => {
-    const sidebar = useResizable({defaultSize: 250, minSize: 150});
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
+      defaultSize: 250,
+      minSize: 150,
+    });
     return (
       <div {...stylex.props(ps.shell)}>
         <Layout
@@ -370,7 +382,7 @@ export const Disabled: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 isDisabled
                 label="Locked"
               />
@@ -390,7 +402,8 @@ export const Disabled: Story = {
 /** Integration with Layout — resizable sidebar with collapsible. */
 export const WithLayout: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 260,
       minSize: 180,
       maxSize: 450,
@@ -405,7 +418,7 @@ export const WithLayout: Story = {
             <>
               {!sidebar.isCollapsed && (
                 <LayoutPanel
-                  resizable={sidebar.props}
+                  width={sidebar.size}
                   hasDivider={false}
                   role="navigation"
                   label="Sidebar">
@@ -423,7 +436,7 @@ export const WithLayout: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize navigation"
               />
             </>
@@ -461,7 +474,8 @@ export const WithLayout: Story = {
 /** AppShell with resizable SideNav. */
 export const WithAppShell: Story = {
   render: () => {
-    const nav = useResizable({
+    const navHandleRef = useRef<HTMLDivElement>(null);
+    const nav = useResizable(navHandleRef, {
       defaultSize: 260,
       minSize: 200,
       maxSize: 400,
@@ -487,7 +501,7 @@ export const WithAppShell: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={nav.props}
+                ref={navHandleRef}
                 label="Resize navigation"
               />
             </>
@@ -522,7 +536,8 @@ export const WithAppShell: Story = {
  */
 export const WithEmbeddedFrame: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 200,
       minSize: 120,
       maxSize: 520,
@@ -545,7 +560,7 @@ export const WithEmbeddedFrame: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>

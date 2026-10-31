@@ -1717,8 +1717,14 @@ export default function CanvasEditor() {
   // being useful below — the rail at the point layer names start truncating,
   // the inspector at the point its two-field rows stop fitting side by side —
   // and the ceilings keep either from eating the canvas they exist to serve.
-  const rail = useResizable({defaultSize: 216, minSize: 176, maxSize: 320});
-  const inspector = useResizable({
+  const railHandleRef = useRef<HTMLDivElement>(null);
+  const rail = useResizable(railHandleRef, {
+    defaultSize: 216,
+    minSize: 176,
+    maxSize: 320,
+  });
+  const inspectorHandleRef = useRef<HTMLDivElement>(null);
+  const inspector = useResizable(inspectorHandleRef, {
     defaultSize: 288,
     minSize: 264,
     maxSize: 400,
@@ -2057,7 +2063,7 @@ export default function CanvasEditor() {
                   chrome.left ? (
                     <>
                       <LayoutPanel
-                        resizable={rail.props}
+                        width={rail.size}
                         hasDivider
                         padding={2}
                         label="Layers and assets"
@@ -2121,7 +2127,7 @@ export default function CanvasEditor() {
                     divider-less and keeps its grip hidden until the pointer
                     is on the seam. */}
                       <ResizeHandle
-                        resizable={rail.props}
+                        ref={railHandleRef}
                         isAlwaysVisible={false}
                         // Centred on the seam rather than pushed onto the
                         // content side: the grip marks the edge it moves, and
@@ -2350,7 +2356,7 @@ export default function CanvasEditor() {
                   chrome.right ? (
                     <>
                       <ResizeHandle
-                        resizable={inspector.props}
+                        ref={inspectorHandleRef}
                         isReversed
                         isAlwaysVisible={false}
                         pillPlacement="center"
@@ -2358,7 +2364,7 @@ export default function CanvasEditor() {
                         xstyle={styles.foldsAtInspector}
                       />
                       <LayoutPanel
-                        resizable={inspector.props}
+                        width={inspector.size}
                         hasDivider
                         padding={0}
                         isScrollable

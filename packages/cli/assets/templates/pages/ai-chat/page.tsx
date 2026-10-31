@@ -274,7 +274,8 @@ export default function AIChatConversationTemplate() {
   const [isArtifactDialogOpen, setIsArtifactDialogOpen] = useState(false);
   const [isArtifactOpen, setIsArtifactOpen] = useState(true);
   const rootRef = useRef<HTMLElement>(null);
-  const artifactResize = useResizable({
+  const artifactResizeHandleRef = useRef<HTMLDivElement>(null);
+  const artifactResize = useResizable(artifactResizeHandleRef, {
     defaultSize: 640,
     minSize: 480,
     maxSize: 960,
@@ -686,7 +687,7 @@ The fix is to catch \`TokenExpiredError\` specifically and attempt a refresh bef
                 <>
                   <ResizeHandle
                     direction="horizontal"
-                    resizable={artifactResize.props}
+                    ref={artifactResizeHandleRef}
                     isReversed
                     pillPlacement="start"
                     hasDivider
