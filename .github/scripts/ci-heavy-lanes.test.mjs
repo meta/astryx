@@ -26,7 +26,6 @@ const SUITE = {
   'pr-a11y-specs': 'a11y',
   'pr-a11y': 'a11y',
   'visual-scout': 'visual',
-  'pr-visual': 'visual',
   'pr-rtl-shard': 'rtl',
   'pr-rtl-merge': 'rtl',
   'pr-rtl': 'rtl',
@@ -56,6 +55,32 @@ describe('visual, accessibility and RTL owners', () => {
       expect([ci.jobs[name].needs].flat()).toContain('run-labels');
     },
   );
+
+  it('runs pr-visual on every pull request: its full check only with ci:run-visual, otherwise the default touched check', () => {
+    const visual = ci.jobs['pr-visual'];
+    const condition = ungated(visual.if);
+    expect(condition).toContain(
+      "(github.event_name == 'pull_request' &&\n  needs.build-storybook.result == 'success')",
+    );
+    expect(visual.needs).toContain('run-labels');
+    const step = name =>
+      visual.steps.find(candidate => candidate.name === name);
+    expect(step('Run the visual gate for the touched components').if).toContain(
+      "needs.run-labels.outputs.visual == 'true'",
+    );
+    expect(step('Decide the default touched visual check').if).toContain(
+      "needs.run-labels.outputs.visual != 'true'",
+    );
+    const touched = step('Visual check for the default touched components');
+    expect(touched.if).toBe(
+      "steps.touched.outputs.has_components == 'true' && steps.touched.outputs.visual_components != ''",
+    );
+    expect(touched.run).toContain('gate.mjs check');
+    expect(touched.run).toContain('--tiers component');
+    expect(touched.run).toContain('--no-scout');
+    expect(touched.run).not.toContain('--dependents');
+    expect(touched.run).not.toContain('gate.mjs release');
+  });
 
   it('decides the suites in one gate job from the trusted decision script', () => {
     const gate = ci.jobs['run-labels'];
