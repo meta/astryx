@@ -420,9 +420,9 @@ no scroll.
 
 ### Holding the page still
 
-A scroll lock may hold the page with `holdPageScroll(document, decide)` from
-`pageHold.ts`, which returns the release (none does yet: `useScrollLock`
-does not call it). It lives in its own module, so a page without a scroll
+A scroll lock (`useScrollLock`) holds the page with
+`holdPageScroll(document, decide)` from `pageHold.ts`, which returns the
+release. It lives in its own module, so a page without a scroll
 lock never ships it, and it imports nothing of the gesture host: it asks the
 document's host whether a recognizer owns a touch only if a host exists, and
 a document without one has no recognizer to own it. A hold reads the

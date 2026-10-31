@@ -32,7 +32,12 @@ beforeAll(() => {
     };
 });
 
-/** jsdom does no layout, so both halves of the measurement are stubbed. */
+const originalCss = Object.getOwnPropertyDescriptor(window, 'CSS');
+
+/**
+ * jsdom does no layout, so both halves of the measurement are stubbed, and
+ * the engine has `scrollbar-gutter`, as every current one does.
+ */
 function stubViewport(innerWidth: number, clientWidth: number) {
   Object.defineProperty(window, 'innerWidth', {
     value: innerWidth,
@@ -42,6 +47,14 @@ function stubViewport(innerWidth: number, clientWidth: number) {
   Object.defineProperty(document.documentElement, 'clientWidth', {
     value: clientWidth,
     configurable: true,
+  });
+  Object.defineProperty(window, 'CSS', {
+    value: {
+      supports: (property: string, value: string) =>
+        property === 'scrollbar-gutter' && value === 'stable',
+    },
+    configurable: true,
+    writable: true,
   });
 }
 
@@ -53,6 +66,12 @@ describe('MobileNav scrollbar gutter', () => {
     document.documentElement.style.cssText = '';
     // @ts-expect-error -- drop the viewport stub so jsdom's own value comes back
     delete document.documentElement.clientWidth;
+    if (originalCss) {
+      Object.defineProperty(window, 'CSS', originalCss);
+    } else {
+      // @ts-expect-error -- jsdom has no CSS object of its own
+      delete window.CSS;
+    }
   });
 
   it('holds the gutter open while the drawer is open', () => {
