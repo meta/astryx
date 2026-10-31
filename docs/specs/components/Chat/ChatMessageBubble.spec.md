@@ -1,13 +1,13 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:ChatMessageBubble
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, layout, theming, accessibility, testing]
 verified_by:
@@ -40,11 +40,11 @@ system_specs: [spec:AST-029]
 
 | Area                    | Contract                                                                                                                                                                                                                                                   |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | Required `children`; optional `variant`, `name`, `metadata`, `group`, and `width`; root `div` passthrough, styles, and ref. This audit changes no public API shape or default.                                                                             |
+| Public contract         | Required `children`; optional `variant`, `name`, `metadata`, `group`, and `width`; root `div` passthrough, styles, and ref.                                                                                                                                |
 | Behavior                | The bubble derives sender and density from Chat message context, paints filled or ghost content, groups logical sender-side corners, and keeps renderable scalar name/metadata content inside aligned wrappers.                                            |
-| End-user impact         | Numeric zero stays aligned above or below the bubble instead of escaping its wrapper, while non-rendering scalars no longer create empty spacing. Direct light/dark, a11y, RTL, and narrow-layout evidence protects the result.                            |
-| Builder impact          | Existing props and values remain compatible. Builders passing `0` now get the same aligned placement as other visible scalars; nullish, boolean, and empty-string slot values emit no wrapper.                                                             |
-| Compatibility/readiness | Patch-compatible behavior correction. `@astryxdesign/core@0.6.3` already ships this surface through `./Chat`. The draft records the scalar correction and leaves composite/asynchronous content ownership and local visual representation unsettled.       |
+| End-user impact         | Conversation content reads as sender-aware bubbles; numeric zero stays aligned with its bubble, and slot values that paint nothing leave no empty gap.                                                                                                     |
+| Builder impact          | None.                                                                                                                                                                                                                                                      |
+| Compatibility/readiness | Records shipped behavior; no public change. No implementation gap; three owner questions stay open.                                                                                                                                                        |
 | Review checks           | Reject a dropped root passthrough/ref, missing target metadata, physical grouped-corner logic, an explicit width that retains the default cap, scalar `0` outside its wrapper, empty scalar wrappers, or a claim that settles the open composite boundary. |
 | Governing rules         | `architecture:public-component-api/INV1, INV5, INV6, INV8–INV9`; `architecture:component-theming-surface/INV4, INV6–INV8`; `architecture:component-test-sufficiency/INV1–INV7, INV10–INV11`; WCAG 2.2 SC 1.4.10.                                           |
 
@@ -57,20 +57,12 @@ ChatMessage. It gives conversation content a bubble boundary, text inset,
 grouped-corner treatment, and aligned name/metadata placement that raw message
 content does not have.
 
-This record is an observational backfill written during the 2026-09-24
-whole-component audit. It describes verified shipped behavior. It does not
-decide new visual direction, expand the variant axis, or decide how the
-component should inspect composite or asynchronous React content.
-
 ## Compatibility and migration
 
-- Released default preserved: yes — `@astryxdesign/core@0.6.3` ships the `./Chat`
-  subpath, all six component props, the assistant/balanced fallback, and the
-  filled default.
-- Compatibility class: patch. Visible numeric zero is moved into the existing
-  aligned wrapper; non-rendering scalar slots no longer create wrappers.
-- Controlled/uncontrolled behavior: unchanged — the component owns no state.
-- Migration decision: none. Existing consumers need no code change.
+- Released default preserved: `yes`
+- Compatibility class: records shipped behavior; no public change
+- Controlled/uncontrolled behavior: not applicable; the component owns no state
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -114,32 +106,23 @@ Consumer syntax and prop defaults remain in `ChatMessageBubble.doc.mjs`.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision. A `current` contract contains no unresolved rows.
-
-| ID  | Candidate invariant                                                                                                                                                                                                                         | Basis                                                                                         | Draft review state        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ------------------------- |
-| FR1 | The component MUST always render one root `div` for `children`, including when the caller supplies non-rendering child content.                                                                                                             | shipped implementation and required `children` public seam                                    | verified observation      |
-| FR2 | The root MUST reflect the resolved sender. `user` selects user paint; `assistant`, `system`, and absent context use the non-user paint path; absent context reflects `assistant`.                                                           | shipped implementation and browser/unit evidence                                              | verified observation      |
-| FR3 | The root MUST reflect the resolved density. `compact` uses the compact radius and inset; `balanced` is the fallback; `spacious` uses its wider block and inline inset.                                                                      | shipped implementation and browser/unit evidence                                              | verified observation      |
-| FR4 | `filled` MUST paint sender-aware bubble styles; `ghost` MUST remove the fill and block-axis padding while preserving inline alignment.                                                                                                      | shipped implementation, consumer docs, and rendered evidence                                  | verified observation      |
-| FR5 | `first`, `middle`, and `last` MUST tighten the logical sender-side end, both, and start corner respectively. User uses inline-end; every non-user sender uses inline-start.                                                                 | shipped implementation plus real-browser LTR/RTL evidence                                     | verified observation      |
-| FR6 | Omitted `width` MUST keep `max(80%, 280px)`. An explicit number or string MUST set width and replace the default cap with `none`.                                                                                                           | shipped consumer docs, implementation, and unit evidence                                      | verified observation      |
-| FR7 | `name` and `metadata` MUST omit their aligned wrappers for null, undefined, booleans, and the empty string. Visible scalar values, including numeric zero, MUST remain inside their aligned wrappers. Non-scalar React nodes remain opaque. | shared `isRenderable` scalar contract, public `ReactNode` seam, and red-before-green evidence | settled scalar obligation |
-| FR8 | Root `ref`, neutral DOM/data/ARIA props, class, style, and `xstyle` MUST reach or combine on the painting root without losing the component target or owned styles.                                                                         | `architecture:public-component-api/INV5, INV6, INV8`                                          | settled obligation        |
-| FR9 | Exactly one `chat-message-bubble` target MUST ride the painting root and reflect sender, variant, and density.                                                                                                                              | `architecture:component-theming-surface/INV4, INV6–INV8`; public Chat docs                    | settled obligation        |
-
-FR7 corrects two reachable scalar mismatches. JavaScript truthiness previously
-returned numeric `0` as an unwrapped Fragment sibling, so React painted it
-outside the promised alignment, while `true` created an empty wrapper and gap.
-The shared scalar predicate now keeps visible scalars in their wrappers and
-omits scalar values that React does not paint.
+| ID  | Invariant                                                                                                                                                                                                                                   | Basis                                                                      |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| FR1 | The component MUST always render one root `div` for `children`, including when the caller supplies non-rendering child content.                                                                                                             | Current source and tests                                                   |
+| FR2 | The root MUST reflect the resolved sender. `user` selects user paint; `assistant`, `system`, and absent context use the non-user paint path; absent context reflects `assistant`.                                                           | Current source and tests                                                   |
+| FR3 | The root MUST reflect the resolved density. `compact` uses the compact radius and inset; `balanced` is the fallback; `spacious` uses its wider block and inline inset.                                                                      | Current source and tests                                                   |
+| FR4 | `filled` MUST paint sender-aware bubble styles; `ghost` MUST remove the fill and block-axis padding while preserving inline alignment.                                                                                                      | Current source and tests                                                   |
+| FR5 | `first`, `middle`, and `last` MUST tighten the logical sender-side end, both, and start corner respectively. User uses inline-end; every non-user sender uses inline-start.                                                                 | Current source and tests                                                   |
+| FR6 | Omitted `width` MUST keep `max(80%, 280px)`. An explicit number or string MUST set width and replace the default cap with `none`.                                                                                                           | Current source and tests                                                   |
+| FR7 | `name` and `metadata` MUST omit their aligned wrappers for null, undefined, booleans, and the empty string. Visible scalar values, including numeric zero, MUST remain inside their aligned wrappers. Non-scalar React nodes remain opaque. | Current source and tests                                                   |
+| FR8 | Root `ref`, neutral DOM/data/ARIA props, class, style, and `xstyle` MUST reach or combine on the painting root without losing the component target or owned styles.                                                                         | `architecture:public-component-api/INV5, INV6, INV8`                       |
+| FR9 | Exactly one `chat-message-bubble` target MUST ride the painting root and reflect sender, variant, and density.                                                                                                                              | `architecture:component-theming-surface/INV4, INV6–INV8`; public Chat docs |
 
 The public type also admits arrays, Fragments, elements, one-shot iterables,
-lazy content, and promises. The scalar correction does not traverse, clone,
+lazy content, and promises. FR7 does not traverse, clone,
 consume, await, or materialize those values: each remains caller-owned opaque
 content. Whether any composite or asynchronous category should be normalized is
-OQ1 rather than an implicit extension of this patch.
+OQ1.
 
 ### Allowed variation
 
@@ -182,7 +165,7 @@ OQ1 rather than an implicit extension of this patch.
 - **PR1 — Pure render derivation.** The component owns no state, Effect, event
   listener, observer, timer, or animation frame. Every output derives from props
   and context during render.
-- **PR2 — Caller content is not inspected.** The current implementation does not
+- **PR2 — Caller content is not inspected.** The component does not
   traverse, clone, consume, await, or materialize caller-supplied React nodes.
   Whether to preserve that boundary or normalize selected inputs is OQ1.
 
@@ -197,8 +180,7 @@ OQ1 rather than an implicit extension of this patch.
   full-width case MUST wrap without horizontal page overflow (WCAG 2.2 SC 1.4.10).
 - **AR4 — Color.** Bubble text remains meaningful content and requires WCAG 2.2
   AA text contrast against the final rendered bubble/backdrop in light and dark.
-  The component uses semantic token pairs; rendered measurement remains the audit
-  oracle.
+  The component uses semantic token pairs.
 
 ## Design relationships
 
@@ -210,8 +192,8 @@ OQ1 rather than an implicit extension of this patch.
 | metadata         | align auxiliary content with bubble text inset        | unsettled                | supporting     | FR7                |
 
 No `authority: current` design record owns ChatMessageBubble's local
-representation today. These rows record shipped appearance for review; they do
-not authorize a redesign or convert rendered judgment into policy.
+representation (OQ3). These rows describe shipped appearance; they do not
+authorize a redesign.
 
 ## Family and system relationships
 
@@ -222,26 +204,35 @@ not authorize a redesign or convert rendered judgment into policy.
 - `architecture:component-theming-surface` owns the painting target and reflected
   axes. It does not independently require this closed variant axis to become
   extensible; that would need a component-level public API decision.
-- `architecture:component-test-sufficiency` owns the closed, risk-based evidence
-  inventory and the red-before-green requirement for any future slot repair.
-- `spec:AST-029` owns the Night Watch observational backfill and remediation flow.
+- `architecture:component-test-sufficiency` owns the risk-based evidence
+  inventory.
+- `spec:AST-029` owns the audit evidence inventory this record's verification
+  map follows.
 
 ## Verification map
 
-| Contract | Verification                                                         | Representative states                                        | Mutation or failure expectation                                                                 | Audit section                           |
-| -------- | -------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | --------------------------------------- |
-| FR1–FR3  | `ChatMessageBubble.test.tsx`; dedicated Storybook fixture            | standalone; user/assistant; compact/balanced/spacious        | removing fallback/reflection or a density path fails DOM or browser state evidence              | `audit:ChatMessageBubble/behavior`      |
-| FR4, FR9 | `themingTargets.test.ts`; scoped axe report; Chromium evidence       | filled; ghost; user/assistant/density                        | dropping reflection or moving the target fails DOM, generated, or rendered evidence             | `audit:ChatMessageBubble/theming`       |
-| FR5      | dedicated RTL target plus Chromium LTR/RTL frames                    | user/assistant × first/middle/last                           | physical corner logic or wrong sender side fails mirrored geometry and pixels                   | `audit:ChatMessageBubble/rtl`           |
-| FR6      | `ChatMessageBubble.test.tsx`; narrow browser fixture                 | omitted; string `100%`; number `420`                         | retaining the cap or changing numeric CSS semantics fails the width assertions                  | `audit:ChatMessageBubble/behavior`      |
-| FR7      | `ChatMessageBubble.test.tsx`; pre-fix Chromium receipts and pixels   | zero; true; false; empty string; nullish; opaque non-scalars | reverting to truthiness loses wrapper alignment or restores an empty scalar wrapper             | `audit:ChatMessageBubble/behavior`      |
-| FR8      | public-API checks and existing `data-testid`/style composition tests | ref; DOM/data/ARIA; class; style                             | removing rest/ref forwarding or replacing consumer styling fails shared or focused checks       | `audit:ChatMessageBubble/public-api`    |
-| AR1–AR4  | scoped axe report; Chromium receipts and pixels; narrow fixture      | all visible states, light/dark, RTL, 320px                   | a semantic violation, low-contrast pair, or horizontal overflow fails its owning evidence layer | `audit:ChatMessageBubble/accessibility` |
+| Contract | Verification                                                                                                    | Representative states                                 | Mutation or failure expectation                                             | Audit section                           |
+| -------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------- |
+| FR1–FR3  | `ChatMessageBubble.test.tsx` children, sender, fallback, and compact density tests                              | standalone; user and assistant; compact               | A missing root, fallback, or reflected axis fails.                          | `audit:ChatMessageBubble/behavior`      |
+| FR4, FR9 | `ChatMessageBubble.test.tsx` variant and ghost tests; `themingTargets.test.ts`                                  | filled; ghost at each density                         | Dropping reflection, the ghost alignment, or the target fails.              | `audit:ChatMessageBubble/theming`       |
+| FR5      | `ChatMessageBubble.a11y.chromium.spec.ts` visible-state and RTL grouped-corner tests                            | user and assistant × first, middle, last; LTR and RTL | Physical corner logic or the wrong sender side fails the corner assertions. | `audit:ChatMessageBubble/rtl`           |
+| FR6      | `ChatMessageBubble.test.tsx` width tests                                                                        | omitted; string; number                               | Retaining the cap or changing numeric pixels fails.                         | `audit:ChatMessageBubble/behavior`      |
+| FR7      | `ChatMessageBubble.test.tsx` slot tests; the Chromium visible-state test's numeric alignment                    | zero; true; false; empty string; nullish              | A truthiness check loses zero's alignment or restores an empty wrapper.     | `audit:ChatMessageBubble/behavior`      |
+| FR8, AR2 | `ChatMessageBubble.test.tsx` "forwards the ref and neutral DOM props to the bubble root" and `data-testid` test | ref; DOM, data, and ARIA props                        | Dropped forwarding fails.                                                   | `audit:ChatMessageBubble/public-api`    |
+| AR3      | `ChatMessageBubble.a11y.chromium.spec.ts` "keeps long content inside a 320px fixture"                           | 320 CSS px                                            | Horizontal overflow fails.                                                  | `audit:ChatMessageBubble/accessibility` |
+
+Read from source, with no focused test yet:
+
+- FR2: the `system` sender taking the non-user paint path.
+- FR3: the `spacious` inset.
+- FR8: `className`, `style`, and `xstyle` composition.
+- AR1: no role, tab stop, or name of the component's own.
+- AR4: rendered text contrast in light and dark.
+- PR1–PR2: no state or Effect, and no inspection of caller content.
 
 ## Decision log
 
-No component-local decision has been approved. This draft records only verified
-shipped behavior and the evidence routes added by the audit.
+No component-local decision is recorded.
 
 ## Open questions
 
@@ -253,11 +244,10 @@ shipped behavior and the evidence routes added by the audit.
   themeable, inherit a current owner, or remain intentionally unreachable?**
   (`human-api`)
 - **OQ3 — Which current design owner, if any, should make filled/ghost usage and
-  grouped-corner representation durable rather than observational?**
+  grouped-corner representation durable?**
   (`human-design`)
 
 ## Content boundary
 
-This file does not duplicate the consumer prop table/examples, current audit
-scores, implementation steps, or shared architecture rules. Those remain in
-`ChatMessageBubble.doc.mjs`, the audit report, and their canonical owners.
+This file does not duplicate the consumer prop table/examples, implementation steps, or shared architecture rules. Those remain in
+`ChatMessageBubble.doc.mjs` and their canonical owners.
