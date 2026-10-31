@@ -34,6 +34,13 @@ interface UseSelectorPresentationOptions {
   onShow: () => void;
   popoverOptions: Omit<UsePopoverOptions, 'onHide' | 'onShow'>;
   triggerRef: RefObject<HTMLElement | null>;
+  /**
+   * Return focus to the trigger on every close, even when a press already
+   * moved focus to another element. A caller-rendered trigger needs this
+   * (spec:AST-055 AR3); the built-in trigger leaves focus where the press put
+   * it (spec:Popover AR4).
+   */
+  isFocusReturnAlways?: boolean;
 }
 
 interface SelectorPresentationController {
@@ -55,6 +62,7 @@ export function useSelectorPresentation({
   onShow,
   popoverOptions,
   triggerRef,
+  isFocusReturnAlways = false,
 }: UseSelectorPresentationOptions): SelectorPresentationController {
   const resolvedPresentation = useAdaptivePresentation(presentation);
   const activePresentationRef =
@@ -68,6 +76,9 @@ export function useSelectorPresentation({
   const onHideRef = useRef(onHide);
   const onShowRef = useRef(onShow);
   const didShowPopoverRef = useRef(false);
+  // The open list's container, read when the popover hides to tell focus that
+  // is still inside the list from focus that moved to another element.
+  const popoverContentRef = useRef<HTMLDivElement | null>(null);
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
@@ -78,10 +89,26 @@ export function useSelectorPresentation({
   onShowRef.current = onShow;
 
   const handlePopoverHide = useCallback(() => {
-    prepareFocusReturn();
     onHideRef.current();
-    triggerRef.current?.focus();
-  }, [prepareFocusReturn, triggerRef]);
+    const trigger = triggerRef.current;
+    // A light dismiss caused by pressing another focusable element has already
+    // moved focus there; taking it back would leave the next key on this
+    // closed Selector (spec:Popover AR4 returns focus only when it would
+    // otherwise be lost). Escape, a choice in the list, or a press on nothing
+    // focusable still returns focus to the trigger.
+    const active = document.activeElement;
+    const focusLandedElsewhere =
+      !isFocusReturnAlways &&
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      active !== trigger &&
+      !popoverContentRef.current?.contains(active);
+    if (focusLandedElsewhere) {
+      return;
+    }
+    prepareFocusReturn();
+    trigger?.focus();
+  }, [isFocusReturnAlways, prepareFocusReturn, triggerRef]);
   const handlePopoverShow = useCallback(() => {
     didShowPopoverRef.current = true;
     resetFocusReturn();
@@ -92,6 +119,7 @@ export function useSelectorPresentation({
     onHide: handlePopoverHide,
     onShow: handlePopoverShow,
   });
+  popoverContentRef.current = popover.contentRef.current;
   const {hide: hidePopover, show: showPopover} = popover;
 
   const show = useCallback((): boolean => {

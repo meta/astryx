@@ -13,8 +13,8 @@
  * provided and fall back to `label` when it is missing or blank. Their label
  * tooltip binds to the interactive control through a callback ref, so hover,
  * keyboard focus, and `aria-describedby` follow the control from the first
- * collapsed render. A disabled control takes neither pointer nor focus, so its
- * row is the tooltip's trigger instead.
+ * collapsed render. A disabled control takes no pointer, so its row listens
+ * for the tooltip instead, while the control keeps focus and the description.
  *
  * Collapsed items with children open their submenu flyout through
  * `useMenuHover`, the shared hover-intent hook (same one `SideNavHeading` and
@@ -74,6 +74,7 @@ import {
 import {useSideNavRenderMode} from './SideNavRenderContext';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import {themeProps} from '../utils/themeProps';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -324,6 +325,8 @@ interface NavItemElementProps {
 /**
  * Renders `<a>` (via LinkComponent) when `href` is set, otherwise `<button>`.
  * Centralizes the link-vs-button decision used across all SideNavItem paths.
+ * A disabled item is a `<button>` that keeps its tab stop and exposes
+ * `aria-disabled`, but is inert (spec:AST-085 FR1, FR2).
  */
 function NavItemElement({
   href,
@@ -351,8 +354,16 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      disabled={isDisabled}
-      {...rest}>
+      {...rest}
+      {...(isDisabled
+        ? {
+            'aria-disabled': true,
+            ...disabledInteractionProps(
+              rest.onKeyDown as
+                React.KeyboardEventHandler<HTMLButtonElement> | undefined,
+            ),
+          }
+        : null)}>
       {children}
     </button>
   );
@@ -539,6 +550,10 @@ export function SideNavItem({
   const isRailLeaf = isCollapsed && !hasChildren;
   const railTooltip = useTooltip({
     placement: 'end',
+    // A disabled leaf's row is the trigger (see the collapsed path). It is not
+    // focusable itself, so `auto` would never hear the focus that bubbles up
+    // from its control.
+    focusTrigger: 'always',
     isEnabled: isRailLeaf,
     isOpen: isRailLeaf ? undefined : false,
   });
@@ -702,14 +717,17 @@ export function SideNavItem({
 
     // Items without children: icon-only link or button, its label in a
     // tooltip. The control is the trigger, so the element that takes focus is
-    // the one described. A disabled control takes neither pointer
-    // (`navItemStyles.disabled`) nor focus, so its row is the trigger instead.
+    // the one described. A disabled control takes no pointer
+    // (`navItemStyles.disabled`), so its row listens for the tooltip instead;
+    // the control still takes focus (focusin reaches the row) and stays the
+    // element described (spec:AST-085 FR5).
     const isRowTrigger = isDisabled;
     const collapsedAriaProps = {
       'aria-current': isSelected ? ('page' as const) : undefined,
-      'aria-describedby': isRowTrigger
-        ? rest['aria-describedby']
-        : joinIds(rest['aria-describedby'], railTooltip.describedBy),
+      'aria-describedby': joinIds(
+        rest['aria-describedby'],
+        railTooltip.describedBy,
+      ),
       'aria-disabled': isDisabled || undefined,
       'aria-label': collapsedAccessibleLabel,
       'data-testid': testId,
@@ -732,7 +750,6 @@ export function SideNavItem({
     return (
       <div
         ref={isRowTrigger ? railTooltip.ref : undefined}
-        aria-describedby={isRowTrigger ? railTooltip.describedBy : undefined}
         {...stylex.props(styles.root, xstyle)}>
         {collapsedElement}
         {railTooltip.renderTooltip(label)}

@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:DropdownMenuRadioItem
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, accessibility, theming, testing]
 verified_by:
@@ -16,7 +16,6 @@ verified_by:
     packages/core/src/DropdownMenu/__tests__/Menu.a11y.test.tsx,
     packages/core/src/RadioList/__tests__/RadioGroup.a11y.test.tsx,
     packages/core/src/DropdownMenu/__tests__/DropdownMenuRadioItemAudit.a11y.chromium.spec.ts,
-    apps/storybook/stories/DropdownMenuRadioItem.stories.tsx,
     apps/storybook/rtl-audit/verified-not-applicable.json,
     scripts/check-knowledge.mjs,
   ]
@@ -31,22 +30,22 @@ architecture:
     architecture:interaction-modality,
   ]
 contributing: []
-system_specs: [spec:AST-020, spec:AST-029]
+system_specs: [spec:AST-020]
 ---
 
 # DropdownMenuRadioItem component contract
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                     |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | One `menuitemradio` row inside a DropdownMenuRadioGroup with a required value and label, optional description, icon, end content, disabled state, root inputs, and an explicit React 19 ref. |
-| Behavior                | Enabled activation emits the row value through the group, applies the group close policy, then runs the caller click handler; disabled activation does none of these.                        |
-| End-user impact         | Assistive technology hears one radio option with its checked state; pointer and keyboard selection commit the same value, and a disabled option cannot be chosen.                            |
-| Builder impact          | Place the row inside a DropdownMenuRadioGroup and give it a unique value and a label; caller handlers run alongside the row's own behavior.                                                  |
-| Compatibility/readiness | Released subcomponent; observational draft of current behavior. Authority stays `draft` until owner approval.                                                                                |
-| Review checks           | Reject a nested semantic radio, a second keyboard owner, local selection state, a dropped caller input, or disabled activation that selects, closes, or calls the caller click handler.      |
-| Governing rules         | WAI-ARIA menu pattern; `architecture:public-component-api/INV5–INV8`; `architecture:component-theming-surface/INV4–INV6`; `spec:AST-020/FR1,FR2`.                                            |
+| Area                    | Contract                                                                                                                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | One `menuitemradio` row inside a DropdownMenuRadioGroup with a required value and label, optional description, icon, end content, disabled state, root inputs, and a ref.               |
+| Behavior                | Enabled activation emits the row value through the group, applies the group close policy, then runs the caller click handler; disabled activation does none of these.                   |
+| End-user impact         | Assistive technology hears one radio option with its checked state; pointer and keyboard selection commit the same value, and a disabled option cannot be chosen.                       |
+| Builder impact          | Place the row inside a DropdownMenuRadioGroup and give it a unique value and a label; caller handlers run alongside the row's own behavior.                                             |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change.                                                                                                                               |
+| Review checks           | Reject a nested semantic radio, a second keyboard owner, local selection state, a dropped caller input, or disabled activation that selects, closes, or calls the caller click handler. |
+| Governing rules         | `spec:AST-020` FR15; `architecture:public-component-api/INV5–INV8`; `architecture:component-theming-surface/INV4–INV6`; `spec:AST-020/FR1,FR2`.                                         |
 
 This table is a review projection; the body below is authoritative.
 
@@ -62,8 +61,8 @@ activation, and the menu lifecycle.
 ## Compatibility and migration
 
 - Released default preserved: yes (`isDisabled=false`).
-- Compatibility class: no public API change; caller `onClick` and
-  `onPointerMove` compose with the row's own behavior.
+- Compatibility class: records shipped behavior; no public prop, default,
+  export, or DOM change.
 - Controlled behavior: the checked state always derives from the group `value`;
   the row holds no selection state.
 - Migration decision: none.
@@ -106,19 +105,16 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                    | Basis                                                                      | Draft review state |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------ |
-| FR1 | The row MUST render one element with `role="menuitemradio"` whose `aria-checked` is true exactly when the group value equals the row value. It MUST NOT nest a native or ARIA radio.                                                                                                   | WAI-ARIA menu pattern; current source and focused tests                    | verify             |
-| FR2 | Rendering the row outside a DropdownMenuRadioGroup MUST throw.                                                                                                                                                                                                                         | Current source and focused tests                                           | verify             |
-| FR3 | Enabled activation, by pointer or by the parent's synthesized Enter/Space click, MUST call the group `onChange` with the row value, then ask DropdownMenu to close when the group's close policy is on, then call the caller `onClick`.                                                | Released behavior; `architecture:public-component-api/INV7`; focused tests | verify             |
-| FR4 | A disabled row MUST expose `aria-disabled="true"`, render no `tabindex`, take no hover focus, and on any activation, including an assistive-technology click, MUST NOT call `onChange`, close the menu, or call the caller `onClick`. It paints at half opacity with a default cursor. | Current source, focused tests, and browser evidence                        | verify             |
-| FR5 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` MUST reach or compose on the row root. Caller `onPointerMove` MUST run after the row's hover focus, and caller handlers MUST NOT replace the row's own behavior.                                       | `architecture:public-component-api/INV5–INV8`; focused tests               | verify             |
-| FR6 | The marker MUST be the shared radio Indicator, hidden from assistive technology, never the pointer target, sized `sm` in a small menu and `md` otherwise, at the row's inline start on a fine pointer and its inline end on a coarse pointer.                                          | Current source, focused tests, and browser evidence                        | verify             |
-| FR7 | The row MUST carry the `dropdown-menu-item` target with the menu size and the marker MUST carry the `dropdown-menu-radio` target with size, checked, and disabled reflections.                                                                                                         | `architecture:component-theming-surface/INV4–INV6`; current source/docs    | verify             |
-| FR8 | The row MUST add no key handler or tab stop of its own: enabled rows are `tabindex="-1"` for the parent's roving focus, and keyboard selection arrives as the parent's synthesized click.                                                                                              | `architecture:interaction-modality`; parent keyboard tests                 | verify             |
+| ID  | Invariant                                                                                                                                                                                                                                                                                   | Basis                                                                |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| FR1 | The row renders one element with `role="menuitemradio"` whose `aria-checked` is true exactly when the group value equals the row value. It nests no native or ARIA radio.                                                                                                                   | `spec:AST-020`; current source and tests                             |
+| FR2 | Rendering the row outside a DropdownMenuRadioGroup throws.                                                                                                                                                                                                                                  | Current source and focused tests                                     |
+| FR3 | Enabled activation, by pointer or by the parent's synthesized Enter/Space click, calls the group `onChange` with the row value, then asks DropdownMenu to close when the group's close policy is on, then calls the caller `onClick`.                                                       | `architecture:public-component-api` INV7; current behavior and tests |
+| FR4 | A disabled row exposes `aria-disabled="true"`, renders no `tabindex`, takes no hover focus, and on any activation, including an assistive-technology click, calls neither `onChange` nor the caller `onClick` and does not close the menu. It paints at half opacity with a default cursor. | Current source and tests                                             |
+| FR5 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root. Caller `onPointerMove` runs after the row's hover focus, and caller handlers do not replace the row's own behavior.                                                       | `architecture:public-component-api` INV5–INV8; current tests         |
+| FR6 | The marker is the shared radio Indicator, hidden from assistive technology, never the pointer target, sized `sm` in a small menu and `md` otherwise, at the row's inline start on a fine pointer and its inline end on a coarse pointer.                                                    | Current source and tests                                             |
+| FR7 | The row carries the `dropdown-menu-item` target with the menu size and the marker carries the `dropdown-menu-radio` target with size, checked, and disabled reflections.                                                                                                                    | `architecture:component-theming-surface`; current source and docs    |
+| FR8 | The row adds no key handler or tab stop of its own: enabled rows are `tabindex="-1"` for the parent's roving focus, and keyboard selection arrives as the parent's synthesized click.                                                                                                       | `architecture:interaction-modality`; parent keyboard tests           |
 
 ### Allowed variation
 
@@ -165,23 +161,21 @@ intentional decision.
 - **AR3 — Keyboard ownership.** DropdownMenu owns focus movement and activation;
   the row adds no key handling. Whether disabled rows stay keyboard-discoverable
   is owned by `component:DropdownMenu` (its OQ1).
-- **AR4 — Focus visibility (objective gap).** Keyboard focus MUST be
-  perceivable (WCAG 2.2 SC 2.4.7 and 1.4.11). The row currently paints focus
-  only as the menu overlay tint with no outline, which measures about 1.1:1
-  against the menu surface and paints nothing under forced colors. The
-  remediation is a shared row-visual decision with `component:DropdownMenuItem`
-  (its OQ2); this draft records the gap and does not settle it.
+- **AR4 — Focus visibility.** Keyboard focus paints only the menu overlay
+  tint, about 1.1:1 against the menu surface in the default themes, with no
+  outline, and nothing under forced colors. The shared row
+  treatment is `component:DropdownMenuItem` OQ2.
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                                               | Representation authority         | Hierarchy role | Component contract |
-| ---------------- | ---------------------------------------------------------------- | -------------------------------- | -------------- | ------------------ |
-| Row              | Menu row paint and radius; focus paint is the AR4 objective gap. | Current source and menu tokens   | structural     | FR7, AR4           |
-| Radio marker     | Shared radio Indicator at the menu's control size.               | Shared radio Indicator           | prominent      | FR1, FR6           |
-| Disabled         | Half-opacity row with a default cursor.                          | Current source                   | supporting     | FR4                |
-| Direction/touch  | Logical marker placement that mirrors and moves on touch.        | Bidirectionality and current CSS | structural     | FR6                |
+| Anatomy or state | Design requirement                                        | Representation authority         | Hierarchy role | Component contract |
+| ---------------- | --------------------------------------------------------- | -------------------------------- | -------------- | ------------------ |
+| Row              | Menu row paint and radius; focus paint is AR4.            | Current source and menu tokens   | structural     | FR7, AR4           |
+| Radio marker     | Shared radio Indicator at the menu's control size.        | Shared radio Indicator           | prominent      | FR1, FR6           |
+| Disabled         | Half-opacity row with a default cursor.                   | Current source                   | supporting     | FR4                |
+| Direction/touch  | Logical marker placement that mirrors and moves on touch. | Bidirectionality and current CSS | structural     | FR6                |
 
-No new component-local visual decision is settled by this draft.
+No component-local visual decision is recorded.
 
 ## Family and system relationships
 
@@ -195,21 +189,29 @@ No new component-local visual decision is settled by this draft.
   reflection.
 - `architecture:component-test-sufficiency` owns proportionate observable evidence.
 - `spec:AST-020` supplies WCAG/APG adoption and evidence-layer boundaries.
-- `spec:AST-029` keeps this observational draft separate from the audit receipt.
 
 ## Verification map
 
-| Contract      | Verification                                                                                        | Representative states                                          | Mutation or failure expectation                                                                                              | Audit section                              |
-| ------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| FR1, FR2, AR1 | `DropdownMenuSelectable.test.tsx`; reusable radio-group and Menu contracts; scoped axe              | checked, unchecked, outside a group                            | A nested radio, wrong checked row, extra announced control, or missing throw fails                                           | `audit:DropdownMenuRadioItem/§1,§4,§6`     |
-| FR3, FR5, FR8 | `DropdownMenuSelectable.test.tsx` handler, keyboard, close, and ref cases; browser fixture counters | pointer and keyboard activation, close on/off, caller handlers | A dropped caller handler, wrong order, or missing close fails                                                                | `audit:DropdownMenuRadioItem/§3,§4,§6`     |
-| FR4, AR2      | Disabled focused test with an assistive-technology click; browser disabled-hover frame              | disabled checked/unchecked                                     | Removing the disabled guard makes the focused test fail                                                                      | `audit:DropdownMenuRadioItem/§1,§4`        |
-| AR4           | Exact-head keyboard-focus and forced-colors frames with rendered contrast                           | Neutral/Butter light/dark focus, forced colors                 | Current frames record the gap; a remediation passes only with a perceivable indicator in every theme and under forced colors | `audit:DropdownMenuRadioItem/§1,§5`        |
-| FR6, FR7      | Marker and target tests; exact-head Neutral/Butter/RTL/narrow/size/coarse/focus frames              | sm/md/lg, fine/coarse, LTR/RTL, light/dark                     | A lost target or reflection, a marker that is announced, wrongly sized, or misplaced fails                                   | `audit:DropdownMenuRadioItem/§2,§5,§9,§10` |
+| Contract | Verification                                                                                                                                                                                                                                                                                                                                                                      | Representative states                            | Mutation or failure expectation                                                                                                                                                                      | Audit section                           |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| FR1, AR1 | `DropdownMenuSelectable.test.tsx` "renders the shared radio indicator in the menu marker" and "composes caller root inputs without replacing the row semantics"; `Menu.a11y.test.tsx` menu binding cases                                                                                                                                                                          | Checked and unchecked                            | A row that is not `menuitemradio` or a wrong `aria-checked` fails. Evidence gap: no test asserts the absence of a nested radio.                                                                      | `audit:DropdownMenuRadioItem/semantics` |
+| FR2      | `DropdownMenuSelectable.test.tsx` "throws when a radio item is used outside a group"                                                                                                                                                                                                                                                                                              | Outside a group                                  | A row that renders outside a group fails.                                                                                                                                                            | `audit:DropdownMenuRadioItem/behavior`  |
+| FR3, FR8 | `DropdownMenuSelectable.test.tsx` "calls onChange with the selected value", "composes the caller click handler with the selection", "composes the caller click handler on keyboard activation", "keeps the menu open while controlled selection updates when requested"; `DropdownMenu.test.tsx` "activates a focused menuitemradio with Enter and a menuitemcheckbox with Space" | Pointer and keyboard activation; close off       | A missing `onChange`, a dropped caller `onClick`, or a close despite the opt-out fails. Evidence gap: no test asserts the `onChange`, close, `onClick` order or the `tabindex="-1"` on enabled rows. | `audit:DropdownMenuRadioItem/behavior`  |
+| FR4, AR2 | `DropdownMenuSelectable.test.tsx` "does not select, close, or call the caller click handler when disabled"; `DropdownMenu.test.tsx` "does not move focus on hover for a disabled item"                                                                                                                                                                                            | Disabled                                         | A selection, close, or caller `onClick` while disabled, or hover focus on a disabled row, fails. Evidence gap: no test asserts the absent `tabindex` or the half-opacity paint.                      | `audit:DropdownMenuRadioItem/behavior`  |
+| FR5      | `DropdownMenuSelectable.test.tsx` "composes caller root inputs without replacing the row semantics", "composes the caller pointer-move handler with menu hover focus", and "a ref reaches the menuitemradio element"                                                                                                                                                              | Ref, host attributes, class, style, pointer move | A dropped ref, attribute, class, style, or handler fails. Evidence gap: no test asserts `xstyle` on the row.                                                                                         | `audit:DropdownMenuRadioItem/api`       |
+| FR6, FR7 | `DropdownMenuSelectable.test.tsx` "renders the shared radio indicator in the menu marker"; `DropdownMenuRadioItemAudit.a11y.chromium.spec.ts`                                                                                                                                                                                                                                     | Marker in the row                                | A missing shared radio marker fails. Evidence gap: no test asserts the marker size by menu size, its fine and coarse placement, or the `dropdown-menu-radio` reflections.                            | `audit:DropdownMenuRadioItem/visual`    |
+| AR4, PR1 | Evidence gap: no test asserts the focus paint, forced-colors focus, or the absence of lifecycle resources                                                                                                                                                                                                                                                                         | —                                                | —                                                                                                                                                                                                    | `audit:DropdownMenuRadioItem/visual`    |
+
+## Current-state impact
+
+- **Focus visibility (AR4).** Keyboard focus on a radio row shows only an
+  overlay tint about 1.1:1 against the menu surface, and no indicator in
+  forced-colors mode; the shared row treatment is
+  `component:DropdownMenuItem` OQ2.
 
 ## Decision log
 
-None. This draft records current facts and introduces no product decision.
+No component-local decision.
 
 ## Open questions
 
@@ -222,5 +224,4 @@ None. This draft records current facts and introduces no product decision.
 ## Content boundary
 
 This file does not duplicate consumer prop tables/examples, current audit scores,
-screenshot matrices, implementation steps, or group/parent contracts. The audit
-pull request owns the closed run evidence required by `spec:AST-029/FR5`.
+screenshot matrices, implementation steps, or group/parent contracts. It links to their owners.

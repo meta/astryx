@@ -35,6 +35,18 @@ async function runSignal({
   reviews = [],
   reviewApp = '',
   permission = 'write',
+  rateRemaining = 5000,
+  batch = '',
+  draft = false,
+  // The spec-owner job's decision for a PR that changes no spec record.
+  specStatuses = [
+    {
+      context: 'spec-owner-approval',
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
+      creator: {login: 'github-actions[bot]'},
+    },
+  ],
 } = {}) {
   const pr = {
     number: 42,
@@ -42,6 +54,7 @@ async function runSignal({
     base: {sha: baseSha, ref: 'main'},
     head: {sha: HEAD, ref: 'feature'},
     changed_files: 1,
+    draft,
     labels: [{name: 'needs:code-review'}, {name: 'community'}],
   };
   const mutations = {
@@ -79,7 +92,8 @@ async function runSignal({
     rest: {
       pulls: {
         get: vi.fn(async () => ({data: pr})),
-        list: vi.fn(async () => ({data: [pr]})),
+        // Like GitHub's list endpoint, the listed PR omits changed_files.
+        list: vi.fn(async () => ({data: [{...pr, changed_files: undefined}]})),
         listFiles: vi.fn(async () => ({
           data: [{filename: 'README.md', status: 'modified'}],
         })),
@@ -89,6 +103,10 @@ async function runSignal({
       repos: {
         getContent,
         createCommitStatus: mutations.createCommitStatus,
+        listCommitStatusesForRef: vi.fn(async () => ({
+          data:
+            typeof specStatuses === 'function' ? specStatuses() : specStatuses,
+        })),
         getCollaboratorPermissionLevel: vi.fn(async () => {
           if (permission instanceof Error) throw permission;
           return {data: {permission}};
@@ -97,6 +115,15 @@ async function runSignal({
       issues: {
         addLabels: mutations.addLabels,
         removeLabel: mutations.removeLabel,
+      },
+      rateLimit: {
+        get: vi.fn(async () => ({
+          data: {
+            resources: {
+              core: {remaining: rateRemaining, limit: 5000, reset: 1793412000},
+            },
+          },
+        })),
       },
       checks: {
         listForRef: async () => ({data: {check_runs: []}}),
@@ -121,7 +148,7 @@ async function runSignal({
       eventName,
       payload:
         eventName === 'workflow_dispatch'
-          ? {inputs: {pr: backfill ? '' : '42'}}
+          ? {inputs: {pr: backfill ? '' : '42', batch}}
           : {pull_request: pr},
     },
     core,
@@ -193,14 +220,62 @@ describe('review-signal trusted helper ref', () => {
         description: 'Waiting on code review: community contribution',
       });
       if (options.eventName === 'workflow_dispatch') {
-        expect(
-          h.github.rest.pulls[options.backfill ? 'list' : 'get'],
-        ).toHaveBeenCalledOnce();
+        // A backfill lists the open PRs, then reads each in full.
+        if (options.backfill) {
+          expect(h.github.rest.pulls.list).toHaveBeenCalledOnce();
+        }
+        expect(h.github.rest.pulls.get).toHaveBeenCalledOnce();
       } else {
         expect(h.github.rest.pulls.get).not.toHaveBeenCalled();
       }
     },
   );
+
+  it.each([
+    ['its batch', {batch: '1/2'}, true],
+    ['another batch', {batch: '2/2'}, false],
+    ['a draft', {draft: true}, false],
+  ])(
+    'a backfill flags a PR in %s only when it should',
+    async (_name, options, flagged) => {
+      const h = await runSignal({
+        eventName: 'workflow_dispatch',
+        backfill: true,
+        ...options,
+      });
+      expect(h.core.setFailed).not.toHaveBeenCalled();
+      expect(h.mutations.createCommitStatus).toHaveBeenCalledTimes(
+        flagged ? 1 : 0,
+      );
+    },
+  );
+
+  it('refuses a malformed batch before reading any PR', async () => {
+    const h = await runSignal({
+      eventName: 'workflow_dispatch',
+      backfill: true,
+      batch: '3/2',
+    });
+    expect(h.core.setFailed).toHaveBeenCalledExactlyOnceWith(
+      'batch must be k/n with 1 <= k <= n; got "3/2".',
+    );
+    expect(h.github.rest.pulls.get).not.toHaveBeenCalled();
+  });
+
+  it('stops a backfill before the token runs low, and says so', async () => {
+    const h = await runSignal({
+      eventName: 'workflow_dispatch',
+      backfill: true,
+      rateRemaining: 1000,
+    });
+    expect(h.core.setFailed).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining(
+        'Backfill stopped before PR #42 (1 left): 1000 of 5000',
+      ),
+    );
+    expect(h.github.rest.pulls.get).not.toHaveBeenCalled();
+    expect(h.mutations.createCommitStatus).not.toHaveBeenCalled();
+  });
 
   it.each(['workflow_dispatch', 'pull_request_target'])(
     'fails closed if the helper is missing at the workflow SHA for %s',

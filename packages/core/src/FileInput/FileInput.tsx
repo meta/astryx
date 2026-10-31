@@ -68,6 +68,8 @@ import {useTranslator} from '../i18n';
 import type {TranslatorFn} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useListFormatter} from '../i18n/useListFormatter';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
 function formatFileSize(bytes: number, t: TranslatorFn): string {
   if (bytes < 1024) {
     return t('@astryx.fileInput.fileSize.bytes', {size: bytes});
@@ -311,6 +313,9 @@ export interface FileInputProps extends Omit<
   FieldInputBaseProps,
   'onChange' | 'defaultValue' | 'value'
 > {
+  /**
+   * Ref to the native file input.
+   */
   ref?: React.Ref<HTMLInputElement>;
   /**
    * Accessible label for the file input.
@@ -491,6 +496,7 @@ export function FileInput({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const formatList = useListFormatter();
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
@@ -544,7 +550,9 @@ export function FileInput({
   // at a visually hidden "Required" span — mirroring the Field label's visible
   // indicator (where isOptional takes precedence) and the pattern Slider uses
   // for its thumbs.
-  const conveysRequired = isRequired && !isOptional;
+  // A surrounding FormLayout's defaultOptionality="required" makes an unmarked
+  // field required too (FormLayout FR5).
+  const conveysRequired = useResolvedRequired({isRequired, isOptional});
 
   const ariaDescribedBy =
     [
@@ -580,7 +588,9 @@ export function FileInput({
       );
 
       if (errors.length > 0) {
-        setValidationError(errors[0]);
+        // Every rejected file is identified, in one status message
+        // (WCAG 3.3.1), joined as a list in the active locale.
+        setValidationError(formatList(errors));
       } else {
         setValidationError(null);
       }
@@ -625,6 +635,7 @@ export function FileInput({
       setOptimisticValue,
       announce,
       t,
+      formatList,
     ],
   );
 
@@ -760,15 +771,30 @@ export function FileInput({
       : (optimisticValue?.name ?? '')
     : null;
 
+  // The tooltip placement renders no message box: its focusable status button
+  // is the only place the message lives, and the trigger's aria-describedby
+  // points at that button's tooltip. Every content branch that can show a
+  // status keeps it, so the message stays reachable in dropzone mode and while
+  // busy (family:input-fields FR8).
+  const tooltipStatus = statusTooltipDescribedBy != null ? statusIcon : null;
+
   const renderDropzoneContent = () => {
     if (isBusy) {
-      return <Spinner size="md" aria-hidden="true" />;
+      return (
+        <>
+          <Spinner size="md" aria-hidden="true" />
+          {tooltipStatus}
+        </>
+      );
     }
     if (hasFiles) {
       return (
-        <div {...stylex.props(styles.fileNameText, styles.fileNameDropzone)}>
-          {fileNames}
-        </div>
+        <>
+          <div {...stylex.props(styles.fileNameText, styles.fileNameDropzone)}>
+            {fileNames}
+          </div>
+          {tooltipStatus}
+        </>
       );
     }
     return (
@@ -782,6 +808,7 @@ export function FileInput({
         <span {...stylex.props(styles.placeholderText)}>
           {isDragOver ? t('@astryx.fileInput.dropHint') : displayPlaceholder}
         </span>
+        {tooltipStatus}
       </>
     );
   };
@@ -794,6 +821,7 @@ export function FileInput({
             {fileNames ?? displayPlaceholder}
           </span>
           <Spinner size="sm" aria-hidden="true" />
+          {tooltipStatus}
         </>
       );
     }

@@ -69,9 +69,8 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
+import {formatLocaleTime} from '../utils/timeFormat';
 import {
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   isImeKeyEvent,
   isRenderable,
@@ -689,12 +688,9 @@ export function TouchDateTimeField({
   const timeDisplayValue = useMemo(() => {
     const displayTime = normalizedValueTime ?? draftTime;
     return displayTime
-      ? (hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h)(
-          displayTime,
-          hasSeconds,
-        )
+      ? formatLocaleTime(displayTime, locale, hourFormat, hasSeconds)
       : '';
-  }, [draftTime, normalizedValueTime, hourFormat, hasSeconds]);
+  }, [draftTime, normalizedValueTime, locale, hourFormat, hasSeconds]);
 
   const timeBoundsForDate = useCallback(
     (date: ISODateString | undefined) => ({

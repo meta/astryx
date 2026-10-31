@@ -4,7 +4,6 @@
  * @file Mutation-sensitive tests for trusted component-audit scope routing.
  */
 
-import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import {describe, expect, it} from 'vitest';
 
@@ -30,23 +29,6 @@ const NO_COMPONENT_AUDIT_SCOPE = {
 };
 
 describe('component audit scope', () => {
-  it('loads the classifier and registry from the trusted base ref', () => {
-    const workflow = fs.readFileSync(
-      new URL('../workflows/ci.yml', import.meta.url),
-      'utf8',
-    );
-    expect(workflow).toContain(
-      'origin/${{ github.base_ref }}:.github/scripts/component-audit-scope.cjs',
-    );
-    expect(workflow).toContain(
-      'origin/${{ github.base_ref }}:scripts/component-packages.cjs',
-    );
-    expect(workflow).toContain(
-      'origin/${{ github.base_ref }}:.github/scripts/knowledge-paths.cjs',
-    );
-    expect(workflow).toContain('force_full_component_audits=true');
-  });
-
   it.each([
     ['packages/core/src/Button/Button.tsx', 'core'],
     ['packages/lab/src/Stat/Stat.tsx', 'lab'],

@@ -2,10 +2,11 @@
 # Design-team members. This list has three responsibilities:
 #
 # - Current design and theme specs, component/module Design decisions, and
-#   normative design assets may receive exact-head approval from any
-#   DESIGNOWNER. ENGOWNERS may approve every spec.
-# - A DESIGNOWNER approves with an exact-head review or `/approve-spec <head>`,
-#   like every other owner; in a mixed PR every other applicable code or
+#   normative design assets may be approved by any DESIGNOWNER; an approval
+#   binds the spec content (architecture:knowledge-contracts DEC-14). ENGOWNERS
+#   may approve every spec.
+# - A DESIGNOWNER approves with a review or `/approve-spec <sha>`, like every
+#   other owner; in a mixed PR every other applicable code or
 #   spec-owner group remains required. A classifier-proven appearance-only Core
 #   runtime change may bypass the engineering review gate only when no other
 #   code reason applies. The gate decides approval only; it never enables

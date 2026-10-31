@@ -1,13 +1,13 @@
 ---
 schema_version: 3
-template_version: 5
+template_version: 7
 kind: component
 id: component:ChatDictationButton
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, accessibility, theming, testing]
 verified_by:
@@ -18,7 +18,7 @@ verified_by:
   ]
 modules: []
 families: []
-design_specs: []
+design_specs: [design:reduced-motion]
 architecture:
   [
     architecture:public-component-api,
@@ -28,133 +28,178 @@ architecture:
     architecture:knowledge-contracts,
   ]
 contributing: []
-system_specs: [spec:AST-029]
+system_specs: [spec:AST-029, spec:AST-027]
 ---
 
 # ChatDictationButton component contract
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | `dictation` supplies support, listening, volume, bands, and toggle state; `size`, `label`, root span props, styles, and ref remain additive inputs.                                                                |
-| Behavior                | The idle button shows the microphone action. Listening replaces the icon with five volume-reactive bars. Unsupported dictation is hidden by default or disabled when explicitly retained.                          |
-| End-user impact         | Voice input remains operable and labelled; unsupported browsers do not expose an action that cannot run.                                                                                                           |
-| Builder impact          | Builders can place the control in ChatComposer send actions and safely customize its root layout without owning speech state.                                                                                      |
-| Compatibility/readiness | Patch-compatible repair: existing supported behavior is unchanged; the opt-in unsupported-visible state becomes accurately disabled.                                                                               |
-| Review checks           | Reject an enabled unsupported action, a missing listening label, raw theme-inaccessible clipping color, or lost root passthrough.                                                                                  |
-| Governing rules         | `architecture:component-style-authoring/INV1–INV3`; `architecture:theme-tokens/INV3`; `architecture:public-component-api/INV1, INV5–INV6, INV8`; `architecture:component-test-sufficiency/INV1–INV8, INV10–INV11`. |
+| Area                    | Contract                                                                                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `ChatDictationButton` with a required `dictation` state (`isSupported`, `isListening`, `volume`, `bands`, `toggle`), `size` (`sm`, `md`; default `md`), `isHiddenWhenUnsupported` (default true), `label`, `ref`, `xstyle`, `className`, `style`, and span props. |
+| Behavior                | An icon-only microphone Button that toggles dictation. While listening it shows five volume-reactive bars instead of the microphone; unsupported dictation renders nothing, or a disabled Button when kept visible.                                               |
+| End-user impact         | Voice input is one labelled button that says whether it starts or stops dictation; browsers without speech recognition see no action that cannot run.                                                                                                             |
+| Builder impact          | None.                                                                                                                                                                                                                                                             |
+| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps, listed under Current-state impact.                                                                                                                                                           |
+| Review checks           | Reject an enabled unsupported action, a missing or stale start/stop name, bars exposed to assistive technology, or clipping color that a theme cannot retint.                                                                                                     |
+| Governing rules         | `architecture:public-component-api`; `architecture:theme-tokens` INV3; `architecture:component-style-authoring` INV7; `design:reduced-motion`.                                                                                                                    |
 
 This table is a review projection; the body below is authoritative.
 
 ## Intent
 
-ChatDictationButton renders the visible control for an existing speech-recognition
-state owner. It translates that owner's support and listening states into one
-icon-only Button and a direction-neutral equalizer visualization.
+ChatDictationButton is the visible control for a speech-recognition state
+owner. It turns that owner's support and listening state into one icon-only
+Button and a five-bar volume display. Consumer usage lives in
+`ChatDictationButton.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: yes
-- Compatibility class: behavioral bug fix for the explicit unsupported-visible state
-- Supported idle and listening states: unchanged
+- Released default preserved: `yes`
+- Compatibility class: records shipped behavior; no public change
+- Controlled/uncontrolled behavior: listening state is owned by the supplied
+  `dictation` value
 - Migration decision: none
+
+Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **The volume bars are extra elements.** The listening display is a container
+  and five bar `span` elements that no theme target paints.
+  `architecture:component-style-authoring` INV7 renders one element per
+  semantic role or themable part.
+
+- **The bars set a z-index without isolation.** The bar container carries
+  `z-index: 1` and the wrapper does not isolate it, so the bars take part in
+  the page's stacking order. `spec:AST-027` FR1 keeps z-index local and lists
+  this case as a containment gap.
 
 ## Ownership boundary
 
 **Owns**
 
-- The start/stop accessible label and optional caller label override.
-- Hidden-versus-disabled presentation when speech recognition is unsupported.
-- The five-bar visual projection of supplied band and volume values.
-- Theme-aware accent-to-error clipping feedback.
-- Root span ref and accepted neutral span props.
+- The start and stop name, and the caller's `label` override (FR1, FR2).
+- Hiding or disabling the control when speech recognition is unsupported
+  (FR3).
+- The five-bar display of the supplied bands and its clipping color (FR2, FR4).
+- The wrapper span's ref, props, and styling (FR5).
 
 **Does not own / non-goals**
 
-- Speech recognition support detection, lifecycle, transcripts, or errors.
-- Microphone permission UX or audio capture.
-- ChatComposer placement beyond documented composition guidance.
-- A public color, threshold, or equalizer-shape axis.
+- Speech recognition support detection, lifecycle, transcripts, errors, and
+  microphone permission — owned by the `dictation` state owner.
+- Activation, focus, disabled semantics, and icon-only presentation — owned by
+  `component:Button`.
+- Placement in ChatComposer — the caller's composition.
+- A public color, threshold, or bar-shape option.
 
 ## Public concepts
 
-| Concept      | Closed values or states                            | Meaning                                                       | Default                     | Owner                                    | Stability |
-| ------------ | -------------------------------------------------- | ------------------------------------------------------------- | --------------------------- | ---------------------------------------- | --------- |
-| support      | supported; unsupported-hidden; unsupported-visible | Determines whether the control can render and operate.        | unsupported-hidden          | speech owner projected by this component | stable    |
-| listening    | idle; listening                                    | Selects the start/stop label and microphone/equalizer visual. | idle                        | `dictation`                              | stable    |
-| size         | `sm`; `md`                                         | Sizes the Button and equalizer geometry together.             | `md`                        | component                                | stable    |
-| label        | translated default; caller override                | Names the action for assistive technology.                    | state-dependent translation | component/caller                         | stable    |
-| root surface | ref; DOM/data/ARIA props; className/style/xstyle   | Extends the positioning wrapper.                              | omitted                     | public component API                     | stable    |
+| Concept   | Closed values or states                                  | Meaning                                                    | Availability by variant/orientation/state | Default                 | Owner                           | Stability | Invalid-value behavior           |
+| --------- | -------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------- | ----------------------- | ------------------------------- | --------- | -------------------------------- |
+| Support   | supported; unsupported and hidden; unsupported and shown | Whether the control renders and whether it can operate.    | Every control.                            | hidden when unsupported | `component:ChatDictationButton` | Stable    | TypeScript rejects other values. |
+| Listening | idle; listening                                          | Selects the start or stop name and the microphone or bars. | Supported controls.                       | idle                    | `dictation` owner               | Stable    | Not applicable.                  |
+| Size      | `sm`, `md`                                               | Sizes the Button and bars together.                        | Every control.                            | `md`                    | `component:ChatDictationButton` | Stable    | TypeScript rejects other values. |
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                      | Basis                                                 | Draft review state |
-| --- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------ |
-| FR1 | Supported idle state MUST expose an enabled Button named by the start label and invoke `dictation.toggle` on activation. | shipped API and Button contract                       | verify             |
-| FR2 | Supported listening state MUST expose the stop label and five aria-hidden visualizer bars derived from `bands`.          | shipped implementation and docs                       | verify             |
-| FR3 | Unsupported state MUST render nothing by default. If explicitly retained, its Button MUST be disabled.                   | public option plus operability/accessibility repair   | settled            |
-| FR4 | Clipping feedback MUST derive from portable semantic color tokens so a consumer theme can retint both endpoints.         | `architecture:theme-tokens/INV3` and lint enforcement | settled            |
-| FR5 | Accepted ref, DOM/data/ARIA, className, style, and xstyle inputs MUST reach and compose on the root span.                | `architecture:public-component-api`                   | settled            |
+| ID  | Invariant                                                                                                                                                                                          | Basis                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| FR1 | When supported and idle, the control is an enabled, icon-only ghost Button with the microphone icon, named by `label` or the translated start label, that calls `dictation.toggle` when activated. | Current source and tests                |
+| FR2 | While listening, the Button is named by `label` or the translated stop label and shows no icon, and five bars, hidden from assistive technology, scale with the supplied `bands`.                  | Current source and tests                |
+| FR3 | When dictation is unsupported, the control renders nothing; with `isHiddenWhenUnsupported={false}` it renders a disabled Button.                                                                   | Current source and tests                |
+| FR4 | The bars use `--color-accent`, blending toward `--color-error` as `volume` passes the clipping threshold, so a theme retints both ends (`architecture:theme-tokens` INV3).                         | Current source and tests                |
+| FR5 | `ref`, DOM, data, and ARIA props, `className`, `style`, and `xstyle` reach the wrapper span, which carries the `chat-dictation-button` target; `size` sizes the Button and the bars together.      | Current source and tests                |
+| FR6 | Under reduced motion the bars change scale and color at once, with no transition.                                                                                                                  | `design:reduced-motion`; current source |
 
 ### Allowed variation
 
-- Callers may replace the translated start/stop label with `label`.
-- Band amplitudes and clipping strength vary with the supplied dictation owner.
-- Consumer themes may change the accent and error colors used by the bars.
+- **AV1 — Label.** Callers may replace the translated start and stop name.
+- **AV2 — Bars.** Bar heights and clipping strength follow the supplied
+  `bands` and `volume`.
+- **AV3 — Theme colors.** Themes may change the accent and error colors.
+
+### Representative states
+
+| State                     | Required invariant                             | Allowed variation |
+| ------------------------- | ---------------------------------------------- | ----------------- |
+| Supported, idle           | Enabled microphone Button with the start name. | Label, size.      |
+| Listening                 | Stop name; five hidden bars.                   | Bar heights.      |
+| Clipping                  | Bars blend from accent toward error.           | Theme colors.     |
+| Unsupported, default      | Nothing renders.                               | —                 |
+| Unsupported, kept visible | A disabled Button.                             | Label.            |
+
+### Transformation and precedence order
+
+- **ORD1 — Name.** The caller's `label`, then the translated start or stop
+  label for the listening state.
+- **ORD2 — Support.** Unsupported and hidden renders nothing before any other
+  state applies.
+
+### Performance and resources
+
+- No resource rule.
 
 ## Accessibility contract
 
-- The nested Button owns keyboard and pointer activation, focus, and disabled semantics.
-- The equalizer is decorative and MUST remain hidden from the accessibility tree.
-- The visible control MUST have a state-appropriate accessible label.
-- An unsupported visible control MUST communicate disabled state and MUST NOT activate.
-- Reduced-motion preference removes the equalizer's transition duration.
+- **AR1 — Name.** The control always has a name that says whether it starts or
+  stops dictation, unless the caller overrides it (FR1, FR2).
+- **AR2 — Decorative bars.** The bars are hidden from assistive technology
+  (FR2).
+- **AR3 — Unavailable action.** A visible unsupported control is disabled
+  (FR3); Button owns how disabled is conveyed.
 
 ## Design relationships
 
-- Idle uses the shared microphone Icon through Button.
-- Listening bars begin at `--color-accent` and blend toward `--color-error` as clipping increases.
-- The component adds no portable token or public theme target.
-- Equalizer dimensions remain private component geometry.
+| Anatomy or state | Design requirement                                 | Representation authority | Hierarchy role | Component contract |
+| ---------------- | -------------------------------------------------- | ------------------------ | -------------- | ------------------ |
+| Button           | Icon-only microphone action.                       | `component:Button`       | Prominent      | FR1, FR3           |
+| Volume bars      | Five bars that show live input level and clipping. | Current source           | Supporting     | FR2, FR4, FR6      |
 
-## Responsive and bidirectional behavior
-
-The control has fixed `sm` and `md` sizes and no viewport-owned behavior. Its
-microphone glyph, centered bars, and block-axis scale are direction-neutral; the
-verified-N/A ledger records this with source evidence.
+No anatomy-theming map is recorded yet; the block is optional during
+migration, so the map is deferred.
 
 ## Family and system relationships
 
-- ChatComposer owns placement through its `sendActions` slot.
-- Button owns activation, focus, disabled semantics, hit target, and icon-only presentation.
-- Icon owns the microphone glyph.
-- `useChatDictation` and `useSpeechRecognition` own speech lifecycle and state.
-- Theme token architecture owns the accent and error semantic roles.
+- `component:Button` owns activation, focus, disabled semantics, and icon-only
+  presentation.
+- `architecture:theme-tokens` owns the accent and error roles the bars use.
+- `design:reduced-motion` owns the reduced-motion rule FR6 follows.
+- The glyph and centered bars are direction-neutral; the RTL audit records
+  this as not applicable.
 
 ## Verification map
 
-| Contract                | Evidence                                                              |
-| ----------------------- | --------------------------------------------------------------------- |
-| FR1, labels, activation | `ChatDictationButton.test.tsx` idle activation and custom-label cases |
-| FR2                     | listening structure test and Listening/Speaking stories               |
-| FR3                     | unsupported hidden and visible-disabled tests/stories                 |
-| FR4                     | clipping semantic-color test, lint, and Clipping story                |
-| FR5                     | typed ref and root-passthrough test                                   |
-| rendered states         | exact-head Storybook, a11y, and visual CI                             |
-| RTL N/A                 | `apps/storybook/rtl-audit/verified-not-applicable.json`               |
+| Contract | Verification                                                                                          | Representative states         | Mutation or failure expectation                                         | Audit section                             |
+| -------- | ----------------------------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------- | ----------------------------------------- |
+| FR1, AR1 | `ChatDictationButton.test.tsx` "labels and toggles the idle button"                                   | Idle                          | A missing name, or activation that does not toggle, fails.              | `audit:ChatDictationButton/behavior`      |
+| FR2, AR2 | `ChatDictationButton.test.tsx` "shows five hidden visualizer bars and the stop label while listening" | Listening                     | A wrong bar count, exposed bars, or a start name while listening fails. | `audit:ChatDictationButton/behavior`      |
+| FR3, AR3 | `ChatDictationButton.test.tsx` unsupported tests                                                      | Unsupported, hidden and shown | A rendered or enabled unsupported control fails.                        | `audit:ChatDictationButton/accessibility` |
+| FR4      | `ChatDictationButton.test.tsx` "uses theme-owned colors for clipping feedback"                        | Clipping                      | A raw color in place of the theme roles fails.                          | `audit:ChatDictationButton/theming`       |
+| FR5      | `ChatDictationButton.test.tsx` "forwards the root ref and accepted span props"                        | Ref and span props            | A dropped ref or prop fails.                                            | `audit:ChatDictationButton/api`           |
+| RTL N/A  | `apps/storybook/rtl-audit/verified-not-applicable.json`                                               | —                             | —                                                                       | `audit:ChatDictationButton/rtl`           |
+
+Read from source, with no focused test yet:
+
+- FR1: the ghost variant and the microphone icon.
+- FR2: no icon while listening, the bars scaling with `bands`, and the
+  caller's `label` while listening.
+- FR4: the plain accent below the clipping threshold.
+- FR5: ARIA props reaching the wrapper, `className`, `style`, and `xstyle` composing on the wrapper, the
+  `chat-dictation-button` target, and `sm` sizing.
+- FR6: the reduced-motion transition removal.
 
 ## Decision log
 
-| Decision                                                                           | Reason                                                                                    | Authority                                  |
-| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------ |
-| Keep unsupported dictation hidden by default and disabled when explicitly visible. | An unavailable action must not present as operable.                                       | objective accessibility/operability repair |
-| Blend portable accent and error tokens for clipping.                               | Preserves the existing progressive clipping cue while keeping both endpoints theme-owned. | `architecture:theme-tokens/INV3`           |
+No component-local decision is recorded.
 
 ## Open questions
 
-None for this repair.
+None.
 
 ## Content boundary
 
-Labels may be translated defaults or caller overrides. The component does not own transcript text, permission errors, microphone instructions, or product-specific voice-input guidance.
+This file does not duplicate consumer prop tables, speech-recognition
+behavior, or Button's rules. It links to their owners.

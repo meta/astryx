@@ -18,18 +18,19 @@
 
 import React, {useId, useCallback} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Dialog} from '../Dialog';
+import {Dialog} from '../Dialog/Dialog';
 import {Layout} from '../Layout/Layout';
 import {LayoutContent} from '../Layout/LayoutContent';
 import {LayoutFooter} from '../Layout/LayoutFooter';
-import {Stack} from '../Stack';
+import {Stack} from '../Stack/Stack';
 import {Heading} from '../Heading/Heading';
 import {Text} from '../Text/Text';
-import {Button, type ButtonVariant} from '../Button';
+import {Button} from '../Button/Button';
+import type {ButtonVariant} from '../Button';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {useTranslator} from '../i18n/useTranslator';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';

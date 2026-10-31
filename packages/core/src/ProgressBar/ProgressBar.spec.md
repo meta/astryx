@@ -1,59 +1,103 @@
 ---
 schema_version: 3
-template_version: 3
+template_version: 7
 kind: component
 id: component:ProgressBar
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, theming, accessibility]
 verified_by:
   [
     packages/core/src/ProgressBar/ProgressBar.test.tsx,
+    packages/core/src/ProgressBar/__tests__/ProgressBar.a11y.test.tsx,
+    packages/core/src/ProgressBar/__tests__/ProgressBar.a11y.chromium.spec.ts,
+    packages/core/src/ProgressBar/__tests__/ProgressBarMotion.a11y.chromium.spec.ts,
     packages/core/src/theme/themingTargets.test.ts,
+    .github/visual-baseline/manifest.json,
     scripts/check-knowledge.mjs,
   ]
 modules: []
 families: []
-design_specs: []
+design_specs: [design:reduced-motion]
 architecture:
   [
     architecture:public-component-api,
     architecture:component-theming-surface,
     architecture:theme-authoring-contract,
     architecture:theme-tokens,
+    architecture:internationalization,
   ]
 contributing: []
-system_specs: [spec:AST-002/DEC-1, spec:AST-002/DEC-2]
+system_specs: [spec:AST-002/DEC-1, spec:AST-002/DEC-2, spec:AST-009]
 ---
 
 # ProgressBar component contract
 
+## Contract at a glance
+
+| Area                    | Contract                                                                                                                                                                                                              |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `label`, `value`, `max`, `isLabelHidden`, `hasValueLabel`, `formatValueLabel`, `variant`, `isIndeterminate`, `marks`, `isDisabled`, root `BaseProps`, and a root `ref`.                                               |
+| Behavior                | A labelled `progressbar` whose fill shows the clamped value against a muted track, or slides while indeterminate, with optional value text and labelled target marks.                                                 |
+| End-user impact         | People see how far an operation has gone, and assistive technology reads the name and value; marks reveal their labels on hover or focus.                                                                             |
+| Builder impact          | A builder's `data-variant` replaces the reflected variant today, so theme rules for the bar's real variant stop matching (FR8 gap); otherwise none.                                                                   |
+| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. Implementation gaps are listed under Current-state impact.                                                                                 |
+| Review checks           | Reject a determinate bar whose correctness depends on nearby text, a value outside `[0, max]`, a leaked `NaN`, value semantics while indeterminate, or a target off its part.                                         |
+| Governing rules         | `component:ProgressBar/DEC-1`; `spec:AST-002`; `architecture:component-theming-surface`; `architecture:theme-tokens` INV11; `architecture:internationalization` INV1a; `architecture:public-component-api` INV5–INV8. |
+
+This table is a review projection; the body below is authoritative.
+
 ## Intent
 
-ProgressBar communicates the progress of an operation. A determinate bar must be
-a sufficient standalone visual: people must be able to distinguish completed
-from remaining progress without depending on visible text rendered elsewhere.
-External text may supplement the bar, but it is not a prerequisite for the bar
-to be correct.
+ProgressBar communicates the progress of an operation. A determinate bar is a
+sufficient standalone visual: people can distinguish completed from remaining
+progress without depending on visible text rendered elsewhere. External text
+may supplement the bar, but it is not a prerequisite for the bar to be correct.
 
-This record also captures the current consumer anatomy and exact theming
-ownership. It does not choose a visual treatment; 0.7.0 only removes the four
-deprecated `progressbar*` theming aliases.
+Consumer syntax and examples belong in `ProgressBar.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`; canonical ProgressBar behavior is unchanged.
-- Removed aliases: 0.7.0 stops emitting `progressbar`, `progressbar-track`,
-  `progressbar-fill`, and `progressbar-mark`.
-- Controlled/uncontrolled behavior: unchanged.
-- Migration decision: replace those theme keys and CSS target classes with their
-  `progress-bar*` forms, or run `astryx upgrade --from 0.6.3 --apply --path .`.
+- Released default preserved: `yes` — determinate, `value` 0, `max` 100,
+  `accent`, visible label, no value text, no marks.
+- Compatibility class: records shipped behavior; the four canonical
+  `progress-bar*` targets are the only target classes.
+- Controlled/uncontrolled behavior: not applicable; `value` is caller-owned.
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **Value text assembled outside the catalog (FR3).** The default value text
+  and `aria-valuetext` are `${percent}%` built in code, so locales that write
+  percentages differently read and see the English form, where
+  `architecture:internationalization` INV1a has Astryx-owned text come from
+  one catalog message.
+- **Marks are focusable without a role or name (FR7).** Each mark is a
+  focusable `span` with no role and no accessible name; its label reaches
+  assistive technology only as a description, and only once the tooltip code
+  has loaded, so screen reader users land on an unnamed stop (WCAG 2.2 SC
+  4.1.2).
+- **Caller `data-variant` replaces the reflected variant (FR8).** Caller props
+  spread after the root's theme attributes, so a caller `data-variant`
+  replaces the reflected value and theme rules for the real variant stop
+  matching, where `architecture:public-component-api` INV5 keeps
+  component-owned behavior from being overwritten.
+- **Theme-added variant has no baseline fill (FR4).** The variant map is
+  exported for themes to extend, but an added variant matches no built-in fill
+  or on-fill mark color, so the fill paints nothing until a theme styles it, where
+  `architecture:component-theming-surface` INV14 asks for a safe baseline.
+- **Indeterminate slide follows any right-to-left ancestor (FR6).** The
+  indeterminate slide and the centering of marks mirror under any
+  right-to-left ancestor rather than the bar's own direction, so in a
+  left-to-right region of a right-to-left page they run against the label,
+  where `architecture:internationalization` INV11 resolves mirroring from the
+  rendered region.
 
 ## Ownership boundary
 
@@ -61,118 +105,96 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - A sufficient standalone visual distinction between completed and remaining
   progress for every determinate presentation the component provides.
-- Internal resolution of that visual treatment when the caller supplies ordinary
-  progress state.
-- The current progress-bar container, track, fill, and mark parts represented by
-  the `progress-bar`, `progress-bar-track`, `progress-bar-fill`, and
+- The container, label row, track (the `progressbar` element), fill, and marks,
+  and their `progress-bar`, `progress-bar-track`, `progress-bar-fill`, and
   `progress-bar-mark` targets.
+- Value clamping, value text, indeterminate motion, and mark placement.
 
 **Does not own / non-goals**
 
 - External visible labels, values, or descriptions — owned by the product
   callsite and supplementary to the bar.
-- A separate public target for the built-in label or value text; none currently
-  exists.
-- The exact standalone contrast treatment — still a human design decision.
+- A separate public target for the built-in label or value text; none exists.
+- The exact standalone contrast treatment — a human design decision (OQ1).
 - Theme token definitions — owned by `architecture:theme-tokens`.
-- Public API that makes visual correctness depend on caller-declared external
-  content — governed by `architecture:public-component-api` and `spec:AST-002`.
+- The mark tooltip's behavior — owned by `component:Tooltip`.
 
 ## Public concepts
 
-| Concept             | Closed values or states                                    | Meaning                                                         | Availability by variant/orientation/state | Default                         | Owner                   | Stability          | Invalid-value behavior         |
-| ------------------- | ---------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------- | ------------------------------- | ----------------------- | ------------------ | ------------------------------ |
-| Progress mode       | `determinate`, `indeterminate`                             | Whether completed progress is known                             | All variants                              | Determinate                     | `component:ProgressBar` | Stable current API | Existing prop handling applies |
-| Built-in value text | Shown or hidden                                            | Optional visible text supplement generated by ProgressBar       | Determinate only                          | Hidden                          | `component:ProgressBar` | Stable current API | Ignored when indeterminate     |
-| Visual treatment    | One sufficient standalone treatment; exact form unresolved | How the graphic distinguishes completed from remaining progress | Determinate progress                      | Sufficient standalone treatment | `component:ProgressBar` | Draft decision     | No incomplete public mode      |
-
-The current public props remain documented in `ProgressBar.doc.mjs`. This draft
-does not turn nearby external content into a ProgressBar concept.
+| Concept          | Closed values or states                                                                                 | Meaning                                                             | Availability by variant/orientation/state | Default                 | Owner                   | Stability                         | Invalid-value behavior                                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------------------- | ----------------------- | ----------------------- | --------------------------------- | ---------------------------------------------------------------- |
+| Progress mode    | determinate; indeterminate                                                                              | Whether completed progress is known.                                | All variants                              | determinate             | `component:ProgressBar` | Stable                            | —                                                                |
+| Value and range  | finite `value` within `0`–`max`                                                                         | Completed amount.                                                   | Determinate                               | 0 of 100                | caller                  | Stable                            | Clamped to `[0, max]`; a non-finite value or `max` counts as 0.  |
+| Label            | string, visible or visually hidden                                                                      | The bar's accessible name.                                          | Always                                    | visible                 | caller                  | Stable                            | —                                                                |
+| Value text       | hidden; shown; custom formatter                                                                         | Optional visible value beside the label, also the `aria-valuetext`. | Determinate                               | hidden; rounded percent | `component:ProgressBar` | Stable                            | Ignored when indeterminate.                                      |
+| Variant          | `accent`, `success`, `warning`, `error`, `neutral`; theme-added values through the exported variant map | Fill color.                                                         | Always                                    | `accent`                | `component:ProgressBar` | Stable                            | An added value paints no fill until a theme styles it (FR4 gap). |
+| Disabled         | `true`, `false`                                                                                         | Muted fill, label, and marks.                                       | Always                                    | `false`                 | `component:ProgressBar` | Stable                            | —                                                                |
+| Marks            | `{value, label}` list                                                                                   | Labelled ticks on the track.                                        | Determinate                               | none                    | caller                  | Stable                            | Non-finite values are dropped; others clamp to the track.        |
+| Visual treatment | one sufficient standalone treatment; exact form open                                                    | How the graphic distinguishes completed from remaining progress.    | Determinate                               | —                       | `component:ProgressBar` | Decided by DEC-1; form open (OQ1) | No incomplete public mode.                                       |
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                              | Basis                                                              | Draft review state                          |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------- |
-| FR1 | Every determinate presentation ProgressBar provides MUST be a sufficient standalone visual for distinguishing completed from remaining progress. | `component:ProgressBar/DEC-1`; existing non-text contrast standard | Settled                                     |
-| FR2 | External visible text MAY supplement the bar but MUST NOT be required for the bar's visual correctness.                                          | `component:ProgressBar/DEC-1`                                      | Settled                                     |
-| FR3 | ProgressBar MUST NOT make visual correctness depend on caller-declared external content that it cannot verify or associate.                      | `component:ProgressBar/DEC-1`; `spec:AST-002`                      | Settled                                     |
-| FR4 | Supplementary text or graphics MUST NOT substitute for a sufficient distinction between completed and remaining progress.                        | `component:ProgressBar/DEC-1`                                      | Settled                                     |
-| FR5 | Public API MAY be considered only after the component has a correct base behavior and a stable caller-owned distinction still remains.           | `component:ProgressBar/DEC-1`; `spec:AST-002`                      | Settled admission gate                      |
-| FR6 | The current container, track, fill, and mark carry their four current targets; label and value text carry no separate ProgressBar target.        | Current source, public docs, and focused tests                     | Verified current behavior; no target change |
-
-### Observed current behavior
-
-These observations describe `main`; they are not design approval from this
-draft:
-
-- Determinate progress renders a semantic-color fill over a muted track.
-- `hasValueLabel` optionally renders formatted value text in the component.
-- Callers may compose other visible text outside the component.
-- `Progress bar`, `Track`, `Fill`, and `Mark` carry `progress-bar`,
-  `progress-bar-track`, `progress-bar-fill`, and `progress-bar-mark`
-  respectively. `Label` and `Value text` have no separate public target.
-- Variant state is reflected on the progress-bar, fill, and mark targets;
-  placement is also reflected on marks.
-- Current unit tests cover value semantics, labels, variants, determinate and
-  indeterminate modes, disabled rendering, marks, and public target names. They
-  do not establish a sufficient standalone completed-versus-remaining visual
-  across shipped themes.
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Basis                                                                   |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| FR1 | Every determinate presentation ProgressBar provides is a sufficient standalone visual for distinguishing completed from remaining progress; external visible text may supplement it but is never required, and supplementary text or graphics never substitute for that distinction. ProgressBar does not make visual correctness depend on caller-declared external content it cannot verify or associate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | `component:ProgressBar/DEC-1`; `spec:AST-002`                           |
+| FR2 | New public API that adjusts the visual distinction is considered only after the component has a correct base behavior and a stable caller-owned distinction still remains.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `component:ProgressBar/DEC-1`; `spec:AST-002`                           |
+| FR3 | The root holds a label row and a track. The label names the track (`role="progressbar"`) through `aria-labelledby`; `isLabelHidden` hides it visually only. When determinate, the track exposes `aria-valuenow` (the clamped value), `aria-valuemin` 0, `aria-valuemax` (`max`), and `aria-valuetext` from `formatValueLabel`, which defaults to the rounded percentage; `hasValueLabel` shows the same text beside the label. A zero or non-finite `max` gives 0% and never renders `NaN`. Astryx-owned value text comes from one catalog message (`architecture:internationalization` INV1a). Implementation gap: the default text is assembled in code (Current-state impact).                                                                                                                                                                                                                                                                                                      | Current source and tests                                                |
+| FR4 | The track is 8px high, fully rounded, in `--color-background-muted`, and clips the fill. The determinate fill spans the track and slides along it so its leading edge sits at the clamped percentage, mirrored by the bar's own writing direction, moving over `--duration-medium` when the value changes; under reduced motion a new value lands at once on every pointer (`design:reduced-motion` DR1). The fill paints `--color-accent`, `--color-success`, `--color-warning`, or `--color-error`, or `--color-text-disabled` for `neutral` and disabled bars; a theme-added variant has a safe theme-independent fill (`architecture:component-theming-surface` INV14). Implementation gap: a theme-added variant paints no fill and no on-fill mark color until a theme styles it (Current-state impact). In forced colors the fill is sized to the value instead of sliding and keeps a 1px `CanvasText` outline so its shape stays visible (`architecture:theme-tokens` INV11). | Current source and tests                                                |
+| FR5 | `isDisabled` mutes the fill, label, value text, and marks and adds no ARIA state.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Current source and tests                                                |
+| FR6 | `isIndeterminate` removes every value attribute and the value text and slides a 40% fill across the clipped track, mirrored by the bar's own rendered direction (`architecture:internationalization` INV11); under reduced motion the loop slows from 1.5s to 3s per pass. Whether the loop stops under reduced motion is open (OQ2). Implementation gap: the slide, and the centering of marks, mirror under any right-to-left ancestor rather than the bar's own direction, so in a left-to-right region of a right-to-left page they run against the label (Current-state impact).                                                                                                                                                                                                                                                                                                                                                                                                  | Current source and tests                                                |
+| FR7 | Each finite mark renders, outside the `progressbar` element, a tick at its clamped position whose tooltip shows its label on hover and focus; marks inside the filled part take the fill's contrasting color, and marks do not render while indeterminate. A focusable mark exposes its label as its accessible name (WCAG 2.2 SC 4.1.2). Implementation gap: marks are focusable `span`s with no role or name, labelled only as a description once the tooltip loads (Current-state impact).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | Current source and tests                                                |
+| FR8 | The root carries `progress-bar` reflecting `variant`, the track `progress-bar-track`, the fill `progress-bar-fill` reflecting the resolved fill variant, and each mark `progress-bar-mark` reflecting the resolved fill variant and placement; the label and value text carry no target. Reflected state stays component-owned (`architecture:public-component-api` INV5). Implementation gap: a caller `data-variant` replaces the root's reflected variant (Current-state impact).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Current source and tests                                                |
+| FR9 | `ref` and `data-testid` reach the root; supported DOM, data, ARIA, and event props reach the root, while the reflected theme attributes stay component-owned (FR8); `xstyle`, `className`, and `style` compose after component styles.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Current source and tests; `architecture:public-component-api` INV5–INV8 |
 
 ### Allowed variation
 
 - **AV1 — Exact visual treatment.** Shape, token choice, and other rendering
   details may vary if every resulting presentation satisfies FR1.
-- **AV2 — Themes.** Themes may express their visual language through the current
-  theming system while preserving the standalone distinction.
+- **AV2 — Themes.** Themes may express their visual language through the
+  targets while preserving the standalone distinction.
 
 ### Representative states
 
-| State                                  | Required invariant                                                          | Allowed variation                                                                             |
-| -------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Determinate, partial progress          | Completed and remaining progress are distinguishable from the graphic alone | Exact visual treatment and semantic variant                                                   |
-| Determinate with built-in value text   | The graphic still satisfies FR1; value text supplements it                  | Value formatting                                                                              |
-| Determinate with external visible text | The graphic still satisfies FR1 without relying on that text                | Callsite composition                                                                          |
-| Indeterminate                          | Communicates ongoing activity without claiming a completed amount           | Existing animation and theme variation; completed-versus-remaining distinction does not apply |
+| State                | Required invariant                                                                                     | Allowed variation |
+| -------------------- | ------------------------------------------------------------------------------------------------------ | ----------------- |
+| Determinate, partial | Completed and remaining progress are distinguishable from the graphic alone; value attributes present. | Variant.          |
+| With value text      | The graphic still satisfies FR1; the text supplements it.                                              | Formatter.        |
+| Label hidden         | The bar keeps its accessible name.                                                                     | —                 |
+| Indeterminate        | No value attributes; sliding fill; slower under reduced motion (OQ2).                                  | Variant.          |
+| With marks           | Ticks outside the `progressbar`, labelled by tooltip.                                                  | Mark labels.      |
 
 ### Transformation and precedence order
 
-- **ORD1 — Progress state before presentation.** Resolve determinate or
-  indeterminate behavior from component state, then render a treatment valid for
-  that mode. External content does not weaken the determinate visual requirement.
+- **ORD1 — Value.** Non-finite → 0; clamp to `[0, max]`; a non-positive `max`
+  gives 0%.
+- **ORD2 — Presentation.** Resolve determinate or indeterminate first; external
+  content never weakens the determinate visual requirement.
 
 ### Performance and resources
 
-- **PR1 — No external-content inspection.** ProgressBar MUST NOT add DOM
+- **PR1 — No external-content inspection.** ProgressBar adds no DOM
   observation, measurement, or relationship discovery to decide whether nearby
-  visible text makes a weaker bar acceptable.
+  text makes a weaker bar acceptable. Mark tooltips load lazily.
 
 ## Accessibility contract
 
-- **AR1 — Standalone non-text distinction.** A determinate bar MUST satisfy the
+- **AR1 — Standalone non-text distinction.** A determinate bar satisfies the
   applicable non-text contrast requirement without relying on external visible
   text.
-- **AR2 — Programmatic semantics remain present.** The current required
-  accessible name and determinate value semantics remain independent of the
-  visible treatment.
-- **AR3 — Supplementary text is not inferred.** ProgressBar MUST NOT claim that
-  external text is present, visible, equivalent, or correctly associated when it
-  cannot encode or verify those facts.
+- **AR2 — Programmatic semantics.** The track is a named `progressbar` with
+  value semantics while determinate and none while indeterminate, independent
+  of the visible treatment.
+- **AR3 — Supplementary text is not inferred.** ProgressBar does not claim that
+  external text is present, visible, equivalent, or associated.
 
 ## Design relationships
 
-| Anatomy or state                     | Design requirement                                      | Representation authority              | Hierarchy role | Component contract |
-| ------------------------------------ | ------------------------------------------------------- | ------------------------------------- | -------------- | ------------------ |
-| Progress bar                         | Arranges the current label row and progress track.      | Current source and public docs        | Supporting     | FR6                |
-| Label and value text                 | Name the operation and optionally supplement its value. | Current source and public docs        | Supporting     | FR2, AR2, FR6      |
-| Determinate fill and remaining track | Provide a sufficient standalone distinction.            | Unsettled standalone visual treatment | Prominent      | FR1, AR1           |
-| Mark                                 | Presents an optional labeled target on the track.       | Current source and public docs        | Supporting     | FR6                |
-
-The component implements design requirements without copying their rationale.
-The standalone visual remains a human design decision; this contract does not
-invent its form.
+| Anatomy or state         | Design requirement                                      | Representation authority    | Hierarchy role | Component contract |
+| ------------------------ | ------------------------------------------------------- | --------------------------- | -------------- | ------------------ |
+| Progress bar             | Arranges the label row and track.                       | Current source and docs     | Supporting     | FR3, FR8           |
+| Label and value text     | Name the operation and optionally supplement its value. | Current source and docs     | Supporting     | FR3                |
+| Fill and remaining track | Provide a sufficient standalone distinction.            | DEC-1; treatment open (OQ1) | Prominent      | FR1, FR4           |
+| Mark                     | An optional labelled target on the track.               | Current source and docs     | Supporting     | FR7                |
 
 ### Theming anatomy
 
@@ -197,36 +219,36 @@ invent its form.
 }
 ```
 
-The `Label` and `Value text` gaps are current facts, not decisions that those
-parts should remain untargeted. This map does not select a standalone visual
-treatment or resolve OQ1.
+The `Label` and `Value text` dispositions are current facts, not decisions that
+those parts stay untargeted.
 
 ## Family and system relationships
 
 - `architecture:public-component-api` and `spec:AST-002/DEC-1` govern whether a
-  caller-owned distinction justifies a public prop.
-- `architecture:component-theming-surface` governs which stable visible parts and
-  states become public theme capabilities.
-- `architecture:theme-authoring-contract` governs how themes override those
-  component capabilities without creating a second component contract.
-- `architecture:theme-tokens` governs the semantic token vocabulary used by the
-  eventual treatment.
-- ProgressBar and Slider both render a track, a filled segment, positioned
-  indicators, and optional value presentation, while their current target
-  coverage differs. That evidence requires a future joint family/audit pass; it
-  does not declare a current family, require a new target, or authorize runtime
-  behavior changes.
+  caller-owned distinction justifies a public prop; FR2 applies them.
+- `architecture:component-theming-surface` and
+  `architecture:theme-authoring-contract` govern targets and theme overrides.
+- `architecture:theme-tokens` governs the token vocabulary and forced-colors
+  boundaries; FR4 applies INV11.
+- `architecture:internationalization` governs Astryx-owned text; FR3 records
+  the value-text gap.
+- `component:Tooltip` owns the mark tooltip.
 
 ## Verification map
 
-| Contract            | Verification                                                                    | Representative states                                       | Mutation or failure expectation                                           | Audit section                          |
-| ------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------- |
-| FR1, AR1            | Real-browser visual and contrast evidence across shipped themes and color modes | Partial determinate progress for each semantic variant      | A completed or remaining segment becomes indistinguishable without text   | Future ProgressBar visual audit        |
-| FR2, FR3, AR3       | Public type and consumer-doc review                                             | No value text, built-in value text, external composed text  | A caller signal is credited with correctness the component cannot verify  | Future ProgressBar API tests           |
-| AR2                 | `ProgressBar.test.tsx`                                                          | Determinate, indeterminate, hidden label, custom value text | Accessible name or value semantics disappear when visuals change          | Future ProgressBar accessibility audit |
-| FR6                 | `ProgressBar.test.tsx` and `themingTargets.test.ts`                             | Four canonical target classes                               | Canonical placement remains covered after the 0.7 alias removal           | `audit:ProgressBar/theming`            |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                   | Canonical anatomy and four current targets                  | Missing, extra, prefixed, stale, alias-backed, or unclaimed mappings fail | `audit:ProgressBar/theming`            |
-| Theming             | Theme-target metadata checks plus browser evidence                              | Shipped themes, light and dark modes                        | A theme override bypasses the standalone distinction                      | Future ProgressBar theming audit       |
+| Contract            | Verification                                                                                                                                               | Representative states                                                           | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                            | Audit section                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| FR1, AR1, AR3       | Stable visual baselines `core-progressbar--default` (neutral) and `core-progressbar--with-target-mark` (probe)                                             | Default; probe theme with a mark                                                | A changed fill or track comes back changed for review. Gap: no real-browser contrast check across shipped themes and color modes proves the standalone distinction (OQ1 holds the treatment).                                                                                                                                                                                                                                                                              | `audit:ProgressBar/visual`   |
+| FR2                 | Public type and consumer-doc review                                                                                                                        | Current props                                                                   | Gap: no automated check; a new visual-distinction prop is a review finding.                                                                                                                                                                                                                                                                                                                                                                                                | `audit:ProgressBar/api`      |
+| FR3, ORD1, AR2      | `ProgressBar.test.tsx` label, value text, formatter, clamp, zero and NaN tests; `ProgressBar.a11y.test.tsx` and `ProgressBar.a11y.chromium.spec.ts` states | Determinate; formatted; complete; label hidden                                  | A missing name, a value outside `[0, max]`, a leaked `NaN`, or wrong `aria-valuetext` fails, including at the accessibility tree. Gap: no test checks the default text in a non-English locale.                                                                                                                                                                                                                                                                            | `audit:ProgressBar/a11y`     |
+| FR4                 | `ProgressBar.test.tsx` track-clip, transform, variant, and forced-colors tests; `ProgressBarMotion.a11y.chromium.spec.ts`                                  | Every variant; value changes; RTL region; reduced motion; forced colors         | A track that does not clip, a fill sized by width outside forced colors, a lost forced-colors outline, a leading edge off the value or unmirrored in an RTL region, a value change that does not land at once under reduced motion, or per-frame layout while moving fails. Gap: the variant colors have no direct check. Gap: the "fixed 8px track height" test only checks that the bar renders, so the track height has no check; no test covers a theme-added variant. | `audit:ProgressBar/visual`   |
+| FR5                 | `ProgressBar.test.tsx` disabled and disabled-mark tests                                                                                                    | Disabled                                                                        | A missing label or undimmed marks fail. Gap: the muted fill and label colors have no direct check.                                                                                                                                                                                                                                                                                                                                                                         | `audit:ProgressBar/visual`   |
+| FR6                 | `ProgressBar.test.tsx` indeterminate suite                                                                                                                 | Every variant; RTL                                                              | Value attributes or value text while indeterminate, a lost label, an unclipped track, or an unmirrored slide fails. Gap: the reduced-motion loop duration has no check. No test covers the slide in a left-to-right region inside a right-to-left page. Gap: the RTL test asserts the right-to-left ancestor selector, so it pins the FR6 gap.                                                                                                                             | `audit:ProgressBar/behavior` |
+| FR7                 | `ProgressBar.test.tsx` target-mark suite                                                                                                                   | None; one; many; clamped; non-finite; on fill; indeterminate; disabled; tooltip | A missing, misplaced, or clipped mark, a mark inside the `progressbar`, a lost tooltip, or a wrong on-fill color fails. Gap: the test asserts that marks have no role and no `aria-label`, which pins the FR7 gap.                                                                                                                                                                                                                                                         | `audit:ProgressBar/a11y`     |
+| FR8                 | `ProgressBar.test.tsx` target-name and mark-target tests; `themingTargets.test.ts`                                                                         | Four canonical targets                                                          | A missing or renamed target fails. Gap: no test covers a caller `data-variant`. `themingTargets.test.ts` catches only a renamed or undocumented target; no check fails if a part stops carrying its target.                                                                                                                                                                                                                                                                | `audit:ProgressBar/theming`  |
+| FR9                 | `ProgressBar.test.tsx` ref and `data-testid` tests                                                                                                         | Ref; test id                                                                    | A ref that is not a `div` or a lost test id fails. Gap: the ref test checks only that the ref is a `div`, not that it is the root, and no test covers DOM props, `className`, `style`, or the `xstyle` merge order.                                                                                                                                                                                                                                                        | `audit:ProgressBar/api`      |
+| PR1                 | Source review                                                                                                                                              | Every state                                                                     | Gap: no automated check fails if ProgressBar starts inspecting nearby content.                                                                                                                                                                                                                                                                                                                                                                                             | `audit:ProgressBar/behavior` |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                              | Canonical anatomy and four targets                                              | Missing, extra, or stale mappings fail repository validation.                                                                                                                                                                                                                                                                                                                                                                                                              | `audit:ProgressBar/theming`  |
 
 ## Decision log
 
@@ -253,6 +275,8 @@ verify.
 - **OQ1 — What exact visual treatment gives every determinate presentation a
   sufficient standalone completed-versus-remaining distinction across supported
   variants, themes, and color modes?** (`human-design`)
+- **OQ2 — Under reduced motion, should the indeterminate loop stop or keep
+  sliding at a slower pace?** (`human-design`) Today it slows to 3s per pass.
 
 ## Content boundary
 

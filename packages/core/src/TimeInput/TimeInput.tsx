@@ -52,9 +52,6 @@ import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {
   type ISOTimeString,
-  parseTimeInput,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   adjustTime,
   isImeKeyEvent,
@@ -81,7 +78,12 @@ import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {useLocale, useTranslator} from '../i18n';
+import {
+  formatLocaleTime,
+  parseLocaleTime,
+  resolveHourFormat,
+} from '../utils/timeFormat';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {NativeTimeSegment} from '../DateTimeInput/NativeTimeSegment';
@@ -294,9 +296,13 @@ export interface TimeInputProps extends Omit<
 
   /**
    * Hour format for display.
-   * - '12h': Display as 12-hour with AM/PM (e.g., "2:30 PM")
+   * - '12h': Display as 12-hour with the locale's day period (e.g., "2:30 PM")
    * - '24h': Display as 24-hour (e.g., "14:30")
-   * @default '12h'
+   *
+   * When unset, follows the `InternationalizationProvider` locale's hour
+   * cycle: `en-US` reads 12-hour, `en-GB` and `de-DE` read 24-hour. A
+   * per-user preference rides on the locale tag (`en-US-u-hc-h23`).
+   * @default the locale's hour cycle
    */
   hourFormat?: TimeInputHourFormat;
 
@@ -449,6 +455,7 @@ function TimeField({
     ...controlProps
   } = rest;
   const t = useTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');
@@ -542,9 +549,11 @@ function TimeField({
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Format function based on hourFormat
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
+  const formatDisplayTime = useCallback(
+    (time: ISOTimeString, includeSeconds: boolean) =>
+      formatLocaleTime(time, locale, hourFormat, includeSeconds),
+    [locale, hourFormat],
+  );
 
   // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
@@ -576,21 +585,23 @@ function TimeField({
     if (pendingInput === null || !pendingInput.trim()) {
       return true;
     }
-    const parsed = parseTimeInput(pendingInput, hasSeconds);
+    const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
     if (!parsed) {
       return false;
     }
     // Also check min/max range
     return isTimeInRange(parsed, min, max);
-  }, [pendingInput, hasSeconds, min, max]);
+  }, [pendingInput, locale, hasSeconds, min, max]);
 
   // Placeholder that shows format hint when focused and empty
   const displayPlaceholder = useMemo(() => {
     if (isFocused && !displayValue) {
-      return hourFormat === '12h' ? 'e.g., 2:30 PM' : 'e.g., 14:30';
+      return hourFormat === '12h'
+        ? t('@astryx.dateTimeInput.timeHint12h')
+        : t('@astryx.dateTimeInput.timeHint24h');
     }
     return placeholder;
-  }, [isFocused, displayValue, hourFormat, placeholder]);
+  }, [isFocused, displayValue, hourFormat, placeholder, t]);
 
   // Handle input text change - update immediately if valid
   const handleInputChange = useCallback(
@@ -604,12 +615,12 @@ function TimeField({
       setPendingInput(newValue);
 
       // If the input is valid, update immediately (don't wait for blur)
-      const parsed = parseTimeInput(newValue, hasSeconds);
+      const parsed = parseLocaleTime(newValue, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, min, max) && parsed !== value) {
         fireChange(parsed);
       }
     },
-    [hasSeconds, min, max, value, fireChange, isDisabled],
+    [locale, hasSeconds, min, max, value, fireChange, isDisabled],
   );
 
   // Handle focus
@@ -646,7 +657,7 @@ function TimeField({
         return;
       }
 
-      const parsed = parseTimeInput(pendingInput, hasSeconds);
+      const parsed = parseLocaleTime(pendingInput, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, min, max)) {
         // Valid time - update if different
         if (parsed !== value) {
@@ -656,7 +667,7 @@ function TimeField({
       // Clear pending input - display will revert to formatted value
       setPendingInput(null);
     },
-    [pendingInput, isDisabled, value, fireChange, hasSeconds, min, max],
+    [pendingInput, isDisabled, value, fireChange, locale, hasSeconds, min, max],
   );
 
   // Handle keyboard navigation on input
@@ -950,11 +961,18 @@ export function TimeInput(props: TimeInputProps) {
     props.nativePicker,
     'time',
   );
+  const locale = useLocale();
   const {
     presentation: _presentation,
     nativePicker: _nativePicker,
-    ...rest
+    ...surfaceProps
   } = props;
+  // Every surface gets the resolved hour format, so the typed text, the
+  // native field's resting text, and the sheet wheels agree.
+  const rest = {
+    ...surfaceProps,
+    hourFormat: resolveHourFormat(locale, props.hourFormat),
+  };
   if (effective === 'native') {
     // Deprecated `always` keeps released fallbacks (FR2 legacy); only an
     // explicit `presentation="native"` is forced.

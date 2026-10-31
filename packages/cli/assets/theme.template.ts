@@ -181,12 +181,26 @@ export const myTheme = defineTheme({
   radius: {base: 4, multiplier: 1},
 
   /**
-   * Duration scale in ms. Each of fast/medium/slow also gets a -min and -max
-   * sibling computed with `ratio` (min = base × ratio, max = base ÷ ratio), so
-   * a component can pick a longer or shorter variant of the same tempo.
+   * Motion. Two knobs set how its CSS feels (touch springs don't read them
+   * yet):
+   *   tempo — 1 is Astryx's own; 0.75 the quickest, 1.5 the slowest.
+   *   character — 'crisp' | 'standard' | 'expressive': the entrance and move
+   *     curves (--ease-entrance, --ease-move). --ease-exit, the curve for
+   *     something leaving, is the same at every character; exits and fades
+   *     never overshoot.
+   *   e.g. motion: {tempo: 0.85, character: 'crisp'}
+   * Finger tracking, momentum, the rubber band, the on-screen keyboard,
+   * hover-intent delays, gesture thresholds, the press's onset delay, cancel
+   * distance and tap flash, and busy loops never follow them; the press
+   * release fade follows tempo, up to the 200 ms Reduce Motion cap.
+   *
+   * A duration scale in ms wins over tempo for the durations it sets. Each of
+   * fast/medium/slow also gets a -min and -max sibling computed with `ratio`
+   * (min = base × ratio, max = base ÷ ratio), so a component can pick a longer
+   * or shorter variant of the same tempo.
    *   Snappy {fast: 100, medium: 250} · Default {fast: 175, medium: 410, slow: 975}
    *   Cinematic {fast: 200, medium: 500, slow: 1200}
-   * `easing` overrides --ease-standard.
+   * `easing` overrides --ease-standard. Explicit `tokens` win over both.
    *
    * Reference: `astryx docs motion`.
    */
@@ -217,7 +231,8 @@ export const myTheme = defineTheme({
   //   --radius-*       none · inner · element · container · page · chat · full
   //   --shadow-*       low/med/high + inset-{hover,selected,success,warning,error}
   //   --duration-*     {fast,medium,slow} × {-min, base, -max}
-  //   --ease-*         standard (arriving, state) · exit (leaving)
+  //   --ease-*         standard (state) · entrance (arriving) · move (on
+  //                    screen) · exit (leaving)
   //   --font-family-*  body · heading · code
   //   --font-size-*    4xs … 5xl
   //   --font-weight-*  normal · medium · semibold · bold

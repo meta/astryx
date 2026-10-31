@@ -1,0 +1,268 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Decides, inside the job that owns the work, whether a pull request changes
+# anything in that job's scope (spec:AST-030). There is no separate scope job:
+# each `test-<scope>` job runs this step right after its checkout and skips
+# its remaining steps, reporting success, when nothing in scope changed.
+#
+# - The PR's own change comes from GitHub's file list for the pull request
+#   (its diff from the merge base), never from main's history since an old
+#   base, so a long-lived branch does not inherit main's changes (#8812) and
+#   no history is fetched or deepened (#8826).
+# - The classifier (change-scope.cjs and its two helpers) is read from the PR's
+#   base commit, so a pull request cannot loosen its own classification.
+# - Anything this step cannot decide (not a pull request, a missing trusted
+#   classifier, an API error, an empty file list or one GitHub truncates)
+#   puts everything in scope (spec:AST-030 FR3, FR4). A classifier that rejects the change (a spec-only PR with a
+#   Changeset) fails the step, as the old scope job failed its dependents.
+# - A release-branch pull request is the generated version bump: spec-only and
+#   tooling-only, with `release_bump` true.
+#
+# The job must be checked out first: this is a local action.
+
+name: Test scope
+description: Whether this pull request changes anything in the calling job's scope.
+
+inputs:
+  paths:
+    description: >-
+      Optional regular expression over changed file paths (old and new names
+      of a rename). When given, `touches` says whether any changed path
+      matches; when empty, `touches` is true.
+    required: false
+    default: ''
+  outside-pull-request:
+    description: >-
+      `applies` outside a pull request (a merge-queue entry): `run` (the
+      default) or `skip`, for evidence that already ran on the pull request.
+    required: false
+    default: run
+  component-audit:
+    description: >-
+      `true` to also classify which component audits apply (the trusted
+      component-audit-scope.cjs from the base) and to list the changed files,
+      for the visual and RTL jobs.
+    required: false
+    default: 'false'
+  requires-head-file:
+    description: >-
+      Optional path the work needs at the PR head. A head cut before that file
+      existed, whose diff does not touch it, does not apply (with a notice).
+    required: false
+    default: ''
+
+outputs:
+  spec_only:
+    description: The PR changes only spec records.
+    value: ${{ steps.scope.outputs.spec_only }}
+  docsite_only:
+    description: The PR changes only the docsite.
+    value: ${{ steps.scope.outputs.docsite_only }}
+  tooling_only:
+    description: The PR changes only Node tooling.
+    value: ${{ steps.scope.outputs.tooling_only }}
+  full_suite:
+    description: The import graph cannot scope this change; run every test.
+    value: ${{ steps.scope.outputs.full_suite }}
+  release_bump:
+    description: The PR targets a release branch (the generated version bump).
+    value: ${{ steps.scope.outputs.release_bump }}
+  decided:
+    description: >-
+      `false` when the step fell back to everything in scope because it could
+      not decide; a job that must do work on a lane it cannot recognize (spec
+      validation) reads this.
+    value: ${{ steps.scope.outputs.decided }}
+  touches:
+    description: A changed path matches `paths` (true when `paths` is empty or undecidable).
+    value: ${{ steps.scope.outputs.touches }}
+  has_components:
+    description: A component audit applies (with `component-audit`).
+    value: ${{ steps.scope.outputs.has_components }}
+  has_rtl_components:
+    description: An RTL-audited component changed (with `component-audit`).
+    value: ${{ steps.scope.outputs.has_rtl_components }}
+  has_rtl_harness:
+    description: The RTL harness changed (with `component-audit`).
+    value: ${{ steps.scope.outputs.has_rtl_harness }}
+  force_full_component_audits:
+    description: Component audits must run in full (with `component-audit`).
+    value: ${{ steps.scope.outputs.force_full_component_audits }}
+  changed_files_path:
+    description: >-
+      A file listing the PR's changed paths, one per line (with
+      `component-audit`); empty when the step could not list them.
+    value: ${{ steps.scope.outputs.changed_files_path }}
+  applies:
+    description: >-
+      The job's work applies: not a specialized lane (spec, docsite or tooling
+      only), `touches` holds, and any `requires-head-file` is present.
+    value: ${{ steps.scope.outputs.applies }}
+
+runs:
+  using: composite
+  steps:
+    - id: scope
+      uses: actions/github-script@v9
+      env:
+        SCOPE_PATHS: ${{ inputs.paths }}
+        SCOPE_OUTSIDE_PR: ${{ inputs.outside-pull-request }}
+        SCOPE_HEAD_FILE: ${{ inputs.requires-head-file }}
+        SCOPE_COMPONENT_AUDIT: ${{ inputs.component-audit }}
+      with:
+        retries: 3
+        script: |
+          const fs = require('node:fs');
+          const os = require('node:os');
+          const path = require('node:path');
+          const {execFileSync} = require('node:child_process');
+
+          const everything = {
+            spec_only: 'false',
+            docsite_only: 'false',
+            tooling_only: 'false',
+            full_suite: 'true',
+            release_bump: 'false',
+            touches: 'true',
+            applies: 'true',
+            decided: 'true',
+          };
+          // Outside a pull request, or when undecidable, every component audit
+          // applies in full; a specialized lane has none.
+          const auditAll = {
+            has_components: 'true',
+            has_rtl_components: 'true',
+            has_rtl_harness: 'true',
+            force_full_component_audits: 'true',
+          };
+          const auditNone = {
+            has_components: 'false',
+            has_rtl_components: 'false',
+            has_rtl_harness: 'false',
+            force_full_component_audits: 'false',
+          };
+          const audit = process.env.SCOPE_COMPONENT_AUDIT === 'true';
+          Object.assign(everything, audit ? auditAll : {});
+          const report = values => {
+            for (const [key, value] of Object.entries(values)) core.setOutput(key, value);
+            core.info(Object.entries(values).map(([k, v]) => `${k}=${v}`).join(' '));
+          };
+
+          if (context.eventName !== 'pull_request') {
+            core.info(`${context.eventName}: not a pull request, so everything is in scope.`);
+            report({...everything, applies: process.env.SCOPE_OUTSIDE_PR === 'skip' ? 'false' : 'true'});
+            return;
+          }
+          const pr = context.payload.pull_request;
+          if (pr.base.ref.startsWith('release/v')) {
+            core.info('Release-branch pull request: the generated version bump.');
+            report({
+              ...everything,
+              ...(audit ? auditNone : {}),
+              spec_only: 'true',
+              tooling_only: 'true',
+              release_bump: 'true',
+              touches: 'false',
+              applies: 'false',
+            });
+            return;
+          }
+
+          let files;
+          let root;
+          try {
+            files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            // GitHub lists at most 3000 files for a pull request.
+            if (files.length >= 3000) throw new Error('GitHub truncated the file list at 3000');
+            if (files.length === 0) throw new Error('GitHub listed no changed files');
+            root = fs.mkdtempSync(path.join(os.tmpdir(), 'test-scope-'));
+            for (const file of [
+              '.github/scripts/change-scope.cjs',
+              '.github/scripts/knowledge-paths.cjs',
+              'scripts/component-packages.cjs',
+              ...(audit ? ['.github/scripts/component-audit-scope.cjs'] : []),
+            ]) {
+              const {data} = await github.rest.repos.getContent({...context.repo, path: file, ref: pr.base.sha});
+              fs.mkdirSync(path.join(root, path.dirname(file)), {recursive: true});
+              fs.writeFileSync(path.join(root, file), Buffer.from(data.content, 'base64'));
+            }
+          } catch (error) {
+            core.warning(`Scope could not be decided (${error.message}); everything is in scope.`);
+            report({...everything, decided: 'false'});
+            return;
+          }
+
+          const STATUS = {added: 'A', removed: 'D', modified: 'M', changed: 'M', copied: 'C', unchanged: 'M'};
+          const nameStatus = files
+            .map(f => f.status === 'renamed'
+              ? `R100\t${f.previous_filename}\t${f.filename}`
+              : `${STATUS[f.status] ?? 'M'}\t${f.filename}`)
+            .join('\n');
+          const outputFile = path.join(root, 'classification');
+          fs.writeFileSync(outputFile, '');
+          try {
+            execFileSync('node', [path.join(root, '.github/scripts/change-scope.cjs'), '--github-output'], {
+              input: `${nameStatus}\n`,
+              env: {...process.env, GITHUB_OUTPUT: outputFile},
+              stdio: ['pipe', 'inherit', 'inherit'],
+            });
+          } catch (error) {
+            core.setFailed(`The trusted classifier rejected this change: ${error.message}`);
+            return;
+          }
+          const classified = Object.fromEntries(
+            fs.readFileSync(outputFile, 'utf8').split('\n').filter(Boolean).map(line => line.split('=')),
+          );
+
+          let touches = 'true';
+          if (process.env.SCOPE_PATHS) {
+            const pattern = new RegExp(process.env.SCOPE_PATHS);
+            touches = String(files.some(f => pattern.test(f.filename) || (f.previous_filename != null && pattern.test(f.previous_filename))));
+          }
+          const specialized = ['spec_only', 'docsite_only', 'tooling_only'].some(key => classified[key] === 'true');
+          let applies = String(!specialized && touches === 'true');
+          const headFile = process.env.SCOPE_HEAD_FILE;
+          if (applies === 'true' && headFile && !files.some(f => f.filename === headFile || f.previous_filename === headFile)) {
+            try {
+              await github.rest.repos.getContent({...context.repo, path: headFile, ref: pr.head.sha});
+            } catch (error) {
+              if (error.status === 404) {
+                core.notice(`This pull request's head has no ${headFile}; merge main to run this check.`);
+                applies = 'false';
+              }
+            }
+          }
+          let componentScope = {};
+          if (audit) {
+            if (specialized) {
+              componentScope = auditNone;
+            } else {
+              const auditFile = path.join(root, 'component-audit');
+              fs.writeFileSync(auditFile, '');
+              try {
+                execFileSync('node', [
+                  path.join(root, '.github/scripts/component-audit-scope.cjs'),
+                  '--registry',
+                  path.join(root, 'scripts/component-packages.cjs'),
+                  '--github-output',
+                ], {input: `${nameStatus}\n`, env: {...process.env, GITHUB_OUTPUT: auditFile}, stdio: ['pipe', 'inherit', 'inherit']});
+                componentScope = Object.fromEntries(
+                  fs.readFileSync(auditFile, 'utf8').split('\n').filter(Boolean).map(line => line.split('=')),
+                );
+              } catch (error) {
+                core.warning(`Component audit scope could not be decided (${error.message}); every audit runs in full.`);
+                componentScope = auditAll;
+              }
+            }
+            // A file, not an output value: a large pull request's list would
+            // not fit an environment variable.
+            const changedFilesPath = path.join(process.env.RUNNER_TEMP || os.tmpdir(), 'test-scope-changed-files.txt');
+            const changed = [...new Set(files.flatMap(f => [f.filename, f.previous_filename].filter(Boolean)))];
+            fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
+            componentScope.changed_files_path = changedFilesPath;
+          }
+          report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies});

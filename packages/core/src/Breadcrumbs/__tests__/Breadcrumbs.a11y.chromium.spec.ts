@@ -97,15 +97,27 @@ async function runState(
   });
 }
 
-test('every Breadcrumb expectation is exercised by at least one state', async ({
-  page,
-}) => {
-  const cdp = await page.context().newCDPSession(page);
+// Checking coverage runs every state again, which on a loaded runner nears
+// the per-test timeout as one test. It runs as one serial part per state,
+// sharing their results, then one check over all of them.
+test.describe('every Breadcrumb expectation is exercised by at least one state', () => {
+  test.describe.configure({mode: 'serial'});
   const results: BindingResult[] = [];
+
   for (const state of BREADCRUMB_A11Y_STATES) {
-    results.push(await runState(page, cdp, state));
+    test(`runs ${state.id}`, async ({page}) => {
+      const cdp = await page.context().newCDPSession(page);
+      results.push(await runState(page, cdp, state));
+    });
   }
-  expect(neverExercised(results)).toEqual([]);
+
+  test('no expectation is left unexercised', () => {
+    // Every part ran in this worker; this test alone proves nothing.
+    expect(results.map(result => result.state).sort()).toEqual(
+      BREADCRUMB_A11Y_STATES.map(state => state.id).sort(),
+    );
+    expect(neverExercised(results)).toEqual([]);
+  });
 });
 
 for (const state of BREADCRUMB_A11Y_STATES) {

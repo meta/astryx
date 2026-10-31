@@ -228,7 +228,7 @@ describe('pull-request CI gate (spec:AST-030 FR17)', () => {
     expect(runs({})).toBe(true);
     expect(runs({fork: true})).toBe(false);
     expect(runs({fork: true, labels: ['ci:run']})).toBe(true);
-    expect(runs({fork: true, labels: ['ci:heavy-lanes']})).toBe(false);
+    expect(runs({fork: true, labels: ['ci:run-visual']})).toBe(false);
     expect(runs({draft: true})).toBe(false);
     expect(runs({draft: true, fork: true, labels: ['ci:run']})).toBe(false);
   });

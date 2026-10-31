@@ -12,6 +12,8 @@ const {
   parseKind,
   parseOwnerFile,
 } = require('./knowledge-frontmatter.cjs');
+const crypto = require('node:crypto');
+const {SPEC_MIRROR_PREFIX} = require('./review-signal-decision.cjs');
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const GATE_STATUS_CONTEXT = 'spec-owner-approval';
@@ -32,20 +34,17 @@ function isDispatchableOwnerCommand(body) {
 
 function parseOwnerCommand(body, headSha) {
   if (!isDispatchableOwnerCommand(body)) return null;
-  // The command prefix must match the trigger exactly, but a commit SHA is
-  // case-insensitive everywhere else in git and GitHub. Accept either casing
-  // rather than silently ignoring a copy-pasted uppercase head.
-  const match = body
-    .trim()
-    .match(/^\/(approve|revoke)-spec\s+([0-9a-fA-F]{40})$/);
-  if (!match || headSha.toLowerCase() !== match[2].toLowerCase()) return null;
-  return match[1] === 'approve';
+  // A commit SHA is case-insensitive everywhere else in git and GitHub, so a
+  // copy-pasted uppercase head still names it.
+  const target = parseOwnerCommandTarget(body);
+  if (!target?.sha || target.sha !== headSha.toLowerCase()) return null;
+  return target.approved;
 }
 
 /**
  * Recognize that a comment was meant as an owner command, whatever it names.
- * Only the exact-head form in `parseOwnerCommand` decides the gate; this looser
- * shape exists so a near-miss command is answered instead of ignored.
+ * Only a well-formed command decides the gate; this looser shape exists so a
+ * near-miss command is explained in the gate's details instead of ignored.
  */
 function parseOwnerCommandIntent(body) {
   if (!isDispatchableOwnerCommand(body)) return null;
@@ -61,16 +60,15 @@ function parseOwnerCommandIntent(body) {
  * null when it does. The reasons are the two silent failures owners hit: a
  * command that names no full head SHA, and one that names a superseded commit.
  */
-function describeOwnerCommandProblem(intent, headSha) {
+function describeOwnerCommandProblem(intent) {
   if (!intent) return null;
   if (!intent.argument) {
-    return 'it did not name a commit';
+    return intent.verb === 'approve'
+      ? 'it did not name a commit; post /approve-spec with the full head SHA'
+      : null;
   }
   if (!/^[0-9a-f]{40}$/i.test(intent.argument)) {
     return 'it did not name exactly one full 40-character commit SHA';
-  }
-  if (intent.argument.toLowerCase() !== headSha.toLowerCase()) {
-    return `it named ${intent.argument.slice(0, 7)}, which is not the current head`;
   }
   return null;
 }
@@ -106,6 +104,10 @@ function resolveOwnerDecision({
   dismissalEvents = [],
   owners,
   headSha,
+  // Spec approvals bind content (DEC-14): a review or a command counts when
+  // the commit it names carries the current spec content. A `/revoke-spec`
+  // without a commit withdraws whatever that owner approved.
+  approvesCurrentContent = sha => sha === headSha,
 }) {
   const allowed = new Set(owners.map(owner => owner.toLowerCase()));
   const latestByOwner = new Map();
@@ -127,7 +129,15 @@ function resolveOwnerDecision({
 
   for (const review of reviews) {
     const login = review.user?.login?.toLowerCase();
-    if (!login || review.commit_id !== headSha) continue;
+    // An approval counts only for the current spec content (DEC-14). A
+    // request for changes on it holds the gate; one on other content, or a
+    // dismissal, withdraws only that owner's approval.
+    if (
+      !login ||
+      (review.state === 'APPROVED' && !approvesCurrentContent(review.commit_id))
+    ) {
+      continue;
+    }
     if (
       !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state)
     ) {
@@ -141,7 +151,8 @@ function resolveOwnerDecision({
       approved:
         review.state === 'APPROVED'
           ? true
-          : review.state === 'CHANGES_REQUESTED'
+          : review.state === 'CHANGES_REQUESTED' &&
+              approvesCurrentContent(review.commit_id)
             ? false
             : null,
       at:
@@ -156,10 +167,13 @@ function resolveOwnerDecision({
   for (const comment of comments) {
     const login = comment.user?.login?.toLowerCase();
     if (!login) continue;
-    const approved = parseOwnerCommand(comment.body ?? '', headSha);
-    if (approved == null) continue;
+    if (!isDispatchableOwnerCommand(comment.body)) continue;
+    const target = parseOwnerCommandTarget(comment.body);
+    if (target == null) continue;
+    if (target.approved && !approvesCurrentContent(target.sha)) continue;
+    // `/revoke-spec` withdraws that owner's approval (DEC-14).
     consider(login, {
-      approved,
+      approved: target.approved || null,
       at: comment.created_at,
       source: 'command',
     });
@@ -278,18 +292,113 @@ function requiresOwnerApproval(records, options = {}) {
   return groups.spec || groups.design || groups.theme;
 }
 
+// --- Spec content an approval binds, and the gate's text (DEC-14). ---
+
+// Recording an approval writes these values, so they never take part in the
+// content an approval binds (DEC-14).
+const BOOKKEEPING_KEYS = new Set(['authority', 'approved_by', 'approved_at']);
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * A Markdown record's text without the front-matter values that approval
+ * bookkeeping rewrites. Everything else, body and other keys, stays.
+ */
+function normalizeRecordText(text) {
+  const normalized = text.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n')) return normalized;
+  const end = normalized.indexOf('\n---', 4);
+  if (end === -1) return normalized;
+  const frontMatter = normalized
+    .slice(4, end)
+    .split('\n')
+    .filter(line => {
+      const key = line.match(/^([A-Za-z_][\w-]*)\s*:/)?.[1];
+      return key == null || !BOOKKEEPING_KEYS.has(key);
+    })
+    .join('\n');
+  return `---\n${frontMatter}${normalized.slice(end)}`;
+}
+
+/**
+ * One fingerprint over every changed spec path. Each entry is
+ * `{path, content}`, where `content` is the text at the head (`null` when the
+ * path is absent there). Markdown is normalized; other files hash as read.
+ */
+function fingerprintSpecContent(entries) {
+  const files = {};
+  for (const {path, content} of entries) {
+    files[path] =
+      content == null
+        ? 'absent'
+        : sha256(path.endsWith('.md') ? normalizeRecordText(content) : content);
+  }
+  const fingerprint = sha256(
+    Object.keys(files)
+      .sort()
+      .map(filePath => `${filePath}\0${files[filePath]}\n`)
+      .join(''),
+  );
+  return {fingerprint, files};
+}
+
+/**
+ * Read an owner command. `/approve-spec <sha>` approves the spec content at
+ * that commit; the SHA says which content the owner reviewed. `/revoke-spec`
+ * withdraws the owner's approval, with or without a commit.
+ */
+function parseOwnerCommandTarget(body) {
+  if (typeof body !== 'string') return null;
+  const match = body
+    .trim()
+    .match(/^\/(approve|revoke)-spec(?:\s+([0-9a-fA-F]{40}))?$/);
+  if (!match) return null;
+  if (match[1] === 'approve' && !match[2]) return null;
+  return {
+    approved: match[1] === 'approve',
+    sha: match[2] ? match[2].toLowerCase() : null,
+  };
+}
+
+function approvedDescription(owners) {
+  const names = owners.map(name => `@${name}`).join(', ');
+  return `✅ Spec approved by ${names || 'an owner'}`;
+}
+
+/**
+ * The `spec-owner-approval` description. That context only mirrors the spec
+ * half of `review-required` until branch protection stops requiring it; the
+ * review gate reads the state from this text.
+ */
+function mirrorDescription({state, missing, approvers = []}) {
+  if (state === 'success') {
+    return approvers.length
+      ? `${SPEC_MIRROR_PREFIX}ok (${approvers.map(name => `@${name}`).join(', ')})`
+      : `${SPEC_MIRROR_PREFIX}ok`;
+  }
+  if (missing?.heldBy)
+    return `${SPEC_MIRROR_PREFIX}waiting (changes @${missing.heldBy})`;
+  return `${SPEC_MIRROR_PREFIX}waiting (${missing?.spec ? 'eng' : 'design'})`;
+}
+
 module.exports = {
   GATE_STATUS_CONTEXT,
   OWNER_COMMAND_PREFIXES,
+  approvedDescription,
   canonicalRunUrl,
   describeOwnerCommandProblem,
+  fingerprintSpecContent,
   isDispatchableOwnerCommand,
+  mirrorDescription,
   newestGateRun,
   parseAuthority,
   parseCanonicalRunId,
   parseKind,
   parseOwnerCommand,
   parseOwnerCommandIntent,
+  parseOwnerCommandTarget,
   parseOwnerFile,
   requiredApprovalGroups,
   requiresOwnerApproval,

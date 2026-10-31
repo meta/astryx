@@ -6,16 +6,33 @@
  * this check.
  */
 
-/** @param {Record<string, any>} themeDef */
+/**
+ * The authored adaptation rule values: a defined theme's normalized rules keep
+ * them, while its resolved `__adaptationRules` hold compiler output.
+ * @param {Record<string, any>} themeDef
+ */
 function adaptationRuleValues(themeDef) {
-  if (Array.isArray(themeDef.__adaptationRules)) {
-    return themeDef.__adaptationRules;
-  }
   const rules = themeDef.adaptations?.rules ?? themeDef.__adaptations?.rules;
-  if (!Array.isArray(rules)) return [];
+  if (!Array.isArray(rules)) {
+    return Array.isArray(themeDef.__adaptationRules)
+      ? themeDef.__adaptationRules
+      : [];
+  }
   return rules
     .map(/** @param {any} rule */ rule => rule?.value)
     .filter(Boolean);
+}
+
+/**
+ * The tokens a surface's author wrote. A defined theme's `tokens` are
+ * resolved, with the private vars the compiler derives (the motion knobs'
+ * `--_astryx-*`, `spec:AST-108` FR4), so its authored ones are
+ * `__inputTokens`; a built module is compiler output, checked when built.
+ * @param {Record<string, any>} value
+ */
+function authoredTokens(value) {
+  if ('__built' in value) return undefined;
+  return '__inputTokens' in value ? value.__inputTokens : value.tokens;
 }
 
 /**
@@ -54,7 +71,10 @@ export function validatePrivateVars(themeDef) {
 
   for (const surface of inputSurfaces(themeDef)) {
     for (const field of ['tokens', 'localTokens']) {
-      const values = surface.value[field];
+      const values =
+        field === 'tokens'
+          ? authoredTokens(surface.value)
+          : surface.value[field];
       if (!values || typeof values !== 'object' || Array.isArray(values)) {
         continue;
       }
