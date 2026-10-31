@@ -1270,6 +1270,87 @@ describe('BottomSheet', () => {
       expect(sheet.style.transition).toBe('');
     });
 
+    it('restores the layout height in the same task as the transform when a drag crosses its detent', async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Release notes"
+          snapPoints={SNAP_POINTS}
+          height="tall">
+          Content
+        </BottomSheet>,
+      );
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+
+      // Rest on p50 (offset 336): the scrolling area gives up 336px of
+      // layout height and the sheet carries no transform.
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+      fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
+      fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+
+      const replacedNodes: Node[] = [];
+      const mutations = new MutationObserver(records => {
+        for (const record of records) {
+          replacedNodes.push(...record.addedNodes, ...record.removedNodes);
+        }
+      });
+      mutations.observe(sheet, {childList: true, subtree: true});
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+
+      // Each finger sample arrives outside act(), as a browser delivers it:
+      // a render React schedules for later is still pending when this task
+      // ends, and the browser paints whatever the element holds then.
+      const reactGlobals = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+      const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
+      reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
+      const sampleAt = (time: number, y: number) => {
+        const event = new Event('pointermove', {bubbles: true});
+        Object.defineProperties(event, {
+          clientY: {value: y},
+          isPrimary: {value: true},
+          pointerId: {value: 1},
+          timeStamp: {value: time},
+        });
+        getHandle().dispatchEvent(event);
+        return {height: sheet.style.height, transform: sheet.style.transform};
+      };
+      let above: {height: string; transform: string};
+      let below: {height: string; transform: string};
+      try {
+        // Up past the detent: the transform is written for the full height
+        // (no layout split), so the full height has to be there too.
+        above = sampleAt(4000, 136);
+        // Back down past it: the split returns with the transform.
+        below = sampleAt(5000, 436);
+      } finally {
+        reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+      }
+      await act(async () => {});
+
+      expect(above.transform).toMatch(/^translateY\(/);
+      expect(above.height).toBe('784px');
+      expect(below.transform).toBe('translateY(100px)');
+      expect(below.height).toBe('448px');
+      // Nothing in the sheet was replaced along the way.
+      mutations.disconnect();
+      expect(replacedNodes).toEqual([]);
+    });
+
     it('uses transforms while dragging and resizes to the visible snapped height', () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
