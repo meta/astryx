@@ -2,9 +2,15 @@
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
+import yaml from 'yaml';
+
+const require = createRequire(import.meta.url);
+const ciImpact = require('./ci-impact.js');
 
 export const PR_ANALYSIS_MARKER = '<!-- astryx-pr-analysis -->';
 
@@ -47,6 +53,269 @@ export function branchPreviewOrigin({headRef, headRepository, baseRepository}) {
 
 function refuse(message) {
   throw new Error(`PR preview refused: ${message}`);
+}
+
+const VERCEL_DEPLOYMENT_URL = /^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/;
+
+/**
+ * This head's Vercel preview, from the deployment Vercel reports to GitHub for
+ * the exact commit: `ready` (that deployment's own address, so every link
+ * shows this head), `failed`, or `building` until Vercel reports it (the
+ * branch alias then serves the previous ready deployment). Previews are not
+ * built for forks. Two reads in the comment job; no workflow runs on a
+ * deployment event.
+ */
+export async function headPreview({
+  github,
+  owner,
+  repo,
+  identity,
+  aliasOrigin,
+}) {
+  const sha = identity.headSha;
+  if (identity.headRepository !== identity.baseRepository)
+    return {state: 'fork', sha};
+  try {
+    const {data: deployments} = await github.rest.repos.listDeployments({
+      owner,
+      repo,
+      sha,
+      per_page: 20,
+    });
+    const deployment = deployments
+      .filter(
+        candidate =>
+          candidate.creator?.login === 'vercel[bot]' &&
+          String(candidate.environment).toLowerCase() === 'preview',
+      )
+      .sort((a, b) => b.id - a.id)[0];
+    if (deployment) {
+      const {data: statuses} = await github.rest.repos.listDeploymentStatuses({
+        owner,
+        repo,
+        deployment_id: deployment.id,
+        per_page: 1,
+      });
+      const latest = statuses[0];
+      if (
+        latest?.state === 'success' &&
+        VERCEL_DEPLOYMENT_URL.test(String(latest.environment_url ?? ''))
+      )
+        return {
+          state: 'ready',
+          sha,
+          url: latest.environment_url.replace(/\/$/, ''),
+        };
+      if (latest?.state === 'failure' || latest?.state === 'error')
+        return {state: 'failed', sha};
+    }
+  } catch {
+    // An unreadable deployment list leaves the preview as still building.
+  }
+  return aliasOrigin
+    ? {state: 'building', sha, aliasOrigin}
+    : {state: 'unknown', sha};
+}
+
+/** Pull-request CI runs sampled for the CI-impact baseline. */
+const CI_HISTORY_RUNS = 20;
+
+/**
+ * Recent pull-request CI runs: the latest CI_HISTORY_RUNS successful runs with
+ * their jobs' timings, and how many runs did work (succeeded or failed) in the
+ * last 7 days. Read once a day: the
+ * comment job keeps it as an artifact and passes it back in `cached`.
+ */
+export async function ciHistory({
+  github,
+  owner,
+  repo,
+  cached,
+  now = new Date(),
+}) {
+  if (cached?.runs) return cached;
+  const since = new Date(now.getTime() - 7 * 24 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  // Runs that did work: a draft's or an out-of-scope run concludes skipped.
+  const count = async status =>
+    (
+      await github.rest.actions.listWorkflowRuns({
+        owner,
+        repo,
+        workflow_id: 'ci.yml',
+        event: 'pull_request',
+        status,
+        created: `>=${since}`,
+        per_page: 1,
+      })
+    ).data.total_count;
+  const runsLast7Days = (await count('success')) + (await count('failure'));
+  const {data: recent} = await github.rest.actions.listWorkflowRuns({
+    owner,
+    repo,
+    workflow_id: 'ci.yml',
+    event: 'pull_request',
+    status: 'success',
+    per_page: CI_HISTORY_RUNS,
+  });
+  const runs = [];
+  for (const run of recent.workflow_runs.slice(0, CI_HISTORY_RUNS)) {
+    const jobs = await sourceRunJobs({github, owner, repo, runId: run.id});
+    if (jobs)
+      runs.push({
+        run_started_at: run.run_started_at,
+        updated_at: run.updated_at,
+        jobs,
+      });
+  }
+  return {runs, runsLast7Days};
+}
+
+async function workflowAt({
+  github,
+  owner,
+  repo,
+  ref,
+  file = '.github/workflows/ci.yml',
+}) {
+  try {
+    const {data} = await github.rest.repos.getContent({
+      owner,
+      repo,
+      path: file,
+      ref,
+    });
+    return yaml.parse(Buffer.from(data.content, 'base64').toString('utf8'));
+  } catch (error) {
+    // A workflow the pull request adds has no base, one it removes no head.
+    if (error?.status === 404 || /Not Found|404/.test(String(error?.message)))
+      return null;
+    throw error;
+  }
+}
+
+/**
+ * The CI impact of a pull request that changes CI, or null for any other.
+ * Reads the changed files, CI's workflow at the merge base and the head, the
+ * source run, and the history (computed here only when `historyPath` holds
+ * none, then written there for the comment job to keep).
+ */
+export async function gatherCiImpact({
+  github,
+  owner,
+  repo,
+  identity,
+  jobs,
+  historyPath,
+}) {
+  try {
+    const files = await github.paginate(github.rest.pulls.listFiles, {
+      owner,
+      repo,
+      pull_number: identity.prNumber,
+      per_page: 100,
+    });
+    const names = files.map(file => file.filename);
+    if (!ciImpact.isCiChange(names)) return null;
+    const cached =
+      historyPath && fs.existsSync(historyPath) ? readJSON(historyPath) : null;
+    const history = await ciHistory({github, owner, repo, cached});
+    if (historyPath && !cached) {
+      fs.mkdirSync(path.dirname(historyPath), {recursive: true});
+      fs.writeFileSync(historyPath, JSON.stringify(history));
+    }
+    const [base, head] = await Promise.all([
+      workflowAt({github, owner, repo, ref: identity.baseSha}),
+      workflowAt({github, owner, repo, ref: identity.headSha}),
+    ]);
+    const {data: run} = await github.rest.actions.getWorkflowRun({
+      owner,
+      repo,
+      run_id: identity.sourceRunId,
+    });
+    // Every other changed workflow: when it runs and on which runners.
+    const otherWorkflows = [];
+    for (const file of names.filter(
+      name =>
+        /^\.github\/workflows\/[^/]+\.ya?ml$/.test(name) &&
+        name !== '.github/workflows/ci.yml',
+    )) {
+      const [before, after] = await Promise.all([
+        workflowAt({github, owner, repo, ref: identity.baseSha, file}),
+        workflowAt({github, owner, repo, ref: identity.headSha, file}),
+      ]);
+      otherWorkflows.push(
+        ciImpact.describeWorkflow(
+          file.replace('.github/workflows/', ''),
+          before,
+          after,
+        ),
+      );
+    }
+    const started = Date.parse(run.run_started_at ?? '');
+    const finished = Date.parse(run.updated_at ?? '');
+    const impact = ciImpact.estimateImpact({
+      diff: ciImpact.diffWorkflow(base, head),
+      history: ciImpact.summarizeHistory(history),
+      currentJobs: jobs,
+      // Time to green compares like with like: a run that failed or was
+      // cancelled has no time to green.
+      currentWallMinutes:
+        run.conclusion === 'success' &&
+        Number.isFinite(started) &&
+        Number.isFinite(finished)
+          ? (finished - started) / 60000
+          : null,
+    });
+    return {
+      ...impact,
+      otherWorkflows,
+      flags: [
+        ...impact.flags,
+        ...otherWorkflows
+          .filter(workflow => workflow.nonStandard)
+          .map(
+            workflow => `\`${workflow.file}\` runs on a non-standard runner`,
+          ),
+      ],
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The source run's jobs (latest attempt) with each step's conclusion, so the
+ * report can say which jobs ran and which skipped their work by path. Null
+ * when the list cannot be read.
+ */
+export async function sourceRunJobs({github, owner, repo, runId}) {
+  try {
+    const jobs = await github.paginate(
+      github.rest.actions.listJobsForWorkflowRun,
+      {
+        owner,
+        repo,
+        run_id: runId,
+        filter: 'latest',
+        per_page: 100,
+      },
+    );
+    return jobs.map(job => ({
+      name: job.name,
+      status: job.status,
+      conclusion: job.conclusion,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
+      steps: (job.steps || []).map(step => ({
+        name: step.name,
+        conclusion: step.conclusion,
+      })),
+    }));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -415,13 +684,6 @@ export function validateAnalysisMetadata(metadata, identity) {
   return metadata;
 }
 
-function previewState(storybook, sandbox) {
-  if (storybook && sandbox) return 'both';
-  if (storybook) return 'storybook';
-  if (sandbox) return 'sandbox';
-  return 'none';
-}
-
 // The same preview wording as the generator's report: the branch alias
 // serves the branch's latest deployment, which can trail a new push. A draft
 // or an update-only reconcile (no alias attempted) says nothing about previews.
@@ -513,8 +775,10 @@ export async function reconcilePrComment({
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
   packageSizePath = 'pr-analysis/package-size.json',
+  touchedPath = 'touched-components/touched-components.json',
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
+  ciHistoryPath = 'ci-history/ci-history.json',
   createIfMissing = true,
   fallbackMessage,
   generator = GENERATOR,
@@ -545,8 +809,6 @@ export async function reconcilePrComment({
   // preview and says nothing about one.
   const aliasAttempted = createIfMissing && !identity.draft;
   const previewOrigin = aliasAttempted ? branchPreviewOrigin(identity) : null;
-  const storybook = previewOrigin !== null;
-  const sandbox = storybook;
   const comments = await allComments(github, owner, repo, identity.prNumber);
   const botComments = comments.filter(comment => comment.user?.type === 'Bot');
   const botComment =
@@ -561,6 +823,37 @@ export async function reconcilePrComment({
 
   let body;
   if (analysisReady) {
+    // The comment job's own reads, handed to the generator as files.
+    const inputs = fs.mkdtempSync(path.join(os.tmpdir(), 'pr-report-'));
+    const preview = aliasAttempted
+      ? await headPreview({
+          github,
+          owner,
+          repo,
+          identity,
+          aliasOrigin: previewOrigin,
+        })
+      : null;
+    const jobs = await sourceRunJobs({
+      github,
+      owner,
+      repo,
+      runId: identity.sourceRunId,
+    });
+    const impact = await gatherCiImpact({
+      github,
+      owner,
+      repo,
+      identity,
+      jobs,
+      historyPath: ciHistoryPath,
+    });
+    const impactPath = path.join(inputs, 'ci-impact.json');
+    if (impact) fs.writeFileSync(impactPath, JSON.stringify(impact));
+    const previewPath = path.join(inputs, 'preview.json');
+    const jobsPath = path.join(inputs, 'jobs.json');
+    if (preview) fs.writeFileSync(previewPath, JSON.stringify(preview));
+    if (jobs) fs.writeFileSync(jobsPath, JSON.stringify(jobs));
     const args = [
       generator,
       '--analysis',
@@ -585,11 +878,17 @@ export async function reconcilePrComment({
       // checks, or with the ci:run-a11y label); the comment says so.
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
-      ...(storybook ? ['--storybook-url', `${previewOrigin}/storybook/`] : []),
-      ...(sandbox ? ['--sandbox-url', `${previewOrigin}/sandbox/`] : []),
-      ...(aliasAttempted
-        ? ['--preview-state', previewState(storybook, sandbox)]
+      ...(trustedHeadReport({
+        reportPath: touchedPath,
+        label: 'touched-components report',
+        identity,
+        core,
+      })
+        ? ['--touched', touchedPath]
         : []),
+      ...(preview ? ['--preview', previewPath] : []),
+      ...(jobs ? ['--jobs', jobsPath] : []),
+      ...(impact ? ['--ci-impact', impactPath] : []),
       '--source-conclusion',
       identity.sourceConclusion,
       '--run-url',
