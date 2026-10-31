@@ -5,7 +5,7 @@
  * @input The analysis (changed components, their import sizes and source
  *   stats at head and at the merge base), this head's Vercel preview state,
  *   the package-size report, the accessibility report, the visual verdict,
- *   and the source CI run's jobs
+ *   the source CI run's jobs and, when present, the touched-components report
  * @output The PR report's compact body: this head's preview first; one table
  *   of modified components (preview links, JS and CSS size and lines of code
  *   against main, and a fixed-position mark per browser suite when any ran),
@@ -167,14 +167,18 @@ function storybookLink(origin, storyTitle) {
 /**
  * One row per modified component: every component this change sized (its
  * folder changed or its bundle reaches a changed module) and every new or
- * modified component folder. Results come from the accessibility report and
- * the visual verdict.
+ * modified component folder. Results come from the touched-components report
+ * when the run wrote one, otherwise from the accessibility report and the
+ * visual verdict.
  */
-function componentRows({analysis, a11yReport, visualVerdict}) {
+function componentRows({analysis, touched, a11yReport, visualVerdict}) {
   const head = analysis.componentSizes || {};
   const base = analysis.baseComponentSizes || {};
   const stats = analysis.componentStats || {};
   const baseStats = analysis.baseComponentStats || {};
+  const byName = new Map(
+    (touched?.components || []).map(component => [component.name, component]),
+  );
   const keys = new Set(Object.keys(head));
   for (const name of [
     ...(analysis.newComponents || []),
@@ -186,6 +190,9 @@ function componentRows({analysis, a11yReport, visualVerdict}) {
     );
     keys.add(`${pkg}/${name}`);
   }
+  for (const component of touched?.components || []) {
+    if (component.key) keys.add(component.key);
+  }
   const visualChanges = visualVerdict?.changes || [];
   // Main's sizes of the merge base were read (a base record or build).
   const baseMeasured =
@@ -194,22 +201,27 @@ function componentRows({analysis, a11yReport, visualVerdict}) {
     Object.keys(baseStats).length > 0;
   return [...keys].map(key => {
     const name = key.slice(key.indexOf('/') + 1);
+    // The touched-components check's own result comes first.
+    const reported = byName.get(name)?.results || {};
     // A component the audit did not cover has no accessibility result.
     const audited = a11yReport?.components?.[name];
-    const a11y = audited
-      ? (audited.violations?.length ?? 0) > 0
-        ? 'fail'
-        : 'pass'
-      : null;
+    const a11y =
+      reported.a11y ??
+      (audited
+        ? (audited.violations?.length ?? 0) > 0
+          ? 'fail'
+          : 'pass'
+        : null);
     const visual =
-      visualVerdict && visualVerdict.status !== 'skipped'
+      reported.visual ??
+      (visualVerdict && visualVerdict.status !== 'skipped'
         ? // A run that failed compared nothing: never a pass.
           visualVerdict.status === 'failed'
           ? 'fail'
           : visualChanges.some(entry => entry.component === name)
             ? 'changed'
             : 'pass'
-        : null;
+        : null);
     return {
       key,
       name,
@@ -218,7 +230,7 @@ function componentRows({analysis, a11yReport, visualVerdict}) {
       base: base[key],
       growth: sizeChange(head[key], base[key]),
       loc: [stats[name]?.linesOfCode, baseStats[name]?.linesOfCode],
-      results: {visual, a11y, rtl: null},
+      results: {visual, a11y, rtl: reported.rtl ?? null},
       baseMeasured,
     };
   });
@@ -242,15 +254,26 @@ function compareRows(a, b) {
   return a.key.localeCompare(b.key);
 }
 
-function buildComponentTable({analysis, origin, a11yReport, visualVerdict}) {
-  const rows = componentRows({analysis, a11yReport, visualVerdict}).sort(
-    compareRows,
-  );
+function buildComponentTable({
+  analysis,
+  origin,
+  touched,
+  a11yReport,
+  visualVerdict,
+}) {
+  const rows = componentRows({
+    analysis,
+    touched,
+    a11yReport,
+    visualVerdict,
+  }).sort(compareRows);
   if (rows.length === 0) return '';
-  // The checks column appears only when a browser suite has a result here.
-  const checks = rows.some(row =>
-    CHECK_SUITES.some(id => row.results[id] != null),
-  );
+  // The checks column appears only when a browser suite has a result here,
+  // or when the change is too wide for the touched-components check, which
+  // then ran none of them (every mark —).
+  const wide = touched?.wideChange === true;
+  const checks =
+    wide || rows.some(row => CHECK_SUITES.some(id => row.results[id] != null));
   const columns = [
     'Component',
     'Size',
@@ -270,7 +293,7 @@ function buildComponentTable({analysis, origin, a11yReport, visualVerdict}) {
       stories ? `${name} · [Storybook](${stories})` : name,
       sizeCell(row.head, row.base, row.baseMeasured),
       locCell(...row.loc, row.baseMeasured),
-      ...(checks ? [checksCell(row.results)] : []),
+      ...(checks ? [checksCell(wide ? {} : row.results)] : []),
     ];
     return `| ${cells.join(' | ')} |`;
   };
@@ -402,11 +425,14 @@ function packagesLine(report) {
  * them. A failed or cancelled Storybook build skips them for another reason
  * (GitHub shows that check), so the line is left out.
  */
-function notRunLine({jobs, a11yReport, visualVerdict}) {
+function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
   const build = (jobs || []).find(
     job => baseJobName(job.name) === 'build-storybook',
   );
   if (build && ['failure', 'cancelled'].includes(build.conclusion)) return '';
+  // Too wide for the touched-components check: no suite ran per component.
+  if (touched?.wideChange === true)
+    return `Wide change (${num(touched.componentCount)} components): add \`ci:run-visual\`, \`ci:run-a11y\` or \`ci:run-rtl\` to run that suite.\n\n`;
   const notRun = SUITES.filter(suite => {
     const state = suiteRunState(suite, jobs);
     if (state !== null) return state === 'not-run';
@@ -429,6 +455,7 @@ function buildCompactReport({
   analysis,
   preview = null,
   jobs = null,
+  touched = null,
   a11yReport = null,
   visualVerdict = null,
   packageSize = null,
@@ -438,9 +465,10 @@ function buildCompactReport({
   return `${previewLine(preview)}${buildComponentTable({
     analysis,
     origin,
+    touched,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
 }
 
 module.exports = {

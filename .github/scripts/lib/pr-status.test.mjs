@@ -149,6 +149,27 @@ describe('buildComponentTable', () => {
     expect(table).not.toContain('<details>');
   });
 
+  it('takes results from the touched-components report first', () => {
+    const table = buildComponentTable({
+      analysis: analysis([['core/A', 1000, 1000]]),
+      origin: ORIGIN,
+      touched: {
+        components: [{name: 'A', results: {visual: 'changed', rtl: 'fail'}}],
+      },
+      a11yReport: {components: {A: {violations: []}}},
+    });
+    expect(table).toMatch(/\| ✗ · ✓ · ✗ \|$/m);
+  });
+
+  it('shows every mark as not run for a wide change', () => {
+    const table = buildComponentTable({
+      analysis: analysis([['core/A', 1000, 1000]]),
+      origin: ORIGIN,
+      touched: {wideChange: true, componentCount: 60, components: []},
+    });
+    expect(table).toMatch(/\| — · — · — \|$/m);
+  });
+
   it('lists a modified component folder with no size', () => {
     const table = buildComponentTable({
       analysis: {
@@ -357,6 +378,14 @@ describe('notRunLine', () => {
       }),
     ).toBe(
       'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.\n\n',
+    );
+  });
+
+  it('names the labels for a wide change', () => {
+    expect(
+      notRunLine({jobs: [], touched: {wideChange: true, componentCount: 60}}),
+    ).toBe(
+      'Wide change (60 components): add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run that suite.\n\n',
     );
   });
 
