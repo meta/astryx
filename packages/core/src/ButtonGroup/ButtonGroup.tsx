@@ -28,13 +28,14 @@ import {radiusVars, shadowVars} from '../theme/tokens.stylex';
 import type {Elevation} from '../utils/types';
 import {SizeProvider, useSize} from '../SizeContext/SizeContext';
 import {useListFocus} from '../hooks/useListFocus';
-import {mergeProps, composeEventHandlers} from '../utils';
+import {mergeProps, composeEventHandlers, isRenderable} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
 import type {ButtonGroupOrientation} from './ButtonGroupContext';
 import {themeProps} from '../utils/themeProps';
-
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+
 // =============================================================================
 // Props
 // =============================================================================
@@ -79,6 +80,13 @@ export interface ButtonGroupProps extends BaseProps<HTMLDivElement> {
    * @default false
    */
   isDisabled?: boolean;
+
+  /**
+   * Explicit role override. By default, ButtonGroup adapts:
+   * - 3 or more members: `role="toolbar"` with `aria-orientation` and roving tabindex.
+   * - 2 or fewer members (e.g. split buttons): `role="group"` with standard Tab order.
+   */
+  role?: 'group' | 'toolbar';
 
   /**
    * Test ID for testing frameworks.
@@ -131,9 +139,14 @@ const elevationStyles = stylex.create({
  * Children automatically detect the group via context and apply position-aware
  * styles in pure CSS.
  *
- * The group is a single tab stop: arrow keys move between members along the
- * orientation, Home/End jump to the ends, focus wraps, and disabled members are
- * skipped (the APG roving tabindex technique, via `useListFocus`).
+ * A group with 3 or more members exposes `role="toolbar"` with `aria-orientation`
+ * and acts as a composite widget with a single Tab stop and arrow-key roving focus
+ * (WAI-ARIA APG toolbar pattern).
+ *
+ * A group with 2 or fewer members (e.g. split button) exposes `role="group"` and
+ * keeps every member in the natural Tab order without roving tabindex.
+ *
+ * An explicit `role` override (`'toolbar'` or `'group'`) can be provided.
  *
  * Members that render their own layer — a Button with a `tooltip`, or a
  * DropdownMenu — compose correctly, including as the trailing member.
@@ -172,9 +185,20 @@ export function ButtonGroup({
   'data-testid': testId,
   onKeyDown,
   onFocus,
+  role: roleProp,
   ...props
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
+
+  const childCount = useMemo(() => {
+    if (Array.isArray(children)) {
+      return children.flat().filter(isRenderable).length;
+    }
+    return isRenderable(children) ? 1 : 0;
+  }, [children]);
+
+  const resolvedRole = roleProp ?? (childCount >= 3 ? 'toolbar' : 'group');
+  const isToolbar = resolvedRole === 'toolbar';
 
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
     // Roving rewrites `tabindex` on every item, so the selector cannot key off
@@ -187,10 +211,25 @@ export function ButtonGroup({
     // the target. Naming the group's own root is what keeps a group rendered
     // inside a Popover or Toast working: bailing on any [popover] ancestor
     // instead would swallow every arrow key it owns.
-    boundarySelector: '[role="group"], [popover]',
+    boundarySelector: '[role="group"], [role="toolbar"], [popover]',
     orientation,
-    hasRovingTabIndex: true,
+    hasRovingTabIndex: isToolbar,
   });
+
+  // When not roving (e.g. role="group" for 2 or fewer members), ensure any items
+  // that were assigned tabindex="-1" return to standard natural Tab order.
+  useIsomorphicLayoutEffect(() => {
+    if (!isToolbar && listRef.current) {
+      const items = listRef.current.querySelectorAll<HTMLElement>(
+        'button, a[href], [tabindex]',
+      );
+      for (const el of items) {
+        if (el.getAttribute('tabindex') === '-1') {
+          el.removeAttribute('tabindex');
+        }
+      }
+    }
+  }, [isToolbar, childCount, listRef]);
 
   const contextValue = useMemo(
     () => ({orientation, isDisabled}),
@@ -214,10 +253,17 @@ export function ButtonGroup({
             className,
             style,
           )}
-          role="group"
+          role={resolvedRole}
           aria-label={label}
-          onKeyDown={composeEventHandlers(onKeyDown, handleKeyDown)}
-          onFocus={composeEventHandlers(onFocus, handleFocus)}
+          aria-orientation={isToolbar ? orientation : undefined}
+          onKeyDown={composeEventHandlers(
+            onKeyDown,
+            isToolbar ? handleKeyDown : undefined,
+          )}
+          onFocus={composeEventHandlers(
+            onFocus,
+            isToolbar ? handleFocus : undefined,
+          )}
           aria-disabled={isDisabled || undefined}
           data-testid={testId}>
           {children}

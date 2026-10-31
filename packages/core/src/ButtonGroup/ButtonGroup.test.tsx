@@ -28,7 +28,21 @@ import {Tooltip} from '../Tooltip';
 import {HoverCard} from '../HoverCard';
 
 describe('ButtonGroup', () => {
-  it('renders a group with aria-label', () => {
+  it('renders a group with aria-label for 2 members', () => {
+    render(
+      <ButtonGroup label="Actions">
+        <Button label="Copy" />
+        <Button label="Cut" />
+      </ButtonGroup>,
+    );
+
+    const group = screen.getByRole('group');
+    expect(group).toBeInTheDocument();
+    expect(group).toHaveAttribute('aria-label', 'Actions');
+    expect(group).not.toHaveAttribute('aria-orientation');
+  });
+
+  it('renders a toolbar with aria-orientation for 3 or more members', () => {
     render(
       <ButtonGroup label="Actions">
         <Button label="Copy" />
@@ -37,9 +51,36 @@ describe('ButtonGroup', () => {
       </ButtonGroup>,
     );
 
-    const group = screen.getByRole('group');
-    expect(group).toBeInTheDocument();
-    expect(group).toHaveAttribute('aria-label', 'Actions');
+    const toolbar = screen.getByRole('toolbar');
+    expect(toolbar).toBeInTheDocument();
+    expect(toolbar).toHaveAttribute('aria-label', 'Actions');
+    expect(toolbar).toHaveAttribute('aria-orientation', 'horizontal');
+  });
+
+  it('honors explicit role override', () => {
+    const {rerender} = render(
+      <ButtonGroup label="Actions" role="group">
+        <Button label="Copy" />
+        <Button label="Cut" />
+        <Button label="Paste" />
+      </ButtonGroup>,
+    );
+
+    expect(screen.getByRole('group')).toBeInTheDocument();
+    expect(screen.getByRole('group')).not.toHaveAttribute('aria-orientation');
+
+    rerender(
+      <ButtonGroup label="Actions" role="toolbar">
+        <Button label="Copy" />
+        <Button label="Cut" />
+      </ButtonGroup>,
+    );
+
+    expect(screen.getByRole('toolbar')).toBeInTheDocument();
+    expect(screen.getByRole('toolbar')).toHaveAttribute(
+      'aria-orientation',
+      'horizontal',
+    );
   });
 
   it('renders all child buttons', () => {
@@ -500,7 +541,7 @@ describe('ButtonGroup', () => {
         </ButtonGroup>,
       );
 
-      const group = screen.getByRole('group');
+      const group = screen.getByRole('toolbar');
       const [first, middle, last] = items(group);
 
       expect([first, middle, last].map(el => el.textContent)).toEqual([
@@ -700,6 +741,7 @@ describe('ButtonGroup', () => {
         <ButtonGroup label="Actions" orientation="vertical">
           <Button label="Copy" />
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
 
@@ -913,18 +955,46 @@ describe('ButtonGroup', () => {
       expect(tabIndexOf('Cut')).toBe('0');
     });
 
+    it('keeps all members in natural Tab order without roving tabindex for 2 members', async () => {
+      const user = userEvent.setup();
+      render(
+        bracketed(
+          <ButtonGroup label="Actions">
+            <Button label="Save" />
+            <Button label="More" />
+          </ButtonGroup>,
+        ),
+      );
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'Save'})).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'More'})).toHaveFocus();
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
+    });
+
     it('repairs the tab stop when the member holding it unmounts', () => {
       const {rerender} = render(
         <ButtonGroup label="Actions">
           <Button label="Copy" />
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
       expect(tabIndexOf('Copy')).toBe('0');
+      expect(tabIndexOf('Cut')).toBe('-1');
+      expect(tabIndexOf('Paste')).toBe('-1');
 
       rerender(
         <ButtonGroup label="Actions">
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
 
@@ -936,6 +1006,7 @@ describe('ButtonGroup', () => {
         <ButtonGroup label="Actions">
           <Button label="Copy" />
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
       expect(tabIndexOf('Copy')).toBe('0');
@@ -944,6 +1015,7 @@ describe('ButtonGroup', () => {
         <ButtonGroup label="Actions">
           <Button label="Copy" isDisabled />
           <Button label="Cut" />
+          <Button label="Paste" />
         </ButtonGroup>,
       );
 
@@ -958,6 +1030,7 @@ describe('ButtonGroup', () => {
           <ButtonGroup label="Docs actions">
             <Button label="Docs" href="https://example.com" />
             <Button label="Print" />
+            <Button label="Share" />
           </ButtonGroup>,
         ),
       );
@@ -966,6 +1039,7 @@ describe('ButtonGroup', () => {
         screen.getByRole('link', {name: 'Docs'}).getAttribute('tabindex'),
       ).toBe('0');
       expect(tabIndexOf('Print')).toBe('-1');
+      expect(tabIndexOf('Share')).toBe('-1');
 
       await user.tab();
       await user.tab();
@@ -996,7 +1070,7 @@ describe('ButtonGroup', () => {
     it('leaves the tab stop on its own members when a member owns an open menu', async () => {
       const user = userEvent.setup();
       render(
-        <ButtonGroup label="Approve action">
+        <ButtonGroup label="Approve action" role="toolbar">
           <Button label="Allow once" />
           <DropdownMenu
             hasChevron={false}
