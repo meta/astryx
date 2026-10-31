@@ -313,6 +313,9 @@ export interface FileInputProps extends Omit<
   FieldInputBaseProps,
   'onChange' | 'defaultValue' | 'value'
 > {
+  /**
+   * Ref to the native file input.
+   */
   ref?: React.Ref<HTMLInputElement>;
   /**
    * Accessible label for the file input.
@@ -768,15 +771,30 @@ export function FileInput({
       : (optimisticValue?.name ?? '')
     : null;
 
+  // The tooltip placement renders no message box: its focusable status button
+  // is the only place the message lives, and the trigger's aria-describedby
+  // points at that button's tooltip. Every content branch that can show a
+  // status keeps it, so the message stays reachable in dropzone mode and while
+  // busy (family:input-fields FR8).
+  const tooltipStatus = statusTooltipDescribedBy != null ? statusIcon : null;
+
   const renderDropzoneContent = () => {
     if (isBusy) {
-      return <Spinner size="md" aria-hidden="true" />;
+      return (
+        <>
+          <Spinner size="md" aria-hidden="true" />
+          {tooltipStatus}
+        </>
+      );
     }
     if (hasFiles) {
       return (
-        <div {...stylex.props(styles.fileNameText, styles.fileNameDropzone)}>
-          {fileNames}
-        </div>
+        <>
+          <div {...stylex.props(styles.fileNameText, styles.fileNameDropzone)}>
+            {fileNames}
+          </div>
+          {tooltipStatus}
+        </>
       );
     }
     return (
@@ -790,6 +808,7 @@ export function FileInput({
         <span {...stylex.props(styles.placeholderText)}>
           {isDragOver ? t('@astryx.fileInput.dropHint') : displayPlaceholder}
         </span>
+        {tooltipStatus}
       </>
     );
   };
@@ -802,6 +821,7 @@ export function FileInput({
             {fileNames ?? displayPlaceholder}
           </span>
           <Spinner size="sm" aria-hidden="true" />
+          {tooltipStatus}
         </>
       );
     }

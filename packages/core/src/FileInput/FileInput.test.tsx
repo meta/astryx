@@ -1356,4 +1356,74 @@ describe('FileInput statusVariant forwarding', () => {
       'detached',
     );
   });
+
+  // family:input-fields FR8: every input offers the tooltip placement. It has
+  // no message box, so the status button is the only place the message lives.
+  function expectReachableTooltipStatus(message: string) {
+    expect(
+      screen.getByRole('button', {name: 'Error details'}),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tooltip', h)).toHaveTextContent(message);
+    const trigger = screen.getByRole('button', {name: 'Upload'});
+    const describedBy = (trigger.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(describedBy.length).toBeGreaterThan(0);
+    for (const id of describedBy) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+  }
+
+  it.each(['input', 'dropzone'] as const)(
+    'keeps a statusVariant="tooltip" message reachable in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={() => {}}
+          mode={mode}
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
+
+  it('does not open the file picker from the dropzone status button', async () => {
+    const user = userEvent.setup();
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click');
+    render(
+      <FileInput
+        label="Upload"
+        value={null}
+        onChange={() => {}}
+        mode="dropzone"
+        status={{type: 'error', message: 'File must be under 10MB'}}
+        statusVariant="tooltip"
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Error details'}));
+    expect(click).not.toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  it.each(['input', 'dropzone'] as const)(
+    'keeps a statusVariant="tooltip" message reachable while loading in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={() => {}}
+          mode={mode}
+          isLoading
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
 });
