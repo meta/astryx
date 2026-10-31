@@ -718,7 +718,7 @@ export function Item({
 
   // Inline rows are one line by definition, so the description always
   // ellipsizes there — a ReactNode description cannot wrap the row open.
-  const isInline = layout === 'inline' && description != null;
+  const isInline = layout === 'inline' && hasRenderableDescription;
 
   const descriptionTruncateStyle =
     descriptionLines != null

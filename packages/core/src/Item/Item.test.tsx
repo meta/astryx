@@ -1545,6 +1545,26 @@ describe('Item empty slots', () => {
     expect(withDescription.innerHTML).toBe(without.innerHTML);
   });
 
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+  ])(
+    'keeps the stacked layout for an inline row whose description is %s',
+    (_name, description) => {
+      const {container: withDescription} = render(
+        <Item
+          label="Item"
+          layout="inline"
+          description={description as ReactNode}
+        />,
+      );
+      const {container: without} = render(
+        <Item label="Item" layout="inline" />,
+      );
+      expect(withDescription.innerHTML).toBe(without.innerHTML);
+    },
+  );
+
   it('renders no description element for an empty string', () => {
     render(<Item label="Item" description="" />);
     const label = screen.getByText('Item');
