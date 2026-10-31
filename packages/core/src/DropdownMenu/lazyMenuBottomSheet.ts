@@ -15,10 +15,10 @@
  * of pages whose dropdowns only open as anchored popovers. Each wrapper keeps
  * the wrapped component's props and renders nothing until its module loads.
  *
- * The action list preloads at rest; a failed load is not kept, so the next
- * preload or open asks the module loader again (a loader that retries then
- * loads it; a browser does not fetch a native module again once its import
- * failed).
+ * The action list preloads at rest, and the preload's result says whether it
+ * loaded. A failed load is not kept, so the next preload or open asks the
+ * module loader again (a loader that retries then loads it; a browser does not
+ * fetch a native module again once its import failed).
  *
  * Neither wrapper renders on the server or in the render that hydrates server
  * HTML (spec:AST-013 FR9): a lazy component that has not loaded yet would
@@ -67,13 +67,25 @@ async function loadActionList(): Promise<typeof ActionListModule> {
   return actionListLoad;
 }
 
+/** What a preload of the action list came to: loaded, or failed with the loader's error. */
+export type ActionListPreload =
+  | {readonly isLoaded: true}
+  | {readonly isLoaded: false; readonly error: unknown};
+
 /**
- * Starts loading the action list; a sheet menu calls it at rest. A preload
- * that fails is dropped, never an unhandled rejection: the first open asks the
- * module loader again.
+ * Starts loading the action list; a sheet menu calls it at rest. Its result
+ * says whether the list loaded: a failure (a dropped connection) is that
+ * result, with the loader's error, and never a rejection. The failed load is
+ * not kept, so the first open asks the module loader again, and a load that
+ * fails there reaches the menu through lazy().
  */
-export function preloadMenuBottomSheetActionList(): void {
-  loadActionList().catch(() => {});
+export async function preloadMenuBottomSheetActionList(): Promise<ActionListPreload> {
+  try {
+    await loadActionList();
+    return {isLoaded: true};
+  } catch (error) {
+    return {isLoaded: false, error};
+  }
 }
 
 const LazyMenuBottomSheetActionList = lazy(async () =>

@@ -2,10 +2,11 @@
 
 /**
  * @file roles.test.ts
- * @input roles.ts and the shared UIKit tables (registered on import)
- * @output Proof that each spring, duration and curve of a registered table is
- *   a role named by its path, that non-motion values are not, and that a
- *   role's CSS value reads back as the same motion
+ * @input roles.ts and the shared UIKit tables (registered by this test)
+ * @output Proof that the registered roles are exactly the ones spec:AST-094
+ *   FR4 names, each by its table path; that every other table value, a
+ *   component's measured spring included, is no role; and that a role's CSS
+ *   value reads back as the same motion
  * @position Testing for /packages/core/src/motion/roles.ts
  */
 
@@ -175,6 +176,10 @@ describe('motion roles', () => {
     // thresholds and the arbitration timings are not motion roles either.
     expect(motionRoleIn(timing, 'reducedMotionCrossFadeMs')).toBeUndefined();
     expect(motionRoleOf(springs.menuReducedMotion)).toBeUndefined();
+    // Nor is the keyboard's motion: it rides the keyboard's own spring and
+    // notification duration, not a role (spec:AST-094 FR4).
+    expect(motionRoleIn(springs, 'keyboard')).toBeUndefined();
+    expect(motionRoleIn(timing, 'keyboardNotificationMs')).toBeUndefined();
     expect(motionRoleIn(timing.press, 'scrollBrakeMs')).toBeUndefined();
     expect(motionRoleIn(scroll, 'delaysContentTouchesMs')).toBeUndefined();
     expect(motionRoleIn(navigation, 'parallax')).toBeUndefined();
@@ -244,6 +249,18 @@ describe('motion roles', () => {
     expect(() => formatMotionRoleValue('spring', {response: 0.5})).toThrow(
       /spring is/,
     );
+    // A spring with no damping never settles.
+    for (const never of [
+      {duration: 0.5, bounce: 1},
+      {duration: 0.5, bounce: 1.5},
+      {response: 0.5, dampingRatio: 0},
+      {mass: 1, stiffness: 100, damping: 0},
+    ]) {
+      expect(() => formatMotionRoleValue('spring', never)).toThrow(
+        /must settle/,
+      );
+    }
+    expect(parseMotionRoleValue('spring', '0.5s 1')).toBeNull();
     expect(parseMotionRoleValue('spring', '')).toBeNull();
     expect(parseMotionRoleValue('spring', 'fast')).toBeNull();
     expect(parseMotionRoleValue('spring', '0.4s 0.2')).toEqual({

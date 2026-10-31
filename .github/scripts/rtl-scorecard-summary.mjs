@@ -29,7 +29,7 @@ const markdownCell = value =>
 const lines = [
   '## RTL semantic audit',
   '',
-  `Audit scope: **${scope}**. The scheduled unfiltered sweep also runs weekly — see \`rtl-weekly.yml\`.`,
+  `Audit scope: **${scope}**. The unfiltered sweep runs for release-check on every push to main.`,
   '',
   'Relationship-based (LTR vs RTL in the same run) — no golden screenshots. **Soft-gated** pending a stability window.',
   '',

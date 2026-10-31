@@ -68,9 +68,9 @@ export interface WheelBurst {
   /** Hold Control through the run. */
   readonly ctrl?: boolean;
   /**
-   * The longest gap the page may stamp between two received steps, ms: the
-   * gap after which the proof's component would treat the run as more than
-   * one gesture. Past it `wheelBurst` throws `WheelPageStallError` when the
+   * The longest gap the page may see between two received steps, ms (see
+   * `wheelArrivals`): the gap after which the proof's component would treat
+   * the run as more than one gesture. Past it `wheelBurst` throws `WheelPageStallError` when the
    * page's own handling of the step before caused the gap, and
    * `WheelPacingError` otherwise.
    */
@@ -78,11 +78,11 @@ export interface WheelBurst {
 }
 
 /**
- * The page stamped a wheel burst's steps further apart than the proof's
+ * The page received a wheel burst's steps further apart than the proof's
  * `maxGapMs`, and its wheel listeners did not hold the step back: the step
  * reached the page later than one frame after they finished the one before.
- * WebKit stamps a step when its web process dispatches it, so a loaded runner
- * splits what the driver sent as one gesture. Other work on the page's main
+ * The dispatch stalled before the page, so a loaded runner splits what the
+ * driver sent as one gesture. Other work on the page's main
  * thread between steps (timers, frame callbacks) also lands here, so a
  * re-taken run is the runner's or that work's, never the wheel listeners'.
  */
@@ -99,7 +99,7 @@ export class WheelPacingError extends Error {
 }
 
 /**
- * The page stamped a wheel burst's steps further apart than the proof's
+ * The page received a wheel burst's steps further apart than the proof's
  * `maxGapMs` because it was still handling the step before: its own wheel
  * listeners held the main thread, and WebKit dispatches the next step only
  * once it is free. The page split the gesture, so this is the proof's own
@@ -131,9 +131,25 @@ export interface WheelPageStall {
 const HELD_BACK_MS = 20;
 
 /**
- * Sorts a burst's gaps past `maxGapMs` by cause. `stamps` are the received
- * steps' `timeStamp`s; `handledAt` is when the page's wheel listeners had
- * finished with each (NaN where that was not seen). In WebKit, which
+ * When each received step of a burst reached the page, ms on the page clock:
+ * its `timeStamp` in Chromium, which stamps a step with its dispatch time; in
+ * WebKit, when the page's first listener received it. WebKit coalesces the
+ * steps it holds while the page's main thread is busy, and the coalesced step
+ * keeps the stamp of the step before it, so its stamp cannot show how long the
+ * page made it wait.
+ */
+export function wheelArrivals(
+  engine: Engine,
+  stamps: readonly number[],
+  receivedAt: readonly number[],
+): readonly number[] {
+  return engine === 'webkit' ? receivedAt : stamps;
+}
+
+/**
+ * Sorts a burst's gaps past `maxGapMs` by cause. `stamps` are when the
+ * received steps reached the page (`wheelArrivals`); `handledAt` is when the
+ * page's wheel listeners had finished with each (NaN where that was not seen). In WebKit, which
  * dispatches a step only once the page's main thread is free, a gap is the
  * page's when the step reached the page within one frame of the listeners
  * finishing the step before: it was waiting on them. Every other gap is the
@@ -225,7 +241,7 @@ export interface WebInputDriver {
    * handles one step when the next arrives, the engine coalesces them, as it
    * does a trackpad's: the page can receive fewer, larger steps with the same
    * total. Returns how many steps the page received and the gaps between
-   * their `timeStamp`s, ms; with `maxGapMs`, a longer gap throws
+   * their arrivals (`wheelArrivals`), ms; with `maxGapMs`, a longer gap throws
    * `WheelPageStallError` when the page's own handling of the step before
    * caused it, and `WheelPacingError` otherwise.
    */
@@ -299,6 +315,8 @@ async function untilReceived(
 
 interface WheelRun {
   stamps: number[];
+  /** When the page's first listener received each step. */
+  receivedAt: number[];
   /** When the page's wheel listeners had finished with each step; NaN until seen. */
   handledAt: number[];
   dx: number;
@@ -319,6 +337,7 @@ function armWheelRun(page: Page): Promise<JSHandle<WheelRun>> {
     const last = {capture: false, passive: true};
     const run = {
       stamps: [] as number[],
+      receivedAt: [] as number[],
       handledAt: [] as number[],
       dx: 0,
       dy: 0,
@@ -330,6 +349,7 @@ function armWheelRun(page: Page): Promise<JSHandle<WheelRun>> {
     const received = (event: Event) => {
       const wheel = event as WheelEvent;
       run.stamps.push(wheel.timeStamp);
+      run.receivedAt.push(performance.now());
       run.handledAt.push(Number.NaN);
       run.dx += wheel.deltaX;
       run.dy += wheel.deltaY;
@@ -361,6 +381,7 @@ async function untilRunReceived(
     ([run, total, ms]) =>
       new Promise<{
         stamps: number[];
+        receivedAt: number[];
         handledAt: number[];
         dx: number;
         dy: number;
@@ -382,6 +403,7 @@ async function untilRunReceived(
             run.stop();
             resolve({
               stamps: run.stamps.slice(),
+              receivedAt: run.receivedAt.slice(),
               handledAt: run.handledAt.slice(),
               dx: run.dx,
               dy: run.dy,
@@ -403,11 +425,12 @@ async function untilRunReceived(
       `webInputDriver: the page received ${got.dx}, ${got.dy} px of the run's ${want.dx}, ${want.dy} px within ${WHEEL_DELIVERY_MS} ms (is the point inside the viewport, over the main document?)`,
     );
   }
-  const receivedGapsMs = got.stamps.slice(1).map((t, i) => t - got.stamps[i]);
+  const arrivals = wheelArrivals(engine, got.stamps, got.receivedAt);
+  const receivedGapsMs = arrivals.slice(1).map((t, i) => t - arrivals[i]);
   if (maxGapMs != null) {
     const {pageStalls, dispatchStalls} = wheelGapCauses(
       engine,
-      got.stamps,
+      arrivals,
       got.handledAt,
       maxGapMs,
     );

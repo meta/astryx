@@ -285,8 +285,10 @@ each round trip and resolves once the page has the run's whole delta; where the
 page still handles one step when the next arrives, the engine coalesces them,
 as it does a trackpad's.
 
-WebKit stamps each step when its web process dispatches it, and dispatches it
-only once the page's main thread is free, so two things can split a run past
+WebKit dispatches a step only once the page's main thread is free, and the
+steps it holds meanwhile reach the page coalesced into one, stamped like the
+step before it, so the burst times each WebKit step by when the page's first
+listener received it (`wheelArrivals`). Two things can split a run past
 `maxGapMs`. When a step reached the page within one frame of its own wheel
 listeners finishing the step before, those listeners held it back: the burst
 throws `WheelPageStallError`, the page split the gesture, and the proof fails.

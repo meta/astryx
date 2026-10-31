@@ -361,17 +361,15 @@ DEC-6 does not require unrelated components to add a new floor.
   below accepts root `xstyle`/`className`/`style`, and none accepts `container*`
   or `control*`. Today's targets:
 
-  | Component                          | Root styling reaches | Base props reach                       | Primary semantic control | Root styling migrates to |
-  | ---------------------------------- | -------------------- | -------------------------------------- | ------------------------ | ------------------------ |
-  | FileInput                          | control box          | native file input                      | native file input        | `control*`               |
-  | DateInput (pointer, native, touch) | control box          | control box                            | date input               | `control*`               |
-  | DateRangeInput                     | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
-  | Selector                           | control box          | trigger button                         | trigger button           | `control*`               |
-  | MultiSelector                      | control box          | not forwarded                          | trigger button           | `control*`               |
-  | ComplexSelector                    | control box          | control box                            | trigger button           | `control*`               |
-  | Typeahead                          | Field                | Field                                  | combobox input           | `container*`             |
-  | Tokenizer                          | Field                | Field                                  | combobox input           | `container*`             |
-  | Slider                             | Field                | not forwarded; `ref` on the track      | slider control           | `container*`             |
+  | Component       | Root styling reaches | Base props reach                       | Primary semantic control | Root styling migrates to |
+  | --------------- | -------------------- | -------------------------------------- | ------------------------ | ------------------------ |
+  | FileInput       | control box          | native file input                      | native file input        | `control*`               |
+  | DateRangeInput  | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
+  | Selector        | control box          | trigger button                         | trigger button           | `control*`               |
+  | ComplexSelector | control box          | control box                            | trigger button           | `control*`               |
+  | Typeahead       | Field                | Field                                  | combobox input           | `container*`             |
+  | Tokenizer       | Field                | Field                                  | combobox input           | `container*`             |
+  | Slider          | Field                | not forwarded; `ref` on the track      | slider control           | `container*`             |
 
   Conformance is an approved removal of root
   styling; an `astryx upgrade` codemod rewrites each component's root styling to

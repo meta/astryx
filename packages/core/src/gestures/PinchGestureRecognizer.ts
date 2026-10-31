@@ -35,6 +35,10 @@ export interface PinchGestureRecognizerOptions extends GestureRecognizerOptions<
 }
 
 export class PinchGestureRecognizer extends GestureRecognizer {
+  override get kind(): GestureRecognizer['kind'] {
+    return 'pinch';
+  }
+
   hysteresis: number;
   private initialSpan = 0;
   private scaleValue = 1;

@@ -2,7 +2,7 @@
 
 // AUTO-GENERATED — do not edit manually.
 // Run: node scripts/generate-token-docs.mjs
-// Total: 283 tokens across 15 categories.
+// Total: 285 tokens across 15 categories.
 
 /** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */
 export const docs = {

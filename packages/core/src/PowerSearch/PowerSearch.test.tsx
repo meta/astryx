@@ -476,6 +476,30 @@ describe('PowerSearch', () => {
       });
     });
 
+    it('announces Clear all in its own words, "All filters removed" (component:PowerSearch; Tokenizer AR7)', async () => {
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[
+            {
+              field: 'status',
+              operator: 'is',
+              value: {type: 'enum', value: 'open'},
+            },
+          ]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Clear all'}));
+      expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('All filters removed');
+      });
+      // Not the Tokenizer's own words.
+      expect(politeRegion()).not.toHaveTextContent('All items removed');
+    });
+
     it('does not announce the result count present on mount under StrictMode, only a later change', async () => {
       // StrictMode replays the mount effects: a mounted-flag guard is reset by
       // the replay and speaks the initial count unprompted; comparing against

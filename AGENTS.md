@@ -169,6 +169,7 @@ Documentation lives in two places:
 - **Testing**: Vitest (colocated tests)
 - **Components**: `packages/core/`
 - **Storybook**: `apps/storybook/`
+- **Imports inside a package**: import the defining module (`'../List/List'`), never a folder's index barrel (`'../List'`); public consumers import `@astryxdesign/core`. `@astryx/no-internal-barrel-import` enforces it.
 
 ## JSDoc Conventions
 

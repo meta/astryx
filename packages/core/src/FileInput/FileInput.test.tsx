@@ -496,6 +496,74 @@ describe('FileInput', () => {
       expect(politeRegion()?.textContent ?? '').toBe('');
     });
 
+    it('identifies every rejected file in one status message (WCAG 3.3.1)', async () => {
+      const onChange = vi.fn();
+      render(
+        <FileInput
+          label="Reports"
+          value={null}
+          onChange={onChange}
+          isMultiple
+          accept=".pdf"
+          maxSize={1024}
+        />,
+      );
+      fireEvent.change(fileInputEl(), {
+        target: {
+          files: [
+            createFile('photo.png', 100),
+            createFile('large.pdf', 4096),
+            createFile('small.pdf', 100),
+          ],
+        },
+      });
+      await waitFor(() => {
+        const status = document.querySelector('.astryx-field-status');
+        expect(status).toHaveTextContent(
+          '"photo.png" is not an accepted file type',
+        );
+        expect(status).toHaveTextContent('"large.pdf" exceeds 1.0 KB limit');
+      });
+      // The valid file is still accepted.
+      expect(onChange).toHaveBeenCalledWith([
+        expect.objectContaining({name: 'small.pdf'}),
+      ]);
+    });
+
+    it('separates the rejected files in a locale whose unit list would run them together', async () => {
+      render(
+        <InternationalizationProvider
+          locale="zh-CN"
+          overrides={{
+            'zh-CN': {
+              '@astryx.fileInput.errorInvalidType': '“{fileName}”类型不受支持',
+              '@astryx.fileInput.errorMaxSize': '“{fileName}”超过 {maxSize}',
+            },
+          }}>
+          <FileInput
+            label="报告"
+            value={null}
+            onChange={() => {}}
+            isMultiple
+            accept=".pdf"
+            maxSize={1024}
+          />
+        </InternationalizationProvider>,
+      );
+      fireEvent.change(fileInputEl(), {
+        target: {
+          files: [createFile('photo.png', 100), createFile('large.pdf', 4096)],
+        },
+      });
+      await waitFor(() => {
+        const status = document.querySelector('.astryx-field-status');
+        // The two messages are separated (、), not run together.
+        expect(status?.textContent).toMatch(
+          /“photo\.png”类型不受支持、“large\.pdf”超过 /,
+        );
+      });
+    });
+
     it('announces a validation error exactly once across live regions', async () => {
       render(
         <FileInput
@@ -1288,4 +1356,74 @@ describe('FileInput statusVariant forwarding', () => {
       'detached',
     );
   });
+
+  // family:input-fields FR8: every input offers the tooltip placement. It has
+  // no message box, so the status button is the only place the message lives.
+  function expectReachableTooltipStatus(message: string) {
+    expect(
+      screen.getByRole('button', {name: 'Error details'}),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tooltip', h)).toHaveTextContent(message);
+    const trigger = screen.getByRole('button', {name: 'Upload'});
+    const describedBy = (trigger.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(describedBy.length).toBeGreaterThan(0);
+    for (const id of describedBy) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+  }
+
+  it.each(['input', 'dropzone'] as const)(
+    'keeps a statusVariant="tooltip" message reachable in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={() => {}}
+          mode={mode}
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
+
+  it('does not open the file picker from the dropzone status button', async () => {
+    const user = userEvent.setup();
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click');
+    render(
+      <FileInput
+        label="Upload"
+        value={null}
+        onChange={() => {}}
+        mode="dropzone"
+        status={{type: 'error', message: 'File must be under 10MB'}}
+        statusVariant="tooltip"
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Error details'}));
+    expect(click).not.toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  it.each(['input', 'dropzone'] as const)(
+    'keeps a statusVariant="tooltip" message reachable while loading in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={() => {}}
+          mode={mode}
+          isLoading
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
 });

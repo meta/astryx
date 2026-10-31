@@ -11,7 +11,7 @@
 
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {act, render, screen, fireEvent} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import userEvent from '@testing-library/user-event';
 import {
@@ -934,8 +934,10 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
       hidden: true,
     });
 
-    fireEvent.keyDown(menu, {key: 'ArrowDown'});
-    expect(analytics).toHaveFocus();
+    // Opening moves focus to the first item a frame later (APG menu-button
+    // focus-on-open): wait for it, since a key pressed before that frame
+    // starts from no item and one pressed after it starts from the first.
+    await waitFor(() => expect(analytics).toHaveFocus());
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(reports).toHaveFocus();
@@ -964,7 +966,8 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
       hidden: true,
     });
 
-    fireEvent.keyDown(menu, {key: 'ArrowDown'}); // focus analytics
+    // Focus lands on the first item a frame after opening (see above).
+    await waitFor(() => expect(analytics).toHaveFocus());
     fireEvent.keyDown(menu, {key: 'ArrowDown'}); // focus reports
 
     // The tab stop follows focus, so it is still a single stop after moving.

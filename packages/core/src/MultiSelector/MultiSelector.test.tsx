@@ -34,6 +34,7 @@ import {
   type MultiSelectorChange,
 } from './MultiSelector';
 import {useRef, useState} from 'react';
+import {Dialog} from '../Dialog/Dialog';
 import {Icon} from '../Icon';
 import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -589,6 +590,41 @@ describe('MultiSelector', () => {
     await user.click(options[0]); // Click disabled Apple
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not toggle options or select all after becoming disabled', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const selector = (isDisabled: boolean) => (
+      <MultiSelector
+        label="Fruit"
+        options={defaultOptions}
+        value={['Apple']}
+        onChange={onChange}
+        changeAction={changeAction}
+        isDisabled={isDisabled}
+        hasSelectAll
+      />
+    );
+    const {rerender} = render(selector(false));
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    await user.click(trigger);
+    const banana = screen.getByRole('option', {name: 'Banana', ...h});
+
+    rerender(selector(true));
+    expect(trigger).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await user.click(banana);
+    await user.click(screen.getByRole('option', {name: 'Apple', ...h}));
+    await user.click(screen.getByRole('option', {name: /^Select all/, ...h}));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+
+    rerender(selector(false));
+    await user.click(banana);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(['Apple', 'Banana']);
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(['Apple', 'Banana']);
   });
 
   it('renders disabled state', () => {
@@ -3835,6 +3871,197 @@ describe('MultiSelector hasCreate', () => {
     });
     // The filter is cleared so the option the caller adds is visible.
     expect(search).toHaveValue('');
+  });
+
+  it('does not create by Enter or click after becoming disabled', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const selector = (isDisabled: boolean) => (
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={['bug']}
+        onChange={onChange}
+        changeAction={changeAction}
+        isDisabled={isDisabled}
+        hasSearch
+        hasCreate
+      />
+    );
+    const {rerender} = render(selector(false));
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const search = screen.getByRole('combobox', h);
+    await user.type(search, 'Urgent');
+    const create = screen.getByRole('option', {name: 'Create "Urgent"', ...h});
+
+    rerender(selector(true));
+    expect(search).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.click(create);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+    expect(search).toHaveValue('Urgent');
+
+    rerender(selector(false));
+    await user.click(create);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(['bug', 'Urgent'], {
+      type: 'create',
+      query: 'Urgent',
+    });
+    expect(changeAction).toHaveBeenCalledExactlyOnceWith(['bug', 'Urgent']);
+    expect(search).toHaveValue('');
+  });
+
+  it('says only the latest status when several keystrokes land in one frame (spec:AST-086 FR9)', async () => {
+    // A barcode scanner, dictation or automation types faster than a frame:
+    // each keystroke states the panel's status through the search's
+    // `hasReplace` announcer, so a status the next keystroke replaces before
+    // it is exposed is withdrawn, not joined.
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={['bug']}
+        onChange={() => {}}
+        hasSearch
+        hasCreate
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const search = screen.getByRole('combobox', h);
+    for (const value of ['Ur', 'Urg', 'Urge', 'Urgent']) {
+      fireEvent.change(search, {target: {value}});
+    }
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(politeRegion()?.textContent).toBe('Create "Urgent"');
+  });
+
+  it('says only the empty panel’s message when the next keystroke in the frame empties the panel (spec:AST-086 FR13)', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={[]}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const search = screen.getByRole('combobox', h);
+    // "Fe" matches Feature; "Fex" matches nothing, in the same frame.
+    fireEvent.change(search, {target: {value: 'Fe'}});
+    fireEvent.change(search, {target: {value: 'Fex'}});
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(politeRegion()?.textContent).toBe('No results found');
+  });
+
+  it('says only the count when the next keystroke in the frame fills an empty panel (spec:AST-086 FR13)', async () => {
+    // The empty panel's message comes from the search's `hasReplace`
+    // announcer too, so the count that follows it in the frame replaces it.
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={[]}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const search = screen.getByRole('combobox', h);
+    fireEvent.change(search, {target: {value: 'Fex'}});
+    fireEvent.change(search, {target: {value: 'Fe'}});
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(politeRegion()?.textContent).toBe('1 result');
+  });
+
+  it('says only the empty panel’s message from inside a modal when the next keystroke in the frame empties the panel (spec:AST-086 FR14)', async () => {
+    // Inside an open modal the search's announcer writes to the modal's own
+    // container, which replaces the same way.
+    HTMLDialogElement.prototype.showModal = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      this.setAttribute('open', '');
+      this.dataset.modal = 'true';
+    });
+    // The file's own `matches` stand-in (for :popover-open) sits on
+    // HTMLElement.prototype; :modal is added on top of it.
+    const matches = HTMLElement.prototype.matches;
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':modal'
+        ? this instanceof HTMLDialogElement &&
+            this.open &&
+            this.dataset.modal === 'true'
+        : matches.call(this, selector);
+    });
+    const user = userEvent.setup();
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Edit labels">
+        <MultiSelector
+          label="Labels"
+          options={OPTIONS}
+          value={[]}
+          onChange={() => {}}
+          hasSearch
+        />
+      </Dialog>,
+    );
+    const dialog = screen.getByRole('dialog', {name: 'Edit labels'});
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    const search = screen.getByRole('combobox', h);
+    fireEvent.change(search, {target: {value: 'Fe'}});
+    fireEvent.change(search, {target: {value: 'Fex'}});
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(
+      dialog.querySelector(':scope > [data-astryx-modal-live-region="polite"]')
+        ?.textContent,
+    ).toBe('No results found');
+  });
+
+  it('still says a selection change and a result count from the same frame: each has its own announcer (spec:AST-086 FR9)', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Labels"
+        options={OPTIONS}
+        value={[]}
+        onChange={() => {}}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Labels'}));
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    fireEvent.click(screen.getByRole('option', {name: 'Bug', hidden: true}));
+    fireEvent.change(screen.getByRole('combobox', h), {
+      target: {value: 'Fe'},
+    });
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(politeRegion()?.textContent).toBe('1 of 3 selected 1 result');
   });
 
   it('a plain toggle passes no descriptor, so a one-argument handler is unchanged', async () => {

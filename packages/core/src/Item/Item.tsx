@@ -50,6 +50,7 @@ import {
 import type {BaseProps} from '../BaseProps';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -611,6 +612,13 @@ export function Item({
   const pressable = usePressFeedback();
   const columnMarker = use(ItemMarkerColumnsContext);
   const LinkComponent = useLinkComponent();
+  // A disabled row's anchor has no destination, so no activation path (a
+  // screen reader's click, Enter, a link context menu) can navigate
+  // (spec:AST-085 FR2). Like a disabled Link, it keeps the link role and skips
+  // the router link component, which may require a live href. The element type
+  // then changes with `isDisabled`, so focus follows the swap (FR4).
+  const RowAnchor = isDisabled ? 'a' : LinkComponent;
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>();
 
   // Delegation mode: the row is an enlarged click/tap target for a nested
   // control (e.g. a checkbox) that owns the keyboard access and action. The
@@ -787,19 +795,18 @@ export function Item({
           {labelAndDescription}
         </span>
       ) : href != null && !isLinkRoot ? (
-        <LinkComponent
-          href={href}
-          target={target}
-          rel={rel}
-          aria-disabled={isDisabled || undefined}
-          tabIndex={isDisabled ? -1 : undefined}
+        <RowAnchor
+          ref={anchorRef}
+          {...(isDisabled
+            ? {role: 'link', 'aria-disabled': true, tabIndex: -1}
+            : {href, target, rel})}
           {...stylex.props(
             styles.invisibleAnchor,
             isInline && styles.inlineContent,
             isDisabled && styles.disabledContent,
           )}>
           {labelAndDescription}
-        </LinkComponent>
+        </RowAnchor>
       ) : onClick != null ? (
         <button
           type="button"

@@ -4,7 +4,7 @@ Every visual-regression test uses the shared Storybook framework and
 `.github/workflows/ci.yml` → `pr-visual` (**Stable visual regression**). It runs
 in `release-check`, which `main-heavy-lanes.yml` dispatches after merges to
 `main` (a burst is checked once, at its newest commit) and the release gate dispatches before a cut; a pull request runs it only
-with the `ci:heavy-lanes` label (AST-030 FR12, DEC-7).
+with the `ci:run-visual` label (AST-030 FR12, DEC-7).
 [AST-030 FR12](../../../docs/specs/AST-030/spec.md) owns this requirement.
 Add coverage to that owner, not to a new component, package, theme, scheduled,
 post-CI, or post-merge workflow.
@@ -82,8 +82,8 @@ It does not execute artifact HTML, run a browser, compare pixels again, change
 a baseline, or create another visual status. Its only status is `PR Comment` on
 the pull request head, which says whether a report step failed.
 
-Deployment previews, `a11y-weekly.yml`, `rtl-weekly.yml`, and
-`vibe-screenshots.yml` remain separate because they do not run visual regression.
+Deployment previews and `vibe-screenshots.yml` remain separate because they do
+not run visual regression.
 
 ## Explicit baseline maintenance
 

@@ -24,6 +24,11 @@ import {createHarness, RecordingConsumer} from './harness';
  * test fails it: something another recognizer can wait on.
  */
 class Held extends GestureRecognizer {
+  // Possible until failed, as a tap waiting for its next tap.
+  override get kind(): GestureRecognizer['kind'] {
+    return 'tap';
+  }
+
   private isWaiting = true;
 
   override isInvolved(): boolean {

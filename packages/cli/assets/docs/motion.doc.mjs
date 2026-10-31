@@ -50,7 +50,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Two easing curves. `--ease-standard` decelerates, for things arriving and state changes. `--ease-exit` accelerates, for things leaving: it moves off from rest and leaves fast, so the travel stays visible for the whole duration.',
+          text: "Four easing curves. `--ease-standard` decelerates, for state changes. `--ease-entrance` is for things arriving and `--ease-move` for things moving on screen; a theme's `character` sets both, and at `standard` they equal `--ease-standard`. `--ease-exit` accelerates, for things leaving: it moves off from rest and leaves fast, so the travel stays visible for the whole duration, and it is the same at every `character`.",
         },
         {
           type: 'token-ref',
@@ -120,7 +120,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Set transition durations and easing from the motion tokens, so a theme that retunes motion retunes your animations too.',
+          text: "Set transition durations and easing from the motion tokens, so a theme that retunes motion retunes your animations too. Ease something arriving on `--ease-entrance` and something moving on screen on `--ease-move`, so it follows the theme's `character`, and something leaving on `--ease-exit`, which stays the same at every `character`.",
         },
         {
           type: 'code',
@@ -137,9 +137,45 @@ const styles = stylex.create({
   slideUp: {
     transitionProperty: 'transform, opacity',
     transitionDuration: durationVars['--duration-medium'],
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionTimingFunction: easeVars['--ease-entrance'],
   },
 });`,
+        },
+      ],
+    },
+    {
+      id: 'theme-motion',
+      title: 'Tune motion from the theme',
+      category: 'foundations',
+      content: [
+        {
+          type: 'prose',
+          text: "A theme sets how motion feels with two knobs in `defineTheme`'s `motion`. They drive the CSS motion tokens; the springs of touch motion don't read them yet. Every theme follows each person's Reduce Motion setting; no theme loosens it.",
+        },
+        {
+          type: 'list',
+          style: 'unordered',
+          items: [
+            "`tempo` scales every motion duration: 1 is Astryx's own, 0.75 the quickest and 1.5 the slowest (values outside are clamped).",
+            "`character` sets how lively motion is: `'crisp'` decelerates without overshoot, `'standard'` is Astryx's own, and `'expressive'` overshoots slightly on entrances and moves. Exits and fades never overshoot.",
+          ],
+        },
+        {
+          type: 'code',
+          lang: 'ts',
+          label: 'A quicker, crisper theme',
+          code: `export const brandTheme = defineTheme({
+  name: 'brand',
+  motion: {tempo: 0.85, character: 'crisp'},
+});`,
+        },
+        {
+          type: 'prose',
+          text: "Some motion never follows the knobs, because it tracks a finger or the system: finger tracking, momentum and the rubber band, the on-screen keyboard, the press model's onset delay, cancel distance and tap flash (its release fade follows tempo), hover-intent delays, gesture thresholds, the loops of busy indicators such as Spinner and Skeleton, and the 200 ms Reduce Motion cross-fade.",
+        },
+        {
+          type: 'prose',
+          text: 'Precedence, lowest to highest: the knobs, then a duration scale (`fast`, `medium`, `slow`, `ratio`) for the durations it sets, then explicit `tokens`. A theme with no `motion` renders exactly as before.',
         },
       ],
     },

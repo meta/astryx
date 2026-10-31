@@ -7,8 +7,6 @@
  * most 15 for pull-request events, so a lane that grows past the budget fails
  * where it grew instead of silently stretching every contributor's wait.
  * Release and maintenance dispatches keep longer limits through an expression.
- * The report-only `ci-duration` job lists each job's run time once every
- * pull-request job has finished, and warns past 12 minutes.
  */
 
 import fs from 'node:fs';
@@ -27,16 +25,9 @@ const BUDGET = 15;
 // macOS Swift builds run on another runner pool with their own variance; the
 // job only does work when native Swift changes.
 const EXEMPT = new Set(['test-native-swift']);
-// Jobs that only classify scope or join results finish in seconds and need no
-// limit of their own; every job that installs, builds, or tests has one.
-const JOINS = new Set([
-  'check-scope',
-  'check-components',
-  'native-swift-scope',
-  'test',
-  'build',
-  'pr-rtl',
-]);
+// Jobs that only join results finish in seconds and need no limit of their
+// own; every job that installs, builds, or tests has one.
+const JOINS = new Set(['test', 'build', 'pr-rtl']);
 
 /** The limit a pull-request run gets from a job's `timeout-minutes`. */
 function pullRequestLimit(value) {
@@ -60,8 +51,8 @@ const runsOnPullRequests = job => {
 };
 
 describe('PR CI duration budget', () => {
-  const prJobs = Object.entries(ci.jobs).filter(
-    ([id, job]) => runsOnPullRequests(job) && id !== 'ci-duration',
+  const prJobs = Object.entries(ci.jobs).filter(([, job]) =>
+    runsOnPullRequests(job),
   );
   const jobs = prJobs.filter(([id]) => !EXEMPT.has(id) && !JOINS.has(id));
 
@@ -79,35 +70,4 @@ describe('PR CI duration budget', () => {
       expect(limit).toBeLessThanOrEqual(BUDGET);
     },
   );
-
-  it('reports every pull-request job after it finishes, without gating', () => {
-    const report = ci.jobs['ci-duration'];
-    expect(report.if).toBe(
-      gated("${{ always() && github.event_name == 'pull_request' }}"),
-    );
-    expect(report['continue-on-error']).toBe(true);
-    expect(report.permissions).toEqual({actions: 'read'});
-    // Waiting on every pull-request job is what lets the table include the
-    // slowest lanes, whichever join they feed.
-    expect([...report.needs].sort()).toEqual(prJobs.map(([id]) => id).sort());
-    const script = report.steps[0].with.script;
-    expect(script).toContain('row.minutes > 12');
-    expect(script).toContain('Run span');
-  });
-
-  it('retries a server error on its job listing', () => {
-    // The listing is one request for every job of the run with its steps,
-    // and GitHub can answer it 502 at its gateway limit. github-script
-    // retries a server error only when the step sets `retries`; the client
-    // errors it exempts stay final.
-    const step = ci.jobs['ci-duration'].steps[0];
-    expect(step.uses).toMatch(/^actions\/github-script@/);
-    expect(step.with.retries).toBeGreaterThanOrEqual(1);
-    const exempt = String(
-      step.with['retry-exempt-status-codes'] ?? '400,401,403,404,422',
-    )
-      .split(',')
-      .map(Number);
-    expect(exempt.filter(code => code >= 500)).toEqual([]);
-  });
 });

@@ -63,6 +63,10 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
+    // A validation message often echoes the value that failed (an address, a
+    // URL). Let such an unbroken token wrap inside the field instead of
+    // painting past its edges (WCAG 2.2 SC 1.4.10 Reflow).
+    overflowWrap: 'anywhere',
   },
   attached: {
     marginTop: `calc(-1 * ${ATTACHED_OVERLAP})`,
@@ -118,6 +122,9 @@ const colorStyles = stylex.create({
 export type FieldStatusVariant = keyof FieldStatusVariantMap;
 
 export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
+  /**
+   * Ref to the rendered message box.
+   */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * The type of status to display.

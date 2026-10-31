@@ -4,8 +4,9 @@
  * @file harness.ts
  * @input Nothing
  * @output Exports the synthetic-input harness the gesture tests share: a
- *   manual clock, an arena wired to a transition log, and fingers that land,
- *   move and lift at explicit timestamps
+ *   manual clock, an arena wired to a transition log, fingers that land,
+ *   move and lift at explicit timestamps, and a coarse primary pointer for
+ *   tests that go through the document's host
  * @position Test-only helper of packages/core/src/gestures (excluded from the
  *   build with the rest of __tests__)
  */
@@ -220,4 +221,32 @@ export function scrollProbe(
   isInsideScroller = true,
 ): NativeScrollProbe {
   return {canScroll, isInsideScroller, allowsNativePan: true};
+}
+
+/**
+ * Declare a phone's primary pointer for a test that goes through the
+ * document's host (`getGestureHost`): these tests exercise the host's
+ * coarse-pointer path, which needs `(pointer: coarse)` to match, and jsdom
+ * has no `matchMedia`. Returns the undo.
+ */
+export function coarsePrimaryPointer(): () => void {
+  const hadOwn = Object.prototype.hasOwnProperty.call(window, 'matchMedia');
+  const original = window.matchMedia;
+  window.matchMedia = (query: string) => ({
+    matches: query === '(pointer: coarse)',
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  });
+  return () => {
+    if (hadOwn) {
+      window.matchMedia = original;
+    } else {
+      delete (window as {matchMedia?: unknown}).matchMedia;
+    }
+  };
 }

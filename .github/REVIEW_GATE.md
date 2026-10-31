@@ -185,7 +185,13 @@ to failure).
 
 `review-signal.yml` has a `workflow_dispatch`:
 
-- blank `pr` input → re-flag **all** open PRs (backfill / mass recovery)
+- blank `pr` input → re-flag every open, **non-draft** PR (backfill / mass
+  recovery). A draft is re-flagged when it becomes ready for review.
+- blank `pr` plus `batch` `k/n` → re-flag only the open, non-draft PRs whose
+  number mod n is k−1. One job has 15 minutes, about 100 PRs, so split a large
+  backfill: `gh workflow run review-signal.yml -f batch=1/4`, then `2/4`, `3/4`
+  and `4/4`. A backfill also stops, failing with where it stopped, before the
+  job token's hourly API budget runs low; re-run after the reset it names.
 - a PR number → re-flag just that one
 
 Use it if a PR's `review-required` ever gets stuck (e.g. the workflow was added

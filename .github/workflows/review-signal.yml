@@ -76,12 +76,17 @@ on:
   # Manual re-trigger. The App only auto-runs on the PR events above, so if it
   # ever misses one (e.g. the workflow was added after a PR was opened, leaving
   # the required "review-required" check stuck as Expected/pending), this is the
-  # recovery lever. Leave `pr` blank to re-flag EVERY open PR (backfill); pass a
-  # number to re-flag just that one.
+  # recovery lever. Leave `pr` blank to re-flag EVERY open, non-draft PR
+  # (backfill); pass a number to re-flag just that one. A backfill too large for
+  # one job splits with `batch` k/n (PRs whose number mod n is k-1).
   workflow_dispatch:
     inputs:
       pr:
-        description: 'PR number to re-flag (blank = all open PRs)'
+        description: 'PR number to re-flag (blank = every open, non-draft PR)'
+        required: false
+        type: string
+      batch:
+        description: 'With a blank pr: re-flag only PRs whose number mod n is k-1 (k/n, e.g. 2/4)'
         required: false
         type: string
 
@@ -143,22 +148,66 @@ jobs:
                 });
                 prs = [data];
               } else {
-                prs = await github.paginate(github.rest.pulls.list, {
+                const open = await github.paginate(github.rest.pulls.list, {
                   owner, repo, state: 'open', per_page: 100,
                 });
-                core.info(`Backfill: re-flagging ${prs.length} open PR(s).`);
+                // A draft is re-flagged when it becomes ready
+                // (ready_for_review), so a backfill skips it.
+                const ready = open.filter(listed => !listed.draft);
+                // A shard keys on the PR number, so it stays the same set
+                // while PRs open and close between dispatches.
+                const batch = (context.payload.inputs.batch || '').trim();
+                prs = ready;
+                if (batch) {
+                  const match = /^(\d+)\/(\d+)$/.exec(batch);
+                  const [k, n] = match ? [Number(match[1]), Number(match[2])] : [0, 0];
+                  if (!(n >= 1 && k >= 1 && k <= n)) {
+                    core.setFailed(`batch must be k/n with 1 <= k <= n; got "${batch}".`);
+                    return;
+                  }
+                  prs = ready.filter(listed => listed.number % n === k - 1);
+                }
+                core.info(
+                  `Backfill${batch ? ` ${batch}` : ''}: re-flagging ${prs.length} of ` +
+                    `${open.length} open PR(s); ${open.length - ready.length} draft(s) skipped.`,
+                );
               }
             } else {
               prs = [context.payload.pull_request];
             }
 
             let hadError = false;
-            for (const pr of prs) {
+            const isBackfill = prs.length > 1 ||
+              (context.eventName === 'workflow_dispatch' &&
+                !(context.payload.inputs.pr || '').trim());
+            for (const [index, listed] of prs.entries()) {
+              if (isBackfill) {
+                // A backfill makes several calls per PR on the job token's
+                // hourly budget. Stop with headroom left for PR events
+                // (reading /rate_limit costs nothing).
+                const {data: limits} = await github.rest.rateLimit.get();
+                const {remaining, limit, reset} = limits.resources.core;
+                if (remaining < Math.min(1500, Math.floor(limit / 3))) {
+                  core.setFailed(
+                    `Backfill stopped before PR #${listed.number} (${prs.length - index} left): ` +
+                      `${remaining} of ${limit} API requests remain until ` +
+                      `${new Date(reset * 1000).toISOString()}; re-run after the reset.`,
+                  );
+                  return;
+                }
+              }
               try {
+                // The list endpoint omits changed_files, which the file check
+                // below needs, so a backfill reads each PR in full.
+                const pr = listed.changed_files == null
+                  ? (await github.rest.pulls.get({
+                      owner, repo, pull_number: listed.number,
+                    })).data
+                  : listed;
                 await flagOne(pr);
               } catch (e) {
                 hadError = true;
-                core.warning(`Failed to flag PR #${pr.number}: ${e.message}`);
+                core.warning(`Failed to flag PR #${listed.number}: ${e.message}`);
               }
             }
             if (hadError) core.setFailed('One or more PRs failed to flag; see warnings.');

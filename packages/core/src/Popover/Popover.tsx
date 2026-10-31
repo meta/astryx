@@ -446,6 +446,15 @@ const styles = stylex.create({
   },
 });
 
+/**
+ * The window that holds `element`: the page's own, or a second document's (a
+ * same-origin iframe, a Document Picture-in-Picture window) when the Popover
+ * renders there.
+ */
+function windowOf(element: Element | null): Window & typeof globalThis {
+  return element?.ownerDocument.defaultView ?? window;
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -512,7 +521,7 @@ export function Popover({
 }: PopoverProps): ReactElement {
   const t = useTranslator();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  const measurementFrameRef = useRef<number | null>(null);
+  const measurementFrameRef = useRef<{id: number; view: Window} | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
   const isControlled = isOpen !== undefined;
   // The bottom-sheet presentation: the surface it resolves to now, and
@@ -711,11 +720,16 @@ export function Popover({
     if (measurementFrameRef.current != null) {
       return;
     }
-    measurementFrameRef.current = window.requestAnimationFrame(() => {
-      measurementFrameRef.current = null;
-      measureOverflow();
-    });
-  }, [measureOverflow]);
+    // The surface's own window paints it, so its frame runs the measurement.
+    const view = windowOf(popover.contentRef.current);
+    measurementFrameRef.current = {
+      view,
+      id: view.requestAnimationFrame(() => {
+        measurementFrameRef.current = null;
+        measureOverflow();
+      }),
+    };
+  }, [measureOverflow, popover.contentRef]);
 
   useIsomorphicLayoutEffect(() => {
     if (!popover.isOpen) {
@@ -725,11 +739,16 @@ export function Popover({
     if (!surface) {
       return;
     }
+    // Observe from the surface's own window. A Popover rendered into a second
+    // document resizes with that document's window, and a ResizeObserver the
+    // page created checks a box in a Picture-in-Picture window only while the
+    // page itself renders frames.
+    const view = windowOf(surface);
     measureOverflow();
     const resizeObserver =
-      typeof ResizeObserver === 'undefined'
+      typeof view.ResizeObserver === 'undefined'
         ? null
-        : new ResizeObserver(scheduleOverflowMeasurement);
+        : new view.ResizeObserver(scheduleOverflowMeasurement);
     const mutationObserver =
       typeof MutationObserver === 'undefined'
         ? null
@@ -741,8 +760,8 @@ export function Popover({
       subtree: true,
     });
     surface.addEventListener('load', scheduleOverflowMeasurement, true);
-    window.addEventListener('resize', scheduleOverflowMeasurement);
-    window.visualViewport?.addEventListener(
+    view.addEventListener('resize', scheduleOverflowMeasurement);
+    view.visualViewport?.addEventListener(
       'resize',
       scheduleOverflowMeasurement,
     );
@@ -750,13 +769,14 @@ export function Popover({
       resizeObserver?.disconnect();
       mutationObserver?.disconnect();
       surface.removeEventListener('load', scheduleOverflowMeasurement, true);
-      window.removeEventListener('resize', scheduleOverflowMeasurement);
-      window.visualViewport?.removeEventListener(
+      view.removeEventListener('resize', scheduleOverflowMeasurement);
+      view.visualViewport?.removeEventListener(
         'resize',
         scheduleOverflowMeasurement,
       );
-      if (measurementFrameRef.current != null) {
-        window.cancelAnimationFrame(measurementFrameRef.current);
+      const frame = measurementFrameRef.current;
+      if (frame != null) {
+        frame.view.cancelAnimationFrame(frame.id);
         measurementFrameRef.current = null;
       }
     };

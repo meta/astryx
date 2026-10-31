@@ -77,6 +77,11 @@ const command = [
   ...user,
   '--network=host',
   '--ipc=host',
+  // Podman caps a container at 2,048 processes, threads included. Every
+  // worker's browser and the tests' own child processes run in this one, and
+  // at eight workers WebKit could not start a page's process: `newPage` (a
+  // frame decode's scratch page) waited out the test.
+  '--pids-limit=-1',
   '-v',
   `${root}:${root}`,
   '-w',

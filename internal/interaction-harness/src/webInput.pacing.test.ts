@@ -3,19 +3,21 @@
 /**
  * @file webInput.pacing.test.ts
  * @input webInput.ts's wheel pacing error and re-take
- * @output Unit cases: a wheel burst's gaps past its bound are the page's when
- *   its own handling of the step before caused them, and the dispatch's
- *   otherwise; each error names its gaps; and a proof is re-taken once, only
- *   on a dispatch stall, with the re-take listed.
+ * @output Unit cases: a wheel burst's steps arrive when the page received
+ *   them in WebKit and at their stamps in Chromium; its gaps past its bound
+ *   are the page's when its own handling of the step before caused them, and
+ *   the dispatch's otherwise; each error names its gaps; and a proof is
+ *   re-taken once, only on a dispatch stall, with the re-take listed.
  * @position Node unit tests beside the harness's browser self-tests.
  *
- * SYNC: When modified, update webInput.ts (wheelGapCauses, WheelPacingError,
- *   WheelPageStallError, retakeOnWheelPacing).
+ * SYNC: When modified, update webInput.ts (wheelArrivals, wheelGapCauses,
+ *   WheelPacingError, WheelPageStallError, retakeOnWheelPacing).
  */
 
 import {describe, expect, it} from 'vitest';
 import {
   retakeOnWheelPacing,
+  wheelArrivals,
   wheelGapCauses,
   WheelPacingError,
   WheelPageStallError,
@@ -28,6 +30,34 @@ describe('WheelPacingError', () => {
     expect(error.message).toMatch(/a gap of 141 ms, over its 100 ms/);
     expect(error.message).toMatch(/gaps 16, 16, 141, 0, 16 ms/);
     expect(error.receivedGapsMs).toEqual([16, 16, 141, 0, 16]);
+  });
+});
+
+describe('wheelArrivals', () => {
+  it('takes a WebKit step at when the page received it, and a Chromium step at its stamp', () => {
+    // WebKit held three steps while the listener blocked for 150 ms and
+    // coalesced them into one, stamped like the step before it.
+    expect(wheelArrivals('webkit', [133, 133], [134, 284])).toEqual([134, 284]);
+    expect(wheelArrivals('chromium', [11, 27, 59], [34, 185, 336])).toEqual([
+      11, 27, 59,
+    ]);
+  });
+
+  it('gives the page the gap a WebKit step coalesced behind its listener waited, though its stamp did not move', () => {
+    const stamps = [133, 133];
+    const receivedAt = [134, 284];
+    const handledAt = [284, 434];
+    expect(
+      wheelGapCauses(
+        'webkit',
+        wheelArrivals('webkit', stamps, receivedAt),
+        handledAt,
+        100,
+      ),
+    ).toEqual({
+      pageStalls: [{gapMs: 150, handlingMs: 150}],
+      dispatchStalls: [],
+    });
   });
 });
 

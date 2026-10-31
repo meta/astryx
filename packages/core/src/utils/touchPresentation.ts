@@ -4,7 +4,8 @@
 
 /**
  * @file touchPresentation.ts
- * @input Uses the SSR-safe useMediaQuery hook and window.matchMedia
+ * @input Uses the SSR-safe useMediaQuery hook, window.matchMedia, and
+ *   TOUCH_QUERY from touchQueries.ts (which loads without React or the theme)
  * @output The one definition of when a component presents itself the touch
  *   way: TOUCH_QUERY, COMPACT_QUERY, COMPACT_TOUCH_QUERY, the iOS style gate
  *   (IOS_SUPPORTS_QUERY and its StyleX keys); the hook useTouchPresentation;
@@ -28,8 +29,8 @@
  *   drilled-in sub-menu in place of a flyout) asks for both.
  *
  * Touch behaviour is one model on every touch device, iOS and Android alike;
- * nothing here chooses a platform. Touch motion reads the theme's motion
- * roles, whose defaults are the measured table.
+ * nothing here chooses a platform. Touch motion plays the measured table,
+ * through the internal motion roles where a value is one.
  *
  * CSS first: a style that changes with these conditions writes the same
  * query as a StyleX media key, spelled exactly as here (`@media` followed by
@@ -46,9 +47,11 @@
  * test keeps core's compact-touch keys identical to COMPACT_TOUCH_QUERY and
  * every touch-callout key spelled and nested as above. The iOS style gate
  * is only for a style iOS WebKit itself requires (core's 16px input floor);
- * it never selects a behaviour. The keys are literal because the Astryx
- * StyleX build does not resolve a key shared across files through
- * `defineConsts`. The hook is for behaviour. It answers the server default
+ * it never selects a behaviour. Core spells the keys literally: an imported
+ * `defineConsts` key compiles to a different StyleX priority than the same
+ * literal, which would reorder the cascade. `touchKeys`
+ * (touchPresentation.stylex.ts, internal to core) holds the same keys, and a
+ * test keeps every literal equal to them. The hook is for behaviour. It answers the server default
  * (not touch, not compact) until hydrated unless the caller passes a server
  * hint, and follows the pointer and size when they change (a tablet docking
  * a mouse).
@@ -65,9 +68,11 @@ import {
   type CompactDefinition,
 } from '../theme/themeAdaptations';
 import {useThemeDefinition} from '../theme/useTheme';
+import {TOUCH_QUERY} from './touchQueries';
 
-/** The primary pointer is coarse: touch behaviours. */
-export const TOUCH_QUERY = '(pointer: coarse)';
+// The primary pointer is coarse: touch behaviours. Defined in touchQueries.ts,
+// which loads without React or the theme.
+export {TOUCH_QUERY};
 
 /**
  * The viewport is compact at the default width points: layout behaviours

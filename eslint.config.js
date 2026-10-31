@@ -3,11 +3,14 @@
 import {defineConfig} from 'eslint/config';
 import {includeIgnoreFile} from '@eslint/compat';
 import path from 'node:path';
+import {readFileSync} from 'node:fs';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import eslintReact from '@eslint-react/eslint-plugin';
 import reactCompiler from 'eslint-plugin-react-compiler';
 import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
+import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
+import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
 
 /* global process */
 
@@ -30,6 +33,31 @@ const astryxConfig = isStrictMode
   ? astryxPlugin.configs.strict
   : astryxPlugin.configs.recommended;
 const reactSeverity = isStrictMode ? 'error' : 'warn';
+
+// Barrel imports that existed when `@astryx/no-internal-barrel-import` arrived,
+// by repo-relative file. The list only shrinks.
+const internalBarrelBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Guarded values whose bare nullish JSX guard or hand-written isRenderable
+// check predates making `@astryx/no-nullish-jsx-guard` fail strict lint, by
+// repo-relative file, once per check. The list only shrinks.
+const nullishGuardBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-nullish-jsx-guard.baseline.json',
+    ),
+    'utf8',
+  ),
+);
 
 // The internal plugin is plain untyped JS (kept out of the lint/type surface),
 // so its inferred shape doesn't satisfy ESLint's strict `Plugin` type. One
@@ -846,6 +874,46 @@ export default defineConfig(
       // Tests build fixtures directly against zod and Commander.
       'no-restricted-imports': 'off',
       'no-restricted-syntax': 'off',
+    },
+  },
+  // Inside a package's own shipped source, import the module that defines a
+  // name, not a folder's index (a barrel): a lazily imported module that goes
+  // through a barrel pulls every sibling export into its graph, which broke
+  // the single-file bundle. Public consumers keep importing from the package
+  // entry. The barrel imports that predate the rule are listed in the
+  // baseline and stay allowed until a codemod removes them; anything new is
+  // reported (an error in strict mode, so a pull request that adds one fails
+  // lint, while main stays green). Type-only imports are erased and allowed.
+  {
+    files: internalBarrelScope.files,
+    ignores: internalBarrelScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-internal-barrel-import': [
+        reactSeverity,
+        {baseline: internalBarrelBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A slot's presence is decided by `isRenderable`, never a bare `!= null`
+  // guard or a hand-written copy of its checks. The checks that predate this
+  // block are listed in the baseline, once per check of each value, and that
+  // many stay allowed until migrated; one more is reported (an error in
+  // strict mode, so a pull request that adds one fails lint, while main stays
+  // green).
+  {
+    files: nullishGuardScope.files,
+    ignores: nullishGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-nullish-jsx-guard': [
+        reactSeverity,
+        {baseline: nullishGuardBaseline, root: import.meta.dirname},
+      ],
     },
   },
   // richtext — the pre-existing backlog, held at `warn` while it is worked
