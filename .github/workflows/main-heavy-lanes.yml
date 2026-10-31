@@ -1,16 +1,17 @@
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 
-# Main's scheduled checks (spec:AST-030 FR12, FR21, DEC-11, DEC-15). This
-# workflow dispatches, for main's tip and about once an hour each:
+# Main's scheduled checks (spec:AST-030 FR12, FR21, FR24, DEC-11, DEC-15,
+# DEC-19). This workflow dispatches, for main's tip:
 #
-# - ci.yml's canonical release-check: main's visual/a11y/RTL result, fixed
-#   forward on failure (DEC-7, DEC-11);
-# - deploy.yml's full unit run: every unit suite of every package, on that
-#   exact commit, never cancelled by a push (FR21).
+# - ci.yml's canonical release-check, about every three hours and once each
+#   weekday at about 06:30 Pacific, before the 08:00 release cut: main's
+#   visual/a11y/RTL result, fixed forward on failure (DEC-7, FR24);
+# - deploy.yml's full unit run, about hourly: every unit suite of every
+#   package, on that exact commit, never cancelled by a push (FR21).
 #
 # A check covers every merge up to its commit. A push dispatches at once when
-# none started in the last 55 minutes, and a quarter-hourly schedule picks up
-# the tip a burst of merges left unchecked. A release-check always brings a
+# its lane's window has passed, and a quarter-hourly schedule picks up the tip
+# a burst of merges left unchecked. A release-check always brings a
 # unit run of the same commit, so a release cut has both. A unit run that did
 # not complete is run again at once, and the guardian's issue says so. Main's
 # fast checks (deploy.yml typecheck, build and export sync) still run for
@@ -47,9 +48,10 @@ jobs:
           SHA: ${{ github.sha }}
         with:
           script: |
-            // A check starts at most once in this window; the schedule's
+            // Each lane starts at most once in its window; the schedule's
             // quarter-hour cadence adds up to 15 minutes to it.
-            const WINDOW_MINUTES = 55;
+            const HEAVY_WINDOW_MINUTES = 175;
+            const UNIT_WINDOW_MINUTES = 55;
             const BOT = 'github-actions[bot]';
             const {data: branch} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
             const tip = branch.commit.sha;
@@ -74,7 +76,7 @@ jobs:
             // commit, so its result is always that commit's.
             const askedFor = run => /^Release check ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1];
             const covers = run => run.head_sha === tip && (askedFor(run) ?? tip) === tip;
-            const due = (runs, label) => {
+            const due = (runs, label, WINDOW_MINUTES) => {
               const counted = runs.filter(run => run.conclusion !== 'cancelled');
               if (counted.some(covers)) {
                 core.notice(`main's tip ${short} already has a ${label}.`);
@@ -90,8 +92,38 @@ jobs:
             };
             const checks = await dispatched('ci.yml');
             const units = await dispatched('deploy.yml');
-            const heavy = due(checks, 'release-check');
-            let unit = due(units, 'full unit run');
+            let heavy = due(checks, 'release-check', HEAVY_WINDOW_MINUTES);
+            let unit = due(units, 'full unit run', UNIT_WINDOW_MINUTES);
+
+            // The weekday release cut is at 08:00 Pacific: one release-check
+            // starts at about 06:30, whatever the window, so it finishes about
+            // an hour before the cut (FR24). It is dispatched once a day, for
+            // the tip unless the tip already has a check.
+            const pacific = Object.fromEntries(
+              new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Los_Angeles', weekday: 'short', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
+                year: 'numeric', month: '2-digit', day: '2-digit',
+              }).formatToParts(new Date(Date.now())).map(part => [part.type, part.value]),
+            );
+            const minuteOfDay = Number(pacific.hour) * 60 + Number(pacific.minute);
+            const weekday = !['Sat', 'Sun'].includes(pacific.weekday);
+            if (!heavy && weekday && minuteOfDay >= 6 * 60 + 30 && minuteOfDay < 7 * 60 + 30) {
+              const today = `${pacific.year}-${pacific.month}-${pacific.day}`;
+              const startedToday = checks.some(run => {
+                if (run.conclusion === 'cancelled') return false;
+                const parts = Object.fromEntries(
+                  new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'America/Los_Angeles', hour: 'numeric', minute: 'numeric', hourCycle: 'h23',
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                  }).formatToParts(new Date(Date.parse(run.created_at))).map(part => [part.type, part.value]),
+                );
+                return `${parts.year}-${parts.month}-${parts.day}` === today && Number(parts.hour) * 60 + Number(parts.minute) >= 6 * 60 + 30;
+              });
+              if (!startedToday && !checks.some(run => run.conclusion !== 'cancelled' && covers(run))) {
+                core.notice(`The pre-cut release-check runs now for ${short}.`);
+                heavy = true;
+              }
+            }
 
             // A full unit run that did not complete (FR21): run the next one at
             // once and tell the guardian. A newer run, such as a recheck that
