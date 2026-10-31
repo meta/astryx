@@ -59,7 +59,9 @@ deciding_specs:
       "INV8",
       "INV9",
       "INV12",
-      "INV16"
+      "INV16",
+      "INV24",
+      "INV25"
     ]
   }
 }
@@ -247,6 +249,27 @@ guidance owns the process used to propose and test APIs.
   among them Theme, MediaTheme, `reset.css`, `generateThemeRules.ts`, the CLI
   theme build, AspectRatio, the Chat composer, the press and menu-press hooks,
   and the edge-compensation styles, and the lint rule allows their names.
+- **INV24 — Each published package's public surface has a generated API
+  report.** `pnpm api:report` generates one committed report per published
+  package from its built declarations and stylesheet, with a section for each
+  entry point. A report lists exports, component props with their types, hook
+  signatures, supporting types, public CSS custom properties and theme targets,
+  and the public `data-astryx-*` attributes INV23 names. A reachable member tagged internal
+  appears (INV12); Core's `./internal/*` subpaths and unpublished packages,
+  including Lab, do not. A member inside a canonical experimental boundary
+  appears marked experimental (`spec:AST-017` FR21). The pull-request report
+  lists the API changes between the merge base's report and one generated from
+  the head's build: added, changed, and removed rows, each with its signature
+  and a usage example, and flags a committed report that differs from the head's
+  build as stale. The report and its changes are evidence: they fail no check
+  and decide no acceptance (INV13).
+- **INV25 — Undeclared public API goes to a human.** Review compares each added
+  or changed row of a pull request's API changes with current records. A row
+  that a record current at the merge base, or a record change in the same pull
+  request, decides needs no further step. A row that no current record decides,
+  including a reachable member tagged internal, goes to human review with that
+  row listed, for an owner of this record, as `architecture:knowledge-contracts`
+  change coupling step 6 describes. A removed or renamed row follows INV9.
 
 This record applies to stable public packages, and INV23 also applies to Lab
 source. Lab components are not stable public promises until promotion.
@@ -258,9 +281,12 @@ source. Lab components are not stable public promises until promotion.
   intentional observable contract triggers public-API review. A top-level export
   need not change for a reachable supporting contract to change.
 - Each review compares declarations and reachable exports from merge-base to head
-  and from current main to the synthetic merge. The generated surface manifest
-  inventories evidence and maps each row to its canonical component, family,
-  architecture, or system owner; it does not decide acceptance.
+  and from current main to the synthetic merge. The API changes from the
+  generated reports (INV24) inventory that evidence and map each row to its
+  canonical component, family, architecture, or system owner; they do not decide
+  acceptance.
+- A pull request that changes a published package's public surface regenerates
+  its API reports with `pnpm api:report`; a stale report is flagged, not failed.
 - After the generated surface inventory identifies the exact API and behavior
   delta and its canonical owner, route it under
   `architecture:knowledge-contracts`. This record does not redefine review results
@@ -339,6 +365,8 @@ copy the component matrix.
 | INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV22                   | Public-API review of each public gesture, press, drag, or motion hook against its `create…` factory                      | A public interaction hook with no public factory taking the same options and returning `destroy()`, outside the listed exemptions                                                                                                                                                                                                                                                                                                                                                       |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
+| INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged; the check fails a pull request                                                                                                                                                                                                       |
+| INV25                   | Public-API review routing against the pull request's API changes                                                         | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Known verification gaps:
@@ -354,10 +382,11 @@ Known verification gaps:
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
-- No checked-in generated manifest currently proves the complete reachable public
-  delta across supporting types, context members, hook returns, utility signatures,
-  defaults, CLI schemas, and observable behavior for both the branch and synthetic
-  merge. Reviews must build that inventory explicitly until enforcement exists.
+- INV24: `pnpm api:report` and the committed reports do not exist yet, so
+  reviews build the reachable public inventory explicitly. The reports cover
+  declarations, CSS custom properties, theme targets, and public attributes;
+  context-member behavior, undeclared defaults, CLI schemas, and observable
+  behavior for both the branch and synthetic merge still need explicit review.
 - INV18: shipped content slots that their anatomy does not name yet include
   PowerSearch's `startIcon` and `endContent`, SideNav's `topContent`,
   `footer`, and `footerIcons`, Tokenizer's `startIcon`, DropdownMenu's
