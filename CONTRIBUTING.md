@@ -386,7 +386,7 @@ Two repo-side rules worth restating here:
   one is a review reject.
 - CI is the enforcement layer, not a replacement for the checklist: the
   `pr-a11y` job in `ci.yml` runs an axe audit after merges to `main` and
-  before each release (and on a pull request labelled `ci:heavy-lanes`), at
+  before each release (and on a pull request labelled `ci:run-a11y`), at
   full scope across the component surface, and the `useAnnounce` lint rule
   rejects hand-wired `aria-live` regions. axe only
   catches static, DOM-level issues — keyboard behavior, focus management, and
@@ -533,7 +533,7 @@ any other value:
 ```
 
 These routes apply when a pull request runs the accessibility owner, which it
-does only with the `ci:heavy-lanes` label; `main` and release checks run every
+does only with the `ci:run-a11y` label; `main` and release checks run every
 spec. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
 from your branch would run (component tokens need CI's `analysis.json`; without
 it the runner says so and leaves those specs out). A spec writes its receipts under
@@ -548,7 +548,7 @@ component set, or has no audit spec has an entry in
 ### Accessibility audits
 
 Merges to `main` (checked at the newest commit of a burst), every release
-check, and a PR labelled `ci:heavy-lanes`
+check, and a PR labelled `ci:run-a11y`
 that touches components run an axe-core audit (the `pr-a11y` CI job); on a PR
 it covers the Storybook stories of the changed components. The job **fails** when it
 finds a violation that is not listed in the checked-in baseline,
@@ -924,10 +924,14 @@ Storybook story for anything you added or altered.
   push, or when the maintainer closes and reopens the pull request; CI then
   runs on each push while the label stays. Until then the required checks fail
   with "Waiting for a maintainer's ci:run label".
-- **`ci:heavy-lanes` opts a pull request into the visual, accessibility and
-  RTL suites**, which otherwise run on `main` after it merges. A maintainer
-  applies it when a change needs that evidence before merging; like `ci:run`,
-  it takes effect on the next push or a close and reopen.
+- **`ci:run-visual`, `ci:run-a11y` and `ci:run-rtl` each opt a pull request
+  into one heavy suite** (visual regression, accessibility, RTL), which
+  otherwise runs on `main` after the pull request merges. Someone with write
+  access applies the label for the evidence a change needs before merging; a
+  label applied without write access runs nothing. Like `ci:run`, a label
+  takes effect on the next push or a close and reopen, and removing it stops
+  that suite from the next run. The pull-request comment names the label for
+  each suite that did not run.
 - **Pull requests from a branch in this repository run CI without the label**,
   since pushing a branch here needs write access. Maintainers who work from a
   fork either push their branches here or apply `ci:run` themselves.

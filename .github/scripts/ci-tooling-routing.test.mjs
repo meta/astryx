@@ -197,6 +197,7 @@ describe('Node-tooling CI routing', () => {
       'test-build',
       'test-native-swift',
       'pr-interaction',
+      'pr-interaction-webkit',
     ]);
     expect(ci.jobs.build.needs).toEqual(['build-storybook', 'typecheck']);
     const testJoin = step(ci.jobs.test, 'Require expected test-owner outcomes');
@@ -221,6 +222,7 @@ describe('Node-tooling CI routing', () => {
       TEST_BUILD_RESULT: '${{ needs.test-build.result }}',
       TEST_NATIVE_SWIFT_RESULT: '${{ needs.test-native-swift.result }}',
       PR_INTERACTION_RESULT: '${{ needs.pr-interaction.result }}',
+      PR_INTERACTION_WEBKIT_RESULT: '${{ needs.pr-interaction-webkit.result }}',
     });
     const buildJoin = step(
       ci.jobs.build,

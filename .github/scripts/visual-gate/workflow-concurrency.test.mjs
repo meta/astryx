@@ -91,7 +91,7 @@ describe('PR report and deployment workflow contracts', () => {
       value.indexOf('  pr-rtl-shard:'),
     );
     expect(visual).toContain(
-      '[build-storybook, maintenance-request, visual-scout]',
+      '[build-storybook, maintenance-request, visual-scout, run-labels]',
     );
     expect(visual).toContain(
       'name: storybook-${{ needs.build-storybook.outputs.short_hash }}',
