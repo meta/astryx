@@ -87,6 +87,12 @@
  *   input selectable); restored when the contact ends. A finger or a pen
  *   takes it under any primary pointer; a mouse never does (`spec:AST-017`
  *   FR59).
+ * - A mouse or a pen drag that a recognizer claims takes no new text
+ *   selection and never clears the page's (`spec:AST-094` FR41): the
+ *   claiming elements and the document refuse one until a task after the
+ *   lift, and the selection the press began with is put back
+ *   (lockDragSelection). A drag that starts on selectable text is not
+ *   claimed (the arena's `refusesClaim`): it selects text.
  * - Each element with a recognizer that can claim a touch while it moves (a
  *   pan, a swipe, a long press that then drags, a pinch) gets a
  *   NON-passive `touchmove` listener that cancels the event only while a
@@ -171,7 +177,13 @@ import {
 } from '../utils/clickGuard';
 import {subscribeInput} from '../utils/inputStream';
 import {isPrimaryClick} from '../utils/primaryClick';
-import {locksSelectionFor} from '../utils/selectionLock';
+import {
+  type DragSelectionReleaseOptions,
+  lockDragSelection,
+  locksSelectionFor,
+  selectionRangesOf,
+  startsOnSelectableText,
+} from '../utils/selectionLock';
 import {isCoarsePointer, watchCoarsePointer} from '../utils/coarsePointer';
 import {gestureHosts} from './hostRegistry';
 
@@ -416,7 +428,28 @@ export class GestureHost {
   /** Cancels the scheduled next-frame read (readCallerTouchActionInNextFrame). */
   private cancelCallerRead: (() => void) | null = null;
   /** The selection lock each contact holds, by host contact id. */
-  private readonly lockedBy = new Map<number, () => void>();
+  private readonly lockedBy = new Map<
+    number,
+    (options?: DragSelectionReleaseOptions) => void
+  >();
+  /**
+   * The page's selection when each mouse or pen press began: a drag a
+   * recognizer claims keeps it (`spec:AST-094` FR41).
+   */
+  private readonly pressSelections = new Map<number, ReadonlyArray<Range>>();
+  /**
+   * Mouse and pen contacts that began on selectable text: once one moves, it
+   * is a drag the browser keeps for a selection, and no recognizer claims it
+   * (FR41).
+   */
+  private readonly selectingContacts = new Set<number>();
+  /**
+   * Drag selection holds until their last task ends, a task after their lift
+   * (lockDragSelection); the last detach ends them at once.
+   */
+  private readonly dragHolds = new Set<
+    (options?: DragSelectionReleaseOptions) => void
+  >();
   private readonly presentedHitTesting: 'auto' | 'always' | 'never';
   /**
    * Contacts sent to what is drawn instead of what the engine hit, by host
@@ -587,6 +620,13 @@ export class GestureHost {
       // tap) ends here: an armed press stops listening (FR24).
       onIdle: () => this.releaseArmedPress(),
       onTransition: options.onTransition,
+      // A mouse or pen drag a recognizer claims takes no new selection and
+      // keeps the page's; one that starts on selectable text is the
+      // browser's, and selects text (FR41).
+      onClaim: ids => this.lockClaimedDrags(ids),
+      refusesClaim: touch =>
+        this.selectingContacts.has(touch.id) &&
+        (touch.x !== touch.startX || touch.y !== touch.startY),
     });
     const view = doc.defaultView;
     // A test may pass its own read; otherwise the one coarse-pointer gate,
@@ -1510,6 +1550,13 @@ export class GestureHost {
       }
       this.ownScrollFrames.clear();
       this.ownedScrolls.clear();
+      // A drag's hold whose press lifted in this task ends now, not a task
+      // later: nothing is attached to meet its mouseup or click.
+      for (const release of [...this.dragHolds]) {
+        release({isCancel: true});
+      }
+      this.pressSelections.clear();
+      this.selectingContacts.clear();
     });
   }
 
@@ -1827,10 +1874,81 @@ export class GestureHost {
     }
   }
 
-  /** Undo `lockSelection` for a contact that ended; idempotent. */
-  private unlockSelection(id: number): void {
-    this.lockedBy.get(id)?.();
+  /**
+   * A mouse or a pen that a recognizer claims (a pan's drag, or a press a
+   * group claims at its own pointerdown) takes no new text selection while
+   * it is down and never clears the page's (`spec:AST-094` FR41): the
+   * claiming recognizers' elements refuse one, and whatever replaced the
+   * selection the page had when the press began (the press's own collapse,
+   * or a selection the drag made before its claim) is put back. A drag that
+   * starts on selectable text never gets here: no recognizer claims it
+   * (`selectingContacts`). A tap claims only at its lift, so a click keeps
+   * the selection it made. A finger keeps the touch-down lock alone.
+   */
+  private lockClaimedDrags(ids: ReadonlyArray<number>): void {
+    for (const id of ids) {
+      if (this.lockedBy.has(id)) {
+        continue;
+      }
+      const touch = this.arena.touches.find(each => each.id === id);
+      if (touch == null || touch.pointerType === 'touch') {
+        continue;
+      }
+      const elements = new Set<Element>();
+      for (const recognizer of this.arena.participantsOf(id)) {
+        if (
+          (recognizer.state === 'began' || recognizer.state === 'changed') &&
+          recognizer.view instanceof Element
+        ) {
+          elements.add(recognizer.view);
+        }
+      }
+      if (elements.size === 0) {
+        continue;
+      }
+      const release = lockDragSelection(
+        elements,
+        this.doc.defaultView,
+        this.pressSelections.get(id) ?? [],
+        () => {
+          this.dragHolds.delete(release);
+        },
+      );
+      this.dragHolds.add(release);
+      this.lockedBy.set(id, release);
+    }
+  }
+
+  /**
+   * At a mouse or pen press, mark one that lands on selectable text: once it
+   * moves, it is the browser's drag, and selects text (`spec:AST-094` FR41).
+   * Text whose hold does something is locked at this press already
+   * (lockSelection), so it is not selectable text.
+   */
+  private noteSelectingPress(
+    id: number,
+    x: number,
+    y: number,
+    target: EventTarget | null,
+  ): void {
+    if (
+      !this.lockedBy.has(id) &&
+      startsOnSelectableText(this.doc, x, y, target)
+    ) {
+      this.selectingContacts.add(id);
+    }
+  }
+
+  /**
+   * Undo a contact's selection lock, at once for a cancel, and forget its
+   * press's selection; idempotent. A drag's hold keeps its last task after a
+   * lift (lockDragSelection).
+   */
+  private unlockSelection(id: number, isCancel = false): void {
+    this.lockedBy.get(id)?.({isCancel});
     this.lockedBy.delete(id);
+    this.pressSelections.delete(id);
+    this.selectingContacts.delete(id);
   }
 
   // --- Touch events ----------------------------------------------------------
@@ -2591,6 +2709,11 @@ export class GestureHost {
     if (target !== landed && target != null) {
       this.retargeted.set(id, {x: event.clientX, y: event.clientY, target});
     }
+    // Before the arena admits it: a press a group claims at its own
+    // pointerdown keeps the selection the page has now (FR41).
+    if (event.pointerType !== 'touch') {
+      this.pressSelections.set(id, selectionRangesOf(this.doc.defaultView));
+    }
     this.arena.began([
       {
         id,
@@ -2614,6 +2737,10 @@ export class GestureHost {
         this.arena.consumerOf(id) ?? null,
         consumerElement,
       );
+    }
+    if (event.pointerType !== 'touch') {
+      // The engine's own hit: the text its caret query and a drag select.
+      this.noteSelectingPress(id, event.clientX, event.clientY, landed);
     }
   };
 
@@ -2766,7 +2893,7 @@ export class GestureHost {
     const id = this.pointerIds.get(event.pointerId);
     if (id != null) {
       this.pointerIds.delete(event.pointerId);
-      this.unlockSelection(id);
+      this.unlockSelection(id, true);
       this.retargeted.delete(id);
       this.arena.cancelled([id], eventTime(event));
     }
@@ -3007,7 +3134,7 @@ export class GestureHost {
   private cancelEverything(time: number): void {
     const ids = [...this.pointerIds.values()];
     for (const id of ids) {
-      this.unlockSelection(id);
+      this.unlockSelection(id, true);
     }
     for (const identifier of [...this.touchIds.keys()]) {
       // The browser may keep the touch alive: its lift must not click.

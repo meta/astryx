@@ -100,6 +100,13 @@ export interface GestureArenaOptions {
    * listening now (`spec:AST-094` FR24).
    */
   onIdle?: () => void;
+  /**
+   * A contact the browser keeps for itself while it is down: no recognizer
+   * that claims touches recognizes with it before its lift (a mouse or pen
+   * drag that starts on selectable text selects text, `spec:AST-094` FR41).
+   * A recognition at the lift, such as a tap's, is unaffected.
+   */
+  refusesClaim?: (touch: GestureTouch) => boolean;
   /** Every recognizer transition, for debugging and tests. */
   onTransition?: (
     recognizer: GestureRecognizer,
@@ -552,7 +559,8 @@ export class GestureArena {
   ): void {
     if (
       !internals(recognizer).shouldBegin() ||
-      this.isVetoedByConsumer(recognizer)
+      this.isVetoedByConsumer(recognizer) ||
+      this.isRefusedByBrowser(recognizer)
     ) {
       this.fail(recognizer);
       return;
@@ -635,6 +643,23 @@ export class GestureArena {
   }
 
   /** UIControl's rule: a control may veto an overlapping ancestor recognizer. */
+  /**
+   * Whether a recognizer that claims touches would take a contact the
+   * browser keeps while it is down (`refusesClaim`).
+   */
+  private isRefusedByBrowser(recognizer: GestureRecognizer): boolean {
+    const refuses = this.options.refusesClaim;
+    if (refuses == null || !recognizer.claimsTouches) {
+      return false;
+    }
+    return recognizer.trackedTouches.some(
+      touch =>
+        touch.phase !== 'ended' &&
+        touch.phase !== 'cancelled' &&
+        refuses(touch),
+    );
+  }
+
   private isVetoedByConsumer(recognizer: GestureRecognizer): boolean {
     for (const id of internals(recognizer).seenTouchIds) {
       const consumer = this.records.get(id)?.consumer;
