@@ -220,14 +220,17 @@ authorize a redesign.
 | FR7      | `ChatMessageBubble.test.tsx` slot tests; the Chromium visible-state test's numeric alignment                    | zero; true; false; empty string; nullish              | A truthiness check loses zero's alignment or restores an empty wrapper.     | `audit:ChatMessageBubble/behavior`      |
 | FR8, AR2 | `ChatMessageBubble.test.tsx` "forwards the ref and neutral DOM props to the bubble root" and `data-testid` test | ref; DOM, data, and ARIA props                        | Dropped forwarding fails.                                                   | `audit:ChatMessageBubble/public-api`    |
 | AR3      | `ChatMessageBubble.a11y.chromium.spec.ts` "keeps long content inside a 320px fixture"                           | 320 CSS px                                            | Horizontal overflow fails.                                                  | `audit:ChatMessageBubble/accessibility` |
+| AR4      | `ChatMessageBubble.a11y.chromium.spec.ts` visible-state test's contrast assertion                               | light and dark                                        | Bubble text below 4.5:1 fails.                                              |
 
 Read from source, with no focused test yet:
 
+- FR1: rendering one root when `children` is `null`.
 - FR2: the `system` sender taking the non-user paint path.
-- FR3: the `spacious` inset.
+- FR3: the standalone `balanced` fallback, the compact radius, and the
+  `spacious` inset.
+- FR4: `ghost` removing the fill and block-axis padding.
 - FR8: `className`, `style`, and `xstyle` composition.
 - AR1: no role, tab stop, or name of the component's own.
-- AR4: rendered text contrast in light and dark.
 - PR1–PR2: no state or Effect, and no inspection of caller content.
 
 ## Decision log
