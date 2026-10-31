@@ -66,7 +66,7 @@ export const docs = {
       name: 'options.value',
       type: 'string',
       description:
-        'The selected value. Without search, opening by a press, Enter or Space highlights it, or the first option when nothing is selected; ArrowDown and ArrowUp open on the first and last option.',
+        'The selected value. Opening the list highlights it when it is enabled; otherwise ArrowUp opens on the last enabled option and ArrowDown, a press, Enter or Space on the first. A disabled option is never highlighted on opening, and with no enabled option nothing is.',
     },
     {
       name: 'options.onSelect',
@@ -84,7 +84,7 @@ export const docs = {
       name: 'options.hasSearch',
       type: 'boolean',
       description:
-        'Whether the list has its own search field. Space then types instead of picking, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the first and last option), and printable keys on the closed control go to `onSearchSeed`.',
+        'Whether the list has its own search field. Space then types instead of picking, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the selected or the first or last enabled option), and printable keys on the closed control go to `onSearchSeed`.',
       default: 'false',
     },
     {
@@ -105,7 +105,7 @@ export const docs = {
       name: 'highlightedIndex',
       type: 'number',
       description:
-        'Index of the active option, or -1 when none is active. With `hasSearch`, opening by a press or Enter does not set one, so it stays -1 after the hook itself closes the list; ArrowDown and ArrowUp still open on the first or last option. Render it as the active option and name it in `aria-activedescendant` only while it points at a rendered option.',
+        'Index of the active option, or -1 when none is active. With `hasSearch`, opening by a press or Enter does not set one, so it stays -1 after the hook itself closes the list; ArrowDown and ArrowUp still open on the selected or the first or last enabled option. Render it as the active option and name it in `aria-activedescendant` only while it points at a rendered option.',
     },
     {
       name: 'setHighlightedIndex',

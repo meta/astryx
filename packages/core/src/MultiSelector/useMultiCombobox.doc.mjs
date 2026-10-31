@@ -32,7 +32,7 @@ export const docs = {
       name: 'options.selectableItems',
       type: 'MultiSelectorOptionData[]',
       description:
-        'The options in the same order as they render. Options with `disabled` cannot be toggled and are skipped while moving through the open list; ArrowDown or ArrowUp that opens the list still lands on the first or last option.',
+        'The options in the same order as they render. Options with `disabled` cannot be toggled and are skipped while moving through the open list; ArrowDown that opens the list lands on the first enabled option and ArrowUp on the last, and nothing is highlighted when none is enabled.',
       required: true,
     },
     {
@@ -72,7 +72,7 @@ export const docs = {
       name: 'options.hasSearch',
       type: 'boolean',
       description:
-        'Whether the list has its own search field. Space then types instead of toggling, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the first and last option), Delete and Backspace edit the query, and type-to-select is off. Home and End still jump to the first and last option, so a search input that keeps them for the caret should stop them before this handler and rely on PageUp and PageDown.',
+        'Whether the list has its own search field. Space then types instead of toggling, opening by a press or Enter does not pre-highlight (ArrowDown and ArrowUp still open on the first and last enabled option), Delete and Backspace edit the query, and type-to-select is off. Home and End still jump to the first and last option, so a search input that keeps them for the caret should stop them before this handler and rely on PageUp and PageDown.',
       default: 'false',
     },
     {

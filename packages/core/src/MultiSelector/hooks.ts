@@ -129,6 +129,23 @@ export function useMultiCombobox({
       .filter(i => i >= 0);
   }, [selectableItems]);
 
+  /**
+   * The option the list highlights when it opens: the first enabled option
+   * (the last when opening with ArrowUp), and none when no option is enabled.
+   * A disabled option is never highlighted (component:Selector FR8).
+   */
+  const findOpeningIndex = useCallback(
+    (fromEnd: boolean) => {
+      const enabledIndices = getEnabledIndices();
+      return (
+        (fromEnd
+          ? enabledIndices[enabledIndices.length - 1]
+          : enabledIndices[0]) ?? -1
+      );
+    },
+    [getEnabledIndices],
+  );
+
   const closeAndReset = useCallback(() => {
     setHighlightedIndex(-1);
     onClose();
@@ -143,7 +160,7 @@ export function useMultiCombobox({
     } else {
       const didOpen = onOpen() !== false;
       if (didOpen && !hasSearch) {
-        setHighlightedIndex(0);
+        setHighlightedIndex(findOpeningIndex(false));
       }
     }
   }, [
@@ -153,6 +170,7 @@ export function useMultiCombobox({
     closeAndReset,
     hasSearch,
     setHighlightedIndex,
+    findOpeningIndex,
   ]);
 
   // The scroll effect lives here, the highlight owner, so the hover/keyboard
@@ -225,7 +243,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -241,7 +259,7 @@ export function useMultiCombobox({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(selectableItems.length - 1);
+              setHighlightedIndex(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -271,7 +289,7 @@ export function useMultiCombobox({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           }
           break;
@@ -372,6 +390,7 @@ export function useMultiCombobox({
       setHighlightedIndex,
       onToggle,
       getEnabledIndices,
+      findOpeningIndex,
       typeahead,
       hasSearch,
       onClear,

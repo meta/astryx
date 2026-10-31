@@ -294,6 +294,28 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     return selectableItems.findIndex(item => item.value === value);
   }, [selectableItems, value]);
 
+  /**
+   * The option the list highlights when it opens: the selected option, else
+   * the first enabled option (the last when opening with ArrowUp), and none
+   * when no option is enabled. A disabled option is never highlighted
+   * (component:Selector FR8).
+   */
+  const findOpeningIndex = useCallback(
+    (fromEnd: boolean) => {
+      const selectedIndex = findSelectedIndex();
+      if (selectedIndex >= 0 && !selectableItems[selectedIndex].disabled) {
+        return selectedIndex;
+      }
+      const enabledIndices = getEnabledIndices();
+      return (
+        (fromEnd
+          ? enabledIndices[enabledIndices.length - 1]
+          : enabledIndices[0]) ?? -1
+      );
+    },
+    [findSelectedIndex, getEnabledIndices, selectableItems],
+  );
+
   const closeAndReset = useCallback(() => {
     setHighlightedIndex(-1);
     onClose();
@@ -319,11 +341,10 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
     } else {
       const didOpen = onOpen() !== false;
       if (didOpen && !hasSearch) {
-        const selectedIndex = findSelectedIndex();
-        setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+        setHighlightedIndex(findOpeningIndex(false));
       }
     }
-  }, [isDisabled, isOpen, onOpen, closeAndReset, findSelectedIndex, hasSearch]);
+  }, [isDisabled, isOpen, onOpen, closeAndReset, findOpeningIndex, hasSearch]);
 
   // The scroll effect lives here, the highlight owner, so every consumer
   // (Selector, CommandPalette) shares one hover/keyboard split (#6077).
@@ -356,7 +377,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -372,7 +393,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           e.preventDefault();
           if (!isOpen) {
             if (onOpen() !== false) {
-              setHighlightedIndex(selectableItems.length - 1);
+              setHighlightedIndex(findOpeningIndex(true));
             }
           } else {
             const currentEnabledPos = enabledIndices.indexOf(highlightedIndex);
@@ -398,8 +419,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
           } else if (!isOpen) {
             const didOpen = onOpen() !== false;
             if (didOpen && !hasSearch) {
-              const selectedIndex = findSelectedIndex();
-              setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+              setHighlightedIndex(findOpeningIndex(false));
             }
           }
           break;
@@ -487,7 +507,7 @@ export function useCombobox<T extends ComboboxOption = SelectorOptionData>({
       selectableItems,
       highlightedIndex,
       selectItem,
-      findSelectedIndex,
+      findOpeningIndex,
       getEnabledIndices,
       hasSearch,
       onClear,
