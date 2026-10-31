@@ -31,7 +31,7 @@ export async function describeReport({github, context, report}) {
     '| --- | --- | ---: | ---: | ---: |',
     ...report.regressions.map(
       r =>
-        `| ${r.scene} | ${r.metric} | ${formatValue(r.value)} | ${formatValue(r.median)} | ${r.change == null ? 'new' : `+${Math.round(r.change * 100)}%`} |`,
+        `| ${r.scene} | ${r.metric} | ${formatValue(r.value)} | ${formatValue(r.median)} | ${r.change == null ? `+${formatValue(r.value - r.median)}` : `+${Math.round(r.change * 100)}%`} |`,
     ),
     '',
   ];

@@ -12,7 +12,7 @@
  *   record a DevTools performance profile, press Mount scene.
  */
 
-import {Suspense, useState} from 'react';
+import {Suspense, useEffect, useState} from 'react';
 import {useSearchParams} from 'react-router-dom';
 import {Button} from '@astryxdesign/core/Button';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
@@ -25,6 +25,11 @@ function PerfScenes() {
   const [searchParams] = useSearchParams();
   const scene = parsePerfScene(searchParams.get('scene'));
   const [isMounted, setIsMounted] = useState(false);
+  // The prerendered buttons exist before React owns them; the driver waits
+  // for this mark so its first click is never lost to hydration.
+  useEffect(() => {
+    document.documentElement.dataset.perfPage = 'interactive';
+  }, []);
   return (
     <VStack gap={4} padding={4}>
       <VStack gap={1}>

@@ -130,8 +130,8 @@ for (const scene of PERF_SCENES) {
         await page.addInitScript(EVENT_TIMING_LOG);
         await page.goto(`/pages/perf-scenes/?scene=${scene}`);
         await page
-          .getByRole('button', {name: 'Mount scene', exact: true})
-          .waitFor();
+          .locator('html[data-perf-page="interactive"]')
+          .waitFor({state: 'attached'});
         await page.evaluate(() => document.fonts.ready);
         const sample = await measureScene(page, INTERACTIONS[scene]);
         if (run >= WARMUPS) {

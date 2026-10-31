@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -134,18 +135,30 @@ describe('the label gate', () => {
   });
 });
 
-describe("the labeler's permission check", () => {
+describe("the labeler's access check", () => {
   const script = workflow.jobs.gate.steps.find(step =>
     step.uses?.startsWith('actions/github-script@'),
   ).with.script;
+  const realRequire = createRequire(import.meta.url);
 
-  /** Runs the gate script; returns its `run` output and notices. */
+  it("reads CI's own label rule from a sparse checkout", () => {
+    const checkout = workflow.jobs.gate.steps.find(step =>
+      step.uses?.startsWith('actions/checkout@'),
+    );
+    expect(checkout.with['sparse-checkout'].trim().split('\n')).toEqual([
+      '.github/scripts/run-labels.cjs',
+      '.github/scripts/review-signal-decision.cjs',
+    ]);
+    expect(script).toContain("label: 'ci:run-perf'");
+  });
+
+  /** Runs the gate script as github-script would; returns `run` and notices. */
   async function decide({
     eventName = 'pull_request',
     repo = 'astryx',
     labels = ['ci:run-perf'],
     events = [{actor: {login: 'maintainer'}, label: {name: 'ci:run-perf'}}],
-    roles = {maintainer: 'maintain'},
+    permissions = {maintainer: 'write'},
     failLookup = false,
   } = {}) {
     const outputs = {};
@@ -168,7 +181,7 @@ describe("the labeler's permission check", () => {
       rest: {
         repos: {
           getCollaboratorPermissionLevel: async ({username}) => ({
-            data: {role_name: roles[username] ?? 'read'},
+            data: {permission: permissions[username] ?? 'read'},
           }),
         },
       },
@@ -183,26 +196,39 @@ describe("the labeler's permission check", () => {
             : undefined,
       },
     };
-    await new AsyncFunction('github', 'context', 'core', script)(
-      github,
-      context,
-      core,
-    );
-    return {run: outputs.run, notices};
+    // The checkout puts the scripts under .run-labels; the tree has them at root.
+    const require = file =>
+      realRequire(file.replace(`${root}/.run-labels/`, `${root}/`));
+    const saved = process.env.GITHUB_WORKSPACE;
+    process.env.GITHUB_WORKSPACE = root;
+    try {
+      await new AsyncFunction('github', 'context', 'core', 'require', script)(
+        github,
+        context,
+        core,
+        require,
+      );
+    } finally {
+      process.env.GITHUB_WORKSPACE = saved;
+    }
+    return {run: outputs.run, outputs, notices};
   }
 
-  it('runs when the label was applied with write, maintain or admin access', async () => {
-    for (const role of ['write', 'maintain', 'admin']) {
-      expect((await decide({roles: {maintainer: role}})).run, role).toBe(
-        'true',
-      );
+  it('runs when the label was applied with write or admin access', async () => {
+    for (const permission of ['write', 'admin']) {
+      expect(
+        (await decide({permissions: {maintainer: permission}})).run,
+        permission,
+      ).toBe('true');
     }
   });
 
-  it('does not run when the labeler has triage or read access', async () => {
-    for (const role of ['triage', 'read']) {
-      const {run, notices} = await decide({roles: {maintainer: role}});
-      expect(run, role).toBe('false');
+  it('does not run when the labeler has read or no access, and says why', async () => {
+    for (const permission of ['read', 'none']) {
+      const {run, notices} = await decide({
+        permissions: {maintainer: permission},
+      });
+      expect(run, permission).toBe('false');
       expect(notices.join('\n')).toContain('maintainer');
     }
   });
@@ -212,9 +238,9 @@ describe("the labeler's permission check", () => {
       events: [
         {actor: {login: 'maintainer'}, label: {name: 'ci:run-perf'}},
         {actor: {login: 'maintainer'}, label: {name: 'bug'}},
-        {actor: {login: 'triager'}, label: {name: 'ci:run-perf'}},
+        {actor: {login: 'reader'}, label: {name: 'ci:run-perf'}},
       ],
-      roles: {maintainer: 'maintain', triager: 'triage'},
+      permissions: {maintainer: 'write', reader: 'read'},
     });
     expect(run).toBe('false');
   });
@@ -224,8 +250,13 @@ describe("the labeler's permission check", () => {
     expect((await decide({events: []})).run).toBe('false');
   });
 
-  it('does not run a pull request without the label', async () => {
+  it('does not run a pull request without the label, nor for a CI suite label', async () => {
     expect((await decide({labels: ['ci:run']})).run).toBe('false');
+    expect((await decide({labels: ['ci:run-visual']})).run).toBe('false');
+  });
+
+  it('sets only its own output', async () => {
+    expect(Object.keys((await decide()).outputs)).toEqual(['run']);
   });
 
   it('runs nightly only on meta/astryx, and on every dispatch', async () => {
@@ -380,6 +411,29 @@ describe('the regression issue', () => {
       ).toBe('none');
       expect(calls).toEqual([]);
     }
+  });
+
+  it('states a regression from a zero median as its absolute change', async () => {
+    const {github, context, calls} = stub();
+    await upsertRegressionIssue({
+      github,
+      context,
+      report: {
+        ...report,
+        regressions: [
+          {
+            scene: 'tree-list',
+            metric: 'listenerDelta',
+            value: 12,
+            median: 0,
+            change: null,
+          },
+        ],
+      },
+    });
+    expect(calls.find(([kind]) => kind === 'create')[1].body).toContain(
+      '| tree-list | listenerDelta | 12 | 0 | +12 |',
+    );
   });
 
   it('says so when no good run is recorded yet', async () => {

@@ -4,11 +4,12 @@
 # five fixed scenes (apps/sandbox/src/app/(raw)/pages/perf-scenes/), measured
 # on main every night and compared with main's own 7-day median.
 #
-# - Runs nightly on main and by manual dispatch. A pull request runs it only
-#   while it carries the `ci:run-perf` label applied by someone with write,
-#   maintain or admin access; like `ci:run`, the label takes effect on the next
-#   push or a close and reopen, and applying a label starts no run
-#   (spec:AST-030 FR17). The pull request's paths must also touch what the
+# - Runs nightly on main and by manual dispatch (spec:AST-030 FR18). A pull
+#   request runs it only while it carries the `ci:run-perf` label last applied
+#   by someone with write, maintain or admin access, decided by CI's own
+#   run-labels.cjs; like the `ci:run-*` suite labels, it takes effect on the
+#   next push or a close and reopen, and applying a label starts no run
+#   (FR12, FR17). The pull request's paths must also touch what the
 #   scenes measure (spec:AST-030 FR14).
 # - build: the packages and the Sandbox, once. measure: every scene, five
 #   samples after a warm-up, the median kept (playwright.perf.config.ts).
@@ -35,7 +36,8 @@ on:
     branches: ['main']
     # What the scenes measure or run (spec:AST-030 FR14): Core and the build
     # plugin that compiles its styles, the default theme, the scenes and their
-    # fixtures, the driver and its config, the trend scripts and this workflow.
+    # fixtures, the driver and its config, the trend and label scripts and this
+    # workflow.
     paths:
       - 'packages/core/**'
       - 'packages/build/**'
@@ -47,6 +49,8 @@ on:
       - 'internal/interaction-harness/src/**'
       - 'playwright.perf.config.ts'
       - '.github/scripts/perf-*.mjs'
+      - '.github/scripts/run-labels.cjs'
+      - '.github/scripts/review-signal-decision.cjs'
       - '.github/workflows/perf-nightly.yml'
       - 'package.json'
       - 'pnpm-lock.yaml'
@@ -71,13 +75,24 @@ jobs:
     outputs:
       run: ${{ steps.decide.outputs.run }}
     steps:
+      # The label rule is CI's own (run-labels.cjs, with the review gate's
+      # write-access check), from the merge commit's trusted sparse checkout.
+      - name: Check out the decision script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/run-labels.cjs
+            .github/scripts/review-signal-decision.cjs
+          sparse-checkout-cone-mode: false
+          path: .run-labels
+          persist-credentials: false
+
       - name: Decide whether to measure
         id: decide
         uses: actions/github-script@v9
         with:
+          retries: 3
           script: |
-            const WRITE_ROLES = ['admin', 'maintain', 'write'];
-            const LABEL = 'ci:run-perf';
             const {owner, repo} = context.repo;
             if (context.eventName === 'schedule') {
               // A fork's copy of the schedule measures nothing.
@@ -90,49 +105,13 @@ jobs:
               core.setOutput('run', 'true');
               return;
             }
-            const pr = context.payload.pull_request;
-            if (!pr?.labels?.some(label => label.name === LABEL)) {
-              core.setOutput('run', 'false');
-              return;
-            }
-            // Who applied the label it carries now: the newest labeled event.
-            let labeler = null;
-            let role = null;
-            try {
-              const data = await github.graphql(
-                `query($owner: String!, $repo: String!, $number: Int!) {
-                  repository(owner: $owner, name: $repo) {
-                    pullRequest(number: $number) {
-                      timelineItems(last: 100, itemTypes: [LABELED_EVENT]) {
-                        nodes { ... on LabeledEvent { actor { login } label { name } } }
-                      }
-                    }
-                  }
-                }`,
-                {owner, repo, number: pr.number},
-              );
-              const events = data.repository.pullRequest.timelineItems.nodes
-                .filter(event => event?.label?.name === LABEL);
-              labeler = events.at(-1)?.actor?.login ?? null;
-              if (labeler != null) {
-                const {data: permission} =
-                  await github.rest.repos.getCollaboratorPermissionLevel({
-                    owner, repo, username: labeler,
-                  });
-                role = permission.role_name;
-              }
-            } catch (error) {
-              core.warning(`Could not check who applied ${LABEL}: ${error.message}`);
-            }
-            const allowed = WRITE_ROLES.includes(role);
-            if (!allowed) {
-              core.notice(
-                labeler == null
-                  ? `No ${LABEL} label event could be read; not measuring.`
-                  : `${LABEL} was applied by ${labeler} (${role ?? 'unknown role'}); only write, maintain or admin access starts a perf run.`,
-              );
-            }
-            core.setOutput('run', String(allowed));
+            const {decideRunLabel} = require(
+              `${process.env.GITHUB_WORKSPACE}/.run-labels/.github/scripts/run-labels.cjs`,
+            );
+            const runs = await decideRunLabel({
+              github, context, core, suite: 'perf', label: 'ci:run-perf',
+            });
+            core.setOutput('run', String(runs));
 
   build:
     needs: [gate]
