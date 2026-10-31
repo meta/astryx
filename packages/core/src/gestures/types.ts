@@ -9,6 +9,8 @@
  * @position Shared vocabulary of packages/core/src/gestures; no runtime code
  */
 
+import type {SelectionLock} from './GestureRecognizer';
+
 /**
  * UIGestureRecognizer.State. A discrete recognizer goes straight from
  * `possible` to `ended` (UIKit's `.recognized` is the same value).
@@ -172,6 +174,22 @@ export interface TouchConsumer {
    * (attached above this consumer) from beginning for a touch on it.
    */
   allowsAncestorRecognizer?(recognizer: unknown): boolean;
+  /**
+   * Whether the consumer holds this touch now (a control whose press was
+   * delivered for that touch): the host cancels the browser's pan for that
+   * finger only, as UIKit's `touchesShouldCancel(in:)` is false for a
+   * tracking control. A move before the press is delivered, and another
+   * finger the consumer is not tracking, still scroll.
+   */
+  keepsTouch?(touchId: number): boolean;
+  /**
+   * A control whose own record defines a hold action (a stepper's
+   * hold-repeat) brings the lock that turns text selection and the callout
+   * off for that press only, as a recognizer created with one does
+   * (`spec:AST-094` FR41). A control whose hold does nothing leaves it
+   * undefined and keeps the browser's long-press selection.
+   */
+  readonly selectionLock?: SelectionLock;
   /**
    * Whether the consumer takes touches now (a disabled control does not).
    * The host listens only while something enabled is attached

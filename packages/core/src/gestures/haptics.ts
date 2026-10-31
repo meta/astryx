@@ -26,7 +26,12 @@
  *   light impact at the moment of the tap. The switch itself never takes the
  *   touch (`pointer-events: none`; WebKit marks a switch's `touchstart`
  *   handled, which would stop a pan starting on it from scrolling the page),
- *   and its own events never reach the page.
+ *   its own events never bubble to the page (capture-phase listeners still
+ *   see its click; the gesture host's click swallower skips it by
+ *   attribute), and focus the label's activation gives it goes straight
+ *   back, so a later Space never toggles it. A label tied to its control
+ *   by `for`, or whose control is itself a switch, gets no switch; a label
+ *   wrapping its own control gets one, which hands each tap on to it.
  * - `playHaptic(kind)` vibrates where `navigator.vibrate` exists (Android
  *   browsers) with the kind's pattern, and does nothing elsewhere.
  *
@@ -39,9 +44,9 @@ import {
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
 import {isDisabledControl} from '../utils/pressDisabled';
+import {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';
 
-/** Marks the hidden switch, so click handlers can recognize and ignore it. */
-export const HAPTIC_SWITCH_ATTRIBUTE = 'data-astryx-haptic-switch';
+export {HAPTIC_SWITCH_ATTRIBUTE};
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
