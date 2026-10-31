@@ -1064,6 +1064,8 @@ export function Tokenizer<T extends SearchableItem>({
     (e: React.FocusEvent) => {
       if (!isFocusInTokenizer(e.relatedTarget)) {
         hasReportedFocusRef.current = false;
+        // Focus left the field: no hand-off is owed any more.
+        isFocusPendingHandOffRef.current = false;
         setIsFocusedWithin(false);
         onBlur?.(e);
         if (isLayerMode) {
@@ -1567,6 +1569,7 @@ export function Tokenizer<T extends SearchableItem>({
               return;
             }
             hasReportedFocusRef.current = false;
+            isFocusPendingHandOffRef.current = false;
             onBlur?.(event);
           }}
           onKeyDown={onKeyDown}

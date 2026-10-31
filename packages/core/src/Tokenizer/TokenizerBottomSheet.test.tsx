@@ -2609,14 +2609,58 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     render(<Harness presentation="adaptive" hasClear />);
     // Inline: a token's Remove button holds focus, then the screen turns
     // compact-touch.
-    screen.getByRole('button', {name: 'Remove Design'}).focus();
+    // Enter the field first: focus arriving from the page is redirected to
+    // the input, so a Remove button only holds focus once inside.
+    screen.getByRole('combobox').focus();
+    const remove = screen.getByRole('button', {name: 'Remove Design'});
+    remove.focus();
+    expect(remove).toHaveFocus();
     turn(true);
     expect(openTrigger()).toHaveFocus();
     // Back to inline, then the inline Clear all holds focus.
     turn(false);
-    screen.getByRole('button', {name: 'Clear all'}).focus();
+    const clearAll = screen.getByRole('button', {name: 'Clear all'});
+    clearAll.focus();
+    expect(clearAll).toHaveFocus();
     turn(true);
     expect(openTrigger()).toHaveFocus();
+  });
+
+  it('owes no hand-off once focus has left the field, even after the wrapper re-attached while focused (FR16)', () => {
+    const onFocus = vi.fn();
+    const stableRef = () => {};
+    const field = (isDisabled: boolean, ref: () => void = stableRef) => (
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        isDisabled={isDisabled}
+        disabledMessage="You need the Editor role"
+        ref={ref}
+        experimental={{presentation: 'popover'}}
+      />
+    );
+    const {rerender} = render(field(false));
+    const input = screen.getByRole('combobox');
+    input.focus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    // Toggling isDisabled re-attaches the field's wrapper, not the input,
+    // while the input holds focus, which notes a hand-off.
+    rerender(field(true));
+    rerender(field(false));
+    expect(input).toHaveFocus();
+    // The user leaves the field.
+    act(() => {
+      input.blur();
+    });
+    expect(document.body).toHaveFocus();
+    // A later re-attach of the input (a new inline ref) must not pull focus
+    // back.
+    rerender(field(false, () => {}));
+    expect(document.body).toHaveFocus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
   });
 
   it('moves no focus when a control re-attaches without a swap, such as a new ref callback (FR16; react-component-runtime INV6)', () => {
