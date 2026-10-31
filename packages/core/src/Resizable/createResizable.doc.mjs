@@ -232,7 +232,9 @@ export const docs = {
   relatedComponents: ['Resizable'],
   relatedHooks: ['useResizable'],
   importPath: '@astryxdesign/core/Resizable',
-  category: 'layout',
+  // No category: a factory documented as a hook is listed with the Resizable
+  // docs, beside useResizable, and is not a tile in the components gallery,
+  // which lists the documents that have one.
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
