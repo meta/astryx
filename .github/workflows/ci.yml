@@ -1083,11 +1083,20 @@ jobs:
       - name: Measure published package size
         id: package-size
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
-        run: node .github/scripts/package-size.mjs measure --output package-size-head.json
+        # A head cut before the check has no script to run (the workflow comes
+        # from the merge ref, the checkout from the head): it skips, visibly,
+        # until it merges main.
+        run: |
+          if [ ! -f .github/scripts/package-size.mjs ]; then
+            echo '::notice title=Head predates the package-size check::Skipping the package-size check; merge main to run it.'
+            exit 0
+          fi
+          node .github/scripts/package-size.mjs measure --output package-size-head.json
+          echo "measured=true" >> "$GITHUB_OUTPUT"
 
       - name: Find the merge base for package size
         id: package-size-merge-base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: echo "sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the package-size comparison')" >> "$GITHUB_OUTPUT"
@@ -1121,7 +1130,7 @@ jobs:
       # Advisory: a package over its budget is flagged in the job summary and
       # the PR report, and fails nothing.
       - name: Compare published package size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ steps.package-size-merge-base.outputs.sha }}
@@ -1219,7 +1228,12 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'base size measurement' || true)
+          # A head cut before merge-base.sh finds the merge base directly.
+          if [ -x .github/scripts/merge-base.sh ]; then
+            BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'base size measurement' || true)
+          else
+            BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD || true)
+          fi
           if [ -z "$BASE_SHA" ]; then
             echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
