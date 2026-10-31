@@ -3,10 +3,10 @@
 /**
  * @file package-size.js
  * @input A built workspace (every published package's files on disk) and, to
- *   compare, two measurements and a pull request description
+ *   compare, two measurements
  * @output Each published package's tarball size (gzip, as npm downloads it),
  *   unpacked size, file count and runtime dependencies; a base-against-head
- *   comparison with a budget verdict; and that comparison as Markdown
+ *   comparison with an advisory budget flag; and that comparison as Markdown
  * @position Shared by package-size.mjs (CI's build-storybook job on a pull
  *   request, and Main's typecheck job, which keeps each main commit's
  *   measurement for pull requests to compare against) and by
@@ -16,11 +16,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {execFile} = require('node:child_process');
+const {num} = require('./report-text');
 
 /**
- * A package fails the check when its tarball grows by more than this share of
- * its base size and by at least MIN_BYTES; the floor keeps a small package
- * from failing on a few hundred bytes.
+ * A package is flagged when its tarball grows by more than this share of its
+ * base size and by at least MIN_BYTES; the floor keeps a small package from
+ * being flagged for a few hundred bytes. The flag is advisory: it asks the
+ * author, as the component touch-only budget does, and fails nothing.
  */
 const PACKED_BUDGET_PERCENT = 5;
 const PACKED_BUDGET_MIN_BYTES = 1024;
@@ -112,18 +114,6 @@ function isMeasured(bytes) {
   return typeof bytes === 'number' && Number.isFinite(bytes);
 }
 
-/**
- * The description's `Size budget:` line, outside HTML comments (a template's
- * placeholder is not a justification), or null when it has no text.
- */
-function sizeBudgetJustification(body) {
-  const visible = String(body || '').replace(/<!--[\s\S]*?-->/g, '');
-  const match = visible.match(
-    /^[ \t>*_-]*Size budget:[ \t]*(?:\*\*|__)?[ \t]*(\S.*)$/im,
-  );
-  return match ? match[1].trim() : null;
-}
-
 function overBudget(baseBytes, headBytes) {
   if (!isMeasured(baseBytes) || !isMeasured(headBytes) || baseBytes <= 0)
     return false;
@@ -144,7 +134,7 @@ function splitDependencyKey(key) {
  * row keeps its head figures, nothing is over budget, and the verdict says
  * the base was not measured.
  */
-function comparePackageSizes({head, base, body, headSha = '', baseSha = ''}) {
+function comparePackageSizes({head, base, headSha = '', baseSha = ''}) {
   const headPackages = head?.packages || {};
   const basePackages = base?.packages || null;
   const names = [
@@ -194,15 +184,8 @@ function comparePackageSizes({head, base, body, headSha = '', baseSha = ''}) {
       });
     }
   }
-  const justification = sizeBudgetJustification(body);
   const over = packages.some(entry => entry.overBudget);
-  const verdict = !basePackages
-    ? 'no-base'
-    : !over
-      ? 'pass'
-      : justification
-        ? 'justified'
-        : 'over-budget';
+  const verdict = !basePackages ? 'no-base' : over ? 'over-budget' : 'pass';
   return {
     schema: 1,
     headSha,
@@ -214,7 +197,6 @@ function comparePackageSizes({head, base, body, headSha = '', baseSha = ''}) {
     packages,
     addedDependencies,
     removedDependencies,
-    justification,
     verdict,
   };
 }
@@ -234,6 +216,10 @@ function deltaText(after, before) {
       ? ` (${delta > 0 ? '+' : ''}${((delta / before) * 100).toFixed(1)}%)`
       : '';
   return `${delta > 0 ? '+' : ''}${sizeText(delta)}${percent}`;
+}
+
+function fileCount(value) {
+  return isMeasured(value) ? String(num(value)) : 'N/A';
 }
 
 function changed(entry) {
@@ -262,7 +248,7 @@ function renderPackageSizeSection(report, literal = text => String(text)) {
       ? report.packages
       : report.packages.filter(changed);
   if (rows.length === 0) {
-    out += `No published package changed size (${report.packages.length} measured).\n\n`;
+    out += `No published package changed size (${num(report.packages.length)} measured).\n\n`;
   } else {
     out +=
       '| Package | Download before | Download after | Delta | Unpacked before | Unpacked after | Delta | Files |\n';
@@ -271,8 +257,8 @@ function renderPackageSizeSection(report, literal = text => String(text)) {
     for (const entry of rows) {
       const files =
         entry.base && entry.head && entry.base.files !== entry.head.files
-          ? `${entry.base.files} → ${entry.head.files}`
-          : String(entry.head?.files ?? entry.base?.files ?? 'N/A');
+          ? `${fileCount(entry.base.files)} → ${fileCount(entry.head.files)}`
+          : fileCount(entry.head?.files ?? entry.base?.files);
       out += `| ${literal(entry.name)} | ${sizeText(entry.base?.packedBytes)} | ${sizeText(entry.head?.packedBytes)} | ${deltaText(entry.head?.packedBytes, entry.base?.packedBytes)}${entry.overBudget ? ' ⚠️' : ''} | ${sizeText(entry.base?.unpackedBytes)} | ${sizeText(entry.head?.unpackedBytes)} | ${deltaText(entry.head?.unpackedBytes, entry.base?.unpackedBytes)} | ${files} |\n`;
     }
     const unchanged = report.packages.length - rows.length;
@@ -294,9 +280,7 @@ function renderPackageSizeSection(report, literal = text => String(text)) {
     out += '\n';
   }
   if (report.verdict === 'over-budget') {
-    out += `**Over budget:** a package's download grew more than ${packedPercent}% (and at least ${sizeText(packedMinBytes)}). Shrink it, or add a \`Size budget:\` line to the pull request description saying why the growth is worth it, then re-run the job.\n\n`;
-  } else if (report.verdict === 'justified') {
-    out += `**Over budget, justified:** ${literal(report.justification)}\n\n`;
+    out += `**⚠️ Over the package budget:** a package's download grew more than ${num(packedPercent)}% (and at least ${sizeText(num(packedMinBytes))}). If the growth is not intended, shrink it; if it is, say why in the pull request description.\n\n`;
   }
   out +=
     'Download is the gzip tarball npm fetches; unpacked is what lands in `node_modules`.\n\n';
@@ -309,7 +293,6 @@ module.exports = {
   publishedPackages,
   runtimeDependencies,
   measurePackages,
-  sizeBudgetJustification,
   overBudget,
   comparePackageSizes,
   renderPackageSizeSection,
