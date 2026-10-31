@@ -2,6 +2,7 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, waitFor} from 'storybook/test';
 import {Timer} from '@astryxdesign/core/Timer';
 import {Stack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
@@ -69,7 +70,22 @@ function TypographyStory() {
   );
 }
 
-export const Default: Story = {};
+export const Default: Story = {
+  play: async ({canvasElement}) => {
+    // The tick is DOM-owned: the zero-duration first paint must advance on
+    // its own, with no interaction and no React render. This play runs in the
+    // storybook test runner, so a regression that freezes the display fails
+    // in a real browser instead of only in jsdom.
+    const timer = canvasElement.querySelector('time');
+    expect(timer).not.toBeNull();
+    await waitFor(
+      () => {
+        expect(timer?.textContent).not.toBe('0s');
+      },
+      {timeout: 2500},
+    );
+  },
+};
 
 export const Formats: Story = {
   render: () => <FormatsStory />,

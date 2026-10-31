@@ -354,6 +354,13 @@ const TARGETS = [
       'isFullBleed strip/label geometry incl. clamp far side, and the real ' +
       'LayoutHeader paddingBlockEnd -> TabList isFullBleed dock (#2622)',
   },
+  {
+    component: 'Timer',
+    story: 'core-timer--default',
+    guards:
+      'the display ticks live from the runtime clock, so a regression that ' +
+      'freezes it at 0s fails CI (#6483 audit layer 2)',
+  },
 ];
 
 const CONTENT_TYPES = {
