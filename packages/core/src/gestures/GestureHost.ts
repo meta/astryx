@@ -156,6 +156,7 @@ import type {
   GestureEnvironment,
   GestureTouch,
   PointerKind,
+  ScrollType,
   TouchBeganInput,
   TouchConsumer,
   TouchInput,
@@ -184,6 +185,8 @@ interface Registration {
   hasTouchEndListener: boolean;
   /** Whether the element carries the host's shared blocking touchmove handler. */
   hasTouchMoveListener: boolean;
+  /** Whether the element carries the host's wheel handler (FR43). */
+  hasWheelListener: boolean;
   /** Inline values the host replaced, to restore on detach. */
   readonly savedStyle: Map<string, string>;
   /**
@@ -304,6 +307,16 @@ function claimsWhileMoving(recognizer: GestureRecognizer): boolean {
 }
 
 /**
+ * Whether a recognizer takes a contact that comes with Touch Events and a
+ * long press's contextmenu: a finger's or a pen's. A scroll-only recognizer
+ * (`allowedPointerTypes: []`) and a mouse-only one take neither.
+ */
+function takesTouchContacts(recognizer: GestureRecognizer): boolean {
+  const types = recognizer.allowedPointerTypes;
+  return types == null || types.has('touch') || types.has('pen');
+}
+
+/**
  * A pan (or a pan subclass), told apart by its family rather than its class,
  * so a page that constructs no pan never ships PanGestureRecognizer.
  */
@@ -377,6 +390,137 @@ function landedOn(
     return retargeted;
   }
   return event.composedPath()[0] ?? retargeted;
+}
+
+/**
+ * How long after its last event a wheel gesture ends, ms: the web reports no
+ * wheel phases, so a quiet wheel is a lifted one. Provisional (owner
+ * question on `spec:AST-094` FR43).
+ */
+const WHEEL_END_MS = 100;
+/** A line-mode wheel's line, px, as the platforms scroll it. */
+const WHEEL_LINE_PX = 40;
+/** The span a ctrl-wheel pinch's two contacts start at, px. */
+const WHEEL_PINCH_SPAN = 100;
+
+/** A wheel gesture: the contacts it drives in the arena, or none where the page keeps it. */
+interface WheelGesture {
+  readonly kind: 'pan' | 'pinch';
+  /** A mouse wheel's notches, or a trackpad's continuous scroll. */
+  readonly scrollType: ScrollType;
+  readonly ids: ReadonlyArray<number>;
+  /** A pan's contact, or a pinch's center. */
+  x: number;
+  y: number;
+  /** A pinch's span between its two contacts. */
+  span: number;
+  /** The latest wheel's time. */
+  last: number;
+  timer: unknown;
+  /** The recognizers that took it; none where the page keeps it. */
+  readonly takers: ReadonlyArray<GestureRecognizer>;
+}
+
+/**
+ * A wheel's deltas in CSS px: a line is `WHEEL_LINE_PX`, a page the
+ * viewport.
+ */
+function wheelPixels(
+  wheel: WheelEvent,
+  view: Window | null,
+): {dx: number; dy: number} {
+  if (wheel.deltaMode === 1) {
+    return {dx: wheel.deltaX * WHEEL_LINE_PX, dy: wheel.deltaY * WHEEL_LINE_PX};
+  }
+  if (wheel.deltaMode === 2) {
+    return {
+      dx: wheel.deltaX * (view?.innerWidth ?? 0),
+      dy: wheel.deltaY * (view?.innerHeight ?? 0),
+    };
+  }
+  return {dx: wheel.deltaX, dy: wheel.deltaY};
+}
+
+/**
+ * The web's best reading of what scrolled: a line- or page-mode delta, or a
+ * whole pixel notch on one axis (100 or 120 px, as Chromium sends a mouse
+ * wheel's on Windows and Linux), is a mouse wheel's (`discrete`); anything
+ * else a trackpad's (`continuous`).
+ */
+function scrollTypeOf(wheel: WheelEvent): ScrollType {
+  if (wheel.deltaMode !== 0) {
+    return 'discrete';
+  }
+  const notch = (value: number) =>
+    value !== 0 &&
+    Number.isInteger(value) &&
+    (value % 100 === 0 || value % 120 === 0);
+  return (wheel.deltaX === 0 && notch(wheel.deltaY)) ||
+    (wheel.deltaY === 0 && notch(wheel.deltaX))
+    ? 'discrete'
+    : 'continuous';
+}
+
+/** Whether a recognizer is a scroll-edge pan (`spec:AST-094` FR19). */
+function isScrollEdgePan(recognizer: GestureRecognizer): boolean {
+  return (recognizer as {scrollEdge?: boolean}).scrollEdge === true;
+}
+
+/** Whether a pan's `direction` takes a contact moving by (cx, cy). */
+function panTakesMove(
+  recognizer: GestureRecognizer,
+  cx: number,
+  cy: number,
+): boolean {
+  const direction = (recognizer as {direction?: string}).direction ?? 'any';
+  const isHorizontal = Math.abs(cx) > Math.abs(cy);
+  switch (direction) {
+    case 'horizontal':
+      return isHorizontal;
+    case 'vertical':
+      return !isHorizontal;
+    case 'left':
+      return isHorizontal && cx < 0;
+    case 'right':
+      return isHorizontal && cx > 0;
+    case 'up':
+      return !isHorizontal && cy < 0;
+    case 'down':
+      return !isHorizontal && cy > 0;
+    default:
+      return true;
+  }
+}
+
+/** Whether `element` scrolls natively by `delta` along one axis now. */
+function scrollsBy(
+  element: Element,
+  delta: number,
+  isHorizontal: boolean,
+  view: Window | null,
+): boolean {
+  if (delta === 0 || view == null) {
+    return false;
+  }
+  const style = view.getComputedStyle(element);
+  const overflow = isHorizontal ? style.overflowX : style.overflowY;
+  if (overflow !== 'auto' && overflow !== 'scroll') {
+    return false;
+  }
+  const room = isHorizontal
+    ? element.scrollWidth - element.clientWidth
+    : element.scrollHeight - element.clientHeight;
+  if (room <= 0) {
+    return false;
+  }
+  // Right to left, scrollLeft runs from 0 at the start to minus the
+  // overflow, and a scroll right moves it toward 0. A scroller a pixel
+  // short of either end, where Chromium stops one, is at that end.
+  const isRtl = isHorizontal && isRtlElement(element as HTMLElement);
+  const min = isRtl ? -room : 0;
+  const max = isRtl ? 0 : room;
+  const position = isHorizontal ? element.scrollLeft : element.scrollTop;
+  return delta > 0 ? position < max - 1 : position > min + 1;
 }
 
 /**
@@ -541,6 +685,12 @@ export class GestureHost {
    */
   private fingerTargets: ReadonlyArray<Node> = [];
   private nextId = 1;
+  /** The wheel gesture in progress (FR43). */
+  private wheel: WheelGesture | null = null;
+  /** Whether the document routes every wheel to the live wheel gesture. */
+  private isWheelLatched = false;
+  /** Wheels already taken: each element on the path with a listener hears one. */
+  private readonly wheelsSeen = new WeakSet<Event>();
   private isInstalled = false;
   /**
    * Whether the primary pointer is coarse (`spec:AST-094` FR19), read when
@@ -658,6 +808,14 @@ export class GestureHost {
       // UIKit when a view leaves the window.
       if (recognizer.state !== 'possible' || recognizer.isInvolved()) {
         recognizer.cancel();
+      }
+      const wheel = this.wheel;
+      if (
+        wheel != null &&
+        wheel.takers.includes(recognizer) &&
+        !this.wheelHasTaker(wheel)
+      ) {
+        this.endWheel();
       }
       this.refresh(element, registration);
       // Even when the element keeps other attachments: one left disabled
@@ -1066,6 +1224,7 @@ export class GestureHost {
         consumer: null,
         hasTouchEndListener: false,
         hasTouchMoveListener: false,
+        hasWheelListener: false,
         savedStyle: new Map(),
         authorTouchAction: null,
         manageStyle: true,
@@ -1145,6 +1304,26 @@ export class GestureHost {
     } else if (!needsListener && registration.hasTouchMoveListener) {
       element.removeEventListener('touchmove', this.onBlockingTouchMove);
       registration.hasTouchMoveListener = false;
+    }
+    // Wheel and trackpad input, only where an enabled recognizer takes it
+    // (FR43): a non-passive wheel listener makes the browser's scrolling over
+    // the element wait for the main thread.
+    const needsWheel = registration.recognizers.some(
+      recognizer =>
+        recognizer.isEnabled &&
+        // A watcher never takes the wheel: the page keeps it (FR20, DEC-7).
+        recognizer.claimsTouches &&
+        recognizer.allowedScrollTypes.size > 0 &&
+        // A wheel drives a pan or a pinch only.
+        (internals(recognizer).family === 'pan' ||
+          internals(recognizer).family === 'pinch'),
+    );
+    if (needsWheel && !registration.hasWheelListener) {
+      element.addEventListener('wheel', this.onWheel, {passive: false});
+      registration.hasWheelListener = true;
+    } else if (!needsWheel && registration.hasWheelListener) {
+      element.removeEventListener('wheel', this.onWheel);
+      registration.hasWheelListener = false;
     }
   }
 
@@ -1301,6 +1480,9 @@ export class GestureHost {
     if (registration.hasTouchMoveListener) {
       element.removeEventListener('touchmove', this.onBlockingTouchMove);
     }
+    if (registration.hasWheelListener) {
+      element.removeEventListener('wheel', this.onWheel);
+    }
     this.registry.delete(element);
     this.uninstallIfIdle();
   }
@@ -1396,7 +1578,13 @@ export class GestureHost {
       for (const [element, registration] of this.registry) {
         const consumer = registration.consumer;
         if (
-          registration.recognizers.some(recognizer => recognizer.isEnabled) ||
+          registration.recognizers.some(
+            recognizer =>
+              recognizer.isEnabled &&
+              // One that takes only scroll input has no press to arm.
+              (recognizer.allowedPointerTypes == null ||
+                recognizer.allowedPointerTypes.size > 0),
+          ) ||
           (consumer != null && consumer.isEnabled?.() !== false)
         ) {
           wanted.add(element);
@@ -1547,8 +1735,10 @@ export class GestureHost {
 
   /**
    * Whether an enabled participant could claim a touch or cancel a lift: a
-   * consumer, or a recognizer that claims touches. With only watchers
-   * attached, the host's listeners are all passive (`spec:AST-094` FR20).
+   * consumer, or a recognizer that claims touches and takes a finger or a
+   * pen. With only watchers, or only scroll-only recognizers
+   * (`allowedPointerTypes: []`), the host's listeners are all passive
+   * (`spec:AST-094` FR20, FR24).
    */
   private hasClaimer(): boolean {
     for (const registration of this.registry.values()) {
@@ -1556,7 +1746,10 @@ export class GestureHost {
       if (
         (consumer != null && consumer.isEnabled?.() !== false) ||
         registration.recognizers.some(
-          recognizer => recognizer.isEnabled && recognizer.claimsTouches,
+          recognizer =>
+            recognizer.isEnabled &&
+            recognizer.claimsTouches &&
+            takesTouchContacts(recognizer),
         )
       ) {
         return true;
@@ -1829,6 +2022,298 @@ export class GestureHost {
     }
   }
 
+  /**
+   * Wheel and trackpad input (`spec:AST-094` FR43). A wheel gesture drives
+   * the recognizers that allow its scroll type as a contact moving with the
+   * content: a pan's along its own axis, after every scroller between the
+   * pointer and the pan's element can no longer scroll that way, as decided
+   * at the gesture's first wheel; a pinch's (a ctrl-wheel, as a trackpad
+   * pinches) as two contacts whose span follows exp(-deltaY / 100). A wheel
+   * the page keeps is never prevented; one a recognizer takes always is. It
+   * ends `WHEEL_END_MS` after its last wheel, at that wheel's time, so its
+   * release keeps its velocity. A gesture a recognizer took is latched to it,
+   * as a browser latches a scroller: while it lasts, the document hands this
+   * every wheel first, wherever it lands, so a pan whose element moves from
+   * under a still pointer keeps it (FR24: a page listener only during a
+   * gesture).
+   */
+  private readonly onWheel = (event: Event): void => {
+    const wheel = event as WheelEvent;
+    if (this.wheelsSeen.has(wheel)) {
+      return;
+    }
+    this.wheelsSeen.add(wheel);
+    const time = eventTime(wheel);
+    const kind = wheel.ctrlKey ? 'pinch' : 'pan';
+    let gesture = this.wheel;
+    if (
+      gesture != null &&
+      (gesture.kind !== kind || time - gesture.last >= WHEEL_END_MS)
+    ) {
+      this.endWheel(time);
+      gesture = null;
+    }
+    if (
+      gesture != null &&
+      gesture.ids.length > 0 &&
+      !this.wheelHasTaker(gesture)
+    ) {
+      // Every recognizer that took it has left (detached, disabled or
+      // cancelled): the rest of the gesture is the page's.
+      this.endWheel();
+      gesture = {
+        kind,
+        scrollType: scrollTypeOf(wheel),
+        ids: [],
+        x: wheel.clientX,
+        y: wheel.clientY,
+        span: WHEEL_PINCH_SPAN,
+        last: time,
+        timer: null,
+        takers: [],
+      };
+      this.wheel = gesture;
+    }
+    const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
+    if (gesture == null) {
+      gesture = this.beginWheel(wheel, kind, dx, dy, time);
+      this.wheel = gesture;
+      if (gesture.ids.length > 0) {
+        this.latchWheel();
+      }
+    }
+    gesture.last = time;
+    if (gesture.timer != null) {
+      this.clock.clearTimeout(gesture.timer);
+    }
+    gesture.timer = this.clock.setTimeout(() => this.endWheel(), WHEEL_END_MS);
+    if (gesture.ids.length === 0) {
+      return;
+    }
+    wheel.preventDefault();
+    if (gesture.kind === 'pan') {
+      gesture.x -= dx;
+      gesture.y -= dy;
+      this.arena.moved([
+        {id: gesture.ids[0], x: gesture.x, y: gesture.y, time},
+      ]);
+    } else {
+      gesture.span *= Math.exp(-dy / 100);
+      this.arena.moved(this.pinchContacts(gesture, time));
+    }
+  };
+
+  /** Start a wheel gesture: who takes it, decided once, or nobody. */
+  private beginWheel(
+    wheel: WheelEvent,
+    kind: 'pan' | 'pinch',
+    dx: number,
+    dy: number,
+    time: number,
+  ): WheelGesture {
+    const type = scrollTypeOf(wheel);
+    const kept: WheelGesture = {
+      kind,
+      scrollType: type,
+      ids: [],
+      x: wheel.clientX,
+      y: wheel.clientY,
+      span: WHEEL_PINCH_SPAN,
+      last: time,
+      timer: null,
+      takers: [],
+    };
+    // A contact already down keeps its gesture; the wheel stays the page's.
+    // So does a first wheel another handler already prevented, or one that
+    // cannot be cancelled: no recognizer could take it from the page.
+    if (
+      this.arena.touches.length > 0 ||
+      (dx === 0 && dy === 0) ||
+      wheel.defaultPrevented ||
+      !wheel.cancelable
+    ) {
+      return kept;
+    }
+    const view = this.doc.defaultView;
+    const isHorizontal = Math.abs(dx) > Math.abs(dy);
+    // Every scroller under the pointer, the page included, as a finger's
+    // probe reads them, without touch-action, which a wheel ignores.
+    // What the wheel landed on: at a shadow host's listener the event's
+    // target is the host, and a scroller inside its tree must count.
+    const target = landedOn(wheel);
+    const scroll = createNativeScrollProbe(target, {
+      readsTouchAction: false,
+    });
+    const takers: GestureRecognizer[] = [];
+    for (
+      let node: Node | null = target instanceof Node ? target : null;
+      node != null;
+      node = parentAcrossShadow(node)
+    ) {
+      if (!(node instanceof Element)) {
+        continue;
+      }
+      for (const recognizer of this.registry.get(node)?.recognizers ?? []) {
+        if (
+          !recognizer.isEnabled ||
+          !recognizer.claimsTouches ||
+          !recognizer.allowedScrollTypes.has(type) ||
+          internals(recognizer).family !== kind
+        ) {
+          continue;
+        }
+        if (
+          kind === 'pan' &&
+          (!panTakesMove(recognizer, -dx, -dy) ||
+            this.scrollerTakes(target, node, dx, dy, isHorizontal, view) ||
+            // A scroll-edge pan only past every scroller's edge (FR19).
+            (isScrollEdgePan(recognizer) && scroll.canScroll(-dx, -dy)))
+        ) {
+          continue;
+        }
+        takers.push(recognizer);
+      }
+    }
+    if (takers.length === 0) {
+      return kept;
+    }
+    const base = {
+      pointerType: 'mouse' as const,
+      target,
+      scroll,
+      scrollType: type,
+      recognizers: takers,
+      consumer: null,
+    };
+    const ids =
+      kind === 'pan' ? [this.nextId++] : [this.nextId++, this.nextId++];
+    const gesture: WheelGesture = {...kept, ids, takers};
+    this.arena.began(
+      kind === 'pan'
+        ? [{...base, id: ids[0], x: wheel.clientX, y: wheel.clientY, time}]
+        : this.pinchContacts(gesture, time).map(input => ({
+            ...base,
+            ...input,
+          })),
+    );
+    // Every recognizer it was offered to may decline it (its own
+    // shouldReceiveTouch): then nobody took the wheel, and it scrolls the
+    // page from its first step, as with no gesture system.
+    if (ids.every(id => this.arena.participantsOf(id).length === 0)) {
+      this.arena.cancelled(ids, time);
+      return kept;
+    }
+    return gesture;
+  }
+
+  /** Whether a scroller between `target` and `boundary` (both included) scrolls this wheel now. */
+  private scrollerTakes(
+    target: unknown,
+    boundary: Element,
+    dx: number,
+    dy: number,
+    isHorizontal: boolean,
+    view: Window | null,
+  ): boolean {
+    for (
+      let node: Node | null = target instanceof Node ? target : null;
+      node != null;
+      node = parentAcrossShadow(node)
+    ) {
+      if (
+        node instanceof Element &&
+        scrollsBy(node, isHorizontal ? dx : dy, isHorizontal, view)
+      ) {
+        return true;
+      }
+      if (node === boundary) {
+        break;
+      }
+    }
+    return false;
+  }
+
+  /** A ctrl-wheel pinch's two contacts, `span` apart around its center. */
+  private pinchContacts(
+    gesture: WheelGesture,
+    time: number,
+  ): {id: number; x: number; y: number; time: number}[] {
+    return [
+      {id: gesture.ids[0], x: gesture.x - gesture.span / 2, y: gesture.y, time},
+      {id: gesture.ids[1], x: gesture.x + gesture.span / 2, y: gesture.y, time},
+    ];
+  }
+
+  /** Whether a recognizer that took this wheel gesture still takes part in it. */
+  private wheelHasTaker(gesture: WheelGesture): boolean {
+    // A cancelled or failed recognizer keeps that state until its contacts
+    // end, which a wheel gesture's do only here.
+    return gesture.takers.some(recognizer => {
+      const {state} = recognizer;
+      return (
+        recognizer.isEnabled &&
+        (state === 'began' ||
+          state === 'changed' ||
+          (state === 'possible' && recognizer.isInvolved()))
+      );
+    });
+  }
+
+  /** Route every wheel on the page to the live wheel gesture, from its claim. */
+  private latchWheel(): void {
+    if (!this.isWheelLatched) {
+      this.doc.addEventListener('wheel', this.onWheel, {
+        capture: true,
+        passive: false,
+      });
+      this.isWheelLatched = true;
+    }
+  }
+
+  /**
+   * End the wheel gesture in progress. On its own (its timer, a taker
+   * leaving, a detach) it ends `WHEEL_END_MS` after its last wheel; an input
+   * that ends it sooner (a press, the next gesture's first wheel) passes its
+   * own time. Both are on the wheels' time base (eventTime), never the
+   * host's clock, which need not share it.
+   */
+  private endWheel(endTime?: number): void {
+    const gesture = this.wheel;
+    if (this.isWheelLatched) {
+      this.doc.removeEventListener('wheel', this.onWheel, {capture: true});
+      this.isWheelLatched = false;
+    }
+    if (gesture == null) {
+      return;
+    }
+    this.wheel = null;
+    if (gesture.timer != null) {
+      this.clock.clearTimeout(gesture.timer);
+    }
+    if (gesture.ids.length === 0) {
+      return;
+    }
+    // A trackpad's scroll releases at its last wheel, with its speed: its
+    // momentum arrives as more wheel. A mouse wheel's notches release still,
+    // past the velocity's stillness interval, so position alone decides
+    // where a pan settles (the coordinator's ruling; FR43 is silent).
+    // Never later than the input that ends it (a press, the next gesture's
+    // first wheel): the arena's clock only moves forward, so a later stamp
+    // would move that input's times too (FR16).
+    const end = gesture.last + WHEEL_END_MS;
+    const time =
+      gesture.scrollType !== 'discrete'
+        ? gesture.last
+        : endTime == null
+          ? end
+          : Math.max(gesture.last, Math.min(end, endTime));
+    this.arena.ended(
+      gesture.kind === 'pan'
+        ? [{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]
+        : this.pinchContacts(gesture, time),
+    );
+  }
+
   /** Undo `lockSelection` for a contact that ended; idempotent. */
   private unlockSelection(id: number): void {
     this.lockedBy.get(id)?.();
@@ -1871,6 +2356,7 @@ export class GestureHost {
   }
 
   private readonly onTouchStart = (event: TouchEvent): void => {
+    this.endWheel(eventTime(event));
     this.noteFingersDown(event);
     // Where the host reads a finger from its pointer events (no ontouchstart,
     // as after touch emulation turns on), its Touch Events would track it twice.
@@ -2556,6 +3042,7 @@ export class GestureHost {
   // --- Pointer events --------------------------------------------------------
 
   private readonly onPointerDown = (event: PointerEvent): void => {
+    this.endWheel(eventTime(event));
     // A new press: whatever click is still owed to the last one is not this.
     disarmClickGuard(this.doc);
     if (!isPointerKind(event.pointerType)) {
