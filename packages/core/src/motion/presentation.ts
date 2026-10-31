@@ -41,8 +41,12 @@ export interface PresentedOffset {
 
 /** What an animator reports for an element it is moving. */
 export interface PresentedSource {
-  /** The element's offset now, read live (the motion keeps going). */
-  offset(): PresentedOffset;
+  /**
+   * The element's offset at `time` (ms on the `performance.now()` clock,
+   * now by default), read live (the motion keeps going): a past time says
+   * where it was drawn then, against where the engine hit-tests it now.
+   */
+  offset(time?: number): PresentedOffset;
   /**
    * Makes the engine hit-test the element where it is drawn now (one style
    * write); the offset restarts from there.
@@ -104,9 +108,13 @@ export function presentedElements(): ReadonlyArray<Element> {
 
 /**
  * How far `element` is drawn from where the engine hit-tests it: its own
- * offset plus those of its moving ancestors (across shadow roots).
+ * offset plus those of its moving ancestors (across shadow roots), now or at
+ * `time` (ms on the `performance.now()` clock).
  */
-export function presentedOffsetOf(element: Element): PresentedOffset {
+export function presentedOffsetOf(
+  element: Element,
+  time?: number,
+): PresentedOffset {
   if (sources.size === 0) {
     return ZERO;
   }
@@ -119,7 +127,7 @@ export function presentedOffsetOf(element: Element): PresentedOffset {
   ) {
     const source = node instanceof Element ? sources.get(node) : undefined;
     if (source != null) {
-      const offset = source.offset();
+      const offset = source.offset(time);
       x += offset.x;
       y += offset.y;
     }
