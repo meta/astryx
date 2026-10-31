@@ -171,7 +171,8 @@ Membership follows public responsibility, not an import of Button or a rendered
   Action or report member Action-pending feedback.
 - **FR12 — Connected and spaced groups stay distinct.** ButtonGroup's connected
   presentation removes inter-member gaps, shares outer edges, owns one elevation,
-  and uses its documented roving-focus keyboard model. The current
+  and uses its documented keyboard model (roving focus in toolbar mode, standard
+  Tab order in group mode). The current
   ToggleButtonGroup keeps distinct child surfaces separated by a gap; each child
   may own its own elevation, and the wrapper owns no shadow. A future connected
   toggle presentation MUST move elevation to the group and make members flat.
@@ -193,7 +194,8 @@ Membership follows public responsibility, not an import of Button or a rendered
   supplied. ToggleButton remains an action with `aria-pressed`; navigation backed
   by its Action does not turn the control into a destination link.
 - **AV5 — Group keyboard model.** ButtonGroup may use roving focus for a connected
-  action cluster. ToggleButtonGroup retains the keyboard and selection behavior
+  action cluster in toolbar mode (or standard Tab order in group mode).
+  ToggleButtonGroup retains the keyboard and selection behavior
   documented for its pressed-button set. Visual similarity alone does not require
   both groups to use the same composite-widget model.
 - **AV6 — Tooltip ownership.** A component may require an explicit tooltip or

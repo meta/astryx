@@ -83,13 +83,6 @@ export interface ButtonGroupProps extends BaseProps<HTMLDivElement> {
   isDisabled?: boolean;
 
   /**
-   * Explicit role override. By default, ButtonGroup adapts:
-   * - 3 or more members: `role="toolbar"` with `aria-orientation` and roving tabindex.
-   * - 2 or fewer members (e.g. split buttons): `role="group"` with standard Tab order.
-   */
-  role?: 'group' | 'toolbar';
-
-  /**
    * Test ID for testing frameworks.
    */
   'data-testid'?: string;
@@ -207,9 +200,17 @@ export function ButtonGroup({
 
   // When nested inside a Toolbar, preserve role="group" and yield roving tabindex
   // and focus management to the parent Toolbar so it retains a single Tab stop.
+  // BaseProps already provides role?: AriaRole; act only on 'toolbar' and 'group',
+  // replacing any other role with 'group' to preserve base contract (spec:AST-017 FR53).
   const resolvedRole = isInsideToolbar
     ? 'group'
-    : (roleProp ?? (renderedCount >= 3 ? 'toolbar' : 'group'));
+    : roleProp === 'toolbar'
+      ? 'toolbar'
+      : roleProp != null
+        ? 'group'
+        : renderedCount >= 3
+          ? 'toolbar'
+          : 'group';
   const isToolbar = resolvedRole === 'toolbar';
 
   const {listRef, handleKeyDown, handleFocus, getItems} =
