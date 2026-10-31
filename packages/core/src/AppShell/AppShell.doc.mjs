@@ -46,6 +46,11 @@ export const docs = {
           'Start the page heading inside `children`. AppShell owns the skip link, the banner landmark and the main landmark, but it renders no heading, so the first heading in the content area is the page h1.',
       },
       {
+        guidance: true,
+        description:
+          'On phones, opt the page into the full screen with `viewport-fit=cover` in the viewport meta tag (`width=device-width, initial-scale=1, viewport-fit=cover`). AppShell then extends its header under the status bar and out to the screen sides, and keeps the header\'s items and the end of the content inside the device\'s safe area. An installed web app can also draw under the status bar with `<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">`. In landscape only the header is inset: an inline SideNav and the content\'s sides still reach under a notch, so keep content padding there.',
+      },
+      {
         guidance: false,
         description:
           "Nest one AppShell inside another; it's the outermost layout frame.",
@@ -342,6 +347,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Give every nav slot an accessible name: TopNav and SideNav are separate navigation landmarks, so pass `label` to each.',
+      },
+      {
+        guidance: true,
+        description:
+          'Phones: add `viewport-fit=cover` to the viewport meta; the header then reaches under the status bar while its items and the content end stay in the safe area. Landscape: only the header is inset (not an inline SideNav or the content sides). Installed web apps: `apple-mobile-web-app-status-bar-style` `black-translucent`.',
       },
       {
         guidance: true,
