@@ -39,19 +39,44 @@ describe('Avatar', () => {
     expect(innerImg).toHaveAttribute('alt', '');
   });
 
-  it('renders fallback initials at the proportional size via a StyleX class, not an inline property', () => {
+  it('renders a named size at its type-scale-aligned font size, not the raw proportional ratio', () => {
+    // sm's raw `24 × 0.4` ratio is 9.6px, which lands between real type-scale
+    // steps (#6470) — the named tier reads the nearest step (10px) instead.
     render(<Avatar name="Ada Lovelace" size="sm" data-testid="a" />);
     const initials = screen.getByText('AL');
-    // The default proportional size (sm = 24 × 0.4 = 9.6px) is fed to StyleX as
-    // a dynamic value: StyleX applies `font-size` through a class and sets only
-    // the computed value inline (as a custom property). Because the property
-    // lands via a class, a theme's `.astryx-avatar-fallback.<size>` rule in the
-    // theme layer overrides it per size tier — no internal var seam needed.
     const style = initials.getAttribute('style') ?? '';
-    expect(style).toMatch(/9\.6\d*px/);
+    expect(style).not.toMatch(/9\.6\d*px/);
     // Regression guard: the seam must NOT reintroduce the removed internal var.
     expect(style).not.toContain('--_avatar-fallback-font-size');
   });
+
+  it('renders a custom numeric size at the proportional ratio via a StyleX class, not an inline property', () => {
+    render(<Avatar name="Ada Lovelace" size={24} data-testid="a" />);
+    const initials = screen.getByText('AL');
+    // A numeric size outside the named tiers has no type-scale step to snap
+    // to, so it keeps the proportional `size × ratio` fallback (24 × 0.4 =
+    // 9.6px), fed to StyleX as a dynamic value: StyleX applies `font-size`
+    // through a class and sets only the computed value inline (as a custom
+    // property). Because the property lands via a class, a theme's
+    // `.astryx-avatar-fallback.<size>` rule in the theme layer overrides it
+    // per size tier — no internal var seam needed.
+    const style = initials.getAttribute('style') ?? '';
+    expect(style).toMatch(/9\.6\d*px/);
+    expect(style).not.toContain('--_avatar-fallback-font-size');
+  });
+
+  it.each(['xsm', 'sm', 'md', 'lg', 'xl'] as const)(
+    'size %s takes the type-scale-aligned static style, not the proportional dynamic one (#6470)',
+    size => {
+      render(<Avatar name="Ada Lovelace" size={size} />);
+      const initials = screen.getByText('AL');
+      // The named tiers no longer go through the dynamic ratio style at all,
+      // so none of their font sizes are set as an inline custom property —
+      // only the numeric-size fallback (tested above) still does that.
+      const style = initials.getAttribute('style') ?? '';
+      expect(style).not.toMatch(/font-size/i);
+    },
+  );
 
   it('marks the fallback surface with the stable theming class (initials and icon)', () => {
     // The background is themed directly on `.astryx-avatar-fallback`, so both

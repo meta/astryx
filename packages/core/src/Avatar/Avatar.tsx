@@ -34,7 +34,9 @@ import {
   typographyVars,
   fontWeightVars,
   radiusVars,
+  typeScaleVars,
 } from '../theme/tokens.stylex';
+import type {typeScaleDefaults} from '../theme/tokens.stylex';
 import {AvatarSizeContext} from './AvatarSizeContext';
 import {
   AvatarStatusLabelContext,
@@ -67,15 +69,34 @@ import {useTranslator, type TranslatorFn} from '../i18n';
 const CIRCLE_EDGE_OFFSET_RATIO = (1 - 1 / Math.SQRT2) / 2;
 
 /**
- * The ratio of font size to avatar size for initials.
- *
- * At 40%, two-letter initials fit comfortably within the circle with adequate
- * padding. This ratio provides good legibility across all avatar sizes:
- *   - 24px avatar → 9.6px font
- *   - 48px avatar → 19.2px font
- *   - 128px avatar → 51.2px font
+ * The ratio of font size to avatar size for initials, used only as a
+ * fallback for a caller-supplied numeric `size` that isn't one of the named
+ * tiers below (there is no type-scale step to snap an arbitrary pixel value
+ * to). At 40%, two-letter initials fit comfortably within the circle with
+ * adequate padding.
  */
 const INITIALS_FONT_SIZE_RATIO = 0.4;
+
+/**
+ * Initials font size for each named avatar size, snapped to the nearest real
+ * `typeScaleVars` step instead of the raw `size × 0.4` ratio. That ratio
+ * lands between type-scale steps at every named tier (24px → 9.6px, 36px →
+ * 14.4px, 48px → 19.2px, …) — sizes nothing else in the system ever renders
+ * text at, and 8px at `xsm` falls below the smallest step in the scale
+ * (#6470). `xl`'s 51.2px ratio result has no step to snap to (42px, the
+ * scale's own largest, is the closest available) — every other tier lands
+ * within 1px of ratio-based value it replaces.
+ */
+const NAMED_SIZE_INITIALS_FONT_TOKEN: Record<
+  AvatarNamedSize,
+  keyof typeof typeScaleDefaults
+> = {
+  xsm: '--text-heading-6-size', // 10px (ratio: 8px)
+  sm: '--text-heading-6-size', // 10px (ratio: 9.6px)
+  md: '--text-body-size', // 14px (ratio: 14.4px)
+  lg: '--text-heading-2-size', // 20px (ratio: 19.2px)
+  xl: '--text-display-1-size', // 42px (ratio: 51.2px)
+};
 
 /**
  * Named size options.
@@ -101,6 +122,10 @@ export type AvatarSize = AvatarNamedSize | AvatarNumericSize;
  * Avatar shape options
  */
 export type AvatarShape = 'circle' | 'rounded' | 'square';
+
+function isNamedSize(size: AvatarSize): size is AvatarNamedSize {
+  return typeof size === 'string';
+}
 
 /**
  * Resolves named sizes to their numeric pixel values
@@ -240,10 +265,12 @@ const dynamicStyles = stylex.create({
     width: size,
     height: size,
   }),
-  // Initials font size defaults to the proportional `size × ratio` scale. It's
-  // a StyleX dynamic style, so the value lands via a class (not an inline
-  // property) — a theme's `.astryx-avatar-fallback.<size>` rule in the theme
-  // layer overrides it per size tier, no internal var needed.
+  // Fallback for a numeric `size` outside the named tiers, which have their
+  // own type-scale-aligned static styles (initialsFontSizeStyles below) —
+  // there's no scale step to snap an arbitrary pixel value to. It's a StyleX
+  // dynamic style, so the value lands via a class (not an inline property) —
+  // a theme's `.astryx-avatar-fallback.<size>` rule in the theme layer
+  // overrides it per size tier, no internal var needed.
   fontSize: (size: number) => ({
     fontSize: `${size * INITIALS_FONT_SIZE_RATIO}px`,
   }),
@@ -268,6 +295,21 @@ const dynamicStyles = stylex.create({
       ':is([dir="rtl"] *)': 'translate(-25%, 25%)',
     },
   },
+});
+
+/**
+ * Type-scale-aligned initials font size for each named avatar size (see
+ * NAMED_SIZE_INITIALS_FONT_TOKEN). Static, not a dynamic style, since each
+ * named tier's value is fixed rather than derived from a runtime number —
+ * and reading the token (not a literal px value) means a theme retinting
+ * `typography.scale` retints these too.
+ */
+const initialsFontSizeStyles = stylex.create({
+  xsm: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.xsm]},
+  sm: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.sm]},
+  md: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.md]},
+  lg: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.lg]},
+  xl: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.xl]},
 });
 
 const BORDER_WIDTH = 2;
@@ -798,7 +840,9 @@ export function Avatar({
               stylex.props(
                 styles.fallback,
                 avatarGroup == null && styles.loneFallback,
-                dynamicStyles.fontSize(numericSize),
+                isNamedSize(resolvedSize)
+                  ? initialsFontSizeStyles[resolvedSize]
+                  : dynamicStyles.fontSize(numericSize),
               ),
             )}>
             {initials}
