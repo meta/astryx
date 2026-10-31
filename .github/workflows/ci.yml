@@ -358,8 +358,61 @@ jobs:
   # code and theme, nothing sent to a document the code navigated to), and
   # only the production build has the opaque-origin sandbox at all. The
   # spec-only lane validates spec records here, where it always has.
+  # Whether this push defers the heavy suites (spec:AST-030 FR20, DEC-14): a
+  # push to a ready agent-lane pull request (the shared agent login), in its
+  # first attempt, runs only the fast checks (lint, typecheck). The heavy jobs
+  # skip, and the required checks fail with the reason until the pull request
+  # is marked ready or reopened, or its run is re-run in full before merge
+  # (any later attempt runs everything). A spec-only change is never deferred.
+  # Every other push skips this job, and nothing waits for it.
+  heavy-ci:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name == 'pull_request' && github.event.action == 'synchronize' && github.run_attempt == '1' && github.event.pull_request.user.login == 'cixzhang' && github.base_ref == 'main' && !startsWith(github.head_ref, 'chore/merge-v'))) }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      deferred: ${{ steps.decide.outputs.deferred }}
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this push's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+
+      - name: Defer the heavy suites unless the change is spec-only
+        id: decide
+        env:
+          SPEC_ONLY: ${{ steps.scope.outputs.spec_only }}
+        run: |
+          if [ "$SPEC_ONLY" = true ]; then
+            echo 'deferred=false' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo 'deferred=true' >> "$GITHUB_OUTPUT"
+          echo "::notice title=Heavy CI deferred::Heavy CI deferred: runs when marked ready and before merge. Mark the pull request ready, reopen it, or re-run all jobs of this run to run everything."
+          echo "Heavy CI deferred: runs when marked ready and before merge." >> "$GITHUB_STEP_SUMMARY"
+          printf '{"headSha":"%s","runId":"%s","runAttempt":"%s"}\n' \
+            "${{ github.event.pull_request.head.sha }}" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" > heavy-ci-deferred.json
+
+      # The PR report says why the heavy checks did not run.
+      - name: Upload the deferral for the PR report
+        if: steps.decide.outputs.deferred == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: heavy-ci-deferred-${{ github.run_attempt }}
+          path: heavy-ci-deferred.json
+          retention-days: 7
+
   docsite-test:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v')) }}
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (!cancelled() && github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v')) }}
     # The Next.js production build uses every core it gets.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -371,6 +424,13 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
         run: |
           echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
+          exit 1
+      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # required check fails with the reason, never passes as skipped.
+      - name: Heavy CI deferred
+        if: needs.heavy-ci.outputs.deferred == 'true'
+        run: |
+          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
           exit 1
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
@@ -493,7 +553,8 @@ jobs:
   # build-storybook + typecheck below.
   test-ui:
     name: test-ui (${{ matrix.shard }}/${{ strategy.job-total }})
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch') }}
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch')) }}
     # One runner ran the whole UI project in ~16 minutes and set the PR's wall
     # time. Vitest's --shard gives each leg an equal share of the files; the
     # two slowest files (~3.5 minutes each) bound a leg, so more legs stop
@@ -607,7 +668,8 @@ jobs:
 
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch') }}
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch')) }}
     # One runner ran the Node project in ~12 minutes. Vitest's --shard splits
     # the files across the legs; `test` joins them.
     strategy:
@@ -700,7 +762,8 @@ jobs:
   # test-native-swift runs on macOS only then. It reads the same scope step as
   # every test job; anything undecidable picks macOS.
   native-swift-runner:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch') }}
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch')) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -818,6 +881,7 @@ jobs:
   test:
     needs:
       [
+        heavy-ci,
         release-bump,
         test-ui,
         test-node,
@@ -836,6 +900,13 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
         run: |
           echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
+          exit 1
+      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # required check fails with the reason, never passes as skipped.
+      - name: Heavy CI deferred
+        if: needs.heavy-ci.outputs.deferred == 'true'
+        run: |
+          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
           exit 1
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
@@ -885,7 +956,8 @@ jobs:
   # own terms. The decision script comes from the merge commit's trusted
   # sparse checkout, and a lookup that fails denies the suite.
   run-labels:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') }}
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check')) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -918,7 +990,8 @@ jobs:
             await decideRunLabels({github, context, core});
 
   build-storybook:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled())) }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
@@ -1173,7 +1246,8 @@ jobs:
   # inside it, so no browser lane waits for the second build; the head sizes
   # still come from build-storybook's analysis.
   size-base:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request')
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name == 'pull_request')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -1373,8 +1447,8 @@ jobs:
   # gate passes. A skipped build-storybook job (a draft) skips this gate too;
   # a fork pull request without `ci:run` still reports here.
   build:
-    needs: [build-storybook, typecheck]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
+    needs: [heavy-ci, build-storybook, typecheck]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || needs.heavy-ci.outputs.deferred == 'true' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
     runs-on: ubuntu-slim
     permissions: {}
     steps:
@@ -1382,6 +1456,13 @@ jobs:
         if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
         run: |
           echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
+          exit 1
+      # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
+      # required check fails with the reason, never passes as skipped.
+      - name: Heavy CI deferred
+        if: needs.heavy-ci.outputs.deferred == 'true'
+        run: |
+          echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
           exit 1
       - name: Assert parallel builds succeeded
         run: |
@@ -1863,8 +1944,8 @@ jobs:
           delete-merged: true
 
   pr-interaction:
-    needs: [build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    needs: [heavy-ci, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -1981,8 +2062,8 @@ jobs:
   # required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
-    needs: [build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    needs: [heavy-ci, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2098,7 +2179,8 @@ jobs:
   # package ownership explicit; the historical `test` join above projects its
   # result. Until runtime:build has a specialized route, broad CI dispatches it.
   test-build:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch')
+    needs: [heavy-ci]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch')) }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:

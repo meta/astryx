@@ -318,6 +318,18 @@ they are separately named.
   required check would count as passing. Events other than a pull request (a
   push to `main`, a merge-group entry, a dispatch) are unaffected, and a fork's
   code never runs with the repository's secrets.
+- **FR20 — An agent lane's push runs the fast checks; the heavy suites run when
+  it is ready and before merge.** A push to a ready pull request authored by the
+  shared agent login, into `main`, in its run's first attempt, runs lint and
+  typecheck only, unless its trusted classification is spec-only. Its heavy jobs
+  skip, and the required contexts `test`, `build` and `docsite-test` (FR7)
+  report failure with "Heavy CI deferred: runs when marked ready and before
+  merge", never success, so nothing merges on that run; the PR report says the
+  same. Marking the pull request ready, opening or reopening it, and any later
+  attempt of its run (the pre-merge re-run of all jobs) run every suite at that
+  head. A release merge-back, a release-branch pull request, every other
+  author, the review and spec gates (FR15) and the heavy-suite caps (FR16) are
+  unaffected (DEC-14).
 
 ### Platform support
 
@@ -369,6 +381,7 @@ read change (FR14).
 | FR15     | workflow contract and reconciler tests                                             | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR                                                                                                                                                                                                                                                                     | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, or a non-command comment starts a runner                                |
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract                      | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                        |
+| FR20 | `ci-heavy-deferral.test.mjs` over ci.yml, lint.yml and pr-comment.yml | agent push; marked ready; opened; reopened; re-run; another author; release branch; merge-back; spec-only change | a heavy job runs on a deferred push, a required context passes or skips on one, a ready, reopened or re-run pull request defers, a spec-only change defers, or the report hides the deferral |
 
 ## Decision log
 
@@ -538,6 +551,25 @@ it, so the merge rules change only when an administrator removes it.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+
+### DEC-14 — Agent lanes run the heavy suites when ready and before merge
+
+**Reference:** `spec:AST-030/DEC-14`
+**Decider:** `cixzhang`
+
+Most pull-request runs come from the shared agent login, and an agent pushes
+many times while it works; each push ran every heavy suite on a head that was
+replaced minutes later. The heavy suites now run at the two heads that decide
+a merge: the one that becomes ready and the one re-run before merge. Between
+them lint and typecheck give fast feedback. A deferred required context fails
+with its reason rather than passing as skipped, because a skipped required
+check counts as passing (FR17's rule), so a deferred head cannot merge.
+
+Rejected: leaving the required contexts pending (a commit status beside the
+job's check run of the same name is ambiguous to branch protection); deferring
+spec-only changes (their heavy jobs already do nothing, and every push would
+then need a re-run to merge).
 
 ## Open questions
 

@@ -322,6 +322,19 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
+      # A failed run may be a deferred agent-lane push (spec:AST-030 FR20),
+      # whose report says so instead of an unavailable analysis.
+      - name: Download the heavy-CI deferral from the CI run
+        id: deferral-download
+        if: steps.identity.outputs.valid == 'true' && steps.identity.outputs.source_conclusion == 'failure'
+        uses: actions/download-artifact@v8
+        with:
+          name: heavy-ci-deferred-${{ steps.identity.outputs.run_attempt }}
+          path: heavy-ci-deferred
+          run-id: ${{ steps.identity.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
       - name: Cross-check artifact identity
         id: cross-check
         continue-on-error: true
@@ -405,6 +418,9 @@ jobs:
                 sourceRunAttempt: Number(process.env.RUN_ATTEMPT),
                 sourceConclusion: process.env.SOURCE_CONCLUSION,
               },
+              fallbackMessage: require('node:fs').existsSync('heavy-ci-deferred/heavy-ci-deferred.json')
+                ? 'Heavy CI deferred: runs when marked ready and before merge. Lint and typecheck ran on this push.'
+                : undefined,
             });
 
   # The CI-completion lane runs on workflow_run, so GitHub attaches its jobs to

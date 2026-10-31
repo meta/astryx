@@ -29,20 +29,21 @@ describe('docsite-test', () => {
   it('is one job that builds the docsite once and runs both suites on it', () => {
     expect(jobs['docsite-data']).toBeUndefined();
     expect(jobs['docsite-browser']).toBeUndefined();
-    expect(owner.needs).toBeUndefined();
+    // It needs only the heavy-suite deferral (spec:AST-030 FR20).
+    expect(owner.needs).toEqual(['heavy-ci']);
     expect(owner['continue-on-error']).toBeUndefined();
     // A required context keeps only the draft skip in its condition; an
     // outside contributor's run stops at the first step with the reason.
     expect(owner.if).toBe(
       gated(
-        "${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') }}",
+        "${{ !cancelled() && github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') }}",
         PR_REPORT_GATE,
       ),
     );
     expect(owner.steps[0].name).toBe(
       'Require a branch in this repository or the ci:run label',
     );
-    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(2);
+    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(3);
 
     const builds = owner.steps.filter(s =>
       /pnpm -F @astryxdesign\/docsite build/.test(s.run ?? ''),

@@ -58,7 +58,7 @@ describe('WebKit interaction proof routing', () => {
     expect(ungated(webkit.if)).toBe(
       "github.event_name != 'workflow_dispatch' && always() && !cancelled()",
     );
-    expect(webkit.needs).toEqual(['build-storybook']);
+    expect(webkit.needs).toEqual(['heavy-ci', 'build-storybook']);
   });
 
   it('stays on a standard runner within the 15-minute budget', () => {
