@@ -239,6 +239,11 @@ export function CommentComposerBase({
   latestValueRef.current = value;
   const isMountedRef = useRef(true);
   const actionPendingRef = useRef(false);
+  // The latest callback, read when reporting. An inline callback is new on
+  // every render; depending on it would re-run the unmount cleanup below on
+  // each render and leave the composer busy after its upload ends.
+  const onActionPendingChangeRef = useRef(onActionPendingChange);
+  onActionPendingChangeRef.current = onActionPendingChange;
   const isSubmittingRef = useRef(isSubmitting);
   isSubmittingRef.current = isSubmitting;
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -269,27 +274,24 @@ export function CommentComposerBase({
   const [isActionPending, setIsActionPending] = useState(false);
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
-  const updateActionPending = useCallback(
-    (nextPending: boolean) => {
-      if (actionPendingRef.current === nextPending) {
-        return;
-      }
-      actionPendingRef.current = nextPending;
-      setIsActionPending(nextPending);
-      onActionPendingChange?.(nextPending);
-    },
-    [onActionPendingChange],
-  );
+  const updateActionPending = useCallback((nextPending: boolean) => {
+    if (actionPendingRef.current === nextPending) {
+      return;
+    }
+    actionPendingRef.current = nextPending;
+    setIsActionPending(nextPending);
+    onActionPendingChangeRef.current?.(nextPending);
+  }, []);
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
       if (actionPendingRef.current) {
         actionPendingRef.current = false;
-        onActionPendingChange?.(false);
+        onActionPendingChangeRef.current?.(false);
       }
     };
-  }, [onActionPendingChange]);
+  }, []);
 
   const uploadImages = async (files: readonly File[]) => {
     if (onUploadImages == null || files.length === 0) {
