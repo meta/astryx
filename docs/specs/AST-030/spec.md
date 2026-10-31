@@ -210,11 +210,14 @@ they are separately named.
   later commits remain next-release input. A rewrite or divergence that removes
   the checked SHA from current `main` history invalidates the receipt.
   This replaces constituent-PR-only release gating, not the canonical checks'
-  existing finding policies. A main-push workflow MUST dispatch that
-  release-check for every push to `main`, bound to the pushed commit; the
-  dispatched checks share one concurrency group that never cancels a running
-  check: at most one runs and one waits, and a burst of pushes is checked once,
-  at its newest commit. A commit `main` has already moved past leaves its check
+  existing finding policies. Main's heavy-lane workflow MUST dispatch that
+  release-check for `main`'s tip, bound to that commit, on a push to `main` and
+  on a quarter-hourly schedule, unless the tip already has one or one was
+  dispatched in the last 55 minutes (DEC-10). A check replaced while waiting,
+  which never ran, does not count. A check covers every merge up to its commit,
+  so every merge is covered by the next one. The dispatched checks share one
+  concurrency group that never cancels a running check: at most one runs and
+  one waits. A push whose commit `main` has already moved past leaves its check
   to the newer push. That release-check run is main's result, and a failure is
   fixed forward by an atomic pull request. Main's own fast
   checks still run for every push. Release checks MUST NOT capture
@@ -538,6 +541,26 @@ it, so the merge rules change only when an administrator removes it.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+### DEC-10 — Main's release-check runs about once an hour
+
+**Reference:** `spec:AST-030/DEC-10`
+**Decider:** `cixzhang`
+
+Dispatched on every push, main's release-check ran back to back through busy
+hours, about 65 full runs a day of roughly 165 runner-minutes each. A check
+covers every merge up to its commit, so one check about an hour keeps every
+merge covered with about a third of the runs. A push after a quiet hour is
+checked at once; in a burst, the next check starts at most 55 minutes after
+the last one, plus up to 15 minutes for the schedule to notice, so a failing
+merge is reported within about two hours of landing instead of about one and a
+quarter. A release cut dispatches its own exact-commit check, which this does
+not affect.
+
+Rejected: waiting for main to be quiet for some minutes (busy hours never go
+quiet, so the check would starve); holding a runner to wait out each push (it
+is billed while it waits); a daily check (main's result would lag a whole
+day).
 
 ## Open questions
 
