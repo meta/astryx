@@ -12,6 +12,8 @@
 /// <reference types="@testing-library/jest-dom" />
 import '@testing-library/jest-dom/vitest';
 import {configure} from '@testing-library/react';
+import {afterEach} from 'vitest';
+import {__resetClickGuardForTest} from '../../../packages/core/src/utils/clickGuard';
 
 // Text queries (getByText/findByText/…) target VISIBLE text. Astryx's
 // `useAnnounce` renders a visually-hidden aria-live region
@@ -24,6 +26,15 @@ import {configure} from '@testing-library/react';
 // that assert an announcement query the region directly, e.g. by role="status").
 // Keeps the jsdom defaults (script, style).
 configure({defaultIgnore: 'script, style, [data-astryx-live-region]'});
+
+// The click guard (packages/core/src/utils/clickGuard.ts) is armed per
+// document by a gesture that already acted and disarms itself 400 ms later.
+// A test that ends inside that window would leave the timer to fire after
+// the environment tears its window down, during a later file. Disarm every
+// guard as each test ends.
+afterEach(() => {
+  __resetClickGuardForTest();
+});
 
 // Polyfill for matchMedia (not supported in jsdom).
 //
