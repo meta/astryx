@@ -432,7 +432,10 @@ const styles = stylex.create({
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-3'],
-    // Clears the sheet's floating grab handle.
+    // Clears the sheet's floating grab handle while it sticks to the top of a
+    // scrolled sheet. At rest it sits over the band the sheet keeps under
+    // the bar (component:BottomSheet), so the band is not doubled.
+    marginBlockStart: `calc(-1 * ${spacingVars['--spacing-6']})`,
     paddingBlockStart: spacingVars['--spacing-6'],
     paddingBlockEnd: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],

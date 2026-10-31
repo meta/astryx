@@ -540,12 +540,11 @@ const styles = stylex.create({
     display: 'flex',
   },
   sheetBody: {
-    // One inset on every edge. The block-start is the exception and has to
-    // be: the sheet's grab handle floats out of flow, costing no layout
-    // height of its own, so the content wrapper owes it the 24px it occupies
-    // — which reads as the same inset, because the handle sits in it.
+    // One inset on every edge but the top: BottomSheet keeps the band under
+    // its grab bar (component:BottomSheet, Content area inset), which reads
+    // as the same inset because the bar sits in it.
     paddingInline: spacingVars['--spacing-4'],
-    paddingBlockStart: spacingVars['--spacing-6'],
+    paddingBlockStart: 0,
     paddingBlockEnd: spacingVars['--spacing-4'],
   },
   divider: {
@@ -1338,7 +1337,8 @@ export function TouchDateField({
         // The picker is a fixed height by construction, so the sheet should be
         // exactly as tall as it is rather than claiming a viewport budget.
         height="hug"
-        // sheetBody owns the inset, including the band under the grab handle.
+        // sheetBody owns the inset; the sheet keeps the band under its grab
+        // bar.
         padding={0}>
         <div ref={sheetBodyRef} {...stylex.props(styles.sheetBody)}>
           {surface}

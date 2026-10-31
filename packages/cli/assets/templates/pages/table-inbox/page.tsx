@@ -1778,12 +1778,9 @@ function ComposeWindow({
       hasScrim={false}
       // The Layout below owns the inset; the sheet adds none of its own.
       padding={0}>
-      {/* The grab handle floats over the top edge, out of flow, about 12px
-          down. The Layout's own padding is not quite enough to clear it — the
-          heading came up level with the pill, four pixels under it — so the
-          sheet buys the handle its own band of space before the content
-          starts. */}
-      <VStack paddingBlockStart={3}>
+      {/* The sheet keeps a band under its grab handle at rest, so the Layout
+          starts below the pill without a band of its own. */}
+      <VStack>
         <Layout
           // auto, not fill: the sheet is sized by this Layout now rather than
           // the other way round. `fill` would stretch it to a height that

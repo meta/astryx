@@ -58,7 +58,6 @@ import {container} from '../Layout/container.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {
   containerPaddingBlockEndVarStyles,
-  containerPaddingBlockStartVarStyles,
   containerPaddingInlineVarStyles,
   overlayPaddingReset,
   paddingStyles,
@@ -86,10 +85,10 @@ export type {BottomSheetSnapPoint};
 const OVERSCROLL_PADDING = 48;
 const MOBILE_KEYBOARD_BOTTOM_CLEARANCE = 48;
 const TRANSITION_BACKSTOP_BUFFER_MS = 50;
-// The floating handle bar's height. The bar is out of flow, so this is not
-// layout space the content pays for -- the pill (4px, centered) lands 10-14px
-// from the sheet's top edge, inside the space a content wrapper's own top
-// padding already provides.
+// The floating handle bar's height. The bar is out of flow; at rest the
+// content box keeps a band this tall under it (`clearsGrabBar`), so the pill
+// (4px, centered, 10-14px from the sheet's top edge) never sits on the first
+// row, and scrolled content rides up beneath it.
 const HANDLE_BAR_HEIGHT = spacingVars['--spacing-6'];
 
 // Measure the same viewport the height budgets are written against. Those are
@@ -119,6 +118,49 @@ function snapPointsKeyFor(
   }
   return key;
 }
+
+// At rest the content starts below the floating grab bar whatever the
+// padding, so the first row never sits under the bar's fade
+// (component:BottomSheet, Content area inset). The band under the bar is not
+// container padding: an explicit padding publishes only what reaches past
+// the band, which a lone Section escapes, and `clearsGrabBar` applies the band
+// on top. It is the content box's own padding, so it scrolls away with the
+// content, which then passes under the bar.
+const pastGrabBarStyles = stylex.create({
+  0: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-0']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  0.5: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-0-5']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  1: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-1']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  1.5: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-1-5']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  2: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-2']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  3: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-3']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  4: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-4']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  5: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-5']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  6: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-6']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  8: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-8']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+  10: {
+    '--container-padding-block-start': `max(calc(${spacingVars['--spacing-10']} - ${HANDLE_BAR_HEIGHT}), 0px)`,
+  },
+});
 
 /**
  * The queries `design:reduced-motion` names: reduced motion with a coarse
@@ -302,11 +344,13 @@ const styles = stylex.create({
     // change width partway down. Painting the surface here hides the ring
     // evenly, leaving the border below as the sheet's one edge.
     backgroundColor: colorVars['--color-background-surface'],
-    // No reserve for the handle bar: it floats, so the content starts at the
-    // sheet's top edge and rides up under the pill. The pill is 4px centered
-    // in a 24px band, so it occupies only 10-14px from the edge -- inside the
-    // space a content wrapper's own top padding already provides.
+    // No reserve for the handle bar here: it floats over the scrolling area,
+    // so scrolled content rides up under the pill. The content box keeps the
+    // resting content clear of the bar instead (`clearsGrabBar`).
     paddingBlockEnd: 0,
+  },
+  clearsGrabBar: {
+    paddingBlockStart: `calc(var(--container-padding-block-start, 0px) + ${HANDLE_BAR_HEIGHT})`,
   },
   content: {
     // Preserve the body's block formatting (including margin/float isolation)
@@ -888,12 +932,15 @@ export function BottomSheetPanel({
                 !usesThemePadding &&
                   effectivePadding !== 4 &&
                   containerPaddingInlineVarStyles[effectivePadding],
-                !usesThemePadding &&
-                  effectivePadding !== 4 &&
-                  containerPaddingBlockStartVarStyles[effectivePadding],
+                // An explicit padding publishes what reaches past the grab
+                // bar's band, like the theme default (Layout/container.stylex.ts).
+                !usesThemePadding && pastGrabBarStyles[effectivePadding],
                 !usesThemePadding &&
                   effectivePadding !== 4 &&
                   containerPaddingBlockEndVarStyles[effectivePadding],
+                // The band under the grab bar, on top of the published
+                // padding past it: max(padding, the bar) in all.
+                styles.clearsGrabBar,
               ),
             ),
           )}>

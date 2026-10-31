@@ -95,7 +95,7 @@ export const docs = {
     derived: [{property: 'padding', expand: 'container'}],
   },
   description:
-    "A mobile touch sheet that rises from the bottom edge, with animated entrance and exit, a grab handle, optional drag-to-resize snap points, and purpose-controlled dismissal. Like Dialog, it is a padded container: content starts at the theme's bottom-sheet padding (--spacing-4 by default), and a lone Section child or bleed children such as Table and Divider align against it. A sheet always owns a native <dialog>; inside the deprecated BottomSheetSwitcher the switcher presents and closes that dialog as the flow moves between steps. In both modes, ref and shared DOM props target the visual panel <div>. Sheets stack: a sheet opened while another is open sits on top of it, the covered sheet stays mounted and recedes, and one scrim covers the page. A sheet that closes as another opens in the same update is replaced by it, with the step-to-step handoff a multi-step flow needs.",
+    "A mobile touch sheet that rises from the bottom edge, with animated entrance and exit, a grab handle, optional drag-to-resize snap points, and purpose-controlled dismissal. Like Dialog, it is a padded container: content starts at the theme's bottom-sheet padding (--spacing-4 by default), and a lone Section child or bleed children such as Table and Divider align against it. At the top the content always starts below the grab bar's 24px band, which is not padding a child escapes, so the first row never sits under the bar; scrolled content passes beneath it. A sheet always owns a native <dialog>; inside the deprecated BottomSheetSwitcher the switcher presents and closes that dialog as the flow moves between steps. In both modes, ref and shared DOM props target the visual panel <div>. Sheets stack: a sheet opened while another is open sits on top of it, the covered sheet stays mounted and recedes, and one scrim covers the page. A sheet that closes as another opens in the same update is replaced by it, with the step-to-step handoff a multi-step flow needs.",
   props: [
     {
       name: 'isOpen',
@@ -146,7 +146,7 @@ export const docs = {
       name: 'padding',
       type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
       description:
-        'Internal padding of the sheet content using the spacing scale, matching Dialog. When omitted, uses the theme default for bottom sheets (--spacing-4 unless the theme sets padding on bottom-sheet). A lone Section child escapes the padding, and bleed children such as Table and Divider compensate against it. Use 0 for edge-to-edge content that supplies its own inset.',
+        "Internal padding of the sheet content using the spacing scale, matching Dialog. When omitted, uses the theme default for bottom sheets (--spacing-4 unless the theme sets padding on bottom-sheet). A lone Section child escapes the padding, and bleed children such as Table and Divider compensate against it. Use 0 for edge-to-edge content that supplies its own inset. Whatever the padding, the block-start inset is never less than the grab bar's height (--spacing-6), so resting content starts below the bar.",
     },
     {
       name: 'height',

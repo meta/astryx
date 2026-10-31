@@ -444,7 +444,8 @@ light-dismisses: a tap outside it or a swipe down closes it, whatever
 `hasLightDismiss` says, so a finger always has a way out. Its fallback close
 stays hidden, as in an anchored popover. Everything else follows Popover's
 existing props. The sheet of DEC-6 is a modal BottomSheet at the sheet's tall
-height and inset by Popover's `padding`; `xstyle`, `className` and `style`
+height and inset by Popover's `padding`, below the grab bar's band at the top
+(`component:BottomSheet`, Content area inset); `xstyle`, `className` and `style`
 style its panel, and `placement`, `alignment` and `width` do not apply. The
 surface is chosen when the popover opens and stays until it closes, and the
 trigger's expanded state and controlled element follow whichever surface is

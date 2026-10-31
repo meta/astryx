@@ -129,7 +129,8 @@ export const TextOnlyFitting: Story = {
  * Content placed directly in a sheet. The sheet pads it like Dialog, by
  * default or at the `padding` step given here, and a full-bleed Divider
  * reaches the sheet's edges because the content box publishes its inset.
- * `padding={0}` restores the unpadded content box.
+ * `padding={0}` removes the padding; the content still starts below the grab
+ * bar's band.
  */
 export const ContainerPadding: Story = {
   args: {

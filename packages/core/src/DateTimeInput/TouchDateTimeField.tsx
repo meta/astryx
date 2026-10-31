@@ -246,7 +246,8 @@ const styles = stylex.create({
     inlineSize: '100%',
     minInlineSize: 0,
     paddingInline: spacingVars['--spacing-4'],
-    paddingBlockStart: spacingVars['--spacing-6'],
+    // The sheet keeps the band under its grab bar.
+    paddingBlockStart: 0,
     paddingBlockEnd: spacingVars['--spacing-4'],
   },
   touchSurface: {
@@ -1500,8 +1501,8 @@ export function TouchDateTimeField({
           onOpenChange={handleSheetOpenChange}
           label={t('@astryx.dateTimeInput.dialogLabel')}
           height="hug"
-          // touchSheetBody owns the inset, including the band under the grab
-          // handle.
+          // touchSheetBody owns the inset; the sheet keeps the band under its
+          // grab bar.
           padding={0}>
           <div ref={sheetBodyRef} {...stylex.props(styles.touchSheetBody)}>
             {surface}

@@ -327,14 +327,14 @@ describe('ContextMenu', () => {
         expect(element).not.toBeNull();
         return element as HTMLElement;
       });
-      // No Section wrapper: the menu element keeps the sheet's 16px top and
-      // 4px side inset plus its own 4px, and publishes the padding it applies.
+      // No Section wrapper: the menu element keeps the 4px side inset plus
+      // its own 4px, and its own 4px below the band the sheet keeps under its
+      // grab bar, and publishes the padding it applies.
       expect(content.parentElement?.closest('.astryx-section')).toBeNull();
       expect(content).toHaveStyle({
-        paddingTop: 'calc(var(--spacing-4) + var(--spacing-1))',
+        paddingTop: 'var(--spacing-1)',
         paddingInline: 'calc(var(--spacing-1) + var(--spacing-1))',
-        '--container-padding-block-start':
-          'calc(var(--spacing-4) + var(--spacing-1))',
+        '--container-padding-block-start': 'var(--spacing-1)',
         '--container-padding-inline-start':
           'calc(var(--spacing-1) + var(--spacing-1))',
       });

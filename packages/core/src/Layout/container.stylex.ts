@@ -102,6 +102,7 @@ const baseStyles = stylex.create({
  * CSS custom property cascade — no layer competition.
  */
 const SP4 = spacingVars['--spacing-4'];
+const SP6 = spacingVars['--spacing-6'];
 
 // Card padding chains: --astryx-* then the next specificity level, terminating
 // at --spacing-4. Built as chained const strings (no function calls) so StyleX
@@ -149,6 +150,13 @@ const bottomSheetInlineStart = `var(--astryx-bottom-sheet-padding-inline-start, 
 const bottomSheetInlineEnd = `var(--astryx-bottom-sheet-padding-inline-end, ${bottomSheetInline})`;
 const bottomSheetBlockStart = `var(--astryx-bottom-sheet-padding-block-start, ${bottomSheetShorthand})`;
 const bottomSheetBlockEnd = `var(--astryx-bottom-sheet-padding-block-end, ${bottomSheetShorthand})`;
+// A bottom sheet's resting content starts below its floating grab bar
+// (--spacing-6 tall), whatever the padding (component:BottomSheet, Content
+// area inset). The band under the bar is not container padding: the sheet
+// publishes only the padding past it, which a lone Section escapes, and
+// applies the band on top (BottomSheetPanel). The layout padding variables
+// keep the plain padding.
+const bottomSheetBlockStartClear = `max(calc(${bottomSheetBlockStart} - ${SP6}), 0px)`;
 
 // Drawer padding chains: --astryx-* then the next specificity level,
 // terminating at --spacing-4 like Dialog. Built as chained const strings (no
@@ -250,7 +258,7 @@ const bottomSheetDefaultPaddingStyles = stylex.create({
     '--container-padding-inline-end': bottomSheetInlineEnd,
   },
   containerPaddingBlockStart: {
-    '--container-padding-block-start': bottomSheetBlockStart,
+    '--container-padding-block-start': bottomSheetBlockStartClear,
   },
   containerPaddingBlockEnd: {
     '--container-padding-block-end': bottomSheetBlockEnd,

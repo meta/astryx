@@ -187,7 +187,9 @@ const styles = stylex.create({
     height: '100%',
     minHeight: 0,
     paddingInline: spacingVars['--spacing-3'],
-    paddingBlockStart: spacingVars['--spacing-8'],
+    // Below the band the sheet keeps under its grab bar (--spacing-6), so the
+    // search field still starts 32px down.
+    paddingBlockStart: spacingVars['--spacing-2'],
     paddingBlockEnd: spacingVars['--spacing-3'],
   },
   // The manage sheet intentionally has no dedicated close button; the sheet

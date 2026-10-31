@@ -219,11 +219,12 @@ describe('DropdownMenu', () => {
     const heading = screen.getByRole('heading', {name: 'Project actions'});
     expect(heading).toHaveStyle({marginInlineStart: 'var(--spacing-3)'});
     // The menu's content element takes the sheet's content padding itself,
-    // with no wrapper: 16px above the first row, 4px at the sides.
+    // with no wrapper: nothing above the first row but the band the sheet
+    // keeps under its grab bar, 4px at the sides.
     const content = heading.closest('.astryx-dropdown-menu');
     expect(content?.parentElement?.closest('.astryx-section')).toBeNull();
     expect(content).toHaveStyle({
-      paddingTop: 'var(--spacing-4)',
+      paddingTop: '0px',
       paddingInline: 'var(--spacing-1)',
     });
     // The root heading stands alone, with no row wrapper.

@@ -178,13 +178,15 @@ const styles = stylex.create({
     userSelect: 'none',
   },
   // The menu's own inset inside the sheet content box (menuBottomSheetStyles
-  // .content): the 16px / 4px the sheet keeps plus the menu's 4px padding.
+  // .content): the 4px at the sides the content box keeps plus the menu's
+  // 4px padding; above the first row, the menu's 4px below the band the sheet
+  // keeps under its grab bar.
   sheetMenuInset: {
-    paddingBlockStart: `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    paddingBlockStart: spacingVars['--spacing-1'],
     paddingBlockEnd: spacingVars['--spacing-1'],
     paddingInline: `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     // Bleeding rows read the padding this element applies.
-    '--container-padding-block-start': `calc(${spacingVars['--spacing-4']} + ${spacingVars['--spacing-1']})`,
+    '--container-padding-block-start': spacingVars['--spacing-1'],
     '--container-padding-block-end': spacingVars['--spacing-1'],
     '--container-padding-inline-start': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,
     '--container-padding-inline-end': `calc(${spacingVars['--spacing-1']} + ${spacingVars['--spacing-1']})`,

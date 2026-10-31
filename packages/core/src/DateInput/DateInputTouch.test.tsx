@@ -2698,9 +2698,10 @@ describe('DateInput — scroll CSS (definition-level)', () => {
     // that is what put the title and Done 4px off the day grid's line.
     expect(source).toContain("paddingInline: spacingVars['--spacing-4']");
     expect(source).toContain("paddingBlockEnd: spacingVars['--spacing-4']");
-    // The block-start is the documented exception: the grab handle floats out
-    // of flow, so the content wrapper owes it the height it occupies.
-    expect(source).toContain("paddingBlockStart: spacingVars['--spacing-6']");
+    // The block-start is the documented exception: BottomSheet keeps the band
+    // under its grab bar (component:BottomSheet, Content area inset), so the
+    // content wrapper adds nothing above.
+    expect(source).toContain('paddingBlockStart: 0,');
     const header = source.slice(
       source.indexOf('  header: {'),
       source.indexOf('  title: {'),

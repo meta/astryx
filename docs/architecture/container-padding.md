@@ -120,14 +120,21 @@ pads caller content and publishes the applied inset. The inset resolves from the
 `padding` prop on the public spacing scale, then the theme's `padding` properties
 on the `bottom-sheet` component, then `--spacing-4` on every logical edge,
 matching Dialog. This prop and theme property are BottomSheet's projection of
-container lowering.
+container lowering. At the block start a sheet keeps a band under its floating
+grab bar (`--spacing-6`) that is not container padding: it publishes only the
+padding past that band and applies the band on top, so its applied block-start
+inset is `max(padding, --spacing-6)` and a lone Section or Layout that escapes
+the published padding still starts below the bar (`component:BottomSheet`,
+Content area inset).
 
 Edge compensation is a two-sided geometry contract, not a token contract:
 
 1. **Host side.** An eligible container or region state publishes the padding
    currently available at each logical edge through the existing private
    `--container-padding-*` variables. Those values must match that state's
-   applied padding and follow nesting and overlay reset; missing values mean zero.
+   applied padding, except BottomSheet's block start, which publishes only the
+   padding past its grab bar's band (above), and follow nesting and overlay
+   reset; missing values mean zero.
    A state with a known publication mismatch is ineligible. Publication does not
    itself opt a descendant into compensation.
 2. **Component side.** A participating component owns the inset retained around
@@ -365,16 +372,16 @@ evidence, not part of this documentation stack.
 
 ## Verification
 
-| Invariant        | Evidence                                                                       | Failure signal                                                                                                                                       |
-| ---------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV2, INV5       | `Section.test.tsx` per-edge and nested-propagation tests                       | A per-edge prop leaves a stale geometry variable, or nested Sections lose the shipped propagation order                                              |
-| INV2, INV3, INV8 | `ScrollableArea.test.tsx` padding and full-bleed tests                         | The content box publishes inset different from its applied padding, or the viewport escapes inherited padding without explicit full bleed            |
-| INV4             | Layout source review plus `Layout.test.tsx` and `LayoutSlots.test.tsx`         | Slot presence stops selecting the shipped applied outer/inner edge styles; exact republished geometry remains limited by the named conformance gap   |
-| INV2             | `BottomSheetPanel.test.tsx` padding tests                                      | The Content area publishes an inset that differs from its applied padding, or the `padding` prop or theme `padding` does not reach it                |
-| INV6             | `overlayPaddingReset.test.tsx`                                                 | An overlay inherits page inset, loses its theme's Section padding, or lets ancestor Section propagation cross the boundary                           |
-| INV3, INV7       | `Layout/__tests__/edgeCompensation.test.tsx` plus component tests              | An unmarked child is compensated, or marked edge content loses direct-child discoverability                                                          |
-| INV9, INV10      | `List.test.tsx` plus real-browser geometry evidence                            | The header moves; a row reads the wrong logical edge, diverges from themed/density padding, applies the wrong bounded movement, or loses paint inset |
-| INV10, INV11     | `TabList.test.tsx` plus real-browser overflow, divider, and indicator evidence | Full host-inset consumption, bounded content movement, divider span, interaction, focus, overflow, scroll controls, or indicator geometry regresses  |
+| Invariant        | Evidence                                                                       | Failure signal                                                                                                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV2, INV5       | `Section.test.tsx` per-edge and nested-propagation tests                       | A per-edge prop leaves a stale geometry variable, or nested Sections lose the shipped propagation order                                                                                                                                         |
+| INV2, INV3, INV8 | `ScrollableArea.test.tsx` padding and full-bleed tests                         | The content box publishes inset different from its applied padding, or the viewport escapes inherited padding without explicit full bleed                                                                                                       |
+| INV4             | Layout source review plus `Layout.test.tsx` and `LayoutSlots.test.tsx`         | Slot presence stops selecting the shipped applied outer/inner edge styles; exact republished geometry remains limited by the named conformance gap                                                                                              |
+| INV2             | `BottomSheetPanel.test.tsx` padding tests                                      | The Content area publishes an inset that differs from its applied padding on any edge but the block start, its block start publishes more than the padding past the grab bar's band, or the `padding` prop or theme `padding` does not reach it |
+| INV6             | `overlayPaddingReset.test.tsx`                                                 | An overlay inherits page inset, loses its theme's Section padding, or lets ancestor Section propagation cross the boundary                                                                                                                      |
+| INV3, INV7       | `Layout/__tests__/edgeCompensation.test.tsx` plus component tests              | An unmarked child is compensated, or marked edge content loses direct-child discoverability                                                                                                                                                     |
+| INV9, INV10      | `List.test.tsx` plus real-browser geometry evidence                            | The header moves; a row reads the wrong logical edge, diverges from themed/density padding, applies the wrong bounded movement, or loses paint inset                                                                                            |
+| INV10, INV11     | `TabList.test.tsx` plus real-browser overflow, divider, and indicator evidence | Full host-inset consumption, bounded content movement, divider span, interaction, focus, overflow, scroll controls, or indicator geometry regresses                                                                                             |
 
 The List evidence must cover each `edge` value in its neutral root and in each
 bounded host List admits (Card, Section, Dialog, BottomSheet), with the optional
