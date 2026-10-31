@@ -279,6 +279,27 @@ describe('MobileNav close path edge cases', () => {
     }
   });
 
+  it('clips <body> instead of the root on a page whose <body> sets its own overflow, and gives it back', () => {
+    // A common reset: `body { overflow-x: hidden }` with the root's overflow
+    // left visible. The viewport then takes <body>'s overflow; a clip on the
+    // root would stop that propagation, so <body> would become a scroller of
+    // its own at offset 0 and the page would jump to its top.
+    document.body.style.overflowX = 'hidden';
+    try {
+      const {unmount} = render(<Drawer isOpen />);
+
+      expect(document.body.style.overflow).toBe('clip');
+      expect(document.documentElement.style.overflow).toBe('');
+
+      unmount();
+
+      expect(document.body.style.overflow).toBe('');
+      expect(document.body.style.overflowX).toBe('hidden');
+    } finally {
+      document.body.style.overflowX = '';
+    }
+  });
+
   it('restores documentElement overflow when unmounted while open', () => {
     const {unmount} = render(<Drawer isOpen />);
     expect(document.documentElement.style.overflow).toBe('clip');
