@@ -316,6 +316,7 @@ describe('RichTextEditor', () => {
       'nodes',
       'toolbar',
       'plugins',
+      'hasHistory',
       'hasMarkdownShortcuts',
       'markdownExtensions',
       'codeLanguages',
