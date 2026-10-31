@@ -156,7 +156,7 @@ export const RESIZE_HANDLE_BINDING_STATES = [
   {
     id: 'bare-documented-usage',
     summary:
-      'the documented minimal usage — <ResizeHandle direction resizable={region.props} /> with no aria-controls passed',
+      'the documented minimal usage — <ResizeHandle direction ref={handleRef} /> with no aria-controls passed',
     storyId: story('bare-documented-usage'),
     component: 'ResizeHandle',
     label: 'Resize details pane',
