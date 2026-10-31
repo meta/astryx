@@ -610,7 +610,9 @@ contraction. It does not merely report that authority is missing.
    specification.
 2. A reviewer or agent applies the contraction path above. Only a surviving,
    intentional `novel-human` question proceeds; the contributor does not invent
-   the answer or specify unrelated adjacent behavior.
+   the answer or specify unrelated adjacent behavior. An undeclared public API
+   row also proceeds, as change coupling step 6 describes, rather than being
+   removed or split by review.
 3. An authorized owner answers in the pull-request review.
 4. A maintainer or agent records that ruling in the canonical owning record.
    - Prefer a commit in the same pull request when maintainers can update the
@@ -813,7 +815,7 @@ authority.
 When an otherwise reviewable change carries a separable contradiction or unsettled
 decision, remove or split that delta and keep the primary intent moving. Recommend
 a specification only when the surviving delta is intentionally pursued as durable
-behavior, not because review discovered adjacent incompleteness.
+behavior, not because review discovered adjacent incompleteness. An undeclared public API row is the exception: change coupling step 6 sends it to human review for an owner's decision, and review does not remove or split it.
 
 Rejected: turning every uncontracted tagalong into a specification project, because
 that makes a narrow repair absorb unrelated design work and leaves the contributor

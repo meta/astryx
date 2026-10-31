@@ -172,7 +172,10 @@ A public API proposal is admitted only when it passes both gates:
   behavior without changing public API or behavior beyond current authority MUST do
   so. Any additional public delta follows `architecture:knowledge-contracts`
   independently. A separable contradictory or unsettled tagalong MUST be removed or
-  split before review asks the repair to carry a new owner decision. Existing current
+  split before review asks the repair to carry a new owner decision, except an
+  undeclared public API row, which goes to human review for an owner's decision
+  rather than being removed or split by review (`architecture:knowledge-contracts`
+  change coupling step 6). Existing current
   authority may settle an intentional remaining delta; only a surviving, intentional
   gap requires owner judgment. Implementation convenience, removal of an internal
   wrapper, or exposure of existing internal fields is not evidence that an API should
