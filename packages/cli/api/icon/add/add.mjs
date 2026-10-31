@@ -31,6 +31,8 @@ import {
   astryxIconDefinitions,
   authoring,
   checkNewDefinition,
+  withLibraryProgress,
+  definitionNameFromInput,
   closestNames,
   findLocalIconSet,
   iconIdOf,
@@ -40,12 +42,13 @@ import {
   generatedNamesOf,
   generatedOrigins,
   iconModulePackage,
-  iconNaming,
   localSourceNote,
   definitionNameOf,
   libraryIcons,
-  modulePrefix,
+  moduleNaming,
+  iconNamingWithoutLook,
   variantExportName,
+  answeringMatches,
   rankIcons,
   resolveIconSource,
   setModuleNote,
@@ -79,15 +82,29 @@ export async function iconAdd(exportName, options) {
     from,
     set: selector,
     definition: givenDefinition,
-    newDefinition,
+    newDefinition: givenNewDefinition,
     description,
     words,
     useDefault = false,
     variant,
     id: givenId,
     all = false,
+    progress,
   } = options ?? {};
+  if (progress != null && typeof progress !== 'function') {
+    throw new TypeError('options.progress must be a function.');
+  }
+  if (progress) {
+    return withLibraryProgress(progress, () =>
+      iconAdd(exportName, {...options, progress: undefined}),
+    );
+  }
   refuseOutsideProject(cwd, 'experimental icon add', 'the icon-set package');
+  // The docs' kebab-case (`ai-helper`) names the same new definition.
+  const newDefinition =
+    givenNewDefinition == null
+      ? undefined
+      : definitionNameFromInput(givenNewDefinition);
   // `--all` adds a declared variant to existing icons, so it names no icon
   // and maps nothing; a description and words describe only a new
   // definition (spec:AST-042 FR5).
@@ -177,14 +194,17 @@ export async function iconAdd(exportName, options) {
     const generated = generatedModulePath(set, packageDir);
     const module = set.data.module;
     // A library prefix every icon export shares (`feather` in `featherEye`)
-    // is left out of the id and the set's export name, as the bulk wrap does.
-    // A ./ path is the author's own files, named as written: never a library
-    // prefix (`CheckDouble` and `CheckDoubleSolid` share `check`).
-    const shared =
+    // is left out of the id and the set's export name, as the bulk wrap does,
+    // and so are the look words a library's names end in (`Outline24WGHT500`
+    // in `XOutline24WGHT500Icon`). A ./ path is the author's own files, named
+    // as written: never a library prefix (`CheckDouble` and
+    // `CheckDoubleSolid` share `check`).
+    const libraryNaming =
       useDefault || source.module.startsWith('./')
-        ? []
-        : modulePrefix(source.file, {adapter: Boolean(set.data.adapter)});
+        ? {prefix: [], positions: []}
+        : moduleNaming(source.file, {adapter: Boolean(set.data.adapter)});
     const nameWords = iconIdOf(exportName).split('-');
+    const shared = libraryNaming.prefix;
     const prefix =
       shared.length > 0 &&
       nameWords.length > shared.length &&
@@ -201,7 +221,10 @@ export async function iconAdd(exportName, options) {
     const known = set.data.icons.find(each => already.includes(each.export));
     const naming = known
       ? {id: known.id, name: known.export}
-      : iconNaming(exportName, prefix);
+      : iconNamingWithoutLook(exportName, {
+          prefix,
+          positions: libraryNaming.positions,
+        });
     const id = givenId ?? naming.id;
     const asVariant = variant != null;
     // The name the set exports it as: `<Name>Icon`, or for a variant the
@@ -219,7 +242,11 @@ export async function iconAdd(exportName, options) {
     }
 
     if (definition == null && newDefinition == null && !asVariant) {
-      return definitionMatches(set, exportName, from, id);
+      return definitionMatches(set, exportName, from, id, {
+        set: selector,
+        useDefault,
+        id: givenId,
+      });
     }
 
     /** @type {{name: string, description: string, words: string[]} | null} */
@@ -250,7 +277,7 @@ export async function iconAdd(exportName, options) {
             }),
           ),
           {
-            name: `--new-definition ${definition} --description '<what it is for>' --words a,b`,
+            name: `--new-definition ${definitionNameFromInput(definition)} --description '<what it is for>' --words a,b`,
             reason: 'add it as your own definition',
           },
         ],
@@ -262,6 +289,19 @@ export async function iconAdd(exportName, options) {
     const icons = set.data.icons.map(each => ({...each}));
     const existing = icons.find(each => each.id === id);
     if (asVariant) {
+      const declared = set.data.variants ?? [];
+      if (!declared.includes(variant)) {
+        throw new AstryxError(
+          `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first.`,
+          [
+            {
+              name: `astryx experimental icon new-set ${set.name} --variants ${[...new Set([...(declared.length > 0 ? declared : ['<default>']), variant])].join(',')}`,
+              reason: 'declare the variants',
+            },
+          ],
+          ERROR_CODES.ERR_INVALID_ARGUMENT,
+        );
+      }
       if (!existing) {
         throw new AstryxError(
           `Icon set "${set.name}" has no icon "${id}" to add a variant to. Add the icon first, or pass --id.`,
@@ -394,9 +434,12 @@ export async function iconAdd(exportName, options) {
  * @param {string} exportName
  * @param {string} from
  * @param {string} id
+ * @param {{set?: string, useDefault?: boolean, id?: string}} passed the
+ *   options the author passed, repeated in each listed command so it runs as
+ *   printed
  * @returns {import('../icon.type.mjs').IconDefinitionMatchesResponse}
  */
-function definitionMatches(set, exportName, from, id) {
+function definitionMatches(set, exportName, from, id, passed = {}) {
   const astryx = astryxIconDefinitions().definitions.map(each => ({
     doc: each.doc,
     source: /** @type {const} */ ('astryx'),
@@ -432,14 +475,19 @@ function definitionMatches(set, exportName, from, id) {
   /** @type {Map<string, {score: number, reason: string}>} */
   const best = new Map();
   for (const query of queries) {
-    for (const match of rankIcons([asSet], query)) {
+    for (const match of answeringMatches(rankIcons([asSet], query))) {
       const prior = best.get(match.export);
       if (!prior || match.score > prior.score) {
         best.set(match.export, {score: match.score, reason: match.reason});
       }
     }
   }
-  const base = `astryx experimental icon add ${exportName} --from ${from}`;
+  const base = [
+    `astryx experimental icon add ${exportName} --from ${shellWord(from)}`,
+    ...(passed.set != null ? [`--set ${shellWord(passed.set)}`] : []),
+    ...(passed.useDefault ? ['--default'] : []),
+    ...(passed.id != null ? [`--id ${shellWord(passed.id)}`] : []),
+  ].join(' ');
   const matches = all
     .filter(({doc}) => best.has(doc.name))
     .map(({doc, source}) => {
@@ -508,7 +556,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       `Icon set "${set.name}" declares no variant "${variant}"${declared.length > 0 ? ` (it declares ${declared.join(', ')})` : ''}. Declare it first.`,
       [
         {
-          name: `astryx experimental icon new-set ${set.name} --from <its library> --variants ${[...new Set([...(declared.length > 0 ? declared : ['<default>']), variant])].join(',')}`,
+          name: `astryx experimental icon new-set ${set.name} --variants ${[...new Set([...(declared.length > 0 ? declared : ['<default>']), variant])].join(',')}`,
           reason: 'declare the variants',
         },
       ],
@@ -523,8 +571,17 @@ async function addVariantForAll({cwd, from, selector, variant}) {
     );
   }
   const source = resolveIconSource(from, where);
-  const found = libraryIcons(source.file, {adapter: Boolean(set.data.adapter)});
+  // In a library that draws each icon in several looks, the variant is the
+  // glyph's look the variant's name picks (`filled`), and an icon is known
+  // by any look of its glyph.
+  const found = libraryIcons(source.file, {
+    adapter: Boolean(set.data.adapter),
+    prefer: [variant],
+  });
   const byId = new Map(found.map(each => [each.id, each]));
+  const byLook = new Map(
+    found.flatMap(each => (each.looks ?? []).map(look => [look, each])),
+  );
   // An existing icon is known by the library export it re-exports, then by
   // its own export, then by its id: an icon whose id or name an older rule
   // wrote (`squares-2-x2`, `Squares2X2Icon`) still meets its variant
@@ -557,6 +614,7 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       origin && origin.source !== 'default' ? origin.source : undefined;
     const match =
       (librarySource ? byLibraryExport.get(librarySource) : undefined) ??
+      (librarySource ? byLook.get(librarySource) : undefined) ??
       byName.get(icon.export) ??
       byId.get(icon.id);
     if (!match) {
@@ -564,6 +622,11 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       return icon;
     }
     if (match.adapt && !set.data.adapter) {
+      missing.push(icon.id);
+      return icon;
+    }
+    // A glyph the library draws in no look of that name has no variant.
+    if (match.look && !match.look.includes(variant)) {
       missing.push(icon.id);
       return icon;
     }
@@ -626,4 +689,15 @@ async function addVariantForAll({cwd, from, selector, variant}) {
       changed: dataChanged || written.changed,
     },
   };
+}
+
+/**
+ * A command-line word, single-quoted only when the shell would read it
+ * otherwise (a space, a quote, `$`).
+ * @param {string} value
+ */
+function shellWord(value) {
+  return /^[\w@./:+,=-]+$/u.test(value)
+    ? value
+    : `'${value.replace(/'/gu, "'\\''")}'`;
 }

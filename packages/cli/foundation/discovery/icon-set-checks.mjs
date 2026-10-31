@@ -57,6 +57,7 @@ import {
   otherNamesOf,
   generatedTypesText,
   readGeneratedStatements,
+  generatedTypesMatch,
 } from './icon-set-writer.mjs';
 import {
   exportValueKind,
@@ -276,16 +277,17 @@ function checkContract(set, packageName, pkg, unchecked) {
       const actual = fs.existsSync(typesFile)
         ? fs.readFileSync(typesFile, 'utf-8')
         : null;
-      // The header comment is the writer's, and changes between releases;
-      // the declarations are what must match.
-      const code = (/** @type {string} */ text) =>
-        text
-          .split('\n')
-          .filter(line => !line.startsWith('//'))
-          .join('\n');
+      // The declarations must match, statement by statement, however a
+      // formatter left the file; the header comment is the writer's and
+      // changes between releases.
       if (
         expected != null &&
-        (actual == null || code(actual) !== code(expected))
+        (actual == null ||
+          !generatedTypesMatch(
+            actual,
+            expected,
+            /** @type {string} */ (typesRel),
+          ))
       ) {
         issues.push(
           issueError(
@@ -538,13 +540,7 @@ export function suggestedIcons(set, doc) {
     ...nameWords,
     ...wordIds.flatMap(id => id.split('-')).map(stem),
   ]);
-  const icons = set.data.icons.map(icon => ({
-    id: icon.id,
-    words: icon.id.split('-').map(stem),
-    raw: icon.id.split('-'),
-    // The library's other names for it, the same ones `map` accepts.
-    other: otherNamesOf(icon),
-  }));
+  const icons = suggestionIndex(set.data.icons);
   /** How many of the definition's words an id has: more is a better fit. */
   const fit = (/** @type {string[]} */ words) =>
     words.filter(word => meaning.has(word)).length;
@@ -634,6 +630,29 @@ export function suggestedIcons(set, doc) {
     ).forEach(icon => add(icon.id, word));
   }
   return found.slice(0, SUGGESTIONS_PER_DEFINITION);
+}
+
+/**
+ * Each icon as the suggestion rules read it: its id's words as written and
+ * in singular form, and the library's other names for it (the same ones
+ * `map` accepts). Built once per list of icons, so suggesting for every
+ * definition of a large library reads each icon once.
+ * @type {WeakMap<object, Array<{id: string, words: string[], raw: string[], other: string[]}>>}
+ */
+const suggestionIndexes = new WeakMap();
+
+/** @param {Array<{id: string, words?: string[]}>} list */
+function suggestionIndex(list) {
+  const cached = suggestionIndexes.get(list);
+  if (cached) return cached;
+  const index = list.map(icon => ({
+    id: icon.id,
+    words: icon.id.split('-').map(stem),
+    raw: icon.id.split('-'),
+    other: otherNamesOf(icon),
+  }));
+  suggestionIndexes.set(list, index);
+  return index;
 }
 
 /**

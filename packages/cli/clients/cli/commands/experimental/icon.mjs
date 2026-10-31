@@ -290,6 +290,13 @@ export function registerExperimentalIcon(group, program) {
     },
   });
 
+  // Reading a large library takes a while: text mode says so on stderr,
+  // with what it found; JSON output stays one document.
+  const progressLine = () =>
+    program.opts().json
+      ? undefined
+      : (/** @type {string} */ line) => console.error(line);
+
   /**
    * The set an authoring subcommand edits. `experimental icon` declares
    * `--set` too, so Commander gives the parent a `--set` written after a
@@ -415,6 +422,7 @@ export function registerExperimentalIcon(group, program) {
             variant: /** @type {string | undefined} */ (options.variant),
             id: /** @type {string | undefined} */ (options.id),
             all: options.all === true,
+            progress: progressLine(),
           }),
         result => {
           const cli = getCliInvocation();
@@ -567,6 +575,7 @@ export function registerExperimentalIcon(group, program) {
             defaultVariant: options.defaultVariant,
             displayName: options.displayName,
             description: options.description,
+            progress: progressLine(),
           }),
         printNew('icon set'),
       ),

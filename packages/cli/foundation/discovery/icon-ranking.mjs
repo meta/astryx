@@ -9,8 +9,16 @@
  *    90  an exact match in the reading the searched sets favor (below)
  *    80  an exact match in the other reading
  *    60  one of its words starts with the query
- *    40  a partial match: the id or a word contains the query, or every
- *        word of the query starts one of the icon's words or id parts
+ *    40  a partial match: the id or a word contains the query (three
+ *        letters or more), or every word of the query starts one of the
+ *        icon's words or id parts
+ *
+ * A word matches a whole word: a word's plural or singular (`stars` for
+ * `star`) is an exact match, while a longer word that only starts with it
+ * (`start`) is a word-start match, and {@link answeringMatches} keeps
+ * word-start and partial matches only when nothing matches a whole word.
+ * Words that only phrase a query (`go`, `the`, `icon`) are left out of a
+ * query of several words, so `go home` asks for `home`.
  *
  * An exact match is a NAME match when the query is the icon's id, or one of
  * its words that is also a part of its id (`trash` for `trash-2`); it is a
@@ -131,6 +139,18 @@ export function matchIcon(query, icon, definitions = []) {
       reason: wholeId ? `id "${icon.id}"` : `word "${query}"`,
     };
   }
+  const plural = icon.words.find(word => sameWord(word, query));
+  if (plural) {
+    const named = parts.has(plural);
+    return {
+      tier: 'exact',
+      name: named,
+      meaning: !named,
+      // After the word itself, wherever it sits.
+      rank: named ? 2 : tags.length + tags.indexOf(plural),
+      reason: `word "${plural}"`,
+    };
+  }
   const prefix = icon.words.find(word => word.startsWith(query));
   if (prefix) {
     return {
@@ -141,7 +161,11 @@ export function matchIcon(query, icon, definitions = []) {
       reason: `word "${prefix}" starts with "${query}"`,
     };
   }
-  const contains = [icon.id, ...icon.words].find(text => text.includes(query));
+  // A letter or two inside a word (`x` in `box`) says nothing about it.
+  const contains =
+    query.replace(/\s+/gu, '').length >= 3
+      ? [icon.id, ...icon.words].find(text => text.includes(query))
+      : undefined;
   if (contains) {
     return {
       tier: 'partial',
@@ -168,6 +192,65 @@ export function matchIcon(query, icon, definitions = []) {
     }
   }
   return null;
+}
+
+/**
+ * Whether two words are one word's singular and plural (`star`, `stars`;
+ * `box`, `boxes`), never the same word.
+ * @param {string} a
+ * @param {string} b
+ */
+function sameWord(a, b) {
+  if (a === b || /\s/u.test(a) || /\s/u.test(b)) return false;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  return short.length >= 2 && (long === `${short}s` || long === `${short}es`);
+}
+
+/**
+ * Words that phrase a query without naming anything: left out of a query of
+ * several words (`go home` asks for `home`).
+ */
+const FILLER_WORDS = new Set([
+  'a',
+  'an',
+  'the',
+  'go',
+  'to',
+  'my',
+  'of',
+  'for',
+  'icon',
+  'icons',
+]);
+
+/**
+ * The query an icon is matched against: trimmed, lower-case, and with the
+ * words that only phrase it left out when it has several words and some
+ * word names something.
+ * @param {string} query
+ */
+export function iconQuery(query) {
+  const words = query.trim().toLowerCase().split(/\s+/u).filter(Boolean);
+  const named = words.filter(word => !FILLER_WORDS.has(word));
+  return (words.length > 1 && named.length > 0 ? named : words).join(' ');
+}
+
+/**
+ * The matches that answer a query: the whole-word ones (a definition or an
+ * exact match, 80 and up) when there are any, else word starts (60) when
+ * there are any, else partial matches. A longer word that only starts with
+ * the query (`start` for `star`) never stands beside a whole-word answer.
+ * @template {{score: number}} T
+ * @param {T[]} ranked best first
+ * @returns {T[]}
+ */
+export function answeringMatches(ranked) {
+  for (const floor of [80, 60]) {
+    if (ranked.some(each => each.score >= floor)) {
+      return ranked.filter(each => each.score >= floor);
+    }
+  }
+  return ranked;
 }
 
 /**
@@ -255,7 +338,7 @@ export function withDefinitionWords(icon, definitions, lookup) {
  * @returns {IconMatchEntry[]}
  */
 export function rankIcons(sets, query) {
-  const term = query.trim().toLowerCase();
+  const term = iconQuery(query);
   const astryx = astryxDefinitionsByName();
   /** @type {Array<{set: DiscoveredIconSet, icon: IconSetIcon, definitions: string[], match: IconMatch, setIndex: number}>} */
   const hits = [];
