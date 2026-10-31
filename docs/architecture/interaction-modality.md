@@ -233,7 +233,9 @@ control sizing, sticky behavior, caller-owned layout, and new visual representat
 remain with their direct current owner unless evidence proves that exact mechanism is
 necessary to restore the invariant and representative unaffected paths remain
 unchanged. A separable delta is removed or split before this interaction restoration
-is asked to carry a new decision.
+is asked to carry a new decision, except an undeclared public API row, which goes
+to human review for an owner's decision rather than being removed or split by
+review (`architecture:knowledge-contracts` change coupling step 6).
 
 ## Change coupling
 
