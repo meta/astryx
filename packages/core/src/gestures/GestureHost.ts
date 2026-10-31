@@ -144,6 +144,11 @@ import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
 import {containsAlongFlatTree} from '../utils/flatTree';
 import {isIosWebKit} from '../utils/touchQueries';
 import {
+  type WheelBoundary,
+  type WheelSegment,
+  WheelSegmenter,
+} from './wheelSegmenter';
+import {
   gestureHostStyle,
   type GestureHostStyle,
   intersectTouchAction,
@@ -400,6 +405,18 @@ function landedOn(
  * question on `spec:AST-094` FR43).
  */
 const WHEEL_END_MS = 100;
+/**
+ * How long after its last event a trackpad scroll that a pan follows
+ * vertically ends, ms (a sheet's pull): a slow drag's stream pauses longer
+ * than WHEEL_END_MS between events. Provisional (owner question on
+ * `spec:AST-094` FR43).
+ */
+const WHEEL_FOLLOW_END_V_MS = 180;
+/**
+ * The same horizontally, ms (a pager's or a row's swipe), whose slow
+ * swipes pause longer still. Provisional (owner question on FR43).
+ */
+const WHEEL_FOLLOW_END_MS = 220;
 /** A line-mode wheel's line, px, as the platforms scroll it. */
 const WHEEL_LINE_PX = 40;
 /** The span a ctrl-wheel pinch's two contacts start at, px. */
@@ -421,7 +438,59 @@ interface WheelGesture {
   timer: unknown;
   /** The recognizers that took it; none where the page keeps it. */
   readonly takers: ReadonlyArray<GestureRecognizer>;
+  /** A swipe its pans take as one step (`wheelStep`), not followed. */
+  step?: WheelStep;
+  /** The step's contact, begun only when the step commits. */
+  stepBegin?: Omit<ArenaBeganInput, 'time'>;
+  /** A trackpad scroll a pan follows, until its fingers lift. */
+  follow?: WheelFollow;
 }
+
+/** A trackpad scroll a pan follows: where its fingers lift, and what waits until then. */
+interface WheelFollow {
+  /** The fingers lifted: the momentum after them never moves the pan. */
+  lifted: boolean;
+  /**
+   * Shrinking deltas held until they are known: the fingers' when larger
+   * ones follow, the start of momentum when the lift is read.
+   */
+  heldX: number;
+  heldY: number;
+  /**
+   * The time of the last move the pan was given: the lift ends there, so the
+   * release keeps the fingers' speed rather than reading the held deltas'
+   * time as a stop.
+   */
+  lastMove: number;
+  /** How long after its last event it ends, ms. */
+  readonly endMs: number;
+}
+
+/** One swipe taken as one step (`wheelStep`). */
+interface WheelStep {
+  readonly axis: 'x' | 'y';
+  /** Travel so far along the axis, px (content direction). */
+  travel: number;
+  /** The swipe's direction once it has one. */
+  sign: number;
+  /** Whether the step was played and its contact ended. */
+  committed: boolean;
+  /** Travel back against the committed step, within this gesture. */
+  back?: number;
+  /** Whether the one step back to rest was played. */
+  reversed?: boolean;
+  /** Wheels seen; a step needs a stream (two or more). */
+  count: number;
+}
+
+/** Travel along the axis that commits one step, px. */
+const WHEEL_STEP_PX = 24;
+/**
+ * A slow swipe's stream has gaps longer than WHEEL_END_MS; travel
+ * in the same direction carries across a gap this short, so a slow
+ * continuous movement still commits.
+ */
+const WHEEL_STEP_CARRY_MS = 450;
 
 /**
  * A wheel's deltas in CSS px: a line is `WHEEL_LINE_PX`, a page the
@@ -444,21 +513,52 @@ function wheelPixels(
 }
 
 /**
- * The web's best reading of what scrolled: a line- or page-mode delta, or a
- * whole pixel notch on one axis (100 or 120 px, as Chromium sends a mouse
- * wheel's on Windows and Linux), is a mouse wheel's (`discrete`); anything
- * else a trackpad's (`continuous`).
+ * The web's best reading of what scrolled: a mouse wheel's notches
+ * (`discrete`) or a trackpad's scroll (`continuous`). What it cannot tell
+ * apart counts as a mouse wheel's, which a pan that takes only a trackpad's
+ * scroll leaves to the page. A mouse wheel's: a line- or page-mode delta; a
+ * pixel delta a hair off a whole pixel (a mouse wheel on Windows); a scroll
+ * that carries no legacy `wheelDelta` (an engine that sends none); a delta
+ * that is not a third of its legacy `wheelDelta`; or a 120 tick over a 40 px
+ * delta. A trackpad's precise deltas, a third of their legacy `wheelDelta`
+ * (Chromium and WebKit), are a trackpad's.
  */
 function scrollTypeOf(wheel: WheelEvent): ScrollType {
   if (wheel.deltaMode !== 0) {
     return 'discrete';
   }
-  const notch = (value: number) =>
-    value !== 0 &&
-    Number.isInteger(value) &&
-    (value % 100 === 0 || value % 120 === 0);
-  return (wheel.deltaX === 0 && notch(wheel.deltaY)) ||
-    (wheel.deltaY === 0 && notch(wheel.deltaX))
+  const remainder = (value: number) => {
+    const fraction = Math.abs(value - Math.round(value));
+    return fraction > 0 && fraction < 0.01;
+  };
+  if (remainder(wheel.deltaX) || remainder(wheel.deltaY)) {
+    return 'discrete';
+  }
+  const legacy = wheel as WheelEvent & {
+    wheelDeltaX?: number;
+    wheelDeltaY?: number;
+  };
+  if (
+    typeof legacy.wheelDeltaY !== 'number' ||
+    typeof legacy.wheelDeltaX !== 'number'
+  ) {
+    return 'discrete';
+  }
+  const precise = (delta: number, legacyDelta: number) =>
+    delta === 0
+      ? legacyDelta === 0
+      : Math.abs(Math.abs(legacyDelta) - 3 * Math.abs(delta)) <=
+        Math.max(1.5, 0.05 * Math.abs(delta) * 3);
+  if (
+    !precise(wheel.deltaY, legacy.wheelDeltaY) ||
+    !precise(wheel.deltaX, legacy.wheelDeltaX)
+  ) {
+    return 'discrete';
+  }
+  const tick = (delta: number, legacyDelta: number) =>
+    legacyDelta !== 0 && legacyDelta % 120 === 0 && delta % 40 === 0;
+  return tick(wheel.deltaY, legacy.wheelDeltaY) ||
+    tick(wheel.deltaX, legacy.wheelDeltaX)
     ? 'discrete'
     : 'continuous';
 }
@@ -678,6 +778,25 @@ export class GestureHost {
   private wheel: WheelGesture | null = null;
   /** Whether the document routes every wheel to the live wheel gesture. */
   private isWheelLatched = false;
+  /** Splits the wheel stream into gestures and reads a trackpad's lift. */
+  private readonly segmenter = new WheelSegmenter();
+  /** The latest wheel's segment. */
+  private wheelSegment: WheelSegment | null = null;
+  /** Why the current wheel gesture began. */
+  private lastBoundary: WheelBoundary | null = null;
+  /** The last committed step, so its slow continuation is absorbed. */
+  private lastStep: {
+    readonly axis: 'x' | 'y';
+    readonly sign: number;
+    last: number;
+  } | null = null;
+  /** An uncommitted step's travel, carried across a short gap. */
+  private pendingStep: {
+    readonly axis: 'x' | 'y';
+    readonly travel: number;
+    readonly count: number;
+    readonly last: number;
+  } | null = null;
   /** Wheels already taken: each element on the path with a listener hears one. */
   private readonly wheelsSeen = new WeakSet<Event>();
   private isInstalled = false;
@@ -2037,7 +2156,11 @@ export class GestureHost {
     let gesture = this.wheel;
     if (
       gesture != null &&
-      (gesture.kind !== kind || time - gesture.last >= WHEEL_END_MS)
+      (gesture.kind !== kind ||
+        time - gesture.last >=
+          (gesture.step != null && !gesture.step.committed
+            ? WHEEL_STEP_CARRY_MS
+            : (gesture.follow?.endMs ?? WHEEL_END_MS)))
     ) {
       this.endWheel(time);
       gesture = null;
@@ -2045,6 +2168,7 @@ export class GestureHost {
     if (
       gesture != null &&
       gesture.ids.length > 0 &&
+      gesture.step == null &&
       !this.wheelHasTaker(gesture)
     ) {
       // Every recognizer that took it has left (detached, disabled or
@@ -2064,6 +2188,30 @@ export class GestureHost {
       this.wheel = gesture;
     }
     const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
+    const horizontal =
+      gesture?.step != null
+        ? gesture.step.axis === 'x'
+        : Math.abs(dx) > Math.abs(dy);
+    const seg = this.segmenter.push(
+      time,
+      horizontal ? dx : dy,
+      gesture?.step != null && !gesture.step.committed
+        ? WHEEL_STEP_CARRY_MS
+        : horizontal
+          ? WHEEL_FOLLOW_END_MS
+          : WHEEL_FOLLOW_END_V_MS,
+    );
+    this.wheelSegment = seg;
+    if (seg.boundary != null) {
+      this.lastBoundary = seg.boundary;
+      if (gesture != null) {
+        this.endWheel(time);
+        gesture = null;
+      }
+    }
+    if (gesture?.step?.committed && this.lastStep != null) {
+      this.lastStep.last = time;
+    }
     if (gesture == null) {
       gesture = this.beginWheel(wheel, kind, dx, dy, time);
       this.wheel = gesture;
@@ -2075,14 +2223,59 @@ export class GestureHost {
     if (gesture.timer != null) {
       this.clock.clearTimeout(gesture.timer);
     }
-    gesture.timer = this.clock.setTimeout(() => this.endWheel(), WHEEL_END_MS);
+    // A step that has not committed yet waits out a slow swipe's gaps, so
+    // its travel keeps adding up within one contact; a followed trackpad
+    // scroll waits out a slow drag's.
+    gesture.timer = this.clock.setTimeout(
+      () => {
+        this.segmenter.end();
+        this.endWheel();
+      },
+      gesture.step != null && !gesture.step.committed
+        ? WHEEL_STEP_CARRY_MS
+        : (gesture.follow?.endMs ?? WHEEL_END_MS),
+    );
     if (gesture.ids.length === 0) {
       return;
     }
     wheel.preventDefault();
+    if (gesture.step) {
+      this.stepWheel(gesture, gesture.step, dx, dy, time);
+      return;
+    }
+    if (gesture.kind === 'pan' && gesture.follow) {
+      const f = gesture.follow;
+      if (f.lifted) {
+        return;
+      }
+      if (this.wheelSegment?.liftNow === true) {
+        // Momentum began: the fingers lifted before the held deltas. Drop
+        // them and release at the fingers' travel and speed; the rest of
+        // the momentum never moves the pan.
+        f.lifted = true;
+        f.heldX = 0;
+        f.heldY = 0;
+        this.arena.ended([
+          {id: gesture.ids[0], x: gesture.x, y: gesture.y, time: f.lastMove},
+        ]);
+        return;
+      }
+      if (this.wheelSegment?.decaying === true) {
+        f.heldX += dx;
+        f.heldY += dy;
+        return;
+      }
+      gesture.x -= f.heldX;
+      gesture.y -= f.heldY;
+      f.heldX = 0;
+      f.heldY = 0;
+    }
     if (gesture.kind === 'pan') {
       gesture.x -= dx;
       gesture.y -= dy;
+      if (gesture.follow != null) {
+        gesture.follow.lastMove = time;
+      }
       this.arena.moved([
         {id: gesture.ids[0], x: gesture.x, y: gesture.y, time},
       ]);
@@ -2091,6 +2284,76 @@ export class GestureHost {
       this.arena.moved(this.pinchContacts(gesture, time));
     }
   };
+
+  /**
+   * A swipe its pans take as one step (`wheelStep`): its travel adds up, and
+   * once it reaches WHEEL_STEP_PX over two wheels or more, the step plays a
+   * short flick (two moves within 24 ms) and ends its contact, so the pan's
+   * release settles one step. Within the same gesture the step can be undone
+   * once, back to rest (an open row closes), and never past it.
+   */
+  private stepWheel(
+    gesture: WheelGesture,
+    s: WheelStep,
+    dx: number,
+    dy: number,
+    time: number,
+  ): void {
+    if (s.committed) {
+      // Undone once at most, back to rest; never past it to the other side.
+      const back = s.axis === 'x' ? dx : dy;
+      if (
+        !s.reversed &&
+        this.wheelSegment?.phase === 'finger' &&
+        back !== 0 &&
+        Math.sign(back) !== s.sign
+      ) {
+        s.back = (s.back ?? 0) + back;
+        if (Math.abs(s.back) >= WHEEL_STEP_PX && gesture.stepBegin != null) {
+          s.reversed = true;
+          const sign = Math.sign(s.back);
+          const id = this.nextId++;
+          const at = (px: number) =>
+            s.axis === 'x'
+              ? {x: gesture.x - sign * px, y: gesture.y}
+              : {x: gesture.x, y: gesture.y - sign * px};
+          this.arena.began([
+            {...gesture.stepBegin, id, x: gesture.x, y: gesture.y, time},
+          ]);
+          this.arena.moved([{id, ...at(12), time: time + 8}]);
+          this.arena.moved([{id, ...at(52), time: time + 24}]);
+          this.arena.ended([{id, ...at(52), time: time + 24}]);
+        }
+      }
+      return;
+    }
+    const d = s.axis === 'x' ? dx : dy;
+    s.travel += d;
+    if (d !== 0) {
+      s.sign = Math.sign(d);
+    }
+    s.count += 1;
+    if (Math.abs(s.travel) < WHEEL_STEP_PX || s.count < 2) {
+      return;
+    }
+    const begin = gesture.stepBegin;
+    if (begin == null) {
+      return;
+    }
+    s.committed = true;
+    const sign = Math.sign(s.travel);
+    const id = gesture.ids[0];
+    const at = (px: number) =>
+      s.axis === 'x'
+        ? {x: gesture.x - sign * px, y: gesture.y}
+        : {x: gesture.x, y: gesture.y - sign * px};
+    this.pendingStep = null;
+    this.lastStep = {axis: s.axis, sign, last: time};
+    this.arena.began([{...begin, id, x: gesture.x, y: gesture.y, time}]);
+    this.arena.moved([{id, ...at(12), time: time + 8}]);
+    this.arena.moved([{id, ...at(52), time: time + 24}]);
+    this.arena.ended([{id, ...at(52), time: time + 24}]);
+  }
 
   /** Start a wheel gesture: who takes it, decided once, or nobody. */
   private beginWheel(
@@ -2177,6 +2440,62 @@ export class GestureHost {
     const ids =
       kind === 'pan' ? [this.nextId++] : [this.nextId++, this.nextId++];
     const gesture: WheelGesture = {...kept, ids, takers};
+    if (kind === 'pan' && type === 'continuous') {
+      gesture.follow = {
+        lifted: false,
+        heldX: 0,
+        heldY: 0,
+        lastMove: time,
+        endMs: isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS,
+      };
+    }
+    if (
+      kind === 'pan' &&
+      takers.every(
+        recognizer => isPanRecognizer(recognizer) && recognizer.wheelStep,
+      )
+    ) {
+      const carry =
+        this.pendingStep != null &&
+        this.pendingStep.axis === (isHorizontal ? 'x' : 'y') &&
+        time - this.pendingStep.last <= WHEEL_STEP_CARRY_MS &&
+        Math.sign(isHorizontal ? dx : dy) === Math.sign(this.pendingStep.travel)
+          ? this.pendingStep
+          : null;
+      this.pendingStep = null;
+      gesture.step = {
+        axis: isHorizontal ? 'x' : 'y',
+        travel: carry?.travel ?? 0,
+        sign: 0,
+        committed: false,
+        count: carry?.count ?? 0,
+      };
+      const along = isHorizontal ? dx : dy;
+      if (
+        this.lastStep != null &&
+        (this.lastBoundary == null || this.lastBoundary === 'idle') &&
+        this.lastStep.axis === gesture.step.axis &&
+        time - this.lastStep.last <= 400 &&
+        Math.sign(along) === this.lastStep.sign &&
+        Math.abs(along) < 6
+      ) {
+        // The slow tail of a swipe that already stepped: absorb it.
+        gesture.step.committed = true;
+        gesture.step.sign = this.lastStep.sign;
+        this.lastStep.last = time;
+      }
+    }
+    if (gesture.step) {
+      // A step's contact begins only when it commits, so its flick's
+      // velocity never spans a slow swipe's whole duration.
+      gesture.stepBegin = {
+        ...base,
+        id: ids[0],
+        x: wheel.clientX,
+        y: wheel.clientY,
+      };
+      return gesture;
+    }
     this.arena.began(
       kind === 'pan'
         ? [{...base, id: ids[0], x: wheel.clientX, y: wheel.clientY, time}]
@@ -2268,6 +2587,14 @@ export class GestureHost {
    */
   private endWheel(endTime?: number): void {
     const gesture = this.wheel;
+    if (gesture?.step && !gesture.step.committed && gesture.step.travel !== 0) {
+      this.pendingStep = {
+        axis: gesture.step.axis,
+        travel: gesture.step.travel,
+        count: gesture.step.count,
+        last: gesture.last,
+      };
+    }
     if (this.isWheelLatched) {
       this.doc.removeEventListener('wheel', this.onWheel, {capture: true});
       this.isWheelLatched = false;
@@ -2279,8 +2606,22 @@ export class GestureHost {
     if (gesture.timer != null) {
       this.clock.clearTimeout(gesture.timer);
     }
-    if (gesture.ids.length === 0) {
+    if (
+      gesture.ids.length === 0 ||
+      gesture.step != null ||
+      gesture.follow?.lifted
+    ) {
       return;
+    }
+    if (
+      gesture.follow != null &&
+      (gesture.follow.heldX !== 0 || gesture.follow.heldY !== 0)
+    ) {
+      gesture.x -= gesture.follow.heldX;
+      gesture.y -= gesture.follow.heldY;
+      this.arena.moved([
+        {id: gesture.ids[0], x: gesture.x, y: gesture.y, time: gesture.last},
+      ]);
     }
     // A trackpad's scroll releases at its last wheel, with its speed: its
     // momentum arrives as more wheel. A mouse wheel's notches release still,
@@ -2289,13 +2630,9 @@ export class GestureHost {
     // Never later than the input that ends it (a press, the next gesture's
     // first wheel): the arena's clock only moves forward, so a later stamp
     // would move that input's times too (FR16).
-    const end = gesture.last + WHEEL_END_MS;
+    const end = gesture.last + (gesture.follow?.endMs ?? WHEEL_END_MS);
     const time =
-      gesture.scrollType !== 'discrete'
-        ? gesture.last
-        : endTime == null
-          ? end
-          : Math.max(gesture.last, Math.min(end, endTime));
+      endTime == null ? end : Math.max(gesture.last, Math.min(end, endTime));
     this.arena.ended(
       gesture.kind === 'pan'
         ? [{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]
