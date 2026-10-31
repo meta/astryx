@@ -721,3 +721,5 @@ export function TextArea({
 }
 
 TextArea.displayName = 'TextArea';
+
+// Replay fixture for the touched-components check timing; not for merge.

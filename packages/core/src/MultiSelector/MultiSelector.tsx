@@ -2808,3 +2808,5 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
 }
 
 MultiSelector.displayName = 'MultiSelector';
+
+// Replay fixture for the touched-components check timing; not for merge.

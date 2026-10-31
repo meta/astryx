@@ -2185,3 +2185,5 @@ export function Selector<T extends SelectorOptionType>(
 }
 
 Selector.displayName = 'Selector';
+
+// Replay fixture for the touched-components check timing; not for merge.
