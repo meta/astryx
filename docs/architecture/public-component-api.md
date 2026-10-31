@@ -306,12 +306,14 @@ copy the component matrix.
 
 Known verification gaps:
 
-- INV22: `useLongPress`, `useMenuPress`, `usePressFeedback`,
-  `useClickableContainer`, `useCombobox`, `useMultiCombobox`, `useResizable`,
-  `useTooltip`, and `useHoverCard` attach gesture, press, drag, or motion
-  behavior and have no `create…` factory yet. Each conforms by adding its
-  factory and, where its signature cannot delegate, a ref-taking signature
-  beside the deprecated one.
+- INV22: known gaps include `useLongPress`, `useMenuPress`,
+  `usePressFeedback`, `useClickableContainer`, `useInputContainer`,
+  `useOverlay`, `useCombobox`, `useMultiCombobox`, `useResizable`,
+  `useTooltip`, `useHoverCard`, and `useChatStreamScroll`: each attaches
+  gesture, press, drag, or motion behavior and has no `create…` factory yet;
+  no full inventory exists yet. Each conforms by adding its factory and, where
+  its signature cannot delegate, a ref-taking signature beside the deprecated
+  one.
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
