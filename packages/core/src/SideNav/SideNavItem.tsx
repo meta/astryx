@@ -78,6 +78,7 @@ import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
 // =============================================================================
 // Styles
 // =============================================================================
@@ -559,6 +560,19 @@ export function SideNavItem({
   });
   const railLeafRef = useMergedRefs(ref, railTooltip.ref);
 
+  // The row's root registers with its SideNav, so a collapse that removes the
+  // focused row can hand focus to the toggle or the nearest row still in the
+  // rail (`component:SideNav` AR3).
+  const focusTargets = use(SideNavFocusTargetsContext);
+  const rowRef = useCallback(
+    (element: HTMLDivElement | null) =>
+      element == null || focusTargets == null
+        ? undefined
+        : focusTargets.registerRow(element),
+    [focusTargets],
+  );
+  const rowTooltipRef = useMergedRefs(rowRef, railTooltip.ref);
+
   // Collapse state for items with children
   const itemCollapsibleConfig = useMemo(
     () => (typeof itemCollapsible === 'object' ? itemCollapsible : {}),
@@ -684,7 +698,7 @@ export function SideNavItem({
     // Items with children: popover trigger + popover
     if (hasChildren) {
       return (
-        <div {...stylex.props(styles.root, xstyle)}>
+        <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
           <button
             ref={mergedTriggerRef}
             type="button"
@@ -749,7 +763,7 @@ export function SideNavItem({
 
     return (
       <div
-        ref={isRowTrigger ? railTooltip.ref : undefined}
+        ref={isRowTrigger ? rowTooltipRef : rowRef}
         {...stylex.props(styles.root, xstyle)}>
         {collapsedElement}
         {railTooltip.renderTooltip(label)}
@@ -942,7 +956,7 @@ export function SideNavItem({
   }
 
   const item = (
-    <div {...stylex.props(styles.root, xstyle)}>
+    <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
       {itemElement}
       {hasChildren && !isCollapsed && (
         <div

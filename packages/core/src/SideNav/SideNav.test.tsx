@@ -4273,3 +4273,64 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// Collapse with focus on a row the rail does not render (AR3)
+// =============================================================================
+
+describe('SideNav collapse focus (AR3)', () => {
+  function Rail({
+    isCollapsed,
+    hasButton = true,
+  }: {
+    isCollapsed: boolean;
+    hasButton?: boolean;
+  }) {
+    return (
+      <>
+        <SideNav
+          collapsible={{isCollapsed, onCollapsedChange: () => {}, hasButton}}>
+          <SideNavSection title="Main">
+            <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+            <SideNavItem label="Reports" href="/reports" />
+            <SideNavItem label="Team" icon={StubIcon} href="/team" />
+          </SideNavSection>
+        </SideNav>
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+
+  it('moves focus from a row the collapsed rail removes to the collapse toggle', () => {
+    const {rerender} = render(<Rail isCollapsed={false} />);
+    screen.getByRole('link', {name: 'Reports'}).focus();
+    rerender(<Rail isCollapsed />);
+    expect(screen.queryByRole('link', {name: 'Reports'})).toBeNull();
+    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+  });
+
+  it('moves focus to the nearest row still in the rail when there is no toggle', () => {
+    const {rerender} = render(<Rail isCollapsed={false} hasButton={false} />);
+    screen.getByRole('link', {name: 'Reports'}).focus();
+    rerender(<Rail isCollapsed hasButton={false} />);
+    expect(screen.getByRole('link', {name: 'Dashboard'})).toHaveFocus();
+  });
+
+  it('moves no focus that is outside the removed rows', () => {
+    const {rerender} = render(<Rail isCollapsed={false} />);
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+    rerender(<Rail isCollapsed />);
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('moves no focus when the rail expands', () => {
+    const {rerender} = render(<Rail isCollapsed />);
+    const toggle = screen.getByRole('button', {name: 'Expand sidebar'});
+    toggle.focus();
+    rerender(<Rail isCollapsed={false} />);
+    expect(
+      screen.getByRole('button', {name: 'Collapse sidebar'}),
+    ).toHaveFocus();
+  });
+});

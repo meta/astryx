@@ -56,6 +56,13 @@ import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {getFocusableElements} from '../hooks/useFocusTrap';
+import {focusForLastInput, isFocusDetached} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
+  SideNavFocusTargetsContext,
+  type SideNavFocusTargets,
+} from './SideNavFocusTargetsContext';
 import {
   createRailLayout,
   playRail,
@@ -550,6 +557,82 @@ export function SideNav({
     [],
   );
 
+  // Focus on a row the collapsed rail does not render (an item without an
+  // icon, a nested row) would fall to the page when the rail collapses. It
+  // moves instead to the rail's collapse toggle, or, with none, to the
+  // nearest row still in the rail (`component:SideNav` AR3). Rows and the
+  // toggle register through their callback refs; the focused row is noted
+  // in the commit before the DOM changes, and focus moves only if it fell.
+  useInteractionModalityTracking();
+  const rowsRef = useRef(new Set<HTMLElement>());
+  const togglesRef = useRef(new Set<HTMLElement>());
+  const focusTargets = useMemo<SideNavFocusTargets>(
+    () => ({
+      registerRow: element => {
+        rowsRef.current.add(element);
+        return () => {
+          rowsRef.current.delete(element);
+        };
+      },
+      registerToggle: element => {
+        togglesRef.current.add(element);
+        return () => {
+          togglesRef.current.delete(element);
+        };
+      },
+    }),
+    [],
+  );
+  const pendingFocusRef = useRef<{
+    rows: HTMLElement[];
+    index: number;
+  } | null>(null);
+  const noteRailFocus = useCallback((wasCollapsed: boolean) => {
+    pendingFocusRef.current = null;
+    const nav = navRef.current;
+    const active = nav?.ownerDocument.activeElement;
+    if (wasCollapsed || nav == null || active == null || !nav.contains(active)) {
+      return;
+    }
+    const rows = [...rowsRef.current]
+      .filter(row => nav.contains(row))
+      .sort((a, b) =>
+        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
+          ? -1
+          : 1,
+      );
+    pendingFocusRef.current = {
+      rows,
+      index: rows.findIndex(row => row.contains(active)),
+    };
+  }, []);
+  useLayoutEffect(() => {
+    const pending = pendingFocusRef.current;
+    pendingFocusRef.current = null;
+    const nav = navRef.current;
+    if (pending == null || !collapsed || nav == null) {
+      return;
+    }
+    // Focus that survived the collapse is never moved.
+    if (!isFocusDetached(nav.ownerDocument)) {
+      return;
+    }
+    const toggle = [...togglesRef.current].find(element =>
+      nav.contains(element),
+    );
+    const target = toggle ?? nearestRenderedRow(pending.rows, pending.index);
+    if (target != null) {
+      focusForLastInput(target);
+    }
+  }, [collapsed]);
+  const beforeRailChange = useCallback(
+    (wasCollapsed: boolean) => {
+      noteRailFocus(wasCollapsed);
+      measureRail(wasCollapsed);
+    },
+    [noteRailFocus, measureRail],
+  );
+
   const toggle = useCallback(() => {
     const next = !collapsed;
 
@@ -771,20 +854,49 @@ export function SideNav({
   // goes with the collapse it measures.
   const content = (
     <>
-      <LayoutChangeSnapshot value={collapsed} onBeforeChange={measureRail} />
+      <LayoutChangeSnapshot
+        value={collapsed}
+        onBeforeChange={beforeRailChange}
+      />
       {rail}
     </>
   );
 
   if (isCollapsible) {
     return (
-      <SideNavCollapseContext value={collapseContext}>
-        {content}
-      </SideNavCollapseContext>
+      <SideNavFocusTargetsContext value={focusTargets}>
+        <SideNavCollapseContext value={collapseContext}>
+          {content}
+        </SideNavCollapseContext>
+      </SideNavFocusTargetsContext>
     );
   }
 
   return content;
+}
+
+/**
+ * The first focusable control of the nearest row, before the removed one, then
+ * after it, that the collapsed rail still renders.
+ */
+function nearestRenderedRow(
+  rows: HTMLElement[],
+  index: number,
+): HTMLElement | null {
+  const order =
+    index < 0
+      ? rows
+      : [...rows.slice(0, index).reverse(), ...rows.slice(index + 1)];
+  for (const row of order) {
+    if (!row.isConnected) {
+      continue;
+    }
+    const control = getFocusableElements(row)[0];
+    if (control != null) {
+      return control;
+    }
+  }
+  return null;
 }
 
 SideNav.displayName = 'SideNav';
