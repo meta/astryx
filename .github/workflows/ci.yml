@@ -1006,11 +1006,14 @@ jobs:
           retries: 3
           script: |
             const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
-            for (const [output, prefix] of [['component_run_id', 'component-size-main'], ['package_run_id', 'package-size-main']]) {
+            for (const [output, prefix, missing] of [
+              ['component_run_id', 'component-size-main', 'the merge base is built here instead'],
+              ['package_run_id', 'package-size-main', 'package sizes are shown without a budget'],
+            ]) {
               const name = `${prefix}-${process.env.BASE_SHA}`;
               const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
               core.setOutput(output, runId ?? '');
-              core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; the merge base is built here instead.`);
+              core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; ${missing}.`);
             }
 
       - name: Download main's component sizes for the merge base
