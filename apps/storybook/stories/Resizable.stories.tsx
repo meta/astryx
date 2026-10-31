@@ -638,3 +638,62 @@ export const SlidingStartPanel: Story = {
 export const SlidingEndPanel: Story = {
   render: () => <SlidingPanelSplit side="end" />,
 };
+
+/**
+ * Browser fixtures for the configuration-object form (component:Resizable
+ * FR8, component:LayoutPanel FR7 and AR2): a start LayoutPanel that takes the
+ * hook's own `props` slides like the ref form, and one that takes a
+ * hand-built `ResizableProps` object (the same fields in an object the hook
+ * did not return) collapses without a slide. Both move focus inside them to
+ * the handle and go inert while collapsed. New code uses
+ * `useResizable(handleRef, options)` above.
+ */
+function PropsPanelSplit({isHandBuilt}: {isHandBuilt: boolean}) {
+  const panel = useResizable({
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+  });
+  const panelProps = isHandBuilt ? {...panel.props} : panel.props;
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel resizable={panelProps} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={panel.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle
+              resizable={panel.props}
+              hasDivider
+              label="Resize panel"
+            />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The content glides with the panel's edge.</Text>
+              <Button label="Open panel" onClick={panel.expand} />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingPanelWithHookProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt={false} />,
+};
+
+export const PanelWithHandBuiltProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt />,
+};
