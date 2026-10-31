@@ -132,6 +132,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Keyboard navigation, typeahead and Enter/Space activation — owned by
   `useListFocus`, `useTypeahead` and the component records.
 - Hover-to-open of sub-menu flyouts — owned by `useMenuHover`.
+- Tracking a held finger across a control group's targets outside a menu or
+  picker, such as a segmented control's segments or a page control's dots —
+  owned by core's internal group tracker. Its loop is the same job as this
+  module's tracking (the highlight under the pointer, the target under the
+  release acting, the stray click swallowed), so no third copy is added.
 - The right mouse button inside a menu: it is not modelled.
 
 ## Public API and concepts
