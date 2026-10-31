@@ -5,11 +5,10 @@
  * Contract: a pull request whose head predates the package-size check (the
  * workflow comes from the merge ref, the checkout from the head) skips the
  * check visibly instead of failing build-storybook, and the comparison steps
- * after it run only when the head was measured. size-base finds the merge
- * base without merge-base.sh on such a head.
+ * after it run only when the head was measured.
  */
 
-import {execFileSync, spawnSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -76,26 +75,5 @@ describe('package size on a head that predates it', () => {
         "steps.package-size.outputs.measured == 'true'",
       );
     }
-  });
-
-  it('finds the merge base without merge-base.sh in size-base', () => {
-    const script = step('size-base', 'Check out the merge base').run;
-    const result = runStep(
-      script.replace(
-        /git worktree add[\s\S]*$/,
-        'echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"',
-      ),
-      root => {
-        const git = (...args) =>
-          execFileSync('git', args, {cwd: root, encoding: 'utf8'});
-        git('init', '-q', '-b', 'main');
-        git('config', 'user.email', 'test@test.co');
-        git('config', 'user.name', 'Test');
-        git('commit', '-q', '--allow-empty', '-m', 'base');
-        git('update-ref', 'refs/remotes/origin/main', 'HEAD');
-      },
-    );
-    expect(result.status).toBe(0);
-    expect(result.outputs).toMatch(/^sha=[0-9a-f]{40}$/m);
   });
 });

@@ -1228,12 +1228,7 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
-          # A head cut before merge-base.sh finds the merge base directly.
-          if [ -x .github/scripts/merge-base.sh ]; then
-            BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'base size measurement' || true)
-          else
-            BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD || true)
-          fi
+          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'base size measurement' || true)
           if [ -z "$BASE_SHA" ]; then
             echo "found=false" >> "$GITHUB_OUTPUT"
             exit 0
