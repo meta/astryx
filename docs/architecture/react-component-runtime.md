@@ -56,6 +56,16 @@ deciding_specs:
         "\\b(?:Mutation|Resize|Intersection)Observer\\b"
       ],
       "claims": ["INV2", "INV3", "INV5", "INV6"]
+    },
+    "slot-presence": {
+      "names": ["isRenderable"],
+      "patterns": ["typeof [\\w.?]+ !==? ['\"]boolean['\"]"],
+      "claims": ["INV16"]
+    },
+    "modality-tracking": {
+      "names": ["useInteractionModalityTracking"],
+      "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
+      "claims": ["INV16"]
     }
   }
 }

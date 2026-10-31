@@ -56,8 +56,28 @@ describe('concern routing on real diffs', () => {
         'architecture:react-component-runtime/INV3',
         'architecture:react-component-runtime/INV5',
         'architecture:react-component-runtime/INV6',
+        'architecture:react-component-runtime/INV16',
       ]),
     );
+  });
+
+  it("routes #8236's hand-written slot check to INV16, naming isRenderable", () => {
+    const matches = collectConcernMatches(
+      records,
+      readDiff(fixture('pr-8236-badge.diff')).addedLines,
+      null,
+    );
+    expect(matches).toContainEqual(
+      expect.objectContaining({
+        recordId: 'architecture:react-component-runtime',
+        concern: 'slot-presence',
+        claimId: 'INV16',
+        utilities: ['isRenderable'],
+      }),
+    );
+    expect(
+      matches.find(match => match.concern === 'slot-presence').matchReason,
+    ).toContain('(shared: isRenderable)');
   });
 
   it("routes #8513's MonthScroller listeners to the runtime claims", () => {
