@@ -181,3 +181,49 @@ describe('installRateLimitBackoff', () => {
     );
   });
 });
+
+describe('the gate and report jobs that share the API budget wait it out', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const YAML = require('yaml');
+  const root = path.resolve(import.meta.dirname, '../../..');
+  const scripts = (workflow, job) =>
+    YAML.parse(
+      fs.readFileSync(path.join(root, '.github/workflows', workflow), 'utf8'),
+    )
+      .jobs[job].steps.filter(step =>
+        step.uses?.startsWith('actions/github-script@'),
+      )
+      .map(step => step.with.script);
+
+  it.each([
+    ['review-signal.yml', 'flag'],
+    ['review-signal.yml', 'spec-owner'],
+    ['review-clear.yml', 'clear'],
+    ['rerequest-review-on-update.yml', 'rerequest-review'],
+    ['pr-comment.yml', 'resolve'],
+    ['pr-comment.yml', 'spec-only-reconcile'],
+    ['pr-comment.yml', 'comment'],
+  ])('%s %s installs the wait before its first request', (workflow, job) => {
+    const steps = scripts(workflow, job);
+    expect(steps.length).toBeGreaterThan(0);
+    for (const script of steps) {
+      expect(script.trimStart()).toMatch(
+        /^\/\/ Wait out the repository's shared API rate limit/,
+      );
+      expect(script).toContain('installRateLimitBackoff({github, core})');
+    }
+  });
+
+  it('reads the helper from a trusted commit, never the pull request', () => {
+    for (const [workflow, job] of [
+      ['review-signal.yml', 'flag'],
+      ['review-clear.yml', 'clear'],
+      ['rerequest-review-on-update.yml', 'rerequest-review'],
+    ]) {
+      expect(scripts(workflow, job)[0]).toMatch(
+        /ref: context\.sha, path: '\.github\/scripts\/lib\/rate-limit-backoff\.cjs'/,
+      );
+    }
+  });
+});
