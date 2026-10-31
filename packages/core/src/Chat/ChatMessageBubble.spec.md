@@ -228,8 +228,8 @@ Read from source, with no focused test yet:
 - FR2: the `system` sender taking the non-user paint path.
 - FR3: the standalone `balanced` fallback, the compact radius, and the
   `spacious` inset.
-- FR4: `ghost` removing the fill and block-axis padding, and its inline
-  alignment matching each density.
+- FR4: `filled` painting the sender fill; `ghost` removing the fill and
+  block-axis padding, and its inline alignment matching each density.
 - FR8: `className`, `style`, and `xstyle` composition.
 - AR1: no role, tab stop, or name of the component's own.
 - PR1–PR2: no state or Effect, and no inspection of caller content.
