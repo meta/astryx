@@ -834,7 +834,10 @@ export function Slider({ref, ...props}: SliderProps) {
       coincidentDragRef.current = parks
         ? getValueFromPosition(e.clientX, e.clientY)
         : null;
-      coincidentOriginRef.current = isCoincident;
+      // Only a drag that began on the shared thumbs, the press that waited for
+      // the first movement, hands itself to the other thumb (FR6); a track
+      // press beside them already picked its thumb.
+      coincidentOriginRef.current = parks;
       if (isCoincident && !parks) {
         thumbIndex = newVal > values[0] ? 1 : 0;
       }
