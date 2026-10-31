@@ -22,7 +22,10 @@ jobs:
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-24.04-arm
     permissions:
+      # The scope step reads the pull request's files and its earlier runs.
+      actions: read
       contents: read
+      pull-requests: read
 
     steps:
       - name: Require a branch in this repository or the ci:run label
@@ -30,15 +33,34 @@ jobs:
         run: |
           echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
           exit 1
+      # A push that only merges main carries the last passing run forward
+      # (spec:AST-030 FR18): the scope step decides it from the pull
+      # request's own diff, and every later step skips.
+      - name: Check out the scope action
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide whether this push carries the last result forward
+        if: github.event_name == 'pull_request'
+        id: carry
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
+
       # Enough history for the merge commit to reach its merge base with the
       # base branch, as ci.yml's check-scope checks out. At depth 1 the merge
       # base is never found, and every pull request ran full lint.
       - uses: actions/checkout@v7
+        if: steps.carry.outputs.carried != 'true'
         with:
           fetch-depth: 50
 
       - name: Classify changed files
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.carry.outputs.carried != 'true'
         id: scope
         run: |
           git fetch origin ${{ github.base_ref }} --depth=50
@@ -70,7 +92,7 @@ jobs:
       # trusted validation (spec:AST-017 FR50). Detect its branch contract so
       # required lint can route it to the stronger validator.
       - name: Detect the release merge-back branch contract
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.carry.outputs.carried != 'true'
         id: release-merge-back-scope
         env:
           MERGE_BRANCH: ${{ github.head_ref }}
@@ -88,7 +110,7 @@ jobs:
           echo "required=$required" >> "$GITHUB_OUTPUT"
 
       - name: Validate release merge-back in required lint
-        if: github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required == 'true'
+        if: github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required == 'true' && steps.carry.outputs.carried != 'true'
         env:
           MERGE_BRANCH: ${{ github.head_ref }}
         run: |
@@ -114,7 +136,7 @@ jobs:
       # released CLI JSON id cannot disappear unclassified. The release coverage
       # audit runs the same classifier over the cut range, so the two agree.
       - name: Check Changeset coverage
-        if: github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required != 'true'
+        if: github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required != 'true' && steps.carry.outputs.carried != 'true'
         env:
           MERGE_SHA: ${{ github.sha }}
         run: |
@@ -139,21 +161,21 @@ jobs:
         run: echo "Lightweight documentation PR — skipping full lint"
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.carry.outputs.carried != 'true'
 
       - name: Clear ESLint cache
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.carry.outputs.carried != 'true'
         run: rm -rf .eslintcache node_modules/.cache
 
       - name: Check repository guardrails
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.carry.outputs.carried != 'true'
         run: pnpm check:repo
 
       # The CLI README's generated tables (commands, error codes, response
       # types) ship to consumers. A merge from main can silently drop a
       # generated row, so the merged result is checked against its sources.
       - name: Check generated CLI README
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.carry.outputs.carried != 'true'
         run: node packages/cli/scripts/generate-cli-readme.mjs --check
 
       # The full pass, type-aware rules over packages/core/src included, needs
@@ -162,7 +184,7 @@ jobs:
       # run it out of memory. 4 GB keeps the pass under half the runner's RAM
       # (3.3 GB peak RSS measured) and spends less time in GC.
       - name: Run ESLint
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.carry.outputs.carried != 'true'
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
         run: pnpm lint

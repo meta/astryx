@@ -314,6 +314,21 @@ they are separately named.
   required check would count as passing. Events other than a pull request (a
   push to `main`, a merge-group entry, a dispatch) are unaffected, and a fork's
   code never runs with the repository's secrets.
+- **FR18 — A push that only merges the base branch carries the last result
+  forward.** On a pull request's push, in a run's first attempt, when the
+  same workflow's last completed run on the push's previous head passed and
+  the pull request's own diff (each changed file's status, names, blob and
+  patch against its merge base) is byte-identical at the previous head and the
+  new head, `test`, `build`, `docsite-test`, `lint` and the jobs they join skip
+  their work and report success. Each of those required contexts (FR7) names
+  the run it carries forward: "Carried forward from run <id> at <sha>". A
+  cancelled or skipped run is not a completed run, and a previous head with no
+  passing run carries nothing. The pre-merge re-run (any later attempt) and an
+  opened, reopened or ready pull request run everything, so the run that gates
+  the merge covers the base branch's changes. Anything that cannot be read or
+  compared (a missing permission, an API error, an empty or truncated file
+  list) runs the job. Merge-group entries, `main`, release checks and the
+  owners a maintainer opts in with `ci:heavy-lanes` are unaffected.
 
 ### Platform support
 
@@ -365,6 +380,7 @@ read change (FR14).
 | FR15     | workflow contract and reconciler tests                                             | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR                                                                                                                                                                                                                                                                     | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, or a non-command comment starts a runner                                |
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract                      | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                        |
+| FR18     | `test-scope-action.test.mjs` carry cases, `ci-carry-forward.test.mjs`              | merge-only push after a pass, a failure, or a cancelled or unfinished run; changed patch, blob or name; re-run; opened or ready; unreadable runs or comparison; truncated list; another branch's run; a fork                                                                                                                           | a carried job runs its work, a required context hides the run it carries, a re-run, changed diff or failed run carries, or an unreadable comparison skips work                                                        |
 
 ## Decision log
 
@@ -534,6 +550,24 @@ it, so the merge rules change only when an administrator removes it.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+### DEC-10 — A merge-only push carries forward; the pre-merge re-run does not
+
+**Reference:** `spec:AST-030/DEC-10`
+**Decider:** `cixzhang`
+
+A long-lived pull request merges the base branch many times without changing
+its own diff, and each merge reran every suite against work that had already
+passed. The result is carried forward only when the pull request's diff is
+byte-identical to a head whose run passed, and the pre-merge re-run still runs
+everything, so the base branch's changes are tested before the merge. A file
+the base branch also changed has a new blob in the merged diff, so that push
+runs in full.
+
+Rejected: rerunning only what the base branch's change could reach (a second
+scoping pass over the base range, with its own failure modes, for a run the
+pre-merge re-run repeats anyway); carrying forward across a diff that differs
+only in line offsets (patches that differ are not proven equal).
 
 ## Open questions
 

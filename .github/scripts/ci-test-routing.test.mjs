@@ -983,7 +983,7 @@ describe('heavy lanes outside their component scope (spec:AST-030 FR9)', () => {
       step => step.name === 'Validate spec records',
     );
     expect(validate.if).toBe(
-      "(steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')",
+      "(steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true') && steps.scope.outputs.carried != 'true'",
     );
   });
 });

@@ -26,7 +26,10 @@ const lint = yaml.parse(
   fs.readFileSync(path.join(root, '.github/workflows/lint.yml'), 'utf8'),
 );
 const steps = lint.jobs.lint.steps;
-const checkout = steps.find(step => step.uses?.startsWith('actions/checkout'));
+// The workspace checkout, not the scope action's side checkout.
+const checkout = steps.find(
+  step => step.uses?.startsWith('actions/checkout') && step.with?.path == null,
+);
 const classify = steps.find(step => step.name === 'Classify changed files');
 const CLASSIFIER_FILES = [
   '.github/scripts/change-scope.cjs',

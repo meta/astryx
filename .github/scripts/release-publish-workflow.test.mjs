@@ -298,14 +298,14 @@ describe('stable and canary publication authority', () => {
     expect(JSON.stringify(mergeBack)).not.toContain('validate-main-version');
 
     expect(step(lint.jobs.lint, 'Check Changeset coverage').if).toBe(
-      "github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required != 'true'",
+      "github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required != 'true' && steps.carry.outputs.carried != 'true'",
     );
     const requiredLintValidation = step(
       lint.jobs.lint,
       'Validate release merge-back in required lint',
     );
     expect(requiredLintValidation.if).toBe(
-      "github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required == 'true'",
+      "github.event_name == 'pull_request' && steps.release-merge-back-scope.outputs.required == 'true' && steps.carry.outputs.carried != 'true'",
     );
     for (const command of [
       'git show origin/main:scripts/release/active-release.mjs',

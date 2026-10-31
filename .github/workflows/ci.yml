@@ -54,6 +54,13 @@ permissions: {}
 # base's trusted classifier) and skips its work, reporting success, when
 # nothing in its scope changed; anything undecidable runs everything.
 #
+# A push that only merges main carries the last result forward (spec:AST-030
+# FR18): when the run on the push's previous head passed and the pull
+# request's own diff is byte-identical at both heads, the jobs that ask the
+# scope step (`carry-forward`) skip their work and report success, and the
+# required checks name the run they carry. The pre-merge re-run runs
+# everything.
+#
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates: they run for release-check,
 # which the Main heavy lanes workflow (main-heavy-lanes.yml) dispatches on every
@@ -362,6 +369,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      # The scope step reads this pull request's earlier runs to carry a
+      # passing result forward (spec:AST-030 FR18).
+      actions: read
       contents: read
       pull-requests: read
     steps:
@@ -383,25 +393,27 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       - name: Skip docsite work for Node tooling
         if: steps.scope.outputs.tooling_only == 'true'
         run: echo "Node-tooling PR — docsite generation is not an owned check"
 
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
 
       # Spec validation imports the canonical CLI discovery path, so the
       # lightweight docs path needs workspace dependencies too.
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
 
       - name: Validate spec records
-        if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')
+        if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true') && steps.scope.outputs.carried != 'true'
         run: node scripts/check-knowledge.mjs
 
       - name: Install Playwright
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: npx playwright install chromium
 
       # The production build (and the data generation inside it) imports every
@@ -409,7 +421,7 @@ jobs:
       # of core. Core builds first; the rest depend on it and not on each
       # other, so they build side by side.
       - name: Build docsite workspace dependencies
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: |
           pnpm -F @astryxdesign/core build
           pnpm --workspace-concurrency=4 \
@@ -429,7 +441,7 @@ jobs:
       # `build` generates the docsite data first, so the data tests below run
       # on the same generated files the production build used.
       - name: Build the docsite
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm -F @astryxdesign/docsite build
 
       # test-docsite (the data tests) runs in the background while
@@ -437,13 +449,13 @@ jobs:
       # e2e step stays its own step so it can move to another tier alone.
       - name: test-docsite (start the data tests)
         id: data
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         # errexit off inside: a failing test run must still record its exit
         # code, written whole so the result step never reads half a file.
         run: (set +e; pnpm -F @astryxdesign/docsite test > docsite-data.log 2>&1; echo $? > docsite-data.exit.tmp; mv docsite-data.exit.tmp docsite-data.exit) &
 
       - name: test-docsite-e2e (browser contracts)
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm test:docsite-browser
 
       - name: test-docsite (data test results)
@@ -456,11 +468,11 @@ jobs:
       # A docsite-only change skips test-node, and the registry generator
       # lives in the docsite.
       - name: Verify the hidden production registry gate
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: node internal/shadcn-registry/verify-production-gate.mjs
 
       - name: Upload docsite browser evidence
-        if: always() && steps.scope.outcome == 'success' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: always() && steps.scope.outcome == 'success' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: docsite-browser-evidence
@@ -508,6 +520,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      # The scope step reads this pull request's earlier runs to carry a
+      # passing result forward (spec:AST-030 FR18).
+      actions: read
       contents: read
       pull-requests: read
     steps:
@@ -524,6 +539,8 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -532,12 +549,12 @@ jobs:
       # Two commits: a pull request's merge commit and its base parent, the
       # diff a scoped run follows.
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         with:
           fetch-depth: 2
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
 
       - name: Check knowledge schema history
         if: >-
@@ -545,31 +562,32 @@ jobs:
           github.event_name == 'pull_request' &&
           steps.scope.outputs.docsite_only != 'true' &&
           steps.scope.outputs.spec_only != 'true' &&
-          steps.scope.outputs.tooling_only != 'true'
+          steps.scope.outputs.tooling_only != 'true' &&
+          steps.scope.outputs.carried != 'true'
         run: |
           git fetch origin "${{ github.event.pull_request.base.sha }}" --depth=1
           node scripts/check-knowledge.mjs --base "${{ github.event.pull_request.base.sha }}"
 
       - name: Check copyright headers
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: ./scripts/add-copyright.sh --check
 
       - name: Check package.json exports are in sync
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: node scripts/sync-exports.js --check
 
       - name: Verify the published CLI ./api type surface
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: node .github/scripts/cli-api-types-verify.mjs
 
       - name: Check token docs are in sync
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: node scripts/generate-token-docs.mjs --check
 
       # Fails when the lab readiness manifest claims a check the source tree
       # contradicts — the report is derived, never hand-maintained.
       - name: Check lab readiness manifest is current
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm lab:readiness:check
 
       # A scoped pull request runs the tests Vitest's module graph relates to
@@ -594,14 +612,14 @@ jobs:
           else
             pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           fi
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
 
       # A child process isolates engine state, not CPU or memory contention.
       # FR23 must wait until this runner's other UI workers have exited
       # (AST-036); the other shards run on other machines.
       - name: Run the isolated Markdown benchmark
         run: pnpm test:ui:isolated
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
 
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
@@ -621,6 +639,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
+      # The scope step reads this pull request's earlier runs to carry a
+      # passing result forward (spec:AST-030 FR18).
+      actions: read
       contents: read
       pull-requests: read
     steps:
@@ -637,18 +658,20 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
 
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.carried != 'true'
         with:
           fetch-depth: 2
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.carried != 'true'
 
       # Before Vitest starts. A scoped run's `--changed` walks the tests'
       # import graphs before the global setup builds Core, and Vite answers an
@@ -657,7 +680,7 @@ jobs:
       # "@astryxdesign/core/theme" imported by "@astryxdesign/cli"". The global
       # setup then finds Core built and skips its own build.
       - name: Build core package
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm -F @astryxdesign/core build
 
       # Scoped like test-ui's run.
@@ -679,18 +702,18 @@ jobs:
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           fi
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.carried != 'true'
 
       # Theme-family compilation is owned by `theme-build`, not Build. Until
       # that surface has an admitted dedicated lane, broad CI keeps its browser
       # contract inside the existing Node test owner rather than `test-build`.
       # One leg runs it.
       - name: Install Playwright for theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: npx playwright install chromium
 
       - name: Run the theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm test:theme-family
 
   # The one pre-job left: a runner must be picked before its job starts, so
@@ -702,6 +725,9 @@ jobs:
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
+      # The scope step reads this pull request's earlier runs to carry a
+      # passing result forward (spec:AST-030 FR18).
+      actions: read
       contents: read
       pull-requests: read
     outputs:
@@ -718,6 +744,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
+          carry-forward: 'true'
           paths: '^packages/native/.*(\.swift|/Package\.swift)$|^\.github/scripts/native-swift\.sh$|^\.github/actions/test-scope/'
 
   test-native-swift:
@@ -827,6 +854,9 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     runs-on: ubuntu-slim
     permissions:
+      # The scope step reads this pull request's earlier runs to carry a
+      # passing result forward (spec:AST-030 FR18).
+      actions: read
       contents: read
       pull-requests: read
     steps:
@@ -848,6 +878,8 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       # A release-branch pull request is spec-only by classification, but its
       # join still runs: it requires the release bump's own validation.
@@ -881,11 +913,15 @@ jobs:
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
+      # The scope step reads this pull request's earlier runs to carry a
+      # passing result forward (spec:AST-030 FR18).
+      actions: read
       contents: read
       pull-requests: read
     outputs:
       short_hash: ${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
       pr_number: ${{ steps.urls.outputs.pr_number }}
+      carried_from: ${{ steps.scope.outputs.carried_from }}
     steps:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
@@ -900,13 +936,15 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated build"
 
       - name: Checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: actions/checkout@v7
         with:
           # Component evidence artifacts are named for and reviewed at the PR
@@ -919,28 +957,28 @@ jobs:
           fetch-depth: 50
 
       - name: Verify Storybook source checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.carried != 'true'
         env:
           EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
 
       - name: Fetch base branch for PR analysis
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.carried != 'true'
         run: git fetch origin ${{ github.base_ref }} --depth=50
 
       - name: Setup Node and pnpm
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: ./.github/actions/setup
 
       # The same steps as `pnpm build` and the Storybook build, overlapped: a
       # package builds once its workspace dependencies have, and Storybook once
       # the packages its story index records are built.
       - name: Build packages and Storybook
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: node .github/scripts/build-packages-and-storybook.mjs
 
       - name: Verify package exports
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: node scripts/verify-exports.mjs
 
       # The story-tree check reads the built index and skips without one, so it
@@ -949,7 +987,7 @@ jobs:
       # check carries the earlier test, which also rejects the A11y/ fixture
       # root; such a head skips the check, visibly, until it merges main.
       - name: Check the story tree
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: |
           STORY_TREE_TEST=apps/storybook/.storybook/story-tree.test.ts
           if ! grep -q 'FIXTURE_ROOT' "$STORY_TREE_TEST"; then
@@ -959,11 +997,11 @@ jobs:
           pnpm exec vitest run --project node "$STORY_TREE_TEST"
 
       - name: Stamp Storybook source revision
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: git rev-parse HEAD > apps/storybook/dist/astryx-build-sha.txt
 
       - name: Compute PR preview path
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.carried != 'true'
         id: urls
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
@@ -974,7 +1012,7 @@ jobs:
           echo "pr_number=${PR_NUMBER}" >> $GITHUB_OUTPUT
 
       - name: Identify full release audit scope
-        if: github.event_name == 'workflow_dispatch' && steps.scope.outputs.tooling_only != 'true'
+        if: github.event_name == 'workflow_dispatch' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         id: release
         run: |
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
@@ -982,7 +1020,7 @@ jobs:
           printf '{"forceFullComponentAudits":true}\n' > analysis.json
 
       - name: Upload Storybook artifact
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check') && steps.scope.outputs.carried != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: storybook-${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
@@ -1001,7 +1039,7 @@ jobs:
       # Two paths, so the artifact is rooted at their common ancestor
       # (packages/) — the download below unpacks it there.
       - name: Upload built themes and core
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check') && steps.scope.outputs.carried != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: dists-${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
@@ -1011,7 +1049,7 @@ jobs:
           retention-days: 1
 
       - name: Analyze components
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.carried != 'true'
         env:
           FULL_SUITE: ${{ steps.scope.outputs.full_suite }}
         run: |
@@ -1026,7 +1064,7 @@ jobs:
             "${FORCE_FULL[@]}"
 
       - name: Write PR comment metadata
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.carried != 'true'
         run: |
           # PR Comment reads this exact-run analysis. Storybook and Sandbox
           # preview links are the branch's Vercel alias.
@@ -1044,7 +1082,7 @@ jobs:
           EOF
 
       - name: Upload analysis artifact
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check') && steps.scope.outputs.carried != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pr-analysis
@@ -1079,27 +1117,29 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       - name: Checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 50
 
       - name: Fetch base branch
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: git fetch origin ${{ github.base_ref }} --depth=50
 
       - name: Setup Node and pnpm
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: ./.github/actions/setup
 
       # A branch far behind main may have no merge base within the fetched
       # history even after deepening. The report then keeps Before and Delta
       # as N/A rather than failing the run.
       - name: Check out the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         id: merge-base
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -1119,7 +1159,7 @@ jobs:
       # The merge base's dependencies install either way: measuring bundles
       # each base component with esbuild, which resolves its imports there.
       - name: Install the merge base's dependencies
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         working-directory: .size-base
         run: pnpm install --frozen-lockfile
 
@@ -1128,7 +1168,7 @@ jobs:
       - name: Find main's build of the merge base
         id: cached
         continue-on-error: true
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: actions/github-script@v9
         env:
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
@@ -1162,7 +1202,7 @@ jobs:
       # the other component packages depend on them; another package builds
       # only when the PR changes its source.
       - name: Build the merge base's component packages
-        if: (steps.merge-base.outputs.found == 'true') && steps.download.outcome != 'success' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: (steps.merge-base.outputs.found == 'true') && steps.download.outcome != 'success' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         working-directory: .size-base
         env:
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
@@ -1178,7 +1218,7 @@ jobs:
           done
 
       - name: Measure the merge base
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: |
           node .github/scripts/analyze-pr.js \
             --base origin/${{ github.base_ref }} \
@@ -1188,7 +1228,7 @@ jobs:
             --output size-base.json
 
       - name: Upload base size stats
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: pr-size-base
@@ -1204,6 +1244,9 @@ jobs:
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
+      # The scope step reads this pull request's earlier runs to carry a
+      # passing result forward (spec:AST-030 FR18).
+      actions: read
       contents: read
       pull-requests: read
     steps:
@@ -1220,24 +1263,26 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       - name: Skip typechecks for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
         run: echo "Specialized PR lane — skipping typechecks"
 
       - name: Checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node and pnpm
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: ./.github/actions/setup
 
       # The doc, template and CLI typechecks resolve the built package types.
       - name: Build packages
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm build
 
       # Every workspace package's own `typecheck` script: its sources and
@@ -1246,7 +1291,7 @@ jobs:
       # A PR head cut before `pnpm typecheck` existed runs the previous list,
       # loaded from the merge commit these steps come from.
       - name: Typecheck every package
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         env:
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
@@ -1283,6 +1328,17 @@ jobs:
           echo "typecheck:       ${{ needs.typecheck.result }}"
           [ "${{ needs.build-storybook.result }}" = "success" ] || exit 1
           [ "${{ needs.typecheck.result }}" = "success" ] || exit 1
+
+      # The required check names the run a carried-forward result comes from
+      # (spec:AST-030 FR18).
+      - name: Name the carried-forward run
+        if: needs.build-storybook.outputs.carried_from != ''
+        env:
+          CARRIED_FROM: ${{ needs.build-storybook.outputs.carried_from }}
+        run: |
+          message="Carried forward from $CARRIED_FROM: this push only merges the base branch, and the pull request's own diff is unchanged. The pre-merge re-run runs everything."
+          echo "::notice title=Result carried forward::$message"
+          echo "$message" >> "$GITHUB_STEP_SUMMARY"
 
   # CI keeps Storybook's static artifact for visual, accessibility, and RTL
   # checks. Vercel independently hosts both human Storybook and Sandbox
@@ -1763,7 +1819,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      # The heavy-suite caps read the author's pull requests and runs.
+      # The heavy-suite caps read the author's pull requests and runs, and
+      # the scope step this pull request's earlier runs (spec:AST-030 FR18).
       actions: read
       contents: read
       pull-requests: read
@@ -1782,6 +1839,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
+          carry-forward: 'true'
           paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
@@ -1881,7 +1939,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      # The heavy-suite caps read the author's pull requests and runs.
+      # The heavy-suite caps read the author's pull requests and runs, and
+      # the scope step this pull request's earlier runs (spec:AST-030 FR18).
       actions: read
       contents: read
       pull-requests: read
@@ -1900,6 +1959,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
+          carry-forward: 'true'
           paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform)|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
@@ -1996,7 +2056,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
-      # The heavy-suite caps read the author's pull requests and runs.
+      # The heavy-suite caps read the author's pull requests and runs, and
+      # the scope step this pull request's earlier runs (spec:AST-030 FR18).
       actions: read
       contents: read
       pull-requests: read
@@ -2014,43 +2075,45 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          carry-forward: 'true'
 
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
 
       - name: Per-author heavy-suite caps
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         uses: ./.github/actions/heavy-caps
 
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: 'true'
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
       - name: Install Playwright
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: npx playwright install chromium
 
       # The Build package's contracts: the packed consumer's dependencies, the
       # production CSS-layer cascade, and cross-package StyleX markers in a
       # real browser. `pnpm test:build` owns the list.
       - name: Run Build package contracts
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm test:build
 
       # The vibe-tests fixtures share this Playwright-equipped runner: the
       # canonical setup compositions and the guest fixture contrast need a
       # production browser render.
       - name: Verify canonical setup compositions
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         env:
           ASTRYX_CANONICAL_SETUP_BROWSER: '1'
         run: pnpm vitest run internal/vibe-tests/setup-test/setup-canonical.test.ts --project node --maxWorkers=1
 
       - name: Verify guest fixture contrast
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'
         run: pnpm -F @astryxdesign/vibe-tests fixtures:contrast
 
   # The full visual plan first loads every Core story to learn which theming

@@ -68,10 +68,14 @@ async function decide({
   headError,
   missingBase = [],
   baseOverrides = {},
+  runs = [],
+  earlierFiles = [],
+  env: extraEnv = {},
 } = {}) {
   const outputs = {};
   const messages = {info: [], warning: [], notice: [], failed: []};
   const contentCalls = [];
+  const apiCalls = [];
   const core = {
     setOutput: (key, value) => {
       outputs[key] = value;
@@ -89,7 +93,19 @@ async function decide({
     },
     rest: {
       pulls: {listFiles: () => {}},
+      actions: {
+        listWorkflowRuns: async params => {
+          apiCalls.push({listWorkflowRuns: params});
+          if (runs instanceof Error) throw runs;
+          return {data: {workflow_runs: runs}};
+        },
+      },
       repos: {
+        compareCommitsWithBasehead: async params => {
+          apiCalls.push({compare: params});
+          if (earlierFiles instanceof Error) throw earlierFiles;
+          return {data: {files: earlierFiles}};
+        },
         getContent: async ({path: file, ref}) => {
           contentCalls.push({file, ref});
           if (
@@ -128,6 +144,10 @@ async function decide({
     SCOPE_OUTSIDE_PR: inputs['outside-pull-request'] ?? 'run',
     SCOPE_HEAD_FILE: inputs['requires-head-file'] ?? '',
     SCOPE_COMPONENT_AUDIT: inputs['component-audit'] ?? 'false',
+    SCOPE_CARRY_FORWARD: inputs['carry-forward'] ?? 'false',
+    GITHUB_RUN_ATTEMPT: '1',
+    GITHUB_WORKFLOW_REF: 'o/r/.github/workflows/ci.yml@refs/pull/7/merge',
+    ...extraEnv,
   };
   const saved = {...process.env};
   Object.assign(process.env, env);
@@ -145,7 +165,7 @@ async function decide({
       else delete process.env[key];
     }
   }
-  return {outputs, messages, contentCalls};
+  return {outputs, messages, contentCalls, apiCalls};
 }
 
 const changed = (...names) =>
@@ -158,6 +178,8 @@ describe('per-job scope step', () => {
     expect(Object.keys(action.outputs).sort()).toEqual(
       [
         'applies',
+        'carried',
+        'carried_from',
         'changed_files_path',
         'decided',
         'docsite_only',
@@ -464,6 +486,233 @@ describe('per-job scope step', () => {
       expect(messages.warning).toEqual([
         expect.stringContaining('Component audit scope could not be decided'),
       ]);
+    });
+  });
+});
+
+describe('carrying a passing result forward (spec:AST-030 FR18)', () => {
+  const EARLIER = 'e'.repeat(40);
+  const file = (filename, extra = {}) => ({
+    filename,
+    status: 'modified',
+    sha: `blob-${filename}`,
+    patch: `@@ -1 +1 @@\n-old ${filename}\n+new ${filename}`,
+    ...extra,
+  });
+  const ownFiles = [file('packages/core/src/Button/Button.tsx')];
+  const pushContext = ({
+    action = 'synchronize',
+    fork = false,
+    before = EARLIER,
+  } = {}) => {
+    const context = pullRequestContext();
+    context.runId = 99;
+    context.payload.action = action;
+    context.payload.before = before;
+    Object.assign(context.payload.pull_request, {
+      number: 7,
+      head: {
+        sha: HEAD_SHA,
+        ref: 'fix/button',
+        repo: {full_name: fork ? 'someone/r' : 'o/r'},
+      },
+    });
+    return context;
+  };
+  const run = (overrides = {}) => ({
+    id: 41,
+    head_sha: EARLIER,
+    head_repository: {full_name: 'o/r'},
+    head_branch: 'fix/button',
+    pull_requests: [],
+    status: 'completed',
+    conclusion: 'success',
+    html_url: 'https://github.com/o/r/actions/runs/41',
+    ...overrides,
+  });
+  const carry = ({action, fork, before, inputs = {}, ...rest} = {}) =>
+    decide({
+      context: pushContext({action, fork, before}),
+      files: ownFiles,
+      inputs: {'carry-forward': 'true', ...inputs},
+      runs: [run()],
+      earlierFiles: ownFiles,
+      ...rest,
+    });
+
+  it('carries the last passing run forward when the push only merged the base branch', async () => {
+    const {outputs, messages, apiCalls} = await carry();
+    expect(outputs).toMatchObject({
+      carried: 'true',
+      carried_from: `run 41 at ${EARLIER}`,
+      applies: 'false',
+    });
+    expect(messages.notice).toEqual([
+      `Carried forward from run 41 at ${EARLIER} (https://github.com/o/r/actions/runs/41): this push only merges main, and the pull request's own diff is unchanged. The pre-merge re-run runs everything.`,
+    ]);
+    expect(apiCalls).toEqual([
+      {compare: {owner: 'o', repo: 'r', basehead: `${BASE_SHA}...${EARLIER}`}},
+      {
+        listWorkflowRuns: {
+          owner: 'o',
+          repo: 'r',
+          workflow_id: 'ci.yml',
+          event: 'pull_request',
+          head_sha: EARLIER,
+          per_page: 10,
+        },
+      },
+    ]);
+  });
+
+  it('compares the diff in any file order', async () => {
+    const two = [file('a.ts'), file('b.ts')];
+    const {outputs} = await carry({
+      files: two,
+      earlierFiles: [...two].reverse(),
+    });
+    expect(outputs.carried).toBe('true');
+  });
+
+  it("looks past the previous head's cancelled, skipped and unfinished runs to its last completed one", async () => {
+    const {outputs} = await carry({
+      runs: [
+        run({id: 44, conclusion: 'cancelled'}),
+        run({id: 43, conclusion: 'skipped'}),
+        run({id: 42, status: 'in_progress', conclusion: null}),
+        run(),
+      ],
+    });
+    expect(outputs.carried_from).toBe(`run 41 at ${EARLIER}`);
+  });
+
+  it("ignores another branch's or another repository's run on the previous head", async () => {
+    const {outputs} = await carry({
+      runs: [
+        run({id: 44, conclusion: 'failure', head_branch: 'other'}),
+        run({
+          id: 43,
+          conclusion: 'failure',
+          head_repository: {full_name: 'someone/r'},
+        }),
+        run(),
+      ],
+    });
+    expect(outputs.carried_from).toBe(`run 41 at ${EARLIER}`);
+  });
+
+  it('makes one call when the push changed the diff', async () => {
+    const {outputs, apiCalls} = await carry({earlierFiles: [file('other.ts')]});
+    expect(outputs.carried).toBe('false');
+    expect(apiCalls).toHaveLength(1);
+  });
+
+  it("identifies a fork's runs by its repository and branch", async () => {
+    const {outputs} = await carry({
+      fork: true,
+      runs: [
+        run({head_repository: {full_name: 'someone/r'}, pull_requests: []}),
+      ],
+    });
+    expect(outputs.carried).toBe('true');
+  });
+
+  it.each([
+    [
+      'the last completed run on the previous head failed',
+      {runs: [run({id: 42, conclusion: 'failure'}), run()]},
+    ],
+    [
+      'the previous head has only a cancelled run',
+      {runs: [run({conclusion: 'cancelled'})]},
+    ],
+    ['the previous head has no run', {runs: []}],
+    ['the push names no previous head', {before: ''}],
+    [
+      'a patch changed',
+      {
+        earlierFiles: [
+          file('packages/core/src/Button/Button.tsx', {
+            patch: '@@ -2 +2 @@\n-old\n+new',
+          }),
+        ],
+      },
+    ],
+    [
+      'the base branch changed a file the pull request changes',
+      {
+        earlierFiles: [
+          file('packages/core/src/Button/Button.tsx', {sha: 'older-blob'}),
+        ],
+      },
+    ],
+    ['a file was added', {earlierFiles: []}],
+    [
+      'a file was renamed',
+      {
+        earlierFiles: [
+          file('packages/core/src/Button/Button.tsx', {
+            status: 'renamed',
+            previous_filename: 'old.tsx',
+          }),
+        ],
+      },
+    ],
+    [
+      'the comparison is truncated',
+      {earlierFiles: Array.from({length: 300}, (_, i) => file(`f${i}.ts`))},
+    ],
+    ['the job does not opt in', {inputs: {'carry-forward': 'false'}}],
+    ['the pull request was opened', {action: 'opened'}],
+    ['the pull request was reopened', {action: 'reopened'}],
+    ['the pull request was marked ready', {action: 'ready_for_review'}],
+    ['it is the pre-merge re-run', {env: {GITHUB_RUN_ATTEMPT: '2'}}],
+    ['the workflow is unknown', {env: {GITHUB_WORKFLOW_REF: ''}}],
+  ])('runs the job when %s', async (_, options) => {
+    const {outputs, messages} = await carry(options);
+    expect(outputs).toMatchObject({
+      carried: 'false',
+      carried_from: '',
+      applies: 'true',
+    });
+    expect(messages.notice).toEqual([]);
+  });
+
+  it.each([
+    [
+      'the runs cannot be read',
+      {
+        runs: Object.assign(
+          new Error('Resource not accessible by integration'),
+          {status: 403},
+        ),
+      },
+    ],
+    [
+      'the comparison fails',
+      {earlierFiles: Object.assign(new Error('Server Error'), {status: 500})},
+    ],
+  ])('runs the job, with a warning, when %s', async (_, options) => {
+    const {outputs, messages} = await carry(options);
+    expect(outputs).toMatchObject({carried: 'false', applies: 'true'});
+    expect(messages.warning).toEqual([
+      expect.stringMatching(
+        /^Could not compare with the last run \(.+\); running this job\.$/,
+      ),
+    ]);
+  });
+
+  it('makes no extra calls for a job that does not opt in', async () => {
+    const {apiCalls} = await carry({inputs: {'carry-forward': 'false'}});
+    expect(apiCalls).toEqual([]);
+  });
+
+  it('keeps the classification it reports', async () => {
+    const {outputs} = await carry();
+    expect(outputs).toMatchObject({
+      spec_only: 'false',
+      docsite_only: 'false',
+      decided: 'true',
     });
   });
 });

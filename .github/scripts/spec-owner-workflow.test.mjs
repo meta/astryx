@@ -187,7 +187,7 @@ describe('spec-only workflow contract', () => {
     // It validates on the spec-only lane, and whenever its own scope step
     // could not decide, so an undecided lane never skips validation.
     expect(docsiteJob.slice(validate, validate + 200)).toContain(
-      "if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')",
+      "if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true') && steps.scope.outputs.carried != 'true'",
     );
 
     const heavy = docsiteJob.slice(
@@ -415,7 +415,7 @@ describe('docsite-test spec validation', () => {
     const job = ci.slice(ci.indexOf('\n  docsite-test:\n'));
     const validate = job.slice(job.indexOf('- name: Validate spec records'));
     expect(validate.split('\n')[1].trim()).toBe(
-      "if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')",
+      "if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true') && steps.scope.outputs.carried != 'true'",
     );
   });
 });

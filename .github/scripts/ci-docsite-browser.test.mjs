@@ -22,8 +22,9 @@ const {jobs} = yaml.parse(
 );
 const owner = jobs['docsite-test'];
 const step = name => owner.steps.find(candidate => candidate.name === name);
+// A carried-forward result (spec:AST-030 FR18) does no work either.
 const ACTIVE =
-  "steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'";
+  "steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'";
 
 describe('docsite-test', () => {
   it('is one job that builds the docsite once and runs both suites on it', () => {

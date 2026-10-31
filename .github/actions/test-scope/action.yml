@@ -17,6 +17,14 @@
 #   Changeset) fails the step, as the old scope job failed its dependents.
 # - A release-branch pull request is the generated version bump: spec-only and
 #   tooling-only, with `release_bump` true.
+# - A push that only merges the base branch carries the last run forward
+#   (spec:AST-030 FR18): when this workflow's run on the push's previous head
+#   passed, and the pull request's own diff (each file's status, names, blob
+#   and patch against the merge base) is byte-identical at both heads, `carried` is true, `applies` is false, and the step leaves a
+#   notice naming that run. A job that opts in with `carry-forward` skips its
+#   work and reports success. A
+#   re-run (the pre-merge restart), any other event, and anything this step
+#   cannot compare run the job normally.
 #
 # The job must be checked out first: this is a local action.
 
@@ -42,6 +50,13 @@ inputs:
       `true` to also classify which component audits apply (the trusted
       component-audit-scope.cjs from the base) and to list the changed files,
       for the visual and RTL jobs.
+    required: false
+    default: 'false'
+  carry-forward:
+    description: >-
+      `true` for a job whose steps honour `carried`: on a push that only merges
+      the base branch, look for a passing earlier run to carry forward. The
+      job needs `actions: read`.
     required: false
     default: 'false'
   requires-head-file:
@@ -96,8 +111,20 @@ outputs:
   applies:
     description: >-
       The job's work applies: not a specialized lane (spec, docsite or tooling
-      only), `touches` holds, and any `requires-head-file` is present.
+      only), `touches` holds, any `requires-head-file` is present, and the
+      result is not carried forward.
     value: ${{ steps.scope.outputs.applies }}
+  carried:
+    description: >-
+      `true` when this push only merges the base branch and the previous run,
+      on the same pull-request diff, passed: the job carries that result
+      forward instead of running its work.
+    value: ${{ steps.scope.outputs.carried }}
+  carried_from:
+    description: >-
+      The run a carried result comes from, as "run <id> at <sha>"; empty
+      otherwise.
+    value: ${{ steps.scope.outputs.carried_from }}
 
 runs:
   using: composite
@@ -109,6 +136,7 @@ runs:
         SCOPE_OUTSIDE_PR: ${{ inputs.outside-pull-request }}
         SCOPE_HEAD_FILE: ${{ inputs.requires-head-file }}
         SCOPE_COMPONENT_AUDIT: ${{ inputs.component-audit }}
+        SCOPE_CARRY_FORWARD: ${{ inputs.carry-forward }}
       with:
         retries: 3
         script: |
@@ -126,6 +154,8 @@ runs:
             touches: 'true',
             applies: 'true',
             decided: 'true',
+            carried: 'false',
+            carried_from: '',
           };
           // Outside a pull request, or when undecidable, every component audit
           // applies in full; a specialized lane has none.
@@ -265,4 +295,58 @@ runs:
             fs.writeFileSync(changedFilesPath, `${changed.join('\n')}\n`);
             componentScope.changed_files_path = changedFilesPath;
           }
-          report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies});
+          // The run that passed on this push's previous head, when the pull
+          // request's own diff is byte-identical at both heads: the push only
+          // merged the base branch (spec:AST-030 FR18). Only a first attempt
+          // of a push carries; the pre-merge re-run, an opened, reopened or
+          // ready pull request, and anything that cannot be compared run the
+          // job. A push that changes the diff costs one call.
+          async function carriedRun() {
+            if (process.env.SCOPE_CARRY_FORWARD !== 'true') return null;
+            const before = context.payload.before;
+            if (context.payload.action !== 'synchronize' || !before) return null;
+            if (Number(process.env.GITHUB_RUN_ATTEMPT ?? '1') !== 1) return null;
+            const workflow = /\/\.github\/workflows\/([^/@]+)@/.exec(process.env.GITHUB_WORKFLOW_REF ?? '')?.[1];
+            if (workflow == null) return null;
+            // The pull request's own diff: each file's status, names, blob and
+            // patch against its merge base with the base branch. This head's
+            // is the file list above; the previous head's comes from a
+            // comparison, which GitHub lists the same way. GitHub lists at
+            // most 300 files in a comparison.
+            const ownDiff = list => JSON.stringify(list
+              .map(f => [f.filename, f.previous_filename ?? '', f.status, f.sha ?? '', f.patch ?? ''])
+              .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
+            if (files.length >= 300) return null;
+            const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead({
+              ...context.repo, basehead: `${pr.base.sha}...${before}`,
+            });
+            const earlier = comparison.files ?? [];
+            if (earlier.length === 0 || earlier.length >= 300) return null;
+            if (ownDiff(earlier) !== ownDiff(files)) return null;
+            // This workflow's last completed run on the previous head, from
+            // this pull request's repository and branch. A run's list of pull
+            // requests is not kept (a fork's is always empty), so the branch
+            // identifies it.
+            const {data} = await github.rest.actions.listWorkflowRuns({
+              ...context.repo, workflow_id: workflow, event: 'pull_request', head_sha: before, per_page: 10,
+            });
+            const ours = run =>
+              run.head_repository?.full_name === pr.head.repo.full_name && run.head_branch === pr.head.ref;
+            const last = data.workflow_runs.find(run =>
+              ours(run) && run.status === 'completed' && !['cancelled', 'skipped'].includes(run.conclusion));
+            return last?.conclusion === 'success' ? last : null;
+          }
+          let carried = {carried: 'false', carried_from: ''};
+          try {
+            const last = await carriedRun();
+            if (last != null) {
+              const from = `run ${last.id} at ${last.head_sha}`;
+              carried = {carried: 'true', carried_from: from, applies: 'false'};
+              const message = `Carried forward from ${from} (${last.html_url}): this push only merges ${pr.base.ref}, and the pull request's own diff is unchanged. The pre-merge re-run runs everything.`;
+              core.notice(message, {title: 'Result carried forward'});
+              await core.summary?.addRaw(`${message}\n`).write();
+            }
+          } catch (error) {
+            core.warning(`Could not compare with the last run (${error.message}); running this job.`);
+          }
+          report({...everything, ...classified, ...componentScope, release_bump: 'false', touches, applies, ...carried});

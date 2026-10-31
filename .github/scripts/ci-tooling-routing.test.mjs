@@ -27,8 +27,9 @@ const prComment = load('.github/workflows/pr-comment.yml');
 const scopeAction = read('.github/actions/test-scope/action.yml');
 const TOOLING_FALSE = "steps.scope.outputs.tooling_only != 'true'";
 const TOOLING_TRUE = "steps.scope.outputs.tooling_only == 'true'";
+// A carried-forward result (spec:AST-030 FR18) does no work either.
 const BROAD_ONLY =
-  "steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'";
+  "steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.carried != 'true'";
 
 function step(job, name) {
   return job.steps.find(candidate => candidate.name === name);
@@ -203,6 +204,7 @@ describe('Node-tooling CI routing', () => {
     const testJoin = step(ci.jobs.test, 'Require expected test-owner outcomes');
     expect(testJoin.run).toBe('node .github/scripts/ci-test-join.mjs');
     expect(ci.jobs.test.permissions).toEqual({
+      actions: 'read',
       contents: 'read',
       'pull-requests': 'read',
     });

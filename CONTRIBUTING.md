@@ -936,6 +936,10 @@ Storybook story for anything you added or altered.
   request past either limit shows a failing check that says why, and runs in
   full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
   are not limited.
+- **Merging `main` into a passing pull request reuses its result.** When a
+  push only merges `main` and leaves your pull request's own diff unchanged,
+  the required checks pass again at once, naming the run they carry forward.
+  The pre-merge re-run still runs everything against the current `main`.
 
 ## Code Style
 
