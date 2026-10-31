@@ -238,7 +238,7 @@ those contracts.
   the modules through an internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
   every pointer, with no touch-only query; under a fine pointer only a component that
-  uses a gesture listens (`spec:AST-094` FR19, FR24, FR43). The modules are not public exports and are not
+  uses a gesture listens (`spec:AST-094` FR19, FR24, FR43). The gesture host, press feedback, page hold, finger-scroll watch and click guard hear document-wide input through one capture-phase listener per event type on the window, present while a subscriber needs it. They run in subscription order, before any document or element listener; it is passive unless a subscriber cancels the event. The modules are not public exports and are not
   documented for consumers; Core and Lab components reach them through
   `@astryxdesign/core/internal/touch`, a subpath reserved for Astryx's own
   packages: undocumented, outside the compatibility promise, versioned in
