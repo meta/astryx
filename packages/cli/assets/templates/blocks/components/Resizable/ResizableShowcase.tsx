@@ -2,6 +2,7 @@
 
 'use client';
 
+import {useRef} from 'react';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
 import {
   Card,
@@ -13,7 +14,8 @@ import {
 import {Text, Heading} from '@astryxdesign/core/Text';
 
 export default function ResizableShowcase() {
-  const sidebar = useResizable({
+  const sidebarHandleRef = useRef<HTMLDivElement>(null);
+  const sidebar = useResizable(sidebarHandleRef, {
     defaultSize: 200,
     minSize: 120,
     maxSize: 400,
@@ -34,7 +36,7 @@ export default function ResizableShowcase() {
             <ResizeHandle
               direction="horizontal"
               hasDivider
-              resizable={sidebar.props}
+              ref={sidebarHandleRef}
               label="Resize sidebar"
             />
           </>

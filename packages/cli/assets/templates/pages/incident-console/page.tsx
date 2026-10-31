@@ -19,7 +19,7 @@
  * StatusDot (severity) and Token (state), not decorative badges.
  */
 
-import {useMemo, useState, type CSSProperties} from 'react';
+import {useMemo, useRef, useState, type CSSProperties} from 'react';
 
 import {
   HStack,
@@ -469,7 +469,8 @@ export default function IncidentConsolePage() {
   // list keeps its full width (never compress dense rows).
   const isNarrow = useMediaQuery('(max-width: 1024px)');
 
-  const inspectorPanel = useResizable({
+  const inspectorPanelHandleRef = useRef<HTMLDivElement>(null);
+  const inspectorPanel = useResizable(inspectorPanelHandleRef, {
     defaultSize: 380,
     minSize: 320,
     maxSize: 480,
@@ -554,7 +555,7 @@ export default function IncidentConsolePage() {
               direction="horizontal"
               hasDivider
               isAlwaysVisible={false}
-              resizable={inspectorPanel.props}
+              ref={inspectorPanelHandleRef}
               label="Resize inspector"
             />
             <LayoutPanel

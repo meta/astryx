@@ -2,9 +2,8 @@
 
 'use client';
 
-import React, {useState, useMemo} from 'react';
+import React, {useState, useMemo, useRef} from 'react';
 import {useResizable, ResizeHandle} from '@astryxdesign/core/Resizable';
-import type {ResizableProps} from '@astryxdesign/core/Resizable';
 import {
   Layout,
   LayoutContent,
@@ -735,11 +734,11 @@ const PRIORITY_LABEL: Record<TaskPriority, string> = {
 function TaskDetailPanel({
   task,
   onClose,
-  resizable,
+  width,
 }: {
   task: TaskRow | null;
   onClose: () => void;
-  resizable: ResizableProps;
+  width: number;
 }) {
   if (!task) {
     return null;
@@ -750,7 +749,7 @@ function TaskDetailPanel({
     // always-on pill doesn't float above the panel as a stray stub.
     <LayoutPanel
       hasDivider
-      resizable={resizable}
+      width={width}
       padding={4}
       role="complementary"
       label="Task details">
@@ -884,7 +883,8 @@ export default function DataTableTemplate() {
     });
   };
 
-  const detailPanel = useResizable({
+  const detailPanelHandleRef = useRef<HTMLDivElement>(null);
+  const detailPanel = useResizable(detailPanelHandleRef, {
     defaultSize: 360,
     minSize: 280,
     maxSize: 500,
@@ -1132,14 +1132,14 @@ export default function DataTableTemplate() {
           selectedTask && (
             <>
               <ResizeHandle
-                resizable={detailPanel.props}
+                ref={detailPanelHandleRef}
                 isReversed
                 isAlwaysVisible={false}
               />
               <TaskDetailPanel
                 task={selectedTask}
                 onClose={() => setSelectedTask(null)}
-                resizable={detailPanel.props}
+                width={detailPanel.size}
               />
             </>
           )

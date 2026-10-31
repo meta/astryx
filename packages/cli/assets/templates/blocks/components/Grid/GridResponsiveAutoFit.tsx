@@ -2,6 +2,7 @@
 
 'use client';
 
+import {useRef} from 'react';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Card} from '@astryxdesign/core/Card';
 import {Layout, LayoutContent, LayoutPanel} from '@astryxdesign/core/Layout';
@@ -19,7 +20,8 @@ const teams = [
 ];
 
 export default function GridResponsiveAutoFit() {
-  const gridPanel = useResizable({
+  const gridPanelHandleRef = useRef<HTMLDivElement>(null);
+  const gridPanel = useResizable(gridPanelHandleRef, {
     defaultSize: 480,
     minSize: 100,
     maxSize: 480,
@@ -62,7 +64,7 @@ export default function GridResponsiveAutoFit() {
               direction="horizontal"
               hasDivider
               isAlwaysVisible
-              resizable={gridPanel.props}
+              ref={gridPanelHandleRef}
               label="Resize grid"
             />
           </>

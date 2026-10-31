@@ -2103,7 +2103,8 @@ export default function SupportInboxTemplate() {
     hasUserMovedPane.current = true;
   }, []);
 
-  const pane = useResizable({
+  const paneHandleRef = useRef<HTMLDivElement>(null);
+  const pane = useResizable(paneHandleRef, {
     defaultSize: '58%',
     minSize: PANE_MIN_WIDTH,
     // Everything the surface has, less the list's floor — so the ceiling
@@ -2659,11 +2660,11 @@ export default function SupportInboxTemplate() {
                 isReversed
                 hasDivider
                 pillPlacement="end"
-                resizable={pane.props}
+                ref={paneHandleRef}
                 label="Resize conversation pane"
               />
               <LayoutPanel
-                resizable={pane.props}
+                width={pane.size}
                 padding={0}
                 // Without a role the label is announced by nothing; with it the
                 // pane becomes a landmark a screen reader can jump straight to.
