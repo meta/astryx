@@ -223,6 +223,7 @@ describe('CommentComposer', () => {
             triggers={[]}
             agentCommands={[]}
             hasEmojiPicker={false}
+            isSubmitting={false}
             onUploadImages={onUploadImages}
             // Inline: a new callback on every render of the host.
             onActionPendingChange={isPending => setPending(isPending)}
