@@ -1351,3 +1351,58 @@ export const FragmentGroupedSteps: Story = {
     );
   },
 };
+
+// ============================================================
+// COMPACT ON-TRACK DISABLED THEME REPRO
+// ============================================================
+
+export const CompactOnTrackDisabledRepro: Story = {
+  name: 'Repro — Compact On-Track Disabled Step',
+  render: () => {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 24,
+          maxWidth: 600,
+        }}>
+        <div>
+          <Text type="label">Compact (width 240px, minStepWidth 160px)</Text>
+          <div style={{width: 240, border: '1px dashed #444', padding: 8}}>
+            <Stepper
+              activeStep={0}
+              label="Checkout"
+              indicatorPosition="on-track"
+              horizontalOptions={{
+                minimumStepWidth: 160,
+                collapsedVariant: 'withLabelAndControls',
+              }}>
+              <Step step={0} label="Shipping" />
+              <Step step={1} label="Delivery" isDisabled />
+              <Step step={2} label="Payment" />
+            </Stepper>
+          </div>
+        </div>
+
+        <div>
+          <Text type="label">Expanded (width 520px)</Text>
+          <div style={{width: 520, border: '1px dashed #444', padding: 8}}>
+            <Stepper
+              activeStep={0}
+              label="Checkout"
+              indicatorPosition="on-track"
+              horizontalOptions={{
+                minimumStepWidth: 160,
+                collapsedVariant: 'withLabelAndControls',
+              }}>
+              <Step step={0} label="Shipping" />
+              <Step step={1} label="Delivery" isDisabled />
+              <Step step={2} label="Payment" />
+            </Stepper>
+          </div>
+        </div>
+      </div>
+    );
+  },
+};

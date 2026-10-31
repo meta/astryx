@@ -104,7 +104,7 @@ Consumer syntax and description remain in `Stepper.doc.mjs` `theming.vars`.
 | FR7  | The horizontal clip mirrors under `dir="rtl"`, so the hole stays at the indicator rather than moving to the join between steps.                                                                                                                                                                                                                                                                                                                                                              | Reviewed defect (PR #5495)           | Settled                   |
 | FR8  | The pieces an on-track connector is drawn from are not public: no `data-segment`, and no bare `lead`/`rail`/`content` class is emitted.                                                                                                                                                                                                                                                                                                                                                      | `component:Stepper/DEC-1`            | Settled                   |
 | FR9  | In both indicator positions, each rendered Label and Description carries its own target and reflects `progress` and `status`.                                                                                                                                                                                                                                                                                                                                                                | Current source, docs, and tests      | Settled                   |
-| FR10 | Label alone reflects `disabled`, because only Label owns disabled paint. Description and the other targets do not gain the selector for symmetry.                                                                                                                                                                                                                                                                                                                                            | Current source, docs, and tests      | Settled                   |
+| FR10 | `step`, `step-indicator`, and `step-label` reflect `disabled` when `isDisabled` is true (`architecture:component-theming-surface` INV6), as the indicator and label carry disabled paint and `step` owns the step's theming surface in all layouts (including compact layouts where the label is omitted). Description does not gain the selector.                                                                                                                                           | Current source, docs, and tests      | Settled                   |
 | FR11 | Label and Description each declare `font-size`, `line-height`, and `color`. Those declarations outrank values inherited from `step`, so only direct targets can expose that paint to themes.                                                                                                                                                                                                                                                                                                 | Current source and Chromium probe    | Settled                   |
 | FR12 | A compact horizontal summary sits directly beneath its track without an additional frame gap.                                                                                                                                                                                                                                                                                                                                                                                                | Reviewed narrow-layout feedback      | Settled                   |
 | FR13 | In compact `on-track`, indicators remain on the rail and the active indicator is not repeated beside the summary label; compact `separated` retains the active indicator beside its label.                                                                                                                                                                                                                                                                                                   | Reviewed narrow-layout feedback      | Settled                   |
@@ -126,19 +126,19 @@ Astryx paints either text part by status.
 
 ### Representative states
 
-| State                                                          | Required invariant | Allowed variation |
-| -------------------------------------------------------------- | ------------------ | ----------------- |
-| vertical, on-track, indicator                                  | FR2, FR3, FR6      | AV1, AV2          |
-| horizontal, on-track, indicator                                | FR2, FR3, FR6, FR7 | AV1, AV2          |
-| `dir="rtl"`, horizontal                                        | FR7                | AV1               |
-| `indicator="none"`                                             | FR5                | —                 |
-| value below `0` or above the cap                               | FR4, FR6           | —                 |
-| both indicator positions; each progress/status; disabled Label | FR9–FR11           | —                 |
-| compact horizontal summary                                     | FR12               | —                 |
-| compact `on-track` and `separated` indicators                  | FR13               | —                 |
-| custom numeric pixel collapse threshold                        | FR14               | —                 |
-| public context read versus internal layout coordination        | FR16               | —                 |
-| each `collapsedVariant`, with and without `onStepClick`        | FR15               | —                 |
+| State                                                                               | Required invariant | Allowed variation |
+| ----------------------------------------------------------------------------------- | ------------------ | ----------------- |
+| vertical, on-track, indicator                                                       | FR2, FR3, FR6      | AV1, AV2          |
+| horizontal, on-track, indicator                                                     | FR2, FR3, FR6, FR7 | AV1, AV2          |
+| `dir="rtl"`, horizontal                                                             | FR7                | AV1               |
+| `indicator="none"`                                                                  | FR5                | —                 |
+| value below `0` or above the cap                                                    | FR4, FR6           | —                 |
+| both indicator positions; each progress/status; disabled Step, Indicator, and Label | FR9–FR11           | —                 |
+| compact horizontal summary                                                          | FR12               | —                 |
+| compact `on-track` and `separated` indicators                                       | FR13               | —                 |
+| custom numeric pixel collapse threshold                                             | FR14               | —                 |
+| public context read versus internal layout coordination                             | FR16               | —                 |
+| each `collapsedVariant`, with and without `onStepClick`                             | FR15               | —                 |
 
 ### Transformation and precedence order
 
