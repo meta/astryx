@@ -410,9 +410,9 @@ export interface FileInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    *
    * Dropzone mode does not support 'attached': its tall surface cannot carry an
-   * overlapping message. Use 'detached' or 'tooltip' there. From the next minor
-   * release, a dropzone resolves 'attached' to 'detached' and defaults to it.
-   * @default 'attached'
+   * overlapping message, so a dropzone defaults to 'detached' and resolves
+   * 'attached' to 'detached'.
+   * @default 'attached' in input mode; 'detached' in dropzone mode
    */
   statusVariant?: FieldStatusVariant;
   /**
@@ -471,7 +471,7 @@ export function FileInput({
   isRequired = false,
   isLoading = false,
   status: statusProp,
-  statusVariant = 'attached',
+  statusVariant: statusVariantProp,
   description,
   placeholder,
   mode = 'input',
@@ -544,6 +544,15 @@ export function FileInput({
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
+
+  // family:input-fields FR8/AV6: a dropzone cannot carry an attached message,
+  // so it offers only detached and tooltip (component:FileInput FR6).
+  const statusVariant: FieldStatusVariant =
+    mode === 'dropzone'
+      ? statusVariantProp === 'tooltip'
+        ? 'tooltip'
+        : 'detached'
+      : (statusVariantProp ?? 'attached');
 
   const status =
     statusProp ??
