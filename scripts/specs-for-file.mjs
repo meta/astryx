@@ -823,7 +823,8 @@ export function formatResult(result, {records: listRecords = false} = {}) {
 /**
  * The default view: the claims to follow, first those the diff's concerns
  * route (with the line that matched), then the trigger-routed global claims
- * one line per record. The linked records are counted, not listed.
+ * one line per record, then the linked records, cited claims and deciding
+ * specs by id. `--records` adds how each one links.
  */
 function formatShortResult(result) {
   const lines = [
@@ -862,38 +863,42 @@ function formatShortResult(result) {
   for (const [recordId, claims] of byRecord) {
     lines.push(`    ${recordId}  ${[...new Set(claims)].join(', ')}`);
   }
-  if (result.records.length === 0) {
-    lines.push(
-      result.decisions.length > 0
-        ? '  No whole record links to this path; it cites the claims above.'
-        : '  No record links to this path.',
-    );
-  } else {
+  if (result.records.length === 0 && result.decisions.length === 0) {
+    lines.push('  No record links to this path.');
+  }
+  if (result.records.length > 0) {
     lines.push(
       `  Records: ${result.records.map(record => record.id).join(', ')}`,
     );
   }
-  const more = result.decisions.length + result.decidingSpecs.length;
-  lines.push(
-    `  --records shows how each record links${more > 0 ? `, plus ${more} cited claims and deciding specs` : ''}.`,
-  );
+  if (result.decisions.length > 0) {
+    lines.push(
+      `  Cited claims: ${result.decisions.map(decision => decision.id).join(', ')}`,
+    );
+  }
+  if (result.decidingSpecs.length > 0) {
+    lines.push(
+      `  Deciding specs: ${result.decidingSpecs.map(record => record.id).join(', ')}`,
+    );
+  }
+  lines.push('  --records shows how each one links.');
   return lines.join('\n');
 }
 
 const WORKING_TREE_NOTE =
   "Records are read from the working tree. On a pull-request branch they include that branch's proposed records, so this is a lookup, not review authority.\n";
 
-const USAGE = `Usage: pnpm specs:for [<file...>] [--diff <base>[..<head>]] [--records] [--json] [--include-draft] [--triggers a,b]
+const USAGE = `Usage: pnpm specs:for [<file...>] [--diff <base>[..|...<head>]] [--records] [--json] [--include-draft] [--triggers a,b]
        pnpm specs:for --unreached [--json]
        pnpm specs:for --unrouted [--json]
 
-Lists every knowledge record that governs each file, with the link that put it
-there, the specs that decided those records, and the trigger-routed global
-claims. --diff reads the change against <base> (its merge base with HEAD, to
-the working tree) or between <base>..<head>, lists its changed files when none
+Lists every knowledge record that governs each file, the specs that decided
+those records, and the trigger-routed global claims. --diff reads the change against <base> (its merge base with HEAD, to
+the working tree), between <base>..<head>, or from their merge base with
+<base>...<head>, lists its changed files when none
 are named, and puts first the claims whose owning record's concerns its added
-lines match. --records shows how each linked record links, with cited claims and deciding
-specs.
+lines match. The linked records, cited claims and deciding specs are listed by
+id; --records shows how each one links.
 --unreached lists current records no other tracked file reaches.
 --unrouted lists tracked files no current record governs.`;
 
@@ -908,8 +913,14 @@ function diffText(root, range) {
       encoding: 'utf8',
       maxBuffer: 256 * 1024 * 1024,
     });
+  if (range.includes('...')) {
+    // git's three-dot form: the head's change since it branched from base.
+    const [base, head] = range.split('...');
+    const fork = git(['merge-base', base, head]).trim();
+    return git(['diff', '--no-color', '--no-ext-diff', fork, head]);
+  }
   if (range.includes('..')) {
-    const [base, head] = range.split(/\.\.\.?/);
+    const [base, head] = range.split('..');
     return git(['diff', '--no-color', '--no-ext-diff', base, head]);
   }
   const base = git(['merge-base', 'HEAD', range]).trim();
