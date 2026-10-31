@@ -14,11 +14,11 @@
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/;
 
 /**
- * Tests, stories and fixtures exercise shipped code but are not shipped, so a
- * listener a test adds re-implements nothing.
+ * Tests, stories and fixtures (`*.fixtures.ts`, `fixtures/`) exercise shipped
+ * code but are not shipped, so a listener a test adds re-implements nothing.
  */
 const NOT_SHIPPED =
-  /(?:^|\/)(?:__tests__|__fixtures__|__mocks__)\/|\.(?:test|spec|stories)\.[cm]?[jt]sx?$/;
+  /(?:^|\/)(?:__tests__|__fixtures__|__mocks__|fixtures)\/|\.(?:test|spec|stories|fixtures?)\.[cm]?[jt]sx?$/;
 
 export function isShippedSource(file) {
   return SOURCE_FILE.test(file) && !NOT_SHIPPED.test(file);

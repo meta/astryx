@@ -73,7 +73,17 @@ const matches = collectGlobalReviewMatches(
 const {addedLines} = readDiff(
   execFileSync(
     'git',
-    ['-C', root, 'diff', '--no-color', '--no-ext-diff', authority, reviewHead],
+    [
+      '-C',
+      root,
+      'diff',
+      '--no-color',
+      '--no-ext-diff',
+      '--src-prefix=a/',
+      '--dst-prefix=b/',
+      authority,
+      reviewHead,
+    ],
     {encoding: 'utf8', maxBuffer: 256 * 1024 * 1024},
   ),
 );

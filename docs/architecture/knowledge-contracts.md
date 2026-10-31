@@ -246,15 +246,14 @@ Every record is either:
 - **INV20 — Global review routing is explicit and claim-scoped.** A cross-cutting
   baseline participates without a component backlink only when its
   `review-applicability:v1` block declares `scope: "global"` and maps a semantic
-  trigger to exact claim ids in that same record. Review loads matching current
+  trigger or a concern to exact claim ids in that same record. Review loads matching current
   global claims before narrower records, then resolves the direct component,
   module, or family owner first when it governs the delta. The marker never makes
   the whole record, adjacent claims, drafts, or proposed-head authority govern.
   Every routed match records the base authority commit, record digest, record id,
   path, trigger or concern, claim id, claim title, and deterministic match
-  reason. A record
-  that owns a shared concern MAY also list it in the same block's `concerns`
-  map: the shared utility's names, the code patterns that re-implement it, and
+  reason. A record that owns a shared concern MAY list it in the block's
+  `concerns` map: the shared utility's names, the code patterns that re-implement it, and
   the claims it routes. A change whose added shipped-source lines match a
   concern routes those claims whatever the component record's
   `review_triggers` list, and each match names the line that matched.

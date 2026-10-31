@@ -917,14 +917,37 @@ function diffText(root, range) {
     // git's three-dot form: the head's change since it branched from base.
     const [base, head] = range.split('...');
     const fork = git(['merge-base', base, head]).trim();
-    return git(['diff', '--no-color', '--no-ext-diff', fork, head]);
+    return git([
+      'diff',
+      '--no-color',
+      '--no-ext-diff',
+      '--src-prefix=a/',
+      '--dst-prefix=b/',
+      fork,
+      head,
+    ]);
   }
   if (range.includes('..')) {
     const [base, head] = range.split('..');
-    return git(['diff', '--no-color', '--no-ext-diff', base, head]);
+    return git([
+      'diff',
+      '--no-color',
+      '--no-ext-diff',
+      '--src-prefix=a/',
+      '--dst-prefix=b/',
+      base,
+      head,
+    ]);
   }
   const base = git(['merge-base', 'HEAD', range]).trim();
-  const tracked = git(['diff', '--no-color', '--no-ext-diff', base]);
+  const tracked = git([
+    'diff',
+    '--no-color',
+    '--no-ext-diff',
+    '--src-prefix=a/',
+    '--dst-prefix=b/',
+    base,
+  ]);
   // A new file not yet added to git is part of the change too.
   const untracked = git(['ls-files', '--others', '--exclude-standard', '-z'])
     .split('\0')

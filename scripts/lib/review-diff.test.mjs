@@ -38,6 +38,22 @@ describe('readDiff', () => {
     });
   });
 
+  it('reads no lines from fixture files or directories', () => {
+    for (const file of [
+      'internal/a11y-spec/src/patterns/accordion.fixtures.ts',
+      'packages/core/src/A/fixtures/data.ts',
+    ]) {
+      const diff = [
+        `diff --git a/${file} b/${file}`,
+        `--- a/${file}`,
+        `+++ b/${file}`,
+        '@@ -1,0 +1,1 @@',
+        "+el.addEventListener('keydown', onKey);",
+      ].join('\n');
+      expect(readDiff(diff).addedLines).toEqual([]);
+    }
+  });
+
   it('reads no lines from tests, stories or fixtures', () => {
     const {files, addedLines} = readDiff(fixture('pr-8381-dialog-test.diff'));
     expect(files).toEqual(['packages/core/src/Dialog/Dialog.test.tsx']);
