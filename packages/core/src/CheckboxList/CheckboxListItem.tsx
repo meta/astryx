@@ -29,6 +29,7 @@ import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
 import {useTranslator} from '../i18n';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
+import {joinAriaIDs} from '../utils/inputAria';
 import type {ItemAlign} from '../Item';
 
 // =============================================================================
@@ -164,9 +165,7 @@ function DescribedCheckboxInput(
   return (
     <CheckboxInput
       {...props}
-      aria-describedby={
-        [describedBy, reasonID].filter(Boolean).join(' ') || undefined
-      }
+      aria-describedby={joinAriaIDs(describedBy ?? undefined, reasonID)}
     />
   );
 }
