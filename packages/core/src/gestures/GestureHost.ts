@@ -1954,7 +1954,11 @@ export class GestureHost {
     let gesture = this.wheel;
     if (
       gesture != null &&
-      (gesture.kind !== kind || time - gesture.last >= WHEEL_END_MS)
+      (gesture.kind !== kind ||
+        time - gesture.last >=
+          (gesture.step != null && !gesture.step.committed
+            ? WHEEL_STEP_CARRY_MS
+            : WHEEL_END_MS))
     ) {
       this.endWheel(time);
       gesture = null;
@@ -2024,7 +2028,14 @@ export class GestureHost {
     if (gesture.timer != null) {
       this.clock.clearTimeout(gesture.timer);
     }
-    gesture.timer = this.clock.setTimeout(() => this.endWheel(), WHEEL_END_MS);
+    // Scratch: a step that has not committed yet waits out a slow swipe's
+    // gaps, so its travel keeps adding up within one contact.
+    gesture.timer = this.clock.setTimeout(
+      () => this.endWheel(),
+      gesture.step != null && !gesture.step.committed
+        ? WHEEL_STEP_CARRY_MS
+        : WHEEL_END_MS,
+    );
     if (gesture.ids.length === 0) {
       return;
     }
