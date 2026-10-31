@@ -1714,6 +1714,58 @@ describe('coincident range thumbs', () => {
     expect(end).toHaveAttribute('aria-valuenow', '100');
   });
 
+  it('leaves the press and focus on the upper thumb, drawn on top, when a press on the shared thumbs never moves', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    const [start, end] = screen.getAllByRole('slider');
+    // Both thumbs share a stacking level, so the later one in the document,
+    // the upper thumb, is drawn over the lower one and takes the press.
+    expect(
+      start.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.pointerDown(end, {clientX: 100, clientY: 10, pointerId: 1});
+    expect(declaresPressedOverlay(end)).toBe(true);
+    expect(declaresPressedOverlay(start)).toBe(false);
+    fireEvent.pointerUp(end, {clientX: 100, clientY: 10, pointerId: 1});
+    expect(start).toHaveAttribute('aria-valuenow', '50');
+    expect(end).toHaveAttribute('aria-valuenow', '50');
+    expect(document.activeElement).toBe(end);
+  });
+
+  it('holds a press on the mark label of the shared value on the upper thumb, as a press on the thumbs does', () => {
+    function MarkedRange() {
+      const [value, setValue] = useState<[number, number]>([50, 50]);
+      return (
+        <Slider
+          label="Price"
+          value={value}
+          min={0}
+          max={100}
+          marks={[{value: 50, label: '50%'}]}
+          onChange={setValue}
+        />
+      );
+    }
+    render(<MarkedRange />);
+    mockGroupRect();
+    const [start, end] = screen.getAllByRole('slider');
+    const label = screen
+      .getByText('50%')
+      .closest<HTMLElement>('[data-mark-value]')!;
+    // The label sits at the shared value, so nothing says which way the
+    // drag goes yet: the upper thumb, drawn over the lower one, holds the
+    // press, as it does for a press on the thumbs.
+    fireEvent.pointerDown(label, {clientX: 100, clientY: 10, pointerId: 1});
+    expect(declaresPressedOverlay(end)).toBe(true);
+    expect(declaresPressedOverlay(start)).toBe(false);
+    expect(document.activeElement).toBe(end);
+    fireEvent.pointerUp(label, {clientX: 100, clientY: 10, pointerId: 1});
+    expect(start).toHaveAttribute('aria-valuenow', '50');
+    expect(end).toHaveAttribute('aria-valuenow', '50');
+    expect(document.activeElement).toBe(end);
+  });
+
   it('hands the drag, its focus and its pressed paint to the thumb the first movement picks', () => {
     const onChange = vi.fn();
     render(<ControlledRange initial={[50, 50]} onChange={onChange} />);

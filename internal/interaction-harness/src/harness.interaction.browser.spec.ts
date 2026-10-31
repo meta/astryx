@@ -80,6 +80,7 @@ import {
   traceRendering,
   trackMarker,
   waitForAnimation,
+  releaseAnimationLog,
   waitForRest,
   watchAnimations,
   webInputDriver,
@@ -2407,6 +2408,53 @@ test.describe('holding', () => {
 });
 
 test.describe('animation state', () => {
+  test("releaseAnimationLog frees what the recorder kept, so a count after it reads the page's own objects", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'forcing a garbage collection needs the DevTools protocol',
+    );
+    await fixture(page);
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.id = 'released';
+      el.style.cssText = 'width:40px;height:40px;background:red';
+      document.body.append(el);
+    });
+    const released = page.locator('#released');
+    await released.evaluate(el => {
+      (el as HTMLElement).style.transition = 'transform 60ms linear';
+      void (el as HTMLElement).offsetWidth;
+      (el as HTMLElement).style.transform = 'translateX(40px)';
+    });
+    await waitForAnimation(released);
+    await waitForRest(released);
+    // The page drops the element; only the recorder's log still holds it.
+    await released.evaluate(el => {
+      (window as unknown as {__released: WeakRef<Element>}).__released =
+        new WeakRef(el);
+      el.remove();
+    });
+    const cdp = await page.context().newCDPSession(page);
+    const alive = async () => {
+      await cdp.send('HeapProfiler.collectGarbage');
+      await cdp.send('HeapProfiler.collectGarbage');
+      return page.evaluate(
+        () =>
+          (
+            window as unknown as {__released: WeakRef<Element>}
+          ).__released.deref() != null,
+      );
+    };
+    // The control: without the release, the log keeps the removed element.
+    expect(await alive()).toBe(true);
+    await releaseAnimationLog(page);
+    expect(await alive()).toBe(false);
+    await cdp.detach();
+  });
+
   test('waitForAnimation reports a running transition and waitForRest resolves after it', async ({
     page,
   }) => {
