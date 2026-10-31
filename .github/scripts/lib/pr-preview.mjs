@@ -477,18 +477,20 @@ function trustedAnalysis({analysisPath, metadataPath, identity, core}) {
  * Base measurements come from the same CI run's merge-base build. They are
  * used only when they name the exact head this comment reports.
  */
-function trustedBaseStats({baseStatsPath, identity, core}) {
+// A size report the generator may read: present and written for the exact
+// head being reported.
+function trustedHeadReport({reportPath, label, identity, core}) {
   try {
-    if (!fs.existsSync(baseStatsPath)) return false;
-    const stats = readJSON(baseStatsPath);
+    if (!fs.existsSync(reportPath)) return false;
+    const report = readJSON(reportPath);
     if (
-      !FULL_SHA.test(String(stats.headSha)) ||
-      stats.headSha !== identity.headSha
+      !FULL_SHA.test(String(report.headSha)) ||
+      report.headSha !== identity.headSha
     )
-      refuse('base stats head does not match');
+      refuse(`${label} head does not match`);
     return true;
   } catch (error) {
-    core.warning(`Ignoring untrusted or stale base stats: ${error.message}`);
+    core.warning(`Ignoring untrusted or stale ${label}: ${error.message}`);
     return false;
   }
 }
@@ -510,6 +512,7 @@ export async function reconcilePrComment({
   analysisPath = 'pr-analysis/analysis.json',
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
+  packageSizePath = 'pr-analysis/package-size.json',
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
   createIfMissing = true,
@@ -562,8 +565,21 @@ export async function reconcilePrComment({
       generator,
       '--analysis',
       analysisPath,
-      ...(trustedBaseStats({baseStatsPath, identity, core})
+      ...(trustedHeadReport({
+        reportPath: baseStatsPath,
+        label: 'base stats',
+        identity,
+        core,
+      })
         ? ['--base-stats', baseStatsPath]
+        : []),
+      ...(trustedHeadReport({
+        reportPath: packageSizePath,
+        label: 'package size report',
+        identity,
+        core,
+      })
+        ? ['--package-size', packageSizePath]
         : []),
       // No report means the audit did not run (it runs on main and release
       // checks, or with the ci:heavy-lanes label); the comment says so.
