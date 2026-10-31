@@ -167,7 +167,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Leave touchTrigger on auto, the fallback: a tap that already acts, as the innermost control around the tapped element decides, stays with that control, and a disabled control is not an action, so its reason opens on a tap. A clickable element without a role needs one.',
+          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action.',
       },
       {
         guidance: false,
@@ -346,7 +346,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Leave touchTrigger on auto, the fallback: a tap that already acts, as the innermost control around the tapped element decides, stays with that control, and a disabled control is not an action, so its reason opens on a tap. A clickable element without a role needs one.',
+          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action.',
       },
       {
         guidance: false,
@@ -398,7 +398,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Leave touchTrigger on auto, the fallback: a tap that already acts, as the innermost control around the tapped element decides, stays with that control, and a disabled control is not an action, so its reason opens on a tap. A clickable element without a role needs one.',
+          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action.',
       },
       {
         guidance: false,
