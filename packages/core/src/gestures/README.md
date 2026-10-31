@@ -464,9 +464,12 @@ element gets the one wheel listener; a pan whose caller passes
 it takes no mouse, trackpad or pen (FR43). A control's thumb, a slider's or
 a switch's, tracks as a control, not a pan, and takes no wheel, so a page
 scroll over it never changes its value. The web reports no wheel phases or
-device:
-a line- or page-mode delta, or a whole 100 or 120 px notch on one axis, reads
-as a mouse wheel, anything else as a trackpad.
+device, so the deltas tell, and what they cannot tell apart reads as a mouse
+wheel: a line- or page-mode delta; a pixel delta a hair off a whole pixel (a
+mouse wheel on Windows); a scroll with no legacy `wheelDelta` (an engine that
+sends none); a delta that is not a third of its legacy `wheelDelta`; or a 120
+tick over a 40 px delta. A trackpad's precise deltas, a third of their legacy
+`wheelDelta` (Chromium and WebKit), read as a trackpad.
 
 A wheel gesture drives a pan as a contact moving with the content, along the
 pan's own axis, and only once every scroller between the pointer and the
@@ -480,12 +483,27 @@ its own scroll owner and the page included, as its finger's rule reads them
 (`spec:AST-094` FR19); `touch-action` narrows only a finger's pan, so a wheel
 reads every scroller past it. A ctrl-wheel (a trackpad
 pinch, or Control and a mouse wheel) drives a pinch, whose scale follows
-`exp(-deltaY / 100)`; a pinch takes it by default. A wheel gesture ends
-100 ms after its last wheel (provisional, an owner question), at that wheel's
-time, so its release keeps its velocity; macOS's momentum wheels arrive as
-more wheel, and the gesture follows them. A mouse wheel's notches release
-still, at that time or at the input that ends the gesture sooner, never
-later (FR16). A finger, mouse or pen that comes down ends it, and a wheel claim keeps the page's text selection. A gesture a
+`exp(-deltaY / 100)`; a pinch takes it by default. A mouse wheel's gesture
+and a pinch end 100 ms after their last wheel; a trackpad scroll a pan
+follows ends 180 ms after it vertically and 220 ms horizontally, as a slow
+drag pauses longer between wheels (all provisional, owner questions). A
+mouse wheel's notches release still, at that time or at the input that ends
+the gesture sooner, never later (FR16).
+
+The web reports no trackpad contact either, so the host reads the lift from
+the stream (`wheelSegmenter.ts`): once a run of shrinking deltas has lost a
+fifth of its size, the fingers lifted and momentum began. A pan it follows
+ends there, at the fingers' travel, released at their last move with their
+speed; the shrinking deltas before the lift wait until they are known, and
+the momentum after it never moves the pan. Fingers that stop release still,
+once the end time passes. In momentum, a reversal, a delta that grows
+against the decay, or a 50 ms pause starts a new gesture. A pan created with
+`wheelStep` takes a trackpad swipe as one step instead: once the swipe
+travels 24 px over two wheels or more, the host plays a short flick and ends
+the contact, so the pan's release settles one step. A slow swipe's travel
+carries across pauses of up to 450 ms, the slow tail of a swipe that already
+stepped is absorbed, and a swipe back within the same gesture undoes the
+step once, back to rest. A finger, mouse or pen that comes down ends it, and a wheel claim keeps the page's text selection. A gesture a
 recognizer took is latched to it, as a browser latches a scroller: while it
 lasts, a document `wheel` listener routes every step to it wherever it lands,
 so a pan whose element moves from under a still pointer keeps the gesture.
