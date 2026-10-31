@@ -122,8 +122,9 @@ work.
   has keyboard focus, and a nested owner or a sibling control rings itself;
   no component writes the attribute or its selector itself. Implementation
   gap: the module does not exist yet, and Item, Token, the clickable and
-  selectable cards, Thumbnail, the Selectors, and SideNavItem write their own
-  ring conditions.
+  selectable cards, Thumbnail, the Selectors, SideNavItem, and ChatComposer's
+  body write their own ring conditions. Swizzle does not yet carry an
+  unexported owner module into an ejected copy.
 - **INV4 — Every modality has an operable path.** Keyboard, pointer, and touch or
   pen can reach each supported interaction. Hover is never the only discovery or
   activation path. A tooltip's scrolling overflow is the one exception, as
