@@ -282,6 +282,9 @@ export function CommentComposerBase({
     setIsActionPending(nextPending);
     onActionPendingChangeRef.current?.(nextPending);
   }, []);
+  // Tracks mount for the upload's async completion, and on unmount releases
+  // the host's pending-action hold, which the upload's finally skips once
+  // unmounted.
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
