@@ -14,10 +14,12 @@
 import {act, render} from '@testing-library/react';
 import {useRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
+import type * as CreateResizableModule from './createResizable';
 import type {
   CreateResizableOptions,
   ResizableController,
 } from './createResizable';
+import type {UseResizableResult} from './useResizable';
 
 interface FakeController extends ResizableController {
   emit(): void;
@@ -28,7 +30,7 @@ const created: {element: HTMLElement; options: CreateResizableOptions}[] = [];
 let fake: FakeController;
 
 vi.mock('./createResizable', async importOriginal => {
-  const original = await importOriginal<typeof import('./createResizable')>();
+  const original = await importOriginal<typeof CreateResizableModule>();
   return {
     ...original,
     createResizable: vi.fn(
@@ -68,6 +70,7 @@ vi.mock('./createResizable', async importOriginal => {
 });
 
 const {useResizable} = await import('./useResizable');
+type Region = UseResizableResult;
 
 afterEach(() => {
   created.length = 0;
@@ -78,7 +81,7 @@ function Split({
   onRegion,
 }: {
   options: CreateResizableOptions;
-  onRegion: (region: ReturnType<typeof useResizable>) => void;
+  onRegion: (region: Region) => void;
 }) {
   const handleRef = useRef<HTMLDivElement>(null);
   const region = useResizable(handleRef, options);
@@ -104,7 +107,7 @@ describe('useResizable(ref, options) only delegates to createResizable (spec:AST
   });
 
   it('returns what the factory reports, and its methods call the factory', () => {
-    let region: ReturnType<typeof useResizable> | undefined;
+    let region: Region | undefined;
     render(
       <Split
         options={{defaultSize: 200}}
