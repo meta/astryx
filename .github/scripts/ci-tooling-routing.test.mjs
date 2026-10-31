@@ -37,8 +37,8 @@ function step(job, name) {
 describe('Node-tooling CI routing', () => {
   it('publishes the tooling output from the trusted-base classifier', () => {
     // ci.yml jobs each run the scope action, which reads the classifier and
-    // both dependencies from the PR's base commit.
-    expect(scopeAction).toContain('ref: pr.base.sha');
+    // both dependencies from the PR's base commit, in one GraphQL query.
+    expect(scopeAction).toContain('`${pr.base.sha}:${file}`');
     for (const file of [
       '.github/scripts/change-scope.cjs',
       '.github/scripts/knowledge-paths.cjs',

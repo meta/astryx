@@ -158,14 +158,70 @@ describe('useResizable persistence', () => {
     act(() => result.current.resize(300));
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-270));
-
     expect(result.current.isCollapsed).toBe(true);
-    expect(readStored()).toEqual({size: 300, isCollapsed: true});
 
     // A continued drag below the threshold must not clobber the saved width.
     act(() => result.current.props._onResizeMove(-275));
+    act(() => result.current.props._onResizeEnd());
+    expect(readStored()).toEqual({size: 300, isCollapsed: true});
+
     act(() => result.current.expand());
     expect(result.current.size).toBe(300);
+  });
+
+  it.each([
+    ['_onResizeEnd', (p: ResizableProps) => p._onResizeEnd()],
+    ['_onResizeCancel', (p: ResizableProps) => p._onResizeCancel?.()],
+  ])(
+    'writes the size a drag reached once, after %s releases it',
+    (_name, finish) => {
+      const {result} = renderHook(() => useResizable(BASE_CONFIG));
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      try {
+        act(() => result.current.props._onResizeStart());
+        act(() => result.current.props._onResizeMove(20));
+        act(() => result.current.props._onResizeMove(40));
+        expect(result.current.size).toBe(300);
+        expect(setItem).not.toHaveBeenCalled();
+
+        act(() => finish(result.current.props));
+        expect(setItem.mock.calls).toEqual([
+          [KEY, JSON.stringify({size: 300, isCollapsed: false})],
+        ]);
+      } finally {
+        setItem.mockRestore();
+      }
+    },
+  );
+
+  it('writes the final size once when the release comes before the last move renders', () => {
+    const {result} = renderHook(() => useResizable(BASE_CONFIG));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      act(() => result.current.props._onResizeStart());
+      act(() => result.current.props._onResizeMove(20));
+      expect(result.current.size).toBe(280);
+
+      // One batch: the last move has not rendered when the release lands.
+      act(() => {
+        result.current.props._onResizeMove(40);
+        result.current.props._onResizeEnd();
+      });
+      expect(result.current.size).toBe(300);
+      expect(setItem.mock.calls).toEqual([
+        [KEY, JSON.stringify({size: 300, isCollapsed: false})],
+      ]);
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it('keeps the size a region was dragged to when it unmounts mid-drag', () => {
+    const {result, unmount} = renderHook(() => useResizable(BASE_CONFIG));
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(40));
+    unmount();
+    expect(readStored()).toEqual({size: 300, isCollapsed: false});
   });
 
   it('does not touch storage without an autoSaveId', () => {
@@ -1603,6 +1659,44 @@ describe('useResizable percentage configuration (AST-010)', () => {
       });
       expect(result.current.props._maxSizePx).toBe(100);
       expect(result.current.size).toBe(100);
+    });
+
+    it('writes only the re-clamped size when the container shrank mid-drag', () => {
+      const key = 'astryx-resizable:pct-release';
+      content = 600;
+      const containerRef = makeContainer();
+      const {result} = renderHook(() =>
+        useResizable({
+          containerRef,
+          defaultSize: 200,
+          maxSize: '50%',
+          autoSaveId: 'pct-release',
+        }),
+      );
+      expect(result.current.props._maxSizePx).toBe(300);
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      const writes = () => setItem.mock.calls.filter(([k]) => k === key);
+      try {
+        act(() => result.current.props._onResizeStart());
+        act(() => result.current.props._onResizeMove(80));
+        expect(result.current.size).toBe(280);
+        // The bound holds at 300 until the release, which re-clamps to 200.
+        act(() => {
+          content = 400;
+          StubResizeObserver.resizeAll();
+        });
+        expect(result.current.size).toBe(280);
+        expect(writes()).toHaveLength(0);
+
+        act(() => result.current.props._onResizeEnd());
+        expect(result.current.size).toBe(200);
+        expect(writes()).toEqual([
+          [key, JSON.stringify({size: 200, isCollapsed: false})],
+        ]);
+      } finally {
+        setItem.mockRestore();
+        localStorage.removeItem(key);
+      }
     });
   });
 });

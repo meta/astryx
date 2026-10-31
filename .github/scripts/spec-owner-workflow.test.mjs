@@ -41,7 +41,8 @@ describe('spec-only workflow contract', () => {
     ]) {
       expect(action).toContain(`'${file}'`);
     }
-    expect(action).toContain('ref: pr.base.sha');
+    // Read at the base commit, in one GraphQL query.
+    expect(action).toContain('`${pr.base.sha}:${file}`');
     for (const workflow of [
       '.github/workflows/lint.yml',
       '.github/workflows/cli-smoke-test.yml',
