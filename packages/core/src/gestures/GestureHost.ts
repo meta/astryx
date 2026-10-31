@@ -140,6 +140,7 @@ import type {PressBounds} from './PressTracker';
 import type {HoverGestureRecognizer} from './HoverGestureRecognizer';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
+import {WheelSegmenter, type WheelSegment} from './wheelSegmenter';
 import {isInHeldLayer} from '../Layer/inputHold';
 import {
   gestureHostStyle,
@@ -362,6 +363,8 @@ function landedOn(
  * question on `spec:AST-094` FR43).
  */
 const WHEEL_END_MS = 100;
+/** Scratch: a vertical trackpad pan (a sheet) ends this long after its last event. */
+const WHEEL_FOLLOW_END_V_MS = 180;
 /** Scratch: a followed horizontal trackpad pan (pager, row) ends this long after its last event, so a slow swipe's gaps never end it. */
 const WHEEL_FOLLOW_END_MS = 220;
 /** A line-mode wheel's line, px, as the platforms scroll it. */
@@ -406,6 +409,10 @@ interface WheelStep {
   decayed: boolean;
   /** Whether the step was played and the contact ended. */
   committed: boolean;
+  /** Scratch: travel back against the committed step, within this gesture. */
+  back?: number;
+  /** Scratch: the one step back to rest was played. */
+  reversed?: boolean;
   t0: number;
   /** Wheels seen; a step needs a stream (two or more). */
   count: number;
@@ -704,6 +711,12 @@ export class GestureHost {
   private wheel: WheelGesture | null = null;
   /** Whether the document routes every wheel to the live wheel gesture. */
   private isWheelLatched = false;
+  /** Scratch: splits the wheel stream into gestures (wheelSegmenter.ts). */
+  private readonly segmenter = new WheelSegmenter();
+  /** Scratch: the latest event's segment. */
+  private wheelSegment: WheelSegment | null = null;
+  /** Scratch: why the current wheel gesture began. */
+  private lastBoundary: string | null = null;
   /** Scratch: the last committed step, so its slow continuation is absorbed. */
   private lastStep: {axis: 'x' | 'y'; sign: number; last: number} | null = null;
   /** Scratch: an uncommitted step's travel, carried across a short gap. */
@@ -2018,36 +2031,27 @@ export class GestureHost {
       this.wheel = gesture;
     }
     const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
-    if (gesture?.follow?.lifted) {
-      const f = gesture.follow;
-      const d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
-      const size = Math.abs(d);
-      const reversed = d !== 0 && f.sign !== 0 && Math.sign(d) !== f.sign;
-      if (reversed || (size >= 3 && size > f.previous * 1.5)) {
+    const horizontal =
+      gesture?.step != null ? gesture.step.axis === 'x' : Math.abs(dx) > Math.abs(dy);
+    const seg = this.segmenter.push(
+      time,
+      horizontal ? dx : dy,
+      gesture?.step != null && !gesture.step.committed
+        ? WHEEL_STEP_CARRY_MS
+        : horizontal
+          ? WHEEL_FOLLOW_END_MS
+          : WHEEL_FOLLOW_END_V_MS,
+    );
+    this.wheelSegment = seg;
+    if (seg.boundary != null) {
+      this.lastBoundary = seg.boundary;
+      if (gesture != null) {
         this.endWheel(time);
         gesture = null;
-      } else {
-        f.previous = size;
       }
     }
-    if (gesture?.step?.committed) {
-      const s = gesture.step;
-      const d = s.axis === 'x' ? dx : dy;
-      const size = Math.abs(d);
-      const reversed = d !== 0 && Math.sign(d) !== s.sign;
-      const fresh = s.decayed && size >= 3 && size > s.previous * 1.5;
-      if (reversed || fresh) {
-        this.endWheel(time);
-        gesture = null;
-      } else {
-        if (size < s.previous) {
-          s.decayed = true;
-        }
-        s.previous = size;
-        if (this.lastStep != null) {
-          this.lastStep.last = time;
-        }
-      }
+    if (gesture?.step?.committed && this.lastStep != null) {
+      this.lastStep.last = time;
     }
     if (gesture == null) {
       gesture = this.beginWheel(wheel, kind, dx, dy, time);
@@ -2063,10 +2067,13 @@ export class GestureHost {
     // Scratch: a step that has not committed yet waits out a slow swipe's
     // gaps, so its travel keeps adding up within one contact.
     gesture.timer = this.clock.setTimeout(
-      () => this.endWheel(),
+      () => {
+        this.segmenter.end();
+        this.endWheel();
+      },
       gesture.step != null && !gesture.step.committed
         ? WHEEL_STEP_CARRY_MS
-        : gesture.follow?.endMs ?? WHEEL_END_MS,
+        : gesture.follow?.endMs ?? WHEEL_FOLLOW_END_V_MS,
     );
     if (gesture.ids.length === 0) {
       return;
@@ -2087,10 +2094,9 @@ export class GestureHost {
       if (d !== 0) {
         f.sign = Math.sign(d);
       }
-      const decaying = size > 0 && size < f.previous * 0.97 && size > f.previous * 0.6;
-      f.run = decaying ? f.run + 1 : 0;
+      const decaying = this.wheelSegment?.decaying === true;
       f.previous = size;
-      if (f.run >= 3 && f.count >= 5) {
+      if (this.wheelSegment?.liftNow === true) {
         // Momentum began: the fingers lifted before the held deltas.
         // Drop them and release at the fingers' travel and speed; the
         // rest of the momentum never moves the pan.
@@ -2135,6 +2141,30 @@ export class GestureHost {
     time: number,
   ): void {
     if (s.committed) {
+      // Scratch: within one gesture the step may be undone once, back to
+      // rest (an open row closes); it never passes rest to the other side.
+      const back = s.axis === 'x' ? dx : dy;
+      if (
+        !s.reversed &&
+        this.wheelSegment?.phase === 'finger' &&
+        back !== 0 &&
+        Math.sign(back) !== s.sign
+      ) {
+        s.back = (s.back ?? 0) + back;
+        if (Math.abs(s.back) >= WHEEL_STEP_PX && gesture.stepBegin != null) {
+          s.reversed = true;
+          const sign = Math.sign(s.back);
+          const id = this.nextId++;
+          const at = (px: number) =>
+            s.axis === 'x'
+              ? {x: gesture.x - sign * px, y: gesture.y}
+              : {x: gesture.x, y: gesture.y - sign * px};
+          this.arena.began([{...gesture.stepBegin, id, x: gesture.x, y: gesture.y, time} as never]);
+          this.arena.moved([{id, ...at(12), time: time + 8}]);
+          this.arena.moved([{id, ...at(52), time: time + 24}]);
+          this.arena.ended([{id, ...at(52), time: time + 24}]);
+        }
+      }
       return;
     }
     const d = s.axis === 'x' ? dx : dy;
@@ -2248,7 +2278,7 @@ export class GestureHost {
       kind === 'pan' ? [this.nextId++] : [this.nextId++, this.nextId++];
     const gesture: WheelGesture = {...kept, ids, takers};
     if (kind === 'pan' && type === 'continuous') {
-      gesture.follow = {previous: 0, run: 0, count: 0, lifted: false, sign: 0, heldX: 0, heldY: 0, endMs: isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_END_MS};
+      gesture.follow = {previous: 0, run: 0, count: 0, lifted: false, sign: 0, heldX: 0, heldY: 0, endMs: isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS};
     }
     if (
       kind === 'pan' &&
@@ -2277,6 +2307,7 @@ export class GestureHost {
       const along = isHorizontal ? dx : dy;
       if (
         this.lastStep != null &&
+        (this.lastBoundary == null || this.lastBoundary === 'idle') &&
         this.lastStep.axis === gesture.step.axis &&
         time - this.lastStep.last <= 400 &&
         Math.sign(along) === this.lastStep.sign &&
