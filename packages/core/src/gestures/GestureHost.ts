@@ -3,7 +3,8 @@
 /**
  * @file GestureHost.ts
  * @input DOM touch, pointer, click, contextmenu, scroll and focus events of
- *   one document; elements with recognizers and consumers attached
+ *   one document; elements with recognizers and consumers attached; the
+ *   input hold's held layers (Layer/inputHold `holdsTouch`)
  * @output Exports GestureHost (the DOM side of the gesture system) and
  *   getGestureHost (one host per document)
  * @position Browser adapter of packages/core/src/gestures: turns real events
@@ -141,6 +142,7 @@ import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {PressBounds} from './PressTracker';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
+import {holdsTouch} from '../Layer/inputHold';
 import {
   gestureHostStyle,
   type GestureHostStyle,
@@ -1716,9 +1718,12 @@ export class GestureHost {
     const recognizers: GestureRecognizer[] = [];
     let consumer: TouchConsumer | null = null;
     let consumerElement: Element | null = null;
+    // A layer the input hold holds takes no touch while its presentation
+    // runs: the host asks the hold itself, so the hold imports nothing from
+    // gestures/ and a component in the root entry can use it statically.
     if (
       target instanceof Node &&
-      [...this.touchGates].some(gate => gate(target))
+      (holdsTouch(target) || [...this.touchGates].some(gate => gate(target)))
     ) {
       return {recognizers, consumer, consumerElement};
     }
@@ -1825,8 +1830,8 @@ export class GestureHost {
 
   /**
    * Hold touches away from every participant while `gate(target)` answers
-   * true (a presentation running in a layer: its content takes no touch
-   * until it settles). Returns the release.
+   * true. Returns the release. The input hold's held layers need none: the
+   * host asks `holdsTouch` for every touch.
    */
   addTouchGate(gate: (target: Node) => boolean): () => void {
     this.touchGates.add(gate);

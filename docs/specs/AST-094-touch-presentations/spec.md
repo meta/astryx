@@ -633,7 +633,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
   `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
   Non-modal state) do not hold the page: the page behind them stays live, and
-  only the sheet itself holds a tap or a drag while it enters.
+  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer
+  and MobileNav hold an entrance only under a coarse primary pointer: where
+  the primary pointer is fine and the screen also takes touch (a touchscreen
+  laptop), a finger's tap or drag during the entrance is not held.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.

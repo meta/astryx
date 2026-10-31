@@ -319,6 +319,22 @@ describe('the touch module in bundles', () => {
     }
   });
 
+  it('is absent from a component that holds its layer (Layer/inputHold)', () => {
+    // A component in the root entry may hold its layer's input statically
+    // (a popover's presentation): the hold brings no gesture code with it.
+    const holder = entryWith(
+      'Holder.ts',
+      `import {holdInput} from ${JSON.stringify(
+        path.join(CORE_SRC, 'Layer/inputHold.ts'),
+      )};
+export const Holder = holdInput;
+`,
+    );
+    for (const bytes of outputsOf([holder])) {
+      expect(bytesOf(bytes)).toEqual([]);
+    }
+  });
+
   it('is one copy that two components importing it share', () => {
     const component = name =>
       entryWith(
