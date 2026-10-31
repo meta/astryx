@@ -2270,10 +2270,6 @@ export class GestureHost {
       this.arena.cancelled(ids, time);
       return kept;
     }
-    if (gesture.step?.committed) {
-      // An absorbed tail: the contact never moves the pan.
-      this.arena.cancelled(ids, time);
-    }
     return gesture;
   }
 
@@ -2374,7 +2370,7 @@ export class GestureHost {
     // first wheel): the arena's clock only moves forward, so a later stamp
     // would move that input's times too (FR16).
     const time =
-      Math.max(gesture.last, Math.min(gesture.last + WHEEL_END_MS, endTime));
+      Math.max(gesture.last, Math.min(gesture.last + WHEEL_END_MS, endTime ?? this.clock.now()));
     this.arena.ended(
       gesture.kind === 'pan'
         ? [{id: gesture.ids[0], x: gesture.x, y: gesture.y, time}]
