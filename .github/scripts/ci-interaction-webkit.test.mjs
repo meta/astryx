@@ -115,6 +115,27 @@ describe('WebKit interaction proof routing', () => {
     expect(run).not.toContain('--project chromium');
   });
 
+  it('runs only the specs of the code it is scoped to', () => {
+    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    const targets = [
+      'packages/core/src/gestures/',
+      'packages/core/src/motion/',
+      'internal/interaction-harness/',
+    ];
+    for (const target of targets) {
+      expect(run).toContain(target);
+      // Each spec directory it runs is one its scope covers.
+      expect(inScope(`${target}x.interaction.browser.spec.ts`), target).toBe(
+        true,
+      );
+    }
+    // Component specs (DateInput, TabList, TreeList, SideNav) stay with the
+    // Chromium proofs.
+    for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
+      expect(run).not.toContain(component);
+    }
+  });
+
   it('runs for gesture, motion, touch, press-feedback and menu-press code, and their harness', () => {
     for (const touched of [
       'packages/core/src/gestures/GestureHost.ts',
@@ -124,9 +145,22 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/internal/touch.ts',
       'packages/core/src/utils/pressFeedback.ts',
       'packages/core/src/utils/pressFeedbackImports.test.ts',
+      'packages/core/src/utils/pressGesture.ts',
+      'packages/core/src/utils/touchPresentation.ts',
       'packages/core/src/hooks/useMenuPress.ts',
+      'packages/core/src/hooks/menuPressGesture.ts',
+      'packages/core/src/hooks/useLongPress.ts',
+      'packages/core/src/hooks/usePressFeedback.ts',
       'internal/interaction-harness/src/webInput.ts',
       'playwright.interaction.config.ts',
+      // Shared setup, as pr-interaction keeps (spec:AST-030 FR13): a
+      // Playwright upgrade, Storybook config, theme sources, the a11y spec
+      // helpers.
+      'package.json',
+      'pnpm-lock.yaml',
+      'apps/storybook/.storybook/preview.tsx',
+      'packages/themes/neutral/src/neutralTheme.ts',
+      'internal/a11y-spec/src/storybook.ts',
       // Its own definition, so a change to this lane runs it.
       '.github/workflows/ci.yml',
       '.github/actions/test-scope/action.yml',
@@ -139,15 +173,13 @@ describe('WebKit interaction proof routing', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
-      'packages/core/src/hooks/useLongPress.ts',
       'packages/core/src/utils/clickGuard.ts',
       'packages/core/src/internal/focus.ts',
+      'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',
-      'packages/themes/neutral/src/neutralTheme.ts',
-      'apps/storybook/.storybook/preview.tsx',
+      'packages/core/package.json',
+      'packages/themes/neutral/package.json',
       'docs/specs/AST-030/spec.md',
-      'package.json',
-      'pnpm-lock.yaml',
       '.github/workflows/release.yml',
     ]) {
       expect(inScope(untouched), untouched).toBe(false);

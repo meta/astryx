@@ -1863,13 +1863,16 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # The same interaction proofs in WebKit, the engine of every iOS browser,
-  # for the code where WebKit and Chromium differ on touch: the gesture host
-  # and recognizers, the motion runtime, the touch helpers, press feedback and
-  # the menu press model, plus the harness and config that drive them. Out of
-  # that scope every step after the scope step skips and the job reports
-  # success, so the `test` join reads it without a new required context.
-  # Specs that need Chromium-only evidence skip themselves in WebKit.
+  # The gesture, motion and harness interaction proofs in WebKit, the engine
+  # of every iOS browser, for the code where WebKit and Chromium differ on
+  # touch: the gesture host and recognizers, the motion runtime, the touch and
+  # press helpers and the menu press model, plus the harness and the shared
+  # setup that runs them (spec:AST-030 FR13). The run is limited to the specs
+  # of that same code, so a WebKit break elsewhere never turns an unrelated
+  # pull request red. Out of scope every step after the scope step skips and
+  # the job reports success, so the `test` join reads it without a new
+  # required context. Specs that need Chromium-only evidence skip themselves
+  # in WebKit.
   pr-interaction-webkit:
     needs: [build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
@@ -1896,7 +1899,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/pressFeedback|packages/core/src/hooks/useMenuPress|internal/interaction-harness/|playwright\.interaction\.config\.ts$|\.github/workflows/ci\.yml$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch)|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -1908,7 +1911,7 @@ jobs:
 
       - name: Skip the WebKit proofs outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch, press-feedback or menu-press code)."
+        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -1965,6 +1968,9 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: |
           pnpm exec playwright test \
+            packages/core/src/gestures/ \
+            packages/core/src/motion/ \
+            internal/interaction-harness/ \
             --config playwright.interaction.config.ts \
             --project webkit \
             --output interaction-proof-output-webkit
