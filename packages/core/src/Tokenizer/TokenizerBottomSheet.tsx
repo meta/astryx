@@ -51,7 +51,6 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {Text} from '../Text/Text';
 import {useTranslator} from '../i18n/useTranslator';
 import {warnOnce} from '../utils/devWarning';
-import {isRenderable} from '../utils/isRenderable';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 import {colorVars, radiusVars, spacingVars} from '../theme/tokens.stylex';
 
@@ -666,7 +665,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
     visibleItems.length === 0 &&
     createItem == null;
   const noResultsTitle =
-    typeof emptySearchText === 'string' && isRenderable(emptySearchText)
+    typeof emptySearchText === 'string'
       ? emptySearchText
       : t('@astryx.typeahead.emptySearchResults');
 
@@ -681,7 +680,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // go through `useAnnounce`, which, called from inside the sheet's dialog,
   // routes into it while the sheet is open (`spec:AST-086` FR14).
   const hasCustomEmptyElement =
-    isRenderable(emptySearchText) && typeof emptySearchText !== 'string';
+    typeof emptySearchText !== 'string' && emptySearchText != null;
   useAnnounceRenderedText(
     emptyStateRef,
     isOpen && isSettledEmpty && hasCustomEmptyElement,

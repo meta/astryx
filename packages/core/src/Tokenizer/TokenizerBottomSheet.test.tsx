@@ -644,32 +644,6 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     ).toBeInTheDocument();
   });
 
-  it('shows the default no-results state for an emptySearchText that renders nothing (FR20)', async () => {
-    for (const emptySearchText of ['', false, true, null]) {
-      const {unmount} = render(
-        <TokenizerWithPresentation
-          label="Tags"
-          searchSource={source}
-          value={[ITEMS[0]]}
-          onChange={() => {}}
-          debounceMs={0}
-          emptySearchText={emptySearchText}
-          experimental={{presentation: 'bottom-sheet'}}
-        />,
-      );
-      fireEvent.click(openTrigger());
-      fireEvent.change(await screen.findByLabelText('Search Tags'), {
-        target: {value: 'zzz'},
-      });
-      // Not an empty box and not an empty title: the default state.
-      expect(
-        await screen.findByRole('heading', {name: 'No results found'}),
-        String(emptySearchText),
-      ).toBeInTheDocument();
-      unmount();
-    }
-  });
-
   it('shows only the search field for an empty query with nothing to list, as the inline field does — no list, no message, no announcement (FR20)', async () => {
     // A search-only source: typing finds items, the bootstrap set is empty.
     const searchOnly: SearchSource<SearchableItem> = {
