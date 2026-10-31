@@ -319,10 +319,10 @@ they are separately named.
   push to `main`, a merge-group entry, a dispatch) are unaffected, and a fork's
   code never runs with the repository's secrets.
 
-- **FR21 — Main's full unit run finishes in minutes.** The Main workflow runs
+- **FR22 — Main's full unit run finishes in minutes.** The Main workflow runs
   every Vitest leg of `main`'s full unit run at once, with no `max-parallel`
   hold: six UI legs and six Node legs beside the build-and-typecheck lane, each
-  inside the fifteen-minute job budget (DEC-15). A dispatch may name `sha`, a
+  inside the fifteen-minute job budget (DEC-17). A dispatch may name `sha`, a
   commit in `main`'s history, and every lane checks that commit out; without
   it the run validates `main`'s tip. One validation runs at a time and a newer
   one waits. Only a release re-check, which the workflow token sends with
@@ -379,7 +379,7 @@ read change (FR14).
 | FR15     | workflow contract and reconciler tests                                             | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR                                                                                                                                                                                                                                                                     | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, or a non-command comment starts a runner                                |
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract                      | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                        |
-| FR21     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person                                                                                                                                                | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, or a person's dispatch that cancels a running validation fails                                                          |
+| FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person                                                                                                                                                | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, or a person's dispatch that cancels a running validation fails                                                          |
 
 ## Decision log
 
@@ -550,9 +550,9 @@ it, so the merge rules change only when an administrator removes it.
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
 
-### DEC-15 — Main's full runs spend runner-minutes to finish in minutes
+### DEC-17 — Main's full runs spend runner-minutes to finish in minutes
 
-**Reference:** `spec:AST-030/DEC-15`
+**Reference:** `spec:AST-030/DEC-17`
 **Decider:** `cixzhang`, `2026-10-31`
 
 `main`'s full checks run on a cadence and on demand during a release, not on

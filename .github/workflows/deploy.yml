@@ -24,7 +24,7 @@ permissions: {}
 # one. Only a release re-check, which the release re-check workflow sends with
 # the workflow token, cancels the running validation: it is itself a full
 # validation of main's tip, so the cancelled run's commits stay covered
-# (spec:AST-030).
+# (spec:AST-030 FR22).
 concurrency:
   group: 'main-validation'
   cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && github.triggering_actor == 'github-actions[bot]' }}
@@ -96,7 +96,7 @@ jobs:
   # Both Vitest lanes split into legs that all run at once, with no
   # max-parallel hold: main is validated about once an hour and by the release
   # re-check, so a run may cost more runner-minutes to finish sooner
-  # (spec:AST-030). At four legs each, test-node's slowest leg took ~8 minutes
+  # (spec:AST-030 FR22, DEC-17). At four legs each, test-node's slowest leg took ~8 minutes
   # and test-ui's ~6. Six legs each bring every leg near the typecheck lane
   # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
   # its own) sets the floor, and more legs would not move it. `test` joins the

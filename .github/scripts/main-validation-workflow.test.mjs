@@ -5,7 +5,7 @@
  * @input The Main workflow (deploy.yml) and a mocked GitHub API
  * @output The shard plan every leg of a main validation runs, the commit a
  *   dispatch validates, and which dispatch may take the validation group
- * @position Node contracts for spec:AST-030's main validation shape. The
+ * @position Node contracts for spec:AST-030 FR22. The
  *   Vitest routing over the same lanes is pinned in ci-test-routing.test.mjs.
  */
 
