@@ -48,6 +48,7 @@ import {
   type ResizeGestureModel,
   type ResizeGestureState,
   type ResizeHandleBinding,
+  type ResizeHandleConfig,
   type ResizeHandleView,
 } from './resizeGesture';
 import type {ResizableSize} from './utils';
@@ -98,10 +99,16 @@ export interface CreateResizableOptions {
   onCollapseChange?: (isCollapsed: boolean) => void;
   /**
    * The handle sits after the panel it resizes (the panel is at the end), so
-   * a drag toward the start grows it. @default false
+   * a drag toward the start grows it. On a ResizeHandle, its own
+   * `isReversed` prop does the same: either one reverses the handle.
+   * @default false
    */
   isReversed?: boolean;
-  /** Ignores pointer and keyboard input and says so. @default false */
+  /**
+   * Ignores pointer and keyboard input and says so. On a ResizeHandle, its
+   * own `isDisabled` prop does the same: either one disables the handle.
+   * @default false
+   */
   isDisabled?: boolean;
   /**
    * The handle's accessible name, when the element has none of its own.
@@ -295,6 +302,13 @@ export function createResizable(
   let isDragging = false;
   let view: ResizeHandleView | null = null;
   const viewListeners = new Set<() => void>();
+  // The ResizeHandle's own isReversed and isDisabled, while it renders the
+  // handle: either it or the options reverses or disables the handle.
+  let handleConfig: ResizeHandleConfig | null = null;
+  const isReversed = (): boolean =>
+    (opts.isReversed ?? false) || (handleConfig?.isReversed ?? false);
+  const isDisabled = (): boolean =>
+    (opts.isDisabled ?? false) || (handleConfig?.isDisabled ?? false);
   const didWarn = {
     min: {current: false},
     max: {current: false},
@@ -593,8 +607,8 @@ export function createResizable(
       effectiveMaxPx: derived.effectiveMax,
       isDragging,
       direction: direction(),
-      isReversed: opts.isReversed ?? false,
-      isDisabled: opts.isDisabled ?? false,
+      isReversed: isReversed(),
+      isDisabled: isDisabled(),
     };
     if (
       view != null &&
@@ -657,7 +671,7 @@ export function createResizable(
       'aria-valuetext',
       isCollapsed ? (opts.collapsedLabel ?? DEFAULT_COLLAPSED_LABEL) : null,
     );
-    setAttribute('aria-disabled', opts.isDisabled === true ? 'true' : null);
+    setAttribute('aria-disabled', isDisabled() ? 'true' : null);
   }
 
   // --- State changes ---
@@ -796,8 +810,8 @@ export function createResizable(
     model,
     () => ({
       direction: direction(),
-      isReversed: opts.isReversed ?? false,
-      isDisabled: opts.isDisabled ?? false,
+      isReversed: isReversed(),
+      isDisabled: isDisabled(),
     }),
     dragging => {
       isDragging = dragging;
@@ -843,6 +857,13 @@ export function createResizable(
   const binding: ResizeHandleBinding = {
     gesture,
     read: () => view as ResizeHandleView,
+    configure(config) {
+      if (isDestroyed) {
+        return;
+      }
+      handleConfig = config;
+      refreshView();
+    },
     subscribe(listener) {
       viewListeners.add(listener);
       return () => {

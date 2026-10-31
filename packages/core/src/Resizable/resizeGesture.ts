@@ -384,6 +384,12 @@ export function createResizeGesture(
 // A factory bound to a ResizeHandle
 // =============================================================================
 
+/** A ResizeHandle's own props that shape the input of the region it renders. */
+export interface ResizeHandleConfig {
+  readonly isReversed: boolean;
+  readonly isDisabled: boolean;
+}
+
 /** What a ResizeHandle renders from the factory bound to it. */
 export interface ResizeHandleView {
   readonly size: number;
@@ -408,6 +414,12 @@ export interface ResizeHandleBinding {
   readonly gesture: ResizeGesture;
   /** The current view, the same object until something in it changes. */
   read(): ResizeHandleView;
+  /**
+   * The handle's own `isReversed` and `isDisabled`, or null when it lets go.
+   * Either the handle or the factory's options reverses or disables the
+   * handle; the view reports the result.
+   */
+  configure(config: ResizeHandleConfig | null): void;
   /** Calls `listener` after every change to `read()`. */
   subscribe(listener: () => void): () => void;
 }

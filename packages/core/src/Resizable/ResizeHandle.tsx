@@ -69,6 +69,7 @@ import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 type PillPlacement = 'start' | 'end' | 'center' | 'auto';
 
 function resolveEffectiveSide(
@@ -481,6 +482,17 @@ export function ResizeHandle({
   // A `resizable` prop wins over a bound factory: it is the region the caller
   // named on this element.
   const view = resizable != null ? null : bound;
+  // The handle's own isReversed and isDisabled apply to the region it renders
+  // (with the region's own options: either one reverses or disables it).
+  useIsomorphicLayoutEffect(() => {
+    if (resizable != null || binding == null) {
+      return;
+    }
+    binding.configure({isReversed, isDisabled});
+    return () => {
+      binding.configure(null);
+    };
+  }, [binding, resizable, isReversed, isDisabled]);
   const gesture: ResizeGesture | null =
     resizable != null ? legacyGesture : (binding?.gesture ?? null);
   const isDragging = resizable != null ? isLegacyDragging : !!view?.isDragging;
@@ -488,7 +500,7 @@ export function ResizeHandle({
   const isCollapsed = resizable?._isCollapsed ?? view?.isCollapsed ?? false;
   const effectiveSide = resolveEffectiveSide(
     pillPlacement,
-    isReversed,
+    view?.isReversed ?? isReversed,
     isCollapsed,
   );
   // Physical offset direction shared by the pill and the grab zone (null =
@@ -503,7 +515,6 @@ export function ResizeHandle({
   const didWarnAxisRef = useRef(false);
   const didWarnBothRef = useRef(false);
   const regionDirection = resizable?._direction ?? view?.direction;
-  const regionIsReversed = view?.isReversed;
   useEffect(() => {
     if (didWarnAxisRef.current) {
       return;
@@ -516,16 +527,8 @@ export function ResizeHandle({
           `"${regionDirection}". They must match: the hook measures one axis ` +
           'and the handle drags the other.',
       );
-    } else if (regionIsReversed != null && regionIsReversed !== isReversed) {
-      didWarnAxisRef.current = true;
-      devWarn(
-        'ResizeHandle',
-        `isReversed={${String(isReversed)}} but its createResizable region ` +
-          `has isReversed: ${String(regionIsReversed)}. Pass the same value to ` +
-          'both: the region drags one way and the handle sits for the other.',
-      );
     }
-  }, [direction, isReversed, regionDirection, regionIsReversed]);
+  }, [direction, regionDirection]);
   useEffect(() => {
     if (resizable != null && binding != null && !didWarnBothRef.current) {
       didWarnBothRef.current = true;
