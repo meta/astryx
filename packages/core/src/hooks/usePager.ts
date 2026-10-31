@@ -56,7 +56,11 @@
  *   returns the pager to `index`, unreported.
  * - The pan and the catch attach for every pointer (`spec:AST-094` FR19,
  *   FR43): a mouse drags the track as a finger does, and the pan follows a
- *   trackpad's scroll along its axis and never a mouse wheel's (DEC-24).
+ *   trackpad's scroll along its axis and never a mouse wheel's (DEC-24). A
+ *   trackpad swipe moves the track at most one page from the page it began
+ *   on, releases still when it moved under a tenth of a page, whatever its
+ *   speed, and one that lands while the last swipe's settle runs begins from
+ *   that settle's page, so back-to-back swipes page on (FR43).
  *
  * Positions are content offsets in px, 0 at page 0 and growing toward later
  * pages; the track is translated by −position, or +position when the
@@ -451,6 +455,17 @@ class SettleCatcher extends LongPressGestureRecognizer {
     }
     super.touchesBegan(touches, event);
   }
+}
+
+/**
+ * A trackpad swipe that moved under this fraction of a page releases still,
+ * whatever its speed (`spec:AST-094` FR43).
+ */
+const STILL_RELEASE_FRACTION = 0.1;
+
+/** Whether a pan's contact is a scroll (a trackpad's), not a pointer. */
+function isScrollContact(recognizer: PanGestureRecognizer): boolean {
+  return recognizer.trackedTouches[0]?.scrollType != null;
 }
 
 export function createPager(
@@ -926,6 +941,7 @@ export function createPager(
       measure();
       clearCatchTimer();
       const current = presentation();
+      const wasSettling = settleHandle != null;
       stopSettle();
       isDragging = true;
       // A track caught past an end is shown rubber-banded: the drag starts
@@ -940,13 +956,37 @@ export function createPager(
             pageWidth > 0 ? pageWidth : 1,
           );
       dragPosition = current;
-      dragStartIndex = nearestPage(current);
+      // A trackpad swipe that lands while the last swipe's settle runs
+      // begins from that settle's page, so back-to-back swipes page on
+      // (spec:AST-094 FR43).
+      dragStartIndex =
+        wasSettling && isScrollContact(recognizer)
+          ? target
+          : nearestPage(current);
       return;
     }
     if (state === 'changed') {
       const dx = recognizer.translation().x;
       // Finger right (dx > 0) moves content toward earlier pages in LTR.
-      const raw = dragStart + sign() * dx;
+      let raw = dragStart + sign() * dx;
+      if (isScrollContact(recognizer) && pageWidth > 0) {
+        // A trackpad swipe moves the track at most one page from the page it
+        // began on, across a loop too; a pager that does not loop keeps the
+        // rubber band of its first and last pages below (spec:AST-094 FR43).
+        const looping = isLooping();
+        const before =
+          looping || dragStartIndex > 0
+            ? offsetOf(dragStartIndex - 1)
+            : -Infinity;
+        const after =
+          looping || dragStartIndex < count() - 1
+            ? offsetOf(dragStartIndex + 1)
+            : Infinity;
+        raw = Math.min(
+          Math.max(raw, Math.min(before, after)),
+          Math.max(before, after),
+        );
+      }
       dragPosition = isLooping()
         ? raw
         : rubberBandClamp(
@@ -968,8 +1008,18 @@ export function createPager(
       // UIScrollView reads it. A finger still for more than 40 ms before the
       // lift releases at 0 (FR2), where UIScrollView keeps the speed. The
       // content moves against the finger in LTR (sign()).
-      const velocity =
+      let velocity =
         state === 'ended' ? sign() * recognizer.scrollVelocity().x : 0;
+      // A trackpad swipe that moved under a tenth of a page releases still,
+      // whatever its speed: a speed spike is not a flick (spec:AST-094
+      // FR43). A finger's and a mouse's flick keep their speed.
+      if (
+        isScrollContact(recognizer) &&
+        Math.abs(dragPosition - offsetOf(dragStartIndex)) <
+          STILL_RELEASE_FRACTION * pageWidth
+      ) {
+        velocity = 0;
+      }
       const next = releasePage(dragPosition, velocity, dragStartIndex);
       setTarget(next, 'drag', true);
       settleFrom(
