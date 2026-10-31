@@ -23,7 +23,10 @@
  *    "dispatches the synthetic close after focus restore so a close listener
  *    owns final focus".
  * 4. A closing top drawer stays on the shared dismissal stack until its visual
- *    exit completes, so a second Escape cannot dismiss the drawer below it.
+ *    exit completes, so a second Escape cannot dismiss the drawer below it. The
+ *    probe checks that the top drawer is still in the top layer when its
+ *    second Escape lands, and probes again when a lagging runner let the exit
+ *    finish first.
  * 5. After a completed exit, focus rests on the element focused at open.
  *
  * None of these orderings exists in jsdom: it runs no CSS transition and has no
@@ -94,6 +97,11 @@ const TARGETS = [
     finalFocus: 'Open order',
   },
 ];
+
+// How many times a stacked-exit probe may miss its window (the top drawer's
+// exit finished before the second Escape landed, on a lagging runner) before
+// the guard reports that it could not observe the window at all.
+const STACKED_EXIT_ATTEMPTS = 3;
 
 const CONTENT_TYPES = {
   '.html': 'text/html',
@@ -272,10 +280,38 @@ async function probe(page, target) {
     );
 
     const outerOpenClass = await outer.getAttribute('class');
+    // Record, at the second Escape's own keydown (capture phase, before any
+    // handler runs), whether the inner drawer is still in the top layer. A
+    // runner that lags between the wait above and that keydown can let the
+    // inner exit finish first: the outer drawer is then rightly on top and
+    // handles the Escape, so the probe missed its window rather than finding
+    // the bug, and the caller probes again.
+    await page.evaluate(label => {
+      window.__secondEscape = null;
+      window.addEventListener(
+        'keydown',
+        event => {
+          if (event.key !== 'Escape' || window.__secondEscape != null) {
+            return;
+          }
+          const dialog = [...document.querySelectorAll('dialog')].find(
+            candidate => candidate.getAttribute('aria-label') === label,
+          );
+          window.__secondEscape = {
+            innerOpen: dialog?.matches(':popover-open') === true,
+          };
+        },
+        true,
+      );
+    }, target.innerLabel);
     await page.keyboard.press('Escape');
     await page.evaluate(
       () => new Promise(resolve => requestAnimationFrame(() => resolve(true))),
     );
+    const secondEscape = await page.evaluate(() => window.__secondEscape);
+    if (secondEscape?.innerOpen !== true) {
+      return {missedWindow: true};
+    }
     // A lower drawer that incorrectly handled the second Escape loses its open
     // transform class immediately, independent of how long a busy runner delays
     // the transition timer. This avoids a wall-clock-based flaky assertion.
@@ -357,9 +393,29 @@ async function run() {
     });
 
     for (const target of TARGETS) {
-      const page = await context.newPage();
+      let page = await context.newPage();
       const name = `${target.component} [${browserName}]`;
       try {
+        let result = await probe(page, target);
+        for (
+          let attempt = 1;
+          result.missedWindow && attempt < STACKED_EXIT_ATTEMPTS;
+          attempt++
+        ) {
+          console.log(
+            `↻ ${name}: the top drawer had left the top layer when the second Escape landed (runner lag); probing again`,
+          );
+          await page.close();
+          page = await context.newPage();
+          result = await probe(page, target);
+        }
+        if (result.missedWindow) {
+          failures++;
+          console.error(
+            `✗ ${name}: in ${STACKED_EXIT_ATTEMPTS} attempts the second Escape never landed during the top drawer's exit`,
+          );
+          continue;
+        }
         const {
           closeDisplays,
           postCloseFrames,
@@ -367,7 +423,7 @@ async function run() {
           expectedExits,
           stackedExitOwned,
           finalFocus,
-        } = await probe(page, target);
+        } = result;
         const hiddenAtExit = closeDisplays.filter(d => d === 'none');
         const paintedAfterExit = target.mustBeHiddenAfterClose
           ? postCloseFrames.filter(frame => frame.display !== 'none')
