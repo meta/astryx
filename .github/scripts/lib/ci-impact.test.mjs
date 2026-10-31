@@ -51,6 +51,12 @@ describe('runnerClass', () => {
   });
 });
 
+describe('runnerClass for an expression without labels', () => {
+  it('is unknown, never standard', () => {
+    expect(runnerClass('${{ matrix.os }}').kind).toBe('unknown');
+  });
+});
+
 describe('diffWorkflow', () => {
   it('lists added, removed and changed jobs with their runner class', () => {
     const base = {
@@ -88,7 +94,7 @@ describe('describeWorkflow', () => {
     expect(workflow).toMatchObject({
       file: 'perf-nightly.yml',
       change: 'added',
-      triggers: 'schedule (`17 9 * * *`), workflow_dispatch',
+      triggers: 'schedule (17 9 \\* \\* \\*), workflow\\_dispatch',
       nonStandard: false,
     });
   });
@@ -101,6 +107,46 @@ describe('describeWorkflow', () => {
         {on: 'push', jobs: {a: {'runs-on': '4-core-ubuntu'}}},
       ).nonStandard,
     ).toBe(true);
+  });
+});
+
+describe('non-standard moves', () => {
+  it('are decided per job id, before variants share a name', () => {
+    const diff = diffWorkflow(
+      {
+        on: 'pull_request',
+        jobs: {
+          a11y_browser: {name: 'pr-a11y (browser)', 'runs-on': 'ubuntu-latest'},
+          a11y_full: {name: 'pr-a11y (full)', 'runs-on': 'ubuntu-latest'},
+        },
+      },
+      {
+        on: 'pull_request',
+        jobs: {
+          a11y_browser: {
+            name: 'pr-a11y (browser)',
+            'runs-on': 'ubuntu-latest',
+            steps: [1],
+          },
+          a11y_full: {name: 'pr-a11y (full)', 'runs-on': '4-core-ubuntu'},
+        },
+      },
+    );
+    expect(diff.changes).toHaveLength(1);
+    expect(diff.movedOntoNonStandard).toEqual(['pr-a11y']);
+  });
+
+  it('compare another workflow job by job', () => {
+    const base = {
+      on: 'schedule',
+      jobs: {a: {'runs-on': '4-core-ubuntu'}, b: {'runs-on': 'ubuntu-latest'}},
+    };
+    const head = {
+      on: 'schedule',
+      jobs: {a: {'runs-on': '4-core-ubuntu'}, b: {'runs-on': '4-core-ubuntu'}},
+    };
+    expect(describeWorkflow('nightly.yml', base, head).nonStandard).toBe(true);
+    expect(describeWorkflow('nightly.yml', base, base).nonStandard).toBe(false);
   });
 });
 
@@ -181,6 +227,7 @@ describe('estimateImpact', () => {
           },
         ],
         triggersChanged: true,
+        movedOntoNonStandard: ['build'],
         names: {before: ['build'], after: ['build']},
       },
       history,
@@ -188,7 +235,7 @@ describe('estimateImpact', () => {
       currentWallMinutes: 14,
     });
     expect(impact.flags).toEqual([
-      '`build` moves onto a non-standard runner',
+      'build moves onto a non-standard runner',
       'time to green +3.0 min',
       'the workflow triggers changed, so runs a day may change too',
     ]);
@@ -217,12 +264,12 @@ describe('renderCiImpact', () => {
   it('collapses the table under a one-line summary, and names no price', () => {
     const section = renderCiImpact(impact);
     expect(section).toMatch(
-      /^<details>\n<summary>CI impact: \+1 job-min per update · pool \+1\.9% · time to green \+0\.8 min · standard runners on pull requests<\/summary>/,
+      /^<details>\n<summary>CI impact: \+1 job-min per update · pool \+1\.9% · time to green \+0\.8 min · standard runners<\/summary>/,
     );
     expect(section).toContain(
       '| Runner pool, runner-minutes a day | 4,160 | 4,240 | +80 (+1.9%) |',
     );
-    expect(section).toContain('Changed jobs: `size-base` removed: standard');
+    expect(section).toContain('Changed jobs: size-base removed: standard');
     expect(section).not.toMatch(/\$|cost|price|budget/i);
   });
 
@@ -247,7 +294,36 @@ describe('renderCiImpact', () => {
     });
     expect(section).toContain('· 1 workflow added</summary>');
     expect(section).toContain(
-      'Other workflows: `perf-nightly.yml` added: runs on schedule (`17 9 * * *`); standard runners; its minutes appear once it has run',
+      'Other workflows: perf-nightly.yml added: runs on schedule (17 9 \\* \\* \\*); standard runners; its minutes are not measured here',
+    );
+  });
+
+  it('renders job and workflow names from the pull request as literal text', () => {
+    const section = renderCiImpact({
+      ...impact,
+      changes: [
+        {
+          name: '<img src=x>',
+          change: 'added',
+          before: null,
+          after: runnerClass('ubuntu-latest'),
+        },
+      ],
+      otherWorkflows: [
+        describeWorkflow('[evil](https://x.example).yml', null, {
+          on: 'push',
+          jobs: {},
+        }),
+      ],
+    });
+    expect(section).toContain('&lt;img src=x&gt; added: standard');
+    expect(section).toContain('\\[evil\\](https://x.example).yml added');
+    expect(section).not.toContain('<img');
+  });
+
+  it('says so when a CI change could not be measured', () => {
+    expect(renderCiImpact({unavailable: true})).toBe(
+      '**CI impact:** not measured on this run; the run history or the workflow files could not be read.\n\n',
     );
   });
 

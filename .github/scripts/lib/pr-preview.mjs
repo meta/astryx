@@ -209,6 +209,9 @@ export async function gatherCiImpact({
   jobs,
   historyPath,
 }) {
+  // The file list decides whether this is a CI change at all (one read for
+  // every pull request); unreadable, the section is left out.
+  let names;
   try {
     const files = await github.paginate(github.rest.pulls.listFiles, {
       owner,
@@ -216,8 +219,12 @@ export async function gatherCiImpact({
       pull_number: identity.prNumber,
       per_page: 100,
     });
-    const names = files.map(file => file.filename);
-    if (!ciImpact.isCiChange(names)) return null;
+    names = files.map(file => file.filename);
+  } catch {
+    return null;
+  }
+  if (!ciImpact.isCiChange(names)) return null;
+  try {
     const cached =
       historyPath && fs.existsSync(historyPath) ? readJSON(historyPath) : null;
     const history = await ciHistory({github, owner, repo, cached});
@@ -225,8 +232,16 @@ export async function gatherCiImpact({
       fs.mkdirSync(path.dirname(historyPath), {recursive: true});
       fs.writeFileSync(historyPath, JSON.stringify(history));
     }
+    // The before side is the merge base, the tree the head was cut from.
+    const {data: comparison} =
+      await github.rest.repos.compareCommitsWithBasehead({
+        owner,
+        repo,
+        basehead: `${identity.baseSha}...${identity.headSha}`,
+      });
+    const mergeBase = comparison.merge_base_commit.sha;
     const [base, head] = await Promise.all([
-      workflowAt({github, owner, repo, ref: identity.baseSha}),
+      workflowAt({github, owner, repo, ref: mergeBase}),
       workflowAt({github, owner, repo, ref: identity.headSha}),
     ]);
     const {data: run} = await github.rest.actions.getWorkflowRun({
@@ -234,7 +249,8 @@ export async function gatherCiImpact({
       repo,
       run_id: identity.sourceRunId,
     });
-    // Every other changed workflow: when it runs and on which runners.
+    // Every other changed workflow: when it runs and on which runners; its
+    // minutes are not measured (the history covers CI's own workflow).
     const otherWorkflows = [];
     for (const file of names.filter(
       name =>
@@ -242,7 +258,7 @@ export async function gatherCiImpact({
         name !== '.github/workflows/ci.yml',
     )) {
       const [before, after] = await Promise.all([
-        workflowAt({github, owner, repo, ref: identity.baseSha, file}),
+        workflowAt({github, owner, repo, ref: mergeBase, file}),
         workflowAt({github, owner, repo, ref: identity.headSha, file}),
       ]);
       otherWorkflows.push(
@@ -276,12 +292,14 @@ export async function gatherCiImpact({
         ...otherWorkflows
           .filter(workflow => workflow.nonStandard)
           .map(
-            workflow => `\`${workflow.file}\` runs on a non-standard runner`,
+            workflow =>
+              `${ciImpact.inlineName(workflow.file)} moves a job onto a non-standard runner`,
           ),
       ],
     };
   } catch {
-    return null;
+    // A CI change whose impact could not be read says so.
+    return {unavailable: true};
   }
 }
 

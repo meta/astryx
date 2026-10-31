@@ -16,7 +16,8 @@
  *   prices.
  */
 
-const {num} = require('./report-text');
+const {inline, num} = require('./report-text');
+const {baseJobName} = require('./pr-status');
 
 /** Paths whose change makes a pull request a CI change. */
 const CI_PATH =
@@ -35,7 +36,8 @@ function isCiChange(files) {
 
 /**
  * The runner labels a `runs-on` value can pick: a literal, or in an
- * expression the strings it can yield (those after `&&` or `||`).
+ * expression the strings it can yield (those after `&&` or `||`); none for
+ * an expression that names no label (its runner is unknown here).
  */
 function runnerLabels(runsOn) {
   if (Array.isArray(runsOn)) return runsOn.map(String);
@@ -44,9 +46,13 @@ function runnerLabels(runsOn) {
   return [...text.matchAll(/(?:&&|\|\|)\s*'([^']+)'/g)].map(match => match[1]);
 }
 
-/** `standard`, `non-standard`, or `mixed` (an expression that can pick either). */
+/**
+ * `standard`, `non-standard`, `mixed` (an expression that can pick either),
+ * or `unknown` (an expression that names no label).
+ */
 function runnerClass(runsOn) {
   const labels = runnerLabels(runsOn);
+  if (labels.length === 0) return {kind: 'unknown', labels};
   const standard = labels.filter(label => STANDARD_RUNNER.test(label));
   if (standard.length === labels.length) return {kind: 'standard', labels};
   if (standard.length === 0) return {kind: 'non-standard', labels};
@@ -59,7 +65,20 @@ function runnerClass(runsOn) {
 
 /** A job's name as the run shows it, without its matrix suffix. */
 function displayName(id, job) {
-  return String(job?.name ?? id).replace(/\s*\(.*\)\s*$/, '');
+  return baseJobName(job?.name ?? id);
+}
+
+/** The non-standard labels a runner class can pick. */
+function nonStandardLabels(cls) {
+  if (!cls) return [];
+  if (cls.kind === 'non-standard') return cls.labels;
+  return cls.nonStandard ?? [];
+}
+
+/** Whether a job's head runner adds a non-standard label its base did not have. */
+function movesOntoNonStandard(before, after) {
+  const was = nonStandardLabels(before);
+  return nonStandardLabels(after).some(label => !was.includes(label));
 }
 
 /**
@@ -86,6 +105,14 @@ function diffWorkflow(base, head) {
       after: after ? runnerClass(after['runs-on']) : null,
     });
   }
+  // Decided per job id, before variants share a name below.
+  const movedOntoNonStandard = [
+    ...new Set(
+      changes
+        .filter(change => movesOntoNonStandard(change.before, change.after))
+        .map(change => change.name),
+    ),
+  ];
   // Variants of one job (`pr-a11y (browser specs)`, `pr-a11y (full audit)`)
   // share a name in the report: one entry per name and kind of change.
   const seen = new Set();
@@ -97,6 +124,7 @@ function diffWorkflow(base, head) {
   });
   return {
     changes: unique,
+    movedOntoNonStandard,
     triggersChanged: JSON.stringify(base?.on) !== JSON.stringify(head?.on),
     names: {
       before: Object.entries(baseJobs).map(([id, job]) => displayName(id, job)),
@@ -199,20 +227,9 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
     history.wallMinutes !== null && Number.isFinite(currentWallMinutes)
       ? currentWallMinutes - history.wallMinutes
       : null;
-  const addedNonStandard = diff.changes.filter(change => {
-    const afterLabels = change.after
-      ? (change.after.nonStandard ??
-        (change.after.kind === 'non-standard' ? change.after.labels : []))
-      : [];
-    const beforeLabels = change.before
-      ? (change.before.nonStandard ??
-        (change.before.kind === 'non-standard' ? change.before.labels : []))
-      : [];
-    return afterLabels.some(label => !beforeLabels.includes(label));
-  });
   const flags = [
-    ...addedNonStandard.map(
-      change => `\`${change.name}\` moves onto a non-standard runner`,
+    ...(diff.movedOntoNonStandard || []).map(
+      name => `${inline(name)} moves onto a non-standard runner`,
     ),
     ...(poolPercent > FLAG_POOL_PERCENT
       ? [`runner-pool usage +${poolPercent.toFixed(0)}%`]
@@ -243,21 +260,22 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
 /** When a workflow runs, in words: its events, and a schedule's cron times. */
 function triggerText(on) {
   if (!on) return 'no trigger';
-  if (typeof on === 'string') return on;
-  if (Array.isArray(on)) return on.join(', ');
+  if (typeof on === 'string') return inline(on);
+  if (Array.isArray(on)) return on.map(inline).join(', ');
   return Object.entries(on)
     .map(([event, config]) =>
       event === 'schedule' && Array.isArray(config)
-        ? `schedule (${config.map(entry => `\`${entry.cron}\``).join(', ')})`
-        : event,
+        ? `schedule (${config.map(entry => inline(entry.cron)).join(', ')})`
+        : inline(event),
     )
     .join(', ');
 }
 
 /**
  * A changed workflow other than CI's own: whether it was added, removed or
- * changed, when it runs, and each job's runner class. Its minutes are not
- * estimated: the pull request's run does not run it.
+ * changed, when it runs, and each job's runner class, compared job by job.
+ * Its minutes are not measured here: this run's history covers CI's own
+ * workflow.
  */
 function describeWorkflow(file, base, head) {
   const doc = head ?? base;
@@ -265,18 +283,18 @@ function describeWorkflow(file, base, head) {
     name: displayName(id, job),
     runner: runnerClass(job['runs-on']),
   }));
+  const baseJobs = base?.jobs || {};
   return {
     file,
     change: !base ? 'added' : !head ? 'removed' : 'changed',
     triggers: triggerText(doc?.on),
     jobs,
-    nonStandard:
-      !!head &&
-      jobs.some(job => job.runner.kind !== 'standard') &&
-      (!base ||
-        Object.values(base.jobs || {}).every(
-          job => runnerClass(job['runs-on']).kind === 'standard',
-        )),
+    nonStandard: Object.entries(head?.jobs || {}).some(([id, job]) =>
+      movesOntoNonStandard(
+        baseJobs[id] ? runnerClass(baseJobs[id]['runs-on']) : null,
+        runnerClass(job['runs-on']),
+      ),
+    ),
   };
 }
 
@@ -295,14 +313,17 @@ function amount(value, digits = 0) {
 function runnerText(cls) {
   if (!cls) return '—';
   if (cls.kind === 'standard') return 'standard';
+  if (cls.kind === 'unknown') return 'unknown (chosen by an expression)';
   if (cls.kind === 'non-standard')
-    return `non-standard (${cls.labels.join(', ')})`;
-  return `standard on pull requests; non-standard (${cls.nonStandard.join(', ')}) on some other events`;
+    return `non-standard (${cls.labels.map(inline).join(', ')})`;
+  return `standard or non-standard by event (${cls.nonStandard.map(inline).join(', ')})`;
 }
 
 /** The report section: a visible summary line, the table collapsed under it. */
 function renderCiImpact(impact) {
   if (!impact) return '';
+  if (impact.unavailable)
+    return '**CI impact:** not measured on this run; the run history or the workflow files could not be read.\n\n';
   const {jobMinutes, pool, concurrent, wall} = impact;
   // A pool change under 10% keeps one decimal, so +0.5% does not read as 0%.
   const percent = value =>
@@ -314,8 +335,12 @@ function renderCiImpact(impact) {
       ? null
       : `time to green ${signed(wall.delta, 1, ' min')}`,
     impact.changes.some(change => change.after?.kind === 'non-standard')
-      ? 'non-standard runners on pull requests'
-      : 'standard runners on pull requests',
+      ? 'non-standard runners'
+      : impact.changes.some(change =>
+            ['mixed', 'unknown'].includes(change.after?.kind),
+          )
+        ? 'some runners chosen by event'
+        : 'standard runners',
     ...['added', 'removed'].map(kind => {
       const count = (impact.otherWorkflows || []).filter(
         workflow => workflow.change === kind,
@@ -355,19 +380,19 @@ function renderCiImpact(impact) {
   const workflows = (impact.otherWorkflows || [])
     .map(
       workflow =>
-        `\`${workflow.file}\` ${workflow.change}: runs on ${workflow.triggers}; ${
+        `${inline(workflow.file)} ${workflow.change}: runs on ${workflow.triggers}; ${
           workflow.jobs.length === 0
             ? 'no jobs'
             : [
                 ...new Set(workflow.jobs.map(job => runnerText(job.runner))),
               ].join(', ')
-        } runners${workflow.change === 'removed' ? '' : '; its minutes appear once it has run'}`,
+        } runners${workflow.change === 'removed' ? '' : '; its minutes are not measured here'}`,
     )
     .join(' · ');
   const jobs = impact.changes
     .map(
       change =>
-        `\`${change.name}\` ${change.change}: ${change.change === 'removed' ? runnerText(change.before) : runnerText(change.after)}`,
+        `${inline(change.name)} ${change.change}: ${change.change === 'removed' ? runnerText(change.before) : runnerText(change.after)}`,
     )
     .join(' · ');
   return `<details>\n<summary>CI impact: ${summary.join(' · ')}${impact.flags.length > 0 ? ' ⚠️' : ''}</summary>\n\n| | Before | After | Change |\n|---|---|---|---|\n${rows
@@ -378,6 +403,7 @@ function renderCiImpact(impact) {
 }
 
 module.exports = {
+  inlineName: inline,
   describeWorkflow,
   CI_PATH,
   isCiChange,

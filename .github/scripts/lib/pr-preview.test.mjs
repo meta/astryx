@@ -203,6 +203,8 @@ async function reconcile({
   baseStats,
   packageSize,
   touched,
+  extendGithub,
+  ciHistoryPath,
 } = {}) {
   const value = previewAvailable
     ? {...requested, headRepository: requested.baseRepository}
@@ -229,6 +231,7 @@ async function reconcile({
     value: githubFixtureValue,
     comments,
   });
+  extendGithub?.(github);
   const core = {info: vi.fn(), warning: vi.fn()};
   const result = await reconcilePrComment({
     github,
@@ -248,6 +251,9 @@ async function reconcile({
     createIfMissing,
     fallbackMessage,
     execute,
+    ciHistoryPath:
+      ciHistoryPath ??
+      path.join(path.dirname(paths.analysis), 'ci-history.json'),
   });
   return {result, state, core, github, paths};
 }
@@ -1362,4 +1368,88 @@ describe('PR comment preview reconciliation', () => {
       ).toBe(origin);
     },
   );
+});
+
+describe('CI impact in the report', () => {
+  const at = minute =>
+    new Date(Date.UTC(2026, 9, 31, 12, minute)).toISOString();
+  const workflow = text => ({content: Buffer.from(text).toString('base64')});
+  const BASE_CI =
+    'on: pull_request\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps: [{run: a}]\n';
+  const HEAD_CI = `${BASE_CI}  extra:\n    runs-on: 4-core-ubuntu\n    steps: [{run: b}]\n`;
+  const ciChange = github => {
+    github.rest.pulls.listFiles = vi.fn(async () => ({
+      data: [{filename: '.github/workflows/ci.yml'}],
+    }));
+    github.rest.repos = {
+      compareCommitsWithBasehead: vi.fn(async () => ({
+        data: {merge_base_commit: {sha: 'c'.repeat(40)}},
+      })),
+      getContent: vi.fn(async ({ref}) => ({
+        data: workflow(ref === 'c'.repeat(40) ? BASE_CI : HEAD_CI),
+      })),
+    };
+    github.rest.actions.listWorkflowRuns = vi.fn(async ({per_page}) => ({
+      data: {
+        total_count: 70,
+        workflow_runs:
+          per_page === 1
+            ? []
+            : [{id: 1, run_started_at: at(0), updated_at: at(10)}],
+      },
+    }));
+    github.rest.actions.listJobsForWorkflowRun = vi.fn(async () => ({
+      data: [
+        {
+          name: 'lint',
+          conclusion: 'success',
+          started_at: at(0),
+          completed_at: at(2),
+        },
+        {
+          name: 'extra',
+          conclusion: 'success',
+          started_at: at(0),
+          completed_at: at(3),
+        },
+      ],
+    }));
+  };
+
+  it('reaches the comment for a pull request that changes CI, with the merge base as before', async () => {
+    let seen;
+    const {github} = await reconcile({
+      extendGithub: ciChange,
+      execute: (_node, args) => {
+        seen = args;
+        const file = args[args.indexOf('--ci-impact') + 1];
+        return `## PR Analysis Report\n${fs.readFileSync(file, 'utf8')}`;
+      },
+    });
+    expect(seen).toContain('--ci-impact');
+    const impact = JSON.parse(
+      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
+    );
+    expect(impact.flags).toContain('extra moves onto a non-standard runner');
+    expect(github.rest.repos.getContent).toHaveBeenCalledWith(
+      expect.objectContaining({ref: 'c'.repeat(40)}),
+    );
+  });
+
+  it('passes no impact for a pull request that does not change CI', async () => {
+    let seen;
+    await reconcile({
+      extendGithub: github => {
+        ciChange(github);
+        github.rest.pulls.listFiles = vi.fn(async () => ({
+          data: [{filename: 'packages/core/src/Card/Card.tsx'}],
+        }));
+      },
+      execute: (_node, args) => {
+        seen = args;
+        return '## PR Analysis Report\n';
+      },
+    });
+    expect(seen).not.toContain('--ci-impact');
+  });
 });
