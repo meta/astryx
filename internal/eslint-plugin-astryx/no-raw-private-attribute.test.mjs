@@ -109,6 +109,7 @@ tester.run('no-raw-private-attribute', rule, {
         export const pressOn = {[ATTRIBUTE]: 'on'};
         export function isPressed(element) { return element.matches(PRESSED); }
         export const closestPressed = element => element.closest(PRESSED);
+        export const isOn = element => element.matches(\`[\${ATTRIBUTE}="on"]\`);
         export function setPress(element, value) { element.setAttribute(ATTRIBUTE, value); }
         export const styles = stylex.create({base: {opacity: {default: 1, [PRESSED]: 0.8}}});
       `,
@@ -356,6 +357,22 @@ tester.run('no-raw-private-attribute', rule, {
     },
     {
       code: `export const PRESS_ATTRIBUTE = dataAttr('press');`,
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    // ❌ A selector built from the name constant, in a template or with `+`.
+    {
+      code: 'const ATTRIBUTE = \'data-astryx-press\'; export const PRESSED_SELECTOR = `[${ATTRIBUTE}="on"]`;',
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: 'const ATTRIBUTE = \'data-astryx-press\'; export function pressedSelector(state) { return `[${ATTRIBUTE}="${state}"]`; }',
+      filename: owner,
+      errors: [{messageId: 'exportedName'}],
+    },
+    {
+      code: "const ATTRIBUTE = 'data-astryx-press'; export const PRESSED_SELECTOR = '[' + ATTRIBUTE + ']';",
       filename: owner,
       errors: [{messageId: 'exportedName'}],
     },

@@ -28,7 +28,8 @@
  * module may not export the raw name or a selector as a string: not as an
  * exported or default-exported value, not inside an exported object, array or
  * function's return value, and not through a module constant that one of
- * those uses. The name stays allowed as an object key (setter props and
+ * those uses, including a string built from that constant in a template or
+ * with `+`. The name stays allowed as an object key (setter props and
  * `stylex.create` selectors) and as a call argument (a writer or a
  * `closest`/`matches` reader). Anywhere, an
  * import of another package's owner module is reported: a private attribute
@@ -190,7 +191,8 @@ const FUNCTIONS = new Set([
 
 /**
  * Where the value of `node` ends up, following it out through wrappers,
- * object property values, array elements and function return values:
+ * strings built from it (a template slot, a `+` operand), object property
+ * values, array elements and function return values:
  * `{exported: true}` when it reaches an export, `{binding}` when it is bound
  * to a name (a variable declarator or a function declaration) whose uses
  * decide, or `null` when it is consumed some other way (an object key, a call
@@ -206,6 +208,10 @@ function valueDestination(node) {
     if (
       PASS_THROUGH.has(parent.type) ||
       (parent.type === 'ConditionalExpression' && parent.test !== current) ||
+      // A string built from the value carries it on: a template slot, or an
+      // operand of `+`.
+      parent.type === 'TemplateLiteral' ||
+      (parent.type === 'BinaryExpression' && parent.operator === '+') ||
       (parent.type === 'SequenceExpression' &&
         parent.expressions.at(-1) === current) ||
       (parent.type === 'Property' && parent.value === current) ||
