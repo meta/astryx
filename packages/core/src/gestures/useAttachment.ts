@@ -5,12 +5,14 @@
 /**
  * @file useAttachment.ts
  * @input An element ref, an attach function and a key
- * @output Exports useAttachment, useIsUnmountedRef, and the gesture-sync
- *   depth (syncingGestures, isSyncingGestures) both hooks read
- * @position Internal React helpers shared by useGestureRecognizer and
- *   usePressTracker, so each hook imports only what it uses
+ * @output Exports useAttachment, useAttachmentPair (the same for two nodes),
+ *   useIsUnmountedRef, and the gesture-sync depth (syncingGestures,
+ *   isSyncingGestures) both hooks read
+ * @position Internal React helpers shared by useGestureRecognizer,
+ *   usePressTracker and usePager, so each hook imports only what it uses
  *
- * SYNC: When modified, update useGestureRecognizer.test.tsx.
+ * SYNC: When modified, update useGestureRecognizer.test.tsx and
+ * __tests__/useAttachmentPair.test.tsx.
  */
 
 import {useRef, type RefObject} from 'react';
@@ -70,22 +72,60 @@ export function useAttachment(
   attach: (element: Element) => () => void,
   key: unknown,
 ): void {
+  useAttachedNodes([ref], ([element]) => attach(element), key);
+}
+
+/**
+ * `useAttachment` for two nodes: keep `attach` bound to the pair the refs hold
+ * after each commit, once both are there. Replacing either node releases the
+ * attachment and attaches the new pair, a changed `key` re-attaches, and the
+ * last attachment is released on unmount; a commit that changes neither does
+ * nothing (react-component-runtime INV3).
+ */
+export function useAttachmentPair<A extends Element, B extends Element>(
+  firstRef: RefObject<A | null>,
+  secondRef: RefObject<B | null>,
+  attach: (first: A, second: B) => () => void,
+  key: unknown,
+): void {
+  useAttachedNodes(
+    [firstRef, secondRef],
+    ([first, second]) => attach(first as A, second as B),
+    key,
+  );
+}
+
+/**
+ * The lifecycle both share: one attachment of the nodes the refs hold, made
+ * once every one is there, released when a node or `key` changes, and at
+ * unmount.
+ */
+function useAttachedNodes(
+  refs: ReadonlyArray<RefObject<Element | null>>,
+  attach: (nodes: ReadonlyArray<Element>) => () => void,
+  key: unknown,
+): void {
   const attachmentRef = useRef<{
-    element: Element;
+    nodes: ReadonlyArray<Element>;
     key: unknown;
     release: () => void;
   } | null>(null);
 
-  // Syncs the attachment with the DOM node `ref` holds after this commit.
+  // Syncs the attachment with the DOM nodes the refs hold after this commit.
   useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
+    const nodes = refs.map(ref => ref.current);
     const current = attachmentRef.current;
-    if (current?.element === element && current?.key === key) {
+    if (
+      current != null &&
+      current.key === key &&
+      nodes.every((node, index) => node === current.nodes[index])
+    ) {
       return;
     }
     current?.release();
-    attachmentRef.current =
-      element == null ? null : {element, key, release: attach(element)};
+    attachmentRef.current = nodes.every(node => node != null)
+      ? {nodes, key, release: attach(nodes)}
+      : null;
   });
 
   // Releases the attachment at unmount.

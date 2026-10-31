@@ -27,6 +27,7 @@
  */
 
 import type {MotionCurve} from './animator';
+import {cubicBezier, type BezierPoints} from './bezier';
 import {paging} from './uikit/paging';
 
 /**
@@ -113,33 +114,56 @@ export function solvePaging({
 }
 
 /**
- * `setContentOffset(_:animated:)`: `paging.animatedScroll.duration` on a
- * sinusoidal ease-in-out, whatever the distance. UIKit starts it from the
- * current offset and drops any velocity, as here.
+ * `setContentOffset(_:animated:)`: `paging.animatedScroll.durationMs` on its
+ * curve (the sinusoidal ease-in-out as a cubic bézier), whatever the
+ * distance, from the current offset. The pager passes the duration and curve
+ * it reads through `resolveMotion` (`spec:AST-094` FR4): the table's measured
+ * values, as FR4 names neither as a role.
+ *
+ * `velocity` (px/s) is that of a move this one retargets: the new curve
+ * starts at it and still ends on `to`, at rest, on time (`spec:AST-094` FR6:
+ * a new target keeps the current velocity; UIKit drops it). The carry is a
+ * Hermite term, v × duration × u(1 − u)², less the curve's own starting
+ * slope, so a move from rest is the curve itself.
  */
 export function solveAnimatedPageScroll({
   from,
   to,
+  durationMs = paging.animatedScroll.durationMs,
+  curve = paging.animatedScroll.curve,
+  velocity,
 }: {
   from: number;
   to: number;
+  durationMs?: number;
+  curve?: BezierPoints;
+  velocity?: number;
 }): MotionCurve {
-  const {duration} = paging.animatedScroll;
+  const duration = durationMs / 1000;
   const distance = to - from;
+  const ease = cubicBezier(curve);
+  const progress = (u: number) => ease(Math.min(1, Math.max(0, u)));
+  // The carry, in px: the retargeted velocity over the whole duration, less
+  // what the curve's own starting slope already gives.
+  const startSlope = progress(1e-4) / 1e-4;
+  const carry =
+    velocity == null ? 0 : velocity * duration - distance * startSlope;
+  const at = (t: number) => {
+    const u = Math.min(1, Math.max(0, t / duration));
+    return from + distance * progress(u) + carry * u * (1 - u) * (1 - u);
+  };
   return {
     duration,
-    at: t => {
-      const u = Math.min(1, Math.max(0, t / duration));
-      return from + (distance * (1 - Math.cos(Math.PI * u))) / 2;
-    },
+    at,
     velocity: t => {
-      if (t <= 0 || t >= duration) {
+      if (t <= 0) {
+        return velocity ?? 0;
+      }
+      if (t >= duration) {
         return 0;
       }
-      return (
-        ((distance * Math.PI) / (2 * duration)) *
-        Math.sin((Math.PI * t) / duration)
-      );
+      const h = Math.min(1e-4, t / 2, (duration - t) / 2);
+      return (at(t + h) - at(t - h)) / (2 * h);
     },
   };
 }
