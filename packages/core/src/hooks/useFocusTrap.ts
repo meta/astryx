@@ -19,6 +19,7 @@
 import {useCallback, useEffect, useRef} from 'react';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
+import {useFocusReturn} from '../utils/focusReturn';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 
 // Escape-dismissible focus traps currently mounted. This is the whole state
@@ -267,83 +268,19 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
     }
   }, []);
 
-  /**
-   * Capture the element focused before the trap activated, and restore focus to
-   * it when the trap deactivates (or the component unmounts). Overlays are
-   * opened imperatively (e.g. `showPopover()`), so the browser's declarative
-   * popover focus restoration does not apply — without this, closing a Popover
-   * via Escape or light dismiss drops keyboard focus to `<body>`.
-   *
-   * The restore is guarded so it never steals focus a consumer moved on
-   * purpose: it only runs when focus would otherwise be lost — i.e. the active
-   * element is nothing, the document body/root, or still inside the (possibly
-   * now-unmounted) trap container. If focus already moved to some other element
-   * outside the trap (the user clicked elsewhere, or a consumer such as
-   * DropdownMenu already refocused its trigger), the restore is a no-op.
-   *
-   * The restore is also skipped when focus never entered the trap while it
-   * was active. Some popups — a Typeahead/PowerSearch listbox anchored to its
-   * own input — deliberately keep DOM focus on the trigger and never move it
-   * into the trap container (they open with `role: "none"` and
-   * `hasAutoFocus: false`). For those, the restore would cancel a blur the
-   * user asked for on outside-click dismissal, re-focusing the trigger so a
-   * second click no longer fires a `focus` event and cannot reopen the menu.
-   * Tracking `focusin` inside the container distinguishes "focus was here and
-   * we should rescue it" from "focus was never here and we should leave it
-   * alone" — popups that do take focus (Dialog, DropdownMenu, a Typeahead
-   * option click) are unaffected.
-   */
-  useEffect(() => {
-    if (!isActive) {
-      return;
-    }
-
-    // Snapshot the container now; by cleanup it may be detached or unmounted.
-    const container = containerRef.current;
-    const doc = trapDocument(container);
-    const previouslyFocused = doc.activeElement as HTMLElement | null;
-
-    // Whether focus ever entered the trap container while it was active.
-    // Initialized from the current active element in case focus was already
-    // inside at activation (e.g. a programmatic focus before the effect ran).
-    let hadFocusInside =
-      container != null && container.contains(doc.activeElement);
-
-    const markFocusInside = (event: FocusEvent) => {
-      const target = event.target as Node | null;
-      if (target != null && containerRef.current?.contains(target)) {
-        hadFocusInside = true;
-      }
-    };
-    doc.addEventListener('focusin', markFocusInside, true);
-
-    return () => {
-      doc.removeEventListener('focusin', markFocusInside, true);
-
-      if (!hadFocusInside) {
-        return;
-      }
-
-      const active = doc.activeElement;
-      const focusWasLost =
-        active == null ||
-        active === doc.body ||
-        active === doc.documentElement ||
-        (container != null && container.contains(active));
-
-      if (!focusWasLost) {
-        return;
-      }
-
-      if (
-        previouslyFocused != null &&
-        previouslyFocused.isConnected &&
-        typeof previouslyFocused.focus === 'function'
-      ) {
-        previouslyFocused.focus();
-      }
-    };
-  }, [isActive]);
+  // Return focus to whatever was focused before the trap activated, when the
+  // trap deactivates or unmounts. Overlays open imperatively (e.g.
+  // `showPopover()`), so the browser's declarative popover focus restoration
+  // does not apply; without this, closing a Popover via Escape or light dismiss
+  // drops keyboard focus to `<body>`. The return runs only when focus would
+  // otherwise be lost, so it never steals focus a consumer moved on purpose,
+  // and only when focus entered the trap: a popup that keeps DOM focus on its
+  // own input (a Typeahead or PowerSearch listbox) must not refocus that input
+  // after an outside-click dismissal, or a second click could not reopen it.
+  useFocusReturn(containerRef, isActive, {
+    requireFocusInside: true,
+    ring: 'browser',
+  });
 
   /**
    * Handle focus events - redirect focus back into container if it escapes.
