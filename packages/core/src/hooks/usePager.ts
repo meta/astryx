@@ -609,10 +609,8 @@ export function createPager(
     axisRatio: options.panOptions?.axisRatio ?? paging.panAxisRatio,
     // On the web a pan also takes a trackpad's scroll and a mouse wheel's
     // notches, along its axis (spec:AST-094 FR43).
-    allowedScrollTypes: options.panOptions?.allowedScrollTypes ?? [
-      'continuous',
-      'discrete',
-    ],
+    allowedScrollTypes: options.panOptions?.allowedScrollTypes ?? ['continuous'],
+    wheelStep: options.panOptions?.wheelStep ?? true,
     shouldBegin: recognizer => {
       if (options.panOptions?.shouldBegin?.(recognizer) === false) {
         return false;
