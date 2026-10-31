@@ -37,8 +37,8 @@ system_specs: [spec:AST-009, spec:AST-024]
 | Public contract         | A semantic heading with a required `level`, an optional theme-extensible visual `type`, `weight`, `accessibilityLevel`, and the shared text controls documented in `Heading.doc.mjs`.      |
 | Behavior                | `level` picks `h1`–`h6` and the default visual scale; `type` and `weight` change only appearance; `accessibilityLevel` sets `aria-level` when it differs.                                  |
 | End-user impact         | Screen-reader users navigate a document outline that matches the page's sections, whatever size each heading is drawn at.                                                                  |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                                                               |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. One implementation gap is listed under Current-state impact.                                                    |
+| Builder impact          | None for the public API; the truncation Tooltip mounts on the first pointer entry or focus (AR3), which is decided and not yet implemented.                                                |
+| Compatibility/readiness | Released behavior recorded as current, except AR3's tooltip mount, which is decided and not yet implemented. Two implementation gaps are listed under Current-state impact.                |
 | Review checks           | Reject a visual `type` or `weight` that changes the element or level, a heading that renders without a level baseline, or a duplicate native tooltip for truncation.                       |
 | Governing rules         | `spec:AST-024` (custom visual types, weight precedence, unchanged accessibility); `architecture:component-theming-surface/INV6,INV14`; `architecture:public-component-api/INV5,INV6,INV8`. |
 
@@ -55,8 +55,10 @@ Heading's own contract.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  or styling output changes
+- Compatibility class: records shipped behavior, except that the truncation
+  Tooltip mounts on the first pointer entry or focus (AR3): before that, a
+  clamped Heading has no closed tooltip layer and no tooltip description in the
+  DOM. Public props, defaults, and styling output are unchanged
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -64,6 +66,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
+- **The truncation Tooltip mounts with the text (AR3, PR1).** A truncated
+  Heading mounts its closed Tooltip layer and tooltip description as soon as
+  truncation is measured, before anyone points at it or focuses it. AR3 has
+  it mount on the first pointer entry or focus.
 - **Truncation tooltip not reachable by keyboard (FR4).** A truncated Heading
   is not focusable, so Tooltip attaches no focus trigger and sighted keyboard
   users cannot reveal the clipped text, where WCAG 2.2 2.1.1 expects
@@ -116,14 +122,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                   | Required invariant                                             | Allowed variation |
-| ----------------------- | -------------------------------------------------------------- | ----------------- |
-| Level only              | `h{level}` at the level's scale.                               | Level.            |
-| Display type            | Same element; display scale and weight; `data-type` reflected. | Type.             |
-| Theme-added type        | Same element; level baseline; `data-type` reflected.           | Theme paint.      |
-| Accessibility override  | `aria-level` differs from the element's level.                 | —                 |
-| Truncated with tooltip  | Clamped heading anchors one Tooltip with the full text.        | Placement.        |
-| Truncation, tooltip off | Clamped heading; no measurement; no Tooltip.                   | —                 |
+| State                   | Required invariant                                                                                   | Allowed variation |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- | ----------------- |
+| Level only              | `h{level}` at the level's scale.                                                                     | Level.            |
+| Display type            | Same element; display scale and weight; `data-type` reflected.                                       | Type.             |
+| Theme-added type        | Same element; level baseline; `data-type` reflected.                                                 | Theme paint.      |
+| Accessibility override  | `aria-level` differs from the element's level.                                                       | —                 |
+| Truncated with tooltip  | Clamped heading anchors one Tooltip with the full text, mounted on the first pointer entry or focus. | Placement.        |
+| Truncation, tooltip off | Clamped heading; no measurement; no Tooltip.                                                         | —                 |
 
 ### Transformation and precedence order
 
@@ -139,7 +145,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **PR1 — Measured only when needed.** Truncation is measured only when
   `maxLines` is positive and the tooltip is enabled; re-measuring follows size
   and content changes without a per-heading observer; the Tooltip module loads
-  only when the text is truncated.
+  only when the text is truncated, and the Tooltip itself mounts only on the
+  first pointer entry or focus, so until that first interaction a page of
+  clamped text mounts no closed tooltip layers; that mount is an implementation
+  gap (Current-state impact).
 
 ## Accessibility contract
 
@@ -149,7 +158,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   level through `aria-level` without changing the element.
 - **AR3 — Truncated text.** The full text stays in the heading's DOM; the
   truncation Tooltip is the only tooltip, and any description it adds is
-  Tooltip's.
+  Tooltip's. The Tooltip mounts on the first pointer entry or focus on the
+  clamped heading, and that pointer entry or focus opens it as it would once
+  mounted, by Tooltip's own rules (Tooltip FR3–FR5); until then the heading
+  carries no tooltip description, since its full text is already in its DOM.
+  This mount is an implementation gap (Current-state impact).
 
 ## Design relationships
 
@@ -173,20 +186,21 @@ Tooltip.
 
 ## Verification map
 
-| Contract | Verification                                                                                                | Representative states                     | Mutation or failure expectation                                                                                                                                                                                                                                                    | Audit section            |
-| -------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1, AR2 | `Heading.test.tsx` level and `accessibilityLevel` tests                                                     | Levels 1–6; differing override            | A wrong element, or a missing `aria-level` for a differing override, fails. Gap: no test asserts that an equal `accessibilityLevel` adds no `aria-level`.                                                                                                                          | `audit:Heading/a11y`     |
-| FR2      | `Heading.test.tsx` target, type, theme-added type, weight, and omitted-type tests; `extensibleAxes.test.ts` | Display types, theme-added type, weight   | A lost `heading` class or `data-level`, `data-color`, `data-type`, or `data-weight` reflection, a reflected omitted type, or a theme-added type losing its level baseline fails. Gap: the display scales, default weights, and weight precedence in paint have no automated check. | `audit:Heading/theming`  |
-| FR3      | Stable visual baseline `core-heading--level-1`; `Heading.stories.tsx`                                       | Level 1 default                           | A changed level-1 scale, color, or display comes back changed for review. Gap: the prop tests assert presence only, so color paint, `display` precedence, `justify`, `textWrap`, cap-height trim, strikethrough, and the theme-added color baseline have no automated check.       | `audit:Heading/behavior` |
-| FR4, PR1 | `Heading.test.tsx` truncation-measurement tests; `useTruncation.test.tsx`                                   | Tooltip on and off; content change        | Measuring with the tooltip off, not measuring with it on, or a missed re-measure fails. Gap: the ellipsis and line clamp, the `wordBreak` defaults, and the tooltip's appearance and placement have no automated check.                                                            | `audit:Heading/behavior` |
-| FR5      | `Heading.test.tsx` ref, `id`, and passthrough tests                                                         | Rerender; `id`; `data-testid`             | A detached ref, a lost `id`, or a lost test id fails. Gap: no test covers a caller `aria-level` winning, the styling-input merge order, or the line clamp after `style`.                                                                                                           | `audit:Heading/behavior` |
-| AR1      | `Heading.test.tsx` display-type element tests                                                               | Levels with display and theme-added types | A visual type that changes the element fails.                                                                                                                                                                                                                                      | `audit:Heading/a11y`     |
-| AR3      | Source review                                                                                               | Truncated heading                         | Gap: no Heading test asserts the absence of a native `title`.                                                                                                                                                                                                                      | `audit:Heading/a11y`     |
-| AR1, AR2 | Accessibility-tree evidence (`spec:AST-009` FR3)                                                            | Levels, override, display types           | Gap: no accessibility-tree check proves the heading role and level; the unit tests query the DOM.                                                                                                                                                                                  | `audit:Heading/a11y`     |
+| Contract                 | Verification                                                                                                | Representative states                                     | Mutation or failure expectation                                                                                                                                                                                                                                                    | Audit section            |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1, AR2                 | `Heading.test.tsx` level and `accessibilityLevel` tests                                                     | Levels 1–6; differing override                            | A wrong element, or a missing `aria-level` for a differing override, fails. Gap: no test asserts that an equal `accessibilityLevel` adds no `aria-level`.                                                                                                                          | `audit:Heading/a11y`     |
+| FR2                      | `Heading.test.tsx` target, type, theme-added type, weight, and omitted-type tests; `extensibleAxes.test.ts` | Display types, theme-added type, weight                   | A lost `heading` class or `data-level`, `data-color`, `data-type`, or `data-weight` reflection, a reflected omitted type, or a theme-added type losing its level baseline fails. Gap: the display scales, default weights, and weight precedence in paint have no automated check. | `audit:Heading/theming`  |
+| FR3                      | Stable visual baseline `core-heading--level-1`; `Heading.stories.tsx`                                       | Level 1 default                                           | A changed level-1 scale, color, or display comes back changed for review. Gap: the prop tests assert presence only, so color paint, `display` precedence, `justify`, `textWrap`, cap-height trim, strikethrough, and the theme-added color baseline have no automated check.       | `audit:Heading/behavior` |
+| FR4, PR1                 | `Heading.test.tsx` truncation-measurement tests; `useTruncation.test.tsx`                                   | Tooltip on and off; content change                        | Measuring with the tooltip off, not measuring with it on, or a missed re-measure fails. Gap: the ellipsis and line clamp, the `wordBreak` defaults, and the tooltip's appearance and placement have no automated check.                                                            | `audit:Heading/behavior` |
+| AR3 (tooltip mount), PR1 | Gap: not yet implemented                                                                                    | Truncated before and after the first hover, tap, or focus | Planned: `Heading.test.tsx` tests that a cut Heading mounts no `[popover]` and no `aria-describedby` before interest, and that the first hover, tap, or focus opens the Tooltip; an accessibility-tree check of the description (`spec:AST-009` FR3).                              | `audit:Heading/a11y`     |
+| FR5                      | `Heading.test.tsx` ref, `id`, and passthrough tests                                                         | Rerender; `id`; `data-testid`                             | A detached ref, a lost `id`, or a lost test id fails. Gap: no test covers a caller `aria-level` winning, the styling-input merge order, or the line clamp after `style`.                                                                                                           | `audit:Heading/behavior` |
+| AR1                      | `Heading.test.tsx` display-type element tests                                                               | Levels with display and theme-added types                 | A visual type that changes the element fails.                                                                                                                                                                                                                                      | `audit:Heading/a11y`     |
+| AR3                      | Source review                                                                                               | Truncated heading                                         | Gap: no Heading test asserts the absence of a native `title`.                                                                                                                                                                                                                      | `audit:Heading/a11y`     |
+| AR1, AR2                 | Accessibility-tree evidence (`spec:AST-009` FR3)                                                            | Levels, override, display types                           | Gap: no accessibility-tree check proves the heading role and level; the unit tests query the DOM.                                                                                                                                                                                  | `audit:Heading/a11y`     |
 
 ## Decision log
 
-None recorded. The record describes shipped behavior.
+None recorded. The record describes shipped behavior, except the truncation Tooltip's mount in AR3 and PR1, which is a decided implementation gap.
 
 ## Open questions
 

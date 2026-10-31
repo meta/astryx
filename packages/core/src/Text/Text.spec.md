@@ -36,8 +36,8 @@ system_specs: [spec:AST-009]
 | Public contract         | A polymorphic text element with a semantic `type`, optional `size`, `color`, and `weight` overrides, an `as` element choice, and the text layout controls documented in `Text.doc.mjs`.    |
 | Behavior                | `type` sets size, weight, and default color from the theme; theme-added types and colors fall back to the body and primary baselines; truncated text offers its full content in a Tooltip. |
 | End-user impact         | Readers get consistent type across the product; clamped text keeps its full content available on hover and in the DOM.                                                                     |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                                                               |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. One implementation gap is listed under Current-state impact.                                                    |
+| Builder impact          | None for the public API; the truncation Tooltip mounts on the first pointer entry or focus (AR2), which is decided and not yet implemented.                                                |
+| Compatibility/readiness | Released behavior recorded as current, except AR2's tooltip mount, which is decided and not yet implemented. Two implementation gaps are listed under Current-state impact.                |
 | Review checks           | Reject a theme-added type or color that renders unstyled, a native `title` beside the truncation Tooltip, or measurement when the tooltip is off.                                          |
 | Governing rules         | `architecture:component-theming-surface/INV6,INV14`; `architecture:public-component-api/INV5,INV6,INV8`.                                                                                   |
 
@@ -53,8 +53,10 @@ the truncation behavior of that element. Heading is documented beside Text in
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  or styling output changes
+- Compatibility class: records shipped behavior, except that the truncation
+  Tooltip mounts on the first pointer entry or focus (AR2): before that, a
+  clamped Text has no closed tooltip layer and no tooltip description in the
+  DOM. Public props, defaults, and styling output are unchanged
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -62,6 +64,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
+- **The truncation Tooltip mounts with the text (AR2, PR1).** A truncated
+  Text mounts its closed Tooltip layer and tooltip description as soon as
+  truncation is measured, before anyone points at it or focuses it. AR2 has
+  it mount on the first pointer entry or focus.
 - **Truncation tooltip not reachable by keyboard (FR4).** A truncated Text
   is not focusable, so Tooltip attaches no focus trigger and sighted keyboard
   users cannot reveal the clipped text, where WCAG 2.2 2.1.1 expects
@@ -114,13 +120,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                   | Required invariant                                      | Allowed variation |
-| ----------------------- | ------------------------------------------------------- | ----------------- |
-| Default                 | `span` with body type and primary color.                | Content.          |
-| Supporting              | Supporting type with secondary color.                   | Color override.   |
-| Theme-added type        | Body baseline; `data-type` names the added type.        | Theme paint.      |
-| Truncated with tooltip  | Clamped element anchors one Tooltip; no native `title`. | Placement.        |
-| Truncation, tooltip off | Clamped element; no measurement; no Tooltip.            | —                 |
+| State                   | Required invariant                                                                                   | Allowed variation |
+| ----------------------- | ---------------------------------------------------------------------------------------------------- | ----------------- |
+| Default                 | `span` with body type and primary color.                                                             | Content.          |
+| Supporting              | Supporting type with secondary color.                                                                | Color override.   |
+| Theme-added type        | Body baseline; `data-type` names the added type.                                                     | Theme paint.      |
+| Truncated with tooltip  | Clamped element anchors one Tooltip, mounted on the first pointer entry or focus; no native `title`. | Placement.        |
+| Truncation, tooltip off | Clamped element; no measurement; no Tooltip.                                                         | —                 |
 
 ### Transformation and precedence order
 
@@ -136,7 +142,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **PR1 — Measured only when needed.** Truncation is measured only when
   `maxLines` is positive and the tooltip is enabled; re-measuring follows size
   and content changes without a per-element observer; the Tooltip module loads
-  only when the text is truncated.
+  only when the text is truncated, and the Tooltip itself mounts only on the
+  first pointer entry or focus, so until that first interaction a page of
+  clamped text mounts no closed tooltip layers; that mount is an implementation
+  gap (Current-state impact).
 
 ## Accessibility contract
 
@@ -145,7 +154,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   `component:Heading`.
 - **AR2 — Truncated text.** The full text stays in the element's DOM; the
   truncation Tooltip is the only tooltip, and any description it adds is
-  Tooltip's.
+  Tooltip's. The Tooltip mounts on the first pointer entry or focus on the
+  clamped element, and that pointer entry or focus opens it as it would once
+  mounted, by Tooltip's own rules (Tooltip FR3–FR5); until then the element
+  carries no tooltip description, since its full text is already in its DOM.
+  This mount is an implementation gap (Current-state impact).
 
 ## Design relationships
 
@@ -171,17 +184,18 @@ record declares no anatomy-theming block rather than assign `heading` to Text.
 
 ## Verification map
 
-| Contract      | Verification                                                                               | Representative states                                          | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Audit section         |
-| ------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| FR1, AR1      | `Text.test.tsx` element, target, and reflection tests                                      | Default `span`; `p`, `div`, `label`                            | A wrong element, a lost `text` class, or a lost `data-type`, `data-size`, or `data-color` reflection fails. Gap: no test asserts that Text adds no role, and no accessibility-tree check proves the element's role (`spec:AST-009` FR3).                                                                                                                                                                                                                                                                                                                                                                                        | `audit:Text/behavior` |
-| FR2           | `Text.test.tsx` theme-added type and color tests; stable visual baseline `core-text--body` | Theme-added type and color; built-in color; body default       | A theme-added type or color losing its reflection, a theme-added color losing its primary baseline, or a lost color override, fails; a changed body scale or color comes back changed for review. Gap: no test asserts a theme-added type's body baseline (the custom-type test checks only the class and `data-type`), and the built-in type tests assert presence only, so each type's size, line height, and weight, and the `size` and `weight` overrides in paint, have no automated check. Each type's default color and a built-in color's paint also have no automated check; the color tests assert `data-color` only. | `audit:Text/theming`  |
-| FR3           | `Text.stories.tsx`                                                                         | Display, cap-height trim, wrap, strikethrough, tabular numbers | Gap: the prop tests assert presence only, so `display` precedence, `justify`, and every text treatment have no automated check.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `audit:Text/behavior` |
-| FR4, AR2, PR1 | `Text.test.tsx` native-title and truncation-measurement tests; `useTruncation.test.tsx`    | Truncated with tooltip; tooltip off; content change            | A native `title`, measuring with the tooltip off, not measuring with it on, or a missed re-measure fails. Gap: the ellipsis and line clamp, the `wordBreak` defaults, and the tooltip's appearance and placement have no automated check.                                                                                                                                                                                                                                                                                                                                                                                       | `audit:Text/a11y`     |
-| FR5           | `Text.test.tsx` ref and passthrough tests                                                  | Rerender; `data-testid`                                        | A detached ref or a lost test id fails. Gap: no test covers other DOM passthrough, the styling-input merge order, or the line clamp after `style`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `audit:Text/behavior` |
+| Contract                 | Verification                                                                               | Representative states                                          | Mutation or failure expectation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Audit section         |
+| ------------------------ | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| FR1, AR1                 | `Text.test.tsx` element, target, and reflection tests                                      | Default `span`; `p`, `div`, `label`                            | A wrong element, a lost `text` class, or a lost `data-type`, `data-size`, or `data-color` reflection fails. Gap: no test asserts that Text adds no role, and no accessibility-tree check proves the element's role (`spec:AST-009` FR3).                                                                                                                                                                                                                                                                                                                                                                                        | `audit:Text/behavior` |
+| FR2                      | `Text.test.tsx` theme-added type and color tests; stable visual baseline `core-text--body` | Theme-added type and color; built-in color; body default       | A theme-added type or color losing its reflection, a theme-added color losing its primary baseline, or a lost color override, fails; a changed body scale or color comes back changed for review. Gap: no test asserts a theme-added type's body baseline (the custom-type test checks only the class and `data-type`), and the built-in type tests assert presence only, so each type's size, line height, and weight, and the `size` and `weight` overrides in paint, have no automated check. Each type's default color and a built-in color's paint also have no automated check; the color tests assert `data-color` only. | `audit:Text/theming`  |
+| FR3                      | `Text.stories.tsx`                                                                         | Display, cap-height trim, wrap, strikethrough, tabular numbers | Gap: the prop tests assert presence only, so `display` precedence, `justify`, and every text treatment have no automated check.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `audit:Text/behavior` |
+| FR4, AR2, PR1            | `Text.test.tsx` native-title and truncation-measurement tests; `useTruncation.test.tsx`    | Truncated with tooltip; tooltip off; content change            | A native `title`, measuring with the tooltip off, not measuring with it on, or a missed re-measure fails. Gap: the ellipsis and line clamp, the `wordBreak` defaults, and the tooltip's appearance and placement have no automated check.                                                                                                                                                                                                                                                                                                                                                                                       | `audit:Text/a11y`     |
+| AR2 (tooltip mount), PR1 | Gap: not yet implemented                                                                   | Truncated before and after the first hover, tap, or focus      | Planned: `Text.test.tsx` tests that a cut Text mounts no `[popover]` and no `aria-describedby` before interest, and that the first hover, tap, or focus opens the Tooltip; an accessibility-tree check of the description (`spec:AST-009` FR3).                                                                                                                                                                                                                                                                                                                                                                                 | `audit:Text/a11y`     |
+| FR5                      | `Text.test.tsx` ref and passthrough tests                                                  | Rerender; `data-testid`                                        | A detached ref or a lost test id fails. Gap: no test covers other DOM passthrough, the styling-input merge order, or the line clamp after `style`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | `audit:Text/behavior` |
 
 ## Decision log
 
-None recorded. The record describes shipped behavior.
+None recorded. The record describes shipped behavior, except the truncation Tooltip's mount in AR2 and PR1, which is a decided implementation gap.
 
 ## Open questions
 
