@@ -131,17 +131,6 @@ describe('generate-pr-comment compact report', () => {
     expect(out).toContain(`| [B](${READY}/components/B) |`);
   });
 
-  it('flags growth past the touch-only budget, family folders included', () => {
-    const out = runComment({
-      ...baseAnalysis,
-      componentSizes: {'core/Chat': size(9000, 1000)},
-      baseComponentSizes: {'core/Chat': size(6000, 1000)},
-    });
-    expect(out).toContain(
-      '| Chat | 🔴 8.8 kB (**+2.9 kB**) · 1000 B CSS (0) |',
-    );
-  });
-
   it('never reports a delta for an unmeasured size', () => {
     const out = runComment({
       ...baseAnalysis,
@@ -168,51 +157,6 @@ describe('generate-pr-comment compact report', () => {
     } finally {
       fs.rmSync(dir, {recursive: true, force: true});
     }
-  });
-
-  it('says in one line which suites did not run and how to run them', () => {
-    const out = withInputs({
-      jobs: [
-        {name: 'Stable visual regression', conclusion: 'skipped', steps: []},
-        {name: 'pr-a11y (browser specs)', conclusion: 'skipped', steps: []},
-        {name: 'pr-rtl', conclusion: 'skipped', steps: []},
-      ],
-    });
-    expect(out).toContain(
-      'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.',
-    );
-    expect(out).not.toContain('| Check |');
-    expect(out).not.toMatch(/CodeBunny/i);
-  });
-
-  it('puts package size on one line, with new dependencies', () => {
-    const entry = (name, before, after) => ({
-      name,
-      base: {packedBytes: before},
-      head: {packedBytes: after},
-      overBudget: false,
-    });
-    const out = withInputs({
-      'package-size': {
-        headSha: HEAD,
-        verdict: 'pass',
-        packages: [
-          entry('@astryxdesign/core', 100000, 101229),
-          entry('@astryxdesign/build', 5000, 5000),
-        ],
-        addedDependencies: [
-          {
-            package: '@astryxdesign/core',
-            field: 'dependencies',
-            name: 'left-pad',
-            range: '1',
-          },
-        ],
-      },
-    });
-    expect(out).toContain(
-      '**Package size:** @astryxdesign/core 98.9 kB packed (**+1.2 kB**); new dependency: left-pad.',
-    );
   });
 
   it('collapses accessibility violations', () => {

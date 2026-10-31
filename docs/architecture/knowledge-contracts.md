@@ -1041,8 +1041,9 @@ requested changes and can reply /approve-spec <sha>`. An approved spec change
   changed paths and the fingerprint, and say why an earlier act no longer
   counts: the spec changed after approval, it was revoked, or the command was
   malformed.
-- **Mirror.** `spec-owner-approval` reports the spec half with a minimal
-  description while branch protection still requires it; it decides nothing
+- **Decision record.** `spec-owner-approval` reports the spec half with a
+  minimal description, and the other writers of `review-required` read the
+  spec half from it. It is not a required check and decides nothing
   `review-required` does not already show.
 - **Event coverage.** Every pull-request event, same-repository review, and
   owner command re-evaluates the gate, and each evaluation publishes a terminal
