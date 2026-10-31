@@ -55,13 +55,24 @@ jobs:
             });
             const checks = data.workflow_runs.filter(run =>
               run.actor?.login === 'github-actions[bot]' && run.conclusion !== 'cancelled');
-            // A run that checked out a newer commit than its name says it was
-            // asked to check (a merge landed between the tip read and the
-            // dispatch) failed on that and is no check of it; it still holds
-            // the window.
-            const askedFor = run => /^Release check ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1];
-            const checked = run => run.head_sha === tip && (askedFor(run) ?? tip) === tip;
-            if (checks.some(checked)) {
+            // A run that checked out a newer commit than it was asked to check
+            // (a merge landed between the tip read and the dispatch) fails its
+            // release-authority job and is no check of that commit; it still
+            // holds the window. Any other run at the tip, failed included, is.
+            const authorityRefused = async run => {
+              const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+              });
+              return jobs.some(job => job.name === 'release-authority' && job.conclusion === 'failure');
+            };
+            let checked = false;
+            for (const run of checks.filter(item => item.head_sha === tip)) {
+              if (run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) {
+                checked = true;
+                break;
+              }
+            }
+            if (checked) {
               core.notice(`main's tip ${tip.slice(0, 7)} already has a release-check.`);
               return;
             }
