@@ -4,7 +4,7 @@
 # (spec:AST-030 FR12, DEC-7): this workflow dispatches ci.yml's canonical
 # release-check on main's tip; that run is main's visual/a11y/RTL result, and a
 # failure is fixed forward. A check covers every merge up to its commit, so
-# main is checked about once an hour (DEC-10): a push dispatches at once when
+# main is checked about once an hour (DEC-11): a push dispatches at once when
 # no check has started in the last 55 minutes, and a quarter-hourly schedule
 # picks up the tip a burst of merges left unchecked. Main's own fast checks
 # (deploy.yml) still run for every push. The release gate's exact-commit

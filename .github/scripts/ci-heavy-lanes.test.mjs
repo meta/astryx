@@ -111,7 +111,7 @@ describe('visual, accessibility and RTL owners', () => {
   });
 });
 
-describe("main's release-check, about once an hour (DEC-10)", () => {
+describe("main's release-check, about once an hour (DEC-11)", () => {
   const job = heavy.jobs.dispatch;
   const script = job.steps[0].with.script;
 

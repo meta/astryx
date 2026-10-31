@@ -213,7 +213,7 @@ they are separately named.
   existing finding policies. Main's heavy-lane workflow MUST dispatch that
   release-check for `main`'s tip, bound to that commit, on a push to `main` and
   on a quarter-hourly schedule, unless the tip already has one or one was
-  dispatched in the last 55 minutes (DEC-10). A check replaced while waiting,
+  dispatched in the last 55 minutes (DEC-11). A check replaced while waiting,
   which never ran, does not count. A check covers every merge up to its commit,
   so every merge is covered by the next one. The dispatched checks share one
   concurrency group that never cancels a running check: at most one runs and
@@ -542,9 +542,9 @@ it, so the merge rules change only when an administrator removes it.
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
 
-### DEC-10 — Main's release-check runs about once an hour
+### DEC-11 — Main's release-check runs about once an hour
 
-**Reference:** `spec:AST-030/DEC-10`
+**Reference:** `spec:AST-030/DEC-11`
 **Decider:** `cixzhang`
 
 Dispatched on every push, main's release-check ran back to back through busy
