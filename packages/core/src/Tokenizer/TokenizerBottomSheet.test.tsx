@@ -72,6 +72,7 @@ function Harness({
   presentation?: Presentation;
   initial?: SearchableItem[];
   hasCreate?: boolean;
+  hasClear?: boolean;
   maxEntries?: number;
   isDisabled?: boolean;
   disabledMessage?: string;
@@ -1806,7 +1807,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // changes until the sheet closes.
     compact = false;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(screen.getByRole('dialog', {name: 'Tags'})).toBe(dialog);
     expect(trigger).toBeInTheDocument();
@@ -2550,7 +2553,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // the hand-off inside the field reports neither a blur nor a focus.
     compact = false;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(screen.getByRole('combobox')).toHaveFocus();
     expect(onFocus).toHaveBeenCalledTimes(1);
@@ -2558,15 +2563,106 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // And back: the input focused, the screen becomes compact again.
     compact = true;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(openTrigger()).toHaveFocus();
     // Unfocused, a change moves nothing.
     openTrigger().blur();
     compact = false;
     act(() => {
-      for (const cb of listeners) {cb();}
+      for (const cb of listeners) {
+        cb();
+      }
     });
+    expect(document.body).toHaveFocus();
+  });
+
+  it('hands focus to the trigger when a swap removes a focused Remove button or Clear all (FR16)', () => {
+    let compact = false;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        get matches() {
+          return query === COMPACT_TOUCH_QUERY ? compact : false;
+        },
+        media: query,
+        onchange: null,
+        addEventListener: (_: string, cb: () => void) => listeners.add(cb),
+        removeEventListener: (_: string, cb: () => void) =>
+          listeners.delete(cb),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const turn = (next: boolean) => {
+      compact = next;
+      act(() => {
+        for (const cb of listeners) {
+          cb();
+        }
+      });
+    };
+    render(<Harness presentation="adaptive" hasClear />);
+    // Inline: a token's Remove button holds focus, then the screen turns
+    // compact-touch.
+    screen.getByRole('button', {name: 'Remove Design'}).focus();
+    turn(true);
+    expect(openTrigger()).toHaveFocus();
+    // Back to inline, then the inline Clear all holds focus.
+    turn(false);
+    screen.getByRole('button', {name: 'Clear all'}).focus();
+    turn(true);
+    expect(openTrigger()).toHaveFocus();
+  });
+
+  it('moves no focus when a control re-attaches without a swap, such as a new ref callback (FR16; react-component-runtime INV6)', () => {
+    const onFocus = vi.fn();
+    const {rerender} = render(
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        ref={() => {}}
+        experimental={{presentation: 'popover'}}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    // A new inline ref detaches and re-attaches the same input while it
+    // holds focus: nothing is handed off, and no focus is reported again.
+    rerender(
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        ref={() => {}}
+        experimental={{presentation: 'popover'}}
+      />,
+    );
+    expect(input).toHaveFocus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    // Focus elsewhere: a later re-attach takes nothing back.
+    input.blur();
+    rerender(
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        ref={() => {}}
+        experimental={{presentation: 'popover'}}
+      />,
+    );
     expect(document.body).toHaveFocus();
   });
 
