@@ -10,8 +10,8 @@
  *   of modified components (preview links, JS and CSS size and lines of code
  *   against main, and a fixed-position mark per browser suite when any ran),
  *   three rows visible and the rest collapsed; the changed shots, collapsed,
- *   when any changed; one line for package size; one line for suites that
- *   did not run
+ *   when any changed; one line for package size; one line for API changes,
+ *   with their rows collapsed; one line for suites that did not run
  * @position Used by generate-pr-comment.js. Everything here reads data the CI
  *   run and the comment job already have; nothing starts a job. GitHub shows
  *   the CI checks and CodeBunny posts its own review, so neither is repeated.
@@ -424,6 +424,72 @@ function notRunLine({jobs, a11yReport, visualVerdict}) {
   return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
 }
 
+/** API rows listed in the API changes section before the rest are counted. */
+const API_ROW_LIMIT = 150;
+const API_CHANGE_MARK = {added: '+', changed: '~', removed: '−'};
+
+/**
+ * API changes (the API report step's api-changes.json): one visible line with
+ * each package's added · changed · removed counts, and a stale or missing
+ * report, then the rows in one closed disclosure. Every string from the file
+ * is rendered as literal text. Nothing when no package has a change or a
+ * report to refresh.
+ */
+function apiChangesLine(report) {
+  if (!report || !Array.isArray(report.packages)) return '';
+  const short = name =>
+    inline(String(name ?? '').replace(/^@astryxdesign\//, ''));
+  const segments = [];
+  const rows = [];
+  for (const entry of report.packages) {
+    const entryRows = Array.isArray(entry.rows) ? entry.rows : [];
+    if (
+      entryRows.length === 0 &&
+      entry.stale !== true &&
+      entry.missing !== true
+    )
+      continue;
+    const counts = ['added', 'changed', 'removed']
+      .map(kind => [kind, num(entry.counts?.[kind])])
+      .filter(([, count]) => count > 0)
+      .map(([kind, count]) => `${API_CHANGE_MARK[kind]}${count}`);
+    const note =
+      entry.missing === true
+        ? ' (report not committed: run `pnpm api:report`)'
+        : entry.stale === true
+          ? ' (report stale: run `pnpm api:report`)'
+          : '';
+    segments.push(
+      `${short(entry.pkg)} ${counts.length > 0 ? counts.join(' · ') : 'no changes'}${note}`,
+    );
+    for (const row of entryRows) rows.push({pkg: entry.pkg, ...row});
+  }
+  if (segments.length === 0) return '';
+  let out = `**API changes:** ${segments.join('; ')}\n\n`;
+  if (rows.length > 0) {
+    const shown = rows.slice(0, API_ROW_LIMIT);
+    const line = row => {
+      const kind = Object.hasOwn(API_CHANGE_MARK, row.change)
+        ? row.change
+        : 'changed';
+      const item = [row.item, row.member].filter(
+        value => value != null && value !== '',
+      );
+      const declaration =
+        kind === 'changed' && row.before != null
+          ? `${inline(row.before)} → ${inline(row.line)}`
+          : inline(row.line);
+      return `| ${short(row.pkg)} | ${kind} | ${item.map(inline).join(' · ')} | ${declaration} |`;
+    };
+    out += `<details>\n<summary>${num(rows.length)} API change${rows.length === 1 ? '' : 's'}</summary>\n\n| Package | Change | Item | Declaration |\n|---|---|---|---|\n${shown.map(line).join('\n')}\n\n${
+      rows.length > shown.length
+        ? `…and ${num(rows.length - shown.length)} more.\n\n`
+        : ''
+    }</details>\n\n`;
+  }
+  return out;
+}
+
 /** The compact report body, between the heading and the footer. */
 function buildCompactReport({
   analysis,
@@ -432,6 +498,7 @@ function buildCompactReport({
   a11yReport = null,
   visualVerdict = null,
   packageSize = null,
+  apiChanges = null,
 }) {
   const origin =
     preview?.state === 'ready' ? preview.url : preview?.aliasOrigin || '';
@@ -440,10 +507,11 @@ function buildCompactReport({
     origin,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${apiChangesLine(apiChanges)}${notRunLine({jobs, a11yReport, visualVerdict})}`;
 }
 
 module.exports = {
+  apiChangesLine,
   SUITES,
   VISUAL_FRAME_LIMIT,
   baseJobName,

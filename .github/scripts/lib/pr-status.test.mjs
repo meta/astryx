@@ -24,6 +24,7 @@ const {
   buildVisualDeltas,
   previewLine,
   packagesLine,
+  apiChangesLine,
   notRunLine,
   SUITES,
   VISUAL_FRAME_LIMIT,
@@ -326,6 +327,93 @@ describe('packagesLine', () => {
       'no measurement of the merge base',
     );
     expect(packagesLine(null)).toBe('');
+  });
+});
+
+describe('apiChangesLine', () => {
+  const pkg = (name, rows, extra = {}) => ({
+    pkg: `@astryxdesign/${name}`,
+    stale: false,
+    missing: false,
+    counts: {
+      added: rows.filter(row => row.change === 'added').length,
+      changed: rows.filter(row => row.change === 'changed').length,
+      removed: rows.filter(row => row.change === 'removed').length,
+    },
+    rows,
+    ...extra,
+  });
+  const row = (change, item, extra = {}) => ({
+    change,
+    entry: '.',
+    section: 'Components',
+    item,
+    member: null,
+    line: `${item} line`,
+    usage: '',
+    ...extra,
+  });
+
+  it('puts the counts on one line and the rows in a closed disclosure', () => {
+    const out = apiChangesLine({
+      version: 1,
+      packages: [
+        pkg(
+          'core',
+          [
+            row('added', 'component AppShell', {member: 'density'}),
+            row('changed', 'component Button', {
+              member: 'size',
+              before: "size = 'md'",
+              line: "size = 'sm'",
+            }),
+            row('removed', 'hook useToast'),
+          ],
+          {stale: true},
+        ),
+        pkg('lab', []),
+        pkg('richtext', [], {missing: true}),
+      ],
+    });
+    expect(out).toMatch(
+      /^\*\*API changes:\*\* core \+1 · ~1 · −1 \(report stale: run `pnpm api:report`\); richtext no changes \(report not committed: run `pnpm api:report`\)\n\n<details>\n<summary>3 API changes<\/summary>/,
+    );
+    expect(out).toContain(
+      '| core | added | component AppShell · density | component AppShell line |',
+    );
+    expect(out).toContain(
+      "| core | changed | component Button · size | size = 'md' → size = 'sm' |",
+    );
+    expect(out).not.toContain('lab');
+  });
+
+  it('renders every string from the file as literal text', () => {
+    const out = apiChangesLine({
+      packages: [
+        pkg('core', [
+          row('added', '<img src=x onerror=alert(1)>', {
+            line: 'a | b [link](https://evil.example)',
+          }),
+        ]),
+      ],
+    });
+    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(out).toContain('a \\| b \\[link\\](https://evil.example)');
+    expect(out).not.toContain('<img');
+  });
+
+  it('lists at most 150 rows and counts the rest', () => {
+    const rows = Array.from({length: 160}, (_, i) => row('added', `item ${i}`));
+    const out = apiChangesLine({packages: [pkg('core', rows)]});
+    expect(out.match(/^\| core \| added \|/gm)).toHaveLength(150);
+    expect(out).toContain('…and 10 more.');
+  });
+
+  it('is absent when no package has a change or a report to refresh, or without a file', () => {
+    expect(
+      apiChangesLine({version: 1, packages: [pkg('core', []), pkg('lab', [])]}),
+    ).toBe('');
+    expect(apiChangesLine(null)).toBe('');
   });
 });
 
