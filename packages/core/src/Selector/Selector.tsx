@@ -5,8 +5,8 @@
 /**
  * @file Selector.tsx
  * @input Uses React, StyleX, adaptive selection surfaces, theme-resolved
- *   indicators, Field, its private live sheet-description bridge, and InputGroup context
- * @output Exports Selector with input, secondary, and ghost trigger treatments, content-derived option-mark layout, token-sized single-line triggers, and focus-preserving disabled popup search and value commits
+ *   indicators, Field, and InputGroup context
+ * @output Exports Selector with input, secondary, and ghost trigger treatments, content-derived option-mark layout, token-sized single-line triggers, and availability-guarded value commits
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
@@ -50,7 +50,6 @@ import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
-import {SheetDescription} from '../Field/SheetDescription';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {
@@ -1035,8 +1034,6 @@ export function Selector<T extends SelectorOptionType>(
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
-  const popupDisabledMessageId = useId();
-  const sheetDescriptionId = useId();
   // Measure from the same outer control that usePopover anchors to; using the
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -1089,6 +1086,7 @@ export function Selector<T extends SelectorOptionType>(
       effectiveStatusVariant === 'tooltip' && status?.message
         ? statusTooltip.describedBy
         : null,
+      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
       isEffectivelyReadOnly ? readOnlyDescriptionId : null,
     ],
     inputGroup,
@@ -1099,10 +1097,6 @@ export function Selector<T extends SelectorOptionType>(
     ariaLabelledByProp != null
       ? joinAriaIDs(ariaLabelledBy ?? fieldLabelId, ariaLabelledByProp)
       : ariaLabelledBy;
-
-  const fieldDescribedBy =
-    [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
-    undefined;
 
   // Flatten options for keyboard navigation
   const selectableItems = useMemo(
@@ -1199,17 +1193,6 @@ export function Selector<T extends SelectorOptionType>(
       surfaceTarget: 'selector-popup',
     },
   });
-  // Modal sheets exclude outside descriptions from Chromium's AX tree. Mirror
-  // their text inside the sheet, never their potentially focusable caller nodes.
-  const popupDescribedBy =
-    [
-      surface.activePresentation === 'bottom-sheet' && fieldDescribedBy
-        ? sheetDescriptionId
-        : fieldDescribedBy,
-      showsDisabledMessage ? popupDisabledMessageId : null,
-    ]
-      .filter(Boolean)
-      .join(' ') || undefined;
   const {popover} = surface;
   const hideSurface = surface.hide;
   const isSurfaceOpen = surface.isOpen;
@@ -1267,14 +1250,11 @@ export function Selector<T extends SelectorOptionType>(
 
   const handleSearchChange = useCallback(
     (nextQuery: string) => {
-      if (isDisabled || isEffectivelyReadOnly) {
-        return;
-      }
       setSearchQuery(nextQuery);
       searchQueryRef.current = nextQuery;
       announceSearchResults(nextQuery);
     },
-    [announceSearchResults, isDisabled, isEffectivelyReadOnly],
+    [announceSearchResults],
   );
 
   // The panel's empty message is role="presentation" — role="listbox" permits
@@ -1317,9 +1297,6 @@ export function Selector<T extends SelectorOptionType>(
   // Clear the current value. Shared by the clear button and the keyboard
   // Delete/Backspace path so clearing is reachable without a mouse.
   const clearValue = useCallback(() => {
-    if (isDisabled || isEffectivelyReadOnly) {
-      return;
-    }
     resetTypeaheadRef.current();
     onChange?.(null);
     if (changeAction) {
@@ -1328,14 +1305,7 @@ export function Selector<T extends SelectorOptionType>(
         await changeAction(null);
       });
     }
-  }, [
-    isDisabled,
-    isEffectivelyReadOnly,
-    onChange,
-    changeAction,
-    startTransition,
-    setOptimisticValue,
-  ]);
+  }, [onChange, changeAction, startTransition, setOptimisticValue]);
 
   // Type-to-find appends to the query rather than replacing it: characters
   // typed before focus reaches the search input must not be dropped. The ref
@@ -1547,8 +1517,6 @@ export function Selector<T extends SelectorOptionType>(
             : undefined
         }
         value={searchQuery}
-        isDisabled={isDisabled}
-        aria-describedby={popupDescribedBy}
         onValueChange={handleSearchChange}
         onContainerKeyDown={e => {
           // The clear (✕) button lives inside the row, after the input in DOM
@@ -1603,8 +1571,6 @@ export function Selector<T extends SelectorOptionType>(
     searchId,
     listboxId,
     searchQuery,
-    isDisabled,
-    popupDescribedBy,
     hasQuery,
     searchPlaceholder,
     handleSearchChange,
@@ -1890,8 +1856,6 @@ export function Selector<T extends SelectorOptionType>(
       ref={attachListbox}
       id={listboxId}
       role="listbox"
-      aria-disabled={isDisabled || undefined}
-      aria-describedby={popupDescribedBy}
       {...listboxPress.menuProps}
       // The bottom sheet is a modal layer, so Chromium drops the trigger
       // outside it from the accessibility tree and a reference to it yields
@@ -1929,23 +1893,6 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   );
 
-  const describedPanelContent = (
-    <>
-      {panelContent}
-      {surface.activePresentation === 'bottom-sheet' && fieldDescribedBy && (
-        <SheetDescription
-          id={sheetDescriptionId}
-          describedBy={fieldDescribedBy}
-        />
-      )}
-      {showsDisabledMessage && (
-        <VisuallyHidden id={popupDisabledMessageId}>
-          {disabledMessage}
-        </VisuallyHidden>
-      )}
-    </>
-  );
-
   let selectionSurface: ReactNode = null;
   if (surface.activePresentation === 'bottom-sheet') {
     if (!isEffectivelyReadOnly || surface.isSheetPresented) {
@@ -1956,12 +1903,12 @@ export function Selector<T extends SelectorOptionType>(
           finalFocusRef={triggerRef}
           initialFocusRef={hasSearch ? searchRef : listboxRef}
           label={label}>
-          {describedPanelContent}
+          {panelContent}
         </SelectorBottomSheet>
       );
     }
   } else if (!isEffectivelyReadOnly) {
-    selectionSurface = popover.render(describedPanelContent, {
+    selectionSurface = popover.render(panelContent, {
       placement: popoverPlacement,
       alignment: 'start',
       // The system's standard menu clearance, except in overlay mode:
@@ -1996,13 +1943,8 @@ export function Selector<T extends SelectorOptionType>(
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
-      [
-        ariaDescribedByProp,
-        ariaDescribedBy,
-        showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
-      ]
-        .filter(Boolean)
-        .join(' ') || undefined,
+      [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
+      undefined,
     'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,

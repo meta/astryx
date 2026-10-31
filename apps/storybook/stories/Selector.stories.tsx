@@ -3,7 +3,7 @@
 /**
  * @file Selector.stories.tsx
  * @input Selector props, controlled values, and availability transitions
- * @output Interactive examples of selection and focus-preserving disabled popup search
+ * @output Interactive examples of selection and disabled popup behavior
  * @position Storybook; demonstrates Selector consumer behavior
  */
 
@@ -1051,11 +1051,9 @@ export const Disabled: Story = {
 };
 
 // The parent disables the selector during the opening click. Existing options
-// and search remain visible, but neither search nor selection can change.
-// Switch hasSearch/presentation in Controls to exercise each popup focus owner.
+// remain visible, but choosing one must not change the selected value.
 export const DisabledAfterOpening: Story = {
-  args: {hasSearch: true, presentation: 'popover'},
-  render: args => {
+  render: () => {
     const [value, setValue] = useState('Apple');
     const [isDisabled, setIsDisabled] = useState(false);
     return (
@@ -1067,9 +1065,6 @@ export const DisabledAfterOpening: Story = {
           onChange={setValue}
           isDisabled={isDisabled}
           disabledMessage="Selection is unavailable"
-          description="Re-enable to search or choose another fruit."
-          hasSearch={args.hasSearch}
-          presentation={args.presentation}
           onClick={() => setIsDisabled(true)}
         />
         <Button label="Enable again" onClick={() => setIsDisabled(false)} />

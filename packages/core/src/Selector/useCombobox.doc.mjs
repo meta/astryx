@@ -140,7 +140,7 @@ export const docs = {
     },
     {
       name: 'onItemSelect',
-      type: '(item: SelectorOptionData) => void',
+      type: '(item: T) => void',
       description:
         'Picks an option from a press on it, then closes the list. Does nothing when the control or option is disabled.',
     },
