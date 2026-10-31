@@ -14,6 +14,7 @@ import {
   findUnroutedFiles,
   loadKnowledgeIndex,
   resolveSpecsForFile,
+  formatResult,
 } from './specs-for-file.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -697,6 +698,97 @@ describe('resolveSpecsForFile', () => {
       'apps/docsite/src/content/blog/posts/release.md',
     );
     expect(none.triggers).toEqual([...GLOBAL_REVIEW_TRIGGERS].sort());
+  });
+});
+
+describe('concern routing', () => {
+  function concernFixture() {
+    const root = popoverFixture();
+    writeRecord(
+      root,
+      'docs/architecture/react-component-runtime.md',
+      {kind: 'architecture', id: 'architecture:react-component-runtime'},
+      [
+        '',
+        '<!-- review-applicability:v1 -->',
+        '',
+        '```json',
+        JSON.stringify({
+          scope: 'global',
+          concerns: {
+            'slot-presence': {
+              names: ['isRenderable'],
+              patterns: ["typeof [\\w.]+ !== 'boolean'"],
+              claims: ['INV16'],
+            },
+          },
+        }),
+        '```',
+        '',
+        '## Requirements',
+        '',
+        '- **INV16 — A shared concern is extended in its owner.** Detail.',
+        '',
+      ].join('\n'),
+    );
+    return loadKnowledgeIndex(root);
+  }
+  const file = 'packages/core/src/Popover/Popover.tsx';
+  const addedLines = [
+    {
+      file,
+      line: 7,
+      text: "  if (label != null && typeof label !== 'boolean') {",
+    },
+    {
+      file: 'packages/core/src/Other/Other.tsx',
+      line: 1,
+      text: 'isRenderable(x)',
+    },
+  ];
+
+  it("lists the claims a concern routes from the file's own added lines", () => {
+    const result = resolveSpecsForFile(concernFixture(), file, {addedLines});
+    expect(result.concernClaims).toEqual([
+      {
+        recordId: 'architecture:react-component-runtime',
+        path: 'docs/architecture/react-component-runtime.md',
+        concern: 'slot-presence',
+        claimId: 'INV16',
+        claim: 'A shared concern is extended in its owner.',
+        utilities: ['isRenderable'],
+        evidence: [
+          {
+            file,
+            line: 7,
+            text: "  if (label != null && typeof label !== 'boolean') {",
+            matched: "typeof label !== 'boolean'",
+            by: "typeof [\\w.]+ !== 'boolean'",
+          },
+        ],
+      },
+    ]);
+    expect(resolveSpecsForFile(concernFixture(), file).concernClaims).toEqual(
+      [],
+    );
+  });
+
+  it('prints the concern claims first and counts the linked records', () => {
+    const result = resolveSpecsForFile(concernFixture(), file, {addedLines});
+    const short = formatResult(result).split('\n');
+    expect(short[1]).toBe(
+      '  Follow first (the change touches a shared concern):',
+    );
+    expect(short[2]).toBe(
+      "    architecture:react-component-runtime  INV16  ← slot-presence (line 7: typeof label !== 'boolean'; shared: isRenderable)",
+    );
+    expect(short.at(-1)).toMatch(
+      /^ {2}\d+ linked records, claims and deciding specs \(--records lists them\)\.$/,
+    );
+    expect(short.join('\n')).not.toContain('component:Popover');
+    expect(formatResult(result, {records: true})).toContain(
+      'component:Popover',
+    );
   });
 });
 

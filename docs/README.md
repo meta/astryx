@@ -131,7 +131,11 @@ inherit. Only visible records are followed, so a draft never adds a link unless
 decision (`spec:AST-NNN/FR3`) lists that claim, not the whole record. The specs that
 decided a linked record are listed separately, as are the global claims the
 matched component and module triggers route (the same selection as
-`review-global-baselines.mjs`). A path with no linked record is reported as
+`review-global-baselines.mjs`). With `--diff origin/main` (or
+`--diff <base>..<head>`) it reads the change, lists its files when none are
+named, and puts first the claims whose owning record's `concerns` the added
+lines match. The default view lists claims and counts the linked records;
+`--records` lists them. A path with no linked record is reported as
 such. Records are read from the working tree, so on a pull-request branch the
 result includes that branch's proposed records and is not review authority.
 `pnpm specs:for --unrouted` lists tracked files with no governing record;

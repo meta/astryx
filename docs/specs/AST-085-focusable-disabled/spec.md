@@ -50,6 +50,25 @@ affects_consumer_docs:
 
 # Focusable disabled controls system spec
 
+<!-- review-applicability:v1 -->
+
+```json
+{
+  "scope": "global",
+  "concerns": {
+    "focus-return": {
+      "names": [
+        "focusForLastInput",
+        "isFocusDetached",
+        "useFocusReturnVisibility"
+      ],
+      "patterns": ["document\\.activeElement"],
+      "claims": ["FR4"]
+    }
+  }
+}
+```
+
 ## Intent
 
 Keyboard and screen-reader users can always reach a disabled control. They can

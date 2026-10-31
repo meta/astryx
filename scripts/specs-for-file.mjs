@@ -19,6 +19,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {
   GLOBAL_REVIEW_TRIGGERS,
+  collectConcernMatches,
   collectGlobalReviewMatches,
   discoverKnowledgeRecords,
   consumerDocPublicNames,
@@ -26,6 +27,7 @@ import {
   parseKnowledgeDocument,
   parsePathApplicabilityBlock,
 } from './check-knowledge.mjs';
+import {readDiff} from './lib/review-diff.mjs';
 
 const require = createRequire(import.meta.url);
 const {componentPackage} = require('./component-packages.cjs');
@@ -585,7 +587,9 @@ function closeOverReferences(index, direct, visible) {
  * `globalClaims` lists the trigger-routed global baseline claims, exactly as
  * `scripts/review-global-baselines.mjs` selects them, for `triggers` (default:
  * the review triggers of the matched component and module records, or every
- * supported trigger when none matched).
+ * supported trigger when none matched). `concernClaims` lists the claims whose
+ * owning record's `concerns` match one of `options.addedLines` (the file's
+ * added lines from a diff), each with the lines that matched.
  */
 export function resolveSpecsForFile(index, file, options = {}) {
   const includeDraft = options.includeDraft ?? false;
@@ -665,6 +669,36 @@ export function resolveSpecsForFile(index, file, options = {}) {
           claim,
         }));
 
+  const addedLines = (options.addedLines ?? []).filter(
+    line => line.file === filePath,
+  );
+  const concernClaims = collectConcernMatches(
+    index.records.map(record => ({
+      path: record.path,
+      content: record.content,
+    })),
+    addedLines,
+    null,
+  ).map(
+    ({
+      recordId,
+      path: recordPath,
+      concern,
+      claimId,
+      claim,
+      utilities,
+      evidence,
+    }) => ({
+      recordId,
+      path: recordPath,
+      concern,
+      claimId,
+      claim,
+      utilities,
+      evidence,
+    }),
+  );
+
   return {
     file: filePath,
     exists: fs.existsSync(path.join(index.root, filePath)),
@@ -681,6 +715,7 @@ export function resolveSpecsForFile(index, file, options = {}) {
     decisions,
     triggers: [...new Set(triggers)].sort(),
     triggerSource,
+    concernClaims,
     globalClaims,
   };
 }
@@ -726,7 +761,8 @@ function trackedFiles(root) {
     .filter(Boolean);
 }
 
-function formatResult(result) {
+export function formatResult(result, {records: listRecords = false} = {}) {
+  if (!listRecords) return formatShortResult(result);
   const lines = [
     `${result.file}${result.exists ? '' : ' (not in the working tree)'}`,
   ];
@@ -784,17 +820,94 @@ function formatResult(result) {
   return lines.join('\n');
 }
 
+/**
+ * The default view: the claims to follow, first those the diff's concerns
+ * route (with the line that matched), then the trigger-routed global claims
+ * one line per record. The linked records are counted, not listed.
+ */
+function formatShortResult(result) {
+  const lines = [
+    `${result.file}${result.exists ? '' : ' (not in the working tree)'}`,
+  ];
+  if (result.concernClaims.length > 0) {
+    lines.push('  Follow first (the change touches a shared concern):');
+    const byConcern = new Map();
+    for (const item of result.concernClaims) {
+      const key = `${item.recordId}\0${item.concern}`;
+      const entry = byConcern.get(key) ?? {...item, claimIds: []};
+      entry.claimIds.push(item.claimId);
+      byConcern.set(key, entry);
+    }
+    for (const entry of byConcern.values()) {
+      const where = entry.evidence[0];
+      const shared =
+        entry.utilities.length > 0
+          ? `; shared: ${entry.utilities.join(', ')}`
+          : '';
+      lines.push(
+        `    ${entry.recordId}  ${entry.claimIds.join(', ')}  ← ${entry.concern} (line ${where.line}: ${where.matched}${shared})`,
+      );
+    }
+  }
+  const byRecord = new Map();
+  for (const claim of result.globalClaims) {
+    const list = byRecord.get(claim.recordId) ?? [];
+    list.push(claim.claimId);
+    byRecord.set(claim.recordId, list);
+  }
+  lines.push(
+    `  Global claims for ${result.triggers.join(', ') || '(no triggers)'} (${result.triggerSource}):`,
+  );
+  if (byRecord.size === 0) lines.push('    none');
+  for (const [recordId, claims] of byRecord) {
+    lines.push(`    ${recordId}  ${[...new Set(claims)].join(', ')}`);
+  }
+  const linked =
+    result.records.length +
+    result.decisions.length +
+    result.decidingSpecs.length;
+  lines.push(
+    linked === 0
+      ? '  No record links to this path.'
+      : `  ${linked} linked records, claims and deciding specs (--records lists them).`,
+  );
+  return lines.join('\n');
+}
+
 const WORKING_TREE_NOTE =
   "Records are read from the working tree. On a pull-request branch they include that branch's proposed records, so this is a lookup, not review authority.\n";
 
-const USAGE = `Usage: pnpm specs:for <file...> [--json] [--include-draft] [--triggers a,b]
+const USAGE = `Usage: pnpm specs:for [<file...>] [--diff <base>[..<head>]] [--records] [--json] [--include-draft] [--triggers a,b]
        pnpm specs:for --unreached [--json]
        pnpm specs:for --unrouted [--json]
 
 Lists every knowledge record that governs each file, with the link that put it
 there, the specs that decided those records, and the trigger-routed global
-claims. --unreached lists current records no other tracked file reaches.
+claims. --diff reads the change against <base> (its merge base with HEAD, to
+the working tree) or between <base>..<head>, lists its changed files when none
+are named, and puts first the claims whose owning record's concerns its added
+lines match. --records lists every linked record, not just the count.
+--unreached lists current records no other tracked file reaches.
 --unrouted lists tracked files no current record governs.`;
+
+/**
+ * The diff `--diff` names: `<base>..<head>` between two commits, or `<base>`
+ * from its merge base with HEAD to the working tree (uncommitted edits
+ * included), the change an author is about to make.
+ */
+function diffText(root, range) {
+  const git = args =>
+    execFileSync('git', ['-C', root, ...args], {
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+    });
+  if (range.includes('..')) {
+    const [base, head] = range.split(/\.\.\.?/);
+    return git(['diff', '--no-color', '--no-ext-diff', base, head]);
+  }
+  const base = git(['merge-base', 'HEAD', range]).trim();
+  return git(['diff', '--no-color', '--no-ext-diff', base]);
+}
 
 function main(argv) {
   const files = [];
@@ -803,6 +916,8 @@ function main(argv) {
   let unreached = false;
   let unrouted = false;
   let triggers;
+  let diffRange;
+  let listRecords = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--json') json = true;
@@ -819,6 +934,15 @@ function main(argv) {
         .map(item => item.trim())
         .filter(Boolean);
       i += 1;
+    } else if (arg === '--diff') {
+      const value = argv[i + 1];
+      if (!value || value.startsWith('--')) {
+        throw new Error('--diff requires <base> or <base>..<head>.');
+      }
+      diffRange = value;
+      i += 1;
+    } else if (arg === '--records') {
+      listRecords = true;
     } else if (arg === '--help' || arg === '-h') {
       console.log(USAGE);
       return 0;
@@ -860,6 +984,9 @@ function main(argv) {
     }
     return 0;
   }
+  const diff =
+    diffRange == null ? null : readDiff(diffText(DEFAULT_ROOT, diffRange));
+  if (files.length === 0 && diff != null) files.push(...diff.files);
   if (files.length === 0) {
     console.error(USAGE);
     return 2;
@@ -869,12 +996,17 @@ function main(argv) {
     resolveSpecsForFile(index, path.resolve(cwd, file), {
       includeDraft,
       triggers,
+      addedLines: diff?.addedLines,
     }),
   );
   if (json) console.log(JSON.stringify(results, null, 2));
   else {
     console.log(WORKING_TREE_NOTE);
-    console.log(results.map(formatResult).join('\n\n'));
+    console.log(
+      results
+        .map(result => formatResult(result, {records: listRecords}))
+        .join('\n\n'),
+    );
   }
   return 0;
 }

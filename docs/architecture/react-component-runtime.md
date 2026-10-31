@@ -46,6 +46,16 @@ deciding_specs:
       "INV13",
       "INV15"
     ]
+  },
+  "concerns": {
+    "effects-listeners-observers": {
+      "patterns": [
+        "\\buse(?:Layout|Insertion)?Effect\\b",
+        "\\b(?:add|remove)EventListener\\b",
+        "\\b(?:Mutation|Resize|Intersection)Observer\\b"
+      ],
+      "claims": ["INV2", "INV3", "INV5", "INV6"]
+    }
   }
 }
 ```

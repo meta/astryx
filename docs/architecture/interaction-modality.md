@@ -37,6 +37,18 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
   "scope": "global",
   "triggers": {
     "interaction": ["INV1", "INV2", "INV3", "INV4", "INV7", "INV8", "INV11"]
+  },
+  "concerns": {
+    "modality-tracking": {
+      "names": ["useInteractionModalityTracking", "getInteractionModality"],
+      "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
+      "claims": ["INV1", "INV2", "INV3"]
+    },
+    "press-tracking": {
+      "names": ["usePressFeedback", "useMenuPress", "useLongPress"],
+      "patterns": ["addEventListener\\(\\s*['\"]pointer(?:up|cancel)['\"]"],
+      "claims": ["INV13"]
+    }
   }
 }
 ```
