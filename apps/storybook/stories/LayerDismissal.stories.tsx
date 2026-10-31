@@ -1017,3 +1017,164 @@ function PinnedTooltipInModalExample() {
 export const PinnedTooltipInModal: Story = {
   render: () => <PinnedTooltipInModalExample />,
 };
+
+/**
+ * Same closed-then-open Dialog shape as PinnedTooltipInModal, but the
+ * Tooltip's trigger is bare text — Tooltip wraps text-only children in an
+ * inline `<span>` rather than a block-level control, which is exactly the
+ * shape whose content box can stay empty in the delayed (ResizeObserver)
+ * anchor-readiness path (#5398): a browser regression against a
+ * button-shaped trigger cannot prove that fallback.
+ */
+function TextOnlyTriggerInModalExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isTipOpen, setIsTipOpen] = useState(true);
+
+  return (
+    <>
+      <Button
+        label="Open modal"
+        variant="secondary"
+        onClick={() => {
+          setIsTipOpen(true);
+          setIsOpen(true);
+        }}
+      />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        width={520}
+        aria-label="Modal with a text-only pinned tooltip">
+        <Layout
+          header={
+            <DialogHeader
+              title="Modal with a text-only pinned tooltip"
+              onOpenChange={setIsOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              <Tooltip
+                isOpen={isTipOpen}
+                onOpenChange={setIsTipOpen}
+                content="Still anchors">
+                Text-only trigger
+              </Tooltip>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </>
+  );
+}
+
+export const TextOnlyTriggerInModal: Story = {
+  render: () => <TextOnlyTriggerInModalExample />,
+};
+
+/**
+ * The trigger only gains a real layout box a full 1.5s after the Dialog
+ * opens (a placeholder with no size stands in until then) — well past any
+ * fixed frame/time bound a readiness wait might give up after. The layer
+ * must still end up anchored to the trigger once it's actually ready, not
+ * opened early against a boxless placeholder (#5398): the current Layer
+ * contract is that layered UI stays positioned against its trigger, with no
+ * time limit on how long that trigger is allowed to take.
+ */
+function DelayedTriggerLayoutInModalExample() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isTipOpen, setIsTipOpen] = useState(true);
+  const [triggerReady, setTriggerReady] = useState(false);
+
+  return (
+    <>
+      <Button
+        label="Open modal"
+        variant="secondary"
+        onClick={() => {
+          setTriggerReady(false);
+          setIsTipOpen(true);
+          setIsOpen(true);
+          setTimeout(() => setTriggerReady(true), 1500);
+        }}
+      />
+      <Dialog
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        width={520}
+        aria-label="Modal with a delayed-layout tooltip trigger">
+        <Layout
+          header={
+            <DialogHeader
+              title="Modal with a delayed-layout tooltip trigger"
+              onOpenChange={setIsOpen}
+            />
+          }
+          content={
+            <LayoutContent>
+              {
+                // One stable element throughout (not swapped), so the
+                // ref Tooltip attaches to it never has to move mid-wait —
+                // display:none is what keeps it boxless for the first
+                // 1.5s, independent of the Dialog's own (much faster)
+                // open transition.
+              }
+              <Tooltip
+                isOpen={isTipOpen}
+                onOpenChange={setIsTipOpen}
+                content="Anchors once ready">
+                <Button
+                  label="Late trigger"
+                  variant="secondary"
+                  style={triggerReady ? undefined : {display: 'none'}}
+                />
+              </Tooltip>
+            </LayoutContent>
+          }
+        />
+      </Dialog>
+    </>
+  );
+}
+
+export const DelayedTriggerLayoutInModal: Story = {
+  render: () => <DelayedTriggerLayoutInModalExample />,
+};
+
+const pulse = stylex.keyframes({
+  '0%': {transform: 'scale(1)'},
+  '50%': {transform: 'scale(1.4)'},
+  '100%': {transform: 'scale(1)'},
+});
+
+const continuousAnimationStyles = stylex.create({
+  wrapper: {
+    display: 'inline-block',
+    animationName: pulse,
+    animationDuration: '600ms',
+    animationIterationCount: 'infinite',
+  },
+});
+
+/**
+ * A controlled Tooltip anchored to a trigger sitting inside a continuously
+ * (infinitely) animating ancestor. `waitForAncestorAnimations` must not wait
+ * on that animation's `finished` promise, which never resolves for one with
+ * `iterationCount: Infinity` — only a genuinely finite entry animation
+ * (Dialog's own open transition, e.g.) should hold the layer open.
+ */
+function ContinuouslyAnimatingTriggerExample() {
+  const [isOpen, setIsOpen] = useState(true);
+
+  return (
+    <div {...stylex.props(continuousAnimationStyles.wrapper)}>
+      <Tooltip isOpen={isOpen} onOpenChange={setIsOpen} content="Still opens">
+        <Button label="Pulsing trigger" variant="secondary" />
+      </Tooltip>
+    </div>
+  );
+}
+
+export const ContinuouslyAnimatingTrigger: Story = {
+  render: () => <ContinuouslyAnimatingTriggerExample />,
+};

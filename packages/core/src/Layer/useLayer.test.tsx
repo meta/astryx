@@ -9,7 +9,7 @@
  * SYNC: When useLayer.tsx changes, update tests accordingly
  */
 
-import {describe, it, expect, vi, afterEach} from 'vitest';
+import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {
   render,
   renderHook,
@@ -18,7 +18,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {Profiler, useEffect, useState} from 'react';
+import {Profiler, useEffect, useLayoutEffect, useState} from 'react';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import * as stylex from '@stylexjs/stylex';
@@ -2841,5 +2841,565 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     expect(
       layerEl.style.getPropertyValue('--_astryx-layer-clear-fallbacks'),
     ).toBe('');
+  });
+});
+
+describe('contextRef anchor-name churn (#5398)', () => {
+  // Both candidate trigger elements always mount; only which one currently
+  // receives `layer.ref` changes, so switching `refTarget` makes React call
+  // the outgoing element's ref with `null` and the incoming one's ref with
+  // itself in the same commit — the exact churn shape a combined ref utility
+  // (e.g. Tooltip's) produces.
+  function ChurnHarness({
+    refTarget,
+    onReady,
+  }: {
+    refTarget: 'x' | 'y' | 'none';
+    onReady?: (anchorId: string) => void;
+  }) {
+    const layer = useLayerInternal({mode: 'context'});
+    onReady?.(layer.anchorId);
+    return (
+      <>
+        <button
+          type="button"
+          data-testid="x"
+          ref={refTarget === 'x' ? layer.ref : undefined}>
+          X
+        </button>
+        <button
+          type="button"
+          data-testid="y"
+          ref={refTarget === 'y' ? layer.ref : undefined}>
+          Y
+        </button>
+        {layer.render(<span>Layer content</span>)}
+      </>
+    );
+  }
+
+  function anchorNamesOf(el: HTMLElement): string[] {
+    return el.style.anchorName
+      .split(',')
+      .map(name => name.trim())
+      .filter(Boolean);
+  }
+
+  it('keeps the anchor name through a transient null-then-same-element reattach', () => {
+    let anchorId = '';
+    const {getByTestId, rerender} = render(
+      <ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />,
+    );
+    const x = getByTestId('x');
+    expect(anchorNamesOf(x)).toContain(anchorId);
+
+    // No await between these two: the churn (null, then the same element
+    // again) happens within one synchronous stretch, before the pending
+    // removal's microtask ever gets a chance to run.
+    rerender(<ChurnHarness refTarget="none" onReady={id => (anchorId = id)} />);
+    rerender(<ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />);
+
+    expect(anchorNamesOf(x)).toContain(anchorId);
+  });
+
+  it('removes the old element and adds the new one when a different element takes over the ref', () => {
+    let anchorId = '';
+    const {getByTestId, rerender} = render(
+      <ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />,
+    );
+    const x = getByTestId('x');
+    const y = getByTestId('y');
+    expect(anchorNamesOf(x)).toContain(anchorId);
+    expect(anchorNamesOf(y)).not.toContain(anchorId);
+
+    rerender(<ChurnHarness refTarget="y" onReady={id => (anchorId = id)} />);
+
+    expect(anchorNamesOf(x)).not.toContain(anchorId);
+    expect(anchorNamesOf(y)).toContain(anchorId);
+  });
+
+  it('removes the anchor name once a persistent (still-mounted) anchor genuinely lets go of the ref', async () => {
+    let anchorId = '';
+    const {getByTestId, rerender} = render(
+      <ChurnHarness refTarget="x" onReady={id => (anchorId = id)} />,
+    );
+    const x = getByTestId('x');
+    expect(anchorNamesOf(x)).toContain(anchorId);
+
+    // `x` stays mounted — only the ref moves off it, nothing reattaches.
+    await act(async () => {
+      rerender(
+        <ChurnHarness refTarget="none" onReady={id => (anchorId = id)} />,
+      );
+      // Let the deferred-removal microtask actually run.
+      await Promise.resolve();
+    });
+
+    expect(anchorNamesOf(x)).not.toContain(anchorId);
+  });
+});
+
+describe('show() anchor readiness (#5398)', () => {
+  // jsdom reports every box as 0x0 and has no layout engine, so each piece of
+  // one is stubbed: per-element boxes, a manual frame queue, a ResizeObserver
+  // the test can watch, and the Web Animations API whose presence marks a real
+  // layout environment.
+  const boxes = new WeakMap<Element, {width: number; height: number}>();
+  // Elements that render an empty box: one client rect of 0x0, as an empty
+  // inline `<span>` has, unlike `display: none`, which has none.
+  const emptyBoxes = new WeakSet<Element>();
+  let frames: (FrameRequestCallback | null)[] = [];
+  let observers: {disconnected: boolean}[] = [];
+  let intersections: {disconnected: boolean; callback: () => void}[] = [];
+  let animations: unknown[] = [];
+
+  const originalRect = Element.prototype.getBoundingClientRect;
+  const originalClientRects = Element.prototype.getClientRects;
+
+  class FakeKeyframeEffect {
+    constructor(public target: Element) {}
+    getComputedTiming() {
+      return {iterations: 1};
+    }
+  }
+
+  beforeEach(() => {
+    frames = [];
+    observers = [];
+    intersections = [];
+    animations = [];
+    vi.stubGlobal('KeyframeEffect', FakeKeyframeEffect);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback): number =>
+      frames.push(cb),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (handle: number) => {
+      frames[handle - 1] = null;
+    });
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        state = {disconnected: false};
+        constructor() {
+          observers.push(this.state);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {
+          this.state.disconnected = true;
+        }
+      },
+    );
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        state: {disconnected: boolean; callback: () => void};
+        constructor(callback: () => void) {
+          this.state = {disconnected: false, callback};
+          intersections.push(this.state);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {
+          this.state.disconnected = true;
+        }
+      },
+    );
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => animations,
+    });
+    Element.prototype.getBoundingClientRect = function () {
+      const box = boxes.get(this) ?? {width: 0, height: 0};
+      return {
+        ...box,
+        x: 0,
+        y: 0,
+        top: 0,
+        left: 0,
+        right: box.width,
+        bottom: box.height,
+        toJSON: () => ({}),
+      };
+    };
+    Element.prototype.getClientRects = function () {
+      const box = boxes.get(this);
+      const hasBox =
+        emptyBoxes.has(this) ||
+        (box != null && (box.width > 0 || box.height > 0));
+      return (hasBox
+        ? [this.getBoundingClientRect()]
+        : []) as unknown as DOMRectList;
+    };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    Element.prototype.getBoundingClientRect = originalRect;
+    Element.prototype.getClientRects = originalClientRects;
+    delete (document as unknown as {getAnimations?: unknown}).getAnimations;
+  });
+
+  /** Run every queued frame callback once, as one animation frame would. */
+  function flushFrame() {
+    const pending = frames;
+    frames = [];
+    act(() => {
+      for (const cb of pending) {
+        cb?.(performance.now());
+      }
+    });
+  }
+
+  /** Deliver an IntersectionObserver entry, as a trigger gaining a box does. */
+  function signal() {
+    act(() => {
+      for (const {disconnected, callback} of [...intersections]) {
+        if (!disconnected) {
+          callback();
+        }
+      }
+    });
+  }
+
+  function Harness({target}: {target: 'a' | 'b' | 'none'}) {
+    const layer = useLayerInternal({mode: 'context'});
+    return (
+      <>
+        <button
+          type="button"
+          data-testid="a"
+          ref={target === 'a' ? layer.ref : undefined}
+          onClick={layer.show}>
+          A
+        </button>
+        <button
+          type="button"
+          data-testid="b"
+          ref={target === 'b' ? layer.ref : undefined}
+          onClick={layer.show}>
+          B
+        </button>
+        <button type="button" data-testid="hide" onClick={layer.hide}>
+          Hide
+        </button>
+        <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+        {layer.render(<span>Layer content</span>)}
+      </>
+    );
+  }
+
+  it('opens in the same task when the trigger already has a box', () => {
+    const {getByTestId} = render(<Harness target="a" />);
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+
+    fireEvent.click(getByTestId('a'));
+
+    expect(getByTestId('state')).toHaveTextContent('open');
+    expect(observers).toHaveLength(0);
+    expect(frames).toHaveLength(0);
+  });
+
+  it('opens at once for a trigger that renders an empty box (a ContextMenu cursor anchor)', () => {
+    const {getByTestId} = render(<Harness target="a" />);
+    emptyBoxes.add(getByTestId('a'));
+
+    fireEvent.click(getByTestId('a'));
+
+    // A 0x0 box is still a box: the wait is for `display: none` and closed
+    // dialogs only, so an empty anchor does not hold the layer closed.
+    expect(getByTestId('state')).toHaveTextContent('open');
+    expect(observers).toHaveLength(0);
+  });
+
+  it('waits for a box on a boxless trigger, then settles, then opens', () => {
+    const {getByTestId} = render(<Harness target="a" />);
+
+    fireEvent.click(getByTestId('a'));
+    expect(getByTestId('state')).toHaveTextContent('closed');
+    // The runtime polls nothing (INV12): no frame is queued while it waits.
+    expect(frames).toHaveLength(0);
+
+    // The trigger gains a box; the observer signal sees it and starts the
+    // settle frame, and only after that does the layer open.
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+    signal();
+    expect(getByTestId('state')).toHaveTextContent('closed');
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('does not hold the layer closed for a paused animation on an ancestor', () => {
+    const {getByTestId} = render(<Harness target="a" />);
+    const trigger = getByTestId('a');
+    animations.push({
+      effect: new FakeKeyframeEffect(trigger.parentElement as Element),
+      playState: 'paused',
+      finished: new Promise(() => {}),
+    });
+
+    fireEvent.click(trigger);
+    boxes.set(trigger, {width: 80, height: 24});
+    signal();
+    flushFrame();
+
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('still waits for a running animation on an ancestor to finish', async () => {
+    const {getByTestId} = render(<Harness target="a" />);
+    const trigger = getByTestId('a');
+    let finish = () => {};
+    animations.push({
+      effect: new FakeKeyframeEffect(trigger.parentElement as Element),
+      playState: 'running',
+      finished: new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+    });
+
+    fireEvent.click(trigger);
+    boxes.set(trigger, {width: 80, height: 24});
+    signal();
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    await act(async () => {
+      finish();
+      await Promise.resolve();
+    });
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('opens without waiting when there is no layout engine, whatever the ResizeObserver does', () => {
+    delete (document as unknown as {getAnimations?: unknown}).getAnimations;
+    const {getByTestId} = render(<Harness target="a" />);
+
+    fireEvent.click(getByTestId('a'));
+
+    expect(getByTestId('state')).toHaveTextContent('open');
+    expect(observers).toHaveLength(0);
+  });
+
+  it('restarts the wait on the new trigger when a boxless one is replaced', async () => {
+    const {getByTestId, rerender} = render(<Harness target="a" />);
+    boxes.set(getByTestId('b'), {width: 80, height: 24});
+
+    fireEvent.click(getByTestId('a'));
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    // The ref moves to `b`, which has a box. The wait that was polling `a`
+    // would never end, so the layer has to be re-shown against `b`.
+    await act(async () => {
+      rerender(<Harness target="b" />);
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('stops observing a trigger that unmounts without a replacement', async () => {
+    const {getByTestId, rerender} = render(<Harness target="a" />);
+
+    fireEvent.click(getByTestId('a'));
+    expect(observers).toHaveLength(1);
+
+    await act(async () => {
+      rerender(<Harness target="none" />);
+      await Promise.resolve();
+    });
+
+    expect(observers[0].disconnected).toBe(true);
+    expect(intersections[0].disconnected).toBe(true);
+    expect(frames.every(cb => cb === null)).toBe(true);
+    expect(getByTestId('state')).toHaveTextContent('closed');
+  });
+
+  function SwapHarness({
+    target,
+    hideOnSwap = false,
+  }: {
+    target: 'a' | 'b';
+    hideOnSwap?: boolean;
+  }) {
+    const layer = useLayerInternal({mode: 'context'});
+    const {hide} = layer;
+    useLayoutEffect(() => {
+      if (hideOnSwap) {
+        hide();
+      }
+    }, [hideOnSwap, hide]);
+    return (
+      <>
+        <button
+          type="button"
+          data-testid="a"
+          ref={target === 'a' ? layer.ref : undefined}
+          onClick={layer.show}>
+          A
+        </button>
+        <button
+          type="button"
+          data-testid="b"
+          ref={target === 'b' ? layer.ref : undefined}
+          onClick={layer.show}>
+          B
+        </button>
+        <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+        {layer.render(<span>Layer content</span>)}
+      </>
+    );
+  }
+
+  it('does not restart a wait that a hide() in the same commit cancelled', async () => {
+    const {getByTestId, rerender} = render(<SwapHarness target="a" />);
+    boxes.set(getByTestId('b'), {width: 80, height: 24});
+
+    fireEvent.click(getByTestId('a'));
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    // The trigger moves to `b` and the layer is hidden in that same commit.
+    await act(async () => {
+      rerender(<SwapHarness target="b" hideOnSwap />);
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('state')).toHaveTextContent('closed');
+  });
+
+  it('forgets a finished wait, so a later trigger swap does not reopen the layer', async () => {
+    const {container, getByTestId, rerender} = render(
+      <SwapHarness target="a" />,
+    );
+    boxes.set(getByTestId('b'), {width: 80, height: 24});
+
+    fireEvent.click(getByTestId('a'));
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+    signal();
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('open');
+
+    const popover = container.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+
+    await act(async () => {
+      rerender(<SwapHarness target="b" />);
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('state')).toHaveTextContent('closed');
+  });
+
+  it('waits for the dialog around the trigger to be open, even though the trigger has a box', async () => {
+    function DialogHarness() {
+      const layer = useLayerInternal({mode: 'context'});
+      return (
+        <>
+          <dialog data-testid="dialog">
+            <button
+              type="button"
+              data-testid="a"
+              ref={layer.ref}
+              onClick={layer.show}>
+              A
+            </button>
+          </dialog>
+          <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const {getByTestId} = render(<DialogHarness />);
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+
+    fireEvent.click(getByTestId('a'));
+    signal();
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    // The dialog goes modal: its `open` attribute is the signal.
+    await act(async () => {
+      getByTestId('dialog').setAttribute('open', '');
+      await Promise.resolve();
+    });
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('opens once a non-modal dialog shown as a popover (a Drawer) is showing', () => {
+    function DrawerHarness() {
+      const layer = useLayerInternal({mode: 'context'});
+      return (
+        <>
+          <dialog data-testid="drawer">
+            <button
+              type="button"
+              data-testid="a"
+              ref={layer.ref}
+              onClick={layer.show}>
+              A
+            </button>
+          </dialog>
+          <span data-testid="state">{layer.isOpen ? 'open' : 'closed'}</span>
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+    const {getByTestId} = render(<DrawerHarness />);
+    const drawer = getByTestId('drawer');
+    let isShowing = false;
+    const originalMatches = drawer.matches.bind(drawer);
+    Object.defineProperty(drawer, 'matches', {
+      configurable: true,
+      value: (selector: string) =>
+        selector === ':popover-open' ? isShowing : originalMatches(selector),
+    });
+    boxes.set(getByTestId('a'), {width: 80, height: 24});
+
+    fireEvent.click(getByTestId('a'));
+    signal();
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    // `showPopover()` never sets `open`; the `toggle` event is the signal.
+    isShowing = true;
+    act(() => {
+      drawer.dispatchEvent(new Event('toggle'));
+    });
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('open');
+  });
+
+  it('hide() cancels a settle wait that is already pending', async () => {
+    const {getByTestId} = render(<Harness target="a" />);
+    const trigger = getByTestId('a');
+    let finish = () => {};
+    animations.push({
+      effect: new FakeKeyframeEffect(trigger.parentElement as Element),
+      playState: 'running',
+      finished: new Promise<void>(resolve => {
+        finish = resolve;
+      }),
+    });
+
+    fireEvent.click(trigger);
+    boxes.set(trigger, {width: 80, height: 24});
+    signal();
+    flushFrame();
+    expect(getByTestId('state')).toHaveTextContent('closed');
+
+    fireEvent.click(getByTestId('hide'));
+    await act(async () => {
+      finish();
+      await Promise.resolve();
+    });
+
+    expect(getByTestId('state')).toHaveTextContent('closed');
   });
 });
