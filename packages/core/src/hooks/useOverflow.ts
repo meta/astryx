@@ -84,9 +84,17 @@ export interface UseOverflowReturn {
   visibleCount: number;
   /** Whether any items are overflowing */
   hasOverflow: boolean;
-  /** Number of rows the visible items occupy (1 for the single-line path) */
+  /**
+   * Number of rows the visible items occupy. Measured on the multi-row path
+   * (`maxRows` above 1); the single-line path reports 1 without measuring.
+   */
   rows: number;
-  /** Measured max item height in pixels; used to size the multi-row container */
+  /**
+   * Measured max item height in pixels; used to size the multi-row container.
+   * Measured on the multi-row path (`maxRows` above 1); the single-line path
+   * reports 0 without measuring, so a change of item height there never
+   * re-renders the host.
+   */
   rowHeight: number;
 }
 
@@ -130,6 +138,11 @@ export function useOverflow(
   );
 
   const observeParent = behavior === 'observeParent';
+  // Only the multi-row path renders from `rows` and `rowHeight` (the row
+  // count caps the container's height). On the single-line path neither is
+  // tracked: a state set nobody reads would still re-render the host, once
+  // per measurement that moves it.
+  const tracksRows = maxRows != null && maxRows > 1;
 
   const [visibleCount, setVisibleCount] = useState(itemCount);
   const [rows, setRows] = useState(1);
@@ -176,8 +189,10 @@ export function useOverflow(
     if (children.length === 0) {
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- overflow count is derived from measured DOM widths
       setVisibleCount(0);
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from measured DOM
-      setRows(0);
+      if (tracksRows) {
+        // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from measured DOM
+        setRows(0);
+      }
       return;
     }
 
@@ -200,6 +215,9 @@ export function useOverflow(
 
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- overflow count is derived from measured DOM widths
     setVisibleCount(nextVisible);
+    if (!tracksRows) {
+      return;
+    }
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from measured DOM
     setRows(prev => (prev === nextRows ? prev : nextRows));
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from measured DOM
@@ -212,6 +230,7 @@ export function useOverflow(
     minVisibleItems,
     maxVisibleItems,
     maxRows,
+    tracksRows,
     collapseFrom,
     observeParent,
   ]);
@@ -268,7 +287,9 @@ export function useOverflow(
     measureRef,
     visibleCount,
     hasOverflow,
-    rows,
-    rowHeight,
+    // A host whose `maxRows` dropped to the single-line path keeps the state
+    // its multi-row measurements wrote; the path's own values are reported.
+    rows: tracksRows ? rows : 1,
+    rowHeight: tracksRows ? rowHeight : 0,
   };
 }

@@ -380,6 +380,55 @@ describe('useOverflow with maxVisibleItems (cap)', () => {
   });
 });
 
+describe('useOverflow on the single-line path', () => {
+  it('renders the host once per measurement that changes nothing it shows: rows and rowHeight are not tracked', () => {
+    let renders = 0;
+    const {result} = renderHook(() => {
+      renders += 1;
+      return useOverflow(3, {gap: 10});
+    });
+
+    act(() => {
+      // 3 items of 50px, 24px tall, gap 10 → 170 fits in 200: the count stays.
+      result.current.measureRef(mockMeasure([50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(200));
+    });
+
+    // The measurement found the same count the hook started with; the item
+    // height it also read is nobody's to render here, so nothing renders.
+    expect(renders).toBe(1);
+    expect(result.current.visibleCount).toBe(3);
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(0);
+  });
+});
+
+describe('useOverflow leaving the multi-row path', () => {
+  it('reports rows 1 and rowHeight 0 once maxRows drops to the single-line path', () => {
+    const initialProps: {maxRows: number | undefined} = {maxRows: 2};
+    const {result, rerender} = renderHook(
+      ({maxRows}: {maxRows: number | undefined}) =>
+        useOverflow(6, {gap: 10, maxRows}),
+      {initialProps},
+    );
+
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 40, 24));
+      result.current.containerRef(mockContainer(170));
+    });
+    expect(result.current.visibleCount).toBe(6);
+    expect(result.current.rows).toBe(2);
+    expect(result.current.rowHeight).toBe(24);
+
+    rerender({maxRows: undefined});
+    // The single-line path's values, not the state the multi-row
+    // measurements left behind; the count is re-measured for one row.
+    expect(result.current.rows).toBe(1);
+    expect(result.current.rowHeight).toBe(0);
+    expect(result.current.visibleCount).toBeLessThan(6);
+  });
+});
+
 describe('useOverflow with maxRows (multi-row)', () => {
   it('exposes rows and rowHeight', () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
