@@ -2,7 +2,8 @@
 
 A gesture recognizer system with UIKit's semantics, for the touch
 presentations of Astryx core components. Components import it from
-`../gestures`; nothing here is exported from the package.
+`../gestures`. The package exports only `createPanGesture` and its types from
+here.
 
 UIKit is the reference throughout: the same recognizer states, the same
 conflict rules, the same thresholds (from `../motion/uikit/gestures.ts`, each

@@ -14,6 +14,7 @@
  *   test-only
  */
 
+import {createPanGesture} from '../../createPanGesture';
 import {getGestureHost} from '../../GestureHost';
 import type {GestureRecognizer} from '../../GestureRecognizer';
 import {LongPressGestureRecognizer} from '../../LongPressGestureRecognizer';
@@ -163,6 +164,7 @@ document.body.innerHTML = `
       <div id="feedRow" style="height: 80px; background: #cfc">feed row (tap)</div>
       <div style="height: 1200px">feed content</div>
     </div>
+    <div id="publicPan" style="height: 80px; background: #fde">public pan (drag sideways)</div>
     <div style="height: 1600px">page</div>
     <div id="passiveEnd" style="height: 60px; background: #dfd; touch-action: pan-y pinch-zoom">passive control at the page's end</div>
   </div>`;
@@ -280,6 +282,19 @@ for (const id of ['edgeZone', 'edgeWide', 'edgeZoneRtl', 'edgeWideRtl']) {
   record(edge, () => ({x: edge.translation().x}));
   host.attach(element(id), edge);
 }
+// The public pan (spec:AST-107 FR1): a drag reported as values, on its axis.
+createPanGesture(element('publicPan'), {
+  axis: 'x',
+  onPan: ({state, translation}) => {
+    window.__gestures.push({
+      name: 'publicPan',
+      state,
+      time: performance.now(),
+      x: translation.x,
+      y: translation.y,
+    });
+  },
+});
 
 // A control with no recognizer of its own (no blocking listener): only a
 // press consumer, under pan-y, as a passive switch is.
