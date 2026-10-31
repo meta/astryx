@@ -209,9 +209,7 @@ function sizeCell({analysis, budgetFlags, packageSize}) {
   }
   if (packageSize) {
     if (packageSize.verdict === 'over-budget')
-      parts.push('❌ a published package is over budget');
-    else if (packageSize.verdict === 'justified')
-      parts.push('⚠️ a published package is over budget (justified)');
+      parts.push('⚠️ a published package grew past its budget');
     else if (packageSize.verdict === 'no-base')
       parts.push('packages measured (no base to compare)');
     else parts.push('packages within budget');
