@@ -51,7 +51,8 @@ function packageStylesheetPath(packageDir) {
 // it imports statically, including modules reached through package imports
 // (other Astryx packages, React, StyleX, third-party libraries), minified for
 // production. Also returns the modules of every chunk the import can load,
-// import() targets included, for CSS. Returns null when the import cannot be
+// import() targets included, for CSS, and the modules that put code in the
+// eager chunks (`eagerInputs`). Returns null when the import cannot be
 // bundled.
 function bundleImportWithInputs(entry, exportName) {
   if (!entry || !fs.existsSync(entry)) return null;
@@ -113,9 +114,17 @@ function bundleImportWithInputs(entry, exportName) {
       return seen;
     }
     let text = '';
+    // The modules that put code in the eager chunks.
+    const eagerInputs = new Set();
     for (const key of reachable(['import-statement'])) {
       text += byPath.get(key) ?? '';
+      for (const [input, {bytesInOutput}] of Object.entries(
+        outputs[key].inputs || {},
+      )) {
+        if (bytesInOutput > 0) eagerInputs.add(path.resolve(workingDir, input));
+      }
     }
+    eagerInputs.delete(entryFile);
     // CSS ships in the package stylesheet whether its module loads eagerly or
     // through import(), so class names come from every chunk the entry can
     // load, dynamic imports included; chunks no kept code imports are ignored.
@@ -126,7 +135,7 @@ function bundleImportWithInputs(entry, exportName) {
       }
     }
     inputs.delete(entryFile);
-    return {text, inputs: [...inputs]};
+    return {text, inputs: [...inputs], eagerInputs: [...eagerInputs]};
   } catch {
     return null;
   } finally {
@@ -321,6 +330,7 @@ function measureComponentImport(entry, stylesheetText, ownDistDir, exportName) {
 
 module.exports = {
   gzipBytes,
+  bundleImportWithInputs,
   packageStylesheetPath,
   bundleImport,
   classNamesIn,
