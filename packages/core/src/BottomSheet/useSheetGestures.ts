@@ -4,7 +4,8 @@
 
 /**
  * @file useSheetGestures.ts
- * @input Uses React (useCallback, useEffect, useMemo, useRef, useState)
+ * @input Uses React (useCallback, useEffect, useMemo, useRef, useState) and
+ *   react-dom (flushSync)
  * @output Exports useSheetGestures hook and its option/result types
  * @position Internal to BottomSheet; not exported from the core entry point
  *
@@ -26,7 +27,9 @@
  * A live drag writes that transform straight to the sheet element, once per
  * input sample, and renders nothing: React state changes when the drag begins
  * and ends, and in between only when the layout split changes (a drag that
- * crosses above its base detent restores the full height). The live offset
+ * crosses above its base detent restores the full height). That one render
+ * commits synchronously, in the input's own task, because the transform
+ * written beside it is only correct on the new height. The live offset
  * is readable through `activeOffsetRef`. The host owns the element's
  * transform outside a drag and writes the resting value after each commit,
  * so a settle animates from wherever the finger left the sheet.
@@ -84,6 +87,7 @@ import {
   type TouchEvent as ReactTouchEvent,
   type UIEvent as ReactUIEvent,
 } from 'react';
+import {flushSync} from 'react-dom';
 
 import {
   computeDetentOffsets,
@@ -1265,8 +1269,15 @@ export function useSheetGestures({
       writeLiveTransform(next, layoutOffset);
       if (hasLayoutChanged) {
         // The layout split moved: the host renders the new height, reading
-        // the offset it has to pair with it from state.
-        setDragOffset(next);
+        // the offset it has to pair with it from state. The transform above
+        // already assumes that height, so the render must commit in this
+        // task. Scheduled normally, it lands after the next paint, and for
+        // that frame the new transform sits on the old height: the sheet
+        // jumps by the whole split (the restored layout height) and back.
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the height must land in the frame the transform does
+        flushSync(() => {
+          setDragOffset(next);
+        });
       }
       if (!state.hasTraveled && next !== state.baseOffset) {
         state.hasTraveled = true;
