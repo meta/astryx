@@ -235,7 +235,7 @@ el.setAttribute(dataAttr('theme'), name);
 ```
 
 It checks string literals in any position (object keys, call arguments,
-selectors inside `stylex.create` and `stylex.when.*`, `.doc.mjs` text),
+selectors inside `stylex.create` and `stylex.when.*`),
 template literals (including `data-${dataAttrNamespace}-…`), JSX attribute
 names, and `dataAttr()` calls. A name it cannot read (`data-astryx-${part}`,
 `dataAttr(name)`) is reported as `data-astryx-*`. Inside an owner module only
@@ -247,8 +247,9 @@ reported. The public attributes INV23 lists are never reported: `theme`,
 builds every name, is not checked.
 
 The repo config turns it on for `packages/*/src`, outside tests, stories and
-test helpers, at the strict-mode severity (an error in CI). Sites that existed
-when the rule arrived are listed by file in
+test helpers, at the strict-mode severity (an error in CI). The repo config does
+not lint `.mjs` outside the CLI, so `.doc.mjs` text stays with public-API
+review. Sites that existed when the rule arrived are listed by file in
 `no-raw-private-attribute.baseline.json`, once per site, and that many stay
 allowed until they move into an owner module; remove an entry when you move its
 site, and never add one.
