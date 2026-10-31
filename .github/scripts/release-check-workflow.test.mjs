@@ -13,6 +13,7 @@ import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {matrixFor} from './ci-matrix.mjs';
 
 const workflow = yaml.parse(
   fs.readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'),
@@ -319,10 +320,10 @@ describe('explicit release routing', () => {
     expect(result.status).not.toBe(0);
   });
 
-  it('keeps dispatch concurrency separate and non-cancelling', () => {
+  it('keeps dispatch concurrency separate, cancelled only by a release re-check', () => {
     expect(workflow.concurrency.group).toContain('|| github.run_id');
     expect(workflow.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
   });
 
@@ -757,9 +758,9 @@ describe('full release scope without PR metadata or maintenance writes', () => {
     expect(contracts.run).toContain(
       'a11y-contract-shard.mjs --shard "${{ matrix.shard }}/${{ strategy.job-total }}"',
     );
-    // File filters must precede `--project`, which is variadic.
+    // Each leg runs the tests its list names (a11y-contract-shard.mjs).
     expect(contracts.run).toContain(
-      'pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium',
+      'pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium',
     );
     expect(packageJson.scripts['test:a11y-contract']).toBe(
       'playwright test --config playwright.config.ts --project chromium',
@@ -814,7 +815,10 @@ describe('full release scope without PR metadata or maintenance writes', () => {
   it('keeps all canonical RTL packages and passes full scope to resolver and join', () => {
     expect([
       ...new Set(
-        jobs['pr-rtl-shard'].strategy.matrix.include.map(leg => leg.package),
+        matrixFor(
+          jobs['pr-rtl-shard'].strategy.matrix.include,
+          'workflow_dispatch',
+        ).map(leg => leg.package),
       ),
     ]).toEqual(['core', 'lab', 'charts', 'richtext', 'vega']);
     // Outside a pull request the scope step reports full scope.

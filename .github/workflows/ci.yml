@@ -41,6 +41,10 @@ on:
         description: 'Exact SHA-256 digest recorded by the active marker; required only for a marked release branch'
         type: string
         required: false
+      recheck:
+        description: 'Release re-check, sent by the release re-check workflow: takes the main check lane at once'
+        type: boolean
+        default: false
 
 permissions: {}
 
@@ -75,11 +79,17 @@ permissions: {}
 # One group per pull request (a fork's branch name can repeat across forks),
 # so a new push cancels the superseded run. Merge-queue entries and dispatches
 # get their own groups and are never cancelled by a pull request. The
-# release-checks main-heavy-lanes.yml dispatches (as github-actions[bot]) share
-# one group: one runs, the newest waits, and a running check is never cancelled.
+# release-checks main-heavy-lanes.yml and the release re-check dispatch (as
+# github-actions[bot]) share one group: one runs and the newest waits. Only a
+# release re-check cancels the running check; it checks main's tip in full, so
+# the cancelled check's commits stay covered (spec:AST-030 FR23).
+#
+# A release-check runs its browser owners in wide shards that all start at
+# once, so a full check takes minutes; pull requests keep their narrower legs
+# (spec:AST-030 FR23, DEC-17).
 concurrency:
   group: "ci-${{ github.event.pull_request.number || github.event.merge_group.head_sha || (github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes') || github.run_id }}"
-  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
   maintenance-request:
@@ -1408,10 +1418,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
-    # Four pages on four cores: on 2-core ARM runners each shard's scan took
-    # 11.5 minutes, the release check's slowest lane after the contracts.
+        shard: [1, 2, 3, 4, 5, 6]
+    # Four pages on four cores. At three legs each leg's scan took ~10 minutes;
+    # six take about five (spec:AST-030 FR23).
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -1755,13 +1766,17 @@ jobs:
     name: Accessibility spec-test contracts (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: [build-storybook]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
+    # Six legs: at three, the slowest leg took ~20 minutes, held by its longest
+    # spec file; files longer than a leg's share are now cut across legs
+    # (spec:AST-030 FR23).
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4, 5, 6]
     # One core per worker: on two cores, four workers starved the CPU-bound
     # "every expectation" specs past their timeouts.
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:
@@ -1792,15 +1807,12 @@ jobs:
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           A11Y_CONTRACT_WORKERS: 4
-        # Files are split by recorded duration (a11y-contract-shard.mjs), not
-        # Playwright's count-based --shard; every listed file runs in one leg.
+        # Tests are split by recorded duration (a11y-contract-shard.mjs), not
+        # Playwright's count-based --shard; every listed test runs in one leg.
         run: |
           set -euo pipefail
-          node .github/scripts/a11y-contract-shard.mjs --shard "${{ matrix.shard }}/${{ strategy.job-total }}" > contract-files.txt
-          mapfile -t FILES < contract-files.txt
-          # The filters come before the options: `--project` takes every
-          # value after it, so filters placed after it read as project names.
-          pnpm exec playwright test "${FILES[@]}" --config playwright.config.ts --project chromium
+          node .github/scripts/a11y-contract-shard.mjs --shard "${{ matrix.shard }}/${{ strategy.job-total }}" > contract-tests.txt
+          pnpm exec playwright test --test-list contract-tests.txt --config playwright.config.ts --project chromium
 
       - name: Upload pressed-state pixel evidence
         if: always() && github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
@@ -2171,16 +2183,17 @@ jobs:
       needs.build-storybook.result == 'success' &&
       ((github.event_name == 'pull_request' && needs.run-labels.outputs.visual == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')))
-    # Five legs: at three, each leg's scout took ~4.5 minutes and the visual
-    # regression waited for the slowest one.
+    # A pull request scouts in five legs (at three, each took ~4.5 minutes and
+    # the visual regression waited for the slowest one); a release-check, in
+    # eight (spec:AST-030 FR23).
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '[1, 2, 3, 4, 5, 6, 7, 8]' || '[1, 2, 3, 4, 5]') }}
     # Four pages on four cores: the scout is page-load bound, and on the rig
     # this cut a shard's scout by a quarter against two pages on two cores.
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: read
@@ -2602,21 +2615,16 @@ jobs:
     if: >-
       ((github.event_name == 'pull_request' && needs.run-labels.outputs.rtl == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
-    # Core is the largest package, so its audit is split three ways
-    # (`--shard`) and joined by pr-rtl-merge; every other package runs whole.
+    # Core is the largest package, so its audit is split (`--shard`) and joined
+    # by pr-rtl-merge: three ways on a pull request, six on a release-check,
+    # where three legs took ~10 minutes (spec:AST-030 FR23). Every other
+    # package runs whole. pr-rtl-merge expects the same count.
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - {package: core, part: 1, parts: 3}
-          - {package: core, part: 2, parts: 3}
-          - {package: core, part: 3, parts: 3}
-          - {package: lab, part: 1, parts: 1}
-          - {package: charts, part: 1, parts: 1}
-          - {package: richtext, part: 1, parts: 1}
-          - {package: vega, part: 1, parts: 1}
+        include: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '[{"package":"core","part":1,"parts":6},{"package":"core","part":2,"parts":6},{"package":"core","part":3,"parts":6},{"package":"core","part":4,"parts":6},{"package":"core","part":5,"parts":6},{"package":"core","part":6,"parts":6},{"package":"lab","part":1,"parts":1},{"package":"charts","part":1,"parts":1},{"package":"richtext","part":1,"parts":1},{"package":"vega","part":1,"parts":1}]' || '[{"package":"core","part":1,"parts":3},{"package":"core","part":2,"parts":3},{"package":"core","part":3,"parts":3},{"package":"lab","part":1,"parts":1},{"package":"charts","part":1,"parts":1},{"package":"richtext","part":1,"parts":1},{"package":"vega","part":1,"parts":1}]') }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 30 || 15 }}
+    timeout-minutes: 15
     permissions:
       contents: read
       pull-requests: read
@@ -2853,11 +2861,14 @@ jobs:
       - name: Join Core RTL parts
         if: (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
         id: join
+        env:
+          # The Core part count pr-rtl-shard's matrix gives this event.
+          CORE_PARTS: ${{ github.event_name == 'workflow_dispatch' && 6 || 3 }}
         run: |
           set -eu
           manifests=(rtl-parts/*/rtl-shard-scope.json)
-          if [ "${#manifests[@]}" -ne 3 ]; then
-            echo "Expected 3 Core RTL parts, found ${#manifests[@]}."
+          if [ "${#manifests[@]}" -ne "$CORE_PARTS" ]; then
+            echo "Expected $CORE_PARTS Core RTL parts, found ${#manifests[@]}."
             exit 1
           fi
           for manifest in "${manifests[@]}"; do

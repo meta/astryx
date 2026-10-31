@@ -1,0 +1,110 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# The release owner's re-check of main's tip (spec:AST-030 FR23). A
+# maintainer dispatches it with the exact commit, usually right after a fix
+# lands during a release. It starts at once, ahead of everything else:
+# - ci.yml's canonical release-check (visual, accessibility, RTL, typecheck,
+#   registry) in its wide shards, which takes the main check lane, cancelling
+#   any check running there;
+# - the Main workflow's full unit run on the same commit, which takes the
+#   validation group the same way.
+# Pull requests never hold it back: CI's ceiling leaves main what it needs
+# (DEC-16).
+#
+# With `failed-only`, it re-runs just the failed or cancelled jobs of this
+# commit's latest re-check runs. That is sound because it is the same commit:
+# each run's passing jobs already checked it, so a run whose re-run passes is
+# a full passing check of that commit, which is what the release publish
+# requires. A fix is a new commit and gets a full re-check.
+name: Release re-check
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Full SHA of main's tip to re-check"
+        type: string
+        required: true
+      failed-only:
+        description: "Re-run only the failed jobs of this commit's latest re-check"
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  recheck:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Start the re-check
+        uses: actions/github-script@v9
+        env:
+          SHA: ${{ inputs.sha }}
+          FAILED_ONLY: ${{ inputs['failed-only'] }}
+        with:
+          script: |
+            const sha = (process.env.SHA ?? '').trim();
+            const failedOnly = process.env.FAILED_ONLY === 'true';
+            const actor = process.env.GITHUB_TRIGGERING_ACTOR || context.actor;
+            const WORKFLOWS = ['ci.yml', 'deploy.yml'];
+
+            // Maintainers only: dispatching needs write access already, and a
+            // re-check cancels main's running checks.
+            const {data: permission} = await github.rest.repos.getCollaboratorPermissionLevel({
+              ...context.repo, username: actor,
+            });
+            if (!['admin', 'maintain'].includes(permission.role_name)) {
+              throw new Error(`Only a maintainer can re-check a release; ${actor} has the ${permission.role_name} role.`);
+            }
+            if (context.ref !== 'refs/heads/main') {
+              throw new Error('Dispatch the release re-check from main.');
+            }
+            if (!/^[0-9a-f]{40}$/.test(sha)) {
+              throw new Error(`sha must be a full 40-character commit SHA, got "${sha}".`);
+            }
+
+            if (failedOnly) {
+              for (const workflow_id of WORKFLOWS) {
+                const {data} = await github.rest.actions.listWorkflowRuns({
+                  ...context.repo, workflow_id, event: 'workflow_dispatch', branch: 'main', head_sha: sha, per_page: 20,
+                });
+                const run = data.workflow_runs.find(candidate => candidate.triggering_actor?.login === 'github-actions[bot]');
+                if (run == null) {
+                  throw new Error(`No re-check of ${sha.slice(0, 7)} in ${workflow_id}; dispatch a full re-check.`);
+                }
+                if (run.status !== 'completed') {
+                  throw new Error(`${workflow_id} re-check ${run.html_url} is still ${run.status}.`);
+                }
+                if (run.conclusion === 'success') {
+                  core.info(`${workflow_id}: ${run.html_url} already passed.`);
+                  continue;
+                }
+                await github.rest.actions.reRunWorkflowFailedJobs({...context.repo, run_id: run.id});
+                core.notice(`${workflow_id}: re-running the failed jobs of ${run.html_url}.`);
+              }
+              return;
+            }
+
+            // A release-check binds main's tip when it starts (ci.yml's main
+            // authority), so a re-check names that tip.
+            const {data: main} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+            if (main.commit.sha !== sha) {
+              throw new Error(`main is at ${main.commit.sha}, not ${sha}; re-check main's tip.`);
+            }
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'ci.yml', ref: 'main',
+              inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': sha, recheck: 'true'},
+            });
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'deploy.yml', ref: 'main',
+              inputs: {sha, recheck: 'true'},
+            });
+            await core.summary
+              .addHeading('Release re-check started')
+              .addRaw(`Commit: ${sha}\n\n`)
+              .addRaw('Started the canonical release-check (ci.yml) and the full unit run (Main) on this commit. Each takes its lane at once.')
+              .write();

@@ -121,14 +121,14 @@ describe('the release-check on every push to main', () => {
     expect(job.steps[0].env.SHA).toBe('${{ github.sha }}');
   });
 
-  it('throttles in ci.yml: the dispatched checks share one group that never cancels a running check', () => {
+  it('throttles in ci.yml: the dispatched checks share one group that only a release re-check cancels', () => {
     // GitHub keeps one running and one pending run per group, and a newer
     // dispatch replaces the pending one, so a burst of merges is checked once.
     expect(ci.concurrency.group).toContain(
       "(github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes')",
     );
     expect(ci.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
     expect(heavy.concurrency).toBeUndefined();
   });

@@ -154,7 +154,7 @@ describe('CI baseline maintenance routing', () => {
   it('isolates dispatch concurrency from PRs and does not cancel queued maintenance', () => {
     expect(workflow.concurrency.group).toContain('|| github.run_id');
     expect(workflow.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
   });
 });
