@@ -40,6 +40,10 @@ tester.run('no-nullish-jsx-guard', rule, {
     {
       code: `const isList = items != null && items !== false && Array.isArray(items);`,
     },
+    // ✅ A grouped type switch (AppShell's mobileNav).
+    {
+      code: `const isNode = mobileNav != null && mobileNav !== false && (isValidElement(mobileNav) || typeof mobileNav === 'string');`,
+    },
     // ✅ The utility's own definition.
     {
       code: `export function isRenderable(node) { return node != null && typeof node !== 'boolean' && node !== ''; }`,
@@ -121,6 +125,11 @@ tester.run('no-nullish-jsx-guard', rule, {
     // ❌ The negated form: nothing to render.
     {
       code: `function f(rendered) { if (rendered == null || typeof rendered === 'boolean') { return null; } return rendered; }`,
+      errors: [{messageId: 'handRolledRenderable'}],
+    },
+    // ❌ A hand-written check that also guards JSX is one report, not two.
+    {
+      code: `const C = () => <div>{label != null && typeof label !== 'boolean' && <span>{label}</span>}</div>;`,
       errors: [{messageId: 'handRolledRenderable'}],
     },
     // ❌ One more check of a listed value than the baseline allows.

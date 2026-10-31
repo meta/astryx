@@ -20,11 +20,11 @@ const ruleTester = new RuleTester({
 });
 
 describe('docblock-example-format', () => {
-  ruleTester.run('docblock-example-format', docblockExampleFormatRule, {
-    valid: [
-      // Pattern 1: @example on its own line, ``` on next line
-      {
-        code: `
+ruleTester.run('docblock-example-format', docblockExampleFormatRule, {
+  valid: [
+    // Pattern 1: @example on its own line, ``` on next line
+    {
+      code: `
 /**
  * A button component.
  *
@@ -35,10 +35,10 @@ describe('docblock-example-format', () => {
  */
 function Button() {}
       `,
-      },
-      // @example with ```tsx language tag
-      {
-        code: `
+    },
+    // @example with ```tsx language tag
+    {
+      code: `
 /**
  * @example
  * \`\`\`tsx
@@ -47,19 +47,19 @@ function Button() {}
  */
 function Button() {}
       `,
-      },
-      // No @example at all — perfectly fine
-      {
-        code: `
+    },
+    // No @example at all — perfectly fine
+    {
+      code: `
 /**
  * A simple helper function.
  */
 function helper() {}
       `,
-      },
-      // @example with blank line before fence — still valid
-      {
-        code: `
+    },
+    // @example with blank line before fence — still valid
+    {
+      code: `
 /**
  * @example
  *
@@ -69,10 +69,10 @@ function helper() {}
  */
 function Button() {}
       `,
-      },
-      // Multiple valid @example blocks
-      {
-        code: `
+    },
+    // Multiple valid @example blocks
+    {
+      code: `
 /**
  * @example
  * \`\`\`
@@ -86,54 +86,54 @@ function Button() {}
  */
 function Button() {}
       `,
-      },
-    ],
+    },
+  ],
 
-    invalid: [
-      // Inline: @example with code on the same line
-      {
-        code: `
+  invalid: [
+    // Inline: @example with code on the same line
+    {
+      code: `
 /**
  * @example getInitials('John Doe') // 'JD'
  */
 function getInitials() {}
       `,
-        errors: [{messageId: 'inlineExample'}],
-      },
-      // Inline: @example with JSX on same line
-      {
-        code: `
+      errors: [{messageId: 'inlineExample'}],
+    },
+    // Inline: @example with JSX on same line
+    {
+      code: `
 /**
  * @example <Button label="Click" />
  */
 function Button() {}
       `,
-        errors: [{messageId: 'inlineExample'}],
-      },
-      // Inline: @example with string on same line
-      {
-        code: `
+      errors: [{messageId: 'inlineExample'}],
+    },
+    // Inline: @example with string on same line
+    {
+      code: `
 /**
  * @example "mod+k", "mod+shift+p"
  */
 function Shortcut() {}
       `,
-        errors: [{messageId: 'inlineExample'}],
-      },
-      // Missing fence: @example then code without ```
-      {
-        code: `
+      errors: [{messageId: 'inlineExample'}],
+    },
+    // Missing fence: @example then code without ```
+    {
+      code: `
 /**
  * @example
  * <Button label="Click" />
  */
 function Button() {}
       `,
-        errors: [{messageId: 'missingFence'}],
-      },
-      // Missing fence: @example then comment without ```
-      {
-        code: `
+      errors: [{messageId: 'missingFence'}],
+    },
+    // Missing fence: @example then comment without ```
+    {
+      code: `
 /**
  * @example
  * // Default usage
@@ -141,11 +141,11 @@ function Button() {}
  */
 function Button() {}
       `,
-        errors: [{messageId: 'missingFence'}],
-      },
-      // Mixed: one valid, one inline
-      {
-        code: `
+      errors: [{messageId: 'missingFence'}],
+    },
+    // Mixed: one valid, one inline
+    {
+      code: `
 /**
  * @example
  * \`\`\`
@@ -156,11 +156,11 @@ function Button() {}
  */
 function Section() {}
       `,
-        errors: [{messageId: 'inlineExample'}],
-      },
-      // Prop-level docblock with inline example
-      {
-        code: `
+      errors: [{messageId: 'inlineExample'}],
+    },
+    // Prop-level docblock with inline example
+    {
+      code: `
 interface Props {
   /**
    * @example dividers={['top', 'bottom']}
@@ -168,8 +168,8 @@ interface Props {
   dividers?: string[];
 }
       `,
-        errors: [{messageId: 'inlineExample'}],
-      },
-    ],
-  });
+      errors: [{messageId: 'inlineExample'}],
+    },
+  ],
+});
 });

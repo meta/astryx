@@ -250,11 +250,7 @@ ruleTester.run('no-raw-color', rule, {
         fill: '#ff6166',
         caretColor: 'rgb(28, 28, 30)',
       }});`,
-      errors: [
-        {messageId: 'rawColor'},
-        {messageId: 'rawColor'},
-        {messageId: 'rawColor'},
-      ],
+      errors: [{messageId: 'rawColor'}, {messageId: 'rawColor'}, {messageId: 'rawColor'}],
     },
     // A style RULE named `mask` is not the CSS property — `stylex.create()`'s
     // top-level keys are rule names, and the declarations inside one are

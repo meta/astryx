@@ -414,28 +414,46 @@ const rule = {
     }
 
     /**
+     * The text of the value an operand tests against another type, including
+     * a parenthesised group of such tests on one value
+     * (`isValidElement(x) || typeof x === 'string'`); otherwise null.
+     */
+    function groupTypeTestValue(operand) {
+      if (operand?.type === 'LogicalExpression') {
+        const leaves = flattenLogical(operand, operand.operator);
+        const values = leaves.map(leaf => groupTypeTestValue(leaf));
+        if (values.every(value => value != null && value === values[0])) {
+          return values[0];
+        }
+        return null;
+      }
+      const value = otherTypeTestValue(operand);
+      return value == null ? null : sourceCode.getText(value);
+    }
+
+    /**
      * `x != null && typeof x !== 'boolean'` (render when present) and
      * `x == null || typeof x === 'boolean'` (nothing to render): a presence
      * test (nullish or '') and a boolean test on the same value.
      */
     function checkHandRolled(node) {
       if (node.operator !== '&&' && node.operator !== '||') {
-        return;
+        return false;
       }
       if (
         node.parent?.type === 'LogicalExpression' &&
         node.parent.operator === node.operator
       ) {
-        return;
+        return false;
       }
       const equal = node.operator === '||';
       const presence = new Set();
       const booleans = new Map();
       const otherTypes = new Set();
       for (const operand of flattenLogical(node, node.operator)) {
-        const typed = otherTypeTestValue(operand);
-        if (typed) {
-          otherTypes.add(sourceCode.getText(typed));
+        const typed = groupTypeTestValue(operand);
+        if (typed != null) {
+          otherTypes.add(typed);
           continue;
         }
         const nullish = parseNullishComparison(operand);
@@ -458,9 +476,10 @@ const rule = {
       for (const [text, value] of booleans) {
         if (presence.has(text) && !otherTypes.has(text)) {
           reportHandRolled(node, value);
-          return;
+          return true;
         }
       }
+      return false;
     }
 
     function report(comparison, value, negate) {
@@ -490,7 +509,11 @@ const rule = {
     return {
       // `{value != null && <El>{value}</El>}`
       LogicalExpression(node) {
-        checkHandRolled(node);
+        // One report per chain: a hand-written check that also guards JSX is
+        // reported (and spends a baseline allowance) once.
+        if (checkHandRolled(node)) {
+          return;
+        }
         if (node.operator !== '&&' || !isJSX(node.right)) {
           return;
         }

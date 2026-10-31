@@ -34,9 +34,7 @@ ruleTester.run('require-table-section', requireTableSectionRule, {
     {code: '<table><tbody><tr/></tbody></table>'},
     {code: '<table><thead><tr/></thead></table>'},
     // colgroup/caption are legal direct children of a table — untouched.
-    {
-      code: '<Table><colgroup><col/></colgroup><TableBody><TableRow/></TableBody></Table>',
-    },
+    {code: '<Table><colgroup><col/></colgroup><TableBody><TableRow/></TableBody></Table>'},
     {code: '<table><caption>Cap</caption><tbody><tr/></tbody></table>'},
     // Mapped rows inside a section: the .map()/fragment chain is transparent.
     {
@@ -52,9 +50,7 @@ ruleTester.run('require-table-section', requireTableSectionRule, {
     {code: '<Wrapper><TableRow/></Wrapper>'},
     // A row hoisted out of the JSX: its lexical parent is a declarator, so
     // the rule cannot see where it lands. Silent, not a false positive.
-    {
-      code: 'const row = <TableRow/>; const t = <Table><TableBody>{row}</TableBody></Table>;',
-    },
+    {code: 'const row = <TableRow/>; const t = <Table><TableBody>{row}</TableBody></Table>;'},
     // A row returned from a named helper — same reasoning.
     {code: 'function renderRow() { return <TableRow/>; }'},
     // A standalone row with no table around it at all (unit-test fixtures).

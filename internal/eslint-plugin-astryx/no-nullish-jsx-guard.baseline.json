@@ -1,5 +1,4 @@
 {
-  "packages/core/src/AppShell/AppShell.tsx": ["mobileNav"],
   "packages/core/src/Badge/Badge.tsx": ["label"],
   "packages/core/src/Chat/ChatLayout.tsx": ["children"],
   "packages/core/src/Chat/ChatMessageList.tsx": ["children"],
