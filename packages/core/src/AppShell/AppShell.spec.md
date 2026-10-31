@@ -130,7 +130,9 @@ the only component record in the AppShell root.
 - The `useAppShellMobile` hook's public contract — an uncontracted module; this
   record covers only the values AppShell provides (FR13).
 - Navigation landmark names inside the TopNav and SideNav slots — owned by
-  TopNav (its `label` prop) and SideNav (its translated name).
+  TopNav (its `label` prop) and SideNav (its translated name); in the phone
+  drawer, the landmark is MobileNav's and takes the drawer's name
+  (`component:MobileNav` FR13).
 - The page heading — owned by the caller; AppShell renders no heading.
 
 ## Public concepts
@@ -209,7 +211,9 @@ the only component record in the AppShell root.
 - **AR1 — Landmarks.** AppShell exposes at most one banner landmark, never inside
   another landmark, and exactly one main landmark. The sidenav-only mobile top
   bar is a navigation region with a translated name. Navigation landmarks inside
-  the slots are owned by TopNav and SideNav.
+  the slots are owned by TopNav and SideNav; when their content renders in the
+  phone drawer, it sits in MobileNav's navigation landmark, named like the
+  drawer (`component:MobileNav` FR13).
 - **AR2 — Bypass blocks.** The skip link is reachable with the first Tab and moves
   focus to the main region on activation (WCAG 2.4.1). Its focus indicator uses
   the shared focus-outline treatment.
