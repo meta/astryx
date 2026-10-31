@@ -794,9 +794,12 @@ slugs and docs routes, are data and may change.
 
 ### How a release is cut
 
-First, the canonical full-scope `release-check` must pass on an exact commit from
-current `main`; the release branch is cut only from that checked SHA while it remains
-in current main history. A minor cut also requires Cindy, the release owner, to
+First, the canonical full-scope `release-check` and a full unit run of the Main
+workflow must both pass on an exact commit from current `main`. Main's scheduler
+dispatches the unit run with every release-check of main's tip, a person's included,
+while that commit is still the tip. The release branch is cut only from a SHA with
+both while it remains in current main history; the stable publish refuses one
+without them. A minor cut also requires Cindy, the release owner, to
 explicitly sign off on the exact `vX.Y.0` immediately before the branch is created.
 Scheduled or standing authority does not cover a minor.
 

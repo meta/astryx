@@ -30,7 +30,7 @@ const run = (id, headSha, conclusion = 'success') => ({
 const join = conclusion => ({name: 'release-check', conclusion});
 
 /** `runs` are newest first; `jobs` maps a run id to its jobs. */
-function fake({runs = [], jobs = {}} = {}) {
+function fake({runs = [], units, jobs = {}} = {}) {
   const listed = [];
   return {
     listed,
@@ -41,7 +41,10 @@ function fake({runs = [], jobs = {}} = {}) {
             listed.push(params);
             return {
               data: {
-                workflow_runs: runs.filter(
+                workflow_runs: (params.workflow_id === 'deploy.yml'
+                  ? (units ?? runs)
+                  : runs
+                ).filter(
                   item =>
                     (!params.head_sha || item.head_sha === params.head_sha) &&
                     item.conclusion === params.status,
@@ -108,14 +111,25 @@ describe('the release-check receipt for a cut commit', () => {
     ).toBe(7);
   });
 
-  it("fails naming main's last checked commit when the cut commit has no passing release-check", async () => {
+  it("fails naming main's last commit with both receipts when the cut commit has no passing release-check", async () => {
+    const NEWER = 'e'.repeat(40);
     const {result, messages} = await require_({
-      runs: [run(9, CUT, 'failure'), run(8, OTHER)],
-      jobs: {9: [join('failure')], 8: [join('success')]},
+      // NEWER passed its release-check but its unit run failed.
+      runs: [run(10, NEWER), run(9, CUT, 'failure'), run(8, OTHER)],
+      units: [run(21, NEWER, 'failure'), run(20, OTHER)],
+      jobs: {
+        10: [join('success')],
+        9: [join('failure')],
+        8: [join('success')],
+        20: [
+          {name: 'test-ui (1/4)', conclusion: 'success'},
+          {name: 'test-node (1/4)', conclusion: 'success'},
+        ],
+      },
     });
     expect(result).toBeNull();
     expect(messages.failed).toEqual([
-      `No passing release-check for the cut commit ${CUT}. Re-cut the release from main's last commit with a passing release-check, ${OTHER}, or wait for main's next check and cut from it.`,
+      `No passing release-check for the cut commit ${CUT}. Re-cut the release from main's last commit with both a passing release-check and a passing full unit run, ${OTHER}, or wait for main's next checks and cut from them.`,
     ]);
   });
 
@@ -129,7 +143,7 @@ describe('the release-check receipt for a cut commit', () => {
       /^No passing release-check for the cut commit/,
     );
     expect(messages.failed[0]).toMatch(
-      /No main commit has a passing release-check/,
+      /No recent main commit has both a passing release-check and a passing full unit run/,
     );
   });
 
@@ -191,7 +205,7 @@ describe('the full unit run receipt for a cut commit (spec:AST-030 FR21)', () =>
     });
     expect(result).toBeNull();
     expect(messages.failed).toEqual([
-      `No passing full unit run for the cut commit ${CUT}. Re-cut the release from a main commit with both a passing release-check and a passing full unit run, or wait for main's next scheduled checks and cut from them.`,
+      `No passing full unit run for the cut commit ${CUT}. No recent main commit has both a passing release-check and a passing full unit run; wait for main's next checks and cut from them.`,
     ]);
   });
 

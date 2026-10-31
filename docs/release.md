@@ -10,8 +10,11 @@ stable package is built from an immutable release tag and published with provena
 ## Release sequence
 
 1. Run the canonical full-scope `release-check` on an exact commit from current
-   `main`. Cut only from that checked SHA while it remains in current `main`
-   history. A minor cut additionally requires Cindy, the release owner, to
+   `main`. That commit also needs a passing full unit run of the Main workflow:
+   main's scheduler dispatches one with every release-check of main's tip, a
+   person's included, within about 15 minutes while that commit is still the
+   tip. Cut only from a SHA with both while it remains in current `main`
+   history; the stable publish refuses a cut commit without both. A minor cut additionally requires Cindy, the release owner, to
    explicitly sign off on the exact `vX.Y.0` immediately before the branch is
    created; scheduled or standing authority never substitutes for that sign-off.
 2. Create the single marked `release/vX.Y.Z` branch. Its version is the fixed-group

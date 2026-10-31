@@ -58,14 +58,15 @@ jobs:
               core.notice(`main moved past ${process.env.SHA.slice(0, 7)}; the newer push's check covers it.`);
               return;
             }
-            // A workflow's runs dispatched on main by the workflow token, which
-            // stays a run's actor when a person re-runs it. Newest first.
-            const dispatched = async workflow => {
+            // A workflow's runs dispatched on main, newest first; the workflow
+            // token stays a run's actor when a person re-runs it.
+            const dispatchedRuns = async workflow => {
               const {data} = await github.rest.actions.listWorkflowRuns({
                 ...context.repo, workflow_id: workflow, event: 'workflow_dispatch', branch: 'main', per_page: 30,
               });
-              return data.workflow_runs.filter(run => run.actor?.login === BOT);
+              return data.workflow_runs;
             };
+            const byBot = runs => runs.filter(run => run.actor?.login === BOT);
             // Whether a lane is due for the tip. A cancelled run was replaced
             // and never ran. A release-check that checked out a newer commit
             // than it was asked to check (a merge landed between the tip read
@@ -98,8 +99,10 @@ jobs:
               }
               return true;
             };
-            const checks = await dispatched('ci.yml');
-            const units = await dispatched('deploy.yml');
+            const allChecks = await dispatchedRuns('ci.yml');
+            const allUnits = await dispatchedRuns('deploy.yml');
+            const checks = byBot(allChecks);
+            const units = byBot(allUnits);
             const heavy = await due(checks, 'release-check', true);
             let unit = await due(units, 'full unit run', false);
 
@@ -138,8 +141,10 @@ jobs:
               });
             }
             // A release-check always brings a full unit run of the same commit,
-            // so a release cut from it has both.
-            const unitAtTip = await covered(units, false);
-            if (unit || (heavy && !unitAtTip)) {
+            // so a release cut from it has both: this one, or one a person
+            // dispatched for the tip, such as the release owner's own check.
+            const unitAtTip = await covered(allUnits, false);
+            const personCheckAtTip = allChecks.some(run => run.actor?.login !== BOT && run.conclusion !== 'cancelled' && run.head_sha === tip);
+            if (unit || ((heavy || personCheckAtTip) && !unitAtTip)) {
               await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'deploy.yml', ref: 'main'});
             }
