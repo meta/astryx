@@ -92,6 +92,7 @@ import type {
 } from '../Typeahead/types';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {isFocusDetached} from '../utils/focusReturn';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
@@ -827,14 +828,6 @@ export function Tokenizer<T extends SearchableItem>({
     },
     [onChangeQuery],
   );
-  // Whether the field's control — the inline input or the trigger — holds
-  // focus. Kept in a ref by the focus and blur handlers of both, because a
-  // control unmounted while focused fires no blur: when a presentation swap
-  // removes the focused control (the latch releasing into the popover, or
-  // `adaptive` changing while the sheet is closed), the new presentation's
-  // control takes the focus over once it has mounted, so focus never lands on
-  // the page body (`component:Tokenizer` FR16, `spec:AST-085` FR4).
-  const isControlFocusedRef = useRef(false);
   // Set around a focus move the field makes itself — a presentation swap
   // handing focus from one control to the other — so the receiving control
   // does not report it as focus entering from outside.
@@ -845,38 +838,33 @@ export function Tokenizer<T extends SearchableItem>({
   // entry, and the one focus the trigger then gets — BottomSheet's return
   // focus — is the entry to report.
   const hasReportedFocusRef = useRef(false);
-  // A control can hold focus without the field having seen a focus event:
-  // the inline input server-rendered with `autofocus` (`hasAutoFocus`) is
-  // focused before hydration, and the swap to the trigger in the first
-  // render after it removes that input. React detaches the old control
-  // before any effect of the swapping commit runs, so the live focus is
-  // read during that render, while the control is still in the document —
-  // a read of `document.activeElement` only, with no update made in render.
-  const previousPresentationRef = useRef(isSheetPresentation);
-  if (previousPresentationRef.current !== isSheetPresentation) {
-    previousPresentationRef.current = isSheetPresentation;
-    if (typeof document !== 'undefined') {
-      const active = document.activeElement;
-      if (
-        active != null &&
-        (active === inputRef.current || active === triggerRef.current)
-      ) {
-        isControlFocusedRef.current = true;
+  // When a presentation swap removes the focused control (the latch
+  // releasing into the popover, or `adaptive` changing while the sheet is
+  // closed), the new presentation's control takes the focus over, so focus
+  // never lands on the page body (`component:Tokenizer` FR16, `spec:AST-085`
+  // FR4). Both controls' callback refs own the hand-off
+  // (`architecture:react-component-runtime` INV6): the detaching control
+  // notes that it held focus — it is still in the document then, so this also
+  // covers a control focused before hydration (`hasAutoFocus`), which no focus
+  // event reported — and the attaching control takes it.
+  const isFocusPendingHandOffRef = useRef(false);
+  const handOffFocusRef = useCallback((node: HTMLElement | null) => {
+    if (node == null) {
+      return;
+    }
+    const takesFocus = isFocusPendingHandOffRef.current;
+    isFocusPendingHandOffRef.current = false;
+    if (takesFocus && isFocusDetached(node.ownerDocument)) {
+      isHandingOffFocusRef.current = true;
+      node.focus();
+      isHandingOffFocusRef.current = false;
+    }
+    return () => {
+      if (node.ownerDocument.activeElement === node) {
+        isFocusPendingHandOffRef.current = true;
       }
-    }
-  }
-  useEffect(() => {
-    if (!isControlFocusedRef.current) {
-      return;
-    }
-    const active = document.activeElement;
-    if (active != null && active !== document.body) {
-      return;
-    }
-    isHandingOffFocusRef.current = true;
-    (isSheetPresentation ? triggerRef.current : inputRef.current)?.focus();
-    isHandingOffFocusRef.current = false;
-  }, [isSheetPresentation]);
+    };
+  }, []);
   // The trigger's accessible description names the selected tokens: the
   // button's children are tokens whose own content assistive technology
   // leaves out of a button's name (`spec:AST-020` FR1).
@@ -951,6 +939,29 @@ export function Tokenizer<T extends SearchableItem>({
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
+  // The inline field's wrapper holds every control a swap removes with the
+  // input — a token's Remove button, the inline Clear all — so it notes focus
+  // anywhere inside it for the hand-off above. It also anchors the
+  // disabled-message tooltip, whose handlers are gated internally by
+  // isEnabled, so attaching unconditionally is safe.
+  const tooltipAnchorRef = disabledMessageTooltip.ref;
+  const wrapperCallbackRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapperRef.current = el;
+      tooltipAnchorRef(el);
+      if (el == null) {
+        return;
+      }
+      return () => {
+        if (el.contains(el.ownerDocument.activeElement)) {
+          isFocusPendingHandOffRef.current = true;
+        }
+        wrapperRef.current = null;
+        tooltipAnchorRef(null);
+      };
+    },
+    [tooltipAnchorRef],
+  );
 
   // The sheet presentation has no input; the public ref reaches the trigger,
   // the control it stands for (`family:input-fields` FR10).
@@ -958,6 +969,7 @@ export function Tokenizer<T extends SearchableItem>({
     triggerRef,
     ref as React.Ref<HTMLButtonElement> | undefined,
     disabledMessageTooltip.ref,
+    handOffFocusRef,
   );
 
   useImperativeHandle(handleRef, () => ({
@@ -1038,7 +1050,6 @@ export function Tokenizer<T extends SearchableItem>({
         layer.show();
       }
       if (comingFromOutside) {
-        isControlFocusedRef.current = true;
         if (!isHandingOffFocusRef.current) {
           hasReportedFocusRef.current = true;
           onFocus?.(e);
@@ -1056,8 +1067,9 @@ export function Tokenizer<T extends SearchableItem>({
   const handleBlurCapture = useCallback(
     (e: React.FocusEvent) => {
       if (!isFocusInTokenizer(e.relatedTarget)) {
-        isControlFocusedRef.current = false;
         hasReportedFocusRef.current = false;
+        // Focus left the field: no hand-off is owed any more.
+        isFocusPendingHandOffRef.current = false;
         setIsFocusedWithin(false);
         onBlur?.(e);
         if (isLayerMode) {
@@ -1339,13 +1351,7 @@ export function Tokenizer<T extends SearchableItem>({
 
   const wrapperContent = (
     <div
-      ref={el => {
-        wrapperRef.current = el;
-        // Anchor + hover/focus listeners for the disabled-message tooltip.
-        // Handlers are gated internally by isEnabled, so attaching
-        // unconditionally is safe.
-        disabledMessageTooltip.ref(el);
-      }}
+      ref={wrapperCallbackRef}
       role="group"
       aria-label={label}
       onClick={handleWrapperClick}
@@ -1411,6 +1417,7 @@ export function Tokenizer<T extends SearchableItem>({
               // With `experimental`, the ref type admits the trigger too; in
               // this presentation it receives the input.
               ref as React.Ref<HTMLInputElement> | undefined,
+              handOffFocusRef,
             )}
             searchSource={isAtMax ? emptySource : filteredSource}
             value={null}
@@ -1545,7 +1552,6 @@ export function Tokenizer<T extends SearchableItem>({
               React.MouseEventHandler<HTMLButtonElement> | undefined,
           )}
           onFocus={event => {
-            isControlFocusedRef.current = true;
             // BottomSheet focuses the trigger only after its exit completes;
             // that focus is the signal that the retained sheet can leave. If
             // the resolution moved to the popover meanwhile, the inline input
@@ -1574,8 +1580,8 @@ export function Tokenizer<T extends SearchableItem>({
             if (isSheetOpen) {
               return;
             }
-            isControlFocusedRef.current = false;
             hasReportedFocusRef.current = false;
+            isFocusPendingHandOffRef.current = false;
             onBlur?.(event);
           }}
           onKeyDown={onKeyDown}
