@@ -16,6 +16,9 @@ import {resolveComponentReplacements} from '../../foundation/discovery/component
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
 
+/** Whether `gh` is on PATH, for the swizzle receipt's `gh issue create` line. */
+export {checkGhCli} from './_github.mjs';
+
 /** The package that owns Core's components, hooks, and codemods. */
 export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/providers.mjs';
 
