@@ -15,20 +15,29 @@
  * - /packages/cli/assets/templates/blocks/components/HoverCard/ (showcase blocks)
  */
 
-import {useCallback, useRef, type ReactElement, type ReactNode} from 'react';
+import {
+  useCallback,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
   useHoverCard,
   type HoverCardFocusTrigger,
+  type HoverCardPressTrigger,
   type HoverCardTouchTrigger,
 } from './useHoverCard';
+import {isPressPinClick} from '../Layer/usePressPin';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import type {BaseProps} from '../BaseProps';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 
 export type {
   HoverCardFocusTrigger,
+  HoverCardPressTrigger,
   HoverCardTouchTrigger,
 } from './useHoverCard';
 
@@ -159,12 +168,30 @@ export interface HoverCardProps extends Pick<
    * What a tap does on a touch pointer, where there is no hover:
    * - `auto`: tap opens the card, unless the trigger performs an action of its
    *   own (a button, a link, a form control) — that tap belongs to the control
-   * - `tap`: tap always opens the card, even on a trigger that acts
+   * - `tap`: tap always opens the card, even on a trigger that acts.
+   *   Deprecated (DEP-0016): pass `pressTrigger="toggle"` instead; `astryx
+   *   upgrade` rewrites it. Ignored under `pressTrigger="toggle"`
    * - `none`: touch never opens the card
    *
    * @default 'auto'
    */
   touchTrigger?: HoverCardTouchTrigger;
+
+  /**
+   * Whether a press on the trigger pins the card open:
+   * - `none`: no press pins it; `touchTrigger` decides what a tap does
+   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
+   *   card open and the same press closes it; hover and focus still preview
+   *   it. A pinned card stays until Escape, a second press on the trigger, a
+   *   press outside the trigger and the card, or focus leaving them, and the
+   *   press stops at the trigger: no clickable row or card around it
+   *   activates. The trigger reports `aria-expanded` and `aria-controls`, and
+   *   the card's `label` (else its text) is announced once when it pins.
+   *   `touchTrigger` is ignored.
+   *
+   * @default 'none'
+   */
+  pressTrigger?: HoverCardPressTrigger;
 
   /**
    * Whether the hover card is enabled.
@@ -236,6 +263,17 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
 }
 
 /**
+ * A press that pinned or closed the card stops here, after the trigger's own
+ * handlers ran: no clickable row, card, or container around the trigger
+ * receives it (component:HoverCard FR9).
+ */
+function stopPressPinClick(event: ReactMouseEvent): void {
+  if (isPressPinClick(event.nativeEvent)) {
+    event.stopPropagation();
+  }
+}
+
+/**
  * HoverCard component for displaying interactive content on hover/focus.
  *
  * Uses a display:contents wrapper so children refs are preserved.
@@ -259,6 +297,7 @@ export function HoverCard({
   hideDelay = 200,
   focusTrigger = 'auto',
   touchTrigger = 'auto',
+  pressTrigger = 'none',
   isEnabled = true,
   label,
   onOpenChange,
@@ -292,6 +331,7 @@ export function HoverCard({
     hideDelay,
     focusTrigger,
     touchTrigger,
+    pressTrigger,
     isEnabled,
     label,
     isOpen,
@@ -335,14 +375,18 @@ export function HoverCard({
       const existingHaspopup = firstChild.getAttribute('aria-haspopup');
       const existingControls = firstChild.getAttribute('aria-controls');
       const existingExpanded = firstChild.getAttribute('aria-expanded');
-      const canExpand = supportsAriaExpanded(firstChild);
-
+      // Under the toggle, the press pin owns aria-expanded (true only while
+      // pinned) and aria-controls (FR10); the popup role stays here.
+      const ownsToggleState = pressTrigger !== 'toggle';
+      const canExpand = ownsToggleState && supportsAriaExpanded(firstChild);
       firstChild.setAttribute('aria-haspopup', 'dialog');
       // Only point aria-controls at the layer while it is open and in the DOM.
       // While closed, useLayer leaves only an inert <template> marker, so the
       // id would reference nothing. DateInput gates it the same way. The
       // trigger's own aria-controls (if any) is preserved either way.
-      if (hoverCard.isOpen) {
+      if (!ownsToggleState) {
+        // The press pin sets it.
+      } else if (hoverCard.isOpen) {
         firstChild.setAttribute(
           'aria-controls',
           mergeIds(existingControls, hoverCard.id) ?? '',
@@ -352,7 +396,9 @@ export function HoverCard({
       } else {
         firstChild.removeAttribute('aria-controls');
       }
-      if (canExpand) {
+      if (!ownsToggleState) {
+        // The press pin sets it.
+      } else if (canExpand) {
         firstChild.setAttribute('aria-expanded', String(hoverCard.isOpen));
       } else if (existingExpanded) {
         firstChild.setAttribute('aria-expanded', existingExpanded);
@@ -366,6 +412,9 @@ export function HoverCard({
           firstChild.setAttribute('aria-haspopup', existingHaspopup);
         } else {
           firstChild.removeAttribute('aria-haspopup');
+        }
+        if (!ownsToggleState) {
+          return;
         }
         if (existingControls) {
           firstChild.setAttribute('aria-controls', existingControls);
@@ -400,6 +449,7 @@ export function HoverCard({
   }, [
     textOnly,
     label,
+    pressTrigger,
     hoverCard.ref,
     hoverCard.id,
     hoverCard.isOpen,
@@ -442,7 +492,10 @@ export function HoverCard({
   // For element children: use inline-safe display:contents, ref on first child
   return (
     <>
-      <span ref={wrapperRef} {...stylex.props(styles.wrapperContents)}>
+      <span
+        ref={wrapperRef}
+        onClick={stopPressPinClick}
+        {...stylex.props(styles.wrapperContents)}>
         {children}
       </span>
       {renderedHoverCard}

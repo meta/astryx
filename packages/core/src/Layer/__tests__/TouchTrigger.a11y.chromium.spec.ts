@@ -198,3 +198,77 @@ for (const {name, story, trigger, action, layer} of cases) {
     });
   });
 }
+
+test.describe('Tooltip pressTrigger="toggle" (component:Tooltip FR9, FR10)', () => {
+  const STORY = 'a11y-tooltip-press-toggle--button-toggle';
+  const CARD_STORY = 'a11y-tooltip-press-toggle--in-a-clickable-card';
+  const LAYER = '.astryx-tooltip:popover-open';
+  const pinButton = (page: Page) =>
+    page.getByRole('button', {name: 'What is this?'});
+
+  test('a real tap pins the tooltip, and the next tap on the trigger closes it', async ({
+    page,
+  }) => {
+    const finger = await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await expect(page.locator(LAYER)).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a tap outside closes a pinned tooltip', async ({page}) => {
+    const finger = await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await finger.down(...OUTSIDE);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('Enter pins it and Space closes it from the keyboard', async ({
+    page,
+  }) => {
+    await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await page.keyboard.press(' ');
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a tap on the trigger inside a clickable card pins its tooltip and stops there', async ({
+    page,
+  }) => {
+    const finger = await openStory(page, CARD_STORY);
+    const button = pinButton(page);
+    const count = page.getByText(/^Card opened \d+ times$/);
+    await expect(button).toBeVisible();
+    await expect(count).toHaveText('Card opened 0 times');
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(count).toHaveText('Card opened 0 times');
+    await page.mouse.click(x, y);
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(count).toHaveText('Card opened 0 times');
+  });
+});
