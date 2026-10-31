@@ -773,7 +773,7 @@ describe('concern routing', () => {
     );
   });
 
-  it('prints the concern claims first and counts the linked records', () => {
+  it('prints the concern claims first and lists the linked records by id', () => {
     const result = resolveSpecsForFile(concernFixture(), file, {addedLines});
     const short = formatResult(result).split('\n');
     expect(short[1]).toBe(
@@ -782,13 +782,12 @@ describe('concern routing', () => {
     expect(short[2]).toBe(
       "    architecture:react-component-runtime  INV16  ← slot-presence (line 7: typeof label !== 'boolean'; shared: isRenderable)",
     );
-    expect(short.at(-1)).toMatch(
-      /^ {2}\d+ linked records, claims and deciding specs \(--records lists them\)\.$/,
-    );
-    expect(short.join('\n')).not.toContain('component:Popover');
-    expect(formatResult(result, {records: true})).toContain(
-      'component:Popover',
-    );
+    // Every linked record is still listed, by id (INV26).
+    expect(
+      short.some(line => /^ {2}Records: .*component:Popover/.test(line)),
+    ).toBe(true);
+    expect(short.join('\n')).not.toContain('via ');
+    expect(formatResult(result, {records: true})).toContain('via ');
   });
 });
 

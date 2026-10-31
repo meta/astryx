@@ -45,8 +45,7 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
       "claims": ["INV1", "INV2", "INV3"]
     },
     "press-tracking": {
-      "names": ["usePressFeedback", "useMenuPress", "useLongPress"],
-      "patterns": ["addEventListener\\(\\s*['\"]pointer(?:up|cancel)['\"]"],
+      "names": ["createActionGroupTracker", "useMenuPress"],
       "claims": ["INV13"]
     }
   }

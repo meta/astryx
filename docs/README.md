@@ -134,8 +134,8 @@ matched component and module triggers route (the same selection as
 `review-global-baselines.mjs`). With `--diff origin/main` (or
 `--diff <base>..<head>`) it reads the change, lists its files when none are
 named, and puts first the claims whose owning record's `concerns` the added
-lines match. The default view lists claims and counts the linked records;
-`--records` lists them. A path with no linked record is reported as
+lines match. The default view lists the claims and the linked record ids; `--records`
+shows how each record links. A path with no linked record is reported as
 such. Records are read from the working tree, so on a pull-request branch the
 result includes that branch's proposed records and is not review authority.
 `pnpm specs:for --unrouted` lists tracked files with no governing record;

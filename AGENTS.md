@@ -30,8 +30,9 @@ nested `AGENTS.md`.
   route exposes only the listed claim; it never makes the whole record govern
   the component or change. Preserve each matched record, claim, trigger, and
   match reason in the review receipt.
-- Before editing, run `pnpm specs:for --diff origin/main` on your changed
-  files, and follow every concern-routed claim.
+- Before editing a path, run `pnpm specs:for <path>`. After editing, before
+  you commit or push, run `pnpm specs:for --diff origin/main` and follow every
+  concern-routed claim.
 - Any path: `pnpm specs:for <path>` lists the current records linked to it,
   the specs that decided them, and the global claims its component's triggers
   route. It reads the working tree, so on a pull-request branch it shows that

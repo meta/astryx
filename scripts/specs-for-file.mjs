@@ -862,14 +862,20 @@ function formatShortResult(result) {
   for (const [recordId, claims] of byRecord) {
     lines.push(`    ${recordId}  ${[...new Set(claims)].join(', ')}`);
   }
-  const linked =
-    result.records.length +
-    result.decisions.length +
-    result.decidingSpecs.length;
+  if (result.records.length === 0) {
+    lines.push(
+      result.decisions.length > 0
+        ? '  No whole record links to this path; it cites the claims above.'
+        : '  No record links to this path.',
+    );
+  } else {
+    lines.push(
+      `  Records: ${result.records.map(record => record.id).join(', ')}`,
+    );
+  }
+  const more = result.decisions.length + result.decidingSpecs.length;
   lines.push(
-    linked === 0
-      ? '  No record links to this path.'
-      : `  ${linked} linked records, claims and deciding specs (--records lists them).`,
+    `  --records shows how each record links${more > 0 ? `, plus ${more} cited claims and deciding specs` : ''}.`,
   );
   return lines.join('\n');
 }
@@ -886,7 +892,8 @@ there, the specs that decided those records, and the trigger-routed global
 claims. --diff reads the change against <base> (its merge base with HEAD, to
 the working tree) or between <base>..<head>, lists its changed files when none
 are named, and puts first the claims whose owning record's concerns its added
-lines match. --records lists every linked record, not just the count.
+lines match. --records shows how each linked record links, with cited claims and deciding
+specs.
 --unreached lists current records no other tracked file reaches.
 --unrouted lists tracked files no current record governs.`;
 
@@ -906,7 +913,22 @@ function diffText(root, range) {
     return git(['diff', '--no-color', '--no-ext-diff', base, head]);
   }
   const base = git(['merge-base', 'HEAD', range]).trim();
-  return git(['diff', '--no-color', '--no-ext-diff', base]);
+  const tracked = git(['diff', '--no-color', '--no-ext-diff', base]);
+  // A new file not yet added to git is part of the change too.
+  const untracked = git(['ls-files', '--others', '--exclude-standard', '-z'])
+    .split('\0')
+    .filter(Boolean)
+    .map(file => {
+      const lines = fs.readFileSync(path.join(root, file), 'utf8').split('\n');
+      return [
+        `diff --git a/${file} b/${file}`,
+        '--- /dev/null',
+        `+++ b/${file}`,
+        `@@ -0,0 +1,${lines.length} @@`,
+        ...lines.map(line => `+${line}`),
+      ].join('\n');
+    });
+  return [tracked, ...untracked].join('\n');
 }
 
 function main(argv) {
@@ -986,14 +1008,23 @@ function main(argv) {
   }
   const diff =
     diffRange == null ? null : readDiff(diffText(DEFAULT_ROOT, diffRange));
-  if (files.length === 0 && diff != null) files.push(...diff.files);
-  if (files.length === 0) {
+  const cwd = process.env.INIT_CWD ?? process.cwd();
+  // Named files resolve against where the command ran; the diff's own files
+  // are repository-relative.
+  const targets = files.map(file => path.resolve(cwd, file));
+  if (targets.length === 0 && diff != null) {
+    if (diff.files.length === 0) {
+      console.log(`No changes against ${diffRange}.`);
+      return 0;
+    }
+    targets.push(...diff.files.map(file => path.join(DEFAULT_ROOT, file)));
+  }
+  if (targets.length === 0) {
     console.error(USAGE);
     return 2;
   }
-  const cwd = process.env.INIT_CWD ?? process.cwd();
-  const results = files.map(file =>
-    resolveSpecsForFile(index, path.resolve(cwd, file), {
+  const results = targets.map(target =>
+    resolveSpecsForFile(index, target, {
       includeDraft,
       triggers,
       addedLines: diff?.addedLines,
