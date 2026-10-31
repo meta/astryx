@@ -611,7 +611,10 @@ the value drawn at that moment, where it stays. So on iOS WebKit, at
 touch-down, the host has every element the animator reports as moving
 (`motion/presentation.ts`) resolved with one custom-property write, then
 asks the engine what is under the finger: the touch goes to what is drawn
-there, with z-order and `pointer-events` as the engine sees them. Press
+there, with z-order and `pointer-events` as the engine sees them. A touch
+that a busy main thread hands the host late goes to what was drawn under the
+finger when it landed (its timestamp): the host asks at the point that
+content has moved to since. Press
 trackers take their bounds from `presentedRect`, the reported box moved by
 the motion since. A retargeted tap cancels the engine's click,
 which would hit the start position, and clicks what it touched; the
