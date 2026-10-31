@@ -172,14 +172,27 @@ export async function ciHistory({
   return {runs, runsLast7Days};
 }
 
-async function workflowAt({github, owner, repo, ref}) {
-  const {data} = await github.rest.repos.getContent({
-    owner,
-    repo,
-    path: '.github/workflows/ci.yml',
-    ref,
-  });
-  return yaml.parse(Buffer.from(data.content, 'base64').toString('utf8'));
+async function workflowAt({
+  github,
+  owner,
+  repo,
+  ref,
+  file = '.github/workflows/ci.yml',
+}) {
+  try {
+    const {data} = await github.rest.repos.getContent({
+      owner,
+      repo,
+      path: file,
+      ref,
+    });
+    return yaml.parse(Buffer.from(data.content, 'base64').toString('utf8'));
+  } catch (error) {
+    // A workflow the pull request adds has no base, one it removes no head.
+    if (error?.status === 404 || /Not Found|404/.test(String(error?.message)))
+      return null;
+    throw error;
+  }
 }
 
 /**
@@ -203,7 +216,8 @@ export async function gatherCiImpact({
       pull_number: identity.prNumber,
       per_page: 100,
     });
-    if (!ciImpact.isCiChange(files.map(file => file.filename))) return null;
+    const names = files.map(file => file.filename);
+    if (!ciImpact.isCiChange(names)) return null;
     const cached =
       historyPath && fs.existsSync(historyPath) ? readJSON(historyPath) : null;
     const history = await ciHistory({github, owner, repo, cached});
@@ -220,17 +234,52 @@ export async function gatherCiImpact({
       repo,
       run_id: identity.sourceRunId,
     });
+    // Every other changed workflow: when it runs and on which runners.
+    const otherWorkflows = [];
+    for (const file of names.filter(
+      name =>
+        /^\.github\/workflows\/[^/]+\.ya?ml$/.test(name) &&
+        name !== '.github/workflows/ci.yml',
+    )) {
+      const [before, after] = await Promise.all([
+        workflowAt({github, owner, repo, ref: identity.baseSha, file}),
+        workflowAt({github, owner, repo, ref: identity.headSha, file}),
+      ]);
+      otherWorkflows.push(
+        ciImpact.describeWorkflow(
+          file.replace('.github/workflows/', ''),
+          before,
+          after,
+        ),
+      );
+    }
     const started = Date.parse(run.run_started_at ?? '');
     const finished = Date.parse(run.updated_at ?? '');
-    return ciImpact.estimateImpact({
+    const impact = ciImpact.estimateImpact({
       diff: ciImpact.diffWorkflow(base, head),
       history: ciImpact.summarizeHistory(history),
       currentJobs: jobs,
+      // Time to green compares like with like: a run that failed or was
+      // cancelled has no time to green.
       currentWallMinutes:
-        Number.isFinite(started) && Number.isFinite(finished)
+        run.conclusion === 'success' &&
+        Number.isFinite(started) &&
+        Number.isFinite(finished)
           ? (finished - started) / 60000
           : null,
     });
+    return {
+      ...impact,
+      otherWorkflows,
+      flags: [
+        ...impact.flags,
+        ...otherWorkflows
+          .filter(workflow => workflow.nonStandard)
+          .map(
+            workflow => `\`${workflow.file}\` runs on a non-standard runner`,
+          ),
+      ],
+    };
   } catch {
     return null;
   }

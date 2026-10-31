@@ -240,6 +240,46 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
   };
 }
 
+/** When a workflow runs, in words: its events, and a schedule's cron times. */
+function triggerText(on) {
+  if (!on) return 'no trigger';
+  if (typeof on === 'string') return on;
+  if (Array.isArray(on)) return on.join(', ');
+  return Object.entries(on)
+    .map(([event, config]) =>
+      event === 'schedule' && Array.isArray(config)
+        ? `schedule (${config.map(entry => `\`${entry.cron}\``).join(', ')})`
+        : event,
+    )
+    .join(', ');
+}
+
+/**
+ * A changed workflow other than CI's own: whether it was added, removed or
+ * changed, when it runs, and each job's runner class. Its minutes are not
+ * estimated: the pull request's run does not run it.
+ */
+function describeWorkflow(file, base, head) {
+  const doc = head ?? base;
+  const jobs = Object.entries(doc?.jobs || {}).map(([id, job]) => ({
+    name: displayName(id, job),
+    runner: runnerClass(job['runs-on']),
+  }));
+  return {
+    file,
+    change: !base ? 'added' : !head ? 'removed' : 'changed',
+    triggers: triggerText(doc?.on),
+    jobs,
+    nonStandard:
+      !!head &&
+      jobs.some(job => job.runner.kind !== 'standard') &&
+      (!base ||
+        Object.values(base.jobs || {}).every(
+          job => runnerClass(job['runs-on']).kind === 'standard',
+        )),
+  };
+}
+
 function signed(value, digits = 0, unit = '') {
   const rounded = Number(value.toFixed(digits));
   if (rounded === 0) return `0${unit}`;
@@ -276,6 +316,14 @@ function renderCiImpact(impact) {
     impact.changes.some(change => change.after?.kind === 'non-standard')
       ? 'non-standard runners on pull requests'
       : 'standard runners on pull requests',
+    ...['added', 'removed'].map(kind => {
+      const count = (impact.otherWorkflows || []).filter(
+        workflow => workflow.change === kind,
+      ).length;
+      return count > 0
+        ? `${count} workflow${count === 1 ? '' : 's'} ${kind}`
+        : null;
+    }),
   ].filter(Boolean);
   const rows = [
     [
@@ -304,6 +352,18 @@ function renderCiImpact(impact) {
     ],
     ['Runs a day', amount(impact.runsPerDay), amount(impact.runsPerDay), '0'],
   ];
+  const workflows = (impact.otherWorkflows || [])
+    .map(
+      workflow =>
+        `\`${workflow.file}\` ${workflow.change}: runs on ${workflow.triggers}; ${
+          workflow.jobs.length === 0
+            ? 'no jobs'
+            : [
+                ...new Set(workflow.jobs.map(job => runnerText(job.runner))),
+              ].join(', ')
+        } runners${workflow.change === 'removed' ? '' : '; its minutes appear once it has run'}`,
+    )
+    .join(' · ');
   const jobs = impact.changes
     .map(
       change =>
@@ -314,10 +374,11 @@ function renderCiImpact(impact) {
     .map(row => `| ${row.join(' | ')} |`)
     .join(
       '\n',
-    )}\n\n${jobs ? `Changed jobs: ${jobs}\n\n` : ''}${impact.flags.length > 0 ? `**Flags:** ${impact.flags.join('; ')}.\n\n` : ''}Assumptions: before is each job's average over the last ${num(impact.sampled)} pull-request runs; after keeps that for unchanged jobs and uses this run's minutes for added or changed ones; runs a day is the last 7 days' average; time to green compares this run with the median.\n\n</details>\n\n`;
+    )}\n\n${jobs ? `Changed jobs: ${jobs}\n\n` : ''}${workflows ? `Other workflows: ${workflows}\n\n` : ''}${impact.flags.length > 0 ? `**Flags:** ${impact.flags.join('; ')}.\n\n` : ''}Assumptions: before is each job's average over the last ${num(impact.sampled)} pull-request runs; after keeps that for unchanged jobs and uses this run's minutes for added or changed ones; runs a day is the last 7 days' average; time to green compares this run with the median.\n\n</details>\n\n`;
 }
 
 module.exports = {
+  describeWorkflow,
   CI_PATH,
   isCiChange,
   runnerClass,

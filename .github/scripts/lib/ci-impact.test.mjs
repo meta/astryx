@@ -12,6 +12,7 @@ import {describe, expect, it} from 'vitest';
 import impactLib from './ci-impact.js';
 
 const {
+  describeWorkflow,
   isCiChange,
   runnerClass,
   diffWorkflow,
@@ -75,6 +76,31 @@ describe('diffWorkflow', () => {
       ['old', 'removed'],
     ]);
     expect(diff.triggersChanged).toBe(false);
+  });
+});
+
+describe('describeWorkflow', () => {
+  it('says when an added workflow runs and on which runners', () => {
+    const workflow = describeWorkflow('perf-nightly.yml', null, {
+      on: {schedule: [{cron: '17 9 * * *'}], workflow_dispatch: {}},
+      jobs: {perf: {'runs-on': 'ubuntu-latest'}},
+    });
+    expect(workflow).toMatchObject({
+      file: 'perf-nightly.yml',
+      change: 'added',
+      triggers: 'schedule (`17 9 * * *`), workflow_dispatch',
+      nonStandard: false,
+    });
+  });
+
+  it('flags a workflow that moves onto a non-standard runner', () => {
+    expect(
+      describeWorkflow(
+        'nightly.yml',
+        {on: 'push', jobs: {a: {'runs-on': 'ubuntu-latest'}}},
+        {on: 'push', jobs: {a: {'runs-on': '4-core-ubuntu'}}},
+      ).nonStandard,
+    ).toBe(true);
   });
 });
 
@@ -207,6 +233,22 @@ describe('renderCiImpact', () => {
     });
     expect(section).toContain(' ⚠️</summary>');
     expect(section).toContain('**Flags:** runner-pool usage +14%.');
+  });
+
+  it('lists other changed workflows and counts added ones in the summary', () => {
+    const section = renderCiImpact({
+      ...impact,
+      otherWorkflows: [
+        describeWorkflow('perf-nightly.yml', null, {
+          on: {schedule: [{cron: '17 9 * * *'}]},
+          jobs: {perf: {'runs-on': 'ubuntu-latest'}},
+        }),
+      ],
+    });
+    expect(section).toContain('· 1 workflow added</summary>');
+    expect(section).toContain(
+      'Other workflows: `perf-nightly.yml` added: runs on schedule (`17 9 * * *`); standard runners; its minutes appear once it has run',
+    );
   });
 
   it('renders nothing for a pull request that does not change CI', () => {
