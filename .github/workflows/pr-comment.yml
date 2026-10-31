@@ -199,7 +199,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     permissions:
       pull-requests: write
+      # actions: the artifacts and the source run's job list; deployments:
+      # this head's Vercel preview state.
       actions: read
+      deployments: read
     # The artifact downloads are optional (a run may not produce them), so
     # they are not failures of this job.
     outputs:

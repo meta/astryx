@@ -1091,15 +1091,30 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (!popover.isOpen) {
         if (e.key === 'ArrowDown' && (hasEntriesOnFocus || query.length > 0)) {
           e.preventDefault();
-          if (results.length > 0) {
+          // Results held from a replaced search source are not current
+          // (spec:AST-092 FR4): they count as none, so the new source loads.
+          const hasResultsFromCurrentSource =
+            results.length > 0 && resultsGenRef.current >= sourceGenRef.current;
+          const isQueryBelowMinLength = isBelowMinQueryLength(
+            query,
+            minQueryLength,
+          );
+          if (hasResultsFromCurrentSource) {
             popover.show();
             setHighlightedIndex(0);
+          } else if (
+            results.length > 0 &&
+            query.length > 0 &&
+            !isQueryBelowMinLength
+          ) {
+            // The typed query runs again against the new source.
+            void performSearch(query);
           } else if (
             hasEntriesOnFocus &&
             // A below-threshold query was never searched; falling back to the
             // bootstrap entries here would open a menu of suggestions that
             // ignore what the user has already typed.
-            !isBelowMinQueryLength(query, minQueryLength)
+            !isQueryBelowMinLength
           ) {
             void performBootstrap();
           }
@@ -1170,6 +1185,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       query,
       minQueryLength,
       performBootstrap,
+      performSearch,
       externalOnKeyDown,
     ],
   );
