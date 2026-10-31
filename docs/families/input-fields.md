@@ -366,7 +366,6 @@ DEC-6 does not require unrelated components to add a new floor.
   | FileInput       | control box          | native file input                      | native file input        | `control*`               |
   | DateRangeInput  | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
   | Selector        | control box          | trigger button                         | trigger button           | `control*`               |
-  | MultiSelector   | control box          | not forwarded                          | trigger button           | `control*`               |
   | ComplexSelector | control box          | control box                            | trigger button           | `control*`               |
   | Typeahead       | Field                | Field                                  | combobox input           | `container*`             |
   | Tokenizer       | Field                | Field                                  | combobox input           | `container*`             |
