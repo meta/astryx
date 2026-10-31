@@ -16,7 +16,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {execFile} = require('node:child_process');
-const {num} = require('./report-text');
+const {num, sizeText} = require('./report-text');
 
 /**
  * A package is flagged when its tarball grows by more than this share of its
@@ -134,7 +134,13 @@ function splitDependencyKey(key) {
  * row keeps its head figures, nothing is over budget, and the verdict says
  * the base was not measured.
  */
-function comparePackageSizes({head, base, headSha = '', baseSha = ''}) {
+function comparePackageSizes({
+  head,
+  base,
+  headSha = '',
+  baseSha = '',
+  baseReason = '',
+}) {
   const headPackages = head?.packages || {};
   const basePackages = base?.packages || null;
   const names = [
@@ -190,6 +196,7 @@ function comparePackageSizes({head, base, headSha = '', baseSha = ''}) {
     schema: 1,
     headSha,
     baseSha,
+    ...(basePackages ? {} : {baseReason: baseReason || 'not-kept'}),
     budget: {
       packedPercent: PACKED_BUDGET_PERCENT,
       packedMinBytes: PACKED_BUDGET_MIN_BYTES,
@@ -201,13 +208,6 @@ function comparePackageSizes({head, base, headSha = '', baseSha = ''}) {
   };
 }
 
-function sizeText(bytes) {
-  if (!isMeasured(bytes)) return 'N/A';
-  if (Math.abs(bytes) < 1024) return `${bytes}B`;
-  if (Math.abs(bytes) < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)}MB`;
-}
-
 function deltaText(after, before) {
   if (!isMeasured(after) || !isMeasured(before)) return 'N/A';
   const delta = after - before;
@@ -217,6 +217,14 @@ function deltaText(after, before) {
       : '';
   return `${delta > 0 ? '+' : ''}${sizeText(delta)}${percent}`;
 }
+
+/** Why a comparison has no base, as the report says it. */
+const BASE_REASONS = {
+  'no-merge-base':
+    "This branch's merge base with main is not within the fetched history (about 250 main commits).",
+  'not-kept':
+    "Main's measurement of this pull request's merge base could not be found or read (main keeps one for 14 days, from when the measurement started).",
+};
 
 function fileCount(value) {
   return isMeasured(value) ? String(num(value)) : 'N/A';
@@ -240,8 +248,7 @@ function renderPackageSizeSection(report, literal = text => String(text)) {
   const {packedPercent, packedMinBytes} = report.budget || {};
   let out = '### Published Package Size\n\n';
   if (report.verdict === 'no-base') {
-    out +=
-      "_Main has no kept measurement of this pull request's merge base (it is older than 14 days, or predates the measurement), so only this head's sizes are shown and no budget applies._\n\n";
+    out += `_${BASE_REASONS[report.baseReason] ?? BASE_REASONS['not-kept']} Only this head's sizes are shown, with no budget._\n\n`;
   }
   const rows =
     report.verdict === 'no-base'

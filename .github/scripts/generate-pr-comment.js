@@ -13,7 +13,7 @@ const {buildVisualSection} = require('./lib/visual-format');
 const {renderPackageSizeSection} = require('./lib/package-size');
 // Report-file strings render as literal inline text, report numbers as
 // numbers — the comment's structure comes only from this file's literals.
-const {inline, num} = require('./lib/report-text');
+const {inline, num, sizeText} = require('./lib/report-text');
 
 const args = process.argv.slice(2);
 const getArg = name => {
@@ -98,13 +98,6 @@ function bytesDelta(after, before) {
     Number.isFinite(before)
     ? after - before
     : null;
-}
-
-// A measured byte count as text, or N/A. Only numbers reach the output.
-function sizeText(bytes) {
-  if (typeof bytes !== 'number' || !Number.isFinite(bytes)) return 'N/A';
-  if (Math.abs(bytes) < 1024) return `${bytes}B`;
-  return `${(bytes / 1024).toFixed(1)}KB`;
 }
 
 function signedSizeText(delta) {

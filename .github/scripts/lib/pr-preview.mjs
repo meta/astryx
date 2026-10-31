@@ -582,7 +582,7 @@ export async function reconcilePrComment({
         ? ['--package-size', packageSizePath]
         : []),
       // No report means the audit did not run (it runs on main and release
-      // checks, or with the ci:heavy-lanes label); the comment says so.
+      // checks, or with the ci:run-a11y label); the comment says so.
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
       ...(storybook ? ['--storybook-url', `${previewOrigin}/storybook/`] : []),

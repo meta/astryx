@@ -44,7 +44,8 @@ deciding_specs:
       "INV11",
       "INV12",
       "INV13",
-      "INV15"
+      "INV15",
+      "INV16"
     ]
   }
 }
@@ -256,6 +257,17 @@ those contracts.
   only the final value is announced, never the values between. Number formatting stays
   with the caller. The value mode is part of the animator, adds no module, and
   is internal (`spec:AST-017` FR21).
+- **INV16 — A shared concern is extended in its owner and called once.** In
+  `@astryxdesign/core`, a concern Core already owns in a shared hook or utility
+  is extended there; a component calls it once and adds no effect, listener, or
+  tracker of its own for that concern. (Known implementation gaps include: Dialog calls
+  `useInteractionModalityTracking()` and also keeps its own Effect that tracks
+  modality in a second document; MobileNav keeps its own page scroll lock Effect
+  instead of `useScrollLock`; BottomSheet's gestures and mobile keyboard,
+  DateInput's month scroller, DropdownMenu's overflow check, Layer positioning,
+  Popover, and Table's sticky columns each keep their own `ResizeObserver`
+  beside `sharedResizeObserver`; and other Core sites keep their own
+  `MutationObserver` beside `sharedMutationObserver`.)
 
 ## Authoring guidance
 
@@ -407,3 +419,4 @@ component suite is not blanket conformance with every invariant.
 | INV12            | Source boundary check plus real-browser tests on a throttled phone profile over a 10-level by 50-sibling tree and two changes in one frame                                            | A per-frame height or layout, a walk past the area or into a subtree other than `display: contents`, an element moved twice for one frame, an added element other than a swap's one transient copy, that copy left after the swap ends, or an exported reporting function fails                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV13            | Source boundary check plus bundle analysis of a page with several touch components, and real-browser tests on a throttled phone profile, under a fine pointer, and on a hybrid device | A second copy of a touch module on one page, a component bundling its own copy of a module's primitive, an `import()` of a module in a component, a public export or doc entry for the modules, an install call or installed check in the public API, a gesture listener in a component that uses no gesture, or an idle document listener outside a press other than the one shared press controller and the one stray-click swallower, an import of `@astryxdesign/core/internal/*` outside Core and Lab, a class outside the recognizer family, an `instanceof` check on a recognizer, an internal factory with a public factory's name, or a direct module import for a job the public layer covers fails |
 | INV15            | Unit tests of the animator's value mode and real-browser proofs of its adopters                                                                                                       | A value off its motion role, a count past the component's swap size, a count or cross-fade under reduced motion with a coarse or a fine pointer, an intermediate value announced, or a public export fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| INV16            | Review of each Core component that handles a concern Core owns in a shared hook or utility                                                                                            | A Core component that keeps its own effect, listener, or tracker for that concern fails, whether or not it also calls the hook or utility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
