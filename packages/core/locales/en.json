@@ -1259,6 +1259,10 @@
     "defaultMessage": "Code",
     "description": "Screen-reader-only fallback name for a code-snippet scroll container when the code's language is unknown. \"Code\" = source code, not secret code or code of conduct."
   },
+  "@astryx.field.moreInformation": {
+    "defaultMessage": "More information",
+    "description": "Accessible name of the info button beside a form field's label; the button shows the field's explanatory tooltip."
+  },
   "@astryx.field.optional": {
     "defaultMessage": "Optional",
     "description": "Visible indicator shown next to a form field's label when the field is optional (isOptional). Mutually exclusive with the required indicator. Very short — appears inline after the label text."

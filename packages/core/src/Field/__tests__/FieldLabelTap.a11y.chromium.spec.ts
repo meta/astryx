@@ -32,10 +32,12 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-/** Opens the story and returns the Nickname label's info icon. */
+/** Opens the story and returns the Nickname label's help trigger. */
 async function openInfoIcon(page: Page): Promise<Locator> {
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
-  const icon = page.locator(`label[for="${FIELD_ID}"] [aria-describedby]`);
+  const icon = page.locator(
+    `label[for="${FIELD_ID}"] ~ button[aria-label="More information"]`,
+  );
   await icon.waitFor();
   return icon;
 }
@@ -69,12 +71,29 @@ test.describe('a touch tap on the info icon', () => {
 });
 
 test.describe('a mouse click on the info icon', () => {
-  test('focuses the field, like a click anywhere else on the label', async ({
+  test('shows the help and leaves the field unfocused: the trigger is outside the label', async ({
     page,
   }) => {
     const icon = await openInfoIcon(page);
     await icon.click();
 
-    await expect.poll(async () => focusedId(page)).toBe(FIELD_ID);
+    await expect(
+      page.getByRole('tooltip').filter({hasText: HELP}),
+    ).toBeVisible();
+    expect(await focusedId(page)).not.toBe(FIELD_ID);
+  });
+});
+
+test.describe('the keyboard', () => {
+  test('reaches the trigger by Tab, and its help opens', async ({page}) => {
+    const icon = await openInfoIcon(page);
+    await icon.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+
+    await expect(icon).toBeFocused();
+    await expect(
+      page.getByRole('tooltip').filter({hasText: HELP}),
+    ).toBeVisible();
   });
 });
