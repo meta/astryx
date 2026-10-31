@@ -219,6 +219,31 @@ const elevationStyles = stylex.create({
 });
 
 /**
+ * A solid variant's edge in forced colors. These variants separate themselves
+ * from the page with a fill alone and have no border; forced colors discards
+ * the fill, which would leave plain text with no perceivable boundary
+ * (WCAG 1.4.11). `ButtonText` is the platform's own button edge. The edge
+ * exists only in forced colors, so nothing changes anywhere else. `ghost` is
+ * flat by design and keeps none.
+ */
+const forcedColorsEdge = stylex.create({
+  edge: {
+    borderWidth: {
+      default: 0,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: 'none',
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'ButtonText',
+    },
+  },
+});
+
+/**
  * Variant styles using backgroundImage for layered colors
  * Pseudo-classes are nested within properties per StyleX recommendation
  * Overlay is stacked on top of base color using multiple linear-gradients
@@ -751,6 +776,10 @@ export function Button({
     // for every variant, and `destructive` re-colors just the ring to match
     // its own surface. Ordering is the mechanism — StyleX is last-wins.
     variants[variant],
+    (variant === 'primary' ||
+      variant === 'secondary' ||
+      variant === 'destructive') &&
+      forcedColorsEdge.edge,
     xstyle,
   );
 
