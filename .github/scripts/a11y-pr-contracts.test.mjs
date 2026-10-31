@@ -213,7 +213,7 @@ describe('selectSpecs', () => {
   });
 
   it('runs no spec for a changed knowledge record alone', () => {
-    const record = 'packages/core/src/Chat/ChatLayout.spec.md';
+    const record = 'docs/specs/components/Chat/ChatLayout.spec.md';
     expect(pr(all, {changedPaths: [record]})).toEqual([always.file]);
     const pattern = spec(
       'internal/a11y-spec/src/patterns/accordion.chromium.spec.ts',
@@ -221,7 +221,7 @@ describe('selectSpecs', () => {
     );
     expect(
       pr([pattern], {
-        changedPaths: ['packages/core/src/Collapsible/Collapsible.spec.md'],
+        changedPaths: ['docs/specs/components/Collapsible/Collapsible.spec.md'],
       }),
     ).toEqual([]);
     // Code beside the record still selects the spec.
@@ -531,9 +531,9 @@ describe('isKnowledgeRecord', () => {
   });
 
   it('treats a component record as a record and its fixtures as not', () => {
-    expect(isKnowledgeRecord('packages/core/src/Chat/ChatLayout.spec.md')).toBe(
-      true,
-    );
+    expect(
+      isKnowledgeRecord('docs/specs/components/Chat/ChatLayout.spec.md'),
+    ).toBe(true);
     expect(
       isKnowledgeRecord('packages/core/src/Chat/.hidden/ChatLayout.spec.md'),
     ).toBe(false);

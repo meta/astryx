@@ -1461,7 +1461,7 @@ describe('knowledge validation', () => {
     const discovered = discoverKnowledgeRecords(root).map(filePath =>
       path.relative(root, filePath).split(path.sep).join('/'),
     );
-    expect(discovered).toContain('packages/core/src/Button/Button.spec.md');
+    expect(discovered).toContain('docs/specs/components/Button/Button.spec.md');
     expect(discovered).toContain(
       'packages/core/src/Button/plugins/thing/useButtonThing.spec.md',
     );
@@ -2000,7 +2000,7 @@ describe('knowledge validation', () => {
       [
         'component',
         'component-spec.md',
-        'packages/core/src/Button/Button.spec.md',
+        'docs/specs/components/Button/Button.spec.md',
       ],
       [
         'module',
