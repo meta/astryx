@@ -76,11 +76,7 @@ import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {
-  getInteractionModality,
-  trackInteractionModalityIn,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {focusForLastInput} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
@@ -539,19 +535,11 @@ export function Dialog({
   // directional animation origin and focus restoration on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
-  useInteractionModalityTracking();
-
   // Input in a second document (a same-origin iframe, a Document
   // Picture-in-Picture window) never reaches the page's listeners, so the
   // dialog's own document keeps its own last input for the focus return while
   // this Dialog is mounted, from before it opens until it unmounts.
-  useEffect(() => {
-    const ownerDocument = dialogRef.current?.ownerDocument;
-    if (ownerDocument == null || ownerDocument === document) {
-      return undefined;
-    }
-    return trackInteractionModalityIn(ownerDocument);
-  }, [isInline]);
+  useInteractionModalityTracking(dialogRef);
 
   // This runs in a layout effect so the capture lands before any descendant's
   // passive mount effect: all layout effects run before any passive effect,
@@ -622,11 +610,7 @@ export function Dialog({
       // the last input in that element's own document calls for.
       const trigger = triggerElementRef.current;
       if (trigger) {
-        focusForLastInput(
-          trigger,
-          undefined,
-          getInteractionModality(trigger.ownerDocument),
-        );
+        focusForLastInput(trigger);
       }
       triggerElementRef.current = null;
     }

@@ -527,7 +527,7 @@ function BreadcrumbMenuTrigger({
   // The menu's rows move focus with the last input
   // (`architecture:interaction-modality` INV1); this menu has no press model
   // to activate the tracking they read, so it activates it itself.
-  useInteractionModalityTracking();
+  useInteractionModalityTracking(buttonRef);
 
   const popover = usePopover({
     hasLightDismiss: true,

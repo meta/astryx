@@ -105,10 +105,7 @@ import {
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {getInteractionModality} from '../utils/interactionModality';
 import {useTranslator} from '../i18n';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 
@@ -636,7 +633,7 @@ function DropdownMenuBottomSheet({
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
+  } = useFocusReturnVisibility(actionListRef);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousSubmenuDepthRef = useRef(0);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -950,14 +947,13 @@ function DropdownMenuPopover({
   const pendingControlledOpenRef = useRef(false);
   const suppressControlledRollbackHideRef = useRef(false);
 
-  useInteractionModalityTracking();
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  } = useFocusReturnVisibility(contentRef);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
   const hasRegions = useMemo(
@@ -1715,7 +1711,7 @@ function DropdownMenuPopover({
               )?.(event);
               if (event.target === event.currentTarget) {
                 setIsMenuKeyboardFocused(
-                  getInteractionModality() === 'keyboard',
+                  getInteractionModality(event.currentTarget) === 'keyboard',
                 );
               }
             }}

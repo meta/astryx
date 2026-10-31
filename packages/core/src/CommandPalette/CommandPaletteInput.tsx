@@ -37,10 +37,7 @@ import {useDialogContext} from '../Dialog/DialogContext';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -223,13 +220,13 @@ export function CommandPaletteInput({
   // Text-entry controls match :focus-visible after pointer focus in Chromium.
   // Keep the shared selector, but narrow its ring to focus acquired through
   // keyboard navigation so a click or pointer-opened palette stays unringed.
-  useInteractionModalityTracking();
+  const readModality = useInteractionModalityTracking(inputRef);
   const handleFocus = useCallback(
     (event: React.FocusEvent<HTMLInputElement>) => {
-      setIsKeyboardFocus(getInteractionModality() === 'keyboard');
+      setIsKeyboardFocus(readModality() === 'keyboard');
       onFocus?.(event);
     },
-    [onFocus],
+    [onFocus, readModality],
   );
   const handleBlur = useCallback(
     (event: React.FocusEvent<HTMLInputElement>) => {

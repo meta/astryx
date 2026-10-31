@@ -77,10 +77,7 @@ import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {devWarn, warnOnce} from '../utils/devWarning';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
@@ -1840,23 +1837,23 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // interaction modality (architecture:interaction-modality INV1): it is read
   // whenever a key or the pointer moves the highlight, so an action cell
   // highlighted after pointer input keeps the hover treatment and no ring.
-  useInteractionModalityTracking();
+  const readModality = useInteractionModalityTracking(triggerRef);
   const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
-    () => getInteractionModality() === 'keyboard',
+    () => readModality() === 'keyboard',
   );
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
       onComboboxKeyDown(event);
-      setIsKeyboardHighlight(getInteractionModality() === 'keyboard');
+      setIsKeyboardHighlight(readModality() === 'keyboard');
     },
-    [onComboboxKeyDown],
+    [onComboboxKeyDown, readModality],
   );
   const onItemMouseEnter = useCallback(
     (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
       onComboboxItemMouseEnter(...args);
-      setIsKeyboardHighlight(getInteractionModality() === 'keyboard');
+      setIsKeyboardHighlight(readModality() === 'keyboard');
     },
-    [onComboboxItemMouseEnter],
+    [onComboboxItemMouseEnter, readModality],
   );
 
   // The trigger button owns its click so a consumer `onClick`, which lands on

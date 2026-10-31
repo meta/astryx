@@ -9,30 +9,34 @@
  * @position Internal focus-return policy for adaptive overlays
  */
 
-import {useCallback, useState} from 'react';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useCallback, useState, type RefObject} from 'react';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 
-export function useFocusReturnVisibility() {
+/**
+ * Pass the overlay's element ref so the ring follows the last input in that
+ * element's own document (a same-origin iframe, a Document Picture-in-Picture
+ * window), not the page's.
+ */
+export function useFocusReturnVisibility(
+  elementRef?: RefObject<Element | null>,
+) {
   const [isFocusRingSuppressed, setIsFocusRingSuppressed] = useState(false);
 
-  useInteractionModalityTracking();
+  const readModality = useInteractionModalityTracking(elementRef);
 
   const prepareFocusReturn = useCallback(() => {
-    setIsFocusRingSuppressed(getInteractionModality() === 'pointer');
-  }, []);
+    setIsFocusRingSuppressed(readModality() === 'pointer');
+  }, [readModality]);
 
   const resetFocusReturn = useCallback(() => {
     setIsFocusRingSuppressed(false);
   }, []);
 
   const onFocusReturnTargetFocus = useCallback(() => {
-    if (getInteractionModality() === 'keyboard') {
+    if (readModality() === 'keyboard') {
       setIsFocusRingSuppressed(false);
     }
-  }, []);
+  }, [readModality]);
 
   return {
     isFocusRingSuppressed,
