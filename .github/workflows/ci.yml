@@ -1010,7 +1010,7 @@ jobs:
               const name = `${prefix}-${process.env.BASE_SHA}`;
               const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
               core.setOutput(output, runId ?? '');
-              core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; its Before and Delta stay empty.`);
+              core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; the merge base is built here instead.`);
             }
 
       - name: Download main's component sizes for the merge base

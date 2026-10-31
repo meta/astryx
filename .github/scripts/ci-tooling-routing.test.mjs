@@ -132,7 +132,8 @@ describe('Node-tooling CI routing', () => {
     ]) {
       expect(step(ci.jobs['test-build'], name).if).toBe(BROAD_ONLY);
     }
-    // No pull-request job builds the merge base: Main keeps its sizes.
+    // No size-base job: Main keeps the merge base's sizes, and build-storybook
+    // builds the base only when Main kept no record.
     expect(ci.jobs['size-base']).toBeUndefined();
     expect(rootScripts['test:theme-family'].split(' && ')).toEqual([
       'pnpm -F @astryxdesign/core build',
@@ -236,7 +237,7 @@ describe('Node-tooling CI routing', () => {
     );
   });
 
-  it("reads the merge base's sizes from main's kept records, never building the base", () => {
+  it("reads the merge base's sizes from main's kept records, building the base only without one", () => {
     const main = load('.github/workflows/deploy.yml');
     expect(step(main.jobs.typecheck, 'Record component sizes').run).toBe(
       'node .github/scripts/analyze-pr.js --main-record --output component-size.json',
