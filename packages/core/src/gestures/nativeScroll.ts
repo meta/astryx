@@ -4,7 +4,8 @@
  * @file nativeScroll.ts
  * @input An element a touch landed on
  * @output Exports createNativeScrollProbe (the NativeScrollProbe a host gives
- *   each touch) and parseTouchAction
+ *   each touch, and each wheel gesture without the touch-action narrowing)
+ *   and parseTouchAction
  * @position DOM half of the scroll coordination in packages/core/src/gestures
  *
  * Answers one question for a recognizer without letting it touch the DOM:
@@ -82,7 +83,7 @@ interface Chain {
   readonly allowsPan: boolean;
 }
 
-function buildChain(target: Element): Chain {
+function buildChain(target: Element, readsTouchAction: boolean): Chain {
   const doc = target.ownerDocument;
   const view = doc.defaultView;
   if (view == null) {
@@ -103,9 +104,11 @@ function buildChain(target: Element): Chain {
       continue;
     }
     const style = view.getComputedStyle(node);
-    const pans = parseTouchAction(style.touchAction || 'auto');
-    allowX &&= pans.x;
-    allowY &&= pans.y;
+    if (readsTouchAction) {
+      const pans = parseTouchAction(style.touchAction || 'auto');
+      allowX &&= pans.x;
+      allowY &&= pans.y;
+    }
     const isRoot = node === root || node === doc.documentElement;
     if (isRoot) {
       reachedRoot = true;
@@ -210,13 +213,20 @@ function canMoveX(entry: ChainEntry, dx: number): boolean {
     : element.scrollLeft < max - EDGE_TOLERANCE + 0.5;
 }
 
-/** A probe of the native scrollers under `target`. */
-export function createNativeScrollProbe(target: unknown): NativeScrollProbe {
+/**
+ * A probe of the native scrollers under `target`. A wheel scrolls whatever
+ * `touch-action` says, which narrows only a finger's pan: a wheel's probe
+ * passes `readsTouchAction: false`.
+ */
+export function createNativeScrollProbe(
+  target: unknown,
+  {readsTouchAction = true}: {readsTouchAction?: boolean} = {},
+): NativeScrollProbe {
   let chain: Chain | null = null;
   const getChain = (): ChainEntry[] => {
     chain ??=
       target instanceof Element
-        ? buildChain(target)
+        ? buildChain(target, readsTouchAction)
         : {entries: [], allowsPan: false};
     return chain.entries;
   };
