@@ -940,7 +940,9 @@ describe('Timestamp', () => {
       // aria-label spells the timezone out in full (WCAG 3.1.4), so the two
       // strings intentionally differ — compare the row against an
       // independently formatted short-form string.
-      expect(card.querySelectorAll('dd')).toHaveLength(1);
+      // Without labels the card is plain lines, not a description list.
+      expect(card.querySelector('dl')).toBeNull();
+      expect(card.querySelectorAll('p')).toHaveLength(1);
       expect(card.querySelectorAll('button')).toHaveLength(1);
 
       const normalize = (s: string) => s.replace(/\s+/g, ' ');
@@ -962,7 +964,7 @@ describe('Timestamp', () => {
     it("copies the default absolute row's value", async () => {
       render(<Timestamp value={Date.now() / 1000 - 3600} format="relative" />);
       const card = await openTimestampHoverCard();
-      const rowValue = card.querySelector('dd')?.textContent ?? '';
+      const rowValue = card.querySelector('p')?.textContent ?? '';
       expect(rowValue).toBeTruthy();
       fireEvent.click(card.querySelector('button')!);
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(rowValue);
@@ -1335,6 +1337,31 @@ describe('Timestamp', () => {
       expect(card.querySelectorAll('dt')[1].textContent).toBe('');
     });
 
+    it('keeps a copyable labelled card a valid description list', async () => {
+      render(
+        <Timestamp
+          value={VALUE}
+          format="relative"
+          tooltipEntries={[
+            {timezoneID: 'UTC', label: 'UTC', isCopyable: true},
+            {timezoneID: 'Asia/Tokyo', label: 'Tokyo'},
+          ]}
+        />,
+      );
+      const card = await openTimestampHoverCard();
+      const list = card.querySelector('dl')!;
+      // Each group holds only its dt and dd (WCAG 2.2 1.3.1); the copy
+      // button sits inside the value.
+      for (const group of Array.from(list.children)) {
+        expect(group.tagName).toBe('DIV');
+        expect(Array.from(group.children, el => el.tagName)).toEqual([
+          'DT',
+          'DD',
+        ]);
+      }
+      expect(list.querySelectorAll('dd button')).toHaveLength(1);
+    });
+
     it('gives the tab stop back when entries are removed', () => {
       const {rerender} = render(
         <Timestamp
@@ -1366,7 +1393,7 @@ describe('Timestamp', () => {
           />,
         );
         const card = await openTimestampHoverCard();
-        const values = Array.from(card.querySelectorAll('dd')).map(
+        const values = Array.from(card.querySelectorAll('p')).map(
           el => el.textContent,
         );
         expect(values).toHaveLength(2);

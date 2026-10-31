@@ -14,8 +14,10 @@
  *   columns — label, value, and a trailing action column for copy buttons —
  *   so the buttons align down a single column no matter how wide each value
  *   is. The action column is only added when at least one row is copyable, so
- *   a fully read-only card carries no dangling gutter. Label-less cards drop
- *   the label column and stack to whatever columns remain.
+ *   a fully read-only card carries no dangling gutter. A copy button sits
+ *   inside its row's value, which spans the value and action columns through
+ *   a subgrid. Label-less cards are plain lines (no `<dl>`) and drop the label
+ *   column.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Timestamp/Timestamp.tsx (the lazy() + Suspense wrapper)
@@ -79,6 +81,14 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     whiteSpace: 'nowrap',
+  },
+  // A value carrying the action cell spans the value and action columns and
+  // shares the card's tracks, so the copy buttons still align.
+  valueCells: {
+    gridColumn: 'span 2',
+    display: 'grid',
+    gridTemplateColumns: 'subgrid',
+    alignItems: 'center',
   },
   // The trailing action cell holds the copy button (or nothing, on a
   // read-only row). It lives in its own grid column so buttons align.
@@ -165,17 +175,23 @@ function EntryRow({
   hasLabelColumn: boolean;
   hasActionColumn: boolean;
 }) {
+  // A description list holds only name-value groups, so the action cell lives
+  // inside the value, and a card without labels is plain lines of text.
+  const Value = hasLabelColumn ? 'dd' : 'p';
   return (
     <div {...stylex.props(styles.row)}>
       {hasLabelColumn && (
         <dt {...stylex.props(styles.label)}>{line.label ?? ''}</dt>
       )}
-      <dd {...stylex.props(styles.value)}>{line.value}</dd>
-      {hasActionColumn && (
-        <div {...stylex.props(styles.action)}>
-          {line.isCopyable && <CopyButton value={line.value} />}
-        </div>
-      )}
+      <Value
+        {...stylex.props(styles.value, hasActionColumn && styles.valueCells)}>
+        {hasActionColumn ? <span>{line.value}</span> : line.value}
+        {hasActionColumn && (
+          <span {...stylex.props(styles.action)}>
+            {line.isCopyable && <CopyButton value={line.value} />}
+          </span>
+        )}
+      </Value>
     </div>
   );
 }
@@ -228,8 +244,9 @@ export default function TimestampHoverCard({
   );
   const hasActionColumn = lines.some(line => line.isCopyable);
 
+  const List = hasLabelColumn ? 'dl' : 'div';
   const cardContent = (
-    <dl
+    <List
       {...stylex.props(
         styles.dl,
         gridTemplateFor(hasLabelColumn, hasActionColumn),
@@ -243,7 +260,7 @@ export default function TimestampHoverCard({
           hasActionColumn={hasActionColumn}
         />
       ))}
-    </dl>
+    </List>
   );
 
   return (
