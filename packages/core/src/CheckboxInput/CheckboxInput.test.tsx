@@ -906,6 +906,27 @@ describe('pressed state', () => {
     expect(hasPressedArm(wrapper)).toBe(false);
   });
 
+  it('paints no press on a read-only checkbox, which cannot change', () => {
+    const {container} = render(
+      <CheckboxInput
+        label="Locked by policy"
+        value
+        onChange={() => {}}
+        isReadOnly
+      />,
+    );
+    const box = container.querySelector('.astryx-checkbox-indicator');
+    const wrapper = box?.parentElement?.parentElement;
+    if (wrapper == null) {
+      throw new Error('the checkbox has no indicator wrapper');
+    }
+    // Nothing for the touch press controller to write, and no arm that
+    // would paint a mouse or touch press over the box.
+    expect(container.querySelector('[data-astryx-pressable]')).toBeNull();
+    expect(hasPressedArm(wrapper)).toBe(false);
+    expect(readsPressStrength(wrapper, '[data-astryx-press="on"]')).toBe(false);
+  });
+
   it('fades the touch press out from the row, with the overlay reading its strength', () => {
     const {container} = render(
       <CheckboxInput label="Accept terms" value={false} onChange={() => {}} />,

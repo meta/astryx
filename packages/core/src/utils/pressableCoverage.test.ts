@@ -63,9 +63,12 @@ const source = new Map(
   files.map(file => [path.relative(SRC, file), fs.readFileSync(file, 'utf8')]),
 );
 
-const PRESS_ARM = /':active|'\[data-astryx-press=|interactionOverlayStyles\./;
+// A press arm keys on `:active` or on the attribute the controller writes, as
+// a bare attribute selector or inside `:is(…)`.
+const PRESS_ARM =
+  /':active|'(?::is\()?\[data-astryx-press=|interactionOverlayStyles\./;
 const ANCESTOR_ARM =
-  /stylex\.when\.ancestor\(\s*'(?::active|\[data-astryx-press=[^)]*)',\s*(\w+)\s*\)/g;
+  /stylex\.when\.ancestor\(\s*'(?::active|\[data-astryx-press=[^)]*)',\s*(\w+)\s*,?\s*\)/g;
 
 function isMarked(file: string): boolean {
   return (source.get(file) ?? '').includes('usePressFeedback(');

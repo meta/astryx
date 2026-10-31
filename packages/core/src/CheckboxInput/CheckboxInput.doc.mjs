@@ -88,7 +88,7 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Whether the checkbox is read-only. Displays the current state at full opacity but prevents interaction. Unlike `isDisabled`, read-only checkboxes are not visually dimmed.',
+        'Whether the checkbox is read-only. Displays the current state at full opacity but prevents interaction, and shows no pressed feedback. Unlike `isDisabled`, read-only checkboxes are not visually dimmed.',
       default: 'false',
     },
     {
@@ -334,7 +334,7 @@ export const docsZh = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        '复选框是否为只读。以完整不透明度显示当前状态但阻止交互。与 isDisabled 不同，只读复选框不会变暗。',
+        '复选框是否为只读。以完整不透明度显示当前状态但阻止交互，也不显示按下反馈。与 isDisabled 不同，只读复选框不会变暗。',
       default: 'false',
     },
     {

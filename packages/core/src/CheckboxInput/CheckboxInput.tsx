@@ -4,7 +4,8 @@
 
 /**
  * @file CheckboxInput.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip,
+ *   CheckboxRowPressContext (a row around the checkbox that owns its press)
  * @output Exports CheckboxInput component, CheckboxInputProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxInput.test.tsx
  *
@@ -17,6 +18,7 @@
  */
 
 import {
+  use,
   useId,
   useCallback,
   useOptimistic,
@@ -56,6 +58,7 @@ import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {CheckboxRowPressContext} from './CheckboxRowPressContext';
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -85,7 +88,9 @@ const styles = stylex.create({
   // Two pointers, two press models (see interactionOverlay.stylex.ts): a
   // mouse keeps `:active`; under a coarse pointer that arm is dropped and the
   // touch press controller writes `data-astryx-press` on the row, which this layer
-  // reads off the same scope marker as the hover tint.
+  // reads off the same scope marker as the hover tint — or, for the row's own
+  // checkbox under a row that owns the press (CheckboxRowPressContext), paints
+  // that row's own press paint (indicatorRowPressOverlay).
   indicatorPressOverlay: {
     '::after': {
       content: '""',
@@ -116,6 +121,22 @@ const styles = stylex.create({
             '@media (pointer: coarse)': pressedOverlayImage,
           },
       },
+    },
+  },
+  // The row's own checkbox, under a row that owns the press
+  // (CheckboxRowPressContext): the layer paints the row's own press paint,
+  // which that row declares (`--_checkbox-row-press-paint`): none at rest,
+  // and the press paint the row's shared overlay style declares at the
+  // press's strength only inside that row's own press arms, under a coarse
+  // pointer (CheckboxListItem). The box reads its nearest row's value, so the
+  // row and the box are one press and nothing else reaches the box: not an
+  // outer row around a list placed in this row's content, not a pressed
+  // ClickableCard, not a pen on a fine-pointer page. A checkbox placed in the
+  // row's content declares its own paint and keeps its own press. It replaces
+  // the scope arms: this checkbox's own container is never pressed.
+  indicatorRowPressOverlay: {
+    '::after': {
+      backgroundImage: 'var(--_checkbox-row-press-paint, none)',
     },
   },
   // Holds only the indicator, so the focus ring has one unambiguous target.
@@ -342,6 +363,16 @@ export function CheckboxInput({
   // The row is the pressable: the overlay's pressed arm reads the row's
   // scope marker, the way the indicator's hover tint does.
   const pressable = usePressFeedback();
+  // A row around the checkbox that answers a press anywhere on it (a
+  // CheckboxListItem) owns the touch press instead: the checkbox carries no
+  // press marker of its own, so the controller's innermost-wins rule finds the
+  // row for a finger on the label, the description or the box, and the
+  // overlay below paints that row's press.
+  const isRowPressSurface = use(CheckboxRowPressContext);
+  // A checkbox that cannot change paints no press: disabled, or read-only,
+  // whose value is shown but refuses every change.
+  const paintsPress = !isDisabled && !isReadOnly;
+  const ownsPress = paintsPress && !isRowPressSurface;
   const generatedId = useId();
   const id = idProp || generatedId;
   const descriptionID = useId();
@@ -437,7 +468,7 @@ export function CheckboxInput({
           // unconditionally is safe.
           disabledMessageTooltip.interactionRef(el);
         }}
-        {...(isDisabled ? undefined : pressable)}
+        {...(ownsPress ? pressable : undefined)}
         {...stylex.props(
           styles.container,
           isLabelHidden && styles.containerLabelHidden,
@@ -446,14 +477,16 @@ export function CheckboxInput({
           !isDisabled && indicatorScope,
           // The touch press's strength and release live on the row the
           // controller writes to; the layer over the checkbox box inherits
-          // and paints it.
-          !isDisabled && interactionOverlayStyles.pressedAlpha,
+          // and paints it. Under a row that owns the press, the box inherits
+          // that row's strength instead.
+          ownsPress && interactionOverlayStyles.pressedAlpha,
         )}>
         <div
           {...stylex.props(
             styles.checkboxWrapper,
             wrapperSizeStyles[size],
-            !isDisabled && styles.indicatorPressOverlay,
+            paintsPress && styles.indicatorPressOverlay,
+            paintsPress && isRowPressSurface && styles.indicatorRowPressOverlay,
           )}
           {...focusProps}>
           <input
