@@ -215,7 +215,8 @@ merging `main` into this rule's own branch or after a codemod.
 Reports a private `data-astryx-*` attribute written by hand outside its owner
 module (`architecture:public-component-api` INV23). Each private attribute has
 one owner module in the package that writes it,
-`packages/<package>/src/privateAttributes/<name>.stylex.ts`, that writes its
+`packages/<package>/src/privateAttributes/<name>.stylex.ts`, named in camelCase
+(`focusOwner.stylex.ts` owns `data-astryx-focus-owner`), that writes its
 name and selectors once and exports ready-made styles, setter props and the
 runtime readers its package needs; every other file spreads those exports.
 

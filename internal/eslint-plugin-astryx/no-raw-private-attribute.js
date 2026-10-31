@@ -7,7 +7,8 @@
  *
  * A `data-astryx-*` attribute is private unless INV23 names it public. Each
  * private attribute has one owner module in the package that writes it,
- * `packages/<package>/src/privateAttributes/<name>.stylex.ts`, that writes its
+ * `packages/<package>/src/privateAttributes/<name>.stylex.ts` with the name in
+ * camelCase (`focusOwner.stylex.ts` for `data-astryx-focus-owner`), that writes its
  * name and selectors once and exports ready-made styles, setter props and the
  * runtime readers its package needs. Every other file spreads those exports,
  * so the attribute can be renamed or reshaped in one place and never leaks
@@ -16,7 +17,7 @@
  * Reported, outside the owner modules:
  *   - a string literal that contains `data-astryx-<name>`, in any position
  *     (an object key, a `setAttribute` argument, a selector inside
- *     `stylex.create` or `stylex.when.*`, a `.doc.mjs` description);
+ *     `stylex.create` or `stylex.when.*`);
  *   - a template literal that does, including one built from the namespace
  *     constant (`data-${dataAttrNamespace}-press`);
  *   - a JSX attribute named `data-astryx-<name>`;
@@ -38,9 +39,12 @@
  * Public, never reported: the names INV23 lists (`PUBLIC_ATTRIBUTES`).
  * `naming.ts`, which builds every `data-astryx-*` name, is not checked.
  *
- * Known limitations: a name assembled with `+` or read through
- * `element.dataset` is not seen; no shipped source does either today, and
- * public-API review covers them.
+ * Known limitations: a name assembled from the namespace with `+`
+ * (`'data-' + NAMESPACE + '-press'`), a template that reaches the namespace
+ * through anything but `dataAttrNamespace` or `NAMESPACE` (a member access,
+ * an aliased import, `classPrefix`), and a name read through `element.dataset`
+ * are not seen; no shipped source does any of these today, and public-API
+ * review covers them.
  *
  * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
  * baseline lists, per file, each private attribute once per site that
@@ -123,6 +127,16 @@ export function attributeNames(text) {
     names.push(name === '' || next === UNKNOWN ? null : name);
   }
   return names;
+}
+
+/** `focusOwner` → `focus-owner`; a kebab-case stem is returned unchanged. */
+function kebabCase(stem) {
+  return stem.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
+}
+
+/** `focus-owner` → `focusOwner`, the owner module's file stem. */
+function camelCase(name) {
+  return name.replace(/-([a-z0-9])/g, (_, letter) => letter.toUpperCase());
 }
 
 /** `data-astryx-press`, or `data-astryx-*` for a name that cannot be read. */
@@ -305,10 +319,16 @@ const rule = {
     if (NAMING_MODULE.test(filename)) {
       return {};
     }
-    const ownedName = OWNER_MODULE.exec(filename)?.[1] ?? null;
+    // Owner modules are named in camelCase (`focusOwner.stylex.ts` owns
+    // `data-astryx-focus-owner`); compare in the attribute's kebab case.
+    const ownerStem = OWNER_MODULE.exec(filename)?.[1] ?? null;
+    const ownedName = ownerStem == null ? null : kebabCase(ownerStem);
     const packageName = PACKAGE_SOURCE.exec(filename)?.[1] ?? null;
     const ownerDirectory = `packages/${packageName ?? '<package>'}/src/privateAttributes`;
-    const ownerOf = name => `${ownerDirectory}/${name}.stylex.ts`;
+    const ownerOf = name =>
+      name == null
+        ? ownerDirectory
+        : `${ownerDirectory}/${camelCase(name)}.stylex.ts`;
     const sourceCode = context.sourceCode ?? context.getSourceCode();
     // Each listed attribute allows as many sites as it is listed; the next
     // one is reported.

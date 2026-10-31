@@ -88,7 +88,17 @@ tester.run('no-raw-private-attribute', rule, {
     {
       code: `export const syntaxOn = {'data-astryx-richtext-code-syntax': ''};`,
       filename:
-        '/repo/packages/richtext/src/privateAttributes/richtext-code-syntax.stylex.ts',
+        '/repo/packages/richtext/src/privateAttributes/richtextCodeSyntax.stylex.ts',
+    },
+    // ✅ A camelCase owner module owns its kebab-case attribute.
+    {
+      code: `
+        const FOCUS_OWNER = '[data-astryx-focus-owner]';
+        export const focusOwnerProps = {'data-astryx-focus-owner': ''};
+        export const closestFocusOwner = element => element.closest(FOCUS_OWNER);
+      `,
+      filename:
+        '/repo/packages/core/src/privateAttributes/focusOwner.stylex.ts',
     },
     // ✅ A file imports its own package's owner module.
     {
@@ -161,7 +171,7 @@ tester.run('no-raw-private-attribute', rule, {
           messageId: 'raw',
           data: {
             attribute: 'data-astryx-cell-gliding',
-            owner: 'packages/core/src/privateAttributes/cell-gliding.stylex.ts',
+            owner: 'packages/core/src/privateAttributes/cellGliding.stylex.ts',
           },
         },
       ],
@@ -209,7 +219,7 @@ tester.run('no-raw-private-attribute', rule, {
           messageId: 'raw',
           data: {
             attribute: 'data-astryx-theme-prose',
-            owner: 'packages/core/src/privateAttributes/theme-prose.stylex.ts',
+            owner: 'packages/core/src/privateAttributes/themeProse.stylex.ts',
           },
         },
       ],
@@ -262,7 +272,7 @@ tester.run('no-raw-private-attribute', rule, {
           data: {
             attribute: 'data-astryx-popover-fallback-close',
             owner:
-              'packages/lab/src/privateAttributes/popover-fallback-close.stylex.ts',
+              'packages/lab/src/privateAttributes/popoverFallbackClose.stylex.ts',
           },
         },
       ],
@@ -301,7 +311,22 @@ tester.run('no-raw-private-attribute', rule, {
           messageId: 'foreignOwner',
           data: {
             attribute: 'data-astryx-table-pinned',
-            owner: 'packages/core/src/privateAttributes/table-pinned.stylex.ts',
+            owner: 'packages/core/src/privateAttributes/tablePinned.stylex.ts',
+          },
+        },
+      ],
+    },
+    // ❌ A camelCase owner module writing an attribute it does not own.
+    {
+      code: `const s = '[data-astryx-focus-ring]';`,
+      filename:
+        '/repo/packages/core/src/privateAttributes/focusOwner.stylex.ts',
+      errors: [
+        {
+          messageId: 'foreignOwner',
+          data: {
+            attribute: 'data-astryx-focus-ring',
+            owner: 'packages/core/src/privateAttributes/focusRing.stylex.ts',
           },
         },
       ],
