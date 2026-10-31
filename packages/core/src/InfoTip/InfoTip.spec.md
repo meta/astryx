@@ -150,8 +150,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   surface; InfoTip is built entirely on it (DEC-1).
 - `family:overlay-dismissal` owns Escape order through Tooltip.
 - `architecture:icon-resolution-and-component-slots` owns the `info` artwork.
-- `architecture:public-component-api` INV21 counts InfoTip and Tooltip as one
-  API (DEC-1).
+- InfoTip and Tooltip are one API, for the reason DEC-1 gives: InfoTip is built
+  entirely on Tooltip's toggle and adds no layer, listener, or dismissal rule of
+  its own, as `component:MoreMenu` is built on DropdownMenu.
 
 ## Verification map
 
