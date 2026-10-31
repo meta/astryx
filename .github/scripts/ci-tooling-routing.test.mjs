@@ -10,7 +10,9 @@
  * @position Workflow contract for spec:AST-030's first implementation slice.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -281,6 +283,67 @@ describe('Node-tooling CI routing', () => {
     expect(
       names.indexOf("Download main's component sizes for the merge base"),
     ).toBeLessThan(names.indexOf('Analyze components'));
+    // Without a record the merge base builds beside the Storybook build, and
+    // the analysis waits for it, so every changed component keeps a before
+    // size (AST-080 FR8).
+    const start = step(job, 'Start building the merge base without a record');
+    expect(start.if).toContain(
+      "steps.size-records.outputs.component_run_id == ''",
+    );
+    expect(start.run).toContain(
+      'node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json',
+    );
+    expect(start.run).toMatch(/\|\| touch base-build\.failed &$/m);
+    expect(
+      names.indexOf("Find main's size records for the merge base"),
+    ).toBeLessThan(
+      names.indexOf('Start building the merge base without a record'),
+    );
+    expect(
+      names.indexOf('Start building the merge base without a record'),
+    ).toBeLessThan(names.indexOf('Build packages and Storybook'));
+    const wait = step(job, "Wait for the merge base's sizes");
+    expect(wait.if).toContain("steps.base-build.outputs.started == 'true'");
+    expect(names.indexOf("Wait for the merge base's sizes")).toBeLessThan(
+      names.indexOf('Analyze components'),
+    );
+  });
+
+  it.each([
+    ['built', 'base-build.done', true, '::notice title=Merge base built::'],
+    [
+      'failed',
+      'base-build.failed',
+      false,
+      '::warning title=Merge base not built::',
+    ],
+  ])('collects a merge base that %s', (_label, marker, kept, message) => {
+    const wait = step(
+      ci.jobs['build-storybook'],
+      "Wait for the merge base's sizes",
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+    try {
+      fs.mkdirSync(path.join(root, '.component-size-base'));
+      fs.writeFileSync(
+        path.join(root, '.component-size-base/component-size.json'),
+        '{}',
+      );
+      fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
+      fs.writeFileSync(path.join(root, marker), '');
+      const out = execFileSync('bash', ['-e', '-c', wait.run], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(out).toContain(message);
+      expect(
+        fs.existsSync(
+          path.join(root, '.component-size-base/component-size.json'),
+        ),
+      ).toBe(kept);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
   });
 
   it('builds no Sandbox and builds Storybook once per pull-request run', () => {
