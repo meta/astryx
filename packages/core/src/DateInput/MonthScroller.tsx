@@ -85,13 +85,8 @@ const DAY_SIZE = dateInputTouchSizes.daySize;
  */
 const OVERSCAN = 3;
 
-/** Input on the scroller that ends a steer: the user's from here. */
-const USER_INPUT_EVENTS = [
-  'touchstart',
-  'wheel',
-  'pointerdown',
-  'keydown',
-] as const;
+/** Every listener on the scroller is passive; one options object serves all. */
+const PASSIVE: AddEventListenerOptions = {passive: true};
 
 const styles = stylex.create({
   scroller: {
@@ -682,17 +677,20 @@ export function MonthScroller({
         onVisibleMonthChangeRef.current(minMonthIndex + row);
       });
     };
-    scroller.addEventListener('scroll', onScroll, {passive: true});
-    for (const type of USER_INPUT_EVENTS) {
-      scroller.addEventListener(type, endSteer, {passive: true});
-    }
-    scroller.addEventListener('touchstart', onTouchStart, {passive: true});
+    scroller.addEventListener('scroll', onScroll, PASSIVE);
+    // The user's input on the scroller ends a steer: from here, it's theirs.
+    scroller.addEventListener('touchstart', endSteer, PASSIVE);
+    scroller.addEventListener('wheel', endSteer, PASSIVE);
+    scroller.addEventListener('pointerdown', endSteer, PASSIVE);
+    scroller.addEventListener('keydown', endSteer, PASSIVE);
+    scroller.addEventListener('touchstart', onTouchStart, PASSIVE);
     return () => {
-      scroller.removeEventListener('scroll', onScroll);
-      for (const type of USER_INPUT_EVENTS) {
-        scroller.removeEventListener(type, endSteer);
-      }
-      scroller.removeEventListener('touchstart', onTouchStart);
+      scroller.removeEventListener('scroll', onScroll, PASSIVE);
+      scroller.removeEventListener('touchstart', endSteer, PASSIVE);
+      scroller.removeEventListener('wheel', endSteer, PASSIVE);
+      scroller.removeEventListener('pointerdown', endSteer, PASSIVE);
+      scroller.removeEventListener('keydown', endSteer, PASSIVE);
+      scroller.removeEventListener('touchstart', onTouchStart, PASSIVE);
       if (frameRef.current != null) {
         cancelAnimationFrame(frameRef.current);
         frameRef.current = undefined;
