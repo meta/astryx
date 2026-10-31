@@ -59,11 +59,11 @@ deciding_specs:
     },
     "slot-presence": {
       "names": ["isRenderable"],
-      "patterns": ["typeof [\\w.?]+ !==? ['\"]boolean['\"]"],
+      "patterns": ["!= null && typeof [\\w.?]+ !==? ['\"]boolean['\"]"],
       "claims": ["INV16"]
     },
     "modality-tracking": {
-      "names": ["useInteractionModalityTracking"],
+      "names": ["useInteractionModalityTracking", "trackInteractionModalityIn"],
       "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
       "claims": ["INV16"]
     }

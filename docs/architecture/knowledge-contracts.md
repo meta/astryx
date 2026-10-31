@@ -251,7 +251,8 @@ Every record is either:
   module, or family owner first when it governs the delta. The marker never makes
   the whole record, adjacent claims, drafts, or proposed-head authority govern.
   Every routed match records the base authority commit, record digest, record id,
-  path, trigger, claim id, claim title, and deterministic match reason. A record
+  path, trigger or concern, claim id, claim title, and deterministic match
+  reason. A record
   that owns a shared concern MAY also list it in the same block's `concerns`
   map: the shared utility's names, the code patterns that re-implement it, and
   the claims it routes. A change whose added shipped-source lines match a

@@ -40,7 +40,11 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
   },
   "concerns": {
     "modality-tracking": {
-      "names": ["useInteractionModalityTracking", "getInteractionModality"],
+      "names": [
+        "useInteractionModalityTracking",
+        "trackInteractionModalityIn",
+        "getInteractionModality"
+      ],
       "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
       "claims": ["INV1", "INV2", "INV3"]
     },
