@@ -210,7 +210,9 @@ test.describe('touch input', () => {
       {x: 100, y: 220},
       {durationMs: 200, hz: 60, restMs: 120},
     );
-    await driver.play(script);
+    // Taken before the harness reads its own clock to schedule the script.
+    const playStart = Date.now();
+    const played = await driver.play(script);
     const log = await readInputLog(page);
     const moves = log.filter(r => r.type === 'pointermove');
     const down = log.find(r => r.type === 'pointerdown');
@@ -237,13 +239,36 @@ test.describe('touch input', () => {
         (up?.timeStamp ?? NaN) - (moves.at(-1)?.timeStamp ?? NaN),
       ).toBeCloseTo(120, 0);
     } else {
-      // WebKit stamps the real dispatch time: real-time pacing keeps it close.
-      const deltas = moves
-        .slice(1)
-        .map((m, i) => m.timeStamp - moves[i].timeStamp);
-      const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
-      expect(mean).toBeGreaterThan(14);
-      expect(mean).toBeLessThan(20);
+      // WebKit takes no timestamp: the page stamps each event with the time
+      // it is dispatched. The harness paces its sends on the wall clock, but
+      // on a loaded machine a send can leave late, the ones behind it then
+      // leave back to back, and a busy web process can dispatch a move late
+      // too. The scripted spacing is then no promise: in a container capped
+      // at 3 CPUs the page's mean spacing ranged from 0.5 to 118 ms against
+      // the scripted 16.7, in step with the sends. What holds under load is
+      // checked against the harness's own record of when it sent each move:
+      // no move left before its scripted time, and the page's timestamps
+      // follow the sends, in order and never before them.
+      const sent = played.filter(step => step.type === 'touchMove');
+      expect(sent).toHaveLength(moves.length);
+      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+      for (const [i, step] of sent.entries()) {
+        // Against the clock before play() started, not the start event's
+        // send, which can itself leave late. Date.now() counts whole
+        // milliseconds, hence the 1 ms.
+        expect(step.dispatchedAt - playStart).toBeGreaterThanOrEqual(
+          step.t - 1,
+        );
+        // 2 ms of rounding between the two processes' clocks.
+        expect(timeOrigin + moves[i].timeStamp).toBeGreaterThanOrEqual(
+          step.dispatchedAt - 2,
+        );
+        if (i > 0) {
+          expect(moves[i].timeStamp).toBeGreaterThanOrEqual(
+            moves[i - 1].timeStamp,
+          );
+        }
+      }
     }
   });
 
