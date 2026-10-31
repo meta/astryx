@@ -373,6 +373,23 @@ describe('interactionModality', () => {
       expect(
         remove.mock.calls.filter(([type]) => type === 'pointerdown'),
       ).toHaveLength(1);
+      // A detached element no longer answers from its old document.
+      document.dispatchEvent(new Event('pointerdown'));
+      expect(result.current.readModality()).toBe('pointer');
+    });
+
+    it('forgets the node when React runs the ref cleanup instead of a null call', async () => {
+      const tracker = await loadTracker();
+      const {result} = renderHook(() =>
+        tracker.useInteractionModalityTracking(),
+      );
+      const secondDocument = document.implementation.createHTMLDocument();
+      const cleanup = result.current.ref(secondDocument.createElement('div'));
+      secondDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+      document.dispatchEvent(new Event('pointerdown'));
+      expect(result.current.readModality()).toBe('keyboard');
+      cleanup?.();
+      expect(result.current.readModality()).toBe('pointer');
     });
   });
 

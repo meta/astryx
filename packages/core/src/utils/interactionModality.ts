@@ -172,9 +172,11 @@ function trackInteractionModalityIn(targetDocument: Document): () => void {
 export type InteractionModalityTracking = {
   /**
    * Attach to the element the component renders (merge it with the element's
-   * other refs). While the element lives in a second document (a same-origin
-   * iframe, a Document Picture-in-Picture window), that document is tracked;
-   * detaching or replacing the node releases it first (INV6).
+   * other refs with useMergedRefs, or call it with each node and `null` from
+   * a callback ref of the component's own without returning its cleanup).
+   * While the element lives in a second document (a same-origin iframe, a
+   * Document Picture-in-Picture window), that document is tracked; detaching
+   * or replacing the node releases it first (INV6).
    */
   ref: RefCallback<Element>;
   /** How the user last interacted in the element's own document. */
@@ -204,7 +206,9 @@ function holdNodeDocument(
   previous.release = release;
   return () => {
     release();
-    if (previous.release === release) previous.release = null;
+    if (previous.release === release) {
+      previous.release = null;
+    }
   };
 }
 
@@ -220,7 +224,16 @@ export function useInteractionModalityTracking(): InteractionModalityTracking {
   const holdRef = useRef<{release: (() => void) | null}>({release: null});
   const ref = useCallback((node: Element | null) => {
     nodeRef.current = node;
-    return holdNodeDocument(node, holdRef.current);
+    const release = holdNodeDocument(node, holdRef.current);
+    // React's ref cleanup runs instead of a `null` call; it must also forget
+    // the detached node, so the reader never answers from a document whose
+    // listeners are gone.
+    return () => {
+      release?.();
+      if (nodeRef.current === node) {
+        nodeRef.current = null;
+      }
+    };
   }, []);
   const readModality = useCallback(
     () => getInteractionModality(nodeRef.current),

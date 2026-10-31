@@ -622,17 +622,19 @@ function DropdownMenuBottomSheet({
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
   const backLabel = t('@astryx.dropdownMenu.back');
   const buttonRef = useRef<HTMLElement>(null);
+  // The trigger, where focus returns after the sheet closes, carries the
+  // modality tracking for its document.
+  const modality = useInteractionModalityTracking();
   // The caller's `button.ref` rides along with the sheet's own trigger ref.
   const triggerRef = useMergedRefs<HTMLButtonElement>(
     buttonRef as React.Ref<HTMLButtonElement>,
+    modality.ref,
     button.ref,
   );
   const triggerId = useId();
   const sheetId = useId();
   const actionListRef = useRef<HTMLDivElement>(null);
   const openModalityRef = useRef<'keyboard' | 'pointer'>('pointer');
-  const modality = useInteractionModalityTracking();
-  const actionListComposedRef = useMergedRefs(actionListRef, modality.ref);
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
@@ -795,9 +797,14 @@ function DropdownMenuBottomSheet({
     </Heading>
   );
   // A stable ref: an inline one re-runs on every render (null, then the element).
-  const sheetTriggerRef = useCallback((el: HTMLElement | null) => {
-    buttonRef.current = el;
-  }, []);
+  const sheetModalityRef = modality.ref;
+  const sheetTriggerRef = useCallback(
+    (el: HTMLElement | null) => {
+      buttonRef.current = el;
+      sheetModalityRef(el);
+    },
+    [sheetModalityRef],
+  );
   return (
     <>
       {renderTrigger != null ? (
@@ -850,7 +857,7 @@ function DropdownMenuBottomSheet({
         finalFocusRef={buttonRef}
         label={sheetLabel}>
         <div
-          ref={actionListComposedRef}
+          ref={actionListRef}
           id={sheetId}
           {...rest}
           {...mergeProps(
@@ -1607,7 +1614,9 @@ function DropdownMenuPopover({
     (el: HTMLElement | null) => {
       buttonRef.current = el;
       popoverTriggerRef(el);
-      return modalityRef(el);
+      // Called with each node and with `null`, so its cleanup isn't returned
+      // (a returned cleanup would stop React's `null` call to the others).
+      modalityRef(el);
     },
     [popoverTriggerRef, modalityRef],
   );
