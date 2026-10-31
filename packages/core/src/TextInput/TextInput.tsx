@@ -132,6 +132,24 @@ export interface TextInputProps extends Omit<
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLInputElement>;
   /**
+   * Ref to the visual control box: the element that paints the field border
+   * and background and holds the icons and end controls — the same element
+   * `controlXstyle` targets. `ref` points at the native `<input>`, which sits
+   * inside that box, inset by the border, the inline padding and any start
+   * icon; anchor a popover or measure the field through this ref instead, so
+   * the overlay lines up with the box a person sees.
+   *
+   * @example
+   * ```
+   * const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+   *
+   * <Popover placement="below" alignment="start" content={<Results />}>
+   *   {({ref}) => <TextInput label="Search" controlRef={ref} />}
+   * </Popover>
+   * ```
+   */
+  controlRef?: React.Ref<HTMLDivElement>;
+  /**
    * The HTML input type.
    * @default 'text'
    */
@@ -325,6 +343,7 @@ export function TextInput({
   controlXstyle,
   controlClassName,
   controlStyle,
+  controlRef,
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
@@ -454,15 +473,18 @@ export function TextInput({
       disabled: isDisabled,
     });
 
+  const setControlRef = useMergedRefs<HTMLDivElement>(
+    containerRef,
+    controlRef,
+    // Anchor + hover/focus listeners for the disabled-message tooltip.
+    // Handlers are gated internally by isEnabled, and anchor names
+    // compose, so attaching unconditionally is safe.
+    disabledMessageTooltip.ref,
+  );
+
   const inputWrapper = (
     <div
-      ref={el => {
-        containerRef.current = el;
-        // Anchor + hover/focus listeners for the disabled-message tooltip.
-        // Handlers are gated internally by isEnabled, and anchor names
-        // compose, so attaching unconditionally is safe.
-        disabledMessageTooltip.ref(el);
-      }}
+      ref={setControlRef}
       onClick={handleWrapperClick}
       onMouseUp={handleWrapperMouseUp}
       {...(inputGroup ? inputGroupItemProps : undefined)}

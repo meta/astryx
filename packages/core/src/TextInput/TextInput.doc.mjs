@@ -202,6 +202,12 @@ export const docs = {
       type: 'CSSProperties',
       description: 'Inline styles for the visual control box.',
     },
+    {
+      name: 'controlRef',
+      type: 'Ref<HTMLDivElement>',
+      description:
+        'Ref to the visual control box — the same element `controlXstyle` targets. `ref` points at the native input, which is inset from that box by the border, padding and any start icon, so anchor a popover or measure the field through this ref instead.',
+    },
   ],
   theming: {
     targets: [
@@ -412,6 +418,12 @@ export const docsZh = {
       name: 'controlStyle',
       type: 'CSSProperties',
       description: '可视控件框的内联样式。',
+    },
+    {
+      name: 'controlRef',
+      type: 'Ref<HTMLDivElement>',
+      description:
+        '指向可视控件框的 ref，即 `controlXstyle` 作用的同一元素。`ref` 指向原生输入元素，它在该框内受边框、内边距和起始图标的内缩影响；定位浮层或测量字段时请改用此 ref。',
     },
   ],
   theming: {
