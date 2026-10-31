@@ -834,6 +834,14 @@ export function Slider({ref, ...props}: SliderProps) {
         pressedThumbIndex >= 0 ? pressedThumbIndex : getClosestThumb(newVal);
       const parks =
         isCoincident && (pressedThumbIndex >= 0 || newVal === values[0]);
+      // Until the first movement, a parked press is held by the upper thumb,
+      // the one drawn over the lower one, wherever it landed: on the thumbs
+      // (which the upper thumb covers) or on their shared value elsewhere,
+      // such as its mark label. So its pressed paint shows, and a press that
+      // never moves leaves focus on the same thumb.
+      if (parks && pressedThumbIndex < 0) {
+        thumbIndex = 1;
+      }
       // The first movement is measured from the pointer itself, not from a
       // mark it pressed (a wide label sits away from its mark's value).
       coincidentDragRef.current = parks
