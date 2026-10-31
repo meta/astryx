@@ -564,7 +564,12 @@ describe('PR Comment keeps its outcome off main', () => {
   // workflow_run attaches these jobs to main's latest commit, so a failing step
   // here would turn main red for a pull request's problem.
   const LANE = ['resolve', 'spec-only-reconcile', 'comment', 'report'];
-  const OPTIONAL = new Set(['actions/download-artifact@v8']);
+  // Optional: artifact downloads a run may not have, and keeping the CI
+  // history, which is a cache.
+  const OPTIONAL = new Set([
+    'actions/download-artifact@v8',
+    'actions/upload-artifact@v7',
+  ]);
 
   it.each(LANE)('never fails the run from the %s job', name => {
     for (const step of PR_COMMENT_WORKFLOW.jobs[name].steps) {

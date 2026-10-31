@@ -216,6 +216,7 @@ jobs:
         steps.cross-check.outcome == 'failure' ||
         steps.visual.outcome == 'failure' ||
         steps.frames.outcome == 'failure' ||
+        steps.ci-history.outcome == 'failure' ||
         steps.publish.outcome == 'failure' }}
     steps:
       - name: Checkout trusted default-branch code
@@ -404,6 +405,36 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --limit 12
 
+      # The CI-impact baseline (recent pull-request runs) is read once a day
+      # and kept as an artifact, so later CI-changing PRs that day reuse it.
+      - name: Find today's CI history
+        id: ci-history
+        continue-on-error: true
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const name = `ci-history-${new Date().toISOString().slice(0, 10)}`;
+            const {data} = await github.rest.actions.listArtifactsForRepo({...context.repo, name, per_page: 20});
+            // Only this repository's own runs on main keep the history.
+            const artifact = data.artifacts.find(candidate =>
+              !candidate.expired &&
+              candidate.workflow_run?.head_branch === 'main' &&
+              candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id);
+            core.setOutput('name', name);
+            core.setOutput('run_id', artifact ? String(artifact.workflow_run.id) : '');
+
+      - name: Download today's CI history
+        if: steps.identity.outputs.valid == 'true' && steps.ci-history.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.ci-history.outputs.name }}
+          run-id: ${{ steps.ci-history.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ci-history
+
       - name: Generate and post PR comment
         id: publish
         continue-on-error: true
@@ -446,6 +477,15 @@ jobs:
                 sourceConclusion: process.env.SOURCE_CONCLUSION,
               },
             });
+
+      - name: Keep today's CI history
+        if: steps.identity.outputs.valid == 'true' && steps.ci-history.outputs.name != '' && steps.ci-history.outputs.run_id == '' && hashFiles('ci-history/ci-history.json') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.ci-history.outputs.name }}
+          path: ci-history/ci-history.json
+          retention-days: 2
 
   # The CI-completion lane runs on workflow_run, so GitHub attaches its jobs to
   # main's latest commit. Main's checks must show main's health, not a pull
