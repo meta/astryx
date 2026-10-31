@@ -78,6 +78,10 @@ Consumer syntax and examples belong in `Resizable.doc.mjs` and
 - Migration decision: none. CSS-like `min()` and `max()` strings are not
   supported; `percent(value, {min: pixel(value)})` and
   `percent(value, {max: pixel(value)})` express a bounded percentage.
+- Deprecation: useResizable's configuration-object form, and the `resizable`
+  props of ResizeHandle and LayoutPanel that take its props, are deprecated;
+  `useResizable(handleRef, options)` with the ref on ResizeHandle replaces
+  them, and a minor removes them.
 
 Consumer migration instructions belong in consumer docs and release notes.
 
