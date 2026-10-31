@@ -260,8 +260,7 @@ export const categories: SandboxCategory[] = [
       {
         name: 'Perf Scenes',
         href: '/pages/perf-scenes/',
-        description:
-          'The fixed scenes the nightly performance run measures, to mount and profile by hand',
+        description: 'Fixed performance scenes to mount and profile by hand',
       },
       {
         name: 'Table Lab',

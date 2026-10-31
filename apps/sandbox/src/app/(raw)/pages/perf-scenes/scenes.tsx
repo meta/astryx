@@ -7,7 +7,7 @@
  * @input A scene id
  * @output The five perf scenes, each a deterministic composition of Core
  *   components that marks the document ready once it has committed
- * @position The scenes the nightly perf workflow measures in Chromium
+ * @position The scenes the perf driver measures in Chromium
  *   (apps/sandbox/perf/scenes.perf.spec.ts). Each scene renders the same
  *   content on every run: fixtures come from seeded generators shared with
  *   the hand-run Table Lab and Markdown perf pages.

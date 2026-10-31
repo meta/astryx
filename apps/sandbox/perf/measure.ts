@@ -4,7 +4,7 @@
  * @file measure.ts
  * @input A Playwright `Page` on the perf scenes page (Chromium)
  * @output `measureScene`: one sample of a scene's mount, interaction and
- *   unmount, as the numbers the nightly perf trend compares
+ *   unmount, as the numbers one sample records
  * @position Driver support for scenes.perf.spec.ts. Rendering counts and long
  *   tasks come from the interaction harness's Chromium trace
  *   (`traceRendering`); heap and listener counts from the DevTools protocol

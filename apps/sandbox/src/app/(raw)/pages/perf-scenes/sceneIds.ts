@@ -4,7 +4,7 @@
  * @file sceneIds.ts
  * @input None
  * @output The perf scene ids, their labels, and the parser for `?scene=`
- * @position Shared by the perf scenes page and the nightly perf driver
+ * @position Shared by the perf scenes page and the perf driver
  *   (apps/sandbox/perf/), so both name the same scenes.
  *
  * SYNC: A new scene needs a component in scenes.tsx and an interaction in

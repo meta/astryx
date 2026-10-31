@@ -6,7 +6,7 @@
  * @file page.tsx
  * @input `?scene=` (one of the ids in sceneIds.ts; the first by default)
  * @output A bare page with Mount and Unmount buttons around one perf scene
- * @position The page the nightly perf workflow drives in real Chromium
+ * @position The page the perf driver drives in real Chromium
  *   (apps/sandbox/perf/). It is a raw page, with no sandbox chrome, so the
  *   measurements count only the scene. Also usable by hand: open a scene,
  *   record a DevTools performance profile, press Mount scene.

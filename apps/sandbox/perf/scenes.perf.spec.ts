@@ -6,8 +6,7 @@
  *   playwright.perf.config.ts), PERF_SAMPLES (default 5), PERF_RESULTS_DIR
  *   (default test-results/perf)
  * @output One JSON file per scene: every sample and the per-metric median
- * @position The nightly perf workflow's measurement step
- *   (.github/workflows/perf-nightly.yml). Run locally with
+ * @position The perf scenes' measurement driver. Run locally with
  *   `pnpm build && pnpm -F @astryxdesign/sandbox build` then
  *   `pnpm exec playwright test --config playwright.perf.config.ts`.
  *
