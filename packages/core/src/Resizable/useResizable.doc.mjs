@@ -22,7 +22,7 @@ export const docs = {
       name: 'handleRef',
       type: 'RefObject<HTMLElement | null>',
       description:
-        "The handle's ref, passed first: `useResizable(handleRef, options)` attaches createResizable to the element and returns its size, collapse state and controls. Give the same ref to ResizeHandle, or to a plain element. The options are createResizable's: the params below, plus isReversed, isDisabled, label and collapsedLabel. Without a ref, the hook takes the params as one configuration object, for one region or several under `regions`, and also returns `props` for ResizeHandle.",
+        "The handle's ref, passed first: `useResizable(handleRef, options)` attaches createResizable to the element and returns its size, collapse state and controls. Give the same ref to ResizeHandle, or to a plain element; the region answers its controls before the handle renders too. The options are createResizable's: the params below, plus isReversed, isDisabled, label and collapsedLabel.",
     },
     {
       name: 'defaultSize',
@@ -126,12 +126,12 @@ export const docs = {
       name: 'props',
       type: 'ResizableProps',
       description:
-        'Configuration-object form only: props to spread on the resizable component or pass to ResizeHandle.',
+        "Deprecated, configuration-object form only: props for ResizeHandle's and LayoutPanel's deprecated `resizable` prop. Removed in the next minor.",
     },
   ],
   usage: {
     description:
-      'Hook for adding drag-to-resize behavior to layout regions. `useResizable(handleRef, options)` is createResizable in React: one region per call, driven by the handle behind the ref. The configuration-object form supports single-region and multi-region configurations with snap points, collapsible panels, localStorage persistence, and cascade resize ordering.',
+      'Hook for adding drag-to-resize behavior to layout regions: `useResizable(handleRef, options)` is createResizable in React, one region per call, driven by the handle behind the ref, with snap points, collapsible panels and localStorage persistence.',
     bestPractices: [
       {
         guidance: true,
@@ -168,6 +168,11 @@ export const docs = {
         description:
           'Set minSize too small; content becomes unreadable. Prefer collapsible for panels that can hide entirely.',
       },
+      {
+        guidance: false,
+        description:
+          'Pass the options as one configuration object, `useResizable(config)` or `useResizable({regions})`: that form is deprecated and removed in the next minor. To migrate: create a ref for each handle; call `useResizable(handleRef, options)` once per region, with the shared containerRef and direction, and an autoSaveId of `<autoSaveId>:<region key>` to keep a region’s saved size; give the ref to ResizeHandle in place of its `resizable` prop (isReversed and isDisabled stay on the handle); and pass LayoutPanel `width={region.size}` in place of its `resizable` prop.',
+      },
     ],
   },
   relatedComponents: ['Resizable', 'AppShell', 'Layout', 'SideNav'],
@@ -179,10 +184,10 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Adds drag-to-resize behavior to layout regions. useResizable(handleRef, options) = createResizable in React, one region per call. Config-object form: single-/multi-region configs w/ snap points, collapsible panels, localStorage persistence, cascade resize ordering.',
+    'Adds drag-to-resize behavior to layout regions. useResizable(handleRef, options) = createResizable in React, one region per call, w/ snap points, collapsible panels, localStorage persistence.',
   paramDescriptions: {
     handleRef:
-      "handle's ref, passed first; options = createResizable's. Without it: one config object, returns props too.",
+      "handle's ref, passed first; options = createResizable's. Region answers its controls before the handle renders.",
     defaultSize:
       'initial pixels, exact N%, or percent(value, {min: pixel(value)}) / percent(value, {max: pixel(value)}); resolves once.',
     minSize:
@@ -209,11 +214,11 @@ export const docsDense = {
     expand: 'expand from collapsed state.',
     resize: 'resize to specific px value.',
     props:
-      'config-object form only: props to spread on resizable component / pass to ResizeHandle.',
+      "deprecated, config-object form only: props for ResizeHandle's / LayoutPanel's deprecated resizable prop.",
   },
   usage: {
     description:
-      'Adds drag-to-resize behavior to layout regions. useResizable(handleRef, options) = createResizable in React, one region per call. Config-object form: single-/multi-region configs w/ snap points, collapsible panels, localStorage persistence, cascade resize ordering.',
+      'Adds drag-to-resize behavior to layout regions. useResizable(handleRef, options) = createResizable in React, one region per call, w/ snap points, collapsible panels, localStorage persistence.',
     bestPractices: [
       {
         guidance: true,
@@ -234,6 +239,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Set minSize too small; content becomes unreadable. Prefer collapsible for panels that can hide entirely.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use the config-object form (useResizable(config) / {regions}): deprecated, removed next minor. Migrate: one ref per handle; useResizable(handleRef, options) per region (shared containerRef + direction; autoSaveId `<id>:<key>` keeps saved size); ref to ResizeHandle for resizable; LayoutPanel width={region.size}.',
       },
     ],
   },
