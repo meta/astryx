@@ -445,6 +445,8 @@ interface Drag {
   canConfirm: boolean;
   /** A finger drives the swipe, not a pen or a wheel: its release cross-fades on every pointer. */
   isFinger: boolean;
+  /** Scratch: a trackpad step started this drag. */
+  viaScroll?: boolean;
   /** Past UIKit's threshold: the row follows the finger. */
   started: boolean;
   /** Which way the finger crossed the threshold: +1 toward the side, -1 away. */
@@ -768,6 +770,8 @@ export function useSwipeAction({
    * when something interrupts the settle (a finger catches the row, another
    * settle starts).
    */
+  /** Scratch: the next settle is a trackpad step's (a quicker spring). */
+  const fastSettleRef = useRef(false);
   const settle = useCallback(
     (
       layout: SwipeLayout,
@@ -786,10 +790,12 @@ export function useSwipeAction({
       // Under Reduce Motion the animator cross-fades or lands at once
       // (design:reduced-motion); what a release started always cross-fades.
       const touchRelease = cause === 'release';
+      const fast = fastSettleRef.current;
+      fastSettleRef.current = false;
       const motion = springTo(
         layout,
         travel,
-        SWIPE.settle,
+        fast ? {mass: 1, stiffness: 600, damping: 49} : SWIPE.settle,
         confirm,
         touchRelease,
       );
@@ -1099,6 +1105,7 @@ export function useSwipeAction({
       confirmAt: confirmPoint(layout.openWidth, rowWidth),
       isArmed: false,
       isFinger: isFingerContact(pan),
+      viaScroll: pan.trackedTouches[0]?.scrollType != null,
       layout,
       raw: 0,
       rowWidth,
@@ -1213,6 +1220,7 @@ export function useSwipeAction({
       },
     ).outcome;
     const cause: SettleCause = drag.isFinger ? 'release' : 'other';
+    fastSettleRef.current = drag.viaScroll === true;
     if (landing === 'perform') {
       slideOutAndFire(layout, cause);
     } else if (landing === 'open') {
