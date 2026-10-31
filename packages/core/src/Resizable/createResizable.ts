@@ -2,7 +2,8 @@
 
 /**
  * @file createResizable.ts
- * @input A handle element and the region's options: its size, bounds, snap
+ * @input A handle element (or null, for a region with no handle yet) and the
+ *   region's options: its size, bounds, snap
  *   points, collapse, persistence key, percentage basis, axis, and the
  *   handle's reversal, disabled state and labels
  * @output createResizable(handle, options) → {size, isCollapsed, collapse,
@@ -270,7 +271,9 @@ const MANAGED_ATTRIBUTES = [
  * pointer drag (holding the pointer for the whole drag), the arrow keys, Home,
  * End, and Enter and a double-click to collapse and restore. A horizontal
  * region resizes along the inline axis, and under right-to-left the drag
- * follows the pointer. `destroy` takes all of it away.
+ * follows the pointer. `destroy` takes all of it away. With a null handle the
+ * region has no handle yet: it still answers collapse, expand, resize and
+ * subscribe, and touches no element.
  *
  * @example
  * ```
@@ -290,7 +293,7 @@ const MANAGED_ATTRIBUTES = [
  * ```
  */
 export function createResizable(
-  handle: HTMLElement,
+  handle: HTMLElement | null,
   options: CreateResizableOptions = {},
 ): ResizableController {
   let opts = options;
@@ -298,7 +301,10 @@ export function createResizable(
   const listeners = new Set<() => void>();
   // A handle ResizeHandle renders: the component renders the separator's
   // attributes and forwards its events, so the factory adds neither.
-  const isRenderedByResizeHandle = isClaimedResizeHandle(handle);
+  const isRenderedByResizeHandle =
+    handle != null && isClaimedResizeHandle(handle);
+  // A plain element the factory drives itself: its listeners and attributes.
+  const drivenHandle = isRenderedByResizeHandle ? null : handle;
   let isDragging = false;
   let view: ResizeHandleView | null = null;
   const viewListeners = new Set<() => void>();
@@ -548,7 +554,7 @@ export function createResizable(
         break;
       }
     }
-    if (!isRenderedByResizeHandle) {
+    if (drivenHandle != null) {
       announce();
     }
     refreshView();
@@ -626,19 +632,24 @@ export function createResizable(
 
   // --- The handle's attributes ---
   const original = new Map<string, string | null>();
-  if (!isRenderedByResizeHandle) {
+  if (drivenHandle != null) {
     for (const name of MANAGED_ATTRIBUTES) {
-      original.set(name, handle.getAttribute(name));
+      original.set(name, drivenHandle.getAttribute(name));
     }
   }
   const hasOwnName =
-    handle.hasAttribute('aria-label') || handle.hasAttribute('aria-labelledby');
+    drivenHandle != null &&
+    (drivenHandle.hasAttribute('aria-label') ||
+      drivenHandle.hasAttribute('aria-labelledby'));
 
   const setAttribute = (name: string, value: string | null) => {
+    if (drivenHandle == null) {
+      return;
+    }
     if (value == null) {
-      handle.removeAttribute(name);
-    } else if (handle.getAttribute(name) !== value) {
-      handle.setAttribute(name, value);
+      drivenHandle.removeAttribute(name);
+    } else if (drivenHandle.getAttribute(name) !== value) {
+      drivenHandle.setAttribute(name, value);
     }
   };
 
@@ -842,14 +853,14 @@ export function createResizable(
   const onDoubleClick = () => {
     gesture.doubleClick();
   };
-  if (!isRenderedByResizeHandle) {
-    handle.addEventListener('pointerdown', onPointerDown);
-    handle.addEventListener('pointermove', onPointerMove);
-    handle.addEventListener('pointerup', onPointerUp);
-    handle.addEventListener('pointercancel', onPointerCancel);
-    handle.addEventListener('lostpointercapture', onPointerCancel);
-    handle.addEventListener('keydown', onKeyDown);
-    handle.addEventListener('dblclick', onDoubleClick);
+  if (drivenHandle != null) {
+    drivenHandle.addEventListener('pointerdown', onPointerDown);
+    drivenHandle.addEventListener('pointermove', onPointerMove);
+    drivenHandle.addEventListener('pointerup', onPointerUp);
+    drivenHandle.addEventListener('pointercancel', onPointerCancel);
+    drivenHandle.addEventListener('lostpointercapture', onPointerCancel);
+    drivenHandle.addEventListener('keydown', onKeyDown);
+    drivenHandle.addEventListener('dblclick', onDoubleClick);
   }
 
   commit();
@@ -871,9 +882,10 @@ export function createResizable(
       };
     },
   };
-  const unbind = isRenderedByResizeHandle
-    ? bindResizeHandle(handle, binding)
-    : null;
+  const unbind =
+    handle != null && isRenderedByResizeHandle
+      ? bindResizeHandle(handle, binding)
+      : null;
 
   const controller: ResizableController = {
     get size() {
@@ -912,13 +924,13 @@ export function createResizable(
       isDestroyed = true;
       unbind?.();
       viewListeners.clear();
-      handle.removeEventListener('pointerdown', onPointerDown);
-      handle.removeEventListener('pointermove', onPointerMove);
-      handle.removeEventListener('pointerup', onPointerUp);
-      handle.removeEventListener('pointercancel', onPointerCancel);
-      handle.removeEventListener('lostpointercapture', onPointerCancel);
-      handle.removeEventListener('keydown', onKeyDown);
-      handle.removeEventListener('dblclick', onDoubleClick);
+      drivenHandle?.removeEventListener('pointerdown', onPointerDown);
+      drivenHandle?.removeEventListener('pointermove', onPointerMove);
+      drivenHandle?.removeEventListener('pointerup', onPointerUp);
+      drivenHandle?.removeEventListener('pointercancel', onPointerCancel);
+      drivenHandle?.removeEventListener('lostpointercapture', onPointerCancel);
+      drivenHandle?.removeEventListener('keydown', onKeyDown);
+      drivenHandle?.removeEventListener('dblclick', onDoubleClick);
       stopObservingContainer?.();
       stopObservingContainer = null;
       if (isObservingViewport) {

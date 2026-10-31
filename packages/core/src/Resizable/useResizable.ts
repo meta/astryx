@@ -982,7 +982,7 @@ const subscribeToNothing = () => () => {};
 const readNoFactory = () => null;
 
 interface ResizableEntry {
-  readonly element: HTMLElement;
+  readonly element: HTMLElement | null;
   readonly resizable: ResizableController;
   readonly createdWith: CreateResizableOptions;
 }
@@ -1020,10 +1020,11 @@ function isElementRef(value: unknown): value is RefObject<HTMLElement | null> {
 
 /**
  * createResizable on the ref's element, with nothing of its own (spec:AST-107
- * FR6): it creates the factory when the element mounts, passes later options
- * through `update`, destroys it when the element goes, and returns what the
- * factory reports. Before the element exists (the server, the first render)
- * it returns the state the factory starts in.
+ * FR6): it creates the factory as it mounts, on the element (null while there
+ * is none yet), again for a new element, passes later options through
+ * `update`, destroys it as it unmounts, and returns what the factory reports.
+ * Before its first commit (the server, the first render) it returns the state
+ * the factory starts in.
  */
 function useResizableElement(
   ref: RefObject<HTMLElement | null>,
@@ -1035,13 +1036,13 @@ function useResizableElement(
   const [slot] = useState(createSlot);
   // The factory follows the element behind the ref. A ref is stable across
   // an element swap, so its current node is compared after every commit. A
-  // handle that goes away leaves the region where it is, still answering
+  // region whose handle has not rendered yet, or has gone away, still answers
   // collapse, expand and resize; a new handle gets a new factory that starts
   // where the old one stood, and the old one is destroyed.
   useIsomorphicLayoutEffect(() => {
     const element = ref.current;
     const entry = slot.get();
-    if (element == null || entry?.element === element) {
+    if (entry != null && (element == null || entry.element === element)) {
       return;
     }
     const previous =

@@ -20,7 +20,7 @@ import {StrictMode, useRef, useState} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type {CreateResizableOptions} from './createResizable';
 import {ResizeHandle} from './ResizeHandle';
-import {useResizable} from './useResizable';
+import {useResizable, type UseResizableResult} from './useResizable';
 
 function Split({
   options,
@@ -272,6 +272,38 @@ describe('ResizeHandle on a useResizable(handleRef) region (component:Resizable 
     );
     // The prop's region is the one it renders.
     expect(separator()).toHaveAttribute('aria-valuenow', '300');
+  });
+});
+
+describe('useResizable(handleRef) before its handle renders', () => {
+  it('answers collapse, and the handle that renders later starts collapsed', () => {
+    let region: UseResizableResult | undefined;
+    function Late() {
+      const handleRef = useRef<HTMLDivElement>(null);
+      const [isShown, setIsShown] = useState(false);
+      region = useResizable(handleRef, {defaultSize: 200, collapsible: true});
+      return (
+        <>
+          <button type="button" onClick={() => setIsShown(true)}>
+            show
+          </button>
+          {isShown && <ResizeHandle ref={handleRef} />}
+        </>
+      );
+    }
+    render(<Late />);
+    expect(screen.queryByRole('separator')).toBeNull();
+    act(() => {
+      region?.collapse();
+    });
+    expect(region?.isCollapsed).toBe(true);
+    act(() => {
+      screen.getByRole('button', {name: 'show'}).click();
+    });
+    expect(separator()).toHaveAttribute('aria-valuetext', 'Collapsed');
+    fireEvent.keyDown(separator(), {key: 'Enter'});
+    expect(region?.isCollapsed).toBe(false);
+    expect(region?.size).toBe(200);
   });
 });
 

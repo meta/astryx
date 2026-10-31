@@ -20,9 +20,9 @@ export const docs = {
   params: [
     {
       name: 'handle',
-      type: 'HTMLElement',
+      type: 'HTMLElement | null',
       description:
-        'The separator element between the region and its neighbor. It gets `role="separator"`, a tab stop and an accessible name when it has none of its own, its orientation and value, and the drag, keyboard and double-click input. It never sizes the panel.',
+        'The separator element between the region and its neighbor. It gets `role="separator"`, a tab stop and an accessible name when it has none of its own, its orientation and value, and the drag, keyboard and double-click input. It never sizes the panel. Pass null for a region with no handle yet: it still answers `collapse`, `expand`, `resize` and `subscribe`.',
       required: true,
     },
     {
