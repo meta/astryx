@@ -37,6 +37,10 @@ import {TokenLink} from './TokenLink';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOwnerProps,
+  focusWithinOwner,
+} from '../privateAttributes/focusOwner.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useTranslator} from '../i18n';
@@ -448,7 +452,10 @@ export function Token({
         icon={icon}
         endContent={endContent}
         removeButton={removeButton}
-        linkStyleProps={stylex.props(styles.invisibleButton)}
+        linkStyleProps={{
+          ...stylex.props(styles.invisibleButton),
+          ...focusOwnerProps,
+        }}
         {...pressable}
         labelContent={
           <span
@@ -465,7 +472,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself (`architecture:interaction-modality` INV3).
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -504,7 +514,10 @@ export function Token({
             size,
             disabled: isDisabled ? 'disabled' : null,
           }),
-          focusOutlineProps.focusWithin(
+          // Rings for the token's own button or link only; the remove button
+          // rings itself (`architecture:interaction-modality` INV3).
+          stylex.props(
+            focusWithinOwner,
             styles.base,
             sizeStyles[size],
             colorStyles[color],
@@ -525,6 +538,7 @@ export function Token({
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
+          {...focusOwnerProps}
           {...stylex.props(styles.invisibleButton)}>
           <span
             {...stylex.props(

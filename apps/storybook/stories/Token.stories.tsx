@@ -148,6 +148,20 @@ export const Clickable: Story = {
   ),
 };
 
+/**
+ * A token with its own action and a remove button: each of the two tab stops
+ * shows one focus ring, the token's around the token and the remove button's
+ * around the X.
+ */
+export const ClickableWithRemove: Story = {
+  render: () => (
+    <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+      <Token label="Design" onClick={() => {}} onRemove={() => {}} />
+      <Token label="Docs" href="#" onRemove={() => {}} />
+    </div>
+  ),
+};
+
 export const AsLink: Story = {
   render: () => (
     <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
