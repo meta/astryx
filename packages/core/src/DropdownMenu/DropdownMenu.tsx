@@ -105,7 +105,10 @@ import {
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {getInteractionModality} from '../utils/interactionModality';
+import {
+  getInteractionModality,
+  useInteractionModalityTracking,
+} from '../utils/interactionModality';
 import {useTranslator} from '../i18n';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 
@@ -628,12 +631,14 @@ function DropdownMenuBottomSheet({
   const sheetId = useId();
   const actionListRef = useRef<HTMLDivElement>(null);
   const openModalityRef = useRef<'keyboard' | 'pointer'>('pointer');
+  const modality = useInteractionModalityTracking();
+  const actionListComposedRef = useMergedRefs(actionListRef, modality.ref);
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility(actionListRef);
+  } = useFocusReturnVisibility(modality);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousSubmenuDepthRef = useRef(0);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -845,7 +850,7 @@ function DropdownMenuBottomSheet({
         finalFocusRef={buttonRef}
         label={sheetLabel}>
         <div
-          ref={actionListRef}
+          ref={actionListComposedRef}
           id={sheetId}
           {...rest}
           {...mergeProps(
@@ -948,12 +953,13 @@ function DropdownMenuPopover({
   const suppressControlledRollbackHideRef = useRef(false);
 
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const modality = useInteractionModalityTracking();
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility(contentRef);
+  } = useFocusReturnVisibility(modality);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
   const hasRegions = useMemo(
@@ -1594,12 +1600,16 @@ function DropdownMenuPopover({
   // popover's anchor off the trigger and back: two inline-style writes on the
   // trigger per render of the menu.
   const popoverTriggerRef = popover.triggerRef;
+  // The trigger, where focus returns, also carries the modality tracking for
+  // its document.
+  const modalityRef = modality.ref;
   const triggerRef = useCallback(
     (el: HTMLElement | null) => {
       buttonRef.current = el;
       popoverTriggerRef(el);
+      return modalityRef(el);
     },
-    [popoverTriggerRef],
+    [popoverTriggerRef, modalityRef],
   );
   const consumerButtonRef = button.ref;
   const buttonTriggerRef = useCallback(

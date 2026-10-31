@@ -69,7 +69,7 @@ import {
 import {useLongPress, type UseLongPressHandlers} from './useLongPress';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {focusForLastInput} from '../utils/focusReturn';
-import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 
 /** Marks a menu root that carries this press model. */
 export const MENU_PRESS_MARKER = 'data-astryx-menu-press';
@@ -341,7 +341,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   optionsRef.current = options;
   // The highlight, and the hover focus of the rows in this menu, follow the
   // last input, which this tracks for the menu's own document.
-  useInteractionModalityTracking(options.menuRef);
+  useInteractionModalityTrackingFor(options.menuRef);
 
   const gestureRef = useRef<MenuPressGesture<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);

@@ -54,6 +54,7 @@ import {ChatSendButton} from './ChatSendButton';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 
@@ -419,7 +420,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const canSend = currentValue.trim().length > 0 && !isDisabled;
 
   const bodyRef = useRef<HTMLDivElement>(null);
-  const readModality = useInteractionModalityTracking(bodyRef);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const bodyComposedRef = useMergedRefs(bodyRef, modalityRef);
 
   // Input slot registers its focus (and future) control here so the shell can
   // drive it without knowing its DOM shape. Stable ref — safe in the memoized
@@ -545,7 +547,7 @@ export function ChatComposer(props: ChatComposerProps) {
         {drawer}
 
         <div
-          ref={bodyRef}
+          ref={bodyComposedRef}
           onClick={handleBodyClick}
           onPointerDownCapture={() => setHasKeyboardEditorFocus(false)}
           onFocusCapture={handleBodyFocusCapture}

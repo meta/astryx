@@ -529,17 +529,17 @@ export function Dialog({
     [titleId, hasConsumerName],
   );
 
-  const mergedDialogRef = useMergedRefs(ref, attachDialog);
-
-  // Capture the element that was focused when the dialog opened, for
-  // directional animation origin and focus restoration on close.
-  const triggerElementRef = useRef<HTMLElement | null>(null);
-
   // Input in a second document (a same-origin iframe, a Document
   // Picture-in-Picture window) never reaches the page's listeners, so the
   // dialog's own document keeps its own last input for the focus return while
   // this Dialog is mounted, from before it opens until it unmounts.
-  useInteractionModalityTracking(dialogRef);
+  const {ref: modalityRef} = useInteractionModalityTracking();
+
+  const mergedDialogRef = useMergedRefs(ref, attachDialog, modalityRef);
+
+  // Capture the element that was focused when the dialog opened, for
+  // directional animation origin and focus restoration on close.
+  const triggerElementRef = useRef<HTMLElement | null>(null);
 
   // This runs in a layout effect so the capture lands before any descendant's
   // passive mount effect: all layout effects run before any passive effect,

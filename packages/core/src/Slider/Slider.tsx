@@ -557,7 +557,7 @@ export function Slider({ref, ...props}: SliderProps) {
     null,
   );
 
-  const readModality = useInteractionModalityTracking(trackRef);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
 
   const handleThumbFocus = useCallback(
     (thumbIndex: number, _e: FocusEvent<HTMLDivElement>) => {
@@ -1170,6 +1170,7 @@ export function Slider({ref, ...props}: SliderProps) {
           ref={useMergedRefs(
             isRange ? ref : undefined,
             trackRef,
+            modalityRef,
             disabledMessageTooltip.ref,
           )}
           {...(isRange

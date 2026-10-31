@@ -1189,7 +1189,17 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Read by the live region above so it speaks what this element renders.
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
-  const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
+  // A hover moves the highlight too, but the focus ring follows the shared
+  // interaction modality (architecture:interaction-modality INV1): it is read
+  // whenever a key or the pointer moves the highlight, so an action cell
+  // highlighted after pointer input keeps the hover treatment and no ring.
+  const triggerModality = useInteractionModalityTracking();
+  const readModality = triggerModality.readModality;
+  const triggerButtonRef = useMergedRefs<HTMLElement>(
+    triggerRef,
+    triggerModality.ref,
+    ref,
+  );
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
 
@@ -1447,6 +1457,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
     isFocusReturnAlways: hasExternalTrigger,
     popoverOptions: {
       hasLightDismiss: true,
@@ -1833,11 +1844,6 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
-  // A hover moves the highlight too, but the focus ring follows the shared
-  // interaction modality (architecture:interaction-modality INV1): it is read
-  // whenever a key or the pointer moves the highlight, so an action cell
-  // highlighted after pointer input keeps the hover treatment and no ring.
-  const readModality = useInteractionModalityTracking(triggerRef);
   const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
     () => readModality() === 'keyboard',
   );

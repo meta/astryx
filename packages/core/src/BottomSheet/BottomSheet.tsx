@@ -99,6 +99,7 @@ import {
 } from '../theme/tokens.stylex';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useScrollLock} from '../hooks/useScrollLock';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {mergeProps} from '../utils/mergeProps';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
@@ -711,7 +712,8 @@ function StandaloneBottomSheet({
     [finalFocusRef, hasScrim, isOpen],
   );
 
-  useInteractionModalityTracking(dialogRef);
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const dialogComposedRef = useMergedRefs(dialogRef, modalityRef);
   useScrollLock(shouldPresent && hasScrim);
   useDevWarning(
     'BottomSheet',
@@ -797,7 +799,7 @@ function StandaloneBottomSheet({
         hasScrim && isExiting && styles.scrimClosing,
         !hasScrim && styles.dialogNonModal,
       )}
-      ref={dialogRef}
+      ref={dialogComposedRef}
       // A non-modal sheet is hosted in the top layer as a manual popover
       // (no light dismiss, no backdrop), so sheets order by presentation
       // without a page-level z-index. Below the Popover API floor the

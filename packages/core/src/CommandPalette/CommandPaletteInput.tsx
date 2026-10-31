@@ -220,7 +220,7 @@ export function CommandPaletteInput({
   // Text-entry controls match :focus-visible after pointer focus in Chromium.
   // Keep the shared selector, but narrow its ring to focus acquired through
   // keyboard navigation so a click or pointer-opened palette stays unringed.
-  const readModality = useInteractionModalityTracking(inputRef);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
   const handleFocus = useCallback(
     (event: React.FocusEvent<HTMLInputElement>) => {
       setIsKeyboardFocus(readModality() === 'keyboard');
@@ -309,7 +309,7 @@ export function CommandPaletteInput({
       </span>
       <input
         {...props}
-        ref={useMergedRefs(ref, inputRef)}
+        ref={useMergedRefs(ref, inputRef, modalityRef)}
         {...(isKeyboardFocus
           ? focusOutlineProps.focusVisible(styles.input)
           : focusOutlineProps.suppressed(styles.input))}

@@ -39,7 +39,7 @@
 
 import {useCallback, useEffect, useRef, type RefObject} from 'react';
 import {currentGesture} from './gestureCounter';
-import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 
 /**
  * How a hover layer behaves on a touch pointer.
@@ -249,7 +249,7 @@ export function useTouchTrigger(
   // waiting. The next press, a cancel, the tap itself or unmounting calls it.
   const forgetPendingTapRef = useRef<(() => void) | null>(null);
 
-  const readModality = useInteractionModalityTracking(triggerRef);
+  const readModality = useInteractionModalityTrackingFor(triggerRef);
 
   const disarmOutsideDismiss = useCallback(() => {
     isTapOpenRef.current = false;

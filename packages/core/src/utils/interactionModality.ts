@@ -5,9 +5,11 @@
 /**
  * @file interactionModality.ts
  * @input Global pointerdown/keydown events
- * @output `useInteractionModalityTracking(ref?)` activates tracking for the page
- *   and, when the ref's element lives in a second document, for that document,
- *   and returns a reader for the element's own document;
+ * @output `useInteractionModalityTracking()` activates tracking for the page and
+ *   returns a callback ref that tracks the element's second document, if any,
+ *   with a reader for that element's own document;
+ *   `useInteractionModalityTrackingFor(objectRef)` does the same for hooks
+ *   that receive a consumer's object ref;
  *   `getInteractionModality(target?)` reads how the user last interacted in a
  *   node's or document's own document (the page by default)
  * @position Internal document-wide singleton; used where `:focus-visible` alone
@@ -32,14 +34,20 @@
  * between consumers is not lost. A second document (a same-origin iframe, a
  * Document Picture-in-Picture window) gets its own store when a component
  * tracks it, since input there never reaches the page's listeners; its
- * listeners stay only while a consumer there is mounted. A component passes its
- * element's ref to the one hook and gets both; it never tracks a document
- * itself. Importing this module
+ * listeners stay only while a consumer there is mounted. A component attaches
+ * the one hook's callback ref to its element and gets both; it never tracks a
+ * document itself. Importing this module
  * has no DOM side effects, and server rendering keeps the keyboard-safe
  * default.
  */
 
-import {useCallback, useEffect, useRef, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type RefCallback,
+  type RefObject,
+} from 'react';
 
 export type InteractionModality = 'keyboard' | 'pointer';
 
@@ -160,65 +168,92 @@ function trackInteractionModalityIn(targetDocument: Document): () => void {
   };
 }
 
+/** What a component gets from its one modality call. */
+export type InteractionModalityTracking = {
+  /**
+   * Attach to the element the component renders (merge it with the element's
+   * other refs). While the element lives in a second document (a same-origin
+   * iframe, a Document Picture-in-Picture window), that document is tracked;
+   * detaching or replacing the node releases it first (INV6).
+   */
+  ref: RefCallback<Element>;
+  /** How the user last interacted in the element's own document. */
+  readModality: () => InteractionModality;
+};
+
 /**
- * Activate shared modality tracking when the first consumer mounts, and read
- * it. Pass the component's element ref: when the element renders into a
- * second document (a same-origin iframe, a Document Picture-in-Picture
- * window), that document is tracked too while the component is mounted, and
- * the returned reader answers for the element's own document rather than the
- * page's. The component makes this one call and needs no effect of its own.
+ * A second-document hold for the node a ref callback receives: called with
+ * each node and with `null`, it releases the previous document before it holds
+ * a new one, and its returned cleanup releases it too, so React's ref cleanup
+ * and `null` calls both work and a release never runs twice.
  */
-export function useInteractionModalityTracking(
-  elementRef?: RefObject<Element | null>,
-): () => InteractionModality {
-  useEffect(() => trackInteractionModality(), []);
-
-  // The one owner of this component's hold on a second document: attach,
-  // `null` detachment and replacement all go through `hold`, which releases
-  // the old document before it tracks the new one (INV6), and unmount
-  // releases it (INV5).
-  const holdRef = useRef<SecondDocumentHold | null>(null);
-  holdRef.current ??= createSecondDocumentHold();
-  const hold = holdRef.current;
-  // Synchronizes the per-document listener registry with the element's
-  // CURRENT owner document. It re-reads the ref after every commit, so a node
-  // that is detached, replaced or moved to another document re-targets the
-  // hold. `hold` is idempotent, so an unchanged commit and a StrictMode replay
-  // are free. A callback ref cannot do this here: useMenuPress, useTouchTrigger
-  // and useFocusReturnVisibility receive object refs their callers own.
-  useEffect(() => {
-    hold(elementRef?.current?.ownerDocument ?? null);
-  });
-  useEffect(() => () => hold(null), [hold]);
-
-  return useCallback(
-    () => getInteractionModality(elementRef?.current),
-    [elementRef],
-  );
+function holdNodeDocument(
+  node: Element | null,
+  previous: {release: (() => void) | null},
+): (() => void) | undefined {
+  previous.release?.();
+  previous.release = null;
+  const ownerDocument = node?.ownerDocument;
+  if (
+    ownerDocument == null ||
+    (typeof document !== 'undefined' && ownerDocument === document)
+  ) {
+    return undefined;
+  }
+  const release = trackInteractionModalityIn(ownerDocument);
+  previous.release = release;
+  return () => {
+    release();
+    if (previous.release === release) previous.release = null;
+  };
 }
 
-/** Holds at most one second document, re-targeted idempotently. */
-type SecondDocumentHold = (ownerDocument: Document | null) => void;
+/**
+ * Activate shared modality tracking when the first consumer mounts, and read
+ * it for the element the component renders: attach the returned `ref` to that
+ * element. The component makes this one call and adds no effect, listener or
+ * tracker of its own for modality.
+ */
+export function useInteractionModalityTracking(): InteractionModalityTracking {
+  useEffect(() => trackInteractionModality(), []);
+  const nodeRef = useRef<Element | null>(null);
+  const holdRef = useRef<{release: (() => void) | null}>({release: null});
+  const ref = useCallback((node: Element | null) => {
+    nodeRef.current = node;
+    return holdNodeDocument(node, holdRef.current);
+  }, []);
+  const readModality = useCallback(
+    () => getInteractionModality(nodeRef.current),
+    [],
+  );
+  return {ref, readModality};
+}
 
-function createSecondDocumentHold(): SecondDocumentHold {
-  let heldDocument: Document | null = null;
-  let release: (() => void) | null = null;
-  return ownerDocument => {
-    const secondDocument =
-      ownerDocument != null &&
-      (typeof document === 'undefined' || ownerDocument !== document)
-        ? ownerDocument
-        : null;
-    if (secondDocument === heldDocument) {
-      return;
+/**
+ * The same, for a hook that receives an object ref its consumer owns
+ * (useMenuPress's `menuRef`, useTouchTrigger's trigger), so it cannot attach a
+ * callback ref. After every commit it holds the ref's CURRENT owner document,
+ * and the same Effect's cleanup releases it (INV3), so a detached, replaced or
+ * moved node releases the old document before the new one is held (INV6).
+ */
+export function useInteractionModalityTrackingFor(
+  elementRef: RefObject<Element | null>,
+): () => InteractionModality {
+  useEffect(() => trackInteractionModality(), []);
+  useEffect(() => {
+    const ownerDocument = elementRef.current?.ownerDocument;
+    if (
+      ownerDocument == null ||
+      (typeof document !== 'undefined' && ownerDocument === document)
+    ) {
+      return undefined;
     }
-    release?.();
-    release =
-      secondDocument == null
-        ? null
-        : trackInteractionModalityIn(secondDocument);
-    heldDocument = secondDocument;
-  };
+    return trackInteractionModalityIn(ownerDocument);
+  });
+  return useCallback(
+    () => getInteractionModality(elementRef.current),
+    [elementRef],
+  );
 }
 
 /**

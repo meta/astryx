@@ -89,6 +89,7 @@ import {
 } from '../Field/fieldParts';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
@@ -1038,8 +1039,10 @@ export function Selector<T extends SelectorOptionType>(
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+  const triggerModality = useInteractionModalityTracking();
   const triggerButtonRef = useMergedRefs<HTMLButtonElement>(
     triggerRef as React.Ref<HTMLButtonElement>,
+    triggerModality.ref,
     ref,
   );
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1183,6 +1186,7 @@ export function Selector<T extends SelectorOptionType>(
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
     popoverOptions: {
       hasLightDismiss: true,
       hasCloseButton: false,
