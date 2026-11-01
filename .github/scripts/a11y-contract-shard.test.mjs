@@ -10,6 +10,7 @@ import {
   listedTests,
   partitionTests,
   recordDurations,
+  recordLogs,
   recordTestDurations,
   testKey,
   testListLines,
@@ -230,6 +231,32 @@ describe('a11y contract shards', () => {
     expect(Math.max(...legs.map(leg => unitsWall(leg)))).toBeLessThan(
       longestFile,
     );
+  });
+
+  it('records a file the split cut across legs at its whole time', () => {
+    const leg = (test, seconds) =>
+      `  ✓  1 [chromium] › packages/cut.spec.ts:${test}:1 › t${test} (${seconds}s)`;
+    const {seconds, tests} = recordLogs([leg(1, 2), leg(2, 3)]);
+    expect(seconds['packages/cut.spec.ts']).toBe(5);
+    expect(Object.keys(tests)).toHaveLength(2);
+  });
+
+  it('keeps every recorded file at the sum of its tests', () => {
+    const recordedSuite = JSON.parse(
+      fs.readFileSync(
+        path.join(ROOT, '.github/a11y-contract-durations.json'),
+        'utf8',
+      ),
+    );
+    const byFile = {};
+    for (const [key, value] of Object.entries(recordedSuite.tests)) {
+      const file = key.split(' › ')[0];
+      byFile[file] = (byFile[file] ?? 0) + value;
+    }
+    for (const [file, value] of Object.entries(byFile))
+      expect(recordedSuite.seconds[file], file).toBeGreaterThanOrEqual(
+        value * 0.9,
+      );
   });
 
   it('simulates path-order workers', () => {

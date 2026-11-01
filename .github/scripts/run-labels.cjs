@@ -2,7 +2,7 @@
 
 /**
  * @file Decides which heavy suites a pull request opted into with a
- * `ci:run-<suite>` label (spec:AST-030 FR12, DEC-7).
+ * `ci:run-<suite>` label (spec:AST-030 FR12, FR18, DEC-7).
  *
  * A suite runs on a pull request only while the pull request carries its
  * label, and only when the newest application of that label came from someone
@@ -69,17 +69,17 @@ async function newestLabelers(github, {owner, repo, number}) {
 }
 
 /**
- * Decides every suite and sets one `true`/`false` output per suite.
+ * Decides each suite in `suites` (suite → label) without setting outputs.
  * @returns {Promise<Record<string, boolean>>}
  */
-async function decideRunLabels({github, context, core}) {
+async function decideSuites({github, context, core, suites}) {
   const decisions = Object.fromEntries(
-    Object.keys(SUITE_LABELS).map(suite => [suite, false]),
+    Object.keys(suites).map(suite => [suite, false]),
   );
   const pr = context.payload.pull_request;
   if (context.eventName === 'pull_request' && pr != null) {
     const carried = new Set((pr.labels ?? []).map(label => label.name));
-    const wanted = Object.entries(SUITE_LABELS).filter(([, label]) =>
+    const wanted = Object.entries(suites).filter(([, label]) =>
       carried.has(label),
     );
     if (wanted.length > 0) {
@@ -136,10 +136,44 @@ async function decideRunLabels({github, context, core}) {
       }
     }
   }
+  return decisions;
+}
+
+/**
+ * Decides every CI suite and sets one `true`/`false` output per suite.
+ * @returns {Promise<Record<string, boolean>>}
+ */
+async function decideRunLabels({github, context, core}) {
+  const decisions = await decideSuites({
+    github,
+    context,
+    core,
+    suites: SUITE_LABELS,
+  });
   for (const [suite, runs] of Object.entries(decisions)) {
     core.setOutput(suite, String(runs));
   }
   return decisions;
 }
 
-module.exports = {SUITE_LABELS, decideRunLabels, notRunSentence};
+/**
+ * Decides one suite that lives in its own workflow (the nightly perf lane's
+ * `ci:run-perf`), under the same rule as the CI suites. Sets no output.
+ * @returns {Promise<boolean>}
+ */
+async function decideRunLabel({github, context, core, suite, label}) {
+  const decisions = await decideSuites({
+    github,
+    context,
+    core,
+    suites: {[suite]: label},
+  });
+  return decisions[suite];
+}
+
+module.exports = {
+  SUITE_LABELS,
+  decideRunLabel,
+  decideRunLabels,
+  notRunSentence,
+};

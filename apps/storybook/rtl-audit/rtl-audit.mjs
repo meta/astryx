@@ -66,6 +66,7 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  resolveFilterRoutes,
   finishFiniteAnimations,
   d1GlyphKey,
   d1PairKey,
@@ -92,6 +93,7 @@ import {
 } from './rtl-audit-shards.mjs';
 
 const {
+  componentExportsFromBarrel,
   componentPackage,
   flatPackageComponentNames,
   nestedPackageComponentNames,
@@ -1215,6 +1217,64 @@ function matchesFilter(component) {
   return !FILTER.length || FILTER.includes(normalized) || FILTER.includes(name);
 }
 
+const storyFileSources = new Map();
+
+/** Whether a story file (an index `importPath`) uses a component by name. */
+function storyFileUses(importPath, component) {
+  if (!importPath) return false;
+  const file = path.join(PROJECT_ROOT, 'apps/storybook', importPath);
+  if (!storyFileSources.has(file)) {
+    let source = '';
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {}
+    storyFileSources.set(file, source);
+  }
+  const name = component.split('/').at(-1);
+  return new RegExp(`\\b${name}\\b`).test(storyFileSources.get(file));
+}
+
+function readVerifiedNa() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
+    if (!Array.isArray(parsed)) throw new Error('verified-not-applicable registry must be a JSON array');
+    return {verifiedNa: parsed, verifiedNaError: null};
+  } catch (error) {
+    return {verifiedNa: [], verifiedNaError: String(error).slice(0, 200)};
+  }
+}
+
+/**
+ * A filter's public component and the source folder that implements it, from
+ * its package's barrel (`core/resizehandle` → core/ResizeHandle in
+ * packages/core/src/Resizable), or null.
+ */
+function sourceOwnerOf(filter, publicComponentsByPackage) {
+  const [packageName, requested] = filter.includes('/')
+    ? filter.split('/')
+    : [null, filter];
+  for (const name of packageName ? [packageName] : ACTIVE_PACKAGE_NAMES) {
+    const pkg = componentPackage(name);
+    if (!pkg) continue;
+    const component = (publicComponentsByPackage[name] ?? []).find(
+      candidate => candidate.toLowerCase() === requested,
+    );
+    if (!component) continue;
+    const sourceRoot = path.join(PROJECT_ROOT, pkg.src);
+    const implementation = componentExportsFromBarrel(
+      path.join(sourceRoot, 'index.ts'),
+      sourceRoot,
+    ).get(component);
+    if (!implementation) continue;
+    const folder = path
+      .relative(PROJECT_ROOT, path.dirname(implementation))
+      .split(path.sep)
+      .join('/');
+    return {component: `${name}/${component}`, folder};
+  }
+  return null;
+}
+
 function belongsToActivePackage(route) {
   return filterStoryRoutesByPackages([route], ACTIVE_PACKAGE_NAMES).length === 1;
 }
@@ -1289,15 +1349,62 @@ async function cleanupRuntime() {
     targets,
     publicComponentsByPackage,
   }).filter(belongsToActivePackage);
-  const scopedStoryRoutes = storyRoutes.filter(route => matchesFilter(route.component));
-  if (scopedStoryRoutes.length === 0) {
-    throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
+  // Filters resolve through the index: a sub-component whose stories carry
+  // its parent folder's non-component title (ResizeHandle under
+  // Core/Resizable) audits them under its own name.
+  const resolvedFilters = resolveFilterRoutes({
+    routes: storyRoutes,
+    filters: FILTER,
+    knownComponents: Object.entries(publicComponentsByPackage).flatMap(
+      ([packageName, names]) => names.map(name => `${packageName}/${name}`),
+    ),
+    componentPathOf: id => entries[id]?.componentPath,
+    ownerOf: filter => sourceOwnerOf(filter, publicComponentsByPackage),
+    renders: (id, component) => storyFileUses(entries[id]?.importPath, component),
+  });
+  // A curated target on an adopted story checks the adopting component.
+  const adoptedBy = new Map(
+    Object.entries(resolvedFilters.adopted).flatMap(([component, storyIds]) =>
+      storyIds.map(id => [id, component]),
+    ),
+  );
+  const scopedStoryRoutes = resolvedFilters.routes;
+  for (const [component, storyIds] of Object.entries(resolvedFilters.adopted)) {
+    console.error(`NOTE ${component}: audits its folder's stories ${storyIds.join(', ')}`);
   }
   const auditedComponents = buildAuditedComponentRoster({
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
     filters: FILTER,
   });
+  if (scopedStoryRoutes.length === 0) {
+    if (FILTER.length === 0 || SHARD !== null) {
+      throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
+    }
+    // A filtered run whose components have no story renders nothing, but its
+    // components are still in scope: write the coverage report, where each
+    // reads as a coverage gap or its verified N/A (INV5), instead of crashing.
+    const {verifiedNa, verifiedNaError} = readVerifiedNa();
+    const coverage = buildComponentCoverage({components: auditedComponents, verifiedNa});
+    if (verifiedNaError) coverage.registryError = verifiedNaError;
+    fs.writeFileSync(
+      OUT,
+      `${JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          scope: {packages: ACTIVE_PACKAGE_NAMES, filters: FILTER},
+          coverage,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.error(`NOTE no stories for ${FILTER.join(',')}; WROTE ${OUT} with coverage only`);
+    console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+    process.exitCode =
+      coverage.gaps > 0 || coverage.staleVerifiedNa > 0 || coverage.registryError != null ? 1 : 0;
+    return;
+  }
 
   // The audit's plan: D1 uses one deterministic representative story per
   // component. Repository story-file/export order preserves the existing
@@ -1320,11 +1427,9 @@ async function cleanupRuntime() {
   const storyTargets = scopedStoryRoutes.map(({id, component}) => ({id, comp: component}));
   const curatedTargets = [];
   for (const t of targets) {
-    const component = componentFromTarget(
-      t,
-      AUDITED_PACKAGE_NAMES,
-      publicComponentsByPackage,
-    );
+    const component =
+      adoptedBy.get(t.storyId) ??
+      componentFromTarget(t, AUDITED_PACKAGE_NAMES, publicComponentsByPackage);
     if (!belongsToActivePackage({component, id: t.storyId})) continue;
     if (!matchesFilter(component)) continue;
     if (!entries[t.storyId]) {
@@ -1490,15 +1595,7 @@ async function cleanupRuntime() {
     }
   }
 
-  let verifiedNa = [];
-  let verifiedNaError = null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
-    if (!Array.isArray(parsed)) throw new Error('verified-not-applicable registry must be a JSON array');
-    verifiedNa = parsed;
-  } catch (error) {
-    verifiedNaError = String(error).slice(0, 200);
-  }
+  const {verifiedNa, verifiedNaError} = readVerifiedNa();
 
   const coverage = buildComponentCoverage({
     components: auditedComponents,
