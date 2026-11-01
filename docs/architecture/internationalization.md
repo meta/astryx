@@ -194,10 +194,12 @@ for all 30 shipped locales plus `pseudo`.
   `en`, direction `ltr`, and do not read the browser or host locale implicitly.
 - **INV3a — Factories take a per-message option for each announced string.** A
   public non-React factory (`architecture:public-component-api` INV22) that
-  announces Astryx text takes an optional string option for each announced
-  message; given, it replaces that message; absent, the factory announces the
+  announces Astryx text (a live-region announcement or an `aria-*` or `title`
+  value) takes an optional string option for each announced message; given, it replaces that message; absent, the factory announces the
   catalog message, translated when its React wrapper runs under a provider and
-  English without one. Per-message options are the factory mechanism; the
+  English without one. The rule covers INV22 factories; a gesture or
+  interaction spec that fixes its own announcement options keeps them until it
+  adopts this rule. Per-message options are the factory mechanism; the
   external-runtime adapter (INV14) stays a separate, broader decision.
 - **INV4 — Runtime locale changes are live.** Re-rendering the provider with a new
   locale, messages, overrides, or direction updates consumers in that subtree.
