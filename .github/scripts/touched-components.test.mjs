@@ -547,6 +547,38 @@ describe('pr-touched-components routing', () => {
     );
   });
 
+  it('reads the accessibility baseline from the head that built the audited Storybook', () => {
+    const baseline = step("Check out the head's accessibility baseline");
+    expect(baseline.with).toMatchObject({
+      ref: '${{ github.event.pull_request.head.sha }}',
+      path: '.head-baseline',
+      'sparse-checkout': '.github/a11y-baseline.json',
+    });
+    expect(step('Report per-component results').run).toContain(
+      '--a11y-baseline .head-baseline/.github/a11y-baseline.json',
+    );
+  });
+
+  it('records an RTL failure without failing the job, as pr-rtl keeps RTL findings soft', () => {
+    const report = {
+      components: [
+        {
+          key: 'core/ContextMenu',
+          results: {visual: 'pass', a11y: 'pass', rtl: 'fail'},
+        },
+      ],
+    };
+    expect(hasFailure(report)).toBe(false);
+    report.components[0].results.a11y = 'fail';
+    expect(hasFailure(report)).toBe(true);
+  });
+
+  it('checks out the tested merge commit, so a branch that predates the check still runs it', () => {
+    const checkout = job.steps.find(step => step.name === 'Checkout');
+    expect(checkout.uses).toMatch(/^actions\/checkout@/);
+    expect(checkout.with?.ref).toBeUndefined();
+  });
+
   it('exposes the wide-change flag and count', () => {
     expect(job.outputs).toEqual({
       wide_change: '${{ steps.touched.outputs.wide_change }}',

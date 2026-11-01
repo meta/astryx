@@ -3066,10 +3066,23 @@ jobs:
         with:
           component-audit: 'true'
 
+      # The tested merge commit, as pr-visual checks out: a branch that
+      # predates this check has none of its scripts at its own head.
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
+
+      # The accessibility baseline is read from the head, which built the
+      # Storybook this job audits: a branch behind a main fix that dropped a
+      # baseline entry would otherwise report that entry as new.
+      - name: Check out the head's accessibility baseline
+        uses: actions/checkout@v7
+        with:
           ref: ${{ github.event.pull_request.head.sha }}
+          path: .head-baseline
+          sparse-checkout: .github/a11y-baseline.json
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       # A spec-only, docsite-only or tooling-only change has no analysis; it
@@ -3194,7 +3207,7 @@ jobs:
             --visual-job "$VISUAL_JOB" \
             --baseline-manifest .github/visual-baseline/manifest.json \
             --a11y a11y-report.json \
-            --a11y-baseline .github/a11y-baseline.json \
+            --a11y-baseline .head-baseline/.github/a11y-baseline.json \
             --a11y-step "$A11Y_STEP" \
             --rtl-dir rtl-reports \
             --rtl-step "$RTL_STEP" \
