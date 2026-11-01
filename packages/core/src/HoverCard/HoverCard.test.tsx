@@ -1373,6 +1373,24 @@ describe('HoverCard surface press', () => {
     expect(onCardClick).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a click on a padded card's own edge from activating a clickable card", () => {
+    const onCardClick = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCardClick}>
+        <HoverCard
+          isOpen
+          style={{padding: 24}}
+          content={<span>Hover content</span>}>
+          <button type="button">Trigger</button>
+        </HoverCard>
+      </ClickableCard>,
+    );
+    // The padding belongs to the layer root around the content.
+    const root = screen.getByText('Hover content').closest('[popover]')!;
+    fireEvent.click(root);
+    expect(onCardClick).not.toHaveBeenCalled();
+  });
+
   it('keeps a middle-button press on card content from opening a card link', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null);
     render(

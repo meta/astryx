@@ -17,10 +17,19 @@
 
 const surfaces = new WeakSet<Element>();
 
-/** Ref callback for a layer surface's content element. */
+/**
+ * Ref callback for a layer surface's content element. The layer root around
+ * it is registered too: a caller's `style`, `xstyle` or `className` (padding,
+ * for instance) lands there, so a press on that edge is still the surface's.
+ */
 export function registerLayerSurface(element: Element | null): void {
-  if (element != null) {
-    surfaces.add(element);
+  if (element == null) {
+    return;
+  }
+  surfaces.add(element);
+  const root = element.parentElement;
+  if (root?.hasAttribute('popover')) {
+    surfaces.add(root);
   }
 }
 
