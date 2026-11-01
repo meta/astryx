@@ -10,7 +10,10 @@
 #   MUST be named "Wait for room under the CI ceiling": a waiting `main` run is
 #   found by that name.
 # - A run starts once the other active runs' estimated jobs plus `peak` fit
-#   under the ceiling. A pull-request run (`main: false`) also waits while a
+#   under the ceiling. Small workflows that are not admitted (one or two slim
+#   jobs a run) always count at least their measured most at once, so the room
+#   they can still take is kept free. A pull-request run (`main: false`) also
+#   waits while a
 #   `main` full check or release re-check is waiting, so `main` fits first;
 #   pull-request runs never wait for each other.
 # - It looks every two minutes, plus a random 0-20 s so runs that look together
@@ -68,6 +71,11 @@ runs:
             '.github/workflows/review-signal.yml': () => 2,
           };
           const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);
+          // The most jobs small, unadmitted workflows ran at once, measured
+          // over a busy evening (spec:AST-030 DEC-16).
+          const SMALL_MOST = 18;
+          const ADMITTED = ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'];
+          const admitted = run => ADMITTED.includes(run.path);
           const isMain = run =>
             ['push', 'schedule', 'workflow_dispatch'].includes(run.event) &&
             ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'].includes(run.path);
@@ -94,7 +102,8 @@ runs:
           try {
             for (let look = 1; ; look += 1) {
               const seen = new Set();
-              let others = 0;
+              let large = 0;
+              let small = 0;
               let mainWaiting = false;
               for (const status of ['in_progress', 'queued']) {
                 calls += 1;
@@ -104,7 +113,8 @@ runs:
                 for (const run of data.workflow_runs) {
                   if (seen.has(run.id) || run.id === context.runId) continue;
                   seen.add(run.id);
-                  others += estimate(run);
+                  if (admitted(run)) large += estimate(run);
+                  else small += estimate(run);
                   if (!main && !mainWaiting && isMain(run)) {
                     calls += 1;
                     const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
@@ -116,6 +126,7 @@ runs:
                   }
                 }
               }
+              const others = large + Math.max(small, SMALL_MOST);
               if (others + peak <= CI_CEILING && !mainWaiting) {
                 core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.`);
                 return;

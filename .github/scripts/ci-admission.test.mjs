@@ -314,32 +314,36 @@ describe('ci admission', () => {
   }
 
   it('starts at once with room, for two API calls, not counting its own run', async () => {
+    // 5 pull-request runs (60) + room kept for small workflows (18) + 12 = 90.
     const result = await admit({
-      active: [pr(OWN), ...Array.from({length: 78}, (_, i) => slim(10 + i))],
+      active: [pr(OWN), ...[2, 3, 4, 5, 6].map(id => pr(id))],
     });
     expect(result).toMatchObject({looks: 1, calls: 2, warning: []});
   });
 
-  it('estimates each run by its workflow', async () => {
-    // 6 pull-request runs (12 each) + 6 slim jobs + 12 for this run = 90.
-    const fits = await admit({
-      active: [
-        ...[2, 3, 4, 5, 6, 7].map(id => pr(id)),
-        ...[8, 9, 10, 11, 12, 13].map(slim),
-      ],
-    });
-    expect(fits.looks).toBe(1);
-    const over = await admit({
-      active: [
-        ...[2, 3, 4, 5, 6, 7].map(id => pr(id)),
-        ...[8, 9, 10, 11, 12, 13, 14].map(slim),
-      ],
-    });
-    expect(over.looks).toBeGreaterThan(1);
+  it('estimates each run by its workflow, keeping room for small workflows', async () => {
+    const prs = count => Array.from({length: count}, (_, i) => pr(10 + i));
+    const slims = count => Array.from({length: count}, (_, i) => slim(100 + i));
+    // Small workflows always count at least their measured most, 18.
+    expect((await admit({active: [...prs(5), ...slims(18)]})).looks).toBe(1);
+    expect(
+      (await admit({active: [...prs(5), ...slims(19)]})).looks,
+    ).toBeGreaterThan(1);
+    // Six pull-request runs leave no room once that share is kept.
+    expect((await admit({active: prs(6)})).looks).toBeGreaterThan(1);
+    // A running Main unit run counts its planned most.
+    const unit = {
+      id: 40,
+      status: 'in_progress',
+      event: 'push',
+      path: '.github/workflows/deploy.yml',
+    };
+    expect((await admit({active: [...prs(3), unit]})).looks).toBe(1);
+    expect((await admit({active: [...prs(4), unit]})).looks).toBeGreaterThan(1);
   });
 
   it('waits until others finish, looking every two minutes, and gives up after fifteen', async () => {
-    const full = Array.from({length: 7}, (_, i) => pr(10 + i)); // 84 + 12 > 90
+    const full = Array.from({length: 6}, (_, i) => pr(10 + i)); // 72 + 18 + 12 > 90
     const freed = await admit({
       active: look => (look < 3 ? full : full.slice(1)),
     });
@@ -353,8 +357,11 @@ describe('ci admission', () => {
   });
 
   it("adds the jobs a pull request's opt-in labels bring", async () => {
-    // 6 pull-request runs and one slim job: 73 + 12 fits; + 6 for the label does not.
-    const active = [...Array.from({length: 6}, (_, i) => pr(10 + i)), slim(20)];
+    // 4 pull-request runs (48) and 25 slim jobs: 73 + 12 fits; + 6 for the label does not.
+    const active = [
+      ...Array.from({length: 4}, (_, i) => pr(10 + i)),
+      ...Array.from({length: 25}, (_, i) => slim(20 + i)),
+    ];
     expect((await admit({active})).looks).toBe(1);
     expect(
       (await admit({active, labels: ['ci:run-visual']})).looks,
