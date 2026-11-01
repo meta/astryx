@@ -56,10 +56,6 @@ const RUNNERS = {
     runs: "`npm pack`, `tar`, and a Node script that resolves the packed specifiers, to check a package as published, and the package's doc modules, to see which need a newer CLI",
     sites: ['child_process.spawnSync ×3', 'loadTopicModule'],
   },
-  'api/swizzle/_github.mjs': {
-    runs: '`gh auth status`, to check the GitHub CLI is signed in',
-    sites: ['child_process.execFileSync'],
-  },
   'api/theme/_adapter.mjs': {
     runs: 'recorded built theme modules through the shared app-theme loader',
     sites: ['importThemeArtifact'],

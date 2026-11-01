@@ -15,9 +15,12 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {resolveComponentReplacement, resolveCore} from '../_adapter.mjs';
+import {
+  checkGhCli,
+  resolveComponentReplacement,
+  resolveCore,
+} from '../_adapter.mjs';
 import {assertWithin, sanitizeName, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
-import {checkGhCli} from '../_github.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {
   CORE_PACKAGE,
@@ -299,6 +302,10 @@ export async function swizzleCopy(component, options = {}) {
   const outputBase = confineWrite(output, cwd, {label: 'output directory'});
   const outputDir = path.join(outputBase, dirName);
 
+  // The gh lookup first: it can throw (a PATH error it does not expect), and
+  // a swizzle that fails must fail before it writes anything.
+  const feedback = buildFeedback(dirName, owner.issuesUrl);
+
   // Pre-flight path and overwrite checks before any mkdir/writeFile.
   const sourceFiles = fs.readdirSync(componentDir).filter(file => {
     if (isExcludedFromCopy(file)) return false;
@@ -380,8 +387,6 @@ export async function swizzleCopy(component, options = {}) {
       !isExcludedFromCopy(f) &&
       fs.statSync(path.join(componentDir, f)).isFile(),
   );
-  const feedback = buildFeedback(dirName, owner.issuesUrl);
-
   /** @type {import('../swizzle.type.mjs').SwizzleCopyResponse['data']} */
   const data = {
     component: dirName,
