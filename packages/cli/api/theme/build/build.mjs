@@ -97,7 +97,11 @@ import {
   formatBatchFontLoadingHelp,
   formatFontLoadingHelp,
 } from './font-warning.mjs';
-import {interceptCore} from './core-interception.mjs';
+import {
+  interceptCore,
+  lazyCoreRoot,
+  resolveEntry,
+} from './core-interception.mjs';
 import {generateFamilyCSS, resolveThemeFamily} from './family.mjs';
 import {resolveIconImports} from './icon-imports.mjs';
 
@@ -132,12 +136,13 @@ import {resolveIconImports} from './icon-imports.mjs';
  */
 /** @type {any} */ let _coreThemeModule = null;
 /**
- * The `@astryxdesign/core` ROOT namespace, imported separately because it
+ * The `@astryxdesign/core` ROOT namespace, loaded separately because it
  * exports far more than the theme subpath. Interception must hand a theme file
  * that imports a component from the root the root's own exports, not the theme
- * namespace wearing its name.
+ * namespace wearing its name. It loads all of Core and React, so it loads only
+ * when a theme module asks for it (see `lazyCoreRoot` in core-interception.mjs).
  */
-/** @type {any} */ let _coreRootModule = null;
+/** @type {(() => any) | null} */ let _coreRootLoader = null;
 /** @type {any} */ let _coreImportError = null;
 
 /**
@@ -145,7 +150,7 @@ import {resolveIconImports} from './icon-imports.mjs';
  * functions the build calls, and why the import failed, if it did.
  * @typedef {{
  *   themeModule: any,
- *   rootModule: any,
+ *   loadRoot: (() => any) | null,
  *   importError: any,
  *   defineTheme: any,
  *   generateThemeRulesSplit: any,
@@ -164,7 +169,7 @@ async function importCliCore() {
   /** @type {CoreBindings} */
   const core = {
     themeModule: null,
-    rootModule: null,
+    loadRoot: null,
     importError: null,
     defineTheme: null,
     generateThemeRulesSplit: null,
@@ -178,12 +183,13 @@ async function importCliCore() {
     core.generateThemeRulesSplit = coreTheme.generateThemeRulesSplit;
     core.generateOnMediaCSS = coreTheme.generateOnMediaCSS;
     core.generateAdaptationCSS = coreTheme.generateAdaptationCSS;
-    try {
-      core.rootModule = await import('@astryxdesign/core');
-    } catch {
-      // A core without a usable root entry still builds themes; interception
-      // falls back to the theme namespace for the root specifier.
-    }
+    // A Core with no root entry still builds themes: interception gives the
+    // theme namespace for the root specifier.
+    const rootFile = resolveEntry(
+      createRequire(import.meta.url),
+      '@astryxdesign/core',
+    );
+    core.loadRoot = rootFile ? lazyCoreRoot(rootFile) : null;
   } catch (e) {
     // Capture the reason so the theme action can surface a precise, actionable
     // error. The hard failure happens when `theme build` runs.
@@ -221,7 +227,7 @@ function loadCliCore() {
  */
 function setCore(core) {
   _coreThemeModule = core.themeModule;
-  _coreRootModule = core.rootModule;
+  _coreRootLoader = core.loadRoot;
   _coreImportError = core.importError;
   _defineTheme = core.defineTheme;
   _generateThemeRulesSplit = core.generateThemeRulesSplit;
@@ -350,18 +356,13 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
       ERROR_CODES.ERR_CORE_INCOMPATIBLE,
     );
   }
-  let rootModule = null;
+  // As with the CLI's own Core, the theme namespace stands in only for a
+  // root entry that is not there.
   const rootFile = importTarget(dir, '.');
-  if (rootFile) {
-    try {
-      rootModule = await import(pathToFileURL(rootFile).href);
-    } catch {
-      // As with the CLI's own import, the theme namespace stands in for it.
-    }
-  }
   return {
     themeModule,
-    rootModule,
+    loadRoot:
+      rootFile && fs.existsSync(rootFile) ? lazyCoreRoot(rootFile) : null,
     importError: null,
     defineTheme: themeModule.defineTheme,
     generateThemeRulesSplit: themeModule.generateThemeRulesSplit,
@@ -1893,7 +1894,6 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
     // A frozen require(esm) namespace cannot be patched, so retain that gap and
     // let the selected lineage decide whether it matters.
     const commonJsPatch = interception.patchCommonJs(filePath);
-    degraded.commonJs = !commonJsPatch.covered;
     try {
       try {
         mod = jiti(filePath);
@@ -1915,6 +1915,8 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
         });
       }
     } finally {
+      // Read after the load: the root is wrapped when the load requires it.
+      degraded.commonJs = !commonJsPatch.covered;
       commonJsPatch.undo();
     }
   } else {
@@ -2063,7 +2065,7 @@ export async function validateThemePrivateInputs(
 
   // The CLI's own Core, unless a build in this process already chose one.
   await loadCliCore();
-  const interception = interceptCore(_coreThemeModule, _coreRootModule);
+  const interception = interceptCore(_coreThemeModule, _coreRootLoader);
   let theme;
   try {
     theme = (await extractThemeDefinition(filePath, interception)).theme;
@@ -2805,7 +2807,7 @@ async function themeBuildInternal(
     options.__familyInterception ??
     (_generateAdaptationCSS && themeFolderResolvesCore(filePath)
       ? undefined
-      : interceptCore(_coreThemeModule, _coreRootModule));
+      : interceptCore(_coreThemeModule, _coreRootLoader));
 
   // Extract theme definition
   let themeDef;
@@ -3713,7 +3715,7 @@ export async function themeBuildFamily(
     throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
   }
   await selectCore(cwd);
-  const familyInterception = interceptCore(_coreThemeModule, _coreRootModule);
+  const familyInterception = interceptCore(_coreThemeModule, _coreRootLoader);
   // prettier-ignore
   const familyLoader = createJiti(import.meta.url, {moduleCache: true, interopDefault: false, jsx: true, extensions: THEME_MODULE_EXTENSIONS, virtualModules: familyInterception.modules});
   /** @type {any[]} */
