@@ -7,7 +7,7 @@ source), the spring, decay, rubber-band and projection math UIKit uses, and a
 compositor animator that plays it. Nothing here is exported from the package
 entry point. Core's motion and gesture modules read the table by path;
 components read touch motion through its internal motion roles (`roles.ts`),
-so each keeps its measured value; no shipped component reads the roles yet.
+so each keeps its measured value, as the snap-point drag's settle does.
 
 ## Files
 
@@ -32,6 +32,7 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `selectPage.ts`                                  | Paging: at most one page per release, on `resolveSnapPoint`.                                                                                                         |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
+| `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |
 | `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
 
@@ -58,7 +59,7 @@ the timings that decide who gets a touch are not roles.
 ## Animator
 
 ```
-import {createAnimator} from '../motion/animator';
+import {createMotionAnimator} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -67,7 +68,7 @@ import {registerSpringsTable, springs} from '../motion/uikit';
 // Once, so the springs are registered as their roles:
 registerSpringsTable();
 
-const animator = createAnimator(sheet);
+const animator = createMotionAnimator(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the
 // per-role tables stay internal (DEC-15); math on a spring reads the role with
 // resolveMotion.
@@ -162,7 +163,7 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+- `createMotionAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
   pseudo-element exists. A dialog's `::backdrop` is made again each time the
@@ -183,6 +184,16 @@ it runs after that end, writing the end values inline in the same task. So the
 frame an animation ends needs no main thread and shows no flicker, even when
 the main thread is blocked as the curve ends (WebKit's compositor otherwise
 falls back to the last value its main thread committed, mid-flight).
+
+While translate runs, the animator reports the element to `presentation.ts`:
+its offset (the curve's value now minus the value the engine last resolved,
+read live) and a `resolve` that makes the engine hit-test it where it is
+drawn now (one custom-property write). iOS WebKit keeps the transform it
+resolved when an animation went to the compositor, so it reports and
+hit-tests the element at that start for the whole curve, until a style
+write resolves it again. The gesture host resolves the moving elements at
+touch-down, so a touch reaches what is drawn (`gestures/README.md`,
+"Touches on moving elements"). Translation only.
 
 Keyframes rather than one `linear()` easing: measured in Chromium, both are
 composited and, for the same samples, equally precise; but WebKit's Core

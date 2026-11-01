@@ -19,10 +19,14 @@ import {
 import {
   attachTapHaptic,
   canVibrate,
-  HAPTIC_SWITCH_ATTRIBUTE,
   playHaptic,
   supportsSwitchControl,
 } from '../haptics';
+import {isHapticSwitch} from '../../privateAttributes/hapticSwitch.stylex';
+
+/** The hidden switch attachTapHaptic added inside `label`, if any. */
+const hapticSwitchIn = (label: Element): HTMLInputElement | null =>
+  [...label.querySelectorAll('input')].find(isHapticSwitch) ?? null;
 
 const original = Object.getOwnPropertyDescriptor(navigator, 'vibrate');
 
@@ -82,7 +86,7 @@ describe('attachTapHaptic', () => {
     label.addEventListener('change', onChange);
 
     const release = attachTapHaptic(label);
-    const input = label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`);
+    const input = hapticSwitchIn(label);
     expect(input).toBeInstanceOf(HTMLInputElement);
     const sw = input as HTMLInputElement;
     expect(sw.type).toBe('checkbox');
@@ -101,7 +105,7 @@ describe('attachTapHaptic', () => {
     expect(onChange).not.toHaveBeenCalled();
 
     release();
-    expect(label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`)).toBeNull();
+    expect(hapticSwitchIn(label)).toBeNull();
   });
 
   it('never leaves the focus on its hidden switch', () => {
@@ -110,9 +114,7 @@ describe('attachTapHaptic', () => {
     const before = document.getElementById('before') as HTMLButtonElement;
     const label = document.getElementById('tap') as HTMLLabelElement;
     const release = attachTapHaptic(label);
-    const sw = label.querySelector<HTMLInputElement>(
-      `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
-    )!;
+    const sw = hapticSwitchIn(label)!;
     before.focus();
     // Chromium focuses a label's control on its activation.
     sw.focus();
@@ -129,9 +131,7 @@ describe('attachTapHaptic', () => {
     const onOwnClick = vi.fn();
     own.addEventListener('click', onOwnClick);
     const release = attachTapHaptic(label);
-    const sw = label.querySelector<HTMLInputElement>(
-      `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
-    )!;
+    const sw = hapticSwitchIn(label)!;
     // The switch takes the label's activation, so a tap plays.
     expect(label.control).toBe(sw);
     // The checkbox keeps its name: the label's text, through aria-labelledby.
@@ -153,9 +153,7 @@ describe('attachTapHaptic', () => {
     const label = document.getElementById('tap') as HTMLLabelElement;
     const own = document.getElementById('own') as HTMLInputElement;
     const release = attachTapHaptic(label);
-    const sw = label.querySelector<HTMLInputElement>(
-      `[${HAPTIC_SWITCH_ATTRIBUTE}]`,
-    )!;
+    const sw = hapticSwitchIn(label)!;
     before.focus();
     sw.focus();
     sw.click();
@@ -174,7 +172,7 @@ describe('attachTapHaptic', () => {
     for (const id of ['a', 'b']) {
       const label = document.getElementById(id) as HTMLLabelElement;
       const release = attachTapHaptic(label);
-      expect(label.querySelector(`[${HAPTIC_SWITCH_ATTRIBUTE}]`)).toBeNull();
+      expect(hapticSwitchIn(label)).toBeNull();
       release();
     }
   });

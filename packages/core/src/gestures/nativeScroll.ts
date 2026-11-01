@@ -4,7 +4,8 @@
  * @file nativeScroll.ts
  * @input An element a touch landed on
  * @output Exports createNativeScrollProbe (the NativeScrollProbe a host gives
- *   each touch) and parseTouchAction
+ *   each touch, and each wheel gesture without the touch-action narrowing)
+ *   and parseTouchAction
  * @position DOM half of the scroll coordination in packages/core/src/gestures
  *
  * Answers one question for a recognizer without letting it touch the DOM:
@@ -27,7 +28,11 @@
  * read fresh on every question, since a native scroll moves them.
  */
 
+import {isRtlElement} from '../hooks/isRtlElement';
 import type {NativeScrollProbe} from './types';
+import {parentAcrossShadow} from '../utils/flatTree';
+
+export {parentAcrossShadow};
 
 export interface AllowedPans {
   readonly x: boolean;
@@ -72,32 +77,13 @@ interface ChainEntry {
 const SCROLLABLE = new Set(['auto', 'scroll', 'overlay']);
 const EDGE_TOLERANCE = 1;
 
-/**
- * The node's parent in the flat tree: a slotted node's slot, then out of
- * shadow roots to their hosts, so a scroller inside a shadow tree around the
- * slot is found.
- */
-export function parentAcrossShadow(node: Node): Node | null {
-  const slot =
-    node instanceof Element || node instanceof Text ? node.assignedSlot : null;
-  if (slot != null) {
-    return slot;
-  }
-  if (node.parentNode != null) {
-    return node.parentNode instanceof ShadowRoot
-      ? node.parentNode.host
-      : node.parentNode;
-  }
-  return null;
-}
-
 interface Chain {
   readonly entries: ChainEntry[];
   /** touch-action allows some pan all the way up. */
   readonly allowsPan: boolean;
 }
 
-function buildChain(target: Element): Chain {
+function buildChain(target: Element, readsTouchAction: boolean): Chain {
   const doc = target.ownerDocument;
   const view = doc.defaultView;
   if (view == null) {
@@ -118,9 +104,11 @@ function buildChain(target: Element): Chain {
       continue;
     }
     const style = view.getComputedStyle(node);
-    const pans = parseTouchAction(style.touchAction || 'auto');
-    allowX &&= pans.x;
-    allowY &&= pans.y;
+    if (readsTouchAction) {
+      const pans = parseTouchAction(style.touchAction || 'auto');
+      allowX &&= pans.x;
+      allowY &&= pans.y;
+    }
     const isRoot = node === root || node === doc.documentElement;
     if (isRoot) {
       reachedRoot = true;
@@ -136,7 +124,8 @@ function buildChain(target: Element): Chain {
         element,
         x: scrollsX && allowX,
         y: scrollsY && allowY,
-        isRtl: style.direction === 'rtl',
+        // The writing direction through core's one helper.
+        isRtl: isRtlElement(element as HTMLElement),
         stopsX: behaviorX !== 'auto',
         stopsY: behaviorY !== 'auto',
         isBeyondFixed,
@@ -224,13 +213,20 @@ function canMoveX(entry: ChainEntry, dx: number): boolean {
     : element.scrollLeft < max - EDGE_TOLERANCE + 0.5;
 }
 
-/** A probe of the native scrollers under `target`. */
-export function createNativeScrollProbe(target: unknown): NativeScrollProbe {
+/**
+ * A probe of the native scrollers under `target`. A wheel scrolls whatever
+ * `touch-action` says, which narrows only a finger's pan: a wheel's probe
+ * passes `readsTouchAction: false`.
+ */
+export function createNativeScrollProbe(
+  target: unknown,
+  {readsTouchAction = true}: {readsTouchAction?: boolean} = {},
+): NativeScrollProbe {
   let chain: Chain | null = null;
   const getChain = (): ChainEntry[] => {
     chain ??=
       target instanceof Element
-        ? buildChain(target)
+        ? buildChain(target, readsTouchAction)
         : {entries: [], allowsPan: false};
     return chain.entries;
   };
