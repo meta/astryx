@@ -141,10 +141,10 @@ for (const item of cases) {
     await expect(page.getByText(/Required/)).toBeVisible();
     await expect(page.getByText(/Optional/)).toBeVisible();
     await expect(page.getByLabel('Search')).toBeVisible();
-    const tooltipAnchor = page
-      .locator('label[for="field-label-optional"] [aria-describedby]')
-      .first();
-    await expect(tooltipAnchor).toHaveCount(1);
+    const tooltipTrigger = page.locator(
+      'label[for="field-label-optional"] ~ button[aria-label]',
+    );
+    await expect(tooltipTrigger).toHaveCount(1);
 
     await settle(page);
     const observed = await page.evaluate(() => {
@@ -169,8 +169,8 @@ for (const item of cases) {
       const firstLabel = document.querySelector<HTMLElement>(
         '.astryx-field-label',
       );
-      const currentTooltipAnchor = document.querySelector<HTMLElement>(
-        'label[for="field-label-optional"] [aria-describedby]',
+      const currentTooltipTrigger = document.querySelector<HTMLElement>(
+        'label[for="field-label-optional"] ~ button[aria-label]',
       );
       return {
         theme: document
@@ -187,13 +187,13 @@ for (const item of cases) {
         hiddenGeometry: hiddenBox
           ? {width: hiddenBox.width, height: hiddenBox.height}
           : null,
-        tooltipAnchor: currentTooltipAnchor
+        tooltipTrigger: currentTooltipTrigger
           ? {
-              ariaHidden: currentTooltipAnchor.getAttribute('aria-hidden'),
-              ariaLabel: currentTooltipAnchor.getAttribute('aria-label'),
-              describedBy:
-                currentTooltipAnchor.getAttribute('aria-describedby'),
-              tabIndex: currentTooltipAnchor.getAttribute('tabindex'),
+              tagName: currentTooltipTrigger.tagName,
+              type: currentTooltipTrigger.getAttribute('type'),
+              ariaLabel: currentTooltipTrigger.getAttribute('aria-label'),
+              insideLabel: currentTooltipTrigger.closest('label') != null,
+              tabIndex: currentTooltipTrigger.tabIndex,
             }
           : null,
       };
@@ -205,10 +205,14 @@ for (const item of cases) {
       observed.labels.every(label => label.geometry.width > 0) &&
       observed.hiddenGeometry?.width === 1 &&
       observed.hiddenGeometry.height === 1;
-    const knownTooltipGapObserved =
-      observed.tooltipAnchor?.ariaHidden === 'true' &&
-      observed.tooltipAnchor.ariaLabel == null &&
-      observed.tooltipAnchor.tabIndex == null;
+    // FR8, AR5: the help's trigger is a named button outside the label, in
+    // the Tab order.
+    const tooltipTriggerPass =
+      observed.tooltipTrigger?.tagName === 'BUTTON' &&
+      observed.tooltipTrigger.type === 'button' &&
+      observed.tooltipTrigger.ariaLabel?.startsWith('About ') === true &&
+      !observed.tooltipTrigger.insideLabel &&
+      observed.tooltipTrigger.tabIndex === 0;
 
     const png = await page.screenshot({animations: 'disabled', fullPage: true});
     const image = `${item.key}.png`;
@@ -224,8 +228,8 @@ for (const item of cases) {
         targetCount: 7,
         groupLabelTag: 'SPAN',
         hiddenGeometry: {width: 1, height: 1},
-        knownGap:
-          'the tooltip anchor is anonymous and nonfocusable on this audited head',
+        tooltipTrigger:
+          'an "About {label}" button outside the label, in the Tab order',
       },
       observed: {
         build: storybookSha,
@@ -238,7 +242,7 @@ for (const item of cases) {
         width: png.readUInt32BE(16),
         height: png.readUInt32BE(20),
       },
-      checks: {semanticsPass, knownTooltipGapObserved},
+      checks: {semanticsPass, tooltipTriggerPass},
       passed:
         storybookSha === checkoutSha &&
         pageErrors.length === 0 &&
@@ -250,7 +254,8 @@ for (const item of cases) {
         observed.reducedMotion &&
         !observed.horizontalOverflow &&
         observed.fonts === 'loaded' &&
-        semanticsPass,
+        semanticsPass &&
+        tooltipTriggerPass,
     };
     fs.writeFileSync(path.join(OUTPUT, image), png);
     fs.writeFileSync(

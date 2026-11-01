@@ -110,3 +110,24 @@ export const States: Story = {
     </div>
   ),
 };
+
+/**
+ * A visually hidden label with `labelTooltip`: the help's trigger is hidden
+ * with the label and takes no space, and shows while it has keyboard focus.
+ */
+export const HiddenLabelWithTooltip: Story = {
+  render: () => (
+    <div style={{display: 'flex', gap: 8, alignItems: 'center'}}>
+      <FieldLabel
+        label="Search"
+        inputID="field-label-hidden-tooltip"
+        labelTooltip="Matches names and descriptions."
+        isLabelHidden
+      />
+      <input
+        id="field-label-hidden-tooltip"
+        placeholder="Search every workspace"
+      />
+    </div>
+  ),
+};

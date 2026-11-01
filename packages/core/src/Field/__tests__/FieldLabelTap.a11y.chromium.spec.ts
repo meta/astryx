@@ -32,10 +32,12 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-/** Opens the story and returns the Nickname label's info icon. */
+/** Opens the story and returns the Nickname label's help trigger. */
 async function openInfoIcon(page: Page): Promise<Locator> {
   await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
-  const icon = page.locator(`label[for="${FIELD_ID}"] [aria-describedby]`);
+  const icon = page.locator(
+    `label[for="${FIELD_ID}"] ~ button[aria-label^="About "]`,
+  );
   await icon.waitFor();
   return icon;
 }
@@ -69,12 +71,70 @@ test.describe('a touch tap on the info icon', () => {
 });
 
 test.describe('a mouse click on the info icon', () => {
-  test('focuses the field, like a click anywhere else on the label', async ({
+  test('shows the help and leaves the field unfocused: the trigger is outside the label', async ({
     page,
   }) => {
     const icon = await openInfoIcon(page);
     await icon.click();
 
-    await expect.poll(async () => focusedId(page)).toBe(FIELD_ID);
+    await expect(
+      page.getByRole('tooltip').filter({hasText: HELP}),
+    ).toBeVisible();
+    expect(await focusedId(page)).not.toBe(FIELD_ID);
+  });
+});
+
+test.describe('the keyboard', () => {
+  test('reaches the trigger by Tab, and its help opens', async ({page}) => {
+    const icon = await openInfoIcon(page);
+    await icon.focus();
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.press('Tab');
+
+    await expect(icon).toBeFocused();
+    await expect(
+      page.getByRole('tooltip').filter({hasText: HELP}),
+    ).toBeVisible();
+  });
+});
+
+test.describe('Enter and Space on the trigger', () => {
+  test('toggle the help and never focus the field (FR9)', async ({page}) => {
+    const icon = await openInfoIcon(page);
+    const help = page.getByRole('tooltip').filter({hasText: HELP});
+    // Focus alone previews the help; move the pointer away and settle it
+    // closed first, so the key press is what opens it.
+    await icon.focus();
+    await page.keyboard.press('Escape');
+    await expect(help).toBeHidden();
+
+    await page.keyboard.press('Enter');
+    await expect(help).toBeVisible();
+    await page.keyboard.press('Space');
+    await expect(help).toBeHidden();
+    await expect(icon).toBeFocused();
+    expect(await focusedId(page)).not.toBe(FIELD_ID);
+  });
+});
+
+test.describe('a visually hidden label', () => {
+  test('hides the trigger with it, and shows it while it has keyboard focus (FR9)', async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=core-fieldlabel--hidden-label-with-tooltip&viewMode=story`,
+    );
+    const icon = page.getByRole('button', {name: 'About Search'});
+    await icon.waitFor({state: 'attached'});
+    const field = page.locator('#field-label-hidden-tooltip');
+
+    const hidden = await icon.boundingBox();
+    expect(hidden?.width ?? 0).toBeLessThanOrEqual(1);
+
+    await field.focus();
+    await page.keyboard.press('Shift+Tab');
+    await expect(icon).toBeFocused();
+    const shown = await icon.boundingBox();
+    expect(shown?.width ?? 0).toBeGreaterThan(8);
   });
 });

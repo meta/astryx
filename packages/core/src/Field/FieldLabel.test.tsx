@@ -9,6 +9,7 @@
  * SYNC: When FieldLabel.tsx changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -138,6 +139,96 @@ describe('FieldLabel', () => {
     expect(document.querySelector('svg')).toBeInTheDocument();
   });
 
+  describe('labelTooltip trigger (FR8, AR5)', () => {
+    it("keeps the tooltip text out of the field's name and gives the help a named button", () => {
+      render(
+        <>
+          <FieldLabel
+            label="Coverage (%)"
+            inputID="coverage"
+            labelTooltip="Calculated from the monthly totals"
+          />
+          <input type="text" id="coverage" />
+        </>,
+      );
+      expect(screen.getByRole('textbox')).toHaveAccessibleName('Coverage (%)');
+      const trigger = screen.getByRole('button', {name: 'About Coverage (%)'});
+      expect(trigger).toHaveAttribute('type', 'button');
+      // The help describes the trigger, not the field.
+      expect(screen.getByRole('textbox')).not.toHaveAccessibleDescription(
+        /Calculated from the monthly totals/,
+      );
+    });
+
+    it('is reachable by Tab, also beside a disabled field, and its help opens from the keyboard', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <FieldLabel
+            label="Coverage (%)"
+            inputID="coverage"
+            labelTooltip="Calculated from the monthly totals"
+          />
+          <input type="text" id="coverage" disabled />
+        </>,
+      );
+      await user.tab();
+      const trigger = screen.getByRole('button', {name: 'About Coverage (%)'});
+      expect(trigger).toHaveFocus();
+      await waitFor(() => {
+        expect(trigger).toHaveAccessibleDescription(
+          'Calculated from the monthly totals',
+        );
+      });
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+        'Calculated from the monthly totals',
+      );
+    });
+
+    it('keeps the trigger in the Tab order with a visually hidden label', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <FieldLabel
+            label="Coverage (%)"
+            inputID="coverage"
+            isLabelHidden
+            labelTooltip="Calculated from the monthly totals"
+          />
+          <input type="text" id="coverage" />
+        </>,
+      );
+      await user.tab();
+      expect(
+        screen.getByRole('button', {name: 'About Coverage (%)'}),
+      ).toHaveFocus();
+      expect(screen.getByRole('textbox')).toHaveAccessibleName('Coverage (%)');
+    });
+
+    it("keeps the caller's className and ref on the label element", () => {
+      const ref = createRef<HTMLLabelElement>();
+      render(
+        <>
+          <FieldLabel
+            ref={ref}
+            className="caller-label"
+            label="Coverage (%)"
+            inputID="coverage"
+            labelTooltip="Calculated from the monthly totals"
+          />
+          <input type="text" id="coverage" />
+        </>,
+      );
+      expect(ref.current?.tagName).toBe('LABEL');
+      expect(ref.current).toHaveClass('caller-label');
+      expect(
+        ref.current?.contains(
+          screen.getByRole('button', {name: 'About Coverage (%)'}),
+        ),
+      ).toBe(false);
+    });
+  });
+
   describe('labelTooltip under each pointer', () => {
     const originalShowPopover = HTMLElement.prototype.showPopover;
     const originalHidePopover = HTMLElement.prototype.hidePopover;
@@ -176,12 +267,9 @@ describe('FieldLabel', () => {
       fireEvent.click(element);
     };
 
-    /** The info icon the help tooltip is attached to, inside the label. */
+    /** The help's trigger, named after its label. */
     const infoIcon = (labelText: string) =>
-      screen
-        .getByText(labelText)
-        .closest('label')
-        ?.querySelector('[aria-describedby]') as HTMLElement;
+      screen.getByRole('button', {name: `About ${labelText}`});
 
     it('opens the help on a tap of its icon and leaves a checkbox alone', async () => {
       render(
@@ -228,7 +316,32 @@ describe('FieldLabel', () => {
       expect(screen.getByRole('checkbox')).not.toBeChecked();
     });
 
-    it('leaves a mouse click on its icon to the label, which toggles a checkbox', () => {
+    it('leaves the control alone on a mouse click of the trigger, which sits outside the label (FR8)', () => {
+      render(
+        <>
+          <FieldLabel
+            label="Auto-save"
+            inputID="autosave"
+            labelTooltip="Saves each change as you type"
+          />
+          <input type="checkbox" id="autosave" />
+          <input type="text" id="other" aria-label="Other" />
+        </>,
+      );
+
+      const trigger = infoIcon('Auto-save');
+      expect(trigger.closest('label')).toBeNull();
+      fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+      fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+      fireEvent.click(trigger);
+
+      // The trigger is not part of the label, so the click asks only for the
+      // help.
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
+    });
+
+    it('toggles the help on a mouse click, Enter and Space, and never the control (FR9)', async () => {
+      const user = userEvent.setup();
       render(
         <>
           <FieldLabel
@@ -239,15 +352,22 @@ describe('FieldLabel', () => {
           <input type="checkbox" id="autosave" />
         </>,
       );
+      const trigger = infoIcon('Auto-save');
+      const help = () => screen.getByRole('tooltip', {hidden: true});
 
-      const icon = infoIcon('Auto-save');
-      fireEvent.pointerDown(icon, {pointerType: 'mouse'});
-      fireEvent.pointerUp(icon, {pointerType: 'mouse'});
-      fireEvent.click(icon);
+      await user.click(trigger);
+      await waitFor(() => expect(help()).toHaveAttribute('popover-open'));
+      await user.click(trigger);
+      await waitFor(() => expect(help()).not.toHaveAttribute('popover-open'));
 
-      // A mouse click anywhere on a native label, its info icon included,
-      // activates the label's control.
-      expect(screen.getByRole('checkbox')).toBeChecked();
+      trigger.focus();
+      await user.keyboard('{Enter}');
+      await waitFor(() => expect(help()).toHaveAttribute('popover-open'));
+      await user.keyboard(' ');
+      await waitFor(() => expect(help()).not.toHaveAttribute('popover-open'));
+
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
+      expect(trigger).toHaveFocus();
     });
   });
 

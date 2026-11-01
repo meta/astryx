@@ -73,7 +73,7 @@ export const docs = {
       name: 'labelTooltip',
       type: 'string',
       description:
-        'Tooltip text for the info icon after the label. Hover shows it; on a touch screen a tap on the icon opens it without focusing the field or toggling the control, while a mouse click on the icon activates the control like the rest of the label.',
+        'Help text for an info button after the label, named "About {label}". Hover and keyboard focus preview it; a click, tap, Enter or Space opens or closes it and never focuses the field or toggles the control.',
     },
     {
       name: 'description',
@@ -178,7 +178,7 @@ export const docsZh = {
       name: 'labelTooltip',
       type: 'string',
       description:
-        '标签后信息图标的工具提示文本。悬停即可显示；在触摸屏上点按图标即可打开，不会聚焦字段或切换控件；用鼠标点击图标则与点击标签其他部分一样激活控件。',
+        '标签后信息按钮（名称为“About {label}”）显示的帮助文本。悬停和键盘聚焦可预览；点击、点按、Enter 或 Space 可打开或关闭帮助，绝不会聚焦字段或切换控件。',
     },
     {
       name: 'description',
@@ -229,7 +229,7 @@ export const docsDense = {
     isOptional: 'Show localized optional exception indicator.',
     isRequired: 'Show localized required exception indicator.',
     labelIcon: 'Icon type or rendered icon content before label text.',
-    labelTooltip: 'Tooltip text for the info icon after the label.',
+    labelTooltip: 'Help text for the info button after the label.',
     description: 'Supporting content outside the accessible name.',
     descriptionID: 'ID for caller-owned aria-describedby wiring.',
     ref: 'Ref forwarded to the label element; group mode renders a span.',

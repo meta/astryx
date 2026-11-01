@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, useTranslator, FormLayoutContext
+ * @input Uses React, InfoTip, IconType, useTranslator, FormLayoutContext
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -16,15 +16,7 @@
  * - /packages/core/locales/en.json (@astryx.field.required / @astryx.field.optional)
  */
 
-import {
-  use,
-  useMemo,
-  useRef,
-  type MouseEvent,
-  type PointerEvent,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
@@ -36,10 +28,10 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {Icon, renderIconSlot} from '../Icon/Icon';
+import {renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
-import {Tooltip} from '../Tooltip/Tooltip';
-import {TOUCH_POINTER_TYPES} from '../Layer/useTouchTrigger';
+import {InfoTip} from '../InfoTip/InfoTip';
+import {isRenderable} from '../utils/isRenderable';
 import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
@@ -61,6 +53,26 @@ const styles = stylex.create({
   // caller, so the group occupies no space at all.
   labelGroupHidden: {
     display: 'contents',
+  },
+  // The label and the tooltip's trigger share one row. The trigger is a
+  // button of its own after the label element, so it neither joins the
+  // control's name nor activates the control (FR8).
+  labelRow: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-1'],
+  },
+  // With a visually hidden label, the trigger is hidden with it and takes no
+  // layout slot (FR2), but shows while it has keyboard focus, so focus is
+  // never invisible (WCAG 2.2 SC 2.4.7).
+  infoTriggerHidden: {
+    position: {default: 'absolute', ':focus-visible': 'static'},
+    width: {default: 1, ':focus-visible': 'auto'},
+    height: {default: 1, ':focus-visible': 'auto'},
+    margin: {default: -1, ':focus-visible': 0},
+    overflow: {default: 'hidden', ':focus-visible': 'visible'},
+    clip: {default: 'rect(0, 0, 0, 0)', ':focus-visible': 'auto'},
+    whiteSpace: 'nowrap',
   },
   label: {
     display: 'flex',
@@ -175,7 +187,9 @@ export interface FieldLabelProps extends BaseProps<HTMLLabelElement> {
    */
   labelIcon?: ReactNode | IconType;
   /**
-   * Tooltip text to display in an info icon at the end of the label.
+   * Help text revealed by an info button (InfoTip) after the label, named
+   * "About {label}". A click, tap, Enter or Space toggles it and never
+   * reaches the control.
    */
   labelTooltip?: string;
   /**
@@ -265,22 +279,6 @@ export function FieldLabel({
   // a ref-shaped object, since FieldLabel points at the control by id rather
   // than holding a ref to it.
   const descriptionRef = useRef<HTMLSpanElement>(null);
-  // A tap on the info icon asks for the help, so it stops there: it does not
-  // go on to activate the label's control, as a press anywhere else on the
-  // label would (focus the field, toggle a switch). A mouse click on the icon
-  // keeps that native activation, and hover shows the help.
-  const iconPressIsTapRef = useRef(false);
-  const handleIconPointerDown = (event: PointerEvent<Element>) => {
-    // A finger or a pen: the pointers whose tap the shared touch trigger
-    // answers, so the ones whose tap opens or closes the help.
-    iconPressIsTapRef.current = TOUCH_POINTER_TYPES.has(event.pointerType);
-  };
-  const handleIconClick = (event: MouseEvent<Element>) => {
-    if (iconPressIsTapRef.current) {
-      event.preventDefault();
-    }
-    iconPressIsTapRef.current = false;
-  };
   const controlRef = useMemo<RefObject<HTMLElement | null>>(
     () => ({
       get current() {
@@ -309,22 +307,22 @@ export function FieldLabel({
           {statusText}
         </span>
       )}
-      {labelTooltip && (
-        // The icon's one job is to reveal the help, so a tap on it opens or
-        // closes the help (`touchTrigger="tap"`), although it sits inside a
-        // `<label>`.
-        <Tooltip content={labelTooltip} placement="above" touchTrigger="tap">
-          <Icon
-            icon="info"
-            size="sm"
-            color="inherit"
-            onPointerDown={handleIconPointerDown}
-            onClick={handleIconClick}
-          />
-        </Tooltip>
-      )}
     </>
   );
+
+  // The help's trigger: Core InfoTip, a named button after the label element,
+  // reachable by keyboard (FR8, AR5). A click, tap, Enter or Space toggles the
+  // help and never reaches the control (FR9). Its name is "About {label}" —
+  // unique per field, and not the help text — so the help describes only the
+  // trigger and stays out of the control's name (AR2).
+  const hasInfoTrigger = isRenderable(labelTooltip);
+  const infoTrigger = hasInfoTrigger ? (
+    <InfoTip
+      content={labelTooltip}
+      label={t('@astryx.field.aboutLabel', {label})}
+      xstyle={isLabelHidden ? styles.infoTriggerHidden : undefined}
+    />
+  ) : null;
 
   const labelElement = (
     <LabelElement
@@ -356,10 +354,26 @@ export function FieldLabel({
     </LabelElement>
   );
 
+  // With a tooltip, the label and its trigger share one row, which is the
+  // caller's flex/grid item; the caller's className, xstyle and ref stay on
+  // the label element (FR5). A hidden label's row takes no slot (FR2).
+  const labelLine = !hasInfoTrigger ? (
+    labelElement
+  ) : (
+    <div
+      {...stylex.props(
+        styles.labelRow,
+        isLabelHidden && styles.labelGroupHidden,
+      )}>
+      {labelElement}
+      {infoTrigger}
+    </div>
+  );
+
   // Without a description, preserve the original public DOM: the label itself
   // remains the caller's flex/grid item and its layout overrides apply there.
   if (!description) {
-    return labelElement;
+    return labelLine;
   }
 
   return (
@@ -368,7 +382,7 @@ export function FieldLabel({
         styles.labelGroup,
         isLabelHidden && styles.labelGroupHidden,
       )}>
-      {labelElement}
+      {labelLine}
       <span
         ref={forwardsDescriptionClick ? descriptionRef : undefined}
         id={descriptionID}
