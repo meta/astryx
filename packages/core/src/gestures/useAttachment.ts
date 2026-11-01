@@ -4,13 +4,16 @@
 
 /**
  * @file useAttachment.ts
- * @input An element ref, an attach function and a key
+ * @input A node ref (an element's, or the document's), an attach function
+ *   and a key
  * @output Exports useAttachment, useIsUnmountedRef, and the gesture-sync
  *   depth (syncingGestures, isSyncingGestures) both hooks read
- * @position Internal React helpers shared by useGestureRecognizer and
- *   usePressTracker, so each hook imports only what it uses
+ * @position Internal React helpers shared by useGestureRecognizer,
+ *   usePressTracker and useFingerScroll, so each hook imports only what it
+ *   uses
  *
- * SYNC: When modified, update useGestureRecognizer.test.tsx.
+ * SYNC: When modified, update useGestureRecognizer.test.tsx and
+ * useFingerScroll.test.tsx.
  */
 
 import {useRef, type RefObject} from 'react';
@@ -60,18 +63,18 @@ export function useIsUnmountedRef(): {readonly current: boolean} {
 }
 
 /**
- * Keep `attach` bound to the element `ref` holds after each commit. A
- * replaced node is released and the new one attached, a changed `key`
- * re-attaches, and the last attachment is released on unmount; a commit that
- * changes neither does nothing (react-component-runtime INV3).
+ * Keep `attach` bound to the node `ref` holds after each commit: an element,
+ * or the document. A replaced node is released and the new one attached, a
+ * changed `key` re-attaches, and the last attachment is released on unmount;
+ * a commit that changes neither does nothing (react-component-runtime INV3).
  */
-export function useAttachment(
-  ref: RefObject<Element | null>,
-  attach: (element: Element) => () => void,
+export function useAttachment<T extends Node = Element>(
+  ref: RefObject<T | null>,
+  attach: (element: T) => () => void,
   key: unknown,
 ): void {
   const attachmentRef = useRef<{
-    element: Element;
+    element: T;
     key: unknown;
     release: () => void;
   } | null>(null);
