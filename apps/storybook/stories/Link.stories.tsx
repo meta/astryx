@@ -174,11 +174,12 @@ export const ClampedByAncestorText: Story = {
   render: () => (
     <div style={{display: 'grid', gap: 24, width: 220}}>
       <Text maxLines={2} data-testid="ancestor-clamp-text">
-        Release notes with a very long link about the quarterly planning review
-        across all product areas{' '}
-        <Link href="/changelog">and the follow up retrospective notes</Link> and
-        further closing remarks that keep the paragraph going past two lines of
-        text in this narrow container
+        <Link href="/changelog">
+          Quarterly planning review with the product and research teams across
+          every region, plus the follow up retrospective notes and the rollout
+          summary
+        </Link>{' '}
+        and the closing remarks that follow the link in the same paragraph
       </Text>
       <p style={{margin: 0}} data-testid="composed-host">
         <Link href="/team" data-testid="composed-link">
