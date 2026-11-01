@@ -49,6 +49,7 @@ import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {
   colorVars,
@@ -508,6 +509,10 @@ export function Dialog({
     props['aria-label'] != null || props['aria-labelledby'] != null;
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // A modal Dialog is a focus region: Tab and Shift+Tab wrap inside it through
+  // the shared module rather than leaving for the browser's own UI
+  // (component:Dialog/DEC-2). Inline previews never contain focus (FR5).
+  useFocusRegionContainment(dialogRef, isOpen && !isInline);
 
   // Callback ref on the <dialog>: sync the default aria-labelledby from the
   // DialogHeader title (if one rendered) in the same commit, with no second

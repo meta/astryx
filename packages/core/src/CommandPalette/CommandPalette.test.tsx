@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
 import {CommandPalette} from './CommandPalette';
 import {CommandPaletteInput} from './CommandPaletteInput';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {createStaticSource} from '@astryxdesign/core/Typeahead';
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
@@ -746,5 +747,37 @@ describe('CommandPalette', () => {
       // its results are never counted aloud.
       expect(['', 'Loading']).toContain(politeRegion()?.textContent ?? '');
     });
+  });
+});
+
+// component:Dialog/DEC-2: every modal presentation contains Tab through the
+// shared focus-region module. Tab from the last tabbable control wraps to the
+// first and Shift+Tab from the first wraps to the last, so focus never leaves
+// the modal for the browser's own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('CommandPalette focus region (Dialog DEC-2)', () => {
+  it('keeps Tab inside the open palette', () => {
+    render(
+      <CommandPalette
+        isOpen
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+      />,
+    );
+    expectTabWrapsInside(document.querySelector('dialog') as HTMLElement);
   });
 });

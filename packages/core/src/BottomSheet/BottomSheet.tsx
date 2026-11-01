@@ -105,6 +105,7 @@ import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {
@@ -424,6 +425,11 @@ function StandaloneBottomSheet({
   const host = use(BottomSheetHostContext);
   const isHostOpen = host?.isOpen ?? true;
   const isOpen = isOpenProp && isHostOpen;
+  // An open modal sheet is a focus region: Tab and Shift+Tab wrap inside it
+  // through the shared module (component:Dialog/DEC-2). A non-modal sheet
+  // leaves the page's focus order alone (FR11), and a closing sheet stops
+  // containing as soon as it starts to leave.
+  useFocusRegionContainment(dialogRef, isOpen && hasScrim);
   // Presentation outlives the controlled prop: a closing sheet stays mounted
   // and in its native host through its exit, and only its motion completion
   // (or a replace finishing) clears it. The open flip is derived during

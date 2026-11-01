@@ -45,6 +45,7 @@ import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {overlayPaddingReset} from '../Layout/padding.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -332,6 +333,9 @@ export function Lightbox({
   const t = useTranslator();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
+  // The open viewer is a focus region: Tab and Shift+Tab wrap inside it
+  // through the shared module (component:Dialog/DEC-2).
+  useFocusRegionContainment(dialogRef, isOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageWrapperRef = useRef<HTMLDivElement>(null);
   const triggerElementRef = useRef<Element | null>(null);

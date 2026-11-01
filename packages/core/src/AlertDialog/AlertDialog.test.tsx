@@ -20,6 +20,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import {AlertDialog} from './AlertDialog';
 import {useImperativeAlertDialog} from './useImperativeAlertDialog';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 
 function stubAlertDialogMedia({
   smallScreen,
@@ -515,5 +516,40 @@ describe('useImperativeAlertDialog', () => {
     await user.click(screen.getByRole('button', {name: 'Open'}));
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByTestId('is-open')).toHaveTextContent('true');
+  });
+});
+
+// component:Dialog/DEC-2: every modal presentation contains Tab through the
+// shared focus-region module. Tab from the last tabbable control wraps to the
+// first and Shift+Tab from the first wraps to the last, so focus never leaves
+// the modal for the browser's own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('AlertDialog focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside the open modal', () => {
+    render(
+      <AlertDialog
+        isOpen
+        onOpenChange={() => {}}
+        title="Delete item?"
+        description="This action cannot be undone."
+        actionLabel="Delete"
+        onAction={() => {}}
+      />,
+    );
+    expectTabWrapsInside(screen.getByRole('alertdialog'));
   });
 });

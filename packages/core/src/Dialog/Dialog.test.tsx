@@ -27,6 +27,7 @@ import {
   resolveDialogPositionOffsets,
 } from './Dialog';
 import {DialogHeader} from './DialogHeader';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 import {defineTheme, generateThemeCSS} from '../theme';
 import {
   __resetInteractionModalityForTest,
@@ -1595,5 +1596,92 @@ describe('Dialog', () => {
         '0px',
       );
     });
+  });
+});
+
+// component:Dialog/DEC-2: every modal presentation contains Tab through the
+// shared focus-region module. Tab from the last tabbable control wraps to the
+// first and Shift+Tab from the first wraps to the last, so focus never leaves
+// the modal for the browser's own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('Dialog focus region (DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside the open modal', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </Dialog>,
+    );
+    expectTabWrapsInside(screen.getByRole('dialog'));
+  });
+
+  it('wraps Shift+Tab from the focused title to the last control', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}}>
+        <DialogHeader title="Settings" />
+        <button type="button">First</button>
+        <button type="button">Last</button>
+      </Dialog>,
+    );
+    const dialog = screen.getByRole('dialog');
+    const title = screen.getByRole('heading', {name: 'Settings'});
+    // The title takes programmatic focus (tabIndex -1) and is not a Tab stop.
+    title.focus();
+    expect(title).toHaveFocus();
+    const tabbables = getFocusableElements(dialog);
+    expect(tabbables).not.toContain(title);
+
+    expect(fireEvent.keyDown(title, {key: 'Tab', shiftKey: true})).toBe(false);
+    expect(tabbables[tabbables.length - 1]).toHaveFocus();
+  });
+
+  it('lets the inner modal answer Tab when a Dialog opens from a Dialog', () => {
+    function Nested({isInnerOpen}: {isInnerOpen: boolean}) {
+      return (
+        <Dialog isOpen onOpenChange={() => {}} aria-label="Outer">
+          <button type="button">Outer first</button>
+          <Dialog
+            isOpen={isInnerOpen}
+            onOpenChange={() => {}}
+            aria-label="Inner">
+            <button type="button">Inner first</button>
+            <button type="button">Inner last</button>
+          </Dialog>
+        </Dialog>
+      );
+    }
+    // The outer modal's region is active before the inner one opens, as when
+    // a person opens a Dialog from a Dialog.
+    const {rerender} = render(<Nested isInnerOpen={false} />);
+    rerender(<Nested isInnerOpen />);
+    expectTabWrapsInside(screen.getByRole('dialog', {name: 'Inner'}));
+  });
+
+  it('leaves Tab alone when the Dialog renders inline', () => {
+    render(
+      <>
+        <Dialog isOpen isInline onOpenChange={() => {}} aria-label="Preview">
+          <button type="button">Only</button>
+        </Dialog>
+        <button type="button">After</button>
+      </>,
+    );
+    const only = screen.getByRole('button', {name: 'Only'});
+    only.focus();
+    expect(fireEvent.keyDown(only, {key: 'Tab'})).toBe(true);
   });
 });
