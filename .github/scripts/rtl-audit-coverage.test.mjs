@@ -20,6 +20,7 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
+  finishFiniteAnimations,
   orderD1StoryCandidates,
   resolveD1Applicability,
   storyIdsForComponentFilters,
@@ -976,5 +977,40 @@ describe('audited package and story routing', () => {
     expect(coverage.results.map(result => result.component)).toEqual(
       components,
     );
+  });
+});
+
+describe('finishFiniteAnimations', () => {
+  const animation = (endTime, {throws = false} = {}) => {
+    const record = {finished: false};
+    record.effect = {getComputedTiming: () => ({endTime})};
+    record.finish = () => {
+      if (throws) {
+        throw new Error('InvalidStateError');
+      }
+      record.finished = true;
+    };
+    return record;
+  };
+
+  it('finishes a running entrance transition and leaves infinite ones', () => {
+    const entrance = animation(300);
+    const spinner = animation(Infinity);
+    const doc = {getAnimations: () => [entrance, spinner]};
+    expect(finishFiniteAnimations(doc)).toBe(1);
+    expect(entrance.finished).toBe(true);
+    expect(spinner.finished).toBe(false);
+  });
+
+  it('skips an animation that cannot finish and continues', () => {
+    const stuck = animation(500, {throws: true});
+    const fade = animation(200);
+    const doc = {getAnimations: () => [stuck, fade]};
+    expect(finishFiniteAnimations(doc)).toBe(1);
+    expect(fade.finished).toBe(true);
+  });
+
+  it('does nothing in a document without the Web Animations API', () => {
+    expect(finishFiniteAnimations({})).toBe(0);
   });
 });

@@ -154,14 +154,15 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disables the input.',
+      description:
+        'Disables the input. The field keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing.',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled Typeahead in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus, and the reason describes the field (activation stays blocked). Use this instead of wrapping a disabled Typeahead in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'maxMenuItems',

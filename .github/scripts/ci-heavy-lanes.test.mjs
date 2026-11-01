@@ -156,7 +156,7 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
     expect(job.steps[0].env.SHA).toBe('${{ github.sha }}');
   });
 
-  it('decides one push or tick at a time, and ci.yml never cancels a running check', () => {
+  it('decides one push or tick at a time, and ci.yml cancels a running check only for a release re-check', () => {
     // Two pushes deciding at once could both see no recent check.
     expect(heavy.concurrency).toEqual({
       group: 'main-heavy-lanes-dispatch',
@@ -168,7 +168,7 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
       "(github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes')",
     );
     expect(ci.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
   });
 
