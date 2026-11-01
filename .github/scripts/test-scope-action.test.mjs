@@ -162,6 +162,7 @@ describe('per-job scope step', () => {
     expect(Object.keys(action.outputs).sort()).toEqual(
       [
         'applies',
+        'head_file_present',
         'changed_files_path',
         'decided',
         'docsite_only',
@@ -408,6 +409,33 @@ describe('per-job scope step', () => {
         inputs,
       });
       expect(outputs.applies).toBe('true');
+    });
+
+    it('reports a head without the file whether or not touches holds', async () => {
+      for (const file of ['packages/core/src/Button/Button.tsx', 'README.md']) {
+        const {outputs} = await decide({files: changed(file), inputs});
+        expect(outputs.head_file_present, file).toBe('false');
+      }
+      const {outputs} = await decide({
+        files: changed('README.md'),
+        headFiles: ['playwright.interaction.config.ts'],
+        inputs,
+      });
+      expect(outputs.head_file_present).toBe('true');
+    });
+
+    it('keeps the file present for a pull request that renames or deletes it', async () => {
+      for (const file of [
+        {
+          filename: 'playwright.old-interaction.config.ts',
+          previous_filename: 'playwright.interaction.config.ts',
+          status: 'renamed',
+        },
+        {filename: 'playwright.interaction.config.ts', status: 'removed'},
+      ]) {
+        const {outputs} = await decide({files: [file], inputs});
+        expect(outputs.head_file_present).toBe('true');
+      }
     });
 
     it('still applies to a pull request that deletes the file, so the check fails', async () => {

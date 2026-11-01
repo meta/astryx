@@ -951,6 +951,8 @@ jobs:
           # infrastructure, `full_suite`, runs it too); the build itself
           # follows the specialized-lane outputs.
           paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/merge-base\.sh$)'
+          # A head cut before the package-size check has no script for it.
+          requires-head-file: .github/scripts/package-size.mjs
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -1183,11 +1185,16 @@ jobs:
       # package or the lockfile runs it.
       - name: Measure published package size
         id: package-size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
-        run: node .github/scripts/package-size.mjs measure --output package-size-head.json
+        # A head cut before the check has no script to run (the workflow comes
+        # from the merge ref, the checkout from the head): the scope step notes
+        # it, and the check skips until the branch merges main.
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.head_file_present != 'false' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
+        run: |
+          node .github/scripts/package-size.mjs measure --output package-size-head.json
+          echo "measured=true" >> "$GITHUB_OUTPUT"
 
       - name: Download main's package size for the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success' && steps.size-records.outputs.package_run_id != ''
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true' && steps.size-records.outputs.package_run_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -1199,7 +1206,7 @@ jobs:
       # Advisory: a package over its budget is flagged in the job summary and
       # the PR report, and fails nothing.
       - name: Compare published package size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}

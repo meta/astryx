@@ -149,6 +149,98 @@ describe('buildComponentTable', () => {
     expect(table).not.toContain('<details>');
   });
 
+  // The touched-components check's report, as #9178 writes it.
+  const touchedReport = (components, extra = {}) => ({
+    headSha: HEAD,
+    wideChange: false,
+    componentCount: components.length,
+    components,
+    ...extra,
+  });
+
+  it('takes results from the touched-components report first, by key', () => {
+    const table = buildComponentTable({
+      analysis: analysis([
+        ['core/Chat', 1000, 1000],
+        ['lab/Chat', 900, 900],
+      ]),
+      origin: ORIGIN,
+      touched: touchedReport([
+        {
+          key: 'core/Chat',
+          package: 'core',
+          name: 'Chat',
+          results: {visual: 'changed', a11y: 'pass', rtl: 'fail'},
+        },
+        {
+          key: 'lab/Chat',
+          package: 'lab',
+          name: 'Chat',
+          results: {visual: 'pass', a11y: 'pass', rtl: 'pass'},
+        },
+      ]),
+    });
+    expect(table).toMatch(/^\| \[Chat\][^\n]* \| ✗ · ✓ · ✗ \|$/m);
+    expect(table).toMatch(/^\| \[lab\/Chat\][^\n]* \| ✓ · ✓ · ✓ \|$/m);
+  });
+
+  it('treats not-run as no result, so the other reports still apply', () => {
+    const table = buildComponentTable({
+      analysis: analysis([['core/A', 1000, 1000]]),
+      origin: ORIGIN,
+      touched: touchedReport([
+        {
+          key: 'core/A',
+          package: 'core',
+          name: 'A',
+          results: {visual: 'not-run', a11y: 'not-run', rtl: 'not-run'},
+        },
+      ]),
+      a11yReport: {components: {A: {violations: []}}},
+    });
+    expect(table).toMatch(/\| — · ✓ · — \|$/m);
+  });
+
+  it('never shows a visual pass from a touched-only verdict for a row the touched check did not compare', () => {
+    const table = buildComponentTable({
+      analysis: analysis([
+        ['core/New', 1000, 1000],
+        ['lab/Sketch', 900, 900],
+      ]),
+      origin: ORIGIN,
+      touched: touchedReport([
+        {
+          key: 'core/New',
+          package: 'core',
+          name: 'New',
+          results: {visual: 'not-run', a11y: 'pass', rtl: 'pass'},
+        },
+      ]),
+      visualVerdict: {status: 'ok', changes: [], context: {scope: 'touched'}},
+    });
+    expect(table).toMatch(/^\| \[New\][^\n]* \| — · ✓ · ✓ \|$/m);
+    expect(table).not.toMatch(/^\| \[lab\/Sketch\][^\n]* \| ✓/m);
+  });
+
+  it('keeps the marks of a suite run by its label on a wide change', () => {
+    const wide = {wideChange: true, componentCount: 60, components: []};
+    expect(
+      buildComponentTable({
+        analysis: analysis([['core/A', 1000, 1000]]),
+        origin: ORIGIN,
+        touched: wide,
+      }),
+    ).toMatch(/\| — · — · — \|$/m);
+    expect(
+      buildComponentTable({
+        analysis: analysis([['core/A', 1000, 1000]]),
+        origin: ORIGIN,
+        touched: wide,
+        a11yReport: {components: {A: {violations: []}}},
+      }),
+    ).toMatch(/\| — · ✓ · — \|$/m);
+  });
+
   it('lists a modified component folder with no size', () => {
     const table = buildComponentTable({
       analysis: {
@@ -191,28 +283,6 @@ describe('buildComponentTable', () => {
       visualVerdict: {status: 'failed', changes: []},
     });
     expect(table).toContain('| ✗ · — · — |');
-  });
-
-  it("gives a visual result only to the components pr-visual's default check compared", () => {
-    const sizes = {
-      'core/Card': {importGzipBytes: 2048, cssGzipBytes: null},
-      'core/Menu': {importGzipBytes: 1024, cssGzipBytes: null},
-    };
-    const table = buildComponentTable({
-      analysis: {
-        baseSha: 'a'.repeat(40),
-        componentSizes: sizes,
-        baseComponentSizes: sizes,
-      },
-      origin: '',
-      visualVerdict: {
-        status: 'pass',
-        changes: [],
-        context: {scope: 'touched', components: ['Card']},
-      },
-    });
-    expect(table).toMatch(/Card[^\n]*\| ✓ · — · — \|/);
-    expect(table).toMatch(/Menu[^\n]*\| — · — · — \|/);
   });
 
   it('renders nothing when no component changed', () => {
@@ -389,10 +459,9 @@ describe('notRunLine', () => {
       notRunLine({
         jobs: [
           skipped('pr-rtl'),
-          {name: 'Stable visual regression', conclusion: 'success'},
+          {name: 'Stable visual scout (1/5)', conclusion: 'success'},
           {name: 'pr-a11y', conclusion: 'success'},
         ],
-        visualVerdict: {status: 'pass'},
       }),
     ).toBe('Not run on this PR: add `ci:run-rtl` to run it.\n\n');
   });
@@ -413,56 +482,100 @@ describe('notRunLine', () => {
     );
   });
 
-  it("names ci:run-visual after pr-visual's default touched check, and on a wide change", () => {
-    const jobs = [
-      {name: 'pr-visual', conclusion: 'success'},
-      {name: 'pr-a11y', conclusion: 'success'},
-      {name: 'pr-rtl', conclusion: 'success'},
-    ];
+  it('names only the suites that did not run on a wide change', () => {
+    const wide = {wideChange: true, componentCount: 60};
     expect(
       notRunLine({
-        jobs,
-        visualVerdict: {status: 'pass', context: {scope: 'touched'}},
+        jobs: [
+          skipped('Stable visual scout (1/2)'),
+          {name: 'pr-a11y (full audit)', conclusion: 'success'},
+          skipped('pr-rtl (core)'),
+        ],
+        touched: wide,
       }),
     ).toBe(
-      'Visual compared only the touched components: add `ci:run-visual` to run the full suite.\n\n',
+      'Wide change (60 components): add `ci:run-visual` or `ci:run-rtl` to run them.\n\n',
     );
-    expect(
-      notRunLine({
-        jobs,
-        visualVerdict: {status: 'skipped', context: {scope: 'touched'}},
-      }),
-    ).toBe(
-      'Visual did not run on this wide change: add `ci:run-visual` to run the full suite.\n\n',
-    );
-    expect(
-      notRunLine({jobs, visualVerdict: {status: 'pass', context: {}}}),
-    ).toBe('');
+    expect(notRunLine({jobs: [], touched: wide})).toBe('');
   });
 
-  it('names ci:run-visual when pr-visual succeeded but compared nothing', () => {
+  it('decides visual by its label-gated scout, not the regression job the touched check may run', () => {
     expect(
       notRunLine({
         jobs: [
-          {name: 'pr-visual', conclusion: 'success'},
-          skipped('Stable visual scout (1/4)'),
+          skipped('Stable visual scout (1/5)'),
+          {name: 'Stable visual regression', conclusion: 'success'},
           {name: 'pr-a11y', conclusion: 'success'},
           {name: 'pr-rtl', conclusion: 'success'},
         ],
-        visualVerdict: null,
       }),
     ).toBe('Not run on this PR: add `ci:run-visual` to run it.\n\n');
-    // A failed pr-visual is GitHub's to show, not a not-run.
+  });
+
+  it('says the touched components were checked on a narrow change', () => {
     expect(
       notRunLine({
         jobs: [
-          {name: 'pr-visual', conclusion: 'failure'},
-          {name: 'pr-a11y', conclusion: 'success'},
-          {name: 'pr-rtl', conclusion: 'success'},
+          skipped('Stable visual scout (1/5)'),
+          skipped('pr-a11y (full audit)'),
+          skipped('pr-rtl (core)'),
         ],
-        visualVerdict: null,
+        touched: {
+          wideChange: false,
+          componentCount: 1,
+          components: [
+            {
+              key: 'core/A',
+              results: {visual: 'pass', a11y: 'not-run', rtl: 'not-run'},
+            },
+          ],
+        },
       }),
-    ).toBe('');
+    ).toBe(
+      'Touched components checked; add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run the full suites.\n\n',
+    );
+    // Every result not-run: never claim a check that did not happen.
+    expect(
+      notRunLine({
+        jobs: [
+          skipped('pr-rtl (core)'),
+          {name: 'Stable visual scout (1/5)', conclusion: 'success'},
+          {name: 'pr-a11y', conclusion: 'success'},
+        ],
+        touched: {
+          wideChange: false,
+          componentCount: 1,
+          components: [
+            {
+              key: 'core/A',
+              results: {visual: 'not-run', a11y: 'not-run', rtl: 'not-run'},
+            },
+          ],
+        },
+      }),
+    ).toBe(
+      'Touched components identified; checks did not run. Add `ci:run-rtl` to run it.\n\n',
+    );
+  });
+
+  it('names the shared styles that made a change wide', () => {
+    expect(
+      notRunLine({
+        jobs: [
+          skipped('Stable visual scout (1/5)'),
+          skipped('pr-a11y (full audit)'),
+          skipped('pr-rtl (core)'),
+        ],
+        touched: {
+          wideChange: true,
+          componentCount: 0,
+          components: [],
+          foundations: ['packages/core/src/theme/tokens.stylex.ts'],
+        },
+      }),
+    ).toBe(
+      'Wide change (shared styles: packages/core/src/theme/tokens.stylex.ts): add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.\n\n',
+    );
   });
 
   it('leaves the line out when the Storybook build failed', () => {
