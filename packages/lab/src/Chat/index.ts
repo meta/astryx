@@ -20,3 +20,10 @@ export type {ChatUnreadDividerProps} from './ChatUnreadDivider';
 
 export {ChatTypingIndicator} from './ChatTypingIndicator';
 export type {ChatTypingIndicatorProps} from './ChatTypingIndicator';
+
+export {ChatVirtualizer} from './ChatVirtualizer';
+export type {
+  ChatVirtualizerProps,
+  ChatVirtualizerHandle,
+  ChatVirtualizerMeasureMode,
+} from './ChatVirtualizer';
