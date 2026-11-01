@@ -535,6 +535,30 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       ]);
     });
 
+    it.each(['skipped', 'timed_out', 'startup_failure'])(
+      "runs the tip again and reports it when the scheduler's own run of the tip ended %s",
+      async conclusion => {
+        // No merge landed: the run names the tip itself.
+        const calls = await run({
+          runs: [check(20, {head_sha: sha})],
+          units: [unitAt(20, {conclusion})],
+        });
+        expect(calls.dispatch).toEqual([unitRun]);
+        expect(calls.issues).toEqual([
+          expect.objectContaining({owner: 'meta', repo: 'astryx', title}),
+        ]);
+      },
+    );
+
+    it('counts a failed run of the tip as its unit run, without a report', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [unitAt(20, {conclusion: 'failure'})],
+      });
+      expect(calls.dispatch).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
+
     it('dispatches the next run before reporting, so a failed report loses no run', async () => {
       const calls = {};
       const error = await run({

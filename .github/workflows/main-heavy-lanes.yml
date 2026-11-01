@@ -111,7 +111,14 @@ jobs:
             const covered = async (runs, checkAuthority) => {
               // A release-check (checkAuthority) is of its event commit; a unit run of the commit it names.
               for (const run of runs.filter(item => item.conclusion !== 'cancelled' && (checkAuthority ? item.head_sha : tested(item)) === tip)) {
-                if (!checkAuthority || run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) return true;
+                // A unit run covers its commit while it runs, or once it passed
+                // or failed; a skipped, timed-out or unstarted one tested
+                // nothing, so the tip is due again (FR21).
+                if (!checkAuthority) {
+                  if (run.status !== 'completed' || ['success', 'failure'].includes(run.conclusion)) return true;
+                  continue;
+                }
+                if (run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) return true;
               }
               return false;
             };
