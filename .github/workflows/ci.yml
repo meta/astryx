@@ -1051,8 +1051,8 @@ jobs:
       # (deploy.yml): every public component's sizes, every published
       # package's, and every published package's API report. The merge base is
       # compared from them; it is built here only when Main kept no component
-      # record or API surface for it. The lookup runs before the Storybook build so
-      # that build can run beside it.
+      # record for it. The lookup runs before the Storybook build so that build
+      # can run beside it.
       - name: Find the merge base
         id: merge-base
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
@@ -1104,68 +1104,59 @@ jobs:
           github-token: ${{ github.token }}
           path: .api-surface-base
 
-      # No component record or API surface of this merge base was read (Main
-      # kept none, or its download failed): build the base beside the
-      # Storybook build. Without a component record it records the base's
-      # sizes with this head's analyzer, so every changed component still has
-      # a before size (AST-080 FR8); without an API surface it writes the
-      # base's API reports with this head's generator (INV24), which a head
-      # predating `--surface` cannot. It runs in the background; the wait
-      # before the analysis collects it.
+      # No component record of this merge base was read (Main kept none, or
+      # its download failed): build the base beside the Storybook build and
+      # record its sizes with this head's analyzer, so every changed component
+      # still has a before size (AST-080 FR8). When Main kept no API surface
+      # either, the same build writes the base's API reports with this head's
+      # generator (INV24); a head predating `--surface` cannot. A missing API
+      # surface alone starts no build: the API changes then compare with the
+      # merge base's committed reports, marked as such. It runs in the
+      # background; the wait before the analysis collects it.
       - name: Start building the merge base without a record
         id: base-build
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && (steps.component-download.outcome != 'success' || steps.api-download.outcome != 'success')
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.component-download.outcome != 'success'
         env:
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          NEED_SIZES: ${{ steps.component-download.outcome != 'success' }}
           NEED_API: ${{ steps.api-download.outcome != 'success' }}
         run: |
-          if [ "$NEED_API" = true ] && ! grep -q -- "'--surface'" scripts/api-report/cli.mjs 2>/dev/null; then
+          if ! grep -q -- "'--surface'" scripts/api-report/cli.mjs 2>/dev/null; then
             NEED_API=false
           fi
-          [ "$NEED_SIZES" = true ] || [ "$NEED_API" = true ] || exit 0
-          export NEED_SIZES NEED_API
+          export NEED_API
           git worktree add --detach .size-base "$BASE_SHA"
           mkdir -p .component-size-base
-          # The inner script reads BASE_SHA, HEAD_SHA, NEED_SIZES and NEED_API
-          # from this step's env.
+          # The inner script reads BASE_SHA, HEAD_SHA and NEED_API from this
+          # step's env.
           # shellcheck disable=SC2016
           nohup bash -c '
             set -e
             cd .size-base
             pnpm install --frozen-lockfile
-            # Core and its build tooling always build: the other packages
-            # depend on them. Another package builds only when the pull
-            # request changes its source: the component packages for sizes,
-            # the published ones for the API surface. A published package
-            # left unbuilt is unchanged, so the head build stands in for it.
+            # Core and its build tooling always build: the other component
+            # packages depend on them. Another package builds only when the
+            # pull request changes its source. A published package left
+            # unbuilt is unchanged, so the head build stands in for its API.
             pnpm -F @astryxdesign/build build
             pnpm -F @astryxdesign/core build
-            pkgs=()
-            [ "$NEED_SIZES" != true ] || pkgs+=(lab charts richtext vega)
-            [ "$NEED_API" != true ] || pkgs+=(richtext)
-            for pkg in $(printf "%s\n" "${pkgs[@]}" | sort -u); do
+            for pkg in lab charts richtext vega; do
               git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src" || pnpm -F "@astryxdesign/$pkg" build
             done
+            node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
             if [ "$NEED_API" = true ]; then
-              for dir in packages/themes/*/; do
-                git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "$dir" || pnpm -F "./$dir" build
-              done
-              # The CLI publishes declarations generated from its JSDoc.
-              git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
-            fi
-            if [ "$NEED_SIZES" = true ]; then
-              node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
-            fi
-            if [ "$NEED_API" = true ]; then
-              node ../scripts/api-report/cli.mjs --surface ../.api-surface-build --root . \
-                || echo "The merge base API surface was not written; the API changes compare with its committed reports."
+              {
+                for dir in packages/themes/*/; do
+                  git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "$dir" || pnpm -F "./$dir" build
+                done
+                # The CLI publishes declarations generated from its JSDoc.
+                git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
+                node ../scripts/api-report/cli.mjs --surface ../.api-surface-build --root .
+              } || echo "The merge base API surface was not written; the API changes compare with its committed reports."
             fi
             touch ../base-build.done
           ' > base-build.log 2>&1 || touch base-build.failed &
           echo "started=true" >> "$GITHUB_OUTPUT"
-          echo "sizes=$NEED_SIZES" >> "$GITHUB_OUTPUT"
 
       # The same steps as `pnpm build` and the Storybook build, overlapped: a
       # package builds once its workspace dependencies have, and Storybook once
@@ -1250,9 +1241,6 @@ jobs:
       # this job.
       - name: Wait for the merge base's sizes
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.base-build.outputs.started == 'true'
-        env:
-          # A base built only for its API surface keeps main's size record.
-          SIZES_FROM_MAIN: ${{ steps.base-build.outputs.sizes == 'false' }}
         run: |
           waited=0
           while [ ! -f base-build.done ] && [ ! -f base-build.failed ] && [ "$waited" -lt 600 ]; do
@@ -1262,8 +1250,6 @@ jobs:
           tail -n 20 base-build.log || true
           if [ -f base-build.done ]; then
             echo "::notice title=Merge base built::Main kept no record of the merge base; it was built beside Storybook (waited ${waited}s after the build)."
-          elif [ "${SIZES_FROM_MAIN:-false}" = true ]; then
-            echo "::warning title=Merge base not built::Building the merge base failed or timed out; the API changes compare with its committed reports."
           else
             rm -f .component-size-base/component-size.json
             echo "::warning title=Merge base not built::Building the merge base failed or timed out; Before and Delta stay empty."

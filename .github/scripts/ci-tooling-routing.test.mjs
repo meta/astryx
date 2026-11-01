@@ -347,42 +347,7 @@ describe('Node-tooling CI routing', () => {
     }
   });
 
-  it("keeps a base built only for its API surface from removing main's size record", () => {
-    const wait = step(
-      ci.jobs['build-storybook'],
-      "Wait for the merge base's sizes",
-    );
-    expect(wait.env.SIZES_FROM_MAIN).toBe(
-      "${{ steps.base-build.outputs.sizes == 'false' }}",
-    );
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
-    try {
-      fs.mkdirSync(path.join(root, '.component-size-base'));
-      fs.writeFileSync(
-        path.join(root, '.component-size-base/component-size.json'),
-        '{}',
-      );
-      fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
-      fs.writeFileSync(path.join(root, 'base-build.failed'), '');
-      const out = execFileSync('bash', ['-e', '-c', wait.run], {
-        cwd: root,
-        encoding: 'utf8',
-        env: {...process.env, SIZES_FROM_MAIN: 'true'},
-      });
-      expect(out).toContain(
-        'the API changes compare with its committed reports',
-      );
-      expect(
-        fs.existsSync(
-          path.join(root, '.component-size-base/component-size.json'),
-        ),
-      ).toBe(true);
-    } finally {
-      fs.rmSync(root, {recursive: true, force: true});
-    }
-  });
-
-  it("compares the merge base's API surface from main's kept record, building the base only without one", () => {
+  it("compares the merge base's API surface from main's kept record, or from a base built for its sizes", () => {
     const main = load('.github/workflows/deploy.yml');
     const record = step(
       main.jobs.typecheck,
@@ -425,7 +390,13 @@ describe('Node-tooling CI routing', () => {
       path: '.api-surface-base',
     });
     const start = step(job, 'Start building the merge base without a record');
-    expect(start.if).toContain("steps.api-download.outcome != 'success'");
+    // A missing API surface alone starts no build (the API report's budget):
+    // the base builds only for a missing size record, and then also writes
+    // its API surface when Main kept none and the head can.
+    expect(start.if).not.toContain('api-download');
+    expect(start.run).toContain(
+      `grep -q -- "'--surface'" scripts/api-report/cli.mjs`,
+    );
     expect(start.env.NEED_API).toBe(
       "${{ steps.api-download.outcome != 'success' }}",
     );
@@ -441,36 +412,6 @@ describe('Node-tooling CI routing', () => {
       at('Report API changes'),
     );
     expect(step(job, 'Report API changes')['continue-on-error']).toBe(true);
-  });
-
-  it('starts no base build for an API surface a head predating --surface cannot write', () => {
-    const start = step(
-      ci.jobs['build-storybook'],
-      'Start building the merge base without a record',
-    );
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
-    try {
-      fs.mkdirSync(path.join(root, 'scripts/api-report'), {recursive: true});
-      fs.writeFileSync(
-        path.join(root, 'scripts/api-report/cli.mjs'),
-        "if (a === '--changes') {}\n",
-      );
-      const output = path.join(root, 'output');
-      fs.writeFileSync(output, '');
-      execFileSync('bash', ['-e', '-c', start.run], {
-        cwd: root,
-        env: {
-          ...process.env,
-          NEED_SIZES: 'false',
-          NEED_API: 'true',
-          GITHUB_OUTPUT: output,
-        },
-      });
-      expect(fs.readFileSync(output, 'utf8')).toBe('');
-      expect(fs.existsSync(path.join(root, '.size-base'))).toBe(false);
-    } finally {
-      fs.rmSync(root, {recursive: true, force: true});
-    }
   });
 
   it.each([
