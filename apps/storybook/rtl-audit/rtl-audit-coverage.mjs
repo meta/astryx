@@ -353,7 +353,7 @@ export function withD1CompletionIdentity(result, plannedStoryId) {
   };
 }
 
-const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1']);
+const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1', 'D5']);
 
 /** Validate resolved Storybook RTL-audit applicability metadata. */
 export function validateStoryRtlAuditParameters(value, storyId) {
@@ -366,6 +366,10 @@ export function validateStoryRtlAuditParameters(value, storyId) {
   for (const [dimension, applicability] of Object.entries(value)) {
     if (!STORY_RTL_AUDIT_DIMENSIONS.has(dimension)) {
       throw new Error(`${storyId} rtlAudit has unknown dimension ${dimension}`);
+    }
+    if (dimension === 'D5') {
+      result.D5 = validatePhysicalPosition(applicability, storyId);
+      continue;
     }
     if (
       applicability == null ||
@@ -395,6 +399,35 @@ export function validateStoryRtlAuditParameters(value, storyId) {
     };
   }
   return result;
+}
+
+/**
+ * Grade a curated order (D2) or scroll-direction (D3) pair. The relationship
+ * must hold in LTR and reverse in RTL. A relationship that keeps its LTR
+ * physical order in RTL is the RTL defect these checks exist for, so it fails
+ * rather than grading `partial` (INV3); so does one already wrong in LTR.
+ */
+export function gradeDirectionalPair(ltrOk, rtlOk) {
+  return ltrOk && rtlOk ? 'pass' : 'fail';
+}
+
+// rtlAudit.D5 declares a region whose positioned elements stay physical
+// (DR5); it never turns D5 off for the story.
+function validatePhysicalPosition(value, storyId) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${storyId} rtlAudit.D5 must be an object`);
+  }
+  if (!PHYSICAL_POSITION_MARKERS.includes(value.physical)) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.physical must be one of ${PHYSICAL_POSITION_MARKERS.join(', ')}`,
+    );
+  }
+  if (typeof value.within !== 'string' || !value.within.trim()) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.within must name the plot with a non-empty selector`,
+    );
+  }
+  return {physical: value.physical, within: value.within.trim()};
 }
 
 /** Selected owners for which the canonical Storybook route has no story. */
@@ -586,6 +619,61 @@ export function finishFiniteAnimations(doc) {
     }
   }
   return finished;
+}
+
+/**
+ * Declared position semantics a story's `rtlAudit.D5.physical` may name.
+ * `chart`: elements inside the declared plot sit in chart coordinates, which
+ * stay physical in RTL (`design:bidirectionality` DR5), such as a tooltip that
+ * follows a plotted bar.
+ */
+export const PHYSICAL_POSITION_MARKERS = Object.freeze(['chart']);
+
+/**
+ * Fail closed on a `rtlAudit.D5.within` selector the page cannot parse, so a
+ * typo cannot silently grade every overlay as mirrored. Runs in the page: keep
+ * it self-contained.
+ */
+export function assertSelectorParses(doc, selector) {
+  try {
+    doc.querySelector(selector);
+  } catch {
+    throw new Error(`rtlAudit.D5.within "${selector}" is not a valid selector`);
+  }
+}
+
+/**
+ * Bind a JSON value into an in-page detector's placeholder. A replacer
+ * function is used so `$` sequences in the value (`[data-plot='q$']`) are not
+ * read as replacement patterns.
+ */
+export function bindDetectorValue(source, placeholder, value) {
+  return source.replace(placeholder, () => JSON.stringify(value));
+}
+
+/**
+ * Grade one LTR/RTL pair of D5 positioned elements. By default the RTL center
+ * must mirror the LTR center about the parent's center. Under a declared
+ * `chart` marker it must keep the same physical position instead, and a
+ * mirrored chart overlay fails. An unknown marker fails closed rather than
+ * being guessed at.
+ */
+export function gradePositionedPair(ltr, rtl, tolerance) {
+  const marker = ltr.physical ?? null;
+  if (marker != null && !PHYSICAL_POSITION_MARKERS.includes(marker)) {
+    return {
+      expectation: 'invalid-marker',
+      expected: null,
+      delta: null,
+      pass: false,
+      reason: `unknown rtlAudit.D5 physical kind "${marker}"`,
+    };
+  }
+  const expectation = marker === 'chart' ? 'physical' : 'mirror';
+  const expected =
+    expectation === 'physical' ? ltr.relCenterX : ltr.parentW - ltr.relCenterX;
+  const delta = Math.abs(rtl.relCenterX - expected);
+  return {expectation, expected, delta, pass: delta <= tolerance};
 }
 
 /**
@@ -983,14 +1071,61 @@ function componentName(component) {
 }
 
 /**
- * Build the component roster for a scoped audit.
+ * Story-title identities that name no public component, such as
+ * `core/hooks-useclipboard` or `core/tablesortable`. The roster is the public
+ * components (`architecture:rtl-audit-evidence` INV5), so these are not roster
+ * entries and cannot be coverage gaps; the audit reports them, typed, rather
+ * than dropping them silently.
+ *
+ * Public components are `sourceComponents`, package-qualified. The caller
+ * includes documented exports that directory discovery misses (Core's `Theme`
+ * and `MediaTheme`), so they stay roster entries whatever their stories are
+ * titled. It fails closed. An identity stays a roster entry when:
+ * - a filter names it explicitly (an umbrella surface such as `Core/Chat`);
+ * - its package has no discovered public component at all, so a discovery
+ *   failure cannot hide that package's gaps.
+ */
+export function ignoredStoryIdentities({
+  sourceComponents = [],
+  storyComponents = [],
+  filters = [],
+}) {
+  const publicKeys = new Set(sourceComponents.map(c => c.toLowerCase()));
+  const packagesWithPublic = new Set(
+    sourceComponents.map(c => c.split('/')[0].toLowerCase()),
+  );
+  const normalizedFilters = filters.map(filter => filter.toLowerCase());
+  const named = component =>
+    normalizedFilters.some(
+      filter =>
+        component.toLowerCase() === filter ||
+        componentName(component) === filter,
+    );
+  const ignorable = component =>
+    !publicKeys.has(component.toLowerCase()) &&
+    packagesWithPublic.has(component.split('/')[0].toLowerCase()) &&
+    !named(component);
+  return Array.from(
+    new Map(
+      storyComponents.filter(ignorable).map(c => [c.toLowerCase(), c]),
+    ).values(),
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .map(component => ({component, reason: 'no-public-component'}));
+}
+
+/**
+ * Build the component roster for a scoped audit: the public components, plus
+ * any story identity a filter names explicitly.
  *
  * Storybook can expose an umbrella story whose name matches the PR analyzer's
  * module name even when no source component has that exact name. Chat is the
  * canonical example: the source directory contains ChatComposer, ChatMessage,
  * and related components, while Storybook also has a `Core/Chat` surface. A
  * matching story must satisfy the filter so the roster does not invent a
- * second `unknown/chat` coverage entry for the same surface.
+ * second `unknown/chat` coverage entry for the same surface. Story identities
+ * with no public component and no filter naming them are left out (see
+ * `ignoredStoryIdentities`).
  */
 export function buildAuditedComponentRoster({
   sourceComponents = [],
@@ -1007,13 +1142,19 @@ export function buildAuditedComponentRoster({
         !knownComponents.some(component => matchesFilter(component, filter)),
     )
     .map(filter => `unknown/${filter}`);
+  const ignored = new Set(
+    ignoredStoryIdentities({
+      sourceComponents,
+      storyComponents,
+      filters,
+    }).map(entry => entry.component.toLowerCase()),
+  );
 
   return Array.from(
     new Map(
-      [...knownComponents, ...unmatchedFilters].map(component => [
-        component.toLowerCase(),
-        component,
-      ]),
+      [...knownComponents, ...unmatchedFilters]
+        .filter(component => !ignored.has(component.toLowerCase()))
+        .map(component => [component.toLowerCase(), component]),
     ).values(),
   ).filter(
     component =>

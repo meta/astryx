@@ -258,11 +258,11 @@ guidance owns the process used to propose and test APIs.
   appears (INV12); Core's `./internal/*` subpaths and unpublished packages,
   including Lab, do not. A member inside a canonical experimental boundary
   appears marked experimental (`spec:AST-017` FR21). The pull-request report
-  lists the API changes between the merge base's report and one generated from
-  the head's build: added, changed, and removed rows, each with its signature
-  and a usage example, and flags a committed report that differs from the head's
-  build as stale. The report and its changes are evidence: they fail no check
-  and decide no acceptance (INV13).
+  lists the API changes between the reports built from the merge base and from
+  the head: added, changed, and removed rows, each with its signature and a
+  usage example, and flags a committed report that differs from the head's
+  build as stale, in one line. The report and its changes are evidence: they
+  fail no check and decide no acceptance (INV13).
 - **INV25 — Undeclared public API goes to a human.** Review compares each added
   or changed row of a pull request's API changes with current records. A row
   that a record current at the merge base, or a record change in the same pull
@@ -365,7 +365,7 @@ copy the component matrix.
 | INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV22                   | Public-API review of each public gesture, press, drag, or motion hook against its `create…` factory                      | A public interaction hook with no public factory taking the same options and returning `destroy()`, outside the listed exemptions                                                                                                                                                                                                                                                                                                                                                       |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
-| INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged; the check fails a pull request                                                                                                                                                                                                       |
+| INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged, or its rows are listed as the pull request's API changes; the check fails a pull request                                                                                                                                             |
 | INV25                   | Public-API review routing against the pull request's API changes                                                         | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
@@ -382,11 +382,12 @@ Known verification gaps:
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
-- INV24: `pnpm api:report` and the committed reports do not exist yet, so
-  reviews build the reachable public inventory explicitly. The reports cover
-  declarations, CSS custom properties, theme targets, and public attributes;
-  context-member behavior, undeclared defaults, CLI schemas, and observable
-  behavior for both the branch and synthetic merge still need explicit review.
+- INV24: the reports cover declarations, CSS custom properties, theme targets,
+  and public attributes; context-member behavior, undeclared defaults, CLI
+  schemas, and observable behavior for both the branch and synthetic merge
+  still need explicit review. When no build of the merge base is kept, the
+  API changes compare with the merge base's committed reports, marked as
+  such, and list the rows a stale committed report carries.
 - INV18: shipped content slots that their anatomy does not name yet include
   PowerSearch's `startIcon` and `endContent`, SideNav's `topContent`,
   `footer`, and `footerIcons`, Tokenizer's `startIcon`, DropdownMenu's

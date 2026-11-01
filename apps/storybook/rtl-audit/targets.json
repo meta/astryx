@@ -18,6 +18,69 @@
     }
   },
   {
+    "component": "TopNav",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading",
+      "next": ".astryx-top-nav-item"
+    }
+  },
+  {
+    "component": "TopNavHeading",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading > :first-child",
+      "next": ".astryx-top-nav-heading > :last-child",
+      "subject": ".astryx-top-nav-heading"
+    }
+  },
+  {
+    "component": "TopNavItem",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-item:has-text(\"Dashboard\") > svg",
+      "next": ".astryx-top-nav-item:has-text(\"Dashboard\")"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--default",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-menu"},
+    "selectors": {
+      "overlay": ".astryx-popover",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "TopNavMegaMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {
+      "overlay": ".astryx-popover",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "TopNavMegaMenuItem",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D2"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {
+      "prev": ".astryx-top-nav-mega-menu-item > :first-child",
+      "next": ".astryx-top-nav-mega-menu-item > :last-child"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": []
+  },
+  {
     "component": "ButtonGroup",
     "storyId": "core-buttongroup--horizontal",
     "dims": ["D2"],
@@ -85,6 +148,49 @@
       "prev": ".astryx-checkbox-input",
       "next": "[data-testid=\"checkbox-end-content\"]"
     }
+  },
+  {
+    "component": "ContextMenu",
+    "storyId": "core-contextmenu--bottom-sheet-submenu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"Back\"]",
+      "next": "h3:text-is(\"Share\")"
+    }
+  },
+  {
+    "component": "TableHeaderCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child"
+    }
+  },
+  {
+    "component": "TableCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child"
+    }
+  },
+  {
+    "component": "TableSelectionToolbar",
+    "storyId": "core-tableselection--bulk-actions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
+      "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
+    }
+  },
+  {
+    "component": "Table",
+    "storyId": "core-table--in-card",
+    "dims": []
   },
   {
     "component": "GridSpan",
@@ -242,6 +348,66 @@
     }
   },
   {
+    "component": "Stack",
+    "storyId": "core-stack--horizontal",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stack > :first-child",
+      "next": ".astryx-stack > :nth-child(2)"
+    }
+  },
+  {
+    "component": "StackItem",
+    "storyId": "core-stack--stack-item-fill-size",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stack-item:first-child",
+      "next": ".astryx-stack-item:last-child"
+    }
+  },
+  {
+    "component": "HStack",
+    "storyId": "core-aspectratio--height-driven",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stack > :first-child",
+      "next": ".astryx-stack > :nth-child(2)"
+    }
+  },
+  {
+    "component": "VStack",
+    "storyId": "core-spinner--narrow-flex-host",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": "#storybook-root .astryx-stack > .astryx-stack:first-child",
+      "overlayRoot": "#storybook-root .astryx-stack:has(> .astryx-stack)"
+    }
+  },
+  {
+    "component": "Grid",
+    "storyId": "core-grid--with-grid-span",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-grid > :first-child",
+      "next": ".astryx-grid > :nth-child(2)"
+    }
+  },
+  {
+    "component": "Spinner",
+    "storyId": "core-spinner--narrow-flex-host",
+    "dims": []
+  },
+  {
+    "component": "AspectRatio",
+    "storyId": "core-aspectratio--height-driven",
+    "dims": []
+  },
+  {
+    "component": "Stack",
+    "storyId": "core-stack--stack-item-fill-size",
+    "dims": []
+  },
+  {
     "component": "DropdownMenu",
     "storyId": "core-dropdownmenu--alignment-end",
     "dims": ["D4"],
@@ -390,6 +556,49 @@
       "prev": ".astryx-input-group > .astryx-input-group-text:first-child",
       "next": ".astryx-input-group > .astryx-input-group-text:last-child"
     }
+  },
+  {
+    "component": "SideNavHeading",
+    "storyId": "core-sidenav--default",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": ".astryx-side-nav-heading .astryx-nav-icon",
+      "next": ".astryx-side-nav-heading span:text-is(\"My App\")",
+      "subject": ".astryx-side-nav-heading"
+    }
+  },
+  {
+    "component": "SideNavItem",
+    "storyId": "core-sidenav--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-side-nav-item svg.astryx-icon",
+      "next": ".astryx-side-nav-item span:text-is(\"Dashboard\")"
+    }
+  },
+  {
+    "component": "SideNavSection",
+    "storyId": "core-sidenav--section-end-content",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-side-nav-section span:text-is(\"Projects\")",
+      "next": ".astryx-side-nav-section .astryx-badge"
+    }
+  },
+  {
+    "component": "SideNavCollapseButton",
+    "storyId": "core-sidenav--collapsible-sidebar",
+    "dims": []
+  },
+  {
+    "component": "SideNav",
+    "storyId": "core-sidenav--section-end-content",
+    "dims": []
+  },
+  {
+    "component": "SideNav",
+    "storyId": "core-sidenav--collapsible-sidebar",
+    "dims": []
   },
   {
     "component": "NumberInput",
@@ -541,6 +750,78 @@
     "selectors": {
       "prev": "[role=\"list\"]",
       "next": "svg[role=\"img\"]"
+    }
+  },
+  {
+    "component": "Step",
+    "storyId": "core-stepper--default-horizontal",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-step:first-child .astryx-step-indicator",
+      "next": ".astryx-step:first-child .astryx-step-label"
+    }
+  },
+  {
+    "component": "OverflowList",
+    "storyId": "core-overflowlist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-overflow-list > button:first-child",
+      "next": ".astryx-overflow-list button:has-text(\"more\")"
+    }
+  },
+  {
+    "component": "DialogHeader",
+    "storyId": "core-dialog--default",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Open Modal\")"},
+    "selectors": {
+      "prev": ".astryx-dialog-header-title-block",
+      "next": ".astryx-dialog-header-end-content"
+    }
+  },
+  {
+    "component": "AlertDialog",
+    "storyId": "core-alertdialog--delete",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Delete item\")"},
+    "selectors": {
+      "prev": "[role=\"alertdialog\"] button:has-text(\"Cancel\")",
+      "next": "[role=\"alertdialog\"] button:has-text(\"Delete\") >> nth=-1"
+    }
+  },
+  {
+    "component": "MobileNav",
+    "storyId": "core-mobilenav--default",
+    "dims": ["D4"],
+    "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
+    "selectors": {
+      "overlay": "[class*=\"astryx-mobile-nav\"] > div:first-child",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "MoreMenu",
+    "storyId": "core-moremenu--default",
+    "dims": ["D4"],
+    "setup": {"click": "button[aria-label=\"More options\"]"},
+    "selectors": {
+      "overlay": "[role=\"menu\"]",
+      "overlayRoot": "button[aria-label=\"More options\"]"
+    }
+  },
+  {
+    "component": "Dialog",
+    "storyId": "core-dialog--default",
+    "dims": []
+  },
+  {
+    "component": "NavHeadingMenu",
+    "storyId": "core-navmenu--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
+      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
     }
   },
   {

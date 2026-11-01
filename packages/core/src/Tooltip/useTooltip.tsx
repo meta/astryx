@@ -31,6 +31,7 @@ import {
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -264,6 +265,7 @@ function isFocusable(element: HTMLElement): boolean {
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
+
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -636,7 +638,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       };
 
       return renderLayer(
-        <div {...stylex.props(styles.content)}>{children}</div>,
+        // FR11: React bubbles a press on the surface to the trigger's
+        // ancestors, portaled or not. A registered surface counts as
+        // something else in the shared interactive-ancestor walk, so a
+        // clickable container around the trigger leaves the press alone while
+        // document listeners still see it.
+        <div ref={registerLayerSurface} {...stylex.props(styles.content)}>
+          {children}
+        </div>,
         renderProps,
       );
     },

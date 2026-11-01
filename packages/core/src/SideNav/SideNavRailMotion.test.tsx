@@ -569,14 +569,14 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
     expect(pro).toBeChecked();
   });
 
-  it('plays for a resizable rail too, whose resize wrapper comes and goes with the collapse', async () => {
+  it('plays for a resizable rail too, whose resize handle comes and goes with the collapse', async () => {
     render(<Shell isResizable />);
     await toggle();
     expect(railWidth()).toBe(COLLAPSED);
     expect(animated('clipPath').length).toBeGreaterThan(0);
   });
 
-  it('plays for a resizable rail outside AppShell, whose nav remounts with the collapse', async () => {
+  it('plays for a resizable rail outside AppShell, whose resize wrapper is the rail the motion moves', async () => {
     render(<Shell inShell={false} isResizable />);
     await toggle();
     expect(railWidth()).toBe(COLLAPSED);
