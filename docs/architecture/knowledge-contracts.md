@@ -1101,7 +1101,10 @@ requested changes and can reply /approve-spec <sha>`. An approved spec change
   owner command re-evaluates the gate, and each evaluation publishes a terminal
   state for the head it read. A fork review carries a read-only token and is
   skipped, so owners approve a fork pull request with the command. Comments that
-  are not owner commands start no runner.
+  are not owner commands start no runner. A run that would exceed the
+  spec-owner job's request budget leaves the gate pending as too large to
+  reconcile automatically, and a maintainer-dispatched run decides it
+  (`spec:AST-030` FR15).
 
 Rejected: exact-head binding (recording the approval and every base merge
 forced re-approval of unchanged text); per-record or per-section approval

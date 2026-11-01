@@ -1380,6 +1380,72 @@ describe('spec owner workflow reconciliation', () => {
       });
     });
 
+    describe('a spec change too large for one run', () => {
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+      }));
+      const tooLarge =
+        '⏳ Too large to reconcile automatically: a maintainer can run the Review signal workflow for this PR';
+
+      // The job's request count, as lib/rate-limit-backoff.cjs keeps it.
+      function countRequests(harness) {
+        const counter = {requests: 0, waits: 0};
+        const repos = harness.github.rest.repos;
+        for (const name of ['getContent', 'compareCommitsWithBasehead']) {
+          const method = repos[name];
+          repos[name] = async input => {
+            counter.requests += 1;
+            return method(input);
+          };
+        }
+        harness.github.__rateLimitBackoff = counter;
+        return counter;
+      }
+
+      it('stops at the budget and leaves the gate pending, even after an owner command', async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+        });
+        const counter = countRequests(harness);
+
+        await commentRun(harness, ownerComment(`/approve-spec ${head}`));
+
+        expect(counter.requests).toBe(300);
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: tooLarge,
+        });
+        expect(latestGateStatus(harness.state)).toMatchObject({
+          state: 'pending',
+          description:
+            'Mirrors review-required · spec too large to reconcile automatically',
+        });
+      });
+
+      it("lets a maintainer's dispatch decide past the budget", async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          comments: [ownerComment(`/approve-spec ${head}`)],
+        });
+        const counter = countRequests(harness);
+
+        await run(
+          harness,
+          context({runId: 100n, eventName: 'workflow_dispatch'}),
+        );
+
+        expect(counter.requests).toBeGreaterThan(300);
+        expect(latestReviewGate(harness.state).state).toBe('success');
+      });
+    });
+
     it('reads a spec wait as satisfied code review, not an older code wait', async () => {
       const harness = createHarness({
         headContent: currentRecord,
