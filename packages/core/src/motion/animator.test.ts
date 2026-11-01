@@ -208,11 +208,22 @@ function setup({
   return {element, animator};
 }
 
-/** The browser commits a frame at `at`: pending animations start there. */
-async function commitFrame(at: number) {
-  for (const animation of recorded) {
-    if (animation.startTime == null && !animation.cancelled) {
-      animation.commit(at);
+/**
+ * The browser commits a frame at `at`: pending animations start there. With
+ * `startUnread`, the frame's callbacks run before the page can read those
+ * starts, as in Chromium, whose compositor starts a composited animation at
+ * the frame that commits it and tells the page that start a frame or more
+ * later.
+ */
+async function commitFrame(
+  at: number,
+  {startUnread = false}: {startUnread?: boolean} = {},
+) {
+  if (!startUnread) {
+    for (const animation of recorded) {
+      if (animation.startTime == null && !animation.cancelled) {
+        animation.commit(at);
+      }
     }
   }
   const frames = frameQueue;
@@ -713,6 +724,115 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
     } finally {
       Reflect.deleteProperty(document, 'timeline');
     }
+  });
+
+  describe('a start the page reads a frame or more after the compositor uses it (Chromium)', () => {
+    it('starts at the frame that commits it, on the page as on the compositor', async () => {
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      // The frame that commits it runs at 1016 while its start is unread.
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(animation.startTime).toBe(1016);
+      await expect(handle.started).resolves.toBe(1016);
+      clock = 1116;
+      expect(animator.get('x')).toBeCloseTo(curve.value(0.1), 9);
+    });
+
+    it('a retarget before the page reads the start starts where the screen shows it', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      // 100 ms into the curve on screen; the page still has no start to read.
+      clock = 1116;
+      animator.animate({x: 400}, {spring: springs.settle});
+      const retarget = live('translate').at(-1) as Recorded;
+      expect(retarget.startTime).toBe(1116);
+      expect(sampleAt(retarget, 'translate', 1116)[0]).toBeCloseTo(
+        curve.value(0.1),
+        1,
+      );
+    });
+
+    it('a rebase before the page reads the start keeps the value on screen', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      clock = 1116;
+      animator.rebase({x: -16});
+      const rebased = live('translate').at(-1) as Recorded;
+      // On the curve's own clock, 100 ms in, shifted by the rebase.
+      expect(rebased.startTime).not.toBeNull();
+      expect(sampleAt(rebased, 'translate', 1116)[0]).toBeCloseTo(
+        curve.value(0.1) - 16,
+        1,
+      );
+    });
+
+    it('a call made in a frame callback keeps the start the browser gives it, however late its next frame', async () => {
+      // A presented call's animations are made in its second frame's
+      // callback, so that frame commits them: the frame after it, here late
+      // behind a busy task, is not the one that starts them.
+      const {animator} = setup();
+      const handle = animator.animate(
+        {x: 300},
+        {spring: springs.settle},
+        {start: 'presented'},
+      );
+      clock = 1016;
+      await commitFrame(1016);
+      clock = 1033;
+      await commitFrame(1033);
+      const [animation] = live('translate');
+      clock = 1180;
+      await commitFrame(1180, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      let started = false;
+      void handle.started.then(() => {
+        started = true;
+      });
+      await Promise.resolve();
+      expect(started).toBe(false);
+    });
+
+    it('a call whose first frame comes after a block keeps the start the browser gives it', async () => {
+      // A block between the call and its first frame: that frame cannot tell
+      // a call made in a task from one a page's own frame callback made, so
+      // it sets no start of its own.
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      clock = 1150;
+      await commitFrame(1150, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      let started = false;
+      void handle.started.then(() => {
+        started = true;
+      });
+      await Promise.resolve();
+      expect(started).toBe(false);
+    });
+
+    it('a call the page pauses before its first frame waits for its start', async () => {
+      // A harness or a page that pauses the animation: nothing starts it at
+      // the commit, so nothing sets a start for it either.
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      animation.paused = true;
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      let started = false;
+      void handle.started.then(() => {
+        started = true;
+      });
+      await Promise.resolve();
+      expect(started).toBe(false);
+    });
   });
 
   it('holds its start until the browser starts it', async () => {
