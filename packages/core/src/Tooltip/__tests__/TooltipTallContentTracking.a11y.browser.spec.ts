@@ -917,7 +917,15 @@ test('placing a shown tooltip afresh keeps every animation in its content in its
       document.querySelector('[data-row="running"]') as Element
     ).getAnimations()[0];
   });
-  await page.waitForTimeout(100);
+  // Every row's animation has started: one the sets just made or re-timed
+  // (the scripted animation, the transition) is pending, its time held,
+  // until a frame starts it.
+  await page.evaluate(async () => {
+    const rows = Array.from(document.querySelectorAll('[data-row]'));
+    await Promise.all(
+      rows.flatMap(row => row.getAnimations()).map(async a => a.ready),
+    );
+  });
   const read = async () =>
     page.evaluate(names => {
       const handler = (window as unknown as {__handler: unknown}).__handler;
