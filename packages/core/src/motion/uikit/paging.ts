@@ -6,7 +6,10 @@
  * @output Exports `paging`, the constants of a paging UIScrollView
  *   (`isPagingEnabled`, and the scroll view inside UIPageViewController): the
  *   integrator that carries a release onto its page, the rule that picks the
- *   page, the catch, and `setContentOffset(_:animated:)`
+ *   page, the catch, and `setContentOffset(_:animated:)`, as internal
+ *   constants; and `registerPagingTable`, which registers the table with the
+ *   motion registry without a role (`spec:AST-094` FR4 names none of its
+ *   values, so each plays as measured)
  * @position The paging domain of the UIKit constants table (motion/uikit);
  *   read inside core only (motion/paging.ts and the pager), so the `uikit`
  *   namespace does not re-export it
@@ -34,6 +37,8 @@
  * - /packages/core/src/motion/MEASUREMENTS.md (measurement tasks)
  * - /packages/core/src/motion/paging.ts and paging.test.ts
  */
+
+import {registerMotionTable} from '../roles';
 
 export const paging = {
   integrator: {
@@ -133,9 +138,9 @@ export const paging = {
    */
   catchStopMs: 85,
   /**
-   * A horizontal pager's pan begins only when the drag runs within
-   * atan(1 ÷ this) of horizontal (26.6° for 2); a steeper drag is left to
-   * the vertical scroll around it, and between 26.6° and 45° neither moves.
+   * In a sheet, a horizontal pager's pan begins only when the drag runs
+   * within atan(1 ÷ this) of horizontal (26.6° for 2); a steeper drag is
+   * left to the sheet, and between 26.6° and 45° neither moves.
    * @source measured: UIKit lab, iOS 26.2 simulator, a scroll view's
    *   directional lock holds the major axis up to 25° and frees it from 30°;
    *   an inline calendar pager in a sheet pages at 20° from horizontal,
@@ -143,23 +148,36 @@ export const paging = {
    *   the sheet (2026-10-23)
    */
   panAxisRatio: 2,
+  /**
+   * Inside a vertical scroll view, exactly one of the pager and the scroll
+   * view takes a drag, decided once by its dominant axis: the pager when
+   * |dx| ≥ this × |dy| (45° and the tie included), the scroll view
+   * otherwise; never both, never neither.
+   * @source measured: UIKit lab, iOS 26.2 simulator, a 402 × 300 paging
+   *   view inside a full-screen vertical scroll view, 150 pt drags at
+   *   0–90°: the pager takes 0–45° (the outer view stays at 0 through 86 pt
+   *   of vertical travel at 35°), the page 50–90°, decided at 10–15 pt of
+   *   travel (2026-10-24)
+   */
+  nestedPanAxisRatio: 1,
   animatedScroll: {
     /**
-     * `setContentOffset(_:animated:)` duration, the same for one page and
-     * for five (the motion a page control's tap starts).
+     * `setContentOffset(_:animated:)` duration in milliseconds, the same for
+     * one page and for five (the motion a page control's tap starts).
      * @source measured: UIKit lab, iOS 26.2 simulator,
      *   `_contentOffsetAnimationDuration` read as 0.3, and five animated
      *   moves of 1 to 5 pages lasting 0.30 s each (2026-10-23)
      */
-    duration: 0.3,
+    durationMs: 300,
     /**
-     * Its curve: sinusoidal ease-in-out, x = from + (to − from) · (1 − cos πu) ÷ 2
-     * for u = t ÷ duration.
+     * Its curve: sinusoidal ease-in-out, x = from + (to − from) · (1 − cos πu)
+     * ÷ 2 for u = t ÷ duration, written as the cubic bézier that matches it
+     * to 0.02 % of the distance (0.09 pt over a 402 pt page).
      * @source measured: UIKit lab, iOS 26.2 simulator, the five moves fit
      *   the sinusoid to 0.14–0.51 pt RMS (a 2010 pt move to 0.20 pt);
      *   easeInEaseOut (0.42, 0, 0.58, 1) misses by 7.7 pt (2026-10-23)
      */
-    curve: 'sineInOut',
+    curve: [0.364212, 0, 0.635788, 1],
   },
   /**
    * Past the first or last page the content follows the finger through the
@@ -172,3 +190,18 @@ export const paging = {
    */
   rubberBandDimension: 'pageWidth',
 } as const;
+
+/**
+ * Registers this table with the motion registry (motion/roles.ts), so the
+ * pager reads `setContentOffset(_:animated:)`'s duration and curve through
+ * `resolveMotion` as every touch motion is read. It lists no role:
+ * `spec:AST-094` FR4 names none of its values, so each plays as measured;
+ * once FR4's table names them, they are listed here. Nothing registers on
+ * import, and a second call does nothing.
+ */
+export function registerPagingTable(): void {
+  registerMotionTable('paging', paging, {
+    // Who gets the touch, not how anything moves.
+    exclude: ['catchStopMs'],
+  });
+}
