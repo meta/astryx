@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useRef} from 'react';
+import {useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -615,6 +615,10 @@ function SlidingPanelSplit({side}: {side: 'start' | 'end'}) {
             <Stack gap={2}>
               <Text>The content glides with the panel's edge.</Text>
               <Button label="Open panel" onClick={panel.expand} />
+              <Button
+                label="Toggle panel"
+                onClick={panel.isCollapsed ? panel.expand : panel.collapse}
+              />
             </Stack>
           </LayoutContent>
         }
@@ -637,6 +641,59 @@ export const SlidingStartPanel: Story = {
 
 export const SlidingEndPanel: Story = {
   render: () => <SlidingPanelSplit side="end" />,
+};
+
+/**
+ * A start LayoutPanel whose collapse state its parent owns: `isCollapsed`
+ * with `onCollapseChange`, and a toggle that flips the parent's state. The
+ * panel slides on each controlled change too.
+ */
+function ControlledSlidingPanel() {
+  const handleRef = useRef<HTMLDivElement>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const panel = useResizable(handleRef, {
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+    isCollapsed,
+    onCollapseChange: setIsCollapsed,
+  });
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel width={panel.size} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={panel.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle ref={handleRef} hasDivider label="Resize panel" />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The parent owns whether the panel is collapsed.</Text>
+              <Button
+                label="Toggle panel"
+                onClick={() => {
+                  setIsCollapsed(!isCollapsed);
+                }}
+              />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingControlledPanel: Story = {
+  render: () => <ControlledSlidingPanel />,
 };
 
 /**
