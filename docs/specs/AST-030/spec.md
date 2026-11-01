@@ -674,14 +674,16 @@ bookkeeping, report publishing) always count at least the most they were
 measured running at once, eighteen jobs, so the room they can take stays free.
 Each CI or Main run counts its live jobs: a pull-request run still waiting
 counts only the job that waits, so waiting runs hold each other back by no more
-than they use, and a run admitted in the last three minutes counts at least its
-planned most. A look reads the active runs and each CI or Main run's jobs once,
-so it costs two run listings plus one call per active CI or Main run. A pull
-request looks at most twice, and a run starts rather than spend a low API
-budget. A `main` full check, release re-check or baseline capture (every
-dispatch of the CI workflow) goes first: while one waits, pull-request runs wait
-too. Every job ends within its fifteen-minute budget, so `main` fits within
-fifteen minutes. Nothing is reserved for `main` outside those minutes.
+than they use, and a run admitted in the last forty-five seconds, before its
+jobs appear, counts at least its planned most. A run GitHub still lists as
+active but has not updated in two hours holds no runner and counts nothing. A
+look reads the active runs and each CI or Main run's jobs once, so it costs two
+run listings plus one call per active CI or Main run. A pull request looks at
+most twice, and a run starts rather than spend a low API budget. A `main` full
+check, release re-check or baseline capture (every dispatch of the CI workflow)
+goes first: while one waits, pull-request runs wait too. Every job ends within
+its fifteen-minute budget, so `main` fits within fifteen minutes. Nothing is
+reserved for `main` outside those minutes.
 
 CI can still pass ninety in three rare, bounded ways:
 
