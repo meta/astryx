@@ -547,6 +547,20 @@ describe('pr-touched-components routing', () => {
     );
   });
 
+  it('records an RTL failure without failing the job, as pr-rtl keeps RTL findings soft', () => {
+    const report = {
+      components: [
+        {
+          key: 'core/ContextMenu',
+          results: {visual: 'pass', a11y: 'pass', rtl: 'fail'},
+        },
+      ],
+    };
+    expect(hasFailure(report)).toBe(false);
+    report.components[0].results.a11y = 'fail';
+    expect(hasFailure(report)).toBe(true);
+  });
+
   it('checks out the tested merge commit, so a branch that predates the check still runs it', () => {
     const checkout = job.steps.find(step => step.name === 'Checkout');
     expect(checkout.uses).toMatch(/^actions\/checkout@/);
