@@ -2969,6 +2969,8 @@ jobs:
         id: rtl
         if: (steps.rtl-scope.outputs.should_run == 'true') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
         continue-on-error: true
+        env:
+          PARTS: ${{ matrix.parts }}
         run: |
           PACKAGE=${{ matrix.package }}
           COMPONENTS="${{ steps.rtl-scope.outputs.components }}"
@@ -2978,7 +2980,7 @@ jobs:
             FILTER_ARGS=(--filter "$FILTER")
           fi
           SHARD_ARGS=()
-          if [ "${{ matrix.parts }}" -gt 1 ]; then
+          if [ "$PARTS" -gt 1 ]; then
             SHARD_ARGS=(--shard "${{ matrix.part }}/${{ matrix.parts }}" --shard-output "rtl-shard-${{ matrix.part }}.json")
           fi
           echo "Auditing $PACKAGE components: $COMPONENTS"
@@ -2992,6 +2994,8 @@ jobs:
 
       - name: Require completed RTL shard report
         if: always() && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
+        env:
+          PARTS: ${{ matrix.parts }}
         run: |
           SCOPE_OUTCOME="${{ steps.rtl-scope.outcome }}"
           SHOULD_RUN="${{ steps.rtl-scope.outputs.should_run }}"
@@ -3005,7 +3009,7 @@ jobs:
               echo "Applicable RTL audit did not run: $AUDIT_OUTCOME"
               exit 1
             fi
-            if [ "${{ matrix.parts }}" -gt 1 ]; then
+            if [ "$PARTS" -gt 1 ]; then
               # A part writes cards only; pr-rtl-merge checks the joined report.
               test -s "rtl-shard-${{ matrix.part }}.json"
             else

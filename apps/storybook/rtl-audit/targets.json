@@ -611,8 +611,8 @@
     "storyId": "core-overflowlist--default",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-overflow-list > button:first-child",
-      "next": ".astryx-overflow-list button:has-text(\"more\")"
+      "prev": ".astryx-overflow-list > :nth-child(1)",
+      "next": ".astryx-overflow-list > :nth-child(2)"
     }
   },
   {
