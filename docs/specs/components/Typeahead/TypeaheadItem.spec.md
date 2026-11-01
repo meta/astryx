@@ -10,7 +10,11 @@ approved_by: cixzhang
 approved_at: 2026-11-01
 owners: [cixzhang]
 review_triggers: [public-api, theming]
-verified_by: [packages/core/src/Typeahead/TypeaheadItem.test.tsx]
+verified_by:
+  [
+    packages/core/src/Typeahead/TypeaheadItem.test.tsx,
+    apps/storybook/rtl-audit/targets.json,
+  ]
 modules: []
 families: []
 design_specs: []
@@ -130,13 +134,14 @@ carries no anatomy-theming map.
 
 ## Verification map
 
-| Contract  | Verification                                                                                                                                                                                                    | Representative states        | Mutation or failure expectation                                                                                           | Audit section                  |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| FR1       | `TypeaheadItem.test.tsx` "renders the item label", "renders the description below the label when provided", "renders no description element when none is provided", "renders the icon before the label content" | Label, description, icon     | A missing label, description, or icon, an extra description element, or the icon after the label fails.                   | `audit:TypeaheadItem/anatomy`  |
-| FR2       | `TypeaheadItem.test.tsx` "dims the row when isDisabled is set" and "does not dim the row by default"                                                                                                            | Enabled and disabled         | Missing or default dimming fails. Evidence gap: no test asserts the `typeahead-item` class.                               | `audit:TypeaheadItem/theming`  |
-| FR3       | `TypeaheadItem.test.tsx` "forwards pass-through props to the item element", "merges a caller className with its own classes", "forwards ref to the row element"                                                 | Pass-through, className, ref | A dropped prop, class, or ref fails. Evidence gap: no test asserts `style` or `xstyle`.                                   | `audit:TypeaheadItem/api`      |
-| FR4, ORD1 | `TypeaheadItem.test.tsx` "renders item.element raw in place of the label layout"                                                                                                                                | `item.element`               | An element that keeps the default layout fails. Evidence gap: no test asserts the root inputs on this path (the FR4 gap). | `audit:TypeaheadItem/api`      |
-| PR1, AR1  | Evidence gap: no test asserts the absence of lifecycle resources or roles                                                                                                                                       | —                            | —                                                                                                                         | `audit:TypeaheadItem/behavior` |
+| Contract           | Verification                                                                                                                                                                                                    | Representative states                                      | Mutation or failure expectation                                                                                           | Audit section                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| FR1                | `TypeaheadItem.test.tsx` "renders the item label", "renders the description below the label when provided", "renders no description element when none is provided", "renders the icon before the label content" | Label, description, icon                                   | A missing label, description, or icon, an extra description element, or the icon after the label fails.                   | `audit:TypeaheadItem/anatomy`  |
+| FR2                | `TypeaheadItem.test.tsx` "dims the row when isDisabled is set" and "does not dim the row by default"                                                                                                            | Enabled and disabled                                       | Missing or default dimming fails. Evidence gap: no test asserts the `typeahead-item` class.                               | `audit:TypeaheadItem/theming`  |
+| FR3                | `TypeaheadItem.test.tsx` "forwards pass-through props to the item element", "merges a caller className with its own classes", "forwards ref to the row element"                                                 | Pass-through, className, ref                               | A dropped prop, class, or ref fails. Evidence gap: no test asserts `style` or `xstyle`.                                   | `audit:TypeaheadItem/api`      |
+| FR4, ORD1          | `TypeaheadItem.test.tsx` "renders item.element raw in place of the label layout"                                                                                                                                | `item.element`                                             | An element that keeps the default layout fails. Evidence gap: no test asserts the root inputs on this path (the FR4 gap). | `audit:TypeaheadItem/api`      |
+| PR1, AR1           | Evidence gap: no test asserts the absence of lifecycle resources or roles                                                                                                                                       | —                                                          | —                                                                                                                         | `audit:TypeaheadItem/behavior` |
+| RTL relation (FR1) | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Typeahead / Parts / TypeaheadItem with icon` (results opened)                                                                         | Icon, label and description in an open result; LTR and RTL | A result icon that is not at the inline start of its content fails D2.                                                    | `audit:TypeaheadItem/i18n-rtl` |
 
 ## Current-state impact
 

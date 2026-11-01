@@ -483,6 +483,82 @@
     }
   },
   {
+    "component": "ListItem",
+    "storyId": "core-list--interactive",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-list-item:first-child > :first-child",
+      "next": ".astryx-list-item:first-child > :last-child"
+    }
+  },
+  {
+    "component": "MetadataList",
+    "storyId": "core-metadatalist--basic",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-metadata-list dl > dt:first-of-type",
+      "next": ".astryx-metadata-list dl > dd:first-of-type"
+    }
+  },
+  {
+    "component": "MetadataListItem",
+    "storyId": "core-metadatalist--basic",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-metadata-list-item:first-child",
+      "next": ".astryx-metadata-list-item:first-child + dd"
+    }
+  },
+  {
+    "component": "RadioListItem",
+    "storyId": "core-radiolist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-radio-list-item:first-child .astryx-radio-indicator",
+      "next": ".astryx-radio-list-item:first-child span:text-is(\"Email\")"
+    }
+  },
+  {
+    "component": "SelectorOption",
+    "storyId": "core-selector--with-icons",
+    "dims": ["D2"],
+    "setup": {"click": "[role=\"combobox\"]"},
+    "selectors": {
+      "prev": ".astryx-selector-option > span:first-child",
+      "next": ".astryx-selector-option > span:nth-child(2)"
+    }
+  },
+  {
+    "component": "TypeaheadItem",
+    "storyId": "core-typeahead--item-with-icon",
+    "dims": ["D2"],
+    "setup": {"click": "[role=\"combobox\"]"},
+    "selectors": {
+      "prev": ".astryx-typeahead-item > :first-child",
+      "next": ".astryx-typeahead-item > :last-child"
+    }
+  },
+  {
+    "component": "List",
+    "storyId": "core-list--interactive",
+    "dims": []
+  },
+  {
+    "component": "RadioList",
+    "storyId": "core-radiolist--default",
+    "dims": []
+  },
+  {
+    "component": "Selector",
+    "storyId": "core-selector--with-icons",
+    "dims": []
+  },
+  {
+    "component": "Typeahead",
+    "storyId": "core-typeahead--item-with-icon",
+    "dims": []
+  },
+  {
     "component": "Switch",
     "storyId": "core-switch--on",
     "dims": ["D4"],
