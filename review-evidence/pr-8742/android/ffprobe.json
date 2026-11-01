@@ -1,0 +1,6 @@
+{
+  "streams": [{"codec_name": "vp9", "width": 1080, "height": 2400, "pix_fmt": "yuv420p", "color_range": "tv", "r_frame_rate": "30/1", "avg_frame_rate": "30/1"}],
+  "format": {"duration": "17.166000", "size": "1182568"},
+  "full_decode": {"exit_code": 0, "errors": 0},
+  "note": "30 fps is the browser-copy sampling rate, not a claim about the native screenrecord refresh rate."
+}

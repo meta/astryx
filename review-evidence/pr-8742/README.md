@@ -9,6 +9,11 @@ a genuine handle drag, a transient accessory-only band, and full recovery on
 `b6ef992e156c5552a9a42ff59d84990bc5339c50`. It supplements this iPhone capture; it
 does not establish a stable accessory-only state with a field still focused.
 
+[Native Android Chrome/Gboard recovery](android/README.md) verifies a nonzero
+opening body scroll, a lower field, `QA` entry with Gboard visible, and exact
+scroll restoration after native Back on the same head. Its renderer/framebuffer
+positioning caveat is retained in the receipt.
+
 ## Build and environment
 
 - PR: https://github.com/meta/astryx/pull/8742
