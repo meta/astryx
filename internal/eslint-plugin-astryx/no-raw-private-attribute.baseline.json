@@ -119,7 +119,6 @@
     "data-astryx-press",
     "data-astryx-press"
   ],
-  "packages/core/src/gestures/haptics.ts": ["data-astryx-haptic-switch"],
   "packages/core/src/gestures/touchActionRule.ts": ["data-astryx-touch-action"],
   "packages/core/src/hooks/useAnnounce.ts": [
     "data-astryx-live-region",
