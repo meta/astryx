@@ -962,8 +962,9 @@ async function capture(page: Page, scenario: Case) {
       expect(focusIndicator?.color).toBe(focusIndicator?.expectedHighlight);
     }
     if (scenario.forcedColors === 'before-control') {
+      // With `outline-style: none`, Chromium still computes the declared
+      // width, so the style alone says no outline paints.
       expect(focusIndicator?.style).toBe('none');
-      expect(focusIndicator?.width ?? 1).toBe(0);
     }
 
     const file = `DropdownMenu__${scenario.state}.png`;

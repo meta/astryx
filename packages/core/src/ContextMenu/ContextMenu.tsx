@@ -70,6 +70,7 @@ import {
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useListFocus} from '../hooks/useListFocus';
+import {focusForLastInput} from '../utils/focusReturn';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
@@ -444,7 +445,6 @@ export function ContextMenu({
   const {
     listRef,
     handleKeyDown: listNavKeyDown,
-    focusFirst,
     focusItem,
     ownsEvent,
     getItems: getMenuItems,
@@ -583,10 +583,19 @@ export function ContextMenu({
         updateOpenState(true);
       } else {
         layer.show();
-        requestAnimationFrame(() => focusFirst());
+        requestAnimationFrame(() => {
+          // The first row takes the focus the last input calls for
+          // (architecture:interaction-modality INV1): after a right-click or
+          // long-press it shows no keyboard ring; after the context-menu key
+          // or Shift+F10 it does.
+          const first = getMenuItems()[0];
+          if (first != null) {
+            focusForLastInput(first);
+          }
+        });
       }
     },
-    [layer, focusFirst, updateOpenState, usesBottomSheet],
+    [layer, getMenuItems, updateOpenState, usesBottomSheet],
   );
 
   // The box the cursor anchor's offsets are measured from: the trigger, which

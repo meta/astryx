@@ -181,6 +181,27 @@ describe('ContextMenu', () => {
     expect(screen.getByTestId('ctx')).not.toHaveAttribute('aria-haspopup');
   });
 
+  // architecture:interaction-modality INV1: a pointer-opened menu focuses its
+  // first row without the keyboard ring; a keyboard open keeps it.
+  it('focuses the first row with the focus the last input calls for', async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, 'focus');
+    render(
+      <ContextMenu items={[{label: 'Cut'}, {label: 'Copy'}]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    const target = screen.getByText('Right-click me');
+    fireEvent.pointerDown(target, {pointerType: 'mouse', button: 2});
+    fireEvent.contextMenu(target);
+    await waitFor(() =>
+      expect(focus).toHaveBeenCalledWith(
+        expect.objectContaining({focusVisible: false}),
+      ),
+    );
+    expect(focus.mock.contexts.at(-1)).toHaveTextContent('Cut');
+    focus.mockRestore();
+  });
+
   it('opens menu on right-click', () => {
     render(
       <ContextMenu items={[{label: 'Item 1'}]}>
