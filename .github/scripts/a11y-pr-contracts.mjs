@@ -34,7 +34,13 @@
  * the PR's component scope.
  *
  * Unknown scope (no merge base, no changed-file list) runs every scoped spec,
- * never fewer. Locally, `pnpm test:a11y-contract:pr origin/main --dry-run`
+ * never fewer.
+ *
+ * `--changed-only <file>` (the default touched-components check, spec:AST-030
+ * FR12): run only the browser specs the pull request adds or modifies, listed
+ * one per line in <file>. It reads no component scope or title, runs no
+ * component audit, and widens to nothing else; a changed `release-only` spec
+ * still waits for the release check. Locally, `pnpm test:a11y-contract:pr origin/main --dry-run`
  * prints what a PR from this branch would run.
  *
  * The CI step loads this file from the merge commit its steps come from
@@ -287,6 +293,19 @@ export function selectSpecs({
 }
 
 /**
+ * The changed-only selection: of the specs the routing selects, only those the
+ * pull request itself adds or modifies, each because it changed.
+ * @param {{file: string, reason: string}[]} selected
+ * @param {string[]} changedPaths
+ */
+export function changedOnly(selected, changedPaths) {
+  const changed = new Set(changedPaths);
+  return selected
+    .filter(({file}) => changed.has(file))
+    .map(({file}) => ({file, reason: 'spec changed'}));
+}
+
+/**
  * Path segments that never hold knowledge records. Mirrors
  * `IGNORED_COMPONENT_KNOWLEDGE_SEGMENTS` in `knowledge-paths.cjs` (a test
  * keeps them equal); copied because this runner uses only Node built-ins.
@@ -468,20 +487,35 @@ function main() {
     process.argv.slice(2).find(arg => !arg.startsWith('-')) ||
     (process.env.GITHUB_ACTIONS ? undefined : 'origin/main');
   const policySha = process.env.WORKFLOW_SHA;
+  const changedOnlyIndex = process.argv.indexOf('--changed-only');
+  const changedOnlyFile =
+    changedOnlyIndex === -1 ? null : process.argv[changedOnlyIndex + 1];
   const specs = listSpecs(root).map(file => ({
     file,
     routing: parseRouting(readPolicySource(root, file, policySha)),
   }));
-  const changedPaths = isPullRequest ? changedSinceMergeBase(base) : [];
-  const components = isPullRequest ? readComponents(root) : [];
-  const title = isPullRequest ? (process.env.PR_TITLE ?? '') : '';
-  const selected = selectSpecs({
+  const changedPaths =
+    changedOnlyFile != null
+      ? fs.readFileSync(changedOnlyFile, 'utf8').split('\n').filter(Boolean)
+      : isPullRequest
+        ? changedSinceMergeBase(base)
+        : [];
+  const components =
+    isPullRequest && changedOnlyFile == null ? readComponents(root) : [];
+  const title =
+    isPullRequest && changedOnlyFile == null
+      ? (process.env.PR_TITLE ?? '')
+      : '';
+  const routed = selectSpecs({
     specs,
-    isPullRequest,
+    // The changed-only run is always a pull request's.
+    isPullRequest: isPullRequest || changedOnlyFile != null,
     changedPaths,
     components,
     title,
   });
+  const selected =
+    changedOnlyFile != null ? changedOnly(routed, changedPaths) : routed;
   const [audited] = auditedComponents(title);
   const auditConfigFile = '.github/a11y-audit-axe.json';
   const plan = planFor(

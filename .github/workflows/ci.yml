@@ -3144,6 +3144,27 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
+      # A browser accessibility spec the change adds or modifies runs here by
+      # itself (spec:AST-030 FR12), so it never first runs on main's release
+      # check. No such file, no work.
+      - name: Find the changed browser accessibility specs
+        id: specs
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          list="$RUNNER_TEMP/changed-a11y-specs.txt"
+          : > "$list"
+          if [ -n "$FILES_PATH" ] && [ -f "$FILES_PATH" ]; then
+            grep -E '^(packages/[^/]+/src/.+\.a11y\.(chromium|browser)\.spec\.ts|internal/a11y-spec/src/.+\.chromium\.spec\.ts)$' "$FILES_PATH" > "$list" || true
+          fi
+          echo "path=$list" >> "$GITHUB_OUTPUT"
+          if [ -s "$list" ]; then
+            echo "has_specs=true" >> "$GITHUB_OUTPUT"
+            echo "Changed browser accessibility specs:"; cat "$list"
+          else
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Skip when no component changed or the change is wide
         if: steps.touched.outputs.has_components != 'true'
         env:
@@ -3157,13 +3178,13 @@ jobs:
           fi
 
       - name: Setup Node and pnpm
-        if: steps.touched.outputs.has_components == 'true'
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.touched.outputs.has_components == 'true'
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
@@ -3171,7 +3192,7 @@ jobs:
 
       - name: Install Playwright
         id: playwright
-        if: steps.touched.outputs.has_components == 'true'
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # The same changed-component filters an opted-in pull request uses.
@@ -3217,6 +3238,18 @@ jobs:
             test -s "rtl-reports/$PACKAGE.json"
           done
 
+      # Only the changed spec files, in Chromium, with their routing lines read
+      # from this merge commit; a changed release-only spec still waits for the
+      # release check. A failing spec turns this advisory job red.
+      - name: Run the changed browser accessibility specs
+        id: changed-specs
+        if: always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          SPECS_PATH: ${{ steps.specs.outputs.path }}
+        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH"
+
       # The visual result comes from pr-visual, the one visual owner: its
       # default touched check, or its full check under ci:run-visual.
       - name: Download pr-visual's verdict
@@ -3250,7 +3283,7 @@ jobs:
             --out touched-components.json
 
       - name: Upload touched-components results
-        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true' || steps.specs.outputs.has_specs == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: touched-components
@@ -3258,6 +3291,7 @@ jobs:
             touched-components.json
             a11y-report.json
             rtl-reports/
+            pr-a11y-evidence/
           if-no-files-found: ignore
           retention-days: 7
 

@@ -23,6 +23,7 @@ import {
   auditArgs,
   auditedComponents,
   auditPlan,
+  changedOnly,
   changedSinceMergeBase,
   kebab,
   planFor,
@@ -52,6 +53,51 @@ const pr = (specs, overrides = {}) =>
 
 const BINDING =
   'packages/core/src/Chat/__tests__/ChatSendButton.a11y.chromium.spec.ts';
+
+// spec:AST-030 FR12: the default touched-components check runs the browser
+// specs a pull request adds or modifies, and only those.
+describe('changedOnly (the default check runs changed specs)', () => {
+  const NEW_SPEC =
+    'packages/core/src/Radio/__tests__/RadioKeyboard.a11y.chromium.spec.ts';
+  const ALWAYS =
+    'packages/core/src/__tests__/DisabledFocus.a11y.chromium.spec.ts';
+  const RELEASE =
+    'packages/core/src/Table/__tests__/TableFull.a11y.chromium.spec.ts';
+  const specs = [
+    spec(NEW_SPEC),
+    spec(ALWAYS, ['// @pr-a11y always']),
+    spec(RELEASE, ['// @pr-a11y release-only']),
+    spec(BINDING),
+  ];
+  const run = changed =>
+    changedOnly(
+      selectSpecs({
+        specs,
+        isPullRequest: true,
+        changedPaths: changed,
+        components: [],
+        title: '',
+      }),
+      changed,
+    );
+
+  it('selects a spec the pull request adds, which no label-free run reached before', () => {
+    expect(run([NEW_SPEC])).toEqual([{file: NEW_SPEC, reason: 'spec changed'}]);
+  });
+
+  it('runs a changed always-spec too, but never an unchanged one', () => {
+    expect(run([NEW_SPEC]).map(({file}) => file)).not.toContain(ALWAYS);
+    expect(run([ALWAYS])).toEqual([{file: ALWAYS, reason: 'spec changed'}]);
+  });
+
+  it('leaves a changed release-only spec to the release check', () => {
+    expect(run([RELEASE])).toEqual([]);
+  });
+
+  it('widens to nothing else: a changed component folder selects no spec', () => {
+    expect(run(['packages/core/src/Chat/ChatSendButton.tsx'])).toEqual([]);
+  });
+});
 
 describe('parseRouting', () => {
   it('defaults to scoped with no tokens', () => {
@@ -531,9 +577,9 @@ describe('isKnowledgeRecord', () => {
   });
 
   it('treats a component record as a record and its fixtures as not', () => {
-    expect(isKnowledgeRecord('docs/specs/components/Chat/ChatLayout.spec.md')).toBe(
-      true,
-    );
+    expect(
+      isKnowledgeRecord('docs/specs/components/Chat/ChatLayout.spec.md'),
+    ).toBe(true);
     expect(
       isKnowledgeRecord('packages/core/src/Chat/.hidden/ChatLayout.spec.md'),
     ).toBe(false);
