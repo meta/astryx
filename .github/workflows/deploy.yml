@@ -14,20 +14,22 @@ on:
         type: string
         required: false
       recheck:
-        description: 'Release re-check, sent by the release re-check workflow: takes the validation group at once'
+        description: "Release re-check of main's tip, sent by the release re-check workflow: takes the validation group at once"
         type: boolean
         default: false
 
 permissions: {}
 
-# One validation at a time; a newer one waits and replaces any older waiting
-# one. Only a release re-check, which the release re-check workflow sends with
-# the workflow token, cancels the running validation: it is itself a full
+# One validation of main at a time; a newer one waits and replaces any older
+# waiting one. A dispatch that names `sha` validates an older commit in a group
+# of its own, so it never replaces or cancels main's validations. Only a release
+# re-check, which the release re-check workflow sends with the workflow token
+# and without `sha`, cancels the running validation: it is itself a full
 # validation of main's tip, so the cancelled run's commits stay covered
 # (spec:AST-030 FR22).
 concurrency:
-  group: 'main-validation'
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && github.triggering_actor == 'github-actions[bot]' }}
+  group: "${{ github.event_name == 'workflow_dispatch' && inputs.sha != '' && format('main-validation-sha-{0}', github.run_id) || 'main-validation' }}"
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && inputs.sha == '' && github.triggering_actor == 'github-actions[bot]' }}
 
 jobs:
   # The one commit every lane and leg of this run tests. A push validates the
@@ -63,6 +65,16 @@ jobs:
                 if (!['identical', 'ahead'].includes(comparison.status)) {
                   throw new Error(`${requested} is not in main's history.`);
                 }
+                // The typecheck lane measures package size with this script;
+                // a commit from before it cannot run that lane.
+                try {
+                  await github.rest.repos.getContent({
+                    ...context.repo, path: '.github/scripts/package-size.mjs', ref: requested,
+                  });
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                  throw new Error(`${requested} predates the package-size measurement this run's typecheck lane takes; validate a later commit.`);
+                }
                 sha = requested;
               }
             }
@@ -71,11 +83,14 @@ jobs:
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
   sync-exports:
+    needs: [main-commit]
     runs-on: ubuntu-slim
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
 
       - name: Check package.json exports are in sync
         run: node scripts/sync-exports.js --check
@@ -94,8 +109,8 @@ jobs:
   # their own lane and take the build with them.
   #
   # Both Vitest lanes split into legs that all run at once, with no
-  # max-parallel hold: main is validated about once an hour and by the release
-  # re-check, so a run may cost more runner-minutes to finish sooner
+  # max-parallel hold: a validation of main may cost more runner-minutes to
+  # finish sooner, so the release train can re-check a fix within minutes
   # (spec:AST-030 FR22, DEC-17). At four legs each, test-node's slowest leg took ~8 minutes
   # and test-ui's ~6. Six legs each bring every leg near the typecheck lane
   # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
