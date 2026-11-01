@@ -122,7 +122,7 @@ the device has wins, and a system family such as `-apple-system` or
 one with `Theme(…, icons: ["success": "checkmark.seal.fill"])`.
 
 `Sources/Astryx/Theme/Generated/` is written by the Swift theme generator
-(`../specs/swift/library/theme-generator.md`) from core's own resolver, light
+(`architecture:native-swift-theme-generator`, `../specs/swift/theme-generator.spec.md`) from core's own resolver, light
 and dark:
 
 - `Tokens.swift`: the typed token surface, from core's token names.
@@ -148,7 +148,7 @@ node packages/native/scripts/swift-ios-theme.mjs --theme ./src/acmeTheme.ts#acme
 ```
 
 The generator reads the CSS forms its spec lists
-(`specs/swift/library/theme-generator.md`, G7): hex and named colors, `rgb()`,
+(`specs/swift/theme-generator.spec.md`, G7): hex and named colors, `rgb()`,
 `hsl()`, `hwb()`, Lab, LCH, OKLab, OKLCH, `color()` in the listed spaces,
 `color-mix()`, and relative colors (wide-gamut colors kept as Display P3),
 lengths with `calc()`, and `[light, dark]` tuples. A value it can only

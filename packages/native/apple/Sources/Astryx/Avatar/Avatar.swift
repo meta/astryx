@@ -62,7 +62,7 @@ public struct Avatar<Status: View>: View {
   public var body: some View {
     if props.base.isHidden != true {
       control
-        // The Astryx tooltip (library/tooltip.spec.md), as core's Avatar uses
+        // The Astryx tooltip (specs/swift/tooltip.spec.md), as core's Avatar uses
         // core's tooltip: a static avatar is a tab stop and opens on a tap;
         // a link or button keeps its focus and its tap.
         // Touch is core's `auto`: a static avatar opens on a tap; a control's

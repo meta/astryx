@@ -148,11 +148,9 @@ validating, and reviewing individual native components while
 
 - `@astryxdesign/native` gains `packages/native/specs/`, holding one directory
   per language, starting with `swift/`. The directory is not published.
-- The Swift specs under `packages/native/specs/swift/` and the package template
-  `packages/native/specs/TEMPLATE.md` predate FR1's record form. They convert
-  to knowledge records in one change, which removes the template. Until then,
-  the package READMEs still name the template, and a new component spec follows
-  FR1 instead.
+- The Swift rules under `packages/native/specs/swift/` are architecture
+  records (`architecture:native-swift-<slug>`), and the package keeps no
+  template of its own.
 - No architecture, family, contributing, or consumer-doc record changes.
 - No native component spec exists yet.
 - Component folders live inside a language's implementation package. For
