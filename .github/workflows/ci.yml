@@ -121,6 +121,7 @@ jobs:
       full: ${{ steps.room.outputs.full }}
       started: ${{ steps.room.outputs.started }}
       looks: ${{ steps.room.outputs.looks }}
+      next: ${{ steps.room.outputs.next }}
     steps:
       - name: Check out the admission action
         uses: actions/checkout@v7
@@ -173,6 +174,7 @@ jobs:
           fits: ${{ needs.room.outputs.fits }}
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
+          next: ${{ needs.room.outputs.next }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
