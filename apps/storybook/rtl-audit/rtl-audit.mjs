@@ -73,6 +73,7 @@ import {
   d1GlyphKey,
   d1PairKey,
   glyphRendersOnBlockAxis,
+  gradeDirectionalPair,
   gradePositionedPair,
   isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
@@ -940,7 +941,7 @@ async function checkD2(page, port, t, card) {
   const pR = await boxOf(page, prev), nR = await boxOf(page, next);
   if (!pL || !nL || !pR || !nR) { card.dims.D2 = 'N-A'; card.notes.push('D2: prev/next not found'); return; }
   const ltrOk = pL.cx < nL.cx, rtlOk = pR.cx > nR.cx;
-  card.dims.D2 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D2 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D2 prev/next cx: LTR ${pL.cx.toFixed(0)}<${nL.cx.toFixed(0)}=${ltrOk}; RTL ${pR.cx.toFixed(0)}>${nR.cx.toFixed(0)}=${rtlOk}`);
 }
 async function checkD3Scroll(page, port, t, card) {
@@ -957,7 +958,7 @@ async function checkD3Scroll(page, port, t, card) {
   const dL = await run(false), dR = await run(true);
   if (dL == null || dR == null) { card.dims.D3 = 'N-A'; card.notes.push('D3: scroller/next not found'); return; }
   const ltrOk = dL > 1, rtlOk = dR < -1;
-  card.dims.D3 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D3 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D3 scroll delta on next: LTR ${dL.toFixed(0)} (>0=${ltrOk}); RTL ${dR.toFixed(0)} (<0=${rtlOk})`);
 }
 async function checkD4(page, port, t, card) {
