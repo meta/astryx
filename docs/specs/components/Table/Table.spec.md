@@ -169,6 +169,11 @@ documented in `Table.doc.mjs` and the member and module docs.
   columns and leave the span stale. The current full-span test covers only the case
   where expansion captures the final column set. This contract records both gaps
   and does not correct them.
+- While rows glide, WebKit can draw a row's divider (FR14) one pixel higher or
+  lower under a pinned cell than under the scrolling cells: at some fractional
+  positions of the gliding row, the two parts round to different pixels. The step
+  lasts only while the row glides; at rest the divider is level. This contract
+  records the gap and does not correct it.
 
 ### Allowed variation
 
