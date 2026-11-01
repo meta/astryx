@@ -246,6 +246,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Cmd+Option+Up and Cmd+Option+Down (Ctrl+Alt+Up and Ctrl+Alt+Down on other platforms) move the block holding the caret past the block above or below it. A list item moves with the items nested under it and stays within its list; any other block moves among the top-level blocks, so a caret in a table moves the whole table, and a selected horizontal rule moves too. Each move is one undo step, the caret stays in the moved block, and a moved block keeps the Markdown it was written in. A read-only or disabled editor moves nothing.',
+      },
+      {
+        guidance: true,
+        description:
           'To produce a defaultValue from Markdown without mounting an editor (e.g. on the server), use markdownToEditorStateJSON(markdown). Convert the other way with editorStateJSONToMarkdown(json). Both run headless via @lexical/headless and accept the same transformers/nodes options as the editor. The round trip keeps the Markdown as written: exporting unchanged content returns the input exactly, including indentation, escapes, character references, fence metadata, and constructs the editor shows as plain text, and an edit regenerates only the blocks it changed. On the server or in Node, import them from @astryxdesign/richtext/markdown, which loads no React or client code.',
       },
       {
