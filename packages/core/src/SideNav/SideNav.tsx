@@ -572,11 +572,11 @@ export function SideNav({
   // nearest row the rail keeps. Rows and the toggle register through their
   // callback refs. Rows are matched across the commit by their place among
   // the rows the rail keeps, not by element: a resizable SideNav remounts its
-  // nav when it collapses. Focus on a control outside the rows (the header,
-  // the footer) that a resizable collapse remounts goes back to the same
-  // control. Focus on the resize handle, which the collapse removes, goes to
-  // the toggle, or, with none, to the first kept row. Focus moves only if the
-  // collapse lost it.
+  // nav when it collapses. Focus on a header or footer control that a
+  // resizable collapse remounts goes back to the same control, found by name.
+  // From a header or footer control the collapse removes, or the resize
+  // handle, focus goes to the toggle, or, with none, to the first kept row.
+  // Focus moves only if the collapse lost it.
   const rowsRef = useRef(new Map<HTMLElement, boolean>());
   const togglesRef = useRef(new Set<HTMLElement>());
   const focusTargets = useMemo<SideNavFocusTargets>(
@@ -603,8 +603,8 @@ export function SideNav({
     isRowKept: boolean;
     /** Kept rows before the row that held focus. */
     keptBefore: number;
-    /** The control outside the rows that held focus, by name and place. */
-    outside: {name: string; index: number} | null;
+    /** The name of the control outside the rows that held focus. */
+    outside: {name: string} | null;
     /** Whether focus was on the collapse toggle. */
     wasOnToggle: boolean;
   } | null>(null);
@@ -632,7 +632,7 @@ export function SideNav({
     if (index < 0) {
       const controls = controlsOutsideRows(nav, rows);
       const at = controls.findIndex(control => control.contains(focus.element));
-      outside = at < 0 ? null : {name: controlName(controls[at]), index: at};
+      outside = at < 0 ? null : {name: controlName(controls[at])};
     }
     pendingFocusRef.current = {
       focus,
@@ -665,10 +665,9 @@ export function SideNav({
       sameOutside = toggle;
     } else if (pending.outside != null) {
       const controls = controlsOutsideRows(nav, kept);
-      sameOutside =
-        controls.find(
-          control => controlName(control) === pending.outside?.name,
-        ) ?? controls[pending.outside.index];
+      sameOutside = controls.find(
+        control => controlName(control) === pending.outside?.name,
+      );
     }
     const target = pending.isRowKept
       ? controlOf(kept[pending.keptBefore])

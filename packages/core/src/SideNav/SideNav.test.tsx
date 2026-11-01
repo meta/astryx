@@ -4470,6 +4470,35 @@ describe('SideNav collapse focus (AR3)', () => {
     },
   );
 
+  it.each([
+    {
+      toggle: true,
+      lands: () => screen.getByRole('button', {name: 'Expand sidebar'}),
+    },
+    {toggle: false, lands: () => screen.getByRole('link', {name: 'Dashboard'})},
+  ])(
+    'moves focus from an icon-less heading link the collapse removes, never to the control that takes its place, toggle $toggle',
+    ({toggle, lands}) => {
+      const rail = (isCollapsed: boolean) => (
+        <SideNav
+          collapsible={{
+            isCollapsed,
+            onCollapsedChange: () => {},
+            hasButton: toggle,
+          }}
+          header={<SideNavHeading heading="My App" headingHref="/" />}
+          topContent={<button type="button">New project</button>}>
+          <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        </SideNav>
+      );
+      const {rerender} = render(rail(false));
+      screen.getByRole('link', {name: 'My App'}).focus();
+      rerender(rail(true));
+      expect(screen.queryByRole('link', {name: 'My App'})).toBeNull();
+      expect(lands()).toHaveFocus();
+    },
+  );
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});
