@@ -4381,6 +4381,48 @@ describe('SideNav collapse focus (AR3)', () => {
     expect(screen.getByRole('link', {name: 'Project'})).toHaveFocus();
   });
 
+  it('moves focus to the nearest kept row in a resizable SideNav with no toggle, whose nav remounts as it collapses', () => {
+    const resizable = (isCollapsed: boolean) => (
+      <SideNav
+        resizable
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: () => {},
+          hasButton: false,
+        }}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem label="Reports" href="/reports" />
+        <SideNavItem label="Team" icon={StubIcon} href="/team" />
+      </SideNav>
+    );
+    const {rerender} = render(resizable(false));
+    screen.getByRole('link', {name: 'Reports'}).focus();
+    rerender(resizable(true));
+    expect(screen.getByRole('link', {name: 'Dashboard'})).toHaveFocus();
+  });
+
+  it('keeps focus on a kept row whose link the collapsed rail replaces, even with a toggle', () => {
+    const withAction = (isCollapsed: boolean) => (
+      <SideNav collapsible={{isCollapsed, onCollapsedChange: () => {}}}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem
+          label="Project"
+          icon={StubIcon}
+          href="/project"
+          actions={
+            <button type="button" aria-label="Project actions">
+              ⋯
+            </button>
+          }
+        />
+      </SideNav>
+    );
+    const {rerender} = render(withAction(false));
+    screen.getByRole('link', {name: 'Project'}).focus();
+    rerender(withAction(true));
+    expect(screen.getByRole('link', {name: 'Project'})).toHaveFocus();
+  });
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});

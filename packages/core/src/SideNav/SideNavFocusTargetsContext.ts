@@ -15,8 +15,11 @@
 import {createContext} from 'react';
 
 export interface SideNavFocusTargets {
-  /** Registers a row's root element; returns its unregister. */
-  registerRow: (element: HTMLElement) => () => void;
+  /**
+   * Registers a row's root element, and whether the collapsed rail renders
+   * the row (it has an icon and is not nested); returns its unregister.
+   */
+  registerRow: (element: HTMLElement, isKeptInRail: boolean) => () => void;
   /** Registers a collapse toggle rendered inside the SideNav. */
   registerToggle: (element: HTMLElement) => () => void;
 }

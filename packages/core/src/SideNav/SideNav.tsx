@@ -561,20 +561,22 @@ export function SideNav({
     [],
   );
 
-  // Focus on something the collapsed rail does not render (an item without an
-  // icon, a nested row, a kept row's expand toggle or row actions) would fall
-  // to the page when the rail collapses. It moves instead to the rail's
-  // collapse toggle, or, with none, to the nearest control still in the rail
-  // (`component:SideNav` AR3). Rows and the
-  // toggle register through their callback refs; the focused row is noted
-  // in the commit before the DOM changes, and focus moves only if it fell.
+  // Focus on something the collapsed rail does not render would fall to the
+  // page when the rail collapses (`component:SideNav` AR3). On a row the rail
+  // keeps (its link replaced, its expand toggle or row actions gone), focus
+  // stays on that row's control; from a row the rail drops (no icon, or
+  // nested), it moves to the rail's collapse toggle, or, with none, to the
+  // nearest row the rail keeps. Rows and the toggle register through their
+  // callback refs. Rows are matched across the commit by their place among
+  // the rows the rail keeps, not by element: a resizable SideNav remounts its
+  // nav when it collapses. Focus moves only if the collapse lost it.
   useInteractionModalityTracking();
-  const rowsRef = useRef(new Set<HTMLElement>());
+  const rowsRef = useRef(new Map<HTMLElement, boolean>());
   const togglesRef = useRef(new Set<HTMLElement>());
   const focusTargets = useMemo<SideNavFocusTargets>(
     () => ({
-      registerRow: element => {
-        rowsRef.current.add(element);
+      registerRow: (element, isKeptInRail) => {
+        rowsRef.current.set(element, isKeptInRail);
         return () => {
           rowsRef.current.delete(element);
         };
@@ -590,8 +592,10 @@ export function SideNav({
   );
   const pendingFocusRef = useRef<{
     focus: FocusWithin;
-    rows: HTMLElement[];
-    index: number;
+    /** Whether the rail keeps the row that held focus. */
+    isRowKept: boolean;
+    /** Kept rows before the row that held focus. */
+    keptBefore: number;
   } | null>(null);
   const noteRailFocus = useCallback((wasCollapsed: boolean) => {
     pendingFocusRef.current = null;
@@ -600,13 +604,7 @@ export function SideNav({
     if (focus == null || nav == null) {
       return;
     }
-    const rows = [...rowsRef.current]
-      .filter(row => nav.contains(row))
-      .sort((a, b) =>
-        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
-          ? -1
-          : 1,
-      );
+    const rows = railRows(nav, rowsRef.current);
     // The innermost row holding focus, the last in document order: a nested
     // row's parent holds it too.
     let index = -1;
@@ -615,7 +613,13 @@ export function SideNav({
         index = at;
       }
     });
-    pendingFocusRef.current = {focus, rows, index};
+    pendingFocusRef.current = {
+      focus,
+      isRowKept: index >= 0 && rowsRef.current.get(rows[index]) === true,
+      keptBefore: rows
+        .slice(0, Math.max(index, 0))
+        .filter(row => rowsRef.current.get(row) === true).length,
+    };
   }, []);
   useLayoutEffect(() => {
     const pending = pendingFocusRef.current;
@@ -624,13 +628,19 @@ export function SideNav({
     if (pending == null || !collapsed || nav == null) {
       return;
     }
+    // Collapsed, every row the nav renders is one the rail keeps, in order.
+    const kept = railRows(nav, rowsRef.current);
+    const controlOf = (row: HTMLElement | undefined) =>
+      row == null ? undefined : getFocusableElements(row)[0];
     const toggle = [...togglesRef.current].find(element =>
       nav.contains(element),
     );
-    moveFocusLeftBehind(
-      pending.focus,
-      toggle ?? nearestRenderedRow(pending.rows, pending.index),
-    );
+    const target = pending.isRowKept
+      ? controlOf(kept[pending.keptBefore])
+      : (toggle ??
+        controlOf(kept[pending.keptBefore - 1]) ??
+        controlOf(kept[pending.keptBefore]));
+    moveFocusLeftBehind(pending.focus, target);
   }, [collapsed]);
   const beforeRailChange = useCallback(
     (wasCollapsed: boolean) => {
@@ -883,32 +893,18 @@ export function SideNav({
 }
 
 /**
- * The first focusable control the collapsed rail still renders, nearest the
- * row that held focus: that row's own (a kept row whose expand toggle or row
- * action went), then the rows before it, nearest first, then the rows after.
+ * The registered rows inside `nav`, in document order, leaving out rows in a
+ * collapsed item's flyout, which is a layer of its own.
  */
-function nearestRenderedRow(
-  rows: HTMLElement[],
-  index: number,
-): HTMLElement | null {
-  const order =
-    index < 0
-      ? rows
-      : [
-          rows[index],
-          ...rows.slice(0, index).reverse(),
-          ...rows.slice(index + 1),
-        ];
-  for (const row of order) {
-    if (!row.isConnected) {
-      continue;
-    }
-    const control = getFocusableElements(row)[0];
-    if (control != null) {
-      return control;
-    }
-  }
-  return null;
+function railRows(
+  nav: HTMLElement,
+  rows: ReadonlyMap<HTMLElement, boolean>,
+): HTMLElement[] {
+  return [...rows.keys()]
+    .filter(row => nav.contains(row) && row.closest('[popover]') == null)
+    .sort((a, b) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+    );
 }
 
 SideNav.displayName = 'SideNav';
