@@ -18,6 +18,69 @@
     }
   },
   {
+    "component": "TopNav",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading",
+      "next": ".astryx-top-nav-item"
+    }
+  },
+  {
+    "component": "TopNavHeading",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading > :first-child",
+      "next": ".astryx-top-nav-heading > :last-child",
+      "subject": ".astryx-top-nav-heading"
+    }
+  },
+  {
+    "component": "TopNavItem",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-item:has-text(\"Dashboard\") > svg",
+      "next": ".astryx-top-nav-item:has-text(\"Dashboard\")"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--default",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-menu"},
+    "selectors": {
+      "overlay": ".astryx-popover",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "TopNavMegaMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {
+      "overlay": ".astryx-popover",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "TopNavMegaMenuItem",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D2"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {
+      "prev": ".astryx-top-nav-mega-menu-item > :first-child",
+      "next": ".astryx-top-nav-mega-menu-item > :last-child"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": []
+  },
+  {
     "component": "ButtonGroup",
     "storyId": "core-buttongroup--horizontal",
     "dims": ["D2"],
@@ -85,6 +148,49 @@
       "prev": ".astryx-checkbox-input",
       "next": "[data-testid=\"checkbox-end-content\"]"
     }
+  },
+  {
+    "component": "ContextMenu",
+    "storyId": "core-contextmenu--bottom-sheet-submenu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"Back\"]",
+      "next": "h3:text-is(\"Share\")"
+    }
+  },
+  {
+    "component": "TableHeaderCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child"
+    }
+  },
+  {
+    "component": "TableCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child"
+    }
+  },
+  {
+    "component": "TableSelectionToolbar",
+    "storyId": "core-tableselection--bulk-actions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
+      "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
+    }
+  },
+  {
+    "component": "Table",
+    "storyId": "core-table--in-card",
+    "dims": []
   },
   {
     "component": "GridSpan",

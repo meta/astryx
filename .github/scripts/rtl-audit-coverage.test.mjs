@@ -20,11 +20,14 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
-  glyphRendersOnBlockAxis,
+  assertSelectorParses,
+  bindDetectorValue,
   d1GlyphKey,
   d1PairKey,
+  glyphRendersOnBlockAxis,
   isUnchangedBlockAxisPair,
   finishFiniteAnimations,
+  gradePositionedPair,
   ignoredStoryIdentities,
   orderD1StoryCandidates,
   resolveD1Applicability,
@@ -1118,6 +1121,108 @@ describe('finishFiniteAnimations', () => {
 
   it('does nothing in a document without the Web Animations API', () => {
     expect(finishFiniteAnimations({})).toBe(0);
+  });
+});
+
+describe('gradePositionedPair', () => {
+  const ltr = (physical = null) => ({parentW: 1000, relCenterX: 200, physical});
+  const at = relCenterX => ({parentW: 1000, relCenterX});
+
+  it('requires an unmarked element to mirror about its parent center', () => {
+    expect(gradePositionedPair(ltr(), at(800), 3)).toMatchObject({
+      expectation: 'mirror',
+      pass: true,
+    });
+    expect(gradePositionedPair(ltr(), at(200), 3).pass).toBe(false);
+  });
+
+  it('requires a chart overlay to keep its physical position (DR5)', () => {
+    expect(gradePositionedPair(ltr('chart'), at(200), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: true,
+    });
+  });
+
+  it('fails a mirrored chart tooltip', () => {
+    expect(gradePositionedPair(ltr('chart'), at(800), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: false,
+    });
+  });
+
+  it('fails closed on an unknown physical kind', () => {
+    expect(gradePositionedPair(ltr('map'), at(200), 3)).toMatchObject({
+      expectation: 'invalid-marker',
+      pass: false,
+    });
+  });
+});
+
+describe('rtlAudit.D5 physical-region metadata', () => {
+  const within = '[aria-label="Quarterly performance chart"]';
+
+  it('admits a chart plot declaration', () => {
+    expect(
+      validateStoryRtlAuditParameters({D5: {physical: 'chart', within}}, 's'),
+    ).toEqual({D5: {physical: 'chart', within}});
+  });
+
+  it('rejects an unknown physical kind', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'map', within}}, 's'),
+    ).toThrow(/D5.physical/);
+  });
+
+  it('rejects a declaration without a plot selector', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'chart'}}, 's'),
+    ).toThrow(/D5.within/);
+    expect(() =>
+      validateStoryRtlAuditParameters(
+        {D5: {physical: 'chart', within: '  '}},
+        's',
+      ),
+    ).toThrow(/D5.within/);
+  });
+});
+
+describe('assertSelectorParses', () => {
+  const doc = {
+    querySelector(selector) {
+      if (selector.includes('[[')) {
+        throw new SyntaxError('not a valid selector');
+      }
+      return null;
+    },
+  };
+
+  it('accepts a selector the page can parse, matched or not', () => {
+    expect(() =>
+      assertSelectorParses(doc, '[aria-label="Plot"]'),
+    ).not.toThrow();
+  });
+
+  it('fails closed on a selector the page cannot parse', () => {
+    expect(() => assertSelectorParses(doc, '[[aria-label')).toThrow(
+      /rtlAudit.D5.within/,
+    );
+  });
+});
+
+describe('bindDetectorValue', () => {
+  it('binds a selector containing $ patterns verbatim', () => {
+    const physical = {physical: 'chart', within: "[data-plot='q$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', physical)).toBe(
+      `run(${JSON.stringify(physical)})`,
+    );
+    const tricky = {physical: 'chart', within: "[data-plot='$&$1$$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', tricky)).toBe(
+      `run(${JSON.stringify(tricky)})`,
+    );
+  });
+
+  it('binds null when no region is declared', () => {
+    expect(bindDetectorValue('run(__P__)', '__P__', null)).toBe('run(null)');
   });
 });
 

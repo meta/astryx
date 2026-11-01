@@ -1050,11 +1050,12 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: ./.github/actions/setup
 
-      # Main keeps each commit's size records for 14 days (deploy.yml): every
-      # public component's sizes and every published package's. The merge
-      # base is compared from them; it is built here only when Main kept no
-      # component record for it. The lookup runs before the Storybook build so
-      # that build can run beside it.
+      # Main keeps each commit's size records and API surface for 14 days
+      # (deploy.yml): every public component's sizes, every published
+      # package's, and every published package's API report. The merge base is
+      # compared from them; it is built here only when Main kept no component
+      # record for it. The lookup runs before the Storybook build so that build
+      # can run beside it.
       - name: Find the merge base
         id: merge-base
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
@@ -1076,6 +1077,7 @@ jobs:
             for (const [output, prefix, missing] of [
               ['component_run_id', 'component-size-main', 'the merge base is built here instead'],
               ['package_run_id', 'package-size-main', 'package sizes are shown without a budget'],
+              ['api_run_id', 'api-surface-main', 'the API changes compare with its committed reports unless the merge base is built for its sizes'],
             ]) {
               const name = `${prefix}-${process.env.BASE_SHA}`;
               const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
@@ -1094,21 +1096,38 @@ jobs:
           github-token: ${{ github.token }}
           path: .component-size-base
 
+      - name: Download main's API surface for the merge base
+        id: api-download
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.size-records.outputs.api_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: api-surface-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.api_run_id }}
+          github-token: ${{ github.token }}
+          path: .api-surface-base
+
       # No component record of this merge base was read (Main kept none, or
-      # its download failed): build the base beside
-      # the Storybook build and record its sizes with this head's analyzer, so
-      # every changed component still has a before size (AST-080 FR8). It runs
-      # in the background; the wait before the analysis collects it.
+      # its download failed): build the base beside the Storybook build and
+      # record its sizes with this head's analyzer, so every changed component
+      # still has a before size (AST-080 FR8). When Main kept no API surface
+      # either, it also builds the published packages the pull request
+      # changes, and the API changes step reports this base (INV24). A missing
+      # API surface alone starts no build: the API changes then compare with
+      # the merge base's committed reports, marked as such. It runs in the
+      # background; the wait before the analysis collects it.
       - name: Start building the merge base without a record
         id: base-build
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.component-download.outcome != 'success'
         env:
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          NEED_API: ${{ steps.api-download.outcome != 'success' }}
         run: |
           git worktree add --detach .size-base "$BASE_SHA"
           mkdir -p .component-size-base
-          # The inner script reads BASE_SHA and HEAD_SHA from this step's env.
+          # The inner script reads BASE_SHA, HEAD_SHA and NEED_API from this
+          # step's env.
           # shellcheck disable=SC2016
           nohup bash -c '
             set -e
@@ -1116,13 +1135,25 @@ jobs:
             pnpm install --frozen-lockfile
             # Core and its build tooling always build: the other component
             # packages depend on them. Another package builds only when the
-            # pull request changes its source.
+            # pull request changes its source. A published package the base
+            # leaves unbuilt is reported from the head build only when none of
+            # its report inputs changed (the API report CLI's SHARED_INPUTS);
+            # otherwise from its committed report.
             pnpm -F @astryxdesign/build build
             pnpm -F @astryxdesign/core build
             for pkg in lab charts richtext vega; do
               git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src" || pnpm -F "@astryxdesign/$pkg" build
             done
             node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
+            if [ "$NEED_API" = true ]; then
+              {
+                for dir in packages/themes/*/; do
+                  git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "$dir" || pnpm -F "./$dir" build
+                done
+                # The CLI publishes declarations generated from its JSDoc.
+                git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
+              } || echo "Building the merge base's published packages failed; those packages compare with its committed reports."
+            fi
             touch ../base-build.done
           ' > base-build.log 2>&1 || touch base-build.failed &
           echo "started=true" >> "$GITHUB_OUTPUT"
@@ -1308,8 +1339,10 @@ jobs:
           EOF
 
       # Advisory API changes (architecture:public-component-api INV24): each
-      # published package's report from this build, compared with the reports
-      # committed at the merge base (read with git, no API calls). It reads the
+      # published package's report from this build, compared with the merge
+      # base's surface (Main's record of it, else the base built above, else
+      # the reports committed there, read with git). A committed report that
+      # differs from this build is one stale line, not rows. It reads the
       # dists built above and never fails the job; api-changes.json goes into
       # the pr-analysis artifact. With no merge base there is nothing to compare.
       # A head cut before cli.mjs existed cannot run the next step;
@@ -1327,7 +1360,22 @@ jobs:
         run: |
           BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
           [ -n "$BASE_SHA" ] || exit 0
-          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA"
+          # Main's surface of the merge base, else the base built above for its
+          # sizes, reported here. A head that predates the built surface
+          # compares committed reports.
+          SURFACE=()
+          if grep -q -- "'--base-surface'" scripts/api-report/cli.mjs; then
+            if [ -f .api-surface-base/surface.json ]; then
+              SURFACE=(--base-surface .api-surface-base --base-record main)
+            elif [ -f base-build.done ] && [ -d .size-base ]; then
+              node scripts/api-report/cli.mjs --surface .api-surface-build --root .size-base \
+                || echo "::notice::The merge base's API surface was not written; the API changes compare with its committed reports."
+              if [ -f .api-surface-build/surface.json ]; then
+                SURFACE=(--base-surface .api-surface-build --base-record build)
+              fi
+            fi
+          fi
+          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA" "${SURFACE[@]}"
 
       - name: Upload analysis artifact
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')

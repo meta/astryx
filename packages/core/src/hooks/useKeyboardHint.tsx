@@ -259,8 +259,14 @@ export function useKeyboardHint(
       if (!target.matches(':focus-visible')) {
         return;
       }
-      // Only show when focus enters from outside the container
       const container = e.currentTarget as HTMLElement;
+      // React bubbles focus from portaled children (a sheet or popover opened
+      // from the row) to the container; that focus is not in the row, where
+      // the arrow keys work, so it neither shows nor spends the hint.
+      if (!container.contains(target)) {
+        return;
+      }
+      // Only show when focus enters from outside the container
       if (
         e.relatedTarget instanceof Node &&
         container.contains(e.relatedTarget)
