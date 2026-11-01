@@ -38,6 +38,7 @@ import {
   HAPTIC_VIBRATION_PATTERNS,
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
+import {isDisabledControl} from '../utils/pressDisabled';
 
 /** Marks the hidden switch, so click handlers can recognize and ignore it. */
 export const HAPTIC_SWITCH_ATTRIBUTE = 'data-astryx-haptic-switch';
@@ -78,14 +79,6 @@ const VISUALLY_HIDDEN =
   'opacity:0;pointer-events:none;';
 
 let nextLabelId = 0;
-
-/** A native disabled control, or one marked `aria-disabled`. */
-function isDisabledControl(control: HTMLElement): boolean {
-  return (
-    control.matches(':disabled') ||
-    control.getAttribute('aria-disabled') === 'true'
-  );
-}
 
 /** Whether `input` is a switch checkbox, which plays the tap haptic itself. */
 function isSwitch(input: HTMLInputElement): boolean {

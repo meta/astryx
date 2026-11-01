@@ -16,18 +16,31 @@
  *   retained dialog carrying `inert` and `aria-hidden` on every step it is
  *   open; Escape and
  *   the backdrop dismissing by purpose with focus returned to the opener;
- *   and one steady scrim through a handoff.
+ *   and one steady scrim through a handoff. The handoff cases hold it phase
+ *   by phase with the interaction harness (sheet panel transitions stretched
+ *   and held, the page's timers frozen), so neither depends on how fast the
+ *   machine runs.
  * @position Cross-browser proof; jsdom presents no dialog and contains no
  *   focus, so BottomSheetSwitcher.test.tsx can only assert the calls. WebKit
  *   here is desktop WebKit under Playwright, not iOS Safari.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {
+  freezeTimers,
+  holdAnimations,
+  installTimerGate,
+  releaseAnimations,
+  seekAnimations,
+  thawTimers,
+  waitForRest,
+  watchAnimations,
+} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -231,8 +244,6 @@ async function handoffStep(
   retainedName: string,
 ): Promise<{
   openCount: number;
-  /** Page-clock ms since the second dialog opened; -1 before that. */
-  sinceBothOpen: number;
   where: string;
   moved: boolean;
   insideInert: boolean;
@@ -240,11 +251,6 @@ async function handoffStep(
 }> {
   return page.evaluate(name => {
     const openDialogs = Array.from(document.querySelectorAll('dialog[open]'));
-    const clock = window as {__bothOpenAt?: number};
-    const sinceBothOpen =
-      clock.__bothOpenAt == null
-        ? -1
-        : Math.round(performance.now() - clock.__bothOpenAt);
     const active = document.activeElement;
     const tracker = window as {__lastActive?: Element | null};
     const moved = active !== tracker.__lastActive;
@@ -262,7 +268,6 @@ async function handoffStep(
     );
     return {
       openCount: openDialogs.length,
-      sinceBothOpen,
       where,
       moved,
       insideInert,
@@ -278,106 +283,193 @@ async function handoffStep(
   }, retainedName);
 }
 
-test('focus is inside the entering sheet as soon as both dialogs are open, and Tab reaches stops inside it for as long as the retained dialog is open, which stays inert and hidden through its fade, and inside the flow after the handoff', async ({
-  page,
-}) => {
-  await mountScrollable(page);
-  await openFlow(page);
-  // Stamp the page clock the moment the second dialog opens, so the late
-  // window below is measured from the handoff itself, not from when the
-  // test runner got around to reading it on a slow run.
-  await page.evaluate(() => {
-    const clock = window as {__bothOpenAt?: number};
-    clock.__bothOpenAt = undefined;
-    const observer = new MutationObserver(() => {
-      if (
-        clock.__bothOpenAt == null &&
-        document.querySelectorAll('dialog[open]').length >= 2
-      ) {
-        clock.__bothOpenAt = performance.now();
-        observer.disconnect();
-      }
-    });
-    observer.observe(document.body, {
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['open'],
-    });
+/** How long a held phase's panel transitions are stretched to run, ms. */
+const HELD_RUN_MS = 1_000_000;
+
+/** The sheet the flow's Continue presents over the opener's. */
+const ENTERING = 'Notification frequency';
+
+/**
+ * Prepares the switcher's handoff to be held phase by phase, so however busy
+ * the machine, nothing moves it on until the test ends a phase. Once the open
+ * sheet is at rest, panel transitions are stretched to `HELD_RUN_MS` and the
+ * page's timers are frozen (the panels' backstop for a `transitionend` that
+ * never comes among them). On a busy runner a 300ms transition can run out
+ * before a hold sent from the test reaches it, a round trip later; a
+ * stretched one is still near its start when held, and the tests read it by
+ * progress, so its length doesn't change what they read. From here on, every
+ * `::backdrop` transition is listed in `window.__backdropRuns`.
+ */
+async function prepareHandoffHold(page: Page) {
+  await waitForRest(page.locator('dialog[open]'));
+  await page.addStyleTag({
+    content: `.astryx-bottom-sheet { transition-duration: ${HELD_RUN_MS}ms !important; }`,
   });
-  await page.getByRole('button', {name: 'Continue', exact: true}).click();
-  // Both dialogs are open for the handoff's ~650ms: the retained one holds
-  // still, then fades from ~345ms, then closes. Step with Tab until it has
-  // closed, reading open count, focus, and the retained dialog's attributes
-  // in one evaluate per step: focus must land in the entering sheet's dialog
-  // ("Notification frequency"), never in the retained one ("Set up
-  // notifications") or the page, and the retained dialog must carry `inert`
-  // and `aria-hidden` on every step it is still open, the fade included.
+  await page.evaluate(() => {
+    const runs: string[] = [];
+    (window as unknown as {__backdropRuns: string[]}).__backdropRuns = runs;
+    document.addEventListener(
+      'transitionrun',
+      event => {
+        // WebKit runs a `::backdrop` transition on the dialog itself, with an
+        // empty `pseudoElement`; these dialogs run no opacity transition of
+        // their own.
+        if (
+          event.pseudoElement === '::backdrop' ||
+          (event.target instanceof HTMLDialogElement &&
+            event.propertyName === 'opacity')
+        ) {
+          const label = (event.target as Element).getAttribute('aria-label');
+          runs.push(`${label}: ${event.propertyName}`);
+        }
+      },
+      true,
+    );
+  });
+  await installTimerGate(page);
+  await freezeTimers(page);
+}
+
+/** The sheet panel inside the dialog labelled `label`. */
+function sheetPanel(page: Page, label: string): Locator {
+  return page.locator(`dialog[aria-label="${label}"] .astryx-bottom-sheet`);
+}
+
+/**
+ * Runs `action`, which starts the handoff's next phase, waits until a
+ * `property` transition runs on each of `movers` (the sheet panels that move
+ * in that phase), and holds every running animation. Both sheet dialogs are
+ * open through every phase.
+ */
+async function holdPhase(
+  page: Page,
+  movers: Locator[],
+  property: 'transform' | 'opacity',
+  action: () => Promise<void>,
+) {
+  const watches = [];
+  for (const mover of movers) {
+    watches.push(await watchAnimations(mover));
+  }
+  await action();
+  for (const watch of watches) {
+    const started = await watch.started({timeout: 10_000});
+    expect(started.map(animation => animation.name)).toContain(property);
+  }
+  await holdAnimations(page);
   await expect(page.locator('dialog[open]')).toHaveCount(2);
-  // The entering sheet takes focus with its presentation, before any Tab:
-  // the moment both dialogs are open, focus is inside "Notification
-  // frequency" and outside every inert subtree. An entering sheet made
-  // inert while it enters would leave focus on <body> for its first ~300ms.
-  const atOpen = await handoffStep(page, OPENER);
-  expect(atOpen.openCount).toBe(2);
-  expect(atOpen.where, 'focus as soon as both dialogs are open').toBe(
-    'Notification frequency',
+}
+
+/**
+ * Holds the handoff's slide: the entering sheet slides in over the retained
+ * one, which moves to line up with it.
+ */
+async function holdSlide(page: Page) {
+  await holdPhase(
+    page,
+    [sheetPanel(page, ENTERING), sheetPanel(page, OPENER)],
+    'transform',
+    async () => startHandoff(page),
   );
-  expect(atOpen.insideInert, 'focus inside an inert subtree at open').toBe(
-    false,
+}
+
+/**
+ * Ends the held slide (its `transitionend` moves the flow on) and holds the
+ * retained sheet's fade.
+ */
+async function holdFade(page: Page) {
+  await holdPhase(page, [sheetPanel(page, OPENER)], 'opacity', async () =>
+    releaseAnimations(page, {finish: true}),
   );
-  expect(atOpen.sinceBothOpen).toBeGreaterThanOrEqual(0);
-  let midHandoffPresses = 0;
-  let lateHandoffPresses = 0;
-  let midHandoffStopsInside = 0;
-  let lateHandoffStopsInside = 0;
-  for (let index = 0; index < 40; index += 1) {
+}
+
+/**
+ * Starts the handoff: clicks the open sheet's Continue with `click()`, which
+ * calls its handler at once. A pointer press would first run its own frames
+ * and timers, which the frozen gate holds, and the handoff would not start.
+ */
+async function startHandoff(page: Page) {
+  await page.evaluate(() => {
+    Array.from(
+      document.querySelectorAll<HTMLButtonElement>(
+        'dialog[open]:not([inert]) button',
+      ),
+    )
+      .find(button => button.textContent?.trim() === 'Continue')
+      ?.click();
+  });
+}
+
+/**
+ * Presses Tab six times while a handoff phase is held, checking every step:
+ * both dialogs open, focus in the entering sheet's dialog or on the
+ * browser-UI `body` stop (never the page or the retained dialog) and outside
+ * any inert subtree, and the retained dialog `inert` and `aria-hidden`.
+ * Returns how many presses stopped inside the entering sheet.
+ */
+async function tabThroughHeldPhase(page: Page, phase: string) {
+  let stopsInside = 0;
+  for (let index = 0; index < 6; index += 1) {
     await page.keyboard.press('Tab');
     const step = await handoffStep(page, OPENER);
-    if (step.openCount < 2 || step.retained?.open !== true) {
-      break;
-    }
-    midHandoffPresses += 1;
-    // "Late" is inside the retained dialog's fade (from ~345ms after both
-    // opened), on the page's own clock.
-    const isLate = step.sinceBothOpen > 400;
-    if (isLate) {
-      lateHandoffPresses += 1;
-    }
-    const label = `mid-handoff, Tab ${index + 1} at ${step.sinceBothOpen}ms`;
+    const label = `${phase}, Tab ${index + 1}`;
+    expect(step.openCount, label).toBe(2);
+    expect(step.retained?.open, `${label}: retained dialog open`).toBe(true);
     expect(step.where, label).not.toBe('page');
     expect(step.where, label).not.toBe(OPENER);
-    expect(['Notification frequency', 'body'], label).toContain(step.where);
+    expect([ENTERING, 'body'], label).toContain(step.where);
     // A stop inside the entering sheet is a Tab that moved focus onto a
     // focusable element there, outside any inert subtree; focus merely left
     // where the presentation put it, inside a dialog that went inert, is not.
     expect(step.insideInert, `${label}: focus inside an inert subtree`).toBe(
       false,
     );
-    if (step.where === 'Notification frequency' && step.moved) {
-      midHandoffStopsInside += 1;
-      if (isLate) {
-        lateHandoffStopsInside += 1;
-      }
-    }
-    expect(step.retained.inert, `${label}: retained dialog inert`).toBe(true);
-    expect(step.retained.ariaHidden, `${label}: retained aria-hidden`).toBe(
+    expect(step.retained?.inert, `${label}: retained dialog inert`).toBe(true);
+    expect(step.retained?.ariaHidden, `${label}: retained aria-hidden`).toBe(
       'true',
     );
-    await page.waitForTimeout(40);
+    if (step.where === ENTERING && step.moved) {
+      stopsInside += 1;
+    }
   }
-  // Presses landed both before and during the retained dialog's fade, else
-  // the test proved nothing about the handoff; and at least one of them
-  // stopped inside the entering sheet, else an entering sheet that can never
-  // take focus (every stop on the browser-UI `body` stop) would pass.
-  expect(midHandoffPresses).toBeGreaterThan(2);
-  expect(lateHandoffPresses).toBeGreaterThan(0);
-  expect(midHandoffStopsInside).toBeGreaterThan(0);
-  // ...and at least one of those stops landed inside the retained dialog's
-  // fade (from ~345ms), so an entering sheet that went inert only while the
-  // retained one fades would not pass.
-  expect(lateHandoffStopsInside).toBeGreaterThan(0);
+  return stopsInside;
+}
 
-  await expect(page.locator('dialog[open]')).toHaveCount(1, {timeout: 3000});
+test('focus is inside the entering sheet as soon as both dialogs are open, and Tab reaches stops inside it for as long as the retained dialog is open, which stays inert and hidden through its fade, and inside the flow after the handoff', async ({
+  page,
+}) => {
+  await mountScrollable(page);
+  await openFlow(page);
+  await prepareHandoffHold(page);
+  // The handoff, held phase by phase: the entering sheet slides in over the
+  // retained one, then the retained one fades, then it closes. Focus must
+  // land in the entering sheet's dialog ("Notification frequency"), never in
+  // the retained one ("Set up notifications") or the page, and the retained
+  // dialog must carry `inert` and `aria-hidden` on every step it is still
+  // open, the fade included.
+  await holdSlide(page);
+  // The entering sheet takes focus with its presentation, before any Tab:
+  // the moment both dialogs are open, focus is inside "Notification
+  // frequency" and outside every inert subtree. An entering sheet made inert
+  // while it enters would leave focus on <body> through its slide.
+  const atOpen = await handoffStep(page, OPENER);
+  expect(atOpen.openCount).toBe(2);
+  expect(atOpen.where, 'focus as soon as both dialogs are open').toBe(ENTERING);
+  expect(atOpen.insideInert, 'focus inside an inert subtree at open').toBe(
+    false,
+  );
+  const slideStops = await tabThroughHeldPhase(page, 'slide');
+  await holdFade(page);
+  const fadeStops = await tabThroughHeldPhase(page, 'fade');
+  await releaseAnimations(page, {finish: true});
+  await expect(page.locator('dialog[open]')).toHaveCount(1);
+  await thawTimers(page);
+  // At least one Tab in each phase stopped inside the entering sheet, else an
+  // entering sheet that can never take focus (every stop on the browser-UI
+  // `body` stop), or one inert only while the retained sheet fades, passes.
+  expect(slideStops).toBeGreaterThan(0);
+  expect(fadeStops).toBeGreaterThan(0);
+
   let stopsInside = 0;
   for (let index = 0; index < 8; index += 1) {
     await page.keyboard.press('Tab');
@@ -416,46 +508,66 @@ test('one steady scrim through a handoff: no dip and no double dim', async ({
 }) => {
   await mountScrollable(page);
   await openFlow(page);
-  const samples = await page.evaluate(
-    async () =>
-      new Promise<number[]>(resolve => {
-        const dims: number[] = [];
-        const start = performance.now();
-        const tick = () => {
-          let combined = 1;
-          for (const dialog of document.querySelectorAll('dialog[open]')) {
-            if (!dialog.matches(':modal')) {
-              continue;
-            }
-            const style = getComputedStyle(dialog, '::backdrop');
-            const match = /rgba?\(([^)]+)\)/.exec(style.backgroundColor);
-            const parts = match
-              ? match[1].split(/[,/]\s*|\s+/).filter(Boolean)
-              : [];
-            const alpha = parts.length === 4 ? Number(parts[3]) : 1;
-            combined *= 1 - alpha * Number(style.opacity);
-          }
-          dims.push(Number((1 - combined).toFixed(3)));
-          if (performance.now() - start < 1100) {
-            requestAnimationFrame(tick);
-          } else {
-            resolve(dims);
-          }
-        };
-        Array.from(
-          document.querySelectorAll<HTMLButtonElement>(
-            'dialog[open]:not([inert]) button',
-          ),
-        )
-          .find(button => button.textContent?.trim() === 'Continue')
-          ?.click();
-        requestAnimationFrame(tick);
-      }),
-  );
-  expect(samples.length).toBeGreaterThan(20);
-  const steady = samples[0];
+  await prepareHandoffHold(page);
+  // Every modal dialog's backdrop together: 1 - (1 - a1)(1 - a2)…, each `a`
+  // the backdrop color's alpha times its opacity.
+  const combinedDim = async () =>
+    page.evaluate(() => {
+      let combined = 1;
+      for (const dialog of document.querySelectorAll('dialog[open]')) {
+        if (!dialog.matches(':modal')) {
+          continue;
+        }
+        const style = getComputedStyle(dialog, '::backdrop');
+        const match = /rgba?\(([^)]+)\)/.exec(style.backgroundColor);
+        const parts = match
+          ? match[1].split(/[,/]\s*|\s+/).filter(Boolean)
+          : [];
+        const alpha = parts.length === 4 ? Number(parts[3]) : 1;
+        combined *= 1 - alpha * Number(style.opacity);
+      }
+      return Number((1 - combined).toFixed(3));
+    });
+  // The held phase read from 0 to 100% of its run in 5% steps.
+  const readHeldPhase = async () => {
+    const dims: number[] = [];
+    for (let step = 0; step <= 20; step += 1) {
+      await seekAnimations(page, (HELD_RUN_MS * step) / 20);
+      dims.push(await combinedDim());
+    }
+    return dims;
+  };
+  const steady = await combinedDim();
   expect(steady).toBeGreaterThan(0.3);
-  for (const dim of samples) {
+  await holdSlide(page);
+  const slide = await readHeldPhase();
+  await holdFade(page);
+  const fade = await readHeldPhase();
+  // The retained dialog closes and the entering one takes the scrim.
+  await releaseAnimations(page, {finish: true});
+  await expect(page.locator('dialog[open]')).toHaveCount(1);
+  const after = await combinedDim();
+  // Every `::backdrop` transition the handoff ran, and any the page has made
+  // but not yet announced (its `transitionrun` comes with the next frame).
+  // WebKit reports one on the dialog itself, with an empty `pseudoElement`.
+  const backdropRuns = await page.evaluate(() => [
+    ...(window as unknown as {__backdropRuns: string[]}).__backdropRuns,
+    ...document.getAnimations().flatMap(animation => {
+      const effect = animation.effect as KeyframeEffect | null;
+      const target = effect?.target ?? null;
+      const property =
+        'transitionProperty' in animation ? animation.transitionProperty : null;
+      return effect?.pseudoElement === '::backdrop' ||
+        (target instanceof HTMLDialogElement && property === 'opacity')
+        ? [`${target?.getAttribute('aria-label')}: running`]
+        : [];
+    }),
+  ]);
+  await thawTimers(page);
+  // No backdrop fades through the handoff, the takeover included: a scrim
+  // handed over with a fade would dip between two reads.
+  expect(backdropRuns).toEqual([]);
+  for (const dim of [...slide, ...fade, after]) {
     expect(dim).toBeGreaterThanOrEqual(steady * 0.9);
     expect(dim).toBeLessThanOrEqual(steady * 1.05);
   }

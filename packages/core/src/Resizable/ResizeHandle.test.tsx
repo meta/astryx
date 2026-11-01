@@ -948,6 +948,111 @@ describe('ResizeHandle', () => {
     expect(document.body.style.userSelect).toBe('');
   });
 
+  // --- Persistence ---
+
+  it.each([
+    ['pointerup', fireEvent.pointerUp],
+    ['pointercancel', fireEvent.pointerCancel],
+    ['lostpointercapture', fireEvent.lostPointerCapture],
+  ])('saves the size once, when a drag ends on %s', (name, finish) => {
+    // Every write reaches each other open document of the origin as a
+    // `storage` event, so the sizes a drag passes through stay out of
+    // storage: only the size it ends on is written.
+    const key = `astryx-resizable:drag-${name}`;
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          autoSaveId: `drag-${name}`,
+        }}
+      />,
+    );
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const writes = () => setItem.mock.calls.filter(([k]) => k === key);
+    try {
+      const hitArea = getHitArea();
+      fireEvent.pointerDown(hitArea, {pointerId: 1, clientX: 0, clientY: 0});
+      for (let x = 1; x <= 30; x++) {
+        fireEvent.pointerMove(hitArea, {pointerId: 1, clientX: x, clientY: 0});
+      }
+      expect(getSeparator()).toHaveAttribute('aria-valuenow', '230');
+      expect(writes()).toHaveLength(0);
+
+      finish(hitArea, {pointerId: 1, clientX: 30, clientY: 0});
+      expect(writes()).toEqual([
+        [key, JSON.stringify({size: 230, isCollapsed: false})],
+      ]);
+    } finally {
+      setItem.mockRestore();
+      localStorage.removeItem(key);
+    }
+  });
+
+  it('saves the dragged size once when the split unmounts mid-drag', () => {
+    // The handle's own cleanup ends the gesture, so the size it reached
+    // still reaches storage without a per-move write.
+    const key = 'astryx-resizable:drag-unmount';
+    const {unmount} = render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          autoSaveId: 'drag-unmount',
+        }}
+      />,
+    );
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const writes = () => setItem.mock.calls.filter(([k]) => k === key);
+    try {
+      const hitArea = getHitArea();
+      fireEvent.pointerDown(hitArea, {pointerId: 1, clientX: 0, clientY: 0});
+      for (let x = 1; x <= 30; x++) {
+        fireEvent.pointerMove(hitArea, {pointerId: 1, clientX: x, clientY: 0});
+      }
+      expect(getSeparator()).toHaveAttribute('aria-valuenow', '230');
+      expect(writes()).toHaveLength(0);
+
+      unmount();
+      expect(writes()).toEqual([
+        [key, JSON.stringify({size: 230, isCollapsed: false})],
+      ]);
+    } finally {
+      setItem.mockRestore();
+      localStorage.removeItem(key);
+    }
+  });
+
+  it('still saves each keyboard step at once', () => {
+    const key = 'astryx-resizable:keyboard-steps';
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          autoSaveId: 'keyboard-steps',
+        }}
+      />,
+    );
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      for (let i = 0; i < 3; i++) {
+        fireEvent.keyDown(getSeparator(), {key: 'ArrowRight'});
+      }
+      expect(
+        setItem.mock.calls
+          .filter(([k]) => k === key)
+          .map(([, value]) => (JSON.parse(value) as {size: number}).size),
+      ).toEqual([210, 220, 230]);
+    } finally {
+      setItem.mockRestore();
+      localStorage.removeItem(key);
+    }
+  });
+
   // --- RTL pointer-drag direction ---
 
   it('drives the region with the raw pointer delta under LTR', () => {

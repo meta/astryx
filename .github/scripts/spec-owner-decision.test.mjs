@@ -28,7 +28,7 @@ const {
 
 const head = 'abcdef1234567890abcdef1234567890abcdef12';
 const owner = {login: 'cixzhang'};
-const componentPath = 'packages/core/src/Button/Button.spec.md';
+const componentPath = 'docs/specs/components/Button/Button.spec.md';
 
 function componentRecord({body = 'Body.', decision = null} = {}) {
   const block =
@@ -120,7 +120,7 @@ describe('spec owner decision', () => {
     expect(
       requiredApprovalGroups([
         {
-          path: 'packages/core/src/Button/Button.spec.md',
+          path: 'docs/specs/components/Button/Button.spec.md',
           baseContent: 'kind: component\nauthority: current',
           headContent: 'kind: component\nauthority: current',
         },
