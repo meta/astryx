@@ -3,7 +3,7 @@
 /**
  * @file Item.test.tsx
  * @input Uses vitest, @testing-library/react, Item component
- * @output Unit tests for Item
+ * @output Unit tests for Item, including flat marker DOM and numbered-row scope
  * @position Testing; validates Item component implementation
  *
  * SYNC: When Item component changes, update tests to match new behavior
@@ -29,8 +29,10 @@ import {
 } from '@testing-library/react';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import userEvent from '@testing-library/user-event';
+import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {List, ListItem} from '../List';
 
 /**
  * Item in delegation mode: `interactiveRef` points at a nested control that
@@ -382,6 +384,65 @@ describe('Item', () => {
     expect(screen.getByTestId('item')).toHaveAttribute('aria-disabled', 'true');
   });
 
+  it("gives a disabled row's link no destination (spec:AST-085 FR2)", () => {
+    function RouterLink({ref, ...props}: React.ComponentPropsWithRef<'a'>) {
+      return <a ref={ref} data-router-link {...props} />;
+    }
+    render(
+      <LinkProvider component={RouterLink}>
+        <Item
+          label="Billing"
+          href="/billing"
+          target="_blank"
+          rel="noopener"
+          isDisabled
+        />
+        <Item label="Profile" href="/profile" />
+      </LinkProvider>,
+    );
+    // No href, target or rel, so a screen reader's click, Enter or a link
+    // menu cannot navigate; it keeps the link role and skips the router link.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).toHaveAttribute('aria-disabled', 'true');
+    for (const attribute of ['href', 'target', 'rel', 'data-router-link']) {
+      expect(disabled).not.toHaveAttribute(attribute);
+    }
+    const enabled = screen.getByRole('link', {name: 'Profile'});
+    expect(enabled).toHaveAttribute('href', '/profile');
+    expect(enabled).toHaveAttribute('data-router-link');
+    expect(enabled).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('keeps focus on a focused link row that becomes disabled (spec:AST-085 FR4)', () => {
+    const {rerender} = render(<Item label="Billing" href="/billing" />);
+    screen.getByRole('link', {name: 'Billing'}).focus();
+    rerender(<Item label="Billing" href="/billing" isDisabled />);
+    // The disabled row renders a plain anchor in place of the link component;
+    // focus moves to it instead of falling to the page.
+    const disabled = screen.getByRole('link', {name: 'Billing'});
+    expect(disabled).not.toHaveAttribute('href');
+    expect(disabled).toHaveFocus();
+    rerender(<Item label="Billing" href="/billing" />);
+    expect(screen.getByRole('link', {name: 'Billing'})).toHaveFocus();
+  });
+
+  it('does not pull focus back to a row that changes while focus is elsewhere', () => {
+    const {rerender} = render(
+      <>
+        <Item label="Billing" href="/billing" />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(
+      <>
+        <Item label="Billing" href="/billing" isDisabled />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
+  });
+
   it('disables the invisible button when isDisabled', () => {
     const {container} = render(
       <Item label="Disabled" onClick={() => {}} isDisabled />,
@@ -479,6 +540,12 @@ describe('Item', () => {
     expect(root?.querySelector('[data-testid="marker"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="start"]')).toBeInTheDocument();
     expect(root?.querySelector('[data-testid="end"]')).toBeInTheDocument();
+    // A bullet or caller-owned marker needs no extra formatting group: marker,
+    // start, primary and end retain the released flat row structure.
+    expect(root?.children).toHaveLength(4);
+    expect(button?.parentElement).toBe(root);
+    expect(screen.getByTestId('start').parentElement?.parentElement).toBe(root);
+    expect(screen.getByTestId('end').parentElement?.parentElement).toBe(root);
     expect(
       button?.querySelector('[data-testid="marker"]'),
     ).not.toBeInTheDocument();
@@ -590,6 +657,38 @@ describe('Item', () => {
       />,
     );
     expect(hasStrut()).toBe(false);
+  });
+
+  it('groups only the numbered composing row, not marked Items in its slots', () => {
+    render(
+      <List listStyle="decimal">
+        <ListItem
+          data-testid="numbered-row"
+          label="Numbered"
+          startContent={<span data-testid="numbered-start">S</span>}
+          endContent={
+            <Item
+              data-testid="nested-row"
+              label="Nested item"
+              marker={<span>•</span>}
+              startContent={<span data-testid="nested-start">S</span>}
+              endContent={<span>E</span>}
+            />
+          }
+        />
+      </List>,
+    );
+    const numbered = screen.getByTestId('numbered-row');
+    expect(numbered.children).toHaveLength(2);
+    const group = numbered.children[1];
+    expect(
+      screen.getByTestId('numbered-start').parentElement?.parentElement,
+    ).toBe(group);
+    const nested = screen.getByTestId('nested-row');
+    expect(nested.children).toHaveLength(4);
+    expect(
+      screen.getByTestId('nested-start').parentElement?.parentElement,
+    ).toBe(nested);
   });
 
   // ===========================================================================

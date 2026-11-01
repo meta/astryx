@@ -2,15 +2,18 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {createRef} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Carousel, type CarouselHandle} from './Carousel';
 
 // Mock ResizeObserver (not available in jsdom)
 class MockResizeObserver {
+  /** The shared observer, so a test can deliver a resize. */
+  static last: MockResizeObserver | null = null;
   callback: ResizeObserverCallback;
   constructor(callback: ResizeObserverCallback) {
     this.callback = callback;
+    MockResizeObserver.last = this;
   }
   observe() {}
   unobserve() {}
@@ -43,12 +46,130 @@ describe('Carousel', () => {
       </Carousel>,
     );
     // APG carousel pattern: each slide container is role=group with
-    // aria-roledescription="slide" and an "N of M" accessible name.
-    const slides = screen.getAllByRole('group');
+    // aria-roledescription="slide" and an "N of M" accessible name. (The
+    // scroll area around them is a group too, named like the carousel.)
+    const slides = screen.getAllByRole('group', {name: /^Slide /});
     expect(slides).toHaveLength(3);
     slides.forEach((slide, i) => {
       expect(slide).toHaveAttribute('aria-roledescription', 'slide');
       expect(slide).toHaveAccessibleName(`Slide ${i + 1} of 3`);
+    });
+  });
+
+  describe('scroll area (spec:AST-025 FR12)', () => {
+    function getScroller() {
+      return screen.getByRole('group', {name: 'Photos'});
+    }
+
+    function setOverflow(el: HTMLElement, overflowing: boolean) {
+      Object.defineProperty(el, 'scrollWidth', {
+        value: overflowing ? 500 : 200,
+        configurable: true,
+      });
+      Object.defineProperty(el, 'clientWidth', {
+        value: 200,
+        configurable: true,
+      });
+      fireEvent.scroll(el);
+    }
+
+    it('is a group named like the carousel', () => {
+      render(
+        <Carousel aria-label="Photos">
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      expect(scroller).toHaveAttribute('role', 'group');
+      expect(scroller).toHaveAccessibleName('Photos');
+      // It is the region's scroll container, not a slide.
+      expect(scroller).not.toHaveAttribute('aria-roledescription');
+      expect(scroller.parentElement).toBe(
+        screen.getByRole('region', {name: 'Photos'}),
+      );
+    });
+
+    // Named by its owner (spec:AST-025 FR12): the caller's label above, else
+    // the carousel's translated default.
+    it("takes the carousel's translated default name when the caller gives none", () => {
+      render(
+        <Carousel>
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = screen.getByRole('group', {name: 'Carousel'});
+      expect(scroller).toHaveAccessibleName('Carousel');
+      expect(scroller.parentElement).toBe(
+        screen.getByRole('region', {name: 'Carousel'}),
+      );
+    });
+
+    it('takes a tab stop only while its content overflows', () => {
+      render(
+        <Carousel aria-label="Photos">
+          <div>One</div>
+          <div>Two</div>
+        </Carousel>,
+      );
+      const scroller = getScroller();
+      // Fitting: out of the tab order, still focusable from script (FR2).
+      setOverflow(scroller, false);
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+      act(() => scroller.focus());
+      expect(scroller).toHaveFocus();
+      act(() => scroller.blur());
+      // Overflowing: a tab stop.
+      setOverflow(scroller, true);
+      expect(scroller).toHaveAttribute('tabindex', '0');
+      // Fitting again: leaves the tab order.
+      setOverflow(scroller, false);
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+    });
+
+    // The content can come to overflow, or stop, with the scroll area
+    // keeping its size: the tab stop follows it.
+    it('follows its content: slides added or removed, or a slide that grows, move the tab stop', async () => {
+      const slides = (count: number) =>
+        Array.from({length: count}, (_, i) => <div key={i}>Slide {i}</div>);
+      const view = render(<Carousel aria-label="Photos">{slides(1)}</Carousel>);
+      const scroller = getScroller();
+      // A 200 px scroll area; 150 px of content per slide, plus what a slide
+      // grows by.
+      let grown = 0;
+      Object.defineProperty(scroller, 'clientWidth', {
+        value: 200,
+        configurable: true,
+      });
+      Object.defineProperty(scroller, 'scrollWidth', {
+        configurable: true,
+        get: () => scroller.children.length * 150 + grown,
+      });
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+
+      view.rerender(<Carousel aria-label="Photos">{slides(2)}</Carousel>);
+      await act(async () => {});
+      expect(scroller).toHaveAttribute('tabindex', '0');
+
+      view.rerender(<Carousel aria-label="Photos">{slides(1)}</Carousel>);
+      await act(async () => {});
+      expect(scroller).toHaveAttribute('tabindex', '-1');
+
+      // The one slide's content grows past the scroll area.
+      grown = 100;
+      const observer = MockResizeObserver.last;
+      act(() => {
+        observer?.callback(
+          [
+            {
+              target: scroller.firstElementChild,
+            } as unknown as ResizeObserverEntry,
+          ],
+          observer,
+        );
+      });
+      expect(scroller).toHaveAttribute('tabindex', '0');
     });
   });
 

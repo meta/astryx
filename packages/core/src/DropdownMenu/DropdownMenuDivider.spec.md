@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:DropdownMenuDivider
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, theming, accessibility, testing]
 verified_by:
@@ -16,7 +16,6 @@ verified_by:
     packages/core/src/ContextMenu/ContextMenu.test.tsx,
     packages/core/src/Breadcrumbs/Breadcrumbs.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
-    apps/storybook/stories/DropdownMenuDivider.stories.tsx,
     scripts/check-knowledge.mjs,
   ]
 modules: []
@@ -29,7 +28,7 @@ architecture:
     architecture:component-test-sufficiency,
   ]
 contributing: []
-system_specs: [spec:AST-020, spec:AST-029]
+system_specs: [spec:AST-020]
 ---
 
 # DropdownMenuDivider component contract
@@ -42,9 +41,9 @@ system_specs: [spec:AST-020, spec:AST-029]
 | Behavior                | One unlabelled horizontal separator divides pointer-menu rows and stays out of arrow-key order; data and compound pointer modes render the same component.                                                                         |
 | End-user impact         | Pointer-menu sections remain visually separated without adding a focus stop or changing row operation.                                                                                                                             |
 | Builder impact          | No new caller choice. Host attributes, handlers, and styling inputs continue to compose on the separator.                                                                                                                          |
-| Compatibility/readiness | Patch-compatible observational contract. Runtime behavior, exports, defaults, and target names remain unchanged; authority stays `draft` until exact-head owner approval.                                                          |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change.                                                                                                                                                                          |
 | Review checks           | Reject a focusable separator, changed role/orientation, pointer data/compound divergence, dropped root inputs, or a target moved off the visible separator.                                                                        |
-| Governing rules         | `architecture:public-component-api/INV1,INV5–INV9`; `architecture:component-theming-surface/INV3–INV6`; WCAG 2.2 SC 1.3.1 and 4.1.2 through `spec:AST-020/FR1`.                                                                    |
+| Governing rules         | `architecture:public-component-api/INV1,INV5–INV9`; `architecture:component-theming-surface/INV3–INV6`; `spec:AST-020`.                                                                                                            |
 
 This table is a review projection; the body below is authoritative.
 
@@ -63,7 +62,8 @@ Consumer syntax and examples belong in `DropdownMenuDivider.doc.mjs`.
 ## Compatibility and migration
 
 - Released default preserved: yes — one horizontal, unlabelled separator.
-- Compatibility class: observational patch; no behavior or public surface changes.
+- Compatibility class: records shipped behavior; no public prop, default,
+  export, or DOM change.
 - Controlled/uncontrolled behavior: not applicable.
 - Migration decision: none.
 
@@ -98,16 +98,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                                | Basis                                                            | Draft review state |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------ |
-| FR1 | The component MUST render one unlabelled horizontal separator with pointer-menu-specific block spacing.                                                                            | Released source/docs and focused tests                           | verify             |
-| FR2 | The root MUST expose `role="separator"` and `aria-orientation="horizontal"`, remain outside menu-item collection and arrow-key order, and never become focusable.                  | WCAG 2.2 SC 1.3.1 and 4.1.2; focused tests                       | verify             |
-| FR3 | In pointer-menu presentation, `{type: "divider"}` in the data API and the compound divider component or alias MUST render the same component DOM, spacing, semantics, and targets. | Released docs/source; data/compound parity test                  | verify             |
-| FR4 | The visible root MUST carry both the delegated `divider` target and the menu-specific `dropdown-menu-divider` target; menu spacing applies before caller `xstyle`.                 | `architecture:component-theming-surface/INV3–INV6`; source/tests | verify             |
-| FR5 | Accepted ref, DOM/data/ARIA, class, style, events, and `xstyle` MUST reach or compose on the separator root without replacing component-owned role or orientation.                 | `architecture:public-component-api/INV5–INV8`                    | verify             |
+| ID  | Invariant                                                                                                                                                                     | Basis                                                              |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| FR1 | The component renders one unlabelled horizontal separator with pointer-menu-specific block spacing.                                                                           | Released source/docs and focused tests                             |
+| FR2 | The root exposes `role="separator"` and `aria-orientation="horizontal"`, stays outside menu-item collection and arrow-key order, and is never focusable.                      | `spec:AST-020`; current tests                                      |
+| FR3 | In pointer-menu presentation, `{type: "divider"}` in the data API and the compound divider component or alias render the same component DOM, spacing, semantics, and targets. | Released docs/source; data/compound parity test                    |
+| FR4 | The visible root carries both the delegated `divider` target and the menu-specific `dropdown-menu-divider` target; menu spacing applies before caller `xstyle`.               | `architecture:component-theming-surface`; current source and tests |
+| FR5 | Accepted ref, DOM/data/ARIA, class, style, events, and `xstyle` reach or compose on the separator root without replacing component-owned role or orientation.                 | `architecture:public-component-api` INV5–INV8; current tests       |
 
 ### Allowed variation
 
@@ -151,7 +148,7 @@ intentional decision.
 | ---------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------- | ------------------ |
 | Menu separator   | Visually separates adjacent menu row groups without competing with row content. | Current source and delegated Divider tokens; no component-local visual decision added | supporting     | FR1–FR4            |
 
-No component-local visual decision is settled by this draft.
+No component-local visual decision is recorded.
 
 ## Family and system relationships
 
@@ -164,22 +161,20 @@ No component-local visual decision is settled by this draft.
   props aliases; their pointer presentations retain the same component contract.
 - Touch and bottom-sheet data dividers bypass this component and delegate directly
   to Divider under the parent menu contract.
-- Divider provides the base separator implementation; its draft record is
-  observational context, not authority for this contract.
-- `spec:AST-029` keeps this observational draft separate from the audit receipt.
+- Divider provides the base separator implementation.
 
 ## Verification map
 
-| Contract         | Verification                                                                                            | Representative states                                         | Mutation or failure expectation                                                                                     | Audit section                           |
-| ---------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
-| FR1–FR3, AR1–AR2 | `DropdownMenu.test.tsx`; ContextMenu and Breadcrumbs alias tests; dedicated Storybook state; scoped axe | pointer data/compound, aliases, open menu, keyboard traversal | Pointer DOM modes drift, an alias disappears, the role/orientation changes, or the separator enters arrow-key order | `audit:DropdownMenuDivider/§1,§3,§4,§6` |
-| FR4              | Focused root-composition test; exact-head Neutral/Butter browser frames                                 | light/dark themes; menu and delegated targets                 | A target leaves the visible root or caller `xstyle` stops composing after menu spacing                              | `audit:DropdownMenuDivider/§2,§5`       |
-| FR5              | Focused root-composition test; lint and typecheck                                                       | ref, host attributes, class/style/xstyle/events               | An accepted input is dropped or owned semantics are overwritten                                                     | `audit:DropdownMenuDivider/§3`          |
-| PR1              | Source review                                                                                           | every state                                                   | A lifecycle mechanism appears without a resource contract                                                           | `audit:DropdownMenuDivider/§7`          |
+| Contract           | Verification                                                                                                                                                                                                                                                                                                                                                                                                     | Representative states                                     | Mutation or failure expectation                                                                                                                                                                                          | Audit section                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| FR1, FR2, AR1, AR2 | `DropdownMenu.test.tsx` divider and parity cases ("renders dividers between items", "renders an identical divider from either mode", "skips a compound divider in the arrow-key order", "forwards host attributes to a compound divider while keeping its role"); `ContextMenu.test.tsx` divider cases; `Breadcrumbs.test.tsx` "renders the separator and props types through the BreadcrumbMenuDivider aliases" | Data and compound pointer menus; aliases; arrow traversal | A missing separator, a changed role, a separator in the arrow-key order, or a lost alias fails. Evidence gap: no test asserts `aria-orientation` or the menu block spacing.                                              | `audit:DropdownMenuDivider/semantics` |
+| FR3                | `DropdownMenu.test.tsx` "renders an identical divider from either mode"                                                                                                                                                                                                                                                                                                                                          | Data and compound                                         | Different DOM between the modes fails.                                                                                                                                                                                   | `audit:DropdownMenuDivider/behavior`  |
+| FR4, FR5           | `DropdownMenu.test.tsx` "composes the complete public root surface on the separator" and the parity case's `dropdown-menu-divider` class assertion; `themingTargets.test.ts`                                                                                                                                                                                                                                     | Ref, class, style, xstyle, handler                        | A dropped ref, class, style, `xstyle`, or handler, or a missing `dropdown-menu-divider` target, fails. Evidence gap: no test asserts the delegated `divider` target or that menu spacing applies before caller `xstyle`. | `audit:DropdownMenuDivider/api`       |
+| PR1                | Evidence gap: no test asserts the absence of lifecycle resources                                                                                                                                                                                                                                                                                                                                                 | —                                                         | —                                                                                                                                                                                                                        | `audit:DropdownMenuDivider/behavior`  |
 
 ## Decision log
 
-None. This draft records current facts and introduces no product decision.
+No component-local decision.
 
 ## Open questions
 
@@ -188,5 +183,4 @@ None.
 ## Content boundary
 
 This file does not duplicate consumer prop tables/examples, current audit scores,
-screenshot matrices, implementation steps, or system rules. The audit pull request
-owns the closed run evidence required by `spec:AST-029/FR5`.
+screenshot matrices, implementation steps, or system rules. It links to their owners.

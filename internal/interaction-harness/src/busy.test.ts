@@ -14,6 +14,7 @@
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof} from './busy';
+import * as skip from './busy.skip.fixture';
 import {inPresentationOrder, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -361,6 +362,15 @@ function drawn(
   return draws;
 }
 
+const skipFrames = (): TrackedFrame[] =>
+  skip.frames.map(
+    ([t, y]) =>
+      ({
+        t,
+        box: y == null ? null : {x: 0, y, width: 10, height: 10},
+      }) as TrackedFrame,
+  );
+
 describe('busyWindowProof with the compositor record', () => {
   it('with a compositor record, judges a sparse cast from its first to its last moved frame', () => {
     // One screencast frame in six, as on a loaded machine, with the compositor
@@ -400,6 +410,29 @@ describe('busyWindowProof with the compositor record', () => {
     });
     expect(clean.verdict.failures).toEqual([]);
     expect(clean.movedFraction).toBeLessThanOrEqual(1);
+  });
+
+  it('reads frames the screencast skipped while the compositor presented them as presented: a recorded run that fails without the record', () => {
+    const frames = skipFrames();
+    const alone = busyWindowProof(frames, skip.block, {settledWithin: 1});
+    expect(alone.verdict.failures.join('\n')).toMatch(
+      /longest stall 6\d\.\d ms = 4 intervals > 3/,
+    );
+    // Every frame the screencast delivered moved: only the stall remains,
+    // which the record resolves.
+    expect(alone.verdict.failures.join('\n')).not.toMatch(
+      /expected frames moved/,
+    );
+    const proof = busyWindowProof(frames, skip.block, {
+      settledWithin: 1,
+      presented: skip.presented,
+    });
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.recorderSkipped).toBe(5);
+    expect(proof.longestStallFrames).toBeLessThanOrEqual(2);
+    expect(proof.summary).toMatch(
+      /the screencast skipped 5 frames the compositor presented \(at \+3\d\d ms, \+4\d\d ms\)/,
+    );
   });
 
   it('counts a gap the compositor drew through as skipped, and one it did not draw through as a stall', () => {

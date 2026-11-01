@@ -140,17 +140,29 @@ async function runState(
   });
 }
 
-test('the exact known failure matches one executed ChatTypingIndicator result', async ({
-  page,
-}) => {
-  const cdp = await page.context().newCDPSession(page);
+// Checking coverage runs every state again, which on a loaded runner nears
+// the per-test timeout as one test. It runs as one serial part per state,
+// sharing their results, then one check over all of them.
+test.describe('the exact known failure matches one executed ChatTypingIndicator result', () => {
+  test.describe.configure({mode: 'serial'});
   const results: BindingResult[] = [];
+
   for (const state of CHAT_TYPING_STATUS_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
+    test(`runs ${state.id}`, async ({page}) => {
+      const cdp = await page.context().newCDPSession(page);
+      results.push(await runState(page, cdp, state));
+    });
   }
-  expect(
-    unmatchedKnownFailures(CHAT_TYPING_STATUS_KNOWN_FAILURES, results),
-  ).toEqual([]);
+
+  test('the exact known failure matches one executed result', () => {
+    // Every part ran in this worker; this test alone proves nothing.
+    expect(results.map(result => result.state).sort()).toEqual(
+      CHAT_TYPING_STATUS_BINDING_STATES.map(state => state.id).sort(),
+    );
+    expect(
+      unmatchedKnownFailures(CHAT_TYPING_STATUS_KNOWN_FAILURES, results),
+    ).toEqual([]);
+  });
 });
 
 for (const state of CHAT_TYPING_STATUS_BINDING_STATES) {

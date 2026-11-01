@@ -54,13 +54,9 @@ Every knowledge record declares `authority: draft | current | archived`.
   accept current `.github/DESIGNOWNERS` members. Legacy v1 `owners` metadata is
   descriptive and does not grant approval rights.
 - Pull requests that create, change, or archive a `current` record wait on the
-  `spec-owner-approval` status for their exact current head. Draft-only records
-  pass that status after validation without an owner review.
-- Any ENGOWNER can approve another author's current-record PR through GitHub
-  review. A DESIGNOWNER may do the same for current design or theme records and
-  normative design assets. When an eligible approver is also the PR author, they
-  comment `/approve-spec <full-head-sha>`. Any new commit invalidates that
-  approval.
+  review gate, `review-required`, until an owner approves their content with
+  `/approve-spec <full-sha>` or a review (`architecture:knowledge-contracts`
+  DEC-14). Draft-only records need no owner approval.
 - Only `current` documents guide implementation and review.
 - A specification describes durable ideal behavior independently of any one pull
   request. Pull requests and issues may appear only as clearly non-authoritative

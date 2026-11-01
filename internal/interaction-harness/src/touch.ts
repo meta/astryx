@@ -23,7 +23,9 @@
  *   `Input.dispatchTouchEvent` on the page proxy. Touches and the pointer
  *   events derived from them are trusted and cancelable, multi-touch works.
  *   Limits, measured with WebKit 26.5: no timestamp parameter (the page sees
- *   the real dispatch time, so velocity comes from real-time pacing, ±1 ms);
+ *   the real dispatch time, so velocity comes from real-time pacing: within
+ *   ~1 ms on an idle runner, but a runner whose CPU quota stalls the process
+ *   sends some steps late, and the ones behind them back to back);
  *   integer coordinates only; no native scrolling, fling or pinch-zoom from
  *   these touches; a `touchstart` lists only the fingers that landed in it
  *   (pointer events are exact); no click synthesised from a raw touch sequence (use
@@ -265,6 +267,13 @@ export interface InputRecord {
   readonly x?: number;
   readonly y?: number;
   readonly touches?: number;
+  /** A pointer event's pressure (a pen's, 0–1). */
+  readonly pressure?: number;
+  /** A wheel step's deltas, mode and Control key (webInput.ts). */
+  readonly deltaX?: number;
+  readonly deltaY?: number;
+  readonly deltaMode?: number;
+  readonly ctrlKey?: boolean;
   readonly target: string;
 }
 
@@ -276,20 +285,21 @@ const INPUT_LOG_SCRIPT = `(() => {
     ? node.tagName.toLowerCase() + (node.id ? '#' + node.id : '') + (node.getAttribute('aria-label') ? '[' + node.getAttribute('aria-label') + ']' : '')
     : String(node && node.nodeName);
   const types = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove',
-    'touchend', 'touchcancel', 'click', 'contextmenu', 'gotpointercapture', 'lostpointercapture'];
+    'touchend', 'touchcancel', 'click', 'contextmenu', 'gotpointercapture', 'lostpointercapture', 'wheel'];
   for (const type of types) {
     // Bubble phase on window, so defaultPrevented reflects the page's own handlers.
     window.addEventListener(type, event => {
       const record = {type, timeStamp: event.timeStamp, isTrusted: event.isTrusted, cancelable: event.cancelable,
         defaultPrevented: event.defaultPrevented, target: describe(event.target)};
-      if ('pointerId' in event) Object.assign(record, {pointerId: event.pointerId, pointerType: event.pointerType, x: event.clientX, y: event.clientY});
+      if ('pointerId' in event) Object.assign(record, {pointerId: event.pointerId, pointerType: event.pointerType, x: event.clientX, y: event.clientY, pressure: event.pressure});
+      if (type === 'wheel') Object.assign(record, {deltaX: event.deltaX, deltaY: event.deltaY, deltaMode: event.deltaMode, ctrlKey: event.ctrlKey, x: event.clientX, y: event.clientY});
       if (event.touches) Object.assign(record, {touches: event.touches.length, x: event.changedTouches[0] && event.changedTouches[0].clientX, y: event.changedTouches[0] && event.changedTouches[0].clientY});
       log.push(record);
     }, {passive: true});
   }
 })()`;
 
-/** Records every pointer/touch/click the page receives (install before navigation). */
+/** Records every pointer, touch, click and wheel step the page receives (install before navigation). */
 export async function installInputLog(page: Page): Promise<void> {
   await page.addInitScript(INPUT_LOG_SCRIPT);
 }

@@ -99,7 +99,7 @@ import {
 } from '../theme/tokens.stylex';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useScrollLock} from '../hooks/useScrollLock';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useModalOutlet} from '../Layer/modalOutlet';

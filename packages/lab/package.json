@@ -63,7 +63,7 @@
   },
   "peerDependencies": {
     "@stylexjs/stylex": ">=0.10.0",
-    "@astryxdesign/core": "0.7.5",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0"
   },

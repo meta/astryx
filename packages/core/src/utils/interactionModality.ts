@@ -6,7 +6,9 @@
  * @file interactionModality.ts
  * @input Global pointerdown/keydown events
  * @output `useInteractionModalityTracking()` activates document-lifetime tracking;
- *   `getInteractionModality()` reads how the user last interacted
+ *   `getInteractionModality()` reads how the user last interacted;
+ *   `trackInteractionModalityIn(doc)` and `getInteractionModality(doc)` do the
+ *   same for a second document
  * @position Internal document-wide singleton; used where `:focus-visible` alone
  *   is too broad
  *
@@ -26,8 +28,12 @@
  * The store lives on `document`, so duplicate Astryx bundles share one state
  * value and one listener pair. The first mounted consumer activates tracking;
  * the listeners then remain for the document lifetime so input during a gap
- * between consumers is not lost. Importing this module has no DOM side effects,
- * and server rendering keeps the keyboard-safe default.
+ * between consumers is not lost. A second document (a same-origin iframe, a
+ * Document Picture-in-Picture window) gets its own store when a component
+ * tracks it, since input there never reaches the page's listeners; its
+ * listeners stay only while a consumer there is mounted. Importing this module
+ * has no DOM side effects, and server rendering keeps the keyboard-safe
+ * default.
  */
 
 import {useEffect} from 'react';
@@ -37,6 +43,8 @@ export type InteractionModality = 'keyboard' | 'pointer';
 type InteractionModalityStore = {
   modality: InteractionModality;
   isListening: boolean;
+  /** Mounted consumers holding a second document's listeners. */
+  consumers?: number;
   onPointerDown: () => void;
   onKeyDown: (event: KeyboardEvent) => void;
 };
@@ -107,8 +115,59 @@ export function useInteractionModalityTracking(): void {
   useEffect(() => trackInteractionModality(), []);
 }
 
-/** How the user last interacted with the page. */
-export function getInteractionModality(): InteractionModality {
+/**
+ * Track a second document while a consumer there is mounted: a component an
+ * app renders into a same-origin iframe or a Document Picture-in-Picture
+ * window gets input there that never reaches the page's listeners. The first
+ * consumer installs the document's listener pair and the last one's cleanup
+ * removes it. Read the value with `getInteractionModality(doc)`. The page's
+ * own document keeps its document-lifetime listeners.
+ */
+export function trackInteractionModalityIn(
+  targetDocument: Document,
+): () => void {
+  if (typeof document !== 'undefined' && targetDocument === document) {
+    return trackInteractionModality();
+  }
+  const store = getStore(targetDocument);
+  store.consumers = (store.consumers ?? 0) + 1;
+  if (store.consumers === 1) {
+    store.isListening = true;
+    targetDocument.addEventListener('pointerdown', store.onPointerDown, {
+      capture: true,
+      passive: true,
+    });
+    targetDocument.addEventListener('keydown', store.onKeyDown, {
+      capture: true,
+      passive: true,
+    });
+  }
+  let isReleased = false;
+  return () => {
+    if (isReleased) {
+      return;
+    }
+    isReleased = true;
+    store.consumers = (store.consumers ?? 1) - 1;
+    if (store.consumers === 0) {
+      store.isListening = false;
+      targetDocument.removeEventListener('pointerdown', store.onPointerDown, {
+        capture: true,
+      });
+      targetDocument.removeEventListener('keydown', store.onKeyDown, {
+        capture: true,
+      });
+    }
+  };
+}
+
+/** How the user last interacted with the page, or with `targetDocument`. */
+export function getInteractionModality(
+  targetDocument?: Document,
+): InteractionModality {
+  if (targetDocument != null) {
+    return getStore(targetDocument).modality;
+  }
   return typeof document === 'undefined'
     ? 'keyboard'
     : getStore(document).modality;
