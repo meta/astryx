@@ -104,8 +104,15 @@ export const docs = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens. none never opens on touch. A tap-opened card is dismissed by a tap outside it.',
+            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens; it is deprecated (DEP-0016): pass pressTrigger="toggle" on a button trigger instead; `astryx upgrade` rewrites icon and span triggers and flags the rest. none never opens on touch. A tap-opened card is dismissed by a tap outside it. Ignored under pressTrigger="toggle".',
           default: "'auto'",
+        },
+        {
+          name: 'pressTrigger',
+          type: "'none' | 'toggle'",
+          description:
+            "Whether a press on the trigger pins the card open. none leaves taps to touchTrigger. toggle, on a button trigger: a click, a tap, Enter, or Space pins the card and the same press closes it, while hover and focus still preview it. A pinned card stays until Escape, a second press on the trigger, a press outside the trigger and the card, or focus leaving them; a press on its own content keeps it. The press stops at the trigger, so a clickable row or card around it does not activate. The trigger reports aria-expanded and aria-controls, and the card's label (else its text) is announced once when it pins.",
+          default: "'none'",
         },
         {
           name: 'isEnabled',
@@ -167,7 +174,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action.',
+          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action. When the trigger is a button whose only job is the card, set pressTrigger to toggle: a press pins the card and stops at the trigger.',
       },
       {
         guidance: false,
@@ -289,8 +296,15 @@ export const docsZh = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开。none：触摸永不打开。轻点打开的卡片可通过点击卡片外部关闭。',
+            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开，已弃用（DEP-0016）：按钮触发元素请改用 pressTrigger="toggle"；`astryx upgrade` 会改写图标和 span 触发元素，并标记其余用法。none：触摸永不打开。轻点打开的卡片可通过点击卡片外部关闭。pressTrigger="toggle" 时忽略此项。',
           default: "'auto'",
+        },
+        {
+          name: 'pressTrigger',
+          type: "'none' | 'toggle'",
+          description:
+            '按下触发元素是否将卡片固定打开。none：不固定，轻点由 touchTrigger 决定。toggle（仅限按钮触发元素）：单击、轻点、Enter 或空格键固定打开，再次按下触发元素关闭；悬停和聚焦仍会预览。固定后，直到按 Escape、再次按下触发元素、在触发元素和卡片之外按下或焦点移出才关闭；在卡片内容上按下会保持固定。这次按下止于触发元素，外层可点击的行或卡片不会被激活。触发元素会报告 aria-expanded 和 aria-controls，固定时朗读一次卡片的 label（无 label 时朗读其文本）。',
+          default: "'none'",
         },
         {
           name: 'isEnabled',
@@ -346,7 +360,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action.',
+          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action. When the trigger is a button whose only job is the card, set pressTrigger to toggle: a press pins the card and stops at the trigger.',
       },
       {
         guidance: false,
@@ -398,7 +412,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action.',
+          'Leave touchTrigger on auto so a tap opens the card on triggers that do nothing else, and stays out of the way on triggers that perform an action. When the trigger is a button whose only job is the card, set pressTrigger to toggle: a press pins the card and stops at the trigger.',
       },
       {
         guidance: false,
@@ -439,7 +453,9 @@ export const docsDense = {
         hideDelay: 'Hide delay in ms.',
         focusTrigger: 'Controls when focus events trigger hover card.',
         touchTrigger:
-          'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens; none = never on touch. Tap-opened cards close on a tap outside.',
+          'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens (deprecated, DEP-0016: use pressTrigger="toggle"); none = never on touch. Tap-opened cards close on a tap outside.',
+        pressTrigger:
+          'none = no press pins; toggle = a click/tap/Enter/Space on a button trigger pins the card (aria-expanded, label announced once), the same press closes it, and the press stops at the trigger.',
         isEnabled: 'Enable/disable hover + focus triggers.',
         label:
           'Accessible name for the popup. With label: named role="dialog"; without: role="group".',

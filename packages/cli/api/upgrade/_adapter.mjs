@@ -613,7 +613,9 @@ export async function ensureCodemodDeps({installDeps} = {}) {
  * Wrap each core code and config transform so the non-failure outcomes it
  * throws (`assets/codemods/outcome.mjs`) are recorded instead of reaching the
  * runner as errors. The wrapped transform leaves that file unchanged, exactly
- * as the throw did. Project codemods keep their own contract. One wrapper per
+ * as the throw did. A `ManualMigrationRequired` the transform passes to
+ * `api.report` is recorded the same way, and the file keeps the transform's
+ * result. Project codemods keep their own contract. One wrapper per
  * pass: the regeneration re-check takes a fresh one, so an outcome a hook
  * resolved does not linger.
  *
@@ -632,18 +634,36 @@ export function withCodemodOutcomes(versionManifests, root) {
       const {transform, name} = entry;
       return {
         ...entry,
-        /** @param {{path: string, source: string}} file @param {unknown} api */
+        /** @param {{path: string, source: string}} file @param {any} api */
         transform(file, api) {
-          try {
-            return transform(file, api);
-          } catch (err) {
-            const outcome = codemodOutcome(err);
-            if (!outcome) throw err;
+          const record = (
+            /** @type {NonNullable<ReturnType<typeof codemodOutcome>>} */ outcome,
+          ) =>
             outcomes.push({
               ...outcome,
               file: path.relative(root, file.path).split(path.sep).join('/'),
               codemod: `core:${name}`,
             });
+          // A transform that changes the file and still needs a person for
+          // some sites reports each one here, without throwing.
+          const reporting = {
+            ...api,
+            /** @param {unknown[]} args */
+            report(...args) {
+              const outcome = codemodOutcome(args[0]);
+              if (outcome) {
+                record(outcome);
+                return undefined;
+              }
+              return api?.report?.(...args);
+            },
+          };
+          try {
+            return transform(file, reporting);
+          } catch (err) {
+            const outcome = codemodOutcome(err);
+            if (!outcome) throw err;
+            record(outcome);
             return undefined;
           }
         },

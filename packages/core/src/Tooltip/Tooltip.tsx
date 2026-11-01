@@ -25,12 +25,18 @@ import * as stylex from '@stylexjs/stylex';
 import {
   useTooltip,
   type TooltipFocusTrigger,
+  type TooltipPressTrigger,
   type TooltipTouchTrigger,
 } from './useTooltip';
+import {stopPressPinClick} from '../Layer/usePressPin';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
 
-export type {TooltipFocusTrigger, TooltipTouchTrigger} from './useTooltip';
+export type {
+  TooltipFocusTrigger,
+  TooltipPressTrigger,
+  TooltipTouchTrigger,
+} from './useTooltip';
 
 const styles = stylex.create({
   wrapperContents: {
@@ -108,14 +114,36 @@ export interface TooltipProps {
    * - `auto`: tap opens the tooltip, unless the trigger performs an action of
    *   its own (a button, a link, a form control) — that tap belongs to the
    *   control, and a hint about a control the user just operated is noise
-   * - `tap`: tap always opens the tooltip. This is what an info icon rendered
-   *   as a button wants: it looks like an action to the DOM, but revealing the
-   *   tooltip is the only thing it does
+   * - `tap`: tap always opens the tooltip, even on a trigger that acts.
+   *   Deprecated (DEP-0016): pass `pressTrigger="toggle"` on a button trigger
+   *   instead; `astryx upgrade` rewrites icon and span triggers and lists the
+   *   rest. Ignored under `pressTrigger="toggle"`
    * - `none`: touch never opens the tooltip
    *
    * @default 'auto'
    */
   touchTrigger?: TooltipTouchTrigger;
+
+  /**
+   * Whether a press on the trigger pins the tooltip open:
+   * - `none`: no press pins it; `touchTrigger` decides what a tap does
+   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
+   *   tooltip open and the same press closes it; hover and keyboard focus
+   *   still preview it. A pinned tooltip stays until Escape, a second press,
+   *   a press outside, or focus leaving, and the press stops at the trigger:
+   *   no clickable row or card around it activates. With `anchorRef`, the
+   *   caller's own handlers still receive the press: the anchor's `onClick`
+   *   runs, and a plain `onClick` element around the anchor receives it
+   *   unless the anchor's `onClick` stops it; Astryx clickable rows, cards,
+   *   and containers ignore it. The trigger reports
+   *   `aria-expanded` and `aria-controls`, and the tooltip's text is
+   *   announced once when it pins. Use it for a trigger whose information
+   *   lives only in the tooltip, such as an info icon. `touchTrigger` is
+   *   ignored.
+   *
+   * @default 'none'
+   */
+  pressTrigger?: TooltipPressTrigger;
 
   /**
    * Whether the tooltip is enabled.
@@ -190,6 +218,17 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
  * </Tooltip>
  * ```
  */
+export function Tooltip(
+  props: TooltipProps & {touchTrigger?: 'auto' | 'none'},
+): ReactElement;
+/**
+ * @deprecated `touchTrigger="tap"` is deprecated (DEP-0016): pass `pressTrigger="toggle"` on a button trigger instead; `astryx upgrade` rewrites icon and span triggers and lists the rest.
+ */
+export function Tooltip(
+  props: TooltipProps & {touchTrigger: 'tap'},
+): ReactElement;
+/** Any `TooltipProps`, such as props a wrapper forwards. */
+export function Tooltip(props: TooltipProps): ReactElement;
 export function Tooltip({
   children,
   anchorRef,
@@ -200,6 +239,7 @@ export function Tooltip({
   hideDelay = 0,
   focusTrigger = 'auto',
   touchTrigger = 'auto',
+  pressTrigger = 'none',
   isEnabled = true,
   onOpenChange,
   hasHoverIndication = 'auto',
@@ -229,6 +269,7 @@ export function Tooltip({
     hideDelay,
     focusTrigger,
     touchTrigger,
+    pressTrigger,
     isEnabled,
     isOpen,
     isDefaultOpen,
@@ -342,6 +383,7 @@ export function Tooltip({
           ref={tooltip.ref}
           tabIndex={0}
           aria-describedby={tooltip.describedBy}
+          onClick={stopPressPinClick}
           {...stylex.props(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
@@ -356,7 +398,10 @@ export function Tooltip({
   // For element children: use display:contents, ref on first child
   return (
     <>
-      <div ref={wrapperRef} {...stylex.props(styles.wrapperContents)}>
+      <div
+        ref={wrapperRef}
+        onClick={stopPressPinClick}
+        {...stylex.props(styles.wrapperContents)}>
         {children}
       </div>
       {tooltip.renderTooltip(content)}

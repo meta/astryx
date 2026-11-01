@@ -198,3 +198,165 @@ for (const {name, story, trigger, action, layer} of cases) {
     });
   });
 }
+
+test.describe('Tooltip pressTrigger="toggle" (component:Tooltip FR9, FR10)', () => {
+  const STORY = 'a11y-tooltip-press-toggle--button-toggle';
+  const CARD_STORY = 'a11y-tooltip-press-toggle--in-a-clickable-card';
+  const LAYER = '.astryx-tooltip:popover-open';
+  const pinButton = (page: Page) =>
+    page.getByRole('button', {name: 'What is this?'});
+
+  test('a real tap pins the tooltip, and the next tap on the trigger closes it', async ({
+    page,
+  }) => {
+    const finger = await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await expect(page.locator(LAYER)).toBeVisible();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a tap outside closes a pinned tooltip', async ({page}) => {
+    const finger = await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await finger.down(...OUTSIDE);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('Enter pins it and Space closes it from the keyboard', async ({
+    page,
+  }) => {
+    await openStory(page, STORY);
+    const button = pinButton(page);
+    await expect(button).toBeVisible();
+    await button.focus();
+    await page.keyboard.press('Enter');
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await page.keyboard.press(' ');
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a tap on the trigger inside a clickable card pins its tooltip and stops there', async ({
+    page,
+  }) => {
+    const finger = await openStory(page, CARD_STORY);
+    const button = pinButton(page);
+    const count = page.getByText(/^Card opened \d+ times$/);
+    await expect(button).toBeVisible();
+    await expect(count).toHaveText('Card opened 0 times');
+    const [x, y] = await centerOf(button);
+    await finger.down(x, y);
+    await finger.up();
+    await expect(page.locator(LAYER)).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(count).toHaveText('Card opened 0 times');
+    await page.mouse.click(x, y);
+    await expect(page.locator(LAYER)).toHaveCount(0);
+    await expect(count).toHaveText('Card opened 0 times');
+  });
+});
+
+test.describe('a pinned layer under a mouse (component:Tooltip FR9, component:HoverCard FR9 and FR10)', () => {
+  test.use({
+    hasTouch: false,
+    isMobile: false,
+    viewport: {width: 1024, height: 768},
+  });
+
+  async function open(page: Page, id: string) {
+    await page.goto(`${storybook.origin}/iframe.html?id=${id}&viewMode=story`);
+  }
+
+  /** Whether focus sits on no element: a press on text that takes none. */
+  async function focusIsOnBody(page: Page): Promise<boolean> {
+    return page.evaluate(() => document.activeElement === document.body);
+  }
+
+  test('a click on a pinned tooltip’s own text keeps it pinned', async ({
+    page,
+  }) => {
+    await open(page, 'a11y-tooltip-press-toggle--button-toggle');
+    const button = page.getByRole('button', {name: 'What is this?'});
+    const layer = page.locator('.astryx-tooltip:popover-open');
+    await button.click();
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await layer
+      .getByText('Rows are ranked by how many places import the icon')
+      .click();
+    expect(await focusIsOnBody(page)).toBe(true);
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test('a click on an anchored trigger runs its own click handler and pins it, and the card around it ignores the press', async ({
+    page,
+  }) => {
+    await open(page, 'a11y-tooltip-press-toggle--anchored-action-in-a-card');
+    const button = page.getByRole('button', {name: 'What is this?'});
+    const layer = page.locator('.astryx-tooltip:popover-open');
+    const opened = page.getByText(/^Card opened \d+ times$/);
+    const pressed = page.getByText(/^Button pressed \d+ times$/);
+    await expect(opened).toHaveText('Card opened 0 times');
+    await expect(pressed).toHaveText('Button pressed 0 times');
+    await button.click();
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(pressed).toHaveText('Button pressed 1 times');
+    await expect(opened).toHaveText('Card opened 0 times');
+    await button.click();
+    await expect(layer).toHaveCount(0);
+    await expect(pressed).toHaveText('Button pressed 2 times');
+    await expect(opened).toHaveText('Card opened 0 times');
+  });
+
+  test('with focusTrigger="never", Tab to another control closes a pinned tooltip', async ({
+    page,
+  }) => {
+    await open(page, 'a11y-tooltip-press-toggle--focus-trigger-never');
+    const button = page.getByRole('button', {name: 'What is this?'});
+    const layer = page.locator('.astryx-tooltip:popover-open');
+    await button.click();
+    await expect(layer).toHaveCount(1);
+    await expect(button).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', {name: 'Next'})).toBeFocused();
+    await expect(layer).toHaveCount(0);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a pinned unlabelled card says its paragraphs apart, and a click on its text keeps it', async ({
+    page,
+  }) => {
+    await open(page, 'a11y-tooltip-press-toggle--hover-card-toggle');
+    const button = page.getByRole('button', {name: 'Ada'});
+    const layer = page.locator('.astryx-hover-card:popover-open');
+    await button.click();
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('[data-astryx-live-region="polite"]')).toHaveText(
+      'Ada Lovelace Analyst, Payments',
+    );
+    await layer.getByText('Analyst, Payments').click();
+    expect(await focusIsOnBody(page)).toBe(true);
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+  });
+});

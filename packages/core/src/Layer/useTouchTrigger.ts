@@ -7,7 +7,9 @@
  * @input Touch trigger mode, layer open state, trigger ref, show/hide callbacks
  * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
  *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES and useTapStop (internal:
- *   not re-exported from index)
+ *   not re-exported from index); useTouchTriggerInternal, Core's own variant
+ *   that also returns the outside dismissal's arm for the press pin (not
+ *   exported from the Layer entry point)
  * @position Layer hook; shared touch behavior for useTooltip and useHoverCard
  *
  * SYNC: When modified, update:
@@ -63,7 +65,10 @@ import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
  * How a hover layer behaves on a touch pointer.
  *
  * - `auto`: tap-to-open, unless the trigger performs an action of its own
- * - `tap`: always tap-to-open, even on a trigger that performs an action
+ * - `tap`: always tap-to-open, even on a trigger that performs an action.
+ *   Deprecated (DEP-0016): pass `pressTrigger="toggle"` (usePressPin) on a
+ *   button trigger; `astryx upgrade` rewrites icon and span triggers and
+ *   lists the rest
  * - `none`: never open on touch
  */
 export type LayerTouchTrigger = 'auto' | 'tap' | 'none';
@@ -282,6 +287,21 @@ export interface UseTouchTriggerReturn {
 }
 
 /**
+ * useTouchTrigger's return plus the outside dismissal's arm, for Core's own
+ * press pin (usePressPin). Not exported from the Layer entry point.
+ *
+ * @internal
+ */
+export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
+  /**
+   * Arms the outside dismissal a tap-open gets: a press that lifts outside
+   * the trigger and the layer, or a scroll that starts there, hides it. A
+   * press pin arms it too.
+   */
+  armOutsideDismiss: () => void;
+}
+
+/**
  * Touch behavior shared by the hover layers.
  *
  * @example
@@ -301,6 +321,25 @@ export interface UseTouchTriggerReturn {
 export function useTouchTrigger(
   options: UseTouchTriggerOptions,
 ): UseTouchTriggerReturn {
+  const touch = useTouchTriggerInternal(options);
+  return {
+    isTouchPointerRef: touch.isTouchPointerRef,
+    isTouchInteraction: touch.isTouchInteraction,
+    handlePointerEnter: touch.handlePointerEnter,
+    handlePointerDown: touch.handlePointerDown,
+    clearTapOpen: touch.clearTapOpen,
+  };
+}
+
+/**
+ * useTouchTrigger, plus the outside dismissal's arm a press pin uses
+ * (component:Tooltip FR9, component:HoverCard FR9).
+ *
+ * @internal
+ */
+export function useTouchTriggerInternal(
+  options: UseTouchTriggerOptions,
+): UseTouchTriggerInternalReturn {
   const {
     touchTrigger,
     isEnabled,
@@ -503,5 +542,6 @@ export function useTouchTrigger(
     handlePointerEnter,
     handlePointerDown,
     clearTapOpen: disarmOutsideDismiss,
+    armOutsideDismiss,
   };
 }
