@@ -39,7 +39,8 @@
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
 #   after its longest wait), every two minutes for the rare `main` run. A
 #   pull-request run that would fit but yields to a waiting `main` check looks
-#   again every two minutes while it does, outside that count. When the
+#   again every two minutes while it does, and a run within ten jobs of room
+#   every four, both outside that count and inside the run's longest wait. When the
 #   repository's API budget is low, the run starts rather than spend it.
 # - A pull request that may not run CI (a draft, or a fork without `ci:run`)
 #   starts at once, so its required contexts report their failure (FR17).
@@ -80,7 +81,11 @@ inputs:
     required: false
     default: ''
   looks:
-    description: "For 'rest': how many looks 'room' made."
+    description: "For 'rest': how many of its looks 'room' spent."
+    required: false
+    default: ''
+  next:
+    description: "For 'rest': when 'room' planned the next look, in milliseconds since the epoch."
     required: false
     default: ''
 
@@ -95,8 +100,11 @@ outputs:
     description: When the wait started, in milliseconds since the epoch.
     value: ${{ steps.wait.outputs.started }}
   looks:
-    description: How many looks the wait made.
+    description: How many of its looks the wait spent.
     value: ${{ steps.wait.outputs.looks }}
+  next:
+    description: When the wait planned its next look, in milliseconds since the epoch.
+    value: ${{ steps.wait.outputs.next }}
 
 runs:
   using: composite
@@ -107,6 +115,7 @@ runs:
         PHASE: ${{ inputs.phase }}
         FITS: ${{ inputs.fits }}
         STARTED: ${{ inputs.started }}
+        NEXT: ${{ inputs.next }}
         LOOKS: ${{ inputs.looks }}
         PEAK: ${{ inputs.peak }}
         MAIN: ${{ inputs.main }}
@@ -128,6 +137,19 @@ runs:
           // again this soon, outside its count of looks, since `main` waits
           // are short.
           const YIELD_LOOK_MS = 2 * 60_000;
+          // A run with no room but within this many jobs of it looks again
+          // this soon, also outside its count of looks: near-full CI frees
+          // that much in minutes. A run further from room keeps its looks.
+          const NEAR_JOBS = 10;
+          const NEAR_LOOK_MS = 4 * 60_000;
+          // After a look without room: whether it spends one of the run's
+          // looks, and how soon the next look comes. `over` is how many jobs
+          // past the ceiling admitting would go.
+          const plan = (over, yieldsToMain) => {
+            if (yieldsToMain && over <= 0) return {spends: false, interval: YIELD_LOOK_MS};
+            if (over <= NEAR_JOBS) return {spends: false, interval: Math.min(NEAR_LOOK_MS, LOOK_MS)};
+            return {spends: true, interval: LOOK_MS};
+          };
           const STEP = 'Wait for room under the CI ceiling';
           // At most this many pull-request runs wait at once; one more finding
           // no room is turned away (spec:AST-030 DEC-16).
@@ -189,9 +211,10 @@ runs:
           }
           let calls = 0;
           try {
-            if (looked > 0) {
-              // The next look falls where the wait's schedule puts it.
-              const next = started + looked * LOOK_MS - Date.now();
+            if (PHASE === 'rest') {
+              // The next look falls where room planned it.
+              const planned = Number(process.env.NEXT);
+              const next = (planned > 0 ? planned : started + Math.max(1, looked) * LOOK_MS) - Date.now();
               if (looked >= MAX_LOOKS || next > MAX_WAIT_MS - (Date.now() - started)) {
                 core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes; starting.`);
                 return;
@@ -280,18 +303,22 @@ runs:
                   return;
                 }
                 if (others + 1 <= CI_CEILING && !mainWaiting) {
+                  // The rest of the run carries on this wait from this look.
+                  const next = plan(others + peak - CI_CEILING, false);
+                  core.setOutput('looks', String(spent + (next.spends ? 1 : 0)));
+                  core.setOutput('next', String(Date.now() + next.interval));
                   core.info(`Room for the Storybook build: about ${others} other jobs + 1 <= ${CI_CEILING}; the rest of the run waits.`);
                   return;
                 }
               }
               // Room for what this look admits, if no `main` check waited.
-              const yielding = mainWaiting && others + (PHASE === 'room' ? 1 : peak) <= CI_CEILING;
-              if (!yielding) spent += 1;
+              const next = plan(others + (PHASE === 'room' ? 1 : peak) - CI_CEILING, mainWaiting);
+              if (next.spends) spent += 1;
               core.setOutput('looks', String(spent));
               // The time left decides, not the look's own API time: a slow
               // look still waits the rest of the way for its next one.
               const left = MAX_WAIT_MS - (Date.now() - started);
-              const wait = Math.min((yielding ? YIELD_LOOK_MS : LOOK_MS) + Math.floor(Math.random() * JITTER_MS), left);
+              const wait = Math.min(next.interval + Math.floor(Math.random() * JITTER_MS), left);
               if (spent >= MAX_LOOKS || wait <= 0) {
                 core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes (about ${others} other jobs${mainWaiting ? ', a main check waiting' : ''}); starting.`);
                 return;
