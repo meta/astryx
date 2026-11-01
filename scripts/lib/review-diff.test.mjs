@@ -77,6 +77,28 @@ describe('concern routing on real diffs', () => {
     );
   });
 
+  it('routes a call to the document-scoped modality hook', () => {
+    const file = 'packages/core/src/Layer/useTouchTrigger.ts';
+    const diff = [
+      `diff --git a/${file} b/${file}`,
+      `--- a/${file}`,
+      `+++ b/${file}`,
+      '@@ -1,0 +1,1 @@',
+      '+  useInteractionModalityTrackingFor(ownerDocument);',
+    ].join('\n');
+    const claims = collectConcernMatches(
+      records,
+      readDiff(diff).addedLines,
+      null,
+    ).map(match => `${match.recordId}/${match.claimId}`);
+    expect(claims).toEqual(
+      expect.arrayContaining([
+        'architecture:interaction-modality/INV1',
+        'architecture:react-component-runtime/INV16',
+      ]),
+    );
+  });
+
   it("routes #8236's hand-written slot check to INV16, naming isRenderable", () => {
     const matches = collectConcernMatches(
       records,

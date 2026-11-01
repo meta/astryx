@@ -43,6 +43,7 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
     "modality-tracking": {
       "names": [
         "useInteractionModalityTracking",
+        "useInteractionModalityTrackingFor",
         "trackInteractionModalityIn",
         "getInteractionModality"
       ],

@@ -63,7 +63,11 @@ deciding_specs:
       "claims": ["INV16"]
     },
     "modality-tracking": {
-      "names": ["useInteractionModalityTracking", "trackInteractionModalityIn"],
+      "names": [
+        "useInteractionModalityTracking",
+        "useInteractionModalityTrackingFor",
+        "trackInteractionModalityIn"
+      ],
       "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
       "claims": ["INV16"]
     }
