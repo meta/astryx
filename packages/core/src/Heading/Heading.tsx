@@ -45,7 +45,7 @@ import {
 import {useTruncation} from '../Text/useTruncation';
 import {resolveStyleColor} from '../Text/Text';
 import type {LayerPlacement} from '../Layer';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';

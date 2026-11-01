@@ -24,7 +24,8 @@ import {
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {AnnounceRenderedText} from '../hooks/AnnounceRenderedText';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 
 const styles = stylex.create({

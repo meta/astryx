@@ -74,6 +74,8 @@ interface CaseExpectation {
   rows: RowExpectation[];
   status?: {type: 'error' | 'warning' | 'success'; text: string};
   tooltipText?: string;
+  /** The open disabled-reason tooltip describes the group and every checkbox. */
+  reasonDescribesRows?: boolean;
   density?: 'compact' | 'balanced' | 'spacious';
   labelHidden?: boolean;
 }
@@ -306,6 +308,7 @@ const CASES: AuditCase[] = [
         {checked: false, disabled: 'focusable'},
       ],
       tooltipText: 'Notifications are managed by your administrator',
+      reasonDescribesRows: true,
     },
   },
   {
@@ -1033,6 +1036,11 @@ async function readPage(page: Page, auditCase: AuditCase) {
             descriptionText: text(
               byIds(input?.getAttribute('aria-describedby') ?? null)[0] ?? null,
             ),
+            reasonDescribed:
+              tooltip != null &&
+              byIds(input?.getAttribute('aria-describedby') ?? null).includes(
+                tooltip as HTMLElement,
+              ),
             hovered: row.matches(':hover'),
             active: row.matches(':active'),
             focused: input != null && document.activeElement === input,
@@ -1567,6 +1575,18 @@ async function capture(browser: Browser, auditCase: AuditCase, mode: Mode) {
         !actual.tooltip.open
       ) {
         stateFailures.push('expected the open disabled-reason tooltip');
+      }
+      if (auditCase.expect.reasonDescribesRows === true) {
+        if (actual.rows.some(row => !row.reasonDescribed)) {
+          stateFailures.push(
+            'expected the disabled reason to describe every checkbox',
+          );
+        }
+        if (actual.tooltip?.describesGroup !== true) {
+          stateFailures.push(
+            'expected the disabled reason to describe the group',
+          );
+        }
       }
     } else if (actual.tooltip != null) {
       stateFailures.push('unexpected visible tooltip');

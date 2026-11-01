@@ -119,16 +119,19 @@ describe('CI baseline maintenance routing', () => {
     expect(runs(visual, {needs})).toBe(false);
   });
 
-  it('preserves focused PR routing on an opted-in pull request when the maintenance guard is skipped', () => {
+  it('runs on an opted-in pull request when the maintenance guard is skipped', () => {
     const needs = dependencies(visual);
     needs['maintenance-request'].result = 'skipped';
-    const optedIn = {event: 'pull_request', needs, labels: ['ci:heavy-lanes']};
+    // run-labels decided the pull request opted into visual (ci:run-visual).
+    needs['run-labels'].outputs = {visual: 'true', a11y: 'false', rtl: 'false'};
+    const optedIn = {event: 'pull_request', needs};
+    // The job decides its stable visual scope in its own steps.
     expect(runs(visual, optedIn)).toBe(true);
-    // Without the opt-in label a pull request update runs no visual owner.
+    // Without the opt-in a pull request update runs no visual owner, and
+    // another suite's label does not opt it in.
+    needs['run-labels'].outputs = {visual: 'false', a11y: 'true', rtl: 'true'};
     expect(runs(visual, {event: 'pull_request', needs})).toBe(false);
-    needs['check-components'].outputs.has_stable_visual = 'false';
-    expect(runs(visual, optedIn)).toBe(false);
-    needs['check-components'].outputs.has_stable_visual = 'true';
+    needs['run-labels'].outputs = {visual: 'true', a11y: 'false', rtl: 'false'};
     needs['build-storybook'].result = 'failure';
     expect(runs(visual, optedIn)).toBe(false);
     expect(runs(visual, {event: 'merge_group', needs})).toBe(false);
@@ -173,7 +176,10 @@ describe('canonical capture and checked-in baseline separation', () => {
     expect(capture.run).not.toMatch(
       /--(?:sample|only|components|themes|max-shots|tiers)\b/,
     );
-    expect(visual.permissions).toEqual({contents: 'read'});
+    expect(visual.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+    });
   });
 
   it('keeps browser-refresh capture reachable, but only uploads validated full captures', () => {

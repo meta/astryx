@@ -10,9 +10,8 @@
 # drift between a fork path and a same-repo path.
 #
 # Safety: resolves scope and PR identity from the GitHub API. Privileged jobs
-# check out only trusted default-branch code. Both preview URLs are resolved
-# from one exact-head Vercel deployment after route probes; the Pages result
-# remains a separate source-CI artifact, never a preview-link fallback.
+# check out only trusted default-branch code. Both preview links are the
+# branch's Vercel alias, known without waiting for a deployment.
 
 name: PR Comment
 
@@ -20,7 +19,6 @@ on:
   workflow_run:
     workflows: ['CI']
     types: [completed]
-  deployment_status:
 
 permissions: {}
 
@@ -64,6 +62,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {resolveWorkflowRunPullRequest} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -110,105 +111,6 @@ jobs:
             core.setOutput('source_conclusion', identity.sourceConclusion);
             core.setOutput('spec_only', String(changeScope.specOnly));
             core.setOutput('tooling_only', String(changeScope.toolingOnly));
-
-  resolve-preview:
-    if: >-
-      github.event_name == 'deployment_status' &&
-      github.event.deployment_status.state == 'success' &&
-      github.event.deployment.environment == 'Preview' &&
-      github.event.deployment.creator.login == 'vercel[bot]'
-    runs-on: ubuntu-slim
-    permissions:
-      contents: read
-      pull-requests: read
-      deployments: read
-    outputs:
-      valid: ${{ steps.preview.outputs.valid }}
-      pr_number: ${{ steps.preview.outputs.pr_number }}
-      head_sha: ${{ steps.preview.outputs.head_sha }}
-      origin: ${{ steps.preview.outputs.origin }}
-    steps:
-      - name: Checkout trusted default-branch code
-        uses: actions/checkout@v7
-        with:
-          ref: main
-
-      - name: Check trusted resolver availability
-        id: trusted
-        run: |
-          if [ -f .github/scripts/lib/vercel-preview.mjs ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            # A new deployment_status workflow can run before its helper lands
-            # on main. Never load the untrusted PR branch as a substitute.
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Preview resolver is not on trusted main yet; skipping this deployment."
-          fi
-
-      - name: Resolve current Vercel PR preview
-        id: preview
-        if: steps.trusted.outputs.available == 'true'
-        uses: actions/github-script@v9
-        with:
-          retries: 3
-          script: |
-            const {pathToFileURL} = require('node:url');
-            const {resolveVercelDeploymentEvent} = await import(
-              pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/vercel-preview.mjs`).href
-            );
-            const preview = await resolveVercelDeploymentEvent({
-              github,
-              ...context.repo,
-              deployment: context.payload.deployment,
-              status: context.payload.deployment_status,
-            });
-            if (!preview) {
-              core.notice('No current, non-draft PR matches this exact Vercel Preview deployment.');
-              core.setOutput('valid', 'false');
-              return;
-            }
-            core.setOutput('valid', 'true');
-            core.setOutput('pr_number', String(preview.prNumber));
-            core.setOutput('head_sha', preview.headSha);
-            core.setOutput('origin', preview.origin);
-
-  preview-comment:
-    needs: resolve-preview
-    if: needs.resolve-preview.outputs.valid == 'true'
-    concurrency:
-      group: pr-report-${{ needs.resolve-preview.outputs.pr_number }}
-      cancel-in-progress: false
-    runs-on: ubuntu-slim
-    permissions:
-      contents: read
-      pull-requests: write
-      deployments: read
-    steps:
-      - name: Checkout trusted default-branch code
-        uses: actions/checkout@v7
-        with:
-          ref: main
-
-      - name: Post exact-head preview links before CI completes
-        uses: actions/github-script@v9
-        env:
-          PR_NUMBER: ${{ needs.resolve-preview.outputs.pr_number }}
-          HEAD_SHA: ${{ needs.resolve-preview.outputs.head_sha }}
-          PREVIEW_ORIGIN: ${{ needs.resolve-preview.outputs.origin }}
-        with:
-          retries: 3
-          script: |
-            const {pathToFileURL} = require('node:url');
-            const {reconcileEarlyPreviewComment} = await import(
-              pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
-            );
-            await reconcileEarlyPreviewComment({
-              github,
-              ...context.repo,
-              prNumber: Number(process.env.PR_NUMBER),
-              headSha: process.env.HEAD_SHA,
-              origin: process.env.PREVIEW_ORIGIN,
-            });
 
   spec-only-reconcile:
     needs: resolve
@@ -259,6 +161,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {reconcilePrComment} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -284,12 +189,100 @@ jobs:
                 'The current change has no visual or preview-producing scope. Visual checks are not applicable; preview links are not shown.',
             });
 
-  comment:
+  # The changed visual frames behind the report's thumbnails, on the pull
+  # request's assets branch. The only job here that writes repository
+  # contents: it runs trusted code from main (never pull-request code), keeps
+  # no credentials in its checkout, and publish-frames.mjs writes only
+  # assets/pr-<n>, and only validated PNG/WebP frames.
+  frames:
     needs: resolve
+    concurrency:
+      group: pr-frames-${{ needs.resolve.outputs.pr_number }}
+      cancel-in-progress: false
+    if: >-
+      always() &&
+      github.event.action == 'completed' &&
+      needs.resolve.outputs.valid == 'true' &&
+      needs.resolve.outputs.spec_only != 'true' &&
+      needs.resolve.outputs.tooling_only != 'true'
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      actions: read
+      contents: write
+    outputs:
+      image_base: ${{ steps.frames.outputs.image_base }}
+      published: ${{ steps.frames.outputs.published }}
+      failed: >-
+        ${{ steps.checkout.outcome == 'failure' ||
+        steps.setup.outcome == 'failure' ||
+        steps.visual.outcome == 'failure' ||
+        steps.frames.outcome == 'failure' }}
+    steps:
+      - name: Checkout trusted default-branch code
+        id: checkout
+        continue-on-error: true
+        uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node and pnpm
+        id: setup
+        continue-on-error: true
+        if: steps.checkout.outcome == 'success'
+        uses: ./.github/actions/setup
+
+      - name: Download canonical visual report
+        id: visual-download
+        if: steps.setup.outcome == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: visual-pr-report
+          path: visual-pr-report
+          run-id: ${{ needs.resolve.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # The same re-encoding the comment job applies: only JSON and
+      # re-encoded PNGs from the exact CI attempt.
+      - name: Prepare canonical visual report
+        id: visual
+        continue-on-error: true
+        if: steps.visual-download.outcome == 'success'
+        env:
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+          RUN_ID: ${{ needs.resolve.outputs.run_id }}
+          RUN_ATTEMPT: ${{ needs.resolve.outputs.run_attempt }}
+        run: |
+          node .github/scripts/visual-gate/publish-pr-report.mjs \
+            --input visual-pr-report \
+            --output trusted-visual \
+            --head-sha "$HEAD_SHA" \
+            --run-id "$RUN_ID" \
+            --run-attempt "$RUN_ATTEMPT"
+
+      - name: Publish changed visual frames
+        id: frames
+        continue-on-error: true
+        if: steps.visual.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+        run: |
+          node .github/scripts/visual-gate/publish-frames.mjs \
+            --input trusted-visual \
+            --pr "$PR_NUMBER" \
+            --head-sha "$HEAD_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --limit 12
+
+  comment:
+    needs: [resolve, frames]
     concurrency:
       group: pr-report-${{ needs.resolve.outputs.pr_number }}
       cancel-in-progress: false
-    # Only the exact-head Vercel deployment supplies Storybook and Sandbox PR links.
+    # Storybook and Sandbox links are the branch's Vercel alias.
     # Visual evidence remains attached to the exact CI run.
     if: >-
       always() &&
@@ -300,8 +293,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     permissions:
       pull-requests: write
+      # actions: the artifacts and the source run's job list; deployments:
+      # this head's Vercel preview state.
       actions: read
-      deployments: read # resolve the exact-head Vercel Preview deployment
+      deployments: read
     # The artifact downloads are optional (a run may not produce them), so
     # they are not failures of this job.
     outputs:
@@ -311,6 +306,7 @@ jobs:
         steps.identity.outcome == 'failure' ||
         steps.cross-check.outcome == 'failure' ||
         steps.visual.outcome == 'failure' ||
+        steps.ci-history.outcome == 'failure' ||
         steps.publish.outcome == 'failure' }}
     steps:
       - name: Checkout trusted default-branch code
@@ -347,6 +343,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {confirmOrStandDown} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -399,6 +398,18 @@ jobs:
         with:
           name: pr-size-base
           path: pr-size-base
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # The touched-components check's per-component results (or its wide-
+      # change flag); absent when the check did not run.
+      - name: Download the touched-components report from the CI run
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: touched-components
+          path: touched-components
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
@@ -468,6 +479,37 @@ jobs:
             --run-id "$RUN_ID" \
             --run-attempt "$RUN_ATTEMPT"
 
+      # The CI-impact baseline (recent pull-request runs) is read once a day
+      # and kept as an artifact, so later CI-changing PRs that day reuse it.
+      - name: Find today's CI history
+        id: ci-history
+        continue-on-error: true
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
+            // Only this repository's own runs on main keep the history, at any
+            // commit (lib/main-artifact.cjs).
+            const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
+            const name = `ci-history-${new Date().toISOString().slice(0, 10)}`;
+            const runId = await mainArtifactRunId({github, ...context.repo, name});
+            core.setOutput('name', name);
+            core.setOutput('run_id', runId ?? '');
+
+      - name: Download today's CI history
+        if: steps.identity.outputs.valid == 'true' && steps.ci-history.outputs.run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.ci-history.outputs.name }}
+          run-id: ${{ steps.ci-history.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ci-history
+
       - name: Generate and post PR comment
         id: publish
         continue-on-error: true
@@ -484,9 +526,14 @@ jobs:
           RUN_ID: ${{ steps.identity.outputs.run_id }}
           RUN_ATTEMPT: ${{ steps.identity.outputs.run_attempt }}
           SOURCE_CONCLUSION: ${{ steps.identity.outputs.source_conclusion }}
+          VISUAL_IMAGE_BASE: ${{ needs.frames.outputs.image_base }}
+          VISUAL_PUBLISHED: ${{ needs.frames.outputs.published }}
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {reconcilePrComment} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -507,16 +554,28 @@ jobs:
                 sourceRunAttempt: Number(process.env.RUN_ATTEMPT),
                 sourceConclusion: process.env.SOURCE_CONCLUSION,
               },
+              visualFrames: {
+                imageBase: process.env.VISUAL_IMAGE_BASE,
+                published: process.env.VISUAL_PUBLISHED,
+              },
             });
+
+      - name: Keep today's CI history
+        if: steps.identity.outputs.valid == 'true' && steps.ci-history.outputs.name != '' && steps.ci-history.outputs.run_id == '' && hashFiles('ci-history/ci-history.json') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.ci-history.outputs.name }}
+          path: ci-history/ci-history.json
+          retention-days: 2
 
   # The CI-completion lane runs on workflow_run, so GitHub attaches its jobs to
   # main's latest commit. Main's checks must show main's health, not a pull
   # request's. The jobs above therefore never fail the run: every fallible step
   # continues on error, and this job reports their outcome as the PR Comment
-  # status on the pull request's own head. (The deployment_status lane already
-  # runs on the pull request's head commit.)
+  # status on the pull request's own head.
   report:
-    needs: [resolve, spec-only-reconcile, comment]
+    needs: [resolve, spec-only-reconcile, frames, comment]
     if: >-
       always() &&
       github.event_name == 'workflow_run' &&
@@ -537,6 +596,7 @@ jobs:
           FAILED: >-
             ${{ needs.resolve.outputs.failed == 'true' ||
             needs.spec-only-reconcile.outputs.failed == 'true' ||
+            needs.frames.outputs.failed == 'true' ||
             needs.comment.outputs.failed == 'true' ||
             contains(needs.*.result, 'failure') ||
             contains(needs.*.result, 'cancelled') }}

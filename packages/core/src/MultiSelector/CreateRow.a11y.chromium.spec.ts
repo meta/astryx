@@ -78,10 +78,11 @@ async function politeSince(page: Page, since: number): Promise<string> {
 }
 
 /**
- * Matches a polite region whose newest message is `message`. Messages written
- * before the region exposes the previous one are joined in order
- * (spec:AST-086 FR9), so typing faster than a frame can leave the previous
- * keystroke's message ahead of the one under test.
+ * Matches a polite region whose newest message is `message`. Messages from
+ * different announcers written before the region exposes the previous one are
+ * joined in order (spec:AST-086 FR9), so the creation can follow a search
+ * status still waiting. The search's own statuses replace each other instead
+ * (its `hasReplace` announcer), so they are read whole.
  */
 function newestMessage(message: string): RegExp {
   const escaped = message.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -108,9 +109,7 @@ test('the create row is announced as it appears and the highlight survives it va
   // "Bu": a partial match plus the create row above it.
   await search.pressSequentially('Bu');
   await expect(page.getByRole('option')).toHaveText(['Create "Bu"', 'Bug']);
-  await expect
-    .poll(async () => politeSince(page, 0))
-    .toMatch(newestMessage('1 result'));
+  await expect.poll(async () => politeSince(page, 0)).toBe('1 result');
 
   // Highlight the create row, then type the letter that makes it vanish: the
   // highlight must not be left pointing at a row that no longer exists.
@@ -132,7 +131,7 @@ test('the create row is announced as it appears and the highlight survives it va
   await expect(page.getByRole('option')).toHaveText(['Create "Urgent"']);
   await expect
     .poll(async () => politeSince(page, beforeUrgent))
-    .toMatch(newestMessage('Create "Urgent"'));
+    .toBe('Create "Urgent"');
 
   // Enter commits: the caller adds the option, the search clears, and the new
   // label is a real row.

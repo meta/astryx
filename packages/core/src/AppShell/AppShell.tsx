@@ -33,6 +33,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
+  focusVars,
   fontWeightVars,
   radiusVars,
   spacingVars,
@@ -64,7 +65,10 @@ import type {AppShellMobileContextValue} from './AppShellMobileContext';
 import type {SpacingStep} from '../utils/types';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, isRenderable} from '../utils';
-import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOutlineProps,
+  focusOutlineStyles,
+} from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
@@ -77,6 +81,8 @@ import {
 import type {AppShellVariantMap} from './index';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {attachScrollKeyboardDelegation} from '../hooks/scrollKeyboardDelegation';
+import {observeMainOverflow} from './observeMainOverflow';
 const HasActivity = typeof React.Activity !== 'undefined';
 const ActivityWrapper = HasActivity
   ? ({
@@ -370,13 +376,31 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-semibold'],
     fontSize: typeScaleVars['--text-body-size'],
   },
-  // Programmatic focus target for the skip link. The main container is only
+  // Programmatic focus target for the skip link. While main fits, it is only
   // focusable via tabIndex={-1} (never tabbable), so a focus ring around the
   // entire content area would be noise rather than guidance — suppress it.
   mainFocusTarget: {
     outline: {
       default: null,
       ':focus': 'none',
+    },
+  },
+  // While main's focus ring shows, main follows the elevated surface's
+  // rounded top-start corner, so the ring keeps the surface's shape instead of
+  // drawing a square corner. Otherwise main keeps its corner and clips nothing.
+  mainElevatedCorner: {
+    borderStartStartRadius: {
+      default: null,
+      ':focus-visible': radiusVars['--radius-page'],
+    },
+  },
+  // While main scrolls its overflowing content it is a keyboard stop, and
+  // keyboard focus on it draws the standard ring, inset so the shell's own
+  // clipping cannot hide it.
+  mainScrollRegionInset: {
+    outlineOffset: {
+      default: '0',
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
   },
 
@@ -615,8 +639,104 @@ export function AppShell({
     document.getElementById(MAIN_CONTENT_ID)?.focus();
   }, []);
 
+  // Main draws its focus ring only for focus a Tab press moved onto it, and
+  // keeps it for as long as that focus stays, even once the content fits.
+  // Programmatic focus (the skip link, a script's focus() on a route change)
+  // draws none (FR4), even after keyboard input, where :focus-visible alone
+  // would match. See the effect below for how a Tab move is told apart.
+  const [isTabFocus, setIsTabFocus] = useState(false);
+  // A window or tab switch blurs main without moving focus off it: main stays
+  // the document's active element, and focus comes back to it with no Tab
+  // press. The ring holds across that round trip; any real focus move ends it.
+  const isMainAwayRef = useRef(false);
+  const handleMainBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      if (document.activeElement === event.currentTarget) {
+        isMainAwayRef.current = true;
+        return;
+      }
+      isMainAwayRef.current = false;
+      setIsTabFocus(false);
+    },
+    [],
+  );
+
   const isFill = height === 'fill';
   const isAuto = height === 'auto';
+
+  // With `fill`, main is the page's scroller. While its content overflows it
+  // must be reachable from the keyboard even when nothing inside it is
+  // focusable (AST-025 FR12): it joins the tab order, and Tab entry moves on
+  // to its first link or button when it has one. Only `fill` observes main
+  // (PR1); LayoutContent keeps owning main's overflow and styles.
+  const [isMainOverflowing, setIsMainOverflowing] = useState(false);
+  const isMainScrollRegion = isFill && isMainOverflowing;
+  // Main's node is owned through a ref, never React state. Under `fill` its
+  // overflow is observed while the node is attached, and while main is a
+  // scroll region the keyboard delegation is attached to it. The ref callback
+  // changes with `fill`, so switching modes detaches and re-attaches main in
+  // the same commit; a detached or replaced node releases both before the new
+  // node takes over.
+  const mainNodeRef = useRef<HTMLDivElement | null>(null);
+  const mainOverflowRef = useRef<{
+    node: HTMLDivElement;
+    stop: () => void;
+  } | null>(null);
+  const mainDelegationRef = useRef<{
+    node: HTMLDivElement;
+    release: () => void;
+  } | null>(null);
+  const isMainScrollRegionRef = useRef(isMainScrollRegion);
+  const syncMainDelegation = useCallback(() => {
+    const node = isMainScrollRegionRef.current ? mainNodeRef.current : null;
+    const current = mainDelegationRef.current;
+    if (current?.node === node) {
+      return;
+    }
+    current?.release();
+    mainDelegationRef.current =
+      node == null
+        ? null
+        : {node, release: attachScrollKeyboardDelegation(node, node)};
+  }, []);
+  const setMainNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      mainNodeRef.current = node;
+      const observed = isFill ? node : null;
+      const current = mainOverflowRef.current;
+      if (current?.node !== observed) {
+        current?.stop();
+        mainOverflowRef.current =
+          observed == null
+            ? null
+            : {
+                node: observed,
+                stop: observeMainOverflow(observed, setIsMainOverflowing),
+              };
+        if (observed == null) {
+          setIsMainOverflowing(false);
+        }
+      }
+      syncMainDelegation();
+    },
+    [isFill, syncMainDelegation],
+  );
+  useEffect(() => {
+    isMainScrollRegionRef.current = isMainScrollRegion;
+    syncMainDelegation();
+  }, [isMainScrollRegion, syncMainDelegation]);
+  useEffect(
+    () => () => {
+      mainOverflowRef.current?.stop();
+      mainOverflowRef.current = null;
+      mainDelegationRef.current?.release();
+      mainDelegationRef.current = null;
+    },
+    [],
+  );
 
   // Nav style derived values
   const hasBanner = isRenderable(banner);
@@ -781,6 +901,9 @@ export function AppShell({
   // (`component:SideNav` FR6).
   const railRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLDivElement>(null);
+  // Main's node goes to the glide above and to the overflow observation
+  // that, under `fill`, makes main a keyboard stop.
+  const mainRefs = useMergedRefs(mainRef, setMainNode);
   const backdropRef = useRef<HTMLDivElement>(null);
   const contentLayout = useAnimatedLayout({containerRef: shellRef});
   const pendingContentRef = useRef<{
@@ -949,18 +1072,115 @@ export function AppShell({
   // Build main content
   // =========================================================================
   const shouldElevateWithCorner = isElevated && hasTopNav && showSideNavInline;
+  // While main is a keyboard stop, a Tab keydown anywhere in the document
+  // (capture, so Shift+Tab from the page start counts too) marks the next
+  // focus move, and so does the window's focus event for keyboard focus that
+  // enters the document from outside (Tab or Shift+Tab from the page
+  // embedding this one), where the browser's own `:focus-visible` then tells
+  // a key from a pointer. A mark counts only once its event's dispatch has
+  // finished uncancelled (`eventPhase === 0`): the browser's own focus move
+  // follows that dispatch in the same task, while a focus() a page's handler
+  // calls during it is programmatic and draws no ring (FR4). The marks expire
+  // on a zero-delay timer, so a cancelled Tab, a Tab out of the document or a
+  // window focus with nothing focused leaves nothing for a later focus().
+  useEffect(() => {
+    if (!isMainScrollRegion) {
+      return;
+    }
+    let tabKeydown: KeyboardEvent | null = null;
+    let windowFocus: FocusEvent | null = null;
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const expireMarks = () => {
+      clearTimeout(expiry);
+      expiry = setTimeout(() => {
+        tabKeydown = null;
+        windowFocus = null;
+      }, 0);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      tabKeydown = event.key === 'Tab' ? event : null;
+      windowFocus = null;
+      expireMarks();
+    };
+    const onPointerDown = () => {
+      tabKeydown = null;
+      windowFocus = null;
+    };
+    const onWindowFocus = (event: FocusEvent) => {
+      windowFocus = event;
+      expireMarks();
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      // Still dispatching: this focus move is a handler's focus(), so it
+      // reads no mark and leaves the mark for the browser's own move.
+      const tabDone = tabKeydown != null && tabKeydown.eventPhase === 0;
+      const focusDone = windowFocus != null && windowFocus.eventPhase === 0;
+      const arrivedByTab = tabDone && tabKeydown?.defaultPrevented === false;
+      const enteredDocument = focusDone;
+      if (tabDone) {
+        tabKeydown = null;
+      }
+      if (focusDone) {
+        windowFocus = null;
+      }
+      const main = mainNodeRef.current;
+      const isMain = event.target != null && event.target === main;
+      if (isMainAwayRef.current) {
+        // Focus comes back after a window or tab switch (main keeps the ring
+        // it had), or lands elsewhere (main's ring is over).
+        isMainAwayRef.current = false;
+        if (isMain && !arrivedByTab) {
+          return;
+        }
+        if (!isMain) {
+          setIsTabFocus(false);
+          return;
+        }
+      }
+      if (isMain) {
+        setIsTabFocus(
+          arrivedByTab || (enteredDocument && main.matches(':focus-visible')),
+        );
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+    window.addEventListener('focus', onWindowFocus);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+      window.removeEventListener('focus', onWindowFocus);
+      clearTimeout(expiry);
+    };
+  }, [isMainScrollRegion]);
+
+  // Tab focus on main draws the ring until main loses focus; programmatic
+  // focus never does (FR4).
+  const drawsMainFocusRing = isTabFocus;
 
   const mainInner = (
     <LayoutContent
-      ref={mainRef}
+      ref={mainRefs}
       padding={contentPadding ?? 0}
       role="main"
       id={MAIN_CONTENT_ID}
       // Focusable skip-link target (WCAG 2.4.1) — without tabIndex, several
       // browsers won't move focus to the div when the skip link is activated.
-      tabIndex={-1}
+      // A keyboard stop only while it scrolls overflowing content.
+      tabIndex={isMainScrollRegion ? 0 : -1}
       isScrollable={isFill}
-      xstyle={[contentAreaStyle, styles.mainFocusTarget]}>
+      onBlur={handleMainBlur}
+      xstyle={[
+        contentAreaStyle,
+        drawsMainFocusRing &&
+          shouldElevateWithCorner &&
+          styles.mainElevatedCorner,
+        drawsMainFocusRing
+          ? [focusOutlineStyles.focusVisible, styles.mainScrollRegionInset]
+          : styles.mainFocusTarget,
+      ]}>
       {children}
     </LayoutContent>
   );

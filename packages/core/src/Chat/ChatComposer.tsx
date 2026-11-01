@@ -54,11 +54,9 @@ import {ChatSendButton} from './ChatSendButton';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 
 // =============================================================================
 // Types
@@ -394,8 +392,6 @@ export function ChatComposer(props: ChatComposerProps) {
   const [internalValue, setInternalValue] = useState('');
   const [hasKeyboardEditorFocus, setHasKeyboardEditorFocus] = useState(false);
 
-  useInteractionModalityTracking();
-
   const isControlled = controlledValue !== undefined;
   const currentValue = isControlled ? controlledValue : internalValue;
 
@@ -424,6 +420,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const canSend = currentValue.trim().length > 0 && !isDisabled;
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const bodyComposedRef = useMergedRefs(bodyRef, modalityRef);
 
   // Input slot registers its focus (and future) control here so the shell can
   // drive it without knowing its DOM shape. Stable ref — safe in the memoized
@@ -458,11 +456,10 @@ export function ChatComposer(props: ChatComposerProps) {
   const handleBodyFocusCapture = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
       setHasKeyboardEditorFocus(
-        isComposerEditor(event.target) &&
-          getInteractionModality() === 'keyboard',
+        isComposerEditor(event.target) && readModality() === 'keyboard',
       );
     },
-    [],
+    [readModality],
   );
 
   const handleBodyBlurCapture = useCallback(
@@ -550,7 +547,7 @@ export function ChatComposer(props: ChatComposerProps) {
         {drawer}
 
         <div
-          ref={bodyRef}
+          ref={bodyComposedRef}
           onClick={handleBodyClick}
           onPointerDownCapture={() => setHasKeyboardEditorFocus(false)}
           onFocusCapture={handleBodyFocusCapture}

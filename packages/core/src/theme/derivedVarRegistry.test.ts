@@ -106,6 +106,10 @@ const STRUCTURAL_VARS = new Set([
   // authored by a theme.
   '--_layout-flush-block-start',
   '--_layout-flush-block-end',
+  // ProgressBar's filled share of the track, written inline from `value` on
+  // every render and read by the fill's transform. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-fill',
 ]);
 
 /**

@@ -1,7 +1,7 @@
 {
   "name": "@astryxdesign/build",
-  "version": "0.7.5",
-  "description": "Build plugins for Astryx source builds — babel, PostCSS, and Vite integrations",
+  "version": "0.7.6",
+  "description": "Build plugins for Astryx source builds \u2014 babel, PostCSS, and Vite integrations",
   "author": "Meta Open Source",
   "license": "MIT",
   "homepage": "https://github.com/meta/astryx#readme",
@@ -33,9 +33,23 @@
   },
   "files": [
     "src",
-    "dist"
+    "dist",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "build": "node build.mjs",
     "prepack": "pnpm build"
   },

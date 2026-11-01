@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import os from 'node:os';
@@ -9,18 +10,23 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 
 import {
+  branchPreviewOrigin,
+  ciHistory,
   confirmOrStandDown,
   confirmSourceRunIdentity,
   PR_ANALYSIS_MARKER,
-  reconcileEarlyPreviewComment,
   reconcilePrComment,
+  trustedFrames,
   resolveWorkflowRunPullRequest,
   validateAnalysisMetadata,
 } from './pr-preview.mjs';
 
 const HEAD = 'a'.repeat(40);
 const BASE = 'b'.repeat(40);
-const VERCEL_ORIGIN = 'https://astryx-3s4xgbci4-fbopensource.vercel.app';
+// The branch alias of identity() opened from the base repository; from the
+// fork in identity() the alias passes 63 characters and has no link.
+const VERCEL_ORIGIN =
+  'https://astryx-git-fix-failed-ci-preview-links-fbopensource.vercel.app';
 const ROOT = path.resolve(import.meta.dirname, '../../..');
 const REQUIRE = createRequire(import.meta.url);
 const ASYNC_FUNCTION = Object.getPrototypeOf(async function () {}).constructor;
@@ -114,21 +120,6 @@ function githubFixture({value = identity(), comments = []} = {}) {
         get: vi.fn(async () => ({data: pull(value)})),
         list: vi.fn(async () => ({data: [pull(value)]})),
       },
-      repos: {
-        listDeployments: vi.fn(async () => ({
-          data: [
-            {
-              id: 11,
-              sha: value.headSha,
-              environment: 'Preview',
-              creator: {login: 'vercel[bot]'},
-            },
-          ],
-        })),
-        listDeploymentStatuses: vi.fn(async () => ({
-          data: [{state: 'success', environment_url: VERCEL_ORIGIN}],
-        })),
-      },
       issues: {
         listComments: vi.fn(async ({issue_number}) => {
           state.listedIssues.push(issue_number);
@@ -202,27 +193,53 @@ function fixture(value = identity(), {analysis = true, a11y = true} = {}) {
 }
 
 async function reconcile({
-  value = identity(),
+  value: requested = identity(),
   previewAvailable = false,
   analysis = true,
   a11y = true,
   comments = [],
-  githubFixtureValue = value,
+  githubFixtureValue: fixtureValue,
   createIfMissing,
   fallbackMessage,
   execute,
   baseStats,
+  packageSize,
+  touched,
+  apiChanges,
+  extendGithub,
+  ciHistoryPath,
 } = {}) {
+  const value = previewAvailable
+    ? {...requested, headRepository: requested.baseRepository}
+    : requested;
+  const githubFixtureValue = fixtureValue ?? value;
   const paths = fixture(value, {analysis, a11y});
   const baseStatsPath = path.join(
     path.dirname(paths.analysis),
     'size-base.json',
   );
   if (baseStats) fs.writeFileSync(baseStatsPath, JSON.stringify(baseStats));
+  const packageSizePath = path.join(
+    path.dirname(paths.analysis),
+    'package-size.json',
+  );
+  if (packageSize)
+    fs.writeFileSync(packageSizePath, JSON.stringify(packageSize));
+  const apiChangesPath = path.join(
+    path.dirname(paths.analysis),
+    'api-changes.json',
+  );
+  if (apiChanges) fs.writeFileSync(apiChangesPath, JSON.stringify(apiChanges));
+  const touchedPath = path.join(
+    path.dirname(paths.analysis),
+    'touched-components.json',
+  );
+  if (touched) fs.writeFileSync(touchedPath, JSON.stringify(touched));
   const {github, state} = githubFixture({
     value: githubFixtureValue,
     comments,
   });
+  extendGithub?.(github);
   const core = {info: vi.fn(), warning: vi.fn()};
   const result = await reconcilePrComment({
     github,
@@ -235,13 +252,17 @@ async function reconcile({
     analysisPath: paths.analysis,
     metadataPath: paths.metadata,
     baseStatsPath,
+    packageSizePath,
+    apiChangesPath,
+    touchedPath,
     a11yPath: paths.a11y,
-    lookupPreview: async () => (previewAvailable ? VERCEL_ORIGIN : null),
-    probePreview: async () => true,
     visualPath: paths.visual,
     createIfMissing,
     fallbackMessage,
     execute,
+    ciHistoryPath:
+      ciHistoryPath ??
+      path.join(path.dirname(paths.analysis), 'ci-history.json'),
   });
   return {result, state, core, github, paths};
 }
@@ -485,8 +506,8 @@ describe('trusted PR preview identity', () => {
       .map(([name]) => name);
 
     expect(writeCapableJobs).toEqual([
-      'preview-comment',
       'spec-only-reconcile',
+      'frames',
       'comment',
       'report',
     ]);
@@ -496,11 +517,9 @@ describe('trusted PR preview identity', () => {
       statuses: 'write',
     });
     for (const name of writeCapableJobs.filter(job => job !== 'report')) {
-      const expected =
-        name === 'preview-comment'
-          ? "needs.resolve-preview.outputs.valid == 'true'"
-          : "needs.resolve.outputs.valid == 'true'";
-      expect(PR_COMMENT_WORKFLOW.jobs[name].if, name).toContain(expected);
+      expect(PR_COMMENT_WORKFLOW.jobs[name].if, name).toContain(
+        "needs.resolve.outputs.valid == 'true'",
+      );
     }
   });
 
@@ -558,8 +577,19 @@ describe('trusted PR preview identity', () => {
 describe('PR Comment keeps its outcome off main', () => {
   // workflow_run attaches these jobs to main's latest commit, so a failing step
   // here would turn main red for a pull request's problem.
-  const LANE = ['resolve', 'spec-only-reconcile', 'comment', 'report'];
-  const OPTIONAL = new Set(['actions/download-artifact@v8']);
+  const LANE = [
+    'resolve',
+    'spec-only-reconcile',
+    'frames',
+    'comment',
+    'report',
+  ];
+  // Optional: artifact downloads a run may not have, and keeping the CI
+  // history, which is a cache.
+  const OPTIONAL = new Set([
+    'actions/download-artifact@v8',
+    'actions/upload-artifact@v7',
+  ]);
 
   it.each(LANE)('never fails the run from the %s job', name => {
     for (const step of PR_COMMENT_WORKFLOW.jobs[name].steps) {
@@ -585,10 +615,20 @@ describe('PR Comment keeps its outcome off main', () => {
 
   it('reports the outcome on the head of the run the event names', () => {
     const report = PR_COMMENT_WORKFLOW.jobs.report;
-    expect(report.needs).toEqual(['resolve', 'spec-only-reconcile', 'comment']);
+    expect(report.needs).toEqual([
+      'resolve',
+      'spec-only-reconcile',
+      'frames',
+      'comment',
+    ]);
     const [step] = report.steps;
     expect(step.env.HEAD_SHA).toBe('${{ github.event.workflow_run.head_sha }}');
-    for (const name of ['resolve', 'spec-only-reconcile', 'comment']) {
+    for (const name of [
+      'resolve',
+      'spec-only-reconcile',
+      'frames',
+      'comment',
+    ]) {
       expect(step.env.FAILED).toContain(
         `needs.${name}.outputs.failed == 'true'`,
       );
@@ -815,23 +855,187 @@ describe('analysis metadata compatibility', () => {
 
 describe('PR comment preview reconciliation', () => {
   it.each([
-    ['not ready', false],
-    ['exact-head Vercel ready', true],
-  ])('shows both or neither exact-head links: %s', async (_label, ready) => {
+    ['alias past 63 characters', false],
+    ['alias known', true],
+  ])('shows both or neither branch links: %s', async (_label, ready) => {
     const {result} = await reconcile({previewAvailable: ready});
-    expect(result.body.includes('View Storybook for this PR')).toBe(ready);
-    expect(result.body.includes('View Sandbox for this PR')).toBe(ready);
-    expect(result.body.includes('> **Preview availability:**')).toBe(!ready);
-    if (ready) {
-      expect(result.body).toContain(`${VERCEL_ORIGIN}/storybook/`);
-      expect(result.body).toContain(`${VERCEL_ORIGIN}/sandbox/`);
-    }
+    expect(
+      result.body.includes(`[Storybook](${VERCEL_ORIGIN}/storybook/)`),
+    ).toBe(ready);
+    expect(result.body.includes(`[Sandbox](${VERCEL_ORIGIN}/sandbox/)`)).toBe(
+      ready,
+    );
+    // A fork's head is looked up like any other: Vercel builds fork previews.
+    expect(result.body).not.toContain('No preview');
     expect(result.body).not.toContain('facebook.github.io/astryx/pr/');
+  });
+
+  describe("this head's preview and the run's jobs", () => {
+    const deployment = (overrides = {}) => ({
+      id: 7,
+      environment: 'Preview',
+      creator: {login: 'vercel[bot]'},
+      ...overrides,
+    });
+    async function withGithub({deployments = [], statuses = [], jobs = []}) {
+      const value = identity({headRepository: 'meta/astryx'});
+      const harness = githubFixture({value});
+      harness.github.rest.repos = {
+        listDeployments: vi.fn(async () => ({data: deployments})),
+        listDeploymentStatuses: vi.fn(async () => ({data: statuses})),
+      };
+      harness.github.rest.actions.listJobsForWorkflowRun = vi.fn(async () => ({
+        data: jobs,
+      }));
+      const paths = fixture(value);
+      const seen = [];
+      const result = await reconcilePrComment({
+        github: harness.github,
+        core: {info: vi.fn(), warning: vi.fn()},
+        context: {
+          repo: {owner: 'meta', repo: 'astryx'},
+          serverUrl: 'https://github.com',
+        },
+        expectedIdentity: value,
+        analysisPath: paths.analysis,
+        metadataPath: paths.metadata,
+        a11yPath: paths.a11y,
+        visualPath: paths.visual,
+        execute: (node, args, options) => {
+          seen.push(args);
+          return execFileSync(node, args, options);
+        },
+      });
+      return {result, harness, args: seen[0]};
+    }
+
+    it("links Vercel's ready deployment of this exact head", async () => {
+      const {result, harness} = await withGithub({
+        deployments: [deployment()],
+        statuses: [
+          {
+            state: 'success',
+            environment_url: 'https://astryx-abc123-fbopensource.vercel.app',
+          },
+        ],
+      });
+      expect(harness.github.rest.repos.listDeployments).toHaveBeenCalledWith(
+        expect.objectContaining({sha: HEAD}),
+      );
+      expect(result.body).toContain(
+        '[Storybook](https://astryx-abc123-fbopensource.vercel.app/storybook/)',
+      );
+      expect(result.body).toContain('### 🔎 Preview · `aaaaaaa`');
+      expect(result.body).toContain("built from this PR's head");
+    });
+
+    it("ignores a deployment Vercel did not create, and an address that is not Vercel's", async () => {
+      for (const setup of [
+        {
+          deployments: [deployment({creator: {login: 'someone'}})],
+          statuses: [
+            {
+              state: 'success',
+              environment_url: 'https://astryx-abc123-fbopensource.vercel.app',
+            },
+          ],
+        },
+        {
+          deployments: [deployment()],
+          statuses: [
+            {state: 'success', environment_url: 'https://evil.example/'},
+          ],
+        },
+      ]) {
+        const {result} = await withGithub(setup);
+        expect(result.body).not.toContain('astryx-abc123');
+        expect(result.body).not.toContain('evil.example');
+        expect(result.body).toContain('⏳ Building…');
+      }
+    });
+
+    it('says a failed preview failed', async () => {
+      const {result} = await withGithub({
+        deployments: [deployment()],
+        statuses: [{state: 'failure'}],
+      });
+      expect(result.body).toContain('failed to build');
+    });
+
+    it("passes the run's jobs, so the report says which suites did not run", async () => {
+      const {result, args} = await withGithub({
+        jobs: [
+          {
+            name: 'test-node (1/4)',
+            status: 'completed',
+            conclusion: 'success',
+            steps: [],
+          },
+          {
+            name: 'pr-rtl (core)',
+            status: 'completed',
+            conclusion: 'skipped',
+            steps: [],
+          },
+        ],
+      });
+      expect(args).toContain('--jobs');
+      expect(result.body).toContain(
+        'Not run on this PR: add `ci:run-rtl` to run it.',
+      );
+    });
+  });
+
+  describe('the fallback report, when there is no trusted analysis', () => {
+    const failRender = () => {
+      throw new Error('malformed analysis');
+    };
+
+    it('keeps the same preview line as the full report', async () => {
+      const {result} = await reconcile({
+        previewAvailable: true,
+        createIfMissing: true,
+        execute: failRender,
+      });
+      expect(result.body).toContain('trusted analysis is unavailable');
+      expect(result.body).toContain('### 🔎 Preview · ');
+      expect(result.body).toContain(`[Storybook](${VERCEL_ORIGIN}/storybook/)`);
+    });
+
+    it('points to Vercel when the alias cannot be computed', async () => {
+      const {result} = await reconcile({
+        value: identity({headRef: `feat/${'long-branch-name-'.repeat(4)}`}),
+        previewAvailable: true,
+        createIfMissing: true,
+        execute: failRender,
+      });
+      expect(result.body).toContain('cannot be known in advance');
+      expect(result.body).not.toContain('/storybook/');
+    });
+
+    it('says nothing about previews on a draft', async () => {
+      const {result} = await reconcile({
+        value: identity({draft: true}),
+        previewAvailable: true,
+        createIfMissing: true,
+        execute: failRender,
+      });
+      expect(result.body).toContain('trusted analysis is unavailable');
+      expect(result.body).not.toContain('Preview');
+      expect(result.body).not.toContain("Vercel's comment");
+      expect(result.body).not.toContain('View Storybook for this PR');
+    });
+  });
+
+  it('says nothing about previews on a draft', async () => {
+    const {result} = await reconcile({value: identity({draft: true})});
+    expect(result.body).not.toContain('Preview availability');
+    expect(result.body).not.toContain('View Storybook for this PR');
   });
 
   it('says the accessibility audit did not run when there is no report', async () => {
     const {result} = await reconcile({a11y: false});
-    expect(result.body).toContain('did not run on this pull request');
+    expect(result.body).toMatch(/Not run on this PR: add [^\n]*`ci:run-a11y`/);
     expect(result.body).not.toContain('No accessibility violations detected');
   });
 
@@ -839,14 +1043,14 @@ describe('PR comment preview reconciliation', () => {
     const value = identity({sourceConclusion: 'failure'});
     const {result} = await reconcile({value});
 
-    expect(result.body).toContain('Modified Components');
+    expect(result.body).toContain('Modified components');
     expect(result.body).toContain('Card');
     expect(result.body).toContain('CI concluded failure');
     expect(result.body).not.toContain('View Storybook for this PR');
     expect(result.body).not.toContain('View Sandbox for this PR');
   });
 
-  it('shows the exact Vercel preview even when unrelated CI analysis fails', async () => {
+  it('shows the branch preview even when unrelated CI analysis fails', async () => {
     const value = identity({sourceConclusion: 'failure'});
     const {result} = await reconcile({
       value,
@@ -929,6 +1133,61 @@ describe('PR comment preview reconciliation', () => {
     },
   );
 
+  it.each([
+    ['the exact head', HEAD, true],
+    ['another head', 'b'.repeat(40), false],
+  ])(
+    'passes the package size report only when it names %s',
+    async (_label, headSha, used) => {
+      const seen = [];
+      await reconcile({
+        packageSize: {headSha, packages: [], verdict: 'pass'},
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen).toHaveLength(1);
+      expect(seen[0].includes('--package-size')).toBe(used);
+    },
+  );
+
+  it.each([
+    ['the exact head', HEAD, true],
+    ['another head', 'b'.repeat(40), false],
+  ])(
+    'passes the touched-components report only when it names %s',
+    async (_label, headSha, used) => {
+      const seen = [];
+      await reconcile({
+        touched: {headSha, components: []},
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--touched')).toBe(used);
+    },
+  );
+
+  it.each([
+    ['written', true],
+    ['absent', false],
+  ])(
+    'passes the API changes from the analysis artifact when %s',
+    async (_label, written) => {
+      const seen = [];
+      await reconcile({
+        apiChanges: written ? {version: 1, packages: []} : undefined,
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--api-changes')).toBe(written);
+    },
+  );
+
   it('falls back to a safe current message when analysis rendering fails', async () => {
     const stale = {
       id: 78,
@@ -978,7 +1237,6 @@ describe('PR comment preview reconciliation', () => {
       metadataPath: firstPaths.metadata,
       a11yPath: firstPaths.a11y,
       visualPath: firstPaths.visual,
-      probePreview: async () => true,
     });
 
     expect(result.action).toBe('none');
@@ -990,7 +1248,7 @@ describe('PR comment preview reconciliation', () => {
   });
 
   it('updates one same-PR comment across repeated source attempts', async () => {
-    const first = identity();
+    const first = identity({headRepository: 'meta/astryx'});
     const harness = githubFixture({value: first});
     const firstPaths = fixture(first);
     const core = {info: vi.fn(), warning: vi.fn()};
@@ -1002,7 +1260,6 @@ describe('PR comment preview reconciliation', () => {
         serverUrl: 'https://github.com',
       },
       visualPath: firstPaths.visual,
-      probePreview: async () => true,
     };
 
     await reconcilePrComment({
@@ -1013,7 +1270,10 @@ describe('PR comment preview reconciliation', () => {
       a11yPath: firstPaths.a11y,
     });
 
-    const second = identity({sourceRunAttempt: 2});
+    const second = identity({
+      headRepository: 'meta/astryx',
+      sourceRunAttempt: 2,
+    });
     harness.github.rest.actions.getWorkflowRun.mockResolvedValue({
       data: sourceRun(second),
     });
@@ -1032,10 +1292,10 @@ describe('PR comment preview reconciliation', () => {
     expect(harness.state.updated).toHaveLength(1);
     expect(harness.state.comments).toHaveLength(1);
     expect(harness.state.comments[0].body).toContain(
-      'View Storybook for this PR',
+      `[Storybook](${VERCEL_ORIGIN}/storybook/)`,
     );
     expect(harness.state.comments[0].body).toContain(
-      'View Sandbox for this PR',
+      `[Sandbox](${VERCEL_ORIGIN}/sandbox/)`,
     );
     expect(harness.state.listedIssues).toEqual([5697, 5697]);
   });
@@ -1066,7 +1326,7 @@ describe('PR comment preview reconciliation', () => {
     expect(state.listedIssues).toHaveLength(0);
   });
 
-  it('stands down without writing when the head moves during Vercel readiness', async () => {
+  it('stands down without writing when the head moves while the report renders', async () => {
     const expected = identity();
     const current = identity({headSha: 'f'.repeat(40)});
     const paths = fixture(expected);
@@ -1084,11 +1344,10 @@ describe('PR comment preview reconciliation', () => {
       metadataPath: paths.metadata,
       a11yPath: paths.a11y,
       visualPath: paths.visual,
-      lookupPreview: async () => {
+      execute: (command, args, options) => {
         github.rest.pulls.get.mockResolvedValue({data: pull(current)});
-        return VERCEL_ORIGIN;
+        return execFileSync(command, args, options);
       },
-      probePreview: async () => true,
     });
     expect(result.action).toBe('none');
     expect(core.info).toHaveBeenCalledWith(
@@ -1125,7 +1384,7 @@ describe('PR comment preview reconciliation', () => {
     expect(state.updated).toHaveLength(0);
   });
 
-  it('renders the current successful path from exact Vercel proof', async () => {
+  it('renders the current successful path with the branch links', async () => {
     const value = identity();
     const {result, state} = await reconcile({
       value,
@@ -1140,241 +1399,233 @@ describe('PR comment preview reconciliation', () => {
     expect(state.listedIssues).toEqual([5697]);
   });
 
-  it('never advertises either link when one preview route probe fails', async () => {
-    const value = identity();
-    const paths = fixture(value);
-    const {github, state} = githubFixture({value});
-    const context = {
-      repo: {owner: 'meta', repo: 'astryx'},
-      serverUrl: 'https://github.com',
+  it.each([
+    [
+      'a branch in the repository',
+      'meta/astryx',
+      'fix/dropdown-section-submenu',
+      'https://astryx-git-fix-dropdown-section-submenu-fbopensource.vercel.app',
+    ],
+    [
+      'a fork',
+      'kyu-rong/astryx',
+      'Fix_Slider',
+      'https://astryx-git-fork-kyu-rong-fix-slider-fbopensource.vercel.app',
+    ],
+    [
+      'an alias past 63 characters',
+      'kyu-rong/astryx',
+      'fix-slider-keep-caller-aria-labelledby',
+      null,
+    ],
+  ])(
+    'links the Vercel branch alias for %s',
+    (_label, headRepository, headRef, origin) => {
+      expect(
+        branchPreviewOrigin({
+          headRef,
+          headRepository,
+          baseRepository: 'meta/astryx',
+        }),
+      ).toBe(origin);
+    },
+  );
+});
+
+describe('visual frames', () => {
+  const identity = {
+    prNumber: 9171,
+    headSha: 'a'.repeat(40),
+    baseRepository: 'meta/astryx',
+  };
+  const imageBase = `https://raw.githubusercontent.com/meta/astryx/assets/pr-9171/visual/${'a'.repeat(40)}/`;
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'frames-'));
+
+  it("passes frames only from this pull request's assets branch for this head", () => {
+    const published = JSON.stringify(['before/b.png', 'diff/b.png']);
+    const file = trustedFrames({
+      frames: {imageBase, published},
+      identity,
+      inputs: tmp(),
+    });
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+      imageBase,
+      published: ['before/b.png', 'diff/b.png'],
+    });
+    for (const bad of [
+      imageBase.replace('pr-9171', 'pr-1'),
+      imageBase.replace('a'.repeat(40), 'b'.repeat(40)),
+      'https://evil.example/visual/',
+    ])
+      expect(
+        trustedFrames({
+          frames: {imageBase: bad, published},
+          identity,
+          inputs: tmp(),
+        }),
+      ).toBeNull();
+  });
+
+  it('refuses frame paths that are not before/after/diff PNGs', () => {
+    for (const published of [
+      '["../x.png"]',
+      '["other/b.png"]',
+      '[]',
+      'not json',
+    ])
+      expect(
+        trustedFrames({
+          frames: {imageBase, published},
+          identity,
+          inputs: tmp(),
+        }),
+      ).toBeNull();
+  });
+
+  it('gives only the frames job contents: write, with no persisted credentials', () => {
+    const {jobs} = PR_COMMENT_WORKFLOW;
+    for (const [name, job] of Object.entries(jobs))
+      expect(job.permissions?.contents === 'write', name).toBe(
+        name === 'frames',
+      );
+    const checkout = jobs.frames.steps.find(step =>
+      String(step.uses).startsWith('actions/checkout@'),
+    );
+    expect(checkout.with).toEqual({ref: 'main', 'persist-credentials': false});
+    expect(jobs.comment.needs).toEqual(['resolve', 'frames']);
+  });
+});
+
+describe('CI impact in the report', () => {
+  const at = minute =>
+    new Date(Date.UTC(2026, 9, 31, 12, minute)).toISOString();
+  const workflow = text => ({content: Buffer.from(text).toString('base64')});
+  const BASE_CI =
+    'on: pull_request\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps: [{run: a}]\n';
+  const HEAD_CI = `${BASE_CI}  extra:\n    runs-on: 4-core-ubuntu\n    steps: [{run: b}]\n`;
+  const ciChange = github => {
+    github.rest.pulls.listFiles = vi.fn(async () => ({
+      data: [{filename: '.github/workflows/ci.yml'}],
+    }));
+    github.rest.repos = {
+      compareCommitsWithBasehead: vi.fn(async () => ({
+        data: {merge_base_commit: {sha: 'c'.repeat(40)}},
+      })),
+      getContent: vi.fn(async ({ref}) => ({
+        data: workflow(ref === 'c'.repeat(40) ? BASE_CI : HEAD_CI),
+      })),
     };
-    const report = await reconcilePrComment({
-      github,
-      core: {info: vi.fn(), warning: vi.fn()},
-      context,
-      expectedIdentity: value,
-      analysisPath: paths.analysis,
-      metadataPath: paths.metadata,
-      a11yPath: paths.a11y,
-      visualPath: paths.visual,
-      lookupPreview: async () => VERCEL_ORIGIN,
-      probePreview: async () => false,
-      probeWaitMs: 0,
-    });
-    expect(report.body).not.toContain('View Storybook for this PR');
-    expect(report.body).not.toContain('View Sandbox for this PR');
-    const early = await reconcileEarlyPreviewComment({
-      github,
-      owner: 'meta',
-      repo: 'astryx',
-      prNumber: value.prNumber,
-      headSha: value.headSha,
-      origin: VERCEL_ORIGIN,
-      lookupPreview: async () => VERCEL_ORIGIN,
-      probePreview: async () => false,
-      probeWaitMs: 0,
-    });
-    expect(early.action).toBe('none');
-    expect(state.updated).toHaveLength(0);
-  });
-
-  it('does not publish an older same-head origin after a newer redeploy starts', async () => {
-    const value = identity();
-    const paths = fixture(value);
-    const {github, state} = githubFixture({value});
-    let lookups = 0;
-    const lookupPreview = async () => (++lookups === 1 ? VERCEL_ORIGIN : null);
-    const report = await reconcilePrComment({
-      github,
-      core: {info: vi.fn(), warning: vi.fn()},
-      context: {
-        repo: {owner: 'meta', repo: 'astryx'},
-        serverUrl: 'https://github.com',
+    github.rest.actions.listWorkflowRuns = vi.fn(async ({per_page}) => ({
+      data: {
+        total_count: 70,
+        workflow_runs:
+          per_page === 1
+            ? []
+            : [{id: 1, run_started_at: at(0), updated_at: at(10)}],
       },
-      expectedIdentity: value,
-      analysisPath: paths.analysis,
-      metadataPath: paths.metadata,
-      a11yPath: paths.a11y,
-      visualPath: paths.visual,
-      lookupPreview,
-      probePreview: async () => true,
-    });
-    expect(report.body).not.toContain('View Storybook for this PR');
-    expect(report.body).not.toContain('View Sandbox for this PR');
-    expect(state.created).toHaveLength(1);
-
-    let earlyLookups = 0;
-    const early = await reconcileEarlyPreviewComment({
-      github,
-      owner: 'meta',
-      repo: 'astryx',
-      prNumber: value.prNumber,
-      headSha: value.headSha,
-      origin: VERCEL_ORIGIN,
-      lookupPreview: async () => (++earlyLookups === 1 ? VERCEL_ORIGIN : null),
-      probePreview: async () => true,
-    });
-    expect(early.action).toBe('none');
-    expect(state.updated).toHaveLength(0);
-  });
-
-  it('posts preview links before CI and later enriches the same report', async () => {
-    const value = identity();
-    const paths = fixture(value);
-    const {github, state} = githubFixture({value});
-    const early = () =>
-      reconcileEarlyPreviewComment({
-        github,
-        owner: 'meta',
-        repo: 'astryx',
-        prNumber: value.prNumber,
-        headSha: value.headSha,
-        origin: VERCEL_ORIGIN,
-        lookupPreview: async () => VERCEL_ORIGIN,
-        probePreview: async () => true,
-      });
-    expect((await early()).action).toBe('created');
-    expect(state.comments[0].body).toContain(`${VERCEL_ORIGIN}/storybook/`);
-    expect(state.comments[0].body).toContain('View Sandbox for this PR');
-    expect(state.comments[0].body).not.toContain('Modified Components');
-    expect((await early()).action).toBe('unchanged');
-    expect(state.created).toHaveLength(1);
-
-    const enriched = await reconcilePrComment({
-      github,
-      core: {info: vi.fn(), warning: vi.fn()},
-      context: {
-        repo: {owner: 'meta', repo: 'astryx'},
-        serverUrl: 'https://github.com',
-      },
-      expectedIdentity: value,
-      analysisPath: paths.analysis,
-      metadataPath: paths.metadata,
-      a11yPath: paths.a11y,
-      visualPath: paths.visual,
-      lookupPreview: async () => VERCEL_ORIGIN,
-      probePreview: async () => true,
-    });
-    expect(enriched.action).toBe('updated');
-    expect(state.comments).toHaveLength(1);
-    expect(state.comments[0].body).toContain('Modified Components');
-    expect(state.comments[0].body).toContain(`${VERCEL_ORIGIN}/storybook/`);
-    expect(state.comments[0].body).toContain(`${VERCEL_ORIGIN}/sandbox/`);
-  });
-
-  it('adds a late preview without discarding same-head CI and visual evidence', async () => {
-    const value = identity();
-    const {result, github, state} = await reconcile({
-      value,
-      previewAvailable: false,
-    });
-    expect(result.body).toContain('Modified Components');
-    expect(result.body).toContain('Preview availability');
-    const early = await reconcileEarlyPreviewComment({
-      github,
-      owner: 'meta',
-      repo: 'astryx',
-      prNumber: value.prNumber,
-      headSha: value.headSha,
-      origin: VERCEL_ORIGIN,
-      lookupPreview: async () => VERCEL_ORIGIN,
-      probePreview: async () => true,
-    });
-    expect(early.action).toBe('updated');
-    expect(state.comments[0].body).toContain('Modified Components');
-    expect(state.comments[0].body).not.toContain('Preview availability');
-    expect(state.comments[0].body).toContain(`${VERCEL_ORIGIN}/storybook/`);
-    expect(state.comments[0].body).toContain(`${VERCEL_ORIGIN}/sandbox/`);
-  });
-
-  it('replaces a same-head Pages fallback without duplicating its Sandbox link', async () => {
-    const value = identity();
-    const oldOrigin = VERCEL_ORIGIN;
-    const nextOrigin = 'https://astryx-atz4b1yim-fbopensource.vercel.app';
-    const legacySandbox = 'https://facebook.github.io/astryx/pr/5697/sandbox/';
-    const evidence = 'CI, a11y and visual evidence remains here';
-    const {github, state} = githubFixture({
-      value,
-      comments: [
+    }));
+    github.rest.actions.listJobsForWorkflowRun = vi.fn(async () => ({
+      data: [
         {
-          id: 777,
-          user: {type: 'Bot'},
-          body: `## PR Analysis Report\n${PR_ANALYSIS_MARKER}\n<!-- astryx-pr-head:${value.headSha} -->\n\n[View Storybook for this PR](${oldOrigin}/storybook/) · [View Sandbox for this PR](${legacySandbox})\n\n${evidence}`,
+          name: 'lint',
+          conclusion: 'success',
+          started_at: at(0),
+          completed_at: at(2),
+        },
+        {
+          name: 'extra',
+          conclusion: 'success',
+          started_at: at(0),
+          completed_at: at(3),
         },
       ],
+    }));
+  };
+
+  it('reaches the comment for a pull request that changes CI, with the merge base as before', async () => {
+    let seen;
+    const {github} = await reconcile({
+      extendGithub: ciChange,
+      execute: (_node, args) => {
+        seen = args;
+        const file = args[args.indexOf('--ci-impact') + 1];
+        return `## PR Analysis Report\n${fs.readFileSync(file, 'utf8')}`;
+      },
     });
-    const result = await reconcileEarlyPreviewComment({
+    expect(seen).toContain('--ci-impact');
+    const impact = JSON.parse(
+      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
+    );
+    expect(impact.flags).toContain('extra moves onto a non-standard runner');
+    expect(github.rest.repos.getContent).toHaveBeenCalledWith(
+      expect.objectContaining({ref: 'c'.repeat(40)}),
+    );
+  });
+
+  it('names a composite-action-only change as not measured', async () => {
+    let seen;
+    await reconcile({
+      extendGithub: github => {
+        ciChange(github);
+        github.rest.pulls.listFiles = vi.fn(async () => ({
+          data: [{filename: '.github/actions/setup/action.yml'}],
+        }));
+      },
+      execute: (_node, args) => {
+        seen = args;
+        return '## PR Analysis Report\n';
+      },
+    });
+    const impact = JSON.parse(
+      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
+    );
+    expect(impact.unmeasuredFiles).toEqual([
+      '.github/actions/setup/action.yml',
+    ]);
+  });
+
+  it('passes no impact for a pull request that does not change CI', async () => {
+    let seen;
+    await reconcile({
+      extendGithub: github => {
+        ciChange(github);
+        github.rest.pulls.listFiles = vi.fn(async () => ({
+          data: [{filename: 'packages/core/src/Card/Card.tsx'}],
+        }));
+      },
+      execute: (_node, args) => {
+        seen = args;
+        return '## PR Analysis Report\n';
+      },
+    });
+    expect(seen).not.toContain('--ci-impact');
+  });
+});
+
+describe('CI history window', () => {
+  it('counts the seven whole days before today', async () => {
+    const calls = [];
+    const github = {
+      rest: {
+        actions: {
+          listWorkflowRuns: vi.fn(async request => {
+            calls.push(request);
+            return {data: {total_count: 7, workflow_runs: []}};
+          }),
+        },
+      },
+    };
+    const history = await ciHistory({
       github,
       owner: 'meta',
       repo: 'astryx',
-      prNumber: value.prNumber,
-      headSha: value.headSha,
-      origin: nextOrigin,
-      lookupPreview: async () => nextOrigin,
-      probePreview: async () => true,
+      now: new Date('2026-11-01T02:00:00Z'),
     });
-    expect(result.action).toBe('updated');
-    expect(state.comments[0].body).toContain(evidence);
-    expect(state.comments[0].body).toContain(`${nextOrigin}/storybook/`);
-    expect(state.comments[0].body).toContain(`${nextOrigin}/sandbox/`);
-    expect(state.comments[0].body).not.toContain(legacySandbox);
-    expect(
-      state.comments[0].body.match(/View Sandbox for this PR/g),
-    ).toHaveLength(1);
-  });
-
-  it('refreshes a same-head redeployment without losing CI, a11y, or visual evidence', async () => {
-    const value = identity();
-    const {github, state} = await reconcile({
-      value,
-      previewAvailable: true,
-    });
-    const prior = state.comments[0].body;
-    const visualEvidence =
-      '[Visual evidence](https://facebook.github.io/astryx/pr/5697/visual/example/)';
-    state.comments[0].body += `\n${visualEvidence}`;
-    const nextOrigin = 'https://astryx-atz4b1yim-fbopensource.vercel.app';
-
-    const result = await reconcileEarlyPreviewComment({
-      github,
-      owner: 'meta',
-      repo: 'astryx',
-      prNumber: value.prNumber,
-      headSha: value.headSha,
-      origin: nextOrigin,
-      lookupPreview: async () => nextOrigin,
-      probePreview: async () => true,
-    });
-    expect(result.action).toBe('updated');
-    expect(state.comments).toHaveLength(1);
-    expect(state.comments[0].body).toContain('Modified Components');
-    expect(state.comments[0].body).toContain('Accessibility Audit');
-    expect(state.comments[0].body).toContain(visualEvidence);
-    expect(state.comments[0].body).toContain(`${nextOrigin}/storybook/`);
-    expect(state.comments[0].body).toContain(`${nextOrigin}/sandbox/`);
-    expect(state.comments[0].body).not.toContain(VERCEL_ORIGIN);
-    expect(prior).toContain(VERCEL_ORIGIN);
-  });
-
-  it('refuses an early comment when the deployment head becomes stale or draft', async () => {
-    for (const value of [
-      identity({headSha: 'f'.repeat(40)}),
-      identity({draft: true}),
-    ]) {
-      const {github, state} = githubFixture({value});
-      const result = await reconcileEarlyPreviewComment({
-        github,
-        owner: 'meta',
-        repo: 'astryx',
-        prNumber: 5697,
-        headSha: HEAD,
-        origin: VERCEL_ORIGIN,
-        lookupPreview: async () => VERCEL_ORIGIN,
-        probePreview: async () => true,
-      });
-      expect(result.action).toBe('none');
-      expect(state.created).toHaveLength(0);
-      expect(state.updated).toHaveLength(0);
-    }
+    const counted = calls.filter(call => call.per_page === 1);
+    expect(counted.map(call => call.created)).toEqual([
+      '2026-10-25..2026-10-31',
+      '2026-10-25..2026-10-31',
+    ]);
+    expect(history.runsLast7Days).toBe(14);
   });
 });

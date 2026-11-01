@@ -4,8 +4,8 @@
  * @file PopoverSecondDocumentA11y.stories.tsx
  * @input Uses Popover, Button, VStack and HStack from core, and React portals
  * @output The fixture the second-document Popover spec drives in a real
- *   browser: the same two popovers in the page, in a same-origin iframe, and in
- *   a Document Picture-in-Picture window.
+ *   browser: the same popovers in the page, in a same-origin iframe, and in a
+ *   Document Picture-in-Picture window.
  * @position The reproduction path for
  *   `packages/core/src/Popover/__tests__/PopoverSecondDocument.a11y.chromium.spec.ts`
  *   (`docs/specs/AST-009/spec.md` FR30: a browser claim is checked against a
@@ -13,8 +13,9 @@
  *
  * An app can render part of its UI into a second document through a React
  * portal: a same-origin iframe, or a Document Picture-in-Picture window that
- * floats above the page. A Popover there opens, traps Tab, closes on Escape and
- * hands focus back exactly as it does in the page itself.
+ * floats above the page. A Popover there opens, traps Tab, closes on Escape,
+ * hands focus back, and scrolls once its window is too short for it, exactly as
+ * it does in the page itself.
  *
  * SYNC: The spec navigates to this story id and finds the frame, the Pop out
  *   button and the popover controls by name. Nothing at compile time catches a
@@ -39,7 +40,7 @@ const meta: Meta = {
     docs: {
       description: {
         component:
-          'The same two popovers in the page, in a same-origin iframe, and in a Picture-in-Picture window (Pop out). In every document, opening focuses First, Tab stays inside, Escape closes either popover, and closing hands focus back to its trigger.',
+          'The same popovers in the page, in a same-origin iframe, and in a Picture-in-Picture window (Pop out). In every document, opening focuses First, Tab stays inside, Escape closes either settings popover, and closing hands focus back to its trigger. Long list scrolls once its window is too short for it.',
       },
     },
   },
@@ -55,7 +56,7 @@ const styles = stylex.create({
     borderStyle: 'solid',
     borderColor: 'currentColor',
   },
-  // Clear of either open popover, so a press on it is a press outside.
+  // Clear of either open settings popover, so a press on it is a press outside.
   outside: {
     marginBlockStart: 96,
   },
@@ -70,19 +71,29 @@ interface DocumentPictureInPicture {
 /** Copy the page's style sheets into a second document, as an app does. */
 function adoptPageStyles(target: Document) {
   for (const sheet of Array.from(document.styleSheets)) {
-    try {
-      const style = target.createElement('style');
-      style.textContent = Array.from(sheet.cssRules, rule => rule.cssText).join(
-        '\n',
-      );
-      target.head.append(style);
-    } catch {
-      // A cross-origin sheet cannot be read; the page's own sheets can.
+    // A sheet from another origin cannot be read, so only that one is skipped.
+    // Any other error in the copy throws.
+    if (
+      sheet.href != null &&
+      new URL(sheet.href).origin !== window.location.origin
+    ) {
+      continue;
     }
+    const style = target.createElement('style');
+    style.textContent = Array.from(sheet.cssRules, rule => rule.cssText).join(
+      '\n',
+    );
+    target.head.append(style);
   }
 }
 
-/** The default popover, and one that closes only on request. */
+/** Ten rows: taller than a short window, shorter than a tall one. */
+const LONG_LIST = Array.from({length: 10}, (_, index) => `Row ${index + 1}`);
+
+/**
+ * The default popover, one that closes only on request, and a long one that
+ * scrolls once its window is too short for it.
+ */
 function Popovers() {
   const controls = (
     <HStack gap={2}>
@@ -100,6 +111,17 @@ function Popovers() {
         hasLightDismiss={false}
         content={controls}>
         <Button label="Pinned settings" />
+      </Popover>
+      <Popover
+        label="Long list"
+        content={
+          <VStack gap={1}>
+            {LONG_LIST.map(row => (
+              <span key={row}>{row}</span>
+            ))}
+          </VStack>
+        }>
+        <Button label="Long list" />
       </Popover>
       <p {...stylex.props(styles.outside)}>Outside</p>
     </VStack>
@@ -161,7 +183,7 @@ function PictureInPicturePopovers() {
 }
 
 /**
- * Two popovers in each of three documents: the page, a same-origin iframe, and
+ * The popovers in each of three documents: the page, a same-origin iframe, and
  * a Picture-in-Picture window that Pop out opens.
  */
 export const SecondDocuments: StoryObj = {

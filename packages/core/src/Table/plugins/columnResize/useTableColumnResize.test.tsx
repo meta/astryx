@@ -574,6 +574,28 @@ describe('useTableColumnResize', () => {
       expect(handle).toHaveAttribute('aria-label', 'Resize column Name');
     });
 
+    it("names a node header's handle by the header's visible text (AR1)", () => {
+      function Glyph() {
+        return <svg aria-hidden />;
+      }
+      render(
+        <ResizeTable
+          columns={[
+            {key: 'name', header: <span>Amount (EUR)</span>},
+            {key: 'role', header: <Glyph />},
+            {key: 'id', header: 'ID'},
+          ]}
+        />,
+      );
+      const [amount, role] = getResizeHandles();
+      expect(amount).toHaveAttribute(
+        'aria-label',
+        'Resize column Amount (EUR)',
+      );
+      // A header with no text it renders through children falls back to the key.
+      expect(role).toHaveAttribute('aria-label', 'Resize column role');
+    });
+
     it('handle has aria-valuemin', () => {
       render(<ResizeTable minWidth={80} />);
       const handle = getResizeHandles()[0];

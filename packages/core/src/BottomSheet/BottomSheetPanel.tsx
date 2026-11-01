@@ -48,7 +48,8 @@ import {
   sizeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -70,7 +71,11 @@ import {
   type BottomSheetSnapPoint,
 } from './snapOffsets';
 import {useMobileKeyboard} from './useMobileKeyboard';
-import {useSheetGestures} from './useSheetGestures';
+import {
+  scrollPreservationPadding,
+  sheetLayoutHeight,
+  useSheetGestures,
+} from './useSheetGestures';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',
@@ -591,6 +596,8 @@ export function BottomSheetPanel({
     ignoredSnapPointsMessage !== '',
   );
 
+  // A caller's height owns the element's height: the drag never writes it.
+  const consumerHeight = style?.height;
   const {
     contentProps,
     handleProps,
@@ -615,6 +622,7 @@ export function BottomSheetPanel({
     onDismiss,
     snapHeights,
     onScrimOpacity,
+    hasFixedHeight: consumerHeight != null,
   });
 
   const {getViewportProps, getContentProps} = useScrollableArea({
@@ -757,6 +765,8 @@ export function BottomSheetPanel({
     // transform — the layout height changes at rest, in one reconciling render
     // whose visible geometry is identical (see useSheetGestures).
     //   - dragging above the base restores the full height below the viewport
+    //     (the move that crosses writes that height to the element itself,
+    //     so this render only catches up to it)
     //   - a peek settles with layout 0, so it slides rather than reflowing
     const layoutOffset = isDragging
       ? dragOffset < settledOffset
@@ -773,7 +783,7 @@ export function BottomSheetPanel({
     const isTraveling = isDragging || settlingLayoutOffset != null;
     resizedHeight =
       layoutOffset > 0 || isTraveling
-        ? `${Math.max(0, sheetHeight - Math.max(0, layoutOffset))}px`
+        ? sheetLayoutHeight(sheetHeight, layoutOffset)
         : undefined;
     gestureTransform =
       translation !== 0 ? `translateY(${translation}px)` : undefined;
@@ -790,6 +800,9 @@ export function BottomSheetPanel({
       ? retainedTransform
       : undefined;
   const consumerTransform = style?.transform;
+  const hostHeight =
+    isInteractive || isRetained || isClosing ? resizedHeight : undefined;
+  const bodyEndPadding = scrollPreservationPadding(scrollPreservationInset);
   // The transform is written to the element here, not rendered through the
   // style prop. A drag writes it straight to the element once per input
   // sample (useSheetGestures) and renders nothing in between, so React never
@@ -798,20 +811,39 @@ export function BottomSheetPanel({
   // the finger left it. Written after every commit instead, outside a drag,
   // the resting value lands in the same style update as the restored
   // transition, so a settle or a dismissal animates from the live position.
+  //
+  // The height and the scrolling area's end inset are rendered through props,
+  // but a drag that crosses its base detent writes them to the elements too.
+  // When the release is processed before that move's render commits, React
+  // compares the resting values with the ones it committed before the drag,
+  // finds them unchanged and writes nothing, so the sheet would stay drawn at
+  // the drag's height. They are written here after every commit, outside a
+  // drag, for the same reason as the transform. A caller's height is left to
+  // the style prop: the drag does not write over it, so there is nothing to
+  // restore.
   useLayoutEffect(() => {
-    if (isDragging || consumerTransform != null) {
+    if (isDragging) {
       return;
     }
     const element = elementRef.current;
     if (element != null) {
-      element.style.transform = sheetTransform ?? '';
+      if (consumerTransform == null) {
+        element.style.transform = sheetTransform ?? '';
+      }
+      if (consumerHeight == null) {
+        element.style.height = hostHeight ?? '';
+      }
+    }
+    const body = bodyElementRef.current;
+    if (body != null) {
+      body.style.paddingBlockEnd = bodyEndPadding ?? '';
     }
   });
   const gestureStyle = {
     transition: contentProps.style.transition,
     touchAction: contentProps.style.touchAction,
     overscrollBehavior: contentProps.style.overscrollBehavior,
-    height: resizedHeight,
+    height: hostHeight,
   };
   return (
     <div
@@ -838,7 +870,7 @@ export function BottomSheetPanel({
           ...(isInteractive
             ? gestureStyle
             : isRetained || isClosing
-              ? {height: resizedHeight}
+              ? {height: hostHeight}
               : {}),
           ...style,
         },
@@ -859,8 +891,8 @@ export function BottomSheetPanel({
                 styles.body,
                 height === 'tall' && styles.tallKeyboardBody,
               ),
-              scrollPreservationInset > 0
-                ? {style: {paddingBlockEnd: `${scrollPreservationInset}px`}}
+              bodyEndPadding != null
+                ? {style: {paddingBlockEnd: bodyEndPadding}}
                 : {},
             ),
           }),

@@ -635,26 +635,6 @@
     "defaultMessage": "Tyhjennä järjestys",
     "description": "Screen-reader-only label on a column header button that will remove the current sort. \"Clear\" here means remove, not transparent. Part of the sort set."
   },
-  "@astryx.table.sort.direction.ascending": {
-    "defaultMessage": "nouseva",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.direction.descending": {
-    "defaultMessage": "laskeva",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.sortBy": {
-    "defaultMessage": "Järjestä: {label}",
-    "description": "Aria label for a sortable Table header button when the column is unsorted. `label` is the column header text."
-  },
-  "@astryx.table.sort.sortedBy": {
-    "defaultMessage": "Järjestä: {label}, järjestys {direction}",
-    "description": "Aria label for a sorted Table header button. `direction` is the localized direction word from @astryx.table.sort.direction.*."
-  },
-  "@astryx.table.sort.sortedByWithPriority": {
-    "defaultMessage": "Järjestä: {label}, järjestys {direction}, prioriteetti {rank, number} / {total, number}",
-    "description": "Aria label for a sorted Table header button in multi-sort. `rank` is the 1-based position of this column in the sort order; `total` is the number of sorted columns."
-  },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Hylkää ilmoitus",
     "description": "Screen-reader-only label on the X button of a Toast (transient notification popup). Distinct from `banner.dismiss` (persistent banner)."
@@ -1480,4 +1460,3 @@
     "description": "Default summary on the closed trigger of a lab TransferListSelector, stating how many options are currently chosen. Consumers usually override this with a domain phrase (e.g. \"7 columns\")."
   }
 }
-

@@ -60,6 +60,14 @@ function context({
   };
 }
 
+const reviewGate = (description, state = 'pending') => ({
+  sha: head,
+  context: 'review-required',
+  state,
+  description,
+  creator: {login: 'github-actions[bot]'},
+});
+
 function trustedStatus({
   runId,
   statusContext = 'spec-owner-approval',
@@ -99,16 +107,31 @@ function createHarness({
   changedFiles,
   headContent = 'kind: architecture\nauthority: current\n',
   baseContent = '',
+  // Spec text by commit, for heads before the current one.
+  contentAt = {},
+  // Changed files of an earlier commit against the base; the head's files
+  // when absent.
+  filesAt = {},
+  codeGate = {
+    sha: head,
+    context: 'review-required',
+    state: 'success',
+    description: 'No code review required.',
+    creator: {login: 'github-actions[bot]'},
+    created_at: '2026-08-30T09:00:00Z',
+  },
 } = {}) {
   const files = changedFiles ?? [changedFile];
   const state = {
     pullGets: 0,
-    statuses: [...statuses],
+    // review-signal's code half of the review gate, already published.
+    statuses: [...statuses, ...(codeGate ? [codeGate] : [])],
     comments: [...comments],
     reviews: [...reviews],
     timeline: [...timeline],
     calls: [],
     reads: [],
+    summary: null,
     labels: new Set(labels),
     knownLabels: new Set(labels),
     pr: {
@@ -200,11 +223,15 @@ function createHarness({
         },
       },
       repos: {
+        compareCommitsWithBasehead: async ({basehead}) => ({
+          data: {files: filesAt[basehead.split('...')[1]] ?? files},
+        }),
         listCommitStatusesForRef: methods.listStatuses,
         createCommitStatus: async input => {
           onCreateStatus?.(input, state);
           state.reads.push(`status:${input.context}:${input.state}`);
           const status = {
+            id: (state.nextStatusId = (state.nextStatusId ?? 0) + 1),
             ...input,
             creator: {login: 'github-actions[bot]'},
             created_at: '2026-08-30T10:00:30Z',
@@ -214,10 +241,16 @@ function createHarness({
           state.calls.push(`status:${input.context}:${input.state}`);
           return {data: status};
         },
-        getContent: async ({ref}) => ({
+        getContent: async ({ref, path: filePath}) => ({
           data: {
             content: Buffer.from(
-              ref === state.pr.head.sha ? headContent : baseContent,
+              `${ref}:${filePath}` in contentAt
+                ? contentAt[`${ref}:${filePath}`]
+                : ref in contentAt
+                  ? contentAt[ref]
+                  : ref === state.pr.head.sha
+                    ? headContent
+                    : baseContent,
             ).toString('base64'),
           },
         }),
@@ -238,6 +271,13 @@ function createHarness({
   const core = {
     info: message => state.calls.push(`info:${message}`),
     warning: message => state.calls.push(`warning:${message}`),
+    summary: {
+      addRaw(markdown) {
+        state.summary = markdown;
+        return this;
+      },
+      write: async () => {},
+    },
   };
   return {github, core, state};
 }
@@ -252,6 +292,48 @@ async function run(harness, runContext) {
   });
 }
 
+// Statuses this run published, without the seeded code half of the gate.
+function published(state) {
+  return state.statuses.filter(
+    status =>
+      !(
+        status.context === 'review-required' &&
+        status.created_at === '2026-08-30T09:00:00Z'
+      ),
+  );
+}
+
+/** Count every GitHub API call a run makes (paginated lists count once). */
+function countApiCalls(harness) {
+  const counter = {total: 0};
+  for (const namespace of Object.values(harness.github.rest)) {
+    for (const [name, method] of Object.entries(namespace)) {
+      if (typeof method !== 'function') continue;
+      namespace[name] = async (...args) => {
+        counter.total += 1;
+        return method(...args);
+      };
+    }
+  }
+  return counter;
+}
+
+const codeOnlyFile = {
+  filename: 'packages/core/src/Button/Button.tsx',
+  status: 'modified',
+};
+
+/** A pull_request_target event that carries the full pull request. */
+function fullPrContext(harness, runId) {
+  const ctx = context({runId, action: 'synchronize'});
+  ctx.payload.pull_request = structuredClone(harness.state.pr);
+  return ctx;
+}
+
+function latestReviewGate(state) {
+  return state.statuses.find(status => status.context === 'review-required');
+}
+
 function latestGateStatus(state) {
   return state.statuses.find(
     status => status.context === 'spec-owner-approval',
@@ -264,15 +346,15 @@ const designRecord = {
 };
 const currentDesign = 'kind: design\nauthority: current\n';
 const componentRecord = {
-  filename: 'packages/core/src/Button/Button.spec.md',
+  filename: 'docs/specs/components/Button/Button.spec.md',
   status: 'modified',
 };
 function currentComponentSpec(decision, body = 'Body.') {
   return `---\nkind: component\nauthority: current\n---\n\n## Design relationships\n\n${body}\n\n### Design decisions\n\n<!-- design-decisions:v1 -->\n\n| ID | Decision | Intent or reason | Applies to | Allowed variation |\n| --- | --- | --- | --- | --- |\n| DD1 | ${decision} | Preserve emphasis. | Default state | Theme tokens may vary. |\n\n### Theming anatomy\n`;
 }
 
-// Exact-head approval by a real spec owner. The auto-merge mechanics below
-// need an approved head.
+// Exact-head approval by a real spec owner. The approval cases below
+// need an approved head; they must not borrow the design self-attestation.
 const specOwnerReview = {
   user: {login: 'imdreamrunner'},
   state: 'APPROVED',
@@ -294,14 +376,65 @@ function createDesignHarness(options = {}) {
 }
 
 describe('spec owner workflow reconciliation', () => {
+  it('skips the owner reads and the label call for a pull request that changes no records', async () => {
+    const harness = createHarness({
+      changedFile: {filename: 'README.md', status: 'modified'},
+    });
+    const reads = [];
+    for (const [group, name] of [
+      ['pulls', 'listReviews'],
+      ['issues', 'listComments'],
+      ['issues', 'listEventsForTimeline'],
+      ['issues', 'removeLabel'],
+    ]) {
+      harness.github.rest[group][name] = async () => {
+        reads.push(name);
+        return {data: []};
+      };
+    }
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(reads).toEqual([]);
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+    });
+  });
+
+  it('still reaches a terminal status when the changed-file count moves after the file list', async () => {
+    const harness = createHarness({
+      changedFile: {filename: 'README.md', status: 'modified'},
+      onPullGet: (count, state) => {
+        if (count >= 2) state.pr.changed_files = 2;
+      },
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestGateStatus(harness.state).description).not.toMatch(
+      /^Reconciling exact head/,
+    );
+  });
+
+  it('still removes a stale review label from a pull request that changes no records', async () => {
+    const harness = createHarness({
+      changedFile: {filename: 'README.md', status: 'modified'},
+      labels: [env.REVIEW_LABEL],
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(harness.state.calls).toContain(`remove-label:${env.REVIEW_LABEL}`);
+  });
+
   it('clears the gate on an exact-head ENGOWNER review', async () => {
     const harness = createApprovedHarness();
 
     await run(harness, context({runId: 100n}));
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'success',
-      description: expect.stringContaining('Approved by @imdreamrunner'),
+      description: expect.stringContaining('Spec approved by @imdreamrunner'),
     });
   });
 
@@ -325,9 +458,9 @@ describe('spec owner workflow reconciliation', () => {
       }),
     );
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'success',
-      description: expect.stringContaining('Approved by @josephfarina'),
+      description: expect.stringContaining('Spec approved by @josephfarina'),
     });
   });
 
@@ -351,9 +484,11 @@ describe('spec owner workflow reconciliation', () => {
       }),
     );
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'pending',
-      description: expect.stringContaining('engineering owner'),
+      description: expect.stringContaining(
+        'an eng owner can reply /approve-spec <sha>',
+      ),
     });
     expect(harness.state.calls).not.toContain('enable-auto-merge');
   });
@@ -382,9 +517,9 @@ describe('spec owner workflow reconciliation', () => {
       }),
     );
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'success',
-      description: expect.stringContaining('Approved by @ernestt'),
+      description: expect.stringContaining('Spec approved by @ernestt'),
     });
   });
 
@@ -403,7 +538,7 @@ describe('spec owner workflow reconciliation', () => {
 
     expect(latestGateStatus(harness.state)).toMatchObject({
       state: 'success',
-      description: 'No knowledge records changed.',
+      description: 'Mirrors review-required · spec ok',
     });
     expect(harness.state.calls).not.toContain('enable-auto-merge');
   });
@@ -426,9 +561,11 @@ describe('spec owner workflow reconciliation', () => {
       }),
     );
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'pending',
-      description: expect.stringContaining('theme approver'),
+      description: expect.stringContaining(
+        'a design or eng owner can reply /approve-spec <sha>',
+      ),
     });
     expect(harness.state.calls).not.toContain('enable-auto-merge');
     expect(harness.state.pr.auto_merge).toBe(null);
@@ -455,9 +592,11 @@ describe('spec owner workflow reconciliation', () => {
         }),
       );
 
-      expect(latestGateStatus(harness.state)).toMatchObject({
+      expect(latestReviewGate(harness.state)).toMatchObject({
         state: 'pending',
-        description: expect.stringContaining('theme approver'),
+        description: expect.stringContaining(
+          'a design or eng owner can reply /approve-spec <sha>',
+        ),
       });
       expect(harness.state.calls).not.toContain('enable-auto-merge');
       expect(
@@ -496,7 +635,7 @@ describe('spec owner workflow reconciliation', () => {
       }),
     );
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'success',
       description: expect.stringContaining('@rubyycheung'),
     });
@@ -529,7 +668,7 @@ describe('spec owner workflow reconciliation', () => {
       }),
     );
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'success',
       description: expect.stringContaining('@czarandy'),
     });
@@ -564,7 +703,7 @@ describe('spec owner workflow reconciliation', () => {
     );
 
     expect(harness.state.pullGets).toBe(0);
-    expect(harness.state.statuses).toEqual([]);
+    expect(published(harness.state)).toEqual([]);
   });
 
   it('abandons the old event when the live head changes', async () => {
@@ -600,6 +739,112 @@ describe('spec owner workflow reconciliation', () => {
     expect(
       harness.state.calls.some(call => call.includes('yielded to newer run')),
     ).toBe(true);
+  });
+
+  it('restores the review gate from a newer run it yields to', async () => {
+    const harness = createHarness({
+      headContent: 'kind: architecture\nauthority: current\n',
+      comments: [{user: {login: 'cixzhang'}, body: `/approve-spec ${head}`}],
+      statuses: [
+        trustedStatus({
+          runId: 101n,
+          description: 'Mirrors review-required · spec waiting (eng)',
+        }),
+      ],
+    });
+
+    await run(harness, context({runId: 100n}));
+
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'pending',
+      target_url: canonicalRunUrl(repository, '101', '1'),
+    });
+  });
+
+  it('keeps the newer run\u2019s link when it yields to a newer success', async () => {
+    const harness = createHarness({
+      statuses: [
+        trustedStatus({
+          runId: 101n,
+          state: 'success',
+          description: 'Mirrors review-required \u00b7 spec ok (@cixzhang)',
+        }),
+      ],
+    });
+
+    await run(harness, context({runId: 100n}));
+
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'success',
+      target_url: canonicalRunUrl(repository, '101', '1'),
+    });
+  });
+
+  it('restores a newer decision that lands just before the waiting write', async () => {
+    let landed = false;
+    const harness = createHarness({
+      onCreateStatus: (input, state) => {
+        if (landed || input.context !== 'review-required') return;
+        landed = true;
+        // A newer run decides success just before this run's waiting write.
+        state.statuses.unshift(
+          trustedStatus({
+            runId: 101n,
+            state: 'success',
+            description: 'Mirrors review-required \u00b7 spec ok (@cixzhang)',
+          }),
+        );
+      },
+    });
+
+    await run(harness, context({runId: 100n}));
+
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'success',
+      target_url: canonicalRunUrl(repository, '101', '1'),
+    });
+  });
+
+  it('keeps the review gate waiting when a run fails part-way', async () => {
+    // An approved head: the gate succeeded on the earlier run.
+    const harness = createHarness({
+      statuses: [
+        {
+          sha: head,
+          context: 'review-required',
+          state: 'success',
+          description:
+            '\u2705 Spec approved by @cixzhang \u00b7 No code review required.',
+          creator: {login: 'github-actions[bot]'},
+        },
+      ],
+    });
+    harness.github.rest.pulls.listFiles = async () => {
+      throw new Error('listFiles failed');
+    };
+
+    await expect(run(harness, context({runId: 100n}))).rejects.toThrow();
+
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'pending',
+      description: '\u23f3 Checking for spec changes\u2026',
+    });
+  });
+
+  it('leads with code review, and relinks the same text to a newer run', async () => {
+    const harness = createHarness({
+      headContent: 'kind: architecture\nauthority: current\n',
+      codeGate: reviewGate('Waiting on code review: core change'),
+    });
+
+    await run(harness, context({runId: 100n}));
+    await run(harness, context({runId: 101n}));
+
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'pending',
+      description: 'Waiting on code review: core change (+ spec approval)',
+      target_url: canonicalRunUrl(repository, '101', '1'),
+    });
   });
 
   it('skips fork owner reviews before any GitHub API work', async () => {
@@ -641,16 +886,17 @@ describe('spec owner workflow reconciliation', () => {
   it('orders a dismissal after an earlier command by its timeline time', async () => {
     const review = {
       id: 17,
-      user: {login: 'cixzhang'},
+      user: {login: 'imdreamrunner'},
       state: 'DISMISSED',
       commit_id: head,
       submitted_at: '2026-08-30T09:00:00Z',
       updated_at: '2026-08-30T10:02:00Z',
     };
-    // A same-owner command at 10:01; the dismissal is dated by its 10:02
+    // A same-owner command at 10:01 (a non-author owner, as GitHub accepts no
+    // review from the author); the dismissal is dated by its 10:02
     // timeline event, so it is the latest act and the gate waits.
     const command = {
-      user: {login: 'cixzhang'},
+      user: {login: 'imdreamrunner'},
       body: `/approve-spec ${head}`,
       created_at: '2026-08-30T10:01:00Z',
     };
@@ -703,16 +949,16 @@ describe('spec owner workflow reconciliation', () => {
       context({runId: 100n, actor: 'ernestt', author: 'ernestt'}),
     );
 
-    expect(latestGateStatus(harness.state)).toMatchObject({
+    expect(latestReviewGate(harness.state)).toMatchObject({
       state: 'pending',
-      description: expect.stringContaining('engineering owner'),
+      description: expect.stringContaining('an eng owner can reply'),
     });
     expect(harness.state.calls).not.toContain('enable-auto-merge');
   });
 
   it('reconciles same-repository owner reviews automatically', async () => {
     const review = {
-      user: {login: 'cixzhang'},
+      user: {login: 'czarandy'},
       state: 'APPROVED',
       commit_id: head,
       submitted_at: '2026-08-30T10:00:00Z',
@@ -730,7 +976,7 @@ describe('spec owner workflow reconciliation', () => {
     );
 
     expect(harness.state.pullGets).toBeGreaterThan(0);
-    expect(latestGateStatus(harness.state).state).toBe('success');
+    expect(latestReviewGate(harness.state).state).toBe('success');
   });
 
   it('reconciles an exact-head owner command for a fork current-spec PR', async () => {
@@ -755,7 +1001,7 @@ describe('spec owner workflow reconciliation', () => {
     );
 
     expect(harness.state.pullGets).toBeGreaterThan(0);
-    expect(latestGateStatus(harness.state).state).toBe('success');
+    expect(latestReviewGate(harness.state).state).toBe('success');
   });
 
   it('rejects valid-shaped non-owner commands before API work', async () => {
@@ -777,7 +1023,7 @@ describe('spec owner workflow reconciliation', () => {
     );
 
     expect(harness.state.pullGets).toBe(0);
-    expect(harness.state.statuses).toEqual([]);
+    expect(published(harness.state)).toEqual([]);
   });
 
   it('rejects non-owner reviews before API work', async () => {
@@ -801,7 +1047,7 @@ describe('spec owner workflow reconciliation', () => {
     );
 
     expect(harness.state.pullGets).toBe(0);
-    expect(harness.state.statuses).toEqual([]);
+    expect(published(harness.state)).toEqual([]);
   });
 
   it('rejects ordinary comments before any API work', async () => {
@@ -833,7 +1079,7 @@ describe('spec owner workflow reconciliation', () => {
 
       await run(harness, context({runId: 100n}));
 
-      expect(harness.state.statuses).toEqual([]);
+      expect(published(harness.state)).toEqual([]);
       expect(harness.state.calls).toEqual([
         'info:The pull request is already merged or closed; the gate does not rewrite a settled head.',
       ]);
@@ -845,7 +1091,7 @@ describe('spec owner workflow reconciliation', () => {
 
       await run(harness, context({runId: 100n}));
 
-      expect(harness.state.statuses).toEqual([]);
+      expect(published(harness.state)).toEqual([]);
       expect(harness.state.calls).not.toContain(
         'status:spec-owner-approval:pending',
       );
@@ -946,7 +1192,7 @@ describe('spec owner workflow reconciliation', () => {
 
       await run(harness, context({runId: 100n}));
 
-      expect(latestGateStatus(harness.state).state).toBe('success');
+      expect(latestReviewGate(harness.state).state).toBe('success');
       expect(harness.state.calls).not.toContain('enable-auto-merge');
       expect(harness.state.pr.auto_merge).toBe(null);
     });
@@ -993,72 +1239,322 @@ describe('spec owner workflow reconciliation', () => {
     ).toBe(true);
   });
 
-  describe('an owner command that misses the exact head is answered', () => {
-    function commandRun(body, harness = createHarness()) {
-      const comment = {
-        user: {login: 'cixzhang'},
-        body,
-        created_at: '2026-08-30T10:00:00Z',
-      };
-      harness.state.comments.push(comment);
-      return {
-        harness,
-        comment,
-        promise: run(
-          harness,
-          context({
-            runId: 100n,
-            eventName: 'issue_comment',
-            action: 'created',
-            comment,
-          }),
-        ),
-      };
+  describe('one approval binds the spec content (DEC-14)', () => {
+    const oldHead = '3333333333333333333333333333333333333333';
+    const draftRecord = [
+      '---',
+      'kind: architecture',
+      'id: architecture:owner-ready',
+      'authority: draft',
+      'approved_by: null',
+      'approved_at: null',
+      '---',
+      '',
+      '# Owner ready',
+      '',
+      'The contract.',
+      '',
+    ].join('\n');
+    const currentRecord = draftRecord
+      .replace('authority: draft', 'authority: current')
+      .replace('approved_by: null', 'approved_by: cixzhang')
+      .replace('approved_at: null', 'approved_at: 2026-10-28');
+    const changedRecord = currentRecord.replace(
+      'The contract.',
+      'A different contract.',
+    );
+    const waiting =
+      '⏳ Waiting for human spec approval: an eng owner can reply /approve-spec <sha>';
+
+    function ownerComment(
+      body,
+      createdAt = '2026-08-30T10:05:00Z',
+      login = 'cixzhang',
+    ) {
+      return {user: {login}, body, created_at: createdAt};
     }
 
-    it.each([
-      ['/approve-spec', 'did not name a commit'],
-      ['/approve-spec abc1234', 'full 40-character commit SHA'],
-      [`/approve-spec ${nextHead}`, 'is not the current head'],
-    ])('answers %s instead of ignoring it', async (body, reason) => {
-      const {harness, promise} = commandRun(body);
-      await promise;
+    async function commentRun(harness, comment, runId = 100n) {
+      harness.state.comments.push(comment);
+      await run(
+        harness,
+        context({
+          runId,
+          eventName: 'issue_comment',
+          action: 'created',
+          comment,
+        }),
+      );
+    }
 
-      const help = harness.state.comments.at(-1);
-      expect(harness.state.calls).toContain('create-comment');
-      expect(help.body).toContain(`<!-- spec-owner-command-help:${head} -->`);
-      expect(help.body).toContain(reason);
-      expect(help.body).toContain(`/approve-spec ${head}`);
-      expect(latestGateStatus(harness.state).state).toBe('pending');
-      expect(harness.state.calls).not.toContain('enable-auto-merge');
-    });
+    it('keeps an ENGOWNER-authored spec PR pending until /approve-spec <head>', async () => {
+      const harness = createHarness({headContent: currentRecord});
 
-    it('names the revoke verb the owner actually used', async () => {
-      const {harness, promise} = commandRun('/revoke-spec');
-      await promise;
+      await run(harness, context({runId: 100n}));
 
-      expect(harness.state.comments.at(-1).body).toContain(
-        `/revoke-spec ${head}`,
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'pending',
+        description: waiting,
+      });
+      expect(latestGateStatus(harness.state)).toMatchObject({
+        state: 'pending',
+        description: 'Mirrors review-required · spec waiting (eng)',
+      });
+      expect(harness.state.calls).not.toContain('create-comment');
+      expect(harness.state.summary).toContain(`/approve-spec ${head}`);
+      expect(harness.state.summary).toContain('architecture:owner-ready');
+      expect(harness.state.summary).toContain('Owner ready');
+
+      await commentRun(harness, ownerComment(`/approve-spec ${head}`), 101n);
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'success',
+        description: '✅ Spec approved by @cixzhang · No code review required.',
+      });
+      expect(latestGateStatus(harness.state).description).toBe(
+        'Mirrors review-required · spec ok (@cixzhang)',
       );
     });
 
-    it('answers a given head only once', async () => {
-      const {harness, promise} = commandRun('/approve-spec');
-      await promise;
-      const {promise: second} = commandRun('/approve-spec', harness);
-      await second;
+    it.each([
+      ['a commit that changes no spec text', 'currentRecord', 'review'],
+      ['the draft-to-current flip', 'draftRecord', 'command'],
+    ])('keeps an approval across %s', async (_name, earlier, act) => {
+      const harness = createHarness({
+        headContent: currentRecord,
+        contentAt: {
+          [oldHead]: earlier === 'draftRecord' ? draftRecord : currentRecord,
+        },
+        reviews:
+          act === 'review' ? [{...specOwnerReview, commit_id: oldHead}] : [],
+        comments:
+          act === 'command' ? [ownerComment(`/approve-spec ${oldHead}`)] : [],
+      });
 
-      expect(
-        harness.state.calls.filter(call => call === 'create-comment'),
-      ).toHaveLength(1);
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state).state).toBe('success');
     });
 
-    it('stays quiet when the command names the exact head', async () => {
-      const {harness, promise} = commandRun(`/approve-spec ${head}`);
-      await promise;
+    it('resets an approval when spec text changes, and says so', async () => {
+      const harness = createHarness({
+        headContent: changedRecord,
+        contentAt: {[oldHead]: currentRecord},
+        comments: [ownerComment(`/approve-spec ${oldHead}`)],
+      });
 
-      expect(harness.state.calls).not.toContain('create-comment');
-      expect(latestGateStatus(harness.state).state).toBe('success');
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'pending',
+        description: waiting,
+      });
+      expect(harness.state.summary).toContain(
+        'Spec changed after approval at 2026-08-30T10:05:00Z',
+      );
+    });
+
+    it('resets an approval when the head drops an approved spec path', async () => {
+      const dropped = 'docs/specs/dropped/spec.md';
+      const harness = createHarness({
+        headContent: currentRecord,
+        contentAt: {
+          [oldHead]: currentRecord,
+          [`${head}:docs/specs/dropped/spec.md`]: 'base text\n',
+          [`${oldHead}:docs/specs/dropped/spec.md`]: 'approved text\n',
+        },
+        // The approved commit also changed a record the head reverted.
+        filesAt: {
+          [oldHead]: [
+            {filename: 'docs/specs/owner-ready/spec.md', status: 'added'},
+            {filename: dropped, status: 'modified'},
+          ],
+        },
+        comments: [ownerComment(`/approve-spec ${oldHead}`)],
+      });
+
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'pending',
+        description: waiting,
+      });
+    });
+
+    it('reads a spec wait as satisfied code review, not an older code wait', async () => {
+      const harness = createHarness({
+        headContent: currentRecord,
+        comments: [ownerComment(`/approve-spec ${head}`)],
+        // review-clear cleared code review under a spec wait.
+        statuses: [reviewGate(waiting)],
+        codeGate: reviewGate(
+          'Waiting on code review: core change (+ spec approval)',
+        ),
+      });
+
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state).state).toBe('success');
+    });
+
+    it('names the owner whose request for changes holds the gate', async () => {
+      const harness = createHarness({
+        headContent: currentRecord,
+        comments: [ownerComment(`/approve-spec ${head}`)],
+        reviews: [
+          {
+            user: {login: 'imdreamrunner'},
+            state: 'CHANGES_REQUESTED',
+            commit_id: head,
+            submitted_at: '2026-08-30T10:06:00Z',
+          },
+        ],
+      });
+
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'pending',
+        description:
+          '⏳ Waiting for human spec approval: @imdreamrunner requested changes and can reply /approve-spec <sha>',
+      });
+    });
+
+    it('recomposes when code review is withdrawn while it writes', async () => {
+      let injected = false;
+      const harness = createHarness({
+        headContent: currentRecord,
+        comments: [ownerComment(`/approve-spec ${head}`)],
+        // review-clear withdraws code approval between this job's read and write.
+        onCreateStatus: (input, state) => {
+          if (input.context !== 'review-required' || injected) return;
+          injected = true;
+          state.statuses.unshift({
+            ...reviewGate('Waiting on code review after approval withdrawal.'),
+            id: 999,
+          });
+        },
+      });
+
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'pending',
+        description: 'Waiting on code review after approval withdrawal.',
+      });
+    });
+
+    it('withdraws on /revoke-spec, says who, and approves again after it', async () => {
+      const harness = createHarness({
+        headContent: currentRecord,
+        comments: [ownerComment(`/approve-spec ${head}`)],
+      });
+
+      await commentRun(
+        harness,
+        ownerComment('/revoke-spec', '2026-08-30T10:10:00Z'),
+      );
+      expect(latestReviewGate(harness.state)).toMatchObject({
+        state: 'pending',
+        description: waiting,
+      });
+      expect(harness.state.summary).toContain(
+        'Approval revoked by @cixzhang at 2026-08-30T10:10:00Z',
+      );
+
+      await commentRun(
+        harness,
+        ownerComment(`/approve-spec ${head}`, '2026-08-30T10:15:00Z'),
+        101n,
+      );
+      expect(latestReviewGate(harness.state).state).toBe('success');
+    });
+
+    it('never counts an approving review by the author', async () => {
+      const harness = createHarness({
+        headContent: currentRecord,
+        reviews: [{...specOwnerReview, user: {login: 'cixzhang'}}],
+      });
+
+      await run(harness, context({runId: 100n}));
+
+      expect(latestReviewGate(harness.state).state).toBe('pending');
+    });
+  });
+});
+
+describe('a head that changes no knowledge record', () => {
+  it('is decided once, then read back in two calls with nothing written', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+
+    await run(harness, fullPrContext(harness, 100n));
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
+    });
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'No code review required.',
+    });
+
+    const statusCount = harness.state.statuses.length;
+    const counter = countApiCalls(harness);
+    await run(harness, fullPrContext(harness, 101n));
+
+    // The file list and the head's statuses; no status is written again.
+    expect(counter.total).toBe(2);
+    expect(harness.state.statuses).toHaveLength(statusCount);
+  });
+
+  it('decides a new head in a handful of calls, not a full reconcile', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    const counter = countApiCalls(harness);
+
+    await run(harness, fullPrContext(harness, 100n));
+
+    // Was 27 (pull ×3, files, reviews, comments, timeline, statuses ×6,
+    // mirror and gate writes) before this head path.
+    expect(counter.total).toBeLessThanOrEqual(8);
+  });
+
+  it('answers an owner review on a decided head in three calls', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    await run(harness, fullPrContext(harness, 100n));
+    const counter = countApiCalls(harness);
+
+    await run(
+      harness,
+      context({
+        runId: 101n,
+        eventName: 'pull_request_review',
+        action: 'submitted',
+        review: {state: 'approved', user: {login: 'cixzhang'}},
+      }),
+    );
+
+    // The review event carries no file count, so the pull request is read.
+    expect(counter.total).toBe(3);
+  });
+
+  it('falls back to the full reconcile when its file read fails', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    let failed = false;
+    const listFiles = harness.github.rest.pulls.listFiles;
+    harness.github.rest.pulls.listFiles = async options => {
+      if (!failed) {
+        failed = true;
+        throw new Error('listFiles failed');
+      }
+      return listFiles(options);
+    };
+
+    await run(harness, fullPrContext(harness, 100n));
+
+    expect(harness.state.calls).toContain(
+      'warning:Falling back to the full reconcile: listFiles failed',
+    );
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
     });
   });
 });
