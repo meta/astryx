@@ -256,8 +256,15 @@ export interface AnimateOptions {
    *   frames more before an idle start. Any other change to the animator
    *   before then creates the animations first, in call order. A call that
    *   continues motion on screen (a retarget) starts now, as by default.
+   * - `'next-frame'`: the caller is handling an input event (a key, a click,
+   *   a pointer, a touch) in that event's own task, never in a frame
+   *   callback, so the first frame whose callbacks run after the call is the
+   *   one that commits it. A call from rest starts at that frame however
+   *   long the task ran: a later listener's block delays the motion instead
+   *   of skipping into it (the browser would date the start inside that
+   *   block). A call that continues motion starts now, as by default.
    */
-  start?: 'commit' | 'presented';
+  start?: 'commit' | 'presented' | 'next-frame';
   /**
    * A call that retargets a curve on screen adds to it instead of replacing
    * it, as UIKit's animations do: the old curve keeps going (past its end, at
@@ -515,6 +522,12 @@ interface StartGroup {
    * so the frame after it is not the one that starts them.
    */
   madeInFrame?: boolean;
+  /**
+   * Its call asked to start at the next frame (`start: 'next-frame'`): it
+   * is made in an input event's own task, so the first frame after it is
+   * the one that commits its animations, however long that task ran.
+   */
+  nextFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
   /** A later call in the same task that took over its curves. */
@@ -2119,11 +2132,15 @@ export function createMotionAnimator(
       // frame callback, whose frame committed it already, nor when a block
       // ran between the call and this frame (more than LATE_START_MS), after
       // which this frame cannot tell a call made in a task from one a page's
-      // own frame callback made; those keep the browser's start.
+      // own frame callback made; those keep the browser's start. A call made
+      // in an input event's own task says so (`start: 'next-frame'`): this
+      // frame commits it however late it comes, so a later listener's block
+      // holds the motion back instead of skipping into it.
       if (
         !group.resolved &&
         group.madeInFrame !== true &&
-        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        (group.nextFrame === true ||
+          now() - (group.task?.first ?? group.provisional) <= LATE_START_MS) &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
@@ -2267,7 +2284,10 @@ export function createMotionAnimator(
    * main-thread block later in the call's task delays the motion; WebKit
    * dates it at its last frame time before that task, so the first frame
    * after the block would show it skipped into its curve. When the task ran
-   * on more than LATE_START_MS past its first call, a start the browser put
+   * on more than LATE_START_MS past its first call (for a call made with
+   * `start: 'next-frame'`, read at the call's first read: a later listener
+   * of its input event may hold the task past its first microtask), a start
+   * the browser put
    * by the task's first animations (a presented call's second frame, not the
    * call) and more than LATE_START_MS before the call's first read (its
    * `ready`, once the task has ended, or the first frame after it) moves to
@@ -2290,8 +2310,12 @@ export function createMotionAnimator(
       return start;
     }
     const {task} = group;
-    // A read in the task's first microtasks comes after its end too.
-    const ended = task?.ended ?? now();
+    // A read in the task's first microtasks comes after its end too. A call
+    // made in an input event's own task (`start: 'next-frame'`) may have had
+    // that task held past its first microtask by a later listener of the
+    // event: its end is this read, the first frame after the task or its
+    // `ready`.
+    const ended = group.nextFrame === true ? now() : (task?.ended ?? now());
     if (task == null || ended - task.first <= LATE_START_MS) {
       return start;
     }
@@ -3323,6 +3347,14 @@ export function createMotionAnimator(
         animateOptions.at,
         animateOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        animateOptions.at == null &&
+        animateOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const adopted =
         plan?.landing != null
           ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
@@ -3452,6 +3484,14 @@ export function createMotionAnimator(
         playOptions.at,
         playOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        playOptions.at == null &&
+        playOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const adopted =
         plan?.landing != null
           ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
