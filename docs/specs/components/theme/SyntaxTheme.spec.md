@@ -120,14 +120,15 @@ applies.
 
 ## Verification map
 
-| Contract | Verification                                                                                       | Representative states    | Mutation or failure expectation                    | Audit section                |
-| -------- | -------------------------------------------------------------------------------------------------- | ------------------------ | -------------------------------------------------- | ---------------------------- |
-| FR1      | `defineSyntaxTheme.diff.test.ts` style tests                                                       | set and unset diff slots | Writing an unset slot, or losing a set one, fails. | `audit:SyntaxTheme/behavior` |
-| FR2      | `useSyntaxTheme.diff.test.tsx` "resolves unset marker slots to the theme's own punctuation colour" | unset marker slots       | A wrong derived slot fails.                        | `audit:SyntaxTheme/behavior` |
+| Contract | Verification                                                                                                     | Representative states    | Mutation or failure expectation                                    | Audit section                |
+| -------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------ | ---------------------------- |
+| FR1      | `defineSyntaxTheme.diff.test.ts` "skips unset diff slots in the CSS and style output of a hand-built definition" | set and unset diff slots | A style value written for an unset slot, or a set one lost, fails. | `audit:SyntaxTheme/behavior` |
+| FR2      | `useSyntaxTheme.diff.test.tsx` "resolves unset marker slots to the theme's own punctuation colour"               | unset marker slots       | A wrong derived slot fails.                                        | `audit:SyntaxTheme/behavior` |
 
 Read from source, with no focused test yet:
 
-- FR1: the block wrapper and its `data-astryx-syntax-theme` attribute.
+- FR1: the block wrapper, its `data-astryx-syntax-theme` attribute, and the
+  wrapper applying the theme's style values.
 
 ## Decision log
 
