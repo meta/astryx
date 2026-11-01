@@ -1151,5 +1151,10 @@
       "overlay": "#storybook-root .astryx-stack > .astryx-stack:first-child",
       "overlayRoot": "#storybook-root .astryx-stack:has(> .astryx-stack)"
     }
+  },
+  {
+    "component": "LayerProvider",
+    "storyId": "core-layer--provider",
+    "dims": []
   }
 ]
