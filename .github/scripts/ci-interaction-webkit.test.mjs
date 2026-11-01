@@ -220,6 +220,11 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
       'packages/core/src/hooks/usePressFeedback.ts',
+      'packages/core/src/hooks/usePager.ts',
+      'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
+      'packages/core/src/hooks/__tests__/pagerBundle.ts',
+      'packages/core/src/Carousel/useCarouselPaging.ts',
+      'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
       'internal/interaction-harness/src/webInput.ts',
       'playwright.interaction.config.ts',
       // Shared setup, as pr-interaction keeps (spec:AST-030 FR13): a
