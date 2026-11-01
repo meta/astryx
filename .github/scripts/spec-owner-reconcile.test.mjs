@@ -1380,6 +1380,99 @@ describe('spec owner workflow reconciliation', () => {
       });
     });
 
+    describe('a large spec move', () => {
+      // Every component record moved, unchanged, from packages to docs.
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+        sha: `blob-${i}`,
+      }));
+
+      function countContentReads(harness) {
+        const counter = {reads: 0};
+        const getContent = harness.github.rest.repos.getContent;
+        harness.github.rest.repos.getContent = async input => {
+          counter.reads += 1;
+          return getContent(input);
+        };
+        return counter;
+      }
+
+      it('keeps an approval without re-reading files whose blobs match', async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[oldHead]: currentRecord},
+          filesAt: {[oldHead]: moved},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        const counter = countContentReads(harness);
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state).state).toBe('success');
+        // The snapshot's base and head text for each moved record, and
+        // nothing more: the fingerprint reuses the head text, and the
+        // approved commit's identical blobs need no read (was 1,800).
+        expect(counter.reads).toBe(600);
+      });
+
+      it('reads and normalizes only a path whose blob differs', async () => {
+        const target = moved[7];
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          // A bookkeeping-only edit: normalization drops it, so the approval
+          // still counts.
+          contentAt: {
+            [`${oldHead}:${target.filename}`]: currentRecord.replace(
+              'approved_at: 2026-10-28',
+              'approved_at: 2026-10-27',
+            ),
+          },
+          filesAt: {
+            [oldHead]: moved.map(file =>
+              file === target ? {...file, sha: 'blob-earlier'} : file,
+            ),
+          },
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        const counter = countContentReads(harness);
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state).state).toBe('success');
+        expect(counter.reads).toBe(601);
+      });
+
+      it("still resets when a moved file's text changed", async () => {
+        const target = moved[7];
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${target.filename}`]: changedRecord},
+          filesAt: {
+            [oldHead]: moved.map(file =>
+              file === target ? {...file, sha: 'blob-earlier'} : file,
+            ),
+          },
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+    });
+
     it('reads a spec wait as satisfied code review, not an older code wait', async () => {
       const harness = createHarness({
         headContent: currentRecord,
