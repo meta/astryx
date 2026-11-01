@@ -304,6 +304,35 @@ export async function gatherCiImpact({
 }
 
 /**
+ * The frames publish-frames.mjs published, written for the generator, only
+ * when their URL is this pull request's assets branch for this exact head and
+ * each frame is a `<before|after|diff>/<key>.png` path; otherwise null.
+ */
+export function trustedFrames({frames, identity, inputs}) {
+  const expected = `https://raw.githubusercontent.com/${identity.baseRepository}/assets/pr-${identity.prNumber}/visual/${identity.headSha}/`;
+  let published;
+  try {
+    published = JSON.parse(frames?.published || '[]');
+  } catch {
+    return null;
+  }
+  if (
+    frames?.imageBase !== expected ||
+    !Array.isArray(published) ||
+    published.length === 0 ||
+    !published.every(entry =>
+      /^(before|after|diff)\/(?!\.+\.png$)[A-Za-z0-9._-]{1,240}\.png$/.test(
+        String(entry),
+      ),
+    )
+  )
+    return null;
+  const file = path.join(inputs, 'visual-frames.json');
+  fs.writeFileSync(file, JSON.stringify({imageBase: expected, published}));
+  return file;
+}
+
+/**
  * The source run's jobs (latest attempt) with each step's conclusion, so the
  * report can say which jobs ran and which skipped their work by path. Null
  * when the list cannot be read.
@@ -776,6 +805,7 @@ export async function reconcilePrComment({
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
   packageSizePath = 'pr-analysis/package-size.json',
+  visualFrames = null,
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
   ciHistoryPath = 'ci-history/ci-history.json',
@@ -851,6 +881,8 @@ export async function reconcilePrComment({
     });
     const impactPath = path.join(inputs, 'ci-impact.json');
     if (impact) fs.writeFileSync(impactPath, JSON.stringify(impact));
+    // Frames only from this PR's assets branch for this exact head.
+    const framesPath = trustedFrames({frames: visualFrames, identity, inputs});
     const previewPath = path.join(inputs, 'preview.json');
     const jobsPath = path.join(inputs, 'jobs.json');
     if (preview) fs.writeFileSync(previewPath, JSON.stringify(preview));
@@ -879,6 +911,7 @@ export async function reconcilePrComment({
       // checks, or with the ci:run-a11y label); the comment says so.
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
+      ...(framesPath ? ['--visual-frames', framesPath] : []),
       ...(preview ? ['--preview', previewPath] : []),
       ...(jobs ? ['--jobs', jobsPath] : []),
       ...(impact ? ['--ci-impact', impactPath] : []),

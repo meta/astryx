@@ -3,7 +3,7 @@
 
 /**
  * @description Generates the PR comment from the run's analysis results
- * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --preview <file> --jobs <file> --ci-impact <file> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --ci-impact <file> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout, compact by design: this
  *   head's preview first, the modified components (preview links, size, lines
  *   of code, a mark per browser suite that ran; three rows visible, the rest
@@ -67,6 +67,8 @@ if (baseStats) {
 const preview = readOptionalJson('preview');
 const jobs = readOptionalJson('jobs');
 const packageSize = readOptionalJson('package-size');
+// The visual frames publish-frames.mjs put on this PR's assets branch.
+const visualFrames = readOptionalJson('visual-frames');
 // A CI change's impact on runner usage and time to green (ci-impact.js).
 const ciImpact = readOptionalJson('ci-impact');
 const visualVerdict = readOptionalJson('visual');
@@ -128,6 +130,7 @@ const report = buildCompactReport({
   a11yReport,
   visualVerdict,
   packageSize,
+  visualFrames,
 });
 const footerLinksStr = runUrl
   ? ` | ${extLink('View full report', runUrl)}`
