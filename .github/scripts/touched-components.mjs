@@ -257,14 +257,31 @@ export function visualResult(
 }
 
 /**
- * The accessibility result for one owner: new violations fail it, and an
- * audit that failed before writing its report fails every owner.
+ * The owners the accessibility audit checked, from its report's audited
+ * stories: a touched folder member, a multi-component folder's umbrella
+ * (`core/Chat`) or a member's pattern story owner (`core/ChatSendButton`).
+ */
+export function auditedA11yOwners(report) {
+  return [
+    ...new Set(
+      (Array.isArray(report?.auditedStories) ? report.auditedStories : [])
+        .map(entry => entry?.owner)
+        .filter(owner => typeof owner === 'string' && owner.includes('/')),
+    ),
+  ].sort();
+}
+
+/**
+ * The accessibility result for one owner. Its own stories and its folder's
+ * umbrella stories count: a new violation in either fails it, and an audit
+ * that failed before writing its report fails every owner.
  */
 export function a11yResult(
   identity,
   report,
   newViolations,
   stepOutcome = null,
+  scope = null,
 ) {
   if (report == null) {
     return stepOutcome === 'failure'
@@ -274,13 +291,19 @@ export function a11yResult(
         }
       : {result: 'not-run'};
   }
-  const audited = Object.keys(report.components ?? {}).some(component =>
-    namesOwner(component, identity),
-  );
+  const folder = scope?.visualKeyByOwner?.[identity.key];
+  const umbrella =
+    folder != null && folder !== identity.name
+      ? `${identity.shortPackage}/${folder}`
+      : null;
+  const counts = owner => namesOwner(owner, identity) || owner === umbrella;
+  const audited =
+    auditedA11yOwners(report).some(counts) ||
+    Object.keys(report.components ?? {}).some(component =>
+      namesOwner(component, identity),
+    );
   if (!audited) return {result: 'not-run'};
-  const mine = newViolations.filter(violation =>
-    namesOwner(violation.component, identity),
-  );
+  const mine = newViolations.filter(violation => counts(violation.component));
   return mine.length > 0
     ? {
         result: 'fail',
@@ -372,7 +395,13 @@ export function buildTouchedReport({
       visualShots,
       visualJobResult,
     );
-    const a11y = a11yResult(identity, a11yReport, newViolations, a11yStep);
+    const a11y = a11yResult(
+      identity,
+      a11yReport,
+      newViolations,
+      a11yStep,
+      scope,
+    );
     const rtl = rtlResult(identity, rtlReports, rtlStep);
     const details = Object.entries({visual, a11y, rtl})
       .filter(([, value]) => value.detail)
@@ -390,7 +419,15 @@ export function buildTouchedReport({
     wideChange: false,
     componentCount: scope.folders.length,
     broad: scope.broad,
-    components: scope.touched.map(row),
+    // An owner the audit checked outside the touched set (a folder's
+    // umbrella or a member's pattern story) gets its own row, so none of its
+    // violations is dropped.
+    components: [
+      ...scope.touched,
+      ...auditedA11yOwners(a11yReport).filter(
+        owner => !scope.touched.includes(owner),
+      ),
+    ].map(row),
   };
 }
 

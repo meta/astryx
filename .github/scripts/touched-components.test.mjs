@@ -17,6 +17,7 @@ import yaml from 'yaml';
 import {ungated} from './ci-pr-gate.mjs';
 import {
   MAX_TOUCHED_COMPONENTS,
+  auditedA11yOwners,
   withVisualBaseline,
   wideVisualVerdict,
   a11yResult,
@@ -87,6 +88,66 @@ describe('touched scope', () => {
     expect(scope.visualComponents).toEqual(['Chat', 'Toast']);
     expect(scope.visualKeyByOwner['core/ChatComposer']).toBe('Chat');
     expect(decideWideChange(scope, []).componentCount).toBe(2);
+  });
+
+  it("counts a folder's umbrella and pattern-story violations, from the audit's real report shape", () => {
+    const scope = resolveTouchedScope({
+      unresolvedComponentSources: ['core/Chat'],
+    });
+    // The audit files a Chat change under the folder's umbrella story and a
+    // member's pattern story, neither of which is a documented member.
+    const a11yReport = {
+      auditedStories: [
+        {owner: 'core/Chat', storyId: 'core-chat--default'},
+        {owner: 'core/ChatSendButton', storyId: 'core-chat-patterns--send'},
+      ],
+      components: {
+        Chat: {
+          storiesAudited: 2,
+          violations: [],
+          storyDetails: [
+            {
+              story: 'Default',
+              storyId: 'core-chat--default',
+              violations: [
+                {id: 'button-name', impact: 'critical', nodes: [{}]},
+              ],
+            },
+            {
+              story: 'Send',
+              storyId: 'core-chat-patterns--send',
+              violations: [
+                {id: 'color-contrast', impact: 'serious', nodes: [{}]},
+              ],
+            },
+          ],
+        },
+      },
+    };
+    expect(auditedA11yOwners(a11yReport)).toEqual([
+      'core/Chat',
+      'core/ChatSendButton',
+    ]);
+    const report = buildTouchedReport({
+      headSha: 'a'.repeat(40),
+      scope,
+      verdict: null,
+      a11yReport,
+      a11yBaseline: {},
+      rtlReports: [],
+    });
+    const byKey = Object.fromEntries(
+      report.components.map(component => [component.key, component]),
+    );
+    // The umbrella's violation fails every touched member of the folder.
+    expect(byKey['core/ChatComposer'].results.a11y).toBe('fail');
+    expect(byKey['core/ChatComposer'].detail).toContain('button-name');
+    // A pattern-story owner outside the touched set gets its own row.
+    expect(byKey['core/ChatSendButton'].results.a11y).toBe('fail');
+    expect(byKey['core/ChatSendButton'].detail).toContain('color-contrast');
+    expect(hasFailure(report)).toBe(true);
+    // The wide rule still counts the folder once.
+    expect(report.componentCount).toBe(1);
   });
 
   it('compares only visual components that have an accepted baseline shot', () => {
