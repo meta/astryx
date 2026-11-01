@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Visual, accessibility and RTL run on main, not on pull request updates.
+ * @file Full visual, accessibility and RTL suites run on main; pull request
+ *   updates check only touched components.
  * @input CI, Main and Main heavy lanes workflows, and a mocked GitHub API
  * @output Routing for the heavy owners, the required joins, and Main's
  *   release-check dispatch
@@ -9,9 +10,15 @@
  */
 
 import fs from 'node:fs';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 import {ungated} from './ci-pr-gate.mjs';
+
+// The raw file host is offline here, so the dispatcher reads its rate-limit
+// helper through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
 
 const read = name =>
   yaml.parse(
@@ -26,7 +33,6 @@ const SUITE = {
   'pr-a11y-specs': 'a11y',
   'pr-a11y': 'a11y',
   'visual-scout': 'visual',
-  'pr-visual': 'visual',
   'pr-rtl-shard': 'rtl',
   'pr-rtl-merge': 'rtl',
   'pr-rtl': 'rtl',
@@ -56,6 +62,32 @@ describe('visual, accessibility and RTL owners', () => {
       expect([ci.jobs[name].needs].flat()).toContain('run-labels');
     },
   );
+
+  it('runs pr-visual on every pull request: its full check only with ci:run-visual, otherwise the default touched check', () => {
+    const visual = ci.jobs['pr-visual'];
+    const condition = ungated(visual.if);
+    expect(condition).toContain(
+      "(github.event_name == 'pull_request' &&\n  needs.build-storybook.result == 'success')",
+    );
+    expect(visual.needs).toContain('run-labels');
+    const step = name =>
+      visual.steps.find(candidate => candidate.name === name);
+    expect(step('Run the visual gate for the touched components').if).toContain(
+      "needs.run-labels.outputs.visual == 'true'",
+    );
+    expect(step('Decide the default touched visual check').if).toContain(
+      "needs.run-labels.outputs.visual != 'true'",
+    );
+    const touched = step('Visual check for the default touched components');
+    expect(touched.if).toBe(
+      "steps.touched.outputs.has_components == 'true' && steps.touched.outputs.visual_components != ''",
+    );
+    expect(touched.run).toContain('gate.mjs check');
+    expect(touched.run).toContain('--tiers component');
+    expect(touched.run).toContain('--no-scout');
+    expect(touched.run).not.toContain('--dependents');
+    expect(touched.run).not.toContain('gate.mjs release');
+  });
 
   it('decides the suites in one gate job from the trusted decision script', () => {
     const gate = ci.jobs['run-labels'];
@@ -165,7 +197,16 @@ describe("main's release-check, about once an hour (DEC-11)", () => {
     const calls = {dispatch: [], notices: [], listed: []};
     const github = {
       rest: {
-        repos: {getBranch: async () => ({data: {commit: {sha: tip}}})},
+        repos: {
+          getBranch: async () => ({data: {commit: {sha: tip}}}),
+          getContent: async ({path}) => ({
+            data: {
+              content: fs
+                .readFileSync(new URL(`../../${path}`, import.meta.url))
+                .toString('base64'),
+            },
+          }),
+        },
         actions: {
           listJobsForWorkflowRun: async ({run_id}) => ({
             data: {jobs: runs.find(item => item.id === run_id)?.jobs ?? []},

@@ -523,6 +523,152 @@ test('a spring started right before a block plays in full after it', async ({
   expect(Math.max(...later.map(f => f.x))).toBeGreaterThan((first?.x ?? 0) + 1);
 });
 
+test('a retarget made before the page can read a call\u2019s start begins where the screen shows the element (spec:AST-094 FR6)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'screencast frame evidence is Chromium-only in Playwright, and Chromium is the engine that tells the page a composited start late',
+  );
+  await open(page);
+  const box = page.locator('#box');
+  await markElement(box, {inset: MARKER_INSET});
+  const cast = await startScreencast(page);
+  // A call from rest in one task. In the task after the frame that commits
+  // it, the page is busy for 150 ms while the compositor moves the box, so
+  // the browser's notice of the start waits behind it; then it retargets.
+  const spring = {response: 0.6, dampingRatio: 1};
+  const result = await page.evaluate(
+    async ({s, first, second}) =>
+      new Promise<{held: number; at: number}>(resolve => {
+        setTimeout(() => {
+          window.animator.animate({x: first}, {spring: s});
+          // The frame that commits it; a task queued there runs after it.
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              const end = performance.now() + 150;
+              while (performance.now() < end) {
+                // the page's main thread is busy
+              }
+              const at = performance.timeOrigin + performance.now();
+              const held = window.animator.get('x');
+              window.animator.animate({x: second}, {spring: s});
+              resolve({held, at});
+            }, 0);
+          });
+        }, 0);
+      }),
+    {s: spring, first: TRAVEL / 2, second: TRAVEL},
+  );
+  // Wait for the motion, not a wall clock: most of the way to the new
+  // target, then three more frames.
+  await page.waitForFunction(
+    min =>
+      (document.getElementById('box')?.getBoundingClientRect().left ?? 0) > min,
+    TRAVEL * 0.8,
+    {polling: 'raf', timeout: 0},
+  );
+  const seen = cast.frameCount();
+  await expect
+    .poll(() => cast.frameCount(), {timeout: 0})
+    .toBeGreaterThan(seen + 2);
+  const tracked = await trackMarker(page, await cast.stop());
+  const xs = tracked
+    .filter(f => f.box != null && f.box.width > 0 && f.box.height > 0)
+    .map(f => ({t: f.t, x: (f.box?.x ?? NaN) - MARKER_INSET}));
+  test.info().annotations.push({
+    type: 'retarget before the start notice',
+    description: JSON.stringify({held: result.held, at: result.at, xs}),
+  });
+  // Present and painted first: the marked box in the frames.
+  expect(xs.length).toBeGreaterThan(10);
+  // The screen never steps back: each presented frame is at or past the one
+  // before (both targets lie ahead)...
+  for (let i = 1; i < xs.length; i++) {
+    expect(xs[i].x, JSON.stringify(xs)).toBeGreaterThanOrEqual(xs[i - 1].x - 1);
+  }
+  // ...because the page reads the curve under way when it retargets.
+  expect(result.held).toBeGreaterThan(5);
+});
+
+for (const how of ['from a page frame callback', 'presented'] as const) {
+  test(`a call made in an animation-frame callback (${how}), whose next frame a busy task delays, keeps the start its own frame gave it: the screen never steps back (spec:AST-094 FR6)`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'screencast frame evidence is Chromium-only in Playwright, and Chromium is the engine that tells the page a composited start late',
+    );
+    await open(page);
+    const box = page.locator('#box');
+    await markElement(box, {inset: MARKER_INSET});
+    const cast = await startScreencast(page);
+    // Made in a frame, which commits it; a task queued in that frame runs
+    // after it and keeps the page busy for 150 ms, so the frame after it,
+    // and the browser's notice of the start, come late.
+    const spring = {response: 0.6, dampingRatio: 1};
+    await page.evaluate(
+      async ({s, travel, presented}) =>
+        new Promise<void>(resolve => {
+          const busy = () => {
+            setTimeout(() => {
+              const end = performance.now() + 150;
+              while (performance.now() < end) {
+                // the page's main thread is busy
+              }
+              resolve();
+            }, 0);
+          };
+          if (presented) {
+            // Its animations are made in its second frame's callback; this
+            // pair of frame callbacks runs right after the animator's.
+            window.animator.animate(
+              {x: travel},
+              {spring: s},
+              {start: 'presented'},
+            );
+            requestAnimationFrame(() => requestAnimationFrame(busy));
+          } else {
+            requestAnimationFrame(() => {
+              window.animator.animate({x: travel}, {spring: s});
+              busy();
+            });
+          }
+        }),
+      {s: spring, travel: TRAVEL, presented: how === 'presented'},
+    );
+    await page.waitForFunction(
+      min =>
+        (document.getElementById('box')?.getBoundingClientRect().left ?? 0) >
+        min,
+      TRAVEL * 0.8,
+      {polling: 'raf', timeout: 0},
+    );
+    const seen = cast.frameCount();
+    await expect
+      .poll(() => cast.frameCount(), {timeout: 0})
+      .toBeGreaterThan(seen + 2);
+    const tracked = await trackMarker(page, await cast.stop());
+    const xs = tracked
+      .filter(f => f.box != null && f.box.width > 0 && f.box.height > 0)
+      .map(f => ({t: f.t, x: (f.box?.x ?? NaN) - MARKER_INSET}));
+    test.info().annotations.push({
+      type: 'frame-made call behind a busy task',
+      description: JSON.stringify(xs),
+    });
+    expect(xs.length).toBeGreaterThan(10);
+    // The screen never steps back: each presented frame is at or past the
+    // one before.
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i].x, JSON.stringify(xs)).toBeGreaterThanOrEqual(
+        xs[i - 1].x - 1,
+      );
+    }
+  });
+}
+
 test('no Layout or Paint runs while it animates', async ({
   page,
   browserName,

@@ -107,7 +107,7 @@ and its panels stay put, so no element is added to any row.
   templates render inside a `BottomSheet` and on a page — are the rows this
   record serves: two real consumers, one home, and the prop stays on the
   primitive (DEC-3).
-- [`component:List`](../../../packages/core/src/List/List.spec.md) is
+- [`component:List`](../components/List/List.spec.md) is
   `current` and owns List's geometry; it gains the inline clip and cites
   this record.
 - [`spec:AST-002`](../AST-002/spec.md) owns admission: the caller owns which

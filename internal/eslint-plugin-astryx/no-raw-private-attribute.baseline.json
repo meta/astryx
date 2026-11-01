@@ -7,7 +7,6 @@
   "packages/core/src/Chat/ChatComposerInput.tsx": [
     "data-astryx-dictation-interim"
   ],
-  "packages/core/src/Chat/ChatLayout.tsx": ["data-astryx-scrolling"],
   "packages/core/src/Chat/useChatComposerTokens.ts": ["data-astryx-token-id"],
   "packages/core/src/Chat/useChatDictation.ts": [
     "data-astryx-dictation-interim"
@@ -67,7 +66,6 @@
     "data-astryx-press"
   ],
   "packages/core/src/Popover/Popover.tsx": [
-    "data-astryx-popover-fallback-close",
     "data-astryx-popover-fallback-close"
   ],
   "packages/core/src/Popover/usePopover.tsx": [
@@ -108,7 +106,6 @@
   ],
   "packages/core/src/Table/plugins/stickyColumns/useTableStickyColumns.tsx": [
     "data-astryx-cell-gliding",
-    "data-astryx-table-pinned",
     "data-astryx-table-pinned"
   ],
   "packages/core/src/Thumbnail/Thumbnail.tsx": [

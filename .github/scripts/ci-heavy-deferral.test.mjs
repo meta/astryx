@@ -48,7 +48,6 @@ const HEAVY = [
   'native-swift-runner',
   'test-native-swift',
   'run-labels',
-  'size-base',
   'test-build',
   'build-storybook',
   'pr-interaction',

@@ -45,10 +45,7 @@ import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {joinAriaIDs} from '../utils/inputAria';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {
   type FieldInputBaseProps,
@@ -560,16 +557,14 @@ export function Slider({ref, ...props}: SliderProps) {
     null,
   );
 
-  useInteractionModalityTracking();
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
 
   const handleThumbFocus = useCallback(
     (thumbIndex: number, _e: FocusEvent<HTMLDivElement>) => {
       // A focused disabled thumb still shows the ring (spec:AST-085 FR6).
-      setKeyboardFocusThumb(
-        getInteractionModality() === 'keyboard' ? thumbIndex : null,
-      );
+      setKeyboardFocusThumb(readModality() === 'keyboard' ? thumbIndex : null);
     },
-    [],
+    [readModality],
   );
 
   const handleThumbBlur = useCallback((_e: FocusEvent<HTMLDivElement>) => {
@@ -975,7 +970,7 @@ export function Slider({ref, ...props}: SliderProps) {
         !e.metaKey &&
         !e.altKey &&
         !e.ctrlKey &&
-        getInteractionModality() === 'keyboard'
+        readModality() === 'keyboard'
       ) {
         setKeyboardFocusThumb(thumbIndex);
       }
@@ -1055,6 +1050,7 @@ export function Slider({ref, ...props}: SliderProps) {
       minStepsBetweenThumbs,
       updateValue,
       fireChangeEnd,
+      readModality,
     ],
   );
 
@@ -1274,6 +1270,7 @@ export function Slider({ref, ...props}: SliderProps) {
           ref={useMergedRefs(
             isRange ? ref : undefined,
             trackRef,
+            modalityRef,
             disabledMessageTooltip.ref,
           )}
           {...(isRange

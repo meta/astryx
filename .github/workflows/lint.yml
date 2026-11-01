@@ -156,6 +156,41 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: node packages/cli/scripts/generate-cli-readme.mjs --check
 
+      # The pre-commit hook formats staged files with Prettier, but a commit
+      # made without it can land unformatted source. A later local merge of
+      # main then reformats that file inside the merging pull request, which
+      # fails Changeset coverage there for a change it never meant to make.
+      # Check the files this pull request changes, with the Prettier and the
+      # file patterns the hook uses. The docs and spec lanes skip it with the
+      # rest of full lint, since they install no dependencies.
+      - name: Check formatting of changed files
+        if: github.event_name == 'pull_request' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        env:
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- '*.ts' '*.tsx' '*.md' \
+            > "$RUNNER_TEMP/changed-files"
+          status=0
+          xargs -0 -r ./node_modules/.bin/prettier --list-different --ignore-unknown \
+            < "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/unformatted" || status=$?
+          if [ -s "$RUNNER_TEMP/unformatted" ]; then
+            # Quote each path so the printed command pastes into a shell even
+            # for a path with parentheses, such as a Next.js route group.
+            fix="pnpm exec prettier --write $(sed "s/'/'\\\\''/g; s/.*/'&'/" "$RUNNER_TEMP/unformatted" | tr '\n' ' ')"
+            echo 'These changed files are not formatted with the repository'"'"'s Prettier settings:'
+            sed 's/^/  /' "$RUNNER_TEMP/unformatted"
+            echo 'Format them, commit, and push again:'
+            echo "  $fix"
+            echo "::error title=Unformatted files::Run: $fix"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Prettier failed::Prettier failed (xargs exited with $status); see the error above."
+            exit "$status"
+          fi
+          echo 'Every changed file is formatted.'
+
       # The full pass, type-aware rules over packages/core/src included, needs
       # about 1.9 GB of heap on main. Node's default limit on this 16 GB runner
       # is about 2 GB, so a pull request that adds a few percent of source can
