@@ -265,7 +265,13 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
-  /** Whether the input is disabled. @default false */
+  /**
+   * Whether the input is disabled. The disabled input keeps its tab stop: it
+   * is announced as disabled (`aria-disabled`), is read-only, and opens and
+   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"` and no
+   * `disabledMessage`, the input is natively disabled and out of the tab order.
+   * @default false
+   */
   isDisabled?: boolean;
   /**
    * Explains why the tokenizer is disabled. When set together with
@@ -274,8 +280,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * reason is discoverable by keyboard and assistive technology. Input stays
    * blocked.
    *
-   * Use this instead of wrapping a disabled tokenizer in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled tokenizer in `Tooltip`, so the
+   * reason is attached to the field itself.
    */
   disabledMessage?: string;
   /** Show clear button (clears all tokens). @default false */
