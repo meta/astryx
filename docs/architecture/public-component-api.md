@@ -104,10 +104,20 @@ guidance owns the process used to propose and test APIs.
   entry point or component subpath.
 - **INV2 — Names carry the same meaning.** Components, hooks, booleans,
   callbacks, Actions, directions, refs, and native HTML pass-throughs follow the
-  shared naming grammar. Component-specific vocabulary stays local.
+  shared naming grammar. Component-specific vocabulary stays local. A prop that
+  chooses how a component responds to input is named `<thing>Behavior` and takes
+  a closed union of behavior names, and its name holds no input word (press,
+  touch, tap, hover, mouse, click) when the values can name the behavior.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
-  a composed child.
+  a composed child. One interaction behavior is one prop, never parallel touch,
+  mouse, or focus props: when the behavior differs by device, that prop takes an
+  `'adaptive'` default that resolves per device beside explicit fixed values, as
+  `presentation="adaptive"` does (`spec:AST-043`), and the default is the
+  shipped behavior; Tooltip and HoverCard `triggerBehavior` (`'adaptive'`,
+  `'hover'`, `'toggle'`) follow this. An `is…` or `has…` boolean names only a
+  true on/off that has no third state, and `presentation` names which surface
+  appears.
 - **INV4 — New props express caller-owned intent.** New public props follow
   `spec:AST-002/DEC-1`. A component keeps a decision internal when it can derive
   the correct result from state, content, layout, context, or platform behavior.
@@ -350,7 +360,7 @@ copy the component matrix.
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV2                    | Naming and logical-direction lint/tests                                                                                  | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
-| INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice                                                                                                                                                                                                                                                                                                                                                                                                             |
+| INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word, splits one behavior across per-input props, or defaults to anything but the shipped behavior                                                                                                                                                                                                          |
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                                                              | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                                                          | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | INV11                   | Public-API admission review plus owning theming/component tests                                                          | A public semantic custom property exposes derivable or unsupported implementation detail                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -371,6 +381,19 @@ copy the component matrix.
 
 Known verification gaps:
 
+- INV2, INV3: these shipped props predate the behavior-prop rule and keep their
+  names until a minor renames them under INV9: Tooltip and HoverCard
+  `focusTrigger`; Tooltip, HoverCard, and Popover `isEnabled`; Overlay `showOn`;
+  Thumbnail `showRemoveOn`; Popover `hasLightDismiss`, `hasEscapeDismiss`, and
+  `isModal`; Dialog, Drawer, and BottomSheet `purpose`; Banner `isDismissable`;
+  Drawer, BottomSheet, and BottomSheetSwitcher `hasScrim`; CommandPalette
+  `isInline`; Carousel `hasLoop` and `useListFocus` `wrap`; NumberInput
+  `isWheelEnabled`; Outline `hasScrollOnClick`; `useTableRowExpansion` and
+  `useTableTreeData` `hasRowClickExpansion`; `useTableSortable`
+  `isMultiSortEnabled` and `allowUnsortedState`; Banner, SideNav, SideNavItem,
+  and `useResizable` `collapsible` and CodeBlock `isCollapsible`; Calendar
+  `mode` and FileInput `isMultiple`; FileInput `mode`; Tokenizer and
+  PowerSearch `tokenOverflowBehavior`; OverflowList `behavior`.
 - INV22: known gaps include `useLongPress`, `useMenuPress`,
   `usePressFeedback`, `useClickableContainer`, `useInputContainer`,
   `useOverlay`, `useCombobox`, `useMultiCombobox`, `useResizable`,
