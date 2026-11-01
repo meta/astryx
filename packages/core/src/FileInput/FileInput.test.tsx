@@ -17,6 +17,7 @@ import {
   createEvent,
   waitFor,
   act,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {FileInput} from './FileInput';
@@ -1628,6 +1629,36 @@ describe('FileInput statusVariant forwarding', () => {
         />,
       );
       expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
+});
+
+// component:Tooltip FR11: the status tooltip renders inside the clickable
+// surface, so a click on its text must stay in the tooltip.
+describe('FileInput status tooltip press', () => {
+  it.each(['input', 'dropzone'] as const)(
+    'a click on the tooltip text does not open the picker in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          mode={mode}
+          value={null}
+          onChange={() => {}}
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      const openPicker = vi.spyOn(fileInputEl(), 'click');
+      fireEvent.click(
+        within(screen.getByRole('tooltip', h)).getByText(
+          'File must be under 10MB',
+        ),
+      );
+      expect(openPicker).not.toHaveBeenCalled();
+      // Positive control: a click on the surface itself still opens it.
+      fireEvent.click(screen.getByRole('button', {name: 'Upload'}));
+      expect(openPicker).toHaveBeenCalledTimes(1);
     },
   );
 });

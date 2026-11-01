@@ -22,6 +22,7 @@
  */
 
 import {useCallback, useEffect, type RefObject, type MouseEvent} from 'react';
+import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 
 /**
@@ -108,9 +109,18 @@ export function innermostInteractive(
  * instance, has no ref to hand the hook but needs the identical rule. Sharing
  * the walk keeps one definition of "this click belongs to something else"
  * instead of a short hand-rolled selector list per caller.
+ *
+ * A press inside an open Tooltip or HoverCard surface also answers true: it
+ * belongs to that surface, not the container around its trigger.
  */
 export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
-  return innermostInteractive(el, rootEl) != null;
+  return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
+}
+
+// A press inside an open Tooltip or HoverCard surface belongs to that surface
+// (component:Tooltip FR11, component:HoverCard FR11).
+function belongsToSomethingElse(element: Element): boolean {
+  return matchesInteractiveSelectors(element) || isLayerSurface(element);
 }
 
 /**
