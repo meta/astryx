@@ -20,6 +20,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {FileInput} from './FileInput';
+import {FormLayout} from '../FormLayout';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 import {Theme} from '../theme/Theme';
@@ -204,6 +205,26 @@ describe('FileInput', () => {
     expect(trigger).not.toHaveAttribute('aria-required');
   });
 
+  it('conveys required state under FormLayout defaultOptionality="required" unless isOptional (FormLayout FR5)', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <FileInput label="Resume" value={null} onChange={() => {}} />
+        <FileInput
+          label="Cover letter"
+          isOptional
+          value={null}
+          onChange={() => {}}
+        />
+      </FormLayout>,
+    );
+    expect(
+      screen.getByRole('button', {name: 'Resume'}),
+    ).toHaveAccessibleDescription(/Required/);
+    expect(
+      screen.getByRole('button', {name: /Cover letter/}),
+    ).not.toHaveAccessibleDescription(/Required/);
+  });
+
   it('combines required with the description in the accessible description', () => {
     render(
       <FileInput
@@ -234,6 +255,48 @@ describe('FileInput', () => {
     const input = document.querySelector('input[type="file"]')!;
     expect(input).not.toHaveAttribute('aria-describedby');
     expect(input).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it("joins a caller's aria-describedby to the trigger's own description", () => {
+    render(
+      <>
+        <p id="hint">Up to 10 MB</p>
+        <FileInput
+          label="Report"
+          description="PDF only"
+          aria-describedby="hint"
+          value={null}
+          onChange={() => {}}
+        />
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Report'});
+    expect(trigger).toHaveAccessibleDescription('Up to 10 MB PDF only');
+  });
+
+  it("puts a caller's other aria-* props on the trigger, and keeps the ones it manages", () => {
+    render(
+      <FileInput
+        label="Report"
+        aria-details="details"
+        aria-expanded={false}
+        aria-posinset={1}
+        aria-label="Ignored"
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Report'});
+    expect(trigger).toHaveAttribute('aria-details', 'details');
+    // Booleans and numbers reach the trigger too.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-posinset', '1');
+    expect(trigger).toHaveAttribute('aria-label', 'Report');
+    // The hidden input is still aria-hidden, whatever props it takes.
+    expect(document.querySelector('input[type="file"]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
   });
 
   it('does not mention required without isRequired', () => {
@@ -473,6 +536,74 @@ describe('FileInput', () => {
       // exist because the validation error itself is announced assertively via
       // FieldStatus, but the polite channel must stay empty.)
       expect(politeRegion()?.textContent ?? '').toBe('');
+    });
+
+    it('identifies every rejected file in one status message (WCAG 3.3.1)', async () => {
+      const onChange = vi.fn();
+      render(
+        <FileInput
+          label="Reports"
+          value={null}
+          onChange={onChange}
+          isMultiple
+          accept=".pdf"
+          maxSize={1024}
+        />,
+      );
+      fireEvent.change(fileInputEl(), {
+        target: {
+          files: [
+            createFile('photo.png', 100),
+            createFile('large.pdf', 4096),
+            createFile('small.pdf', 100),
+          ],
+        },
+      });
+      await waitFor(() => {
+        const status = document.querySelector('.astryx-field-status');
+        expect(status).toHaveTextContent(
+          '"photo.png" is not an accepted file type',
+        );
+        expect(status).toHaveTextContent('"large.pdf" exceeds 1.0 KB limit');
+      });
+      // The valid file is still accepted.
+      expect(onChange).toHaveBeenCalledWith([
+        expect.objectContaining({name: 'small.pdf'}),
+      ]);
+    });
+
+    it('separates the rejected files in a locale whose unit list would run them together', async () => {
+      render(
+        <InternationalizationProvider
+          locale="zh-CN"
+          overrides={{
+            'zh-CN': {
+              '@astryx.fileInput.errorInvalidType': '“{fileName}”类型不受支持',
+              '@astryx.fileInput.errorMaxSize': '“{fileName}”超过 {maxSize}',
+            },
+          }}>
+          <FileInput
+            label="报告"
+            value={null}
+            onChange={() => {}}
+            isMultiple
+            accept=".pdf"
+            maxSize={1024}
+          />
+        </InternationalizationProvider>,
+      );
+      fireEvent.change(fileInputEl(), {
+        target: {
+          files: [createFile('photo.png', 100), createFile('large.pdf', 4096)],
+        },
+      });
+      await waitFor(() => {
+        const status = document.querySelector('.astryx-field-status');
+        // The two messages are separated (、), not run together.
+        expect(status?.textContent).toMatch(
+          /“photo\.png”类型不受支持、“large\.pdf”超过 /,
+        );
+      });
     });
 
     it('announces a validation error exactly once across live regions', async () => {
@@ -885,6 +1016,168 @@ describe('FileInput', () => {
     });
   });
 
+  describe('busy interaction', () => {
+    it('keeps a loading trigger focusable without opening the picker on click, Enter or Space', async () => {
+      const user = userEvent.setup();
+      render(
+        <FileInput label="Upload" value={null} onChange={() => {}} isLoading />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const click = vi.spyOn(fileInputEl(), 'click');
+
+      await user.click(screen.getByText('Choose file'));
+      await user.tab();
+      expect(trigger).toHaveFocus();
+      await user.keyboard('{Enter} ');
+      fireEvent.click(trigger);
+
+      expect(click).not.toHaveBeenCalled();
+      expect(trigger).toHaveFocus();
+      expect(trigger).toHaveAttribute('aria-busy', 'true');
+      expect(trigger).toHaveAttribute('aria-disabled', 'true');
+      click.mockRestore();
+    });
+
+    it('ignores dropped files while loading without starting another Action', async () => {
+      const onChange = vi.fn();
+      const changeAction = vi.fn(async () => {});
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={onChange}
+          changeAction={changeAction}
+          mode="dropzone"
+          isLoading
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const drop = createEvent.drop(trigger, {
+        dataTransfer: {files: [createFile('dropped.txt', 100)]},
+      });
+      await act(async () => fireEvent(trigger, drop));
+
+      expect(drop.defaultPrevented).toBe(true);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+    });
+
+    it('cancels native input activation while loading and preserves the idle caller handler', () => {
+      const onClick = vi.fn();
+      const props = {label: 'Upload', value: null, onChange: vi.fn(), onClick};
+      const {rerender} = render(<FileInput {...props} isLoading />);
+      const input = fileInputEl();
+
+      expect(fireEvent.click(input)).toBe(false);
+      expect(onClick).not.toHaveBeenCalled();
+
+      rerender(<FileInput {...props} />);
+      expect(fireEvent.click(input)).toBe(true);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a native picker result delivered after loading starts and accepts it once idle', () => {
+      const onChange = vi.fn();
+      const props = {label: 'Upload', value: null, onChange};
+      const {rerender} = render(<FileInput {...props} />);
+      const input = fileInputEl();
+      const file = createFile('report.txt', 100);
+      fireEvent.click(screen.getByRole('button', {name: 'Upload'}));
+      rerender(<FileInput {...props} isLoading />);
+
+      fireEvent.change(input, {target: {files: [file]}});
+      expect(onChange).not.toHaveBeenCalled();
+
+      rerender(<FileInput {...props} />);
+      fireEvent.change(input, {target: {files: [file]}});
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(file);
+    });
+
+    it('discards drag feedback when loading starts and ignores new drags until idle', () => {
+      const props = {
+        label: 'Upload',
+        value: null,
+        onChange: vi.fn(),
+        mode: 'dropzone' as const,
+      };
+      const {rerender} = render(<FileInput {...props} isLoading />);
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const enter = createEvent.dragEnter(trigger);
+      const over = createEvent.dragOver(trigger);
+      fireEvent(trigger, enter);
+      fireEvent(trigger, over);
+      expect(enter.defaultPrevented).toBe(true);
+      expect(over.defaultPrevented).toBe(true);
+
+      rerender(<FileInput {...props} />);
+      expect(screen.getByText('Choose file')).toBeInTheDocument();
+      expect(screen.queryByText('Drop files here')).not.toBeInTheDocument();
+
+      fireEvent.dragEnter(trigger);
+      expect(screen.getByText('Drop files here')).toBeInTheDocument();
+      rerender(<FileInput {...props} isLoading />);
+      rerender(<FileInput {...props} />);
+      expect(screen.getByText('Choose file')).toBeInTheDocument();
+      expect(screen.queryByText('Drop files here')).not.toBeInTheDocument();
+
+      fireEvent.dragOver(trigger);
+      expect(screen.getByText('Drop files here')).toBeInTheDocument();
+    });
+
+    it('blocks a second pick while changeAction is pending and allows picking again after settlement', async () => {
+      let finish: () => void = () => {};
+      const pending = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const onChange = vi.fn();
+      const changeAction = vi.fn(async () => pending);
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={onChange}
+          changeAction={changeAction}
+          mode="dropzone"
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const input = fileInputEl();
+      const click = vi.spyOn(input, 'click');
+      trigger.focus();
+      fireEvent.change(input, {
+        target: {files: [createFile('first.txt', 100)]},
+      });
+
+      try {
+        expect(trigger).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(trigger);
+        fireEvent.keyDown(trigger, {key: 'Enter'});
+        fireEvent.keyDown(trigger, {key: ' '});
+        fireEvent.drop(trigger, {
+          dataTransfer: {files: [createFile('second.txt', 100)]},
+        });
+
+        expect(click).not.toHaveBeenCalled();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(changeAction).toHaveBeenCalledTimes(1);
+        expect(trigger).toHaveFocus();
+        expect(trigger).toHaveAttribute('aria-disabled', 'true');
+      } finally {
+        await act(async () => finish());
+        click.mockRestore();
+      }
+
+      expect(trigger).not.toHaveAttribute('aria-busy');
+      expect(trigger).not.toHaveAttribute('aria-disabled', 'true');
+      fireEvent.change(input, {
+        target: {files: [createFile('after.txt', 100)]},
+      });
+      await act(async () => {});
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(changeAction).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('drag and drop', () => {
     it('calls onChange when files are dropped in dropzone mode', () => {
       const handleChange = vi.fn();
@@ -1267,4 +1560,74 @@ describe('FileInput statusVariant forwarding', () => {
       'detached',
     );
   });
+
+  // family:input-fields FR8: every input offers the tooltip placement. It has
+  // no message box, so the status button is the only place the message lives.
+  function expectReachableTooltipStatus(message: string) {
+    expect(
+      screen.getByRole('button', {name: 'Error details'}),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('tooltip', h)).toHaveTextContent(message);
+    const trigger = screen.getByRole('button', {name: 'Upload'});
+    const describedBy = (trigger.getAttribute('aria-describedby') ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(describedBy.length).toBeGreaterThan(0);
+    for (const id of describedBy) {
+      expect(document.getElementById(id)).not.toBeNull();
+    }
+  }
+
+  it.each(['input', 'dropzone'] as const)(
+    'keeps a statusVariant="tooltip" message reachable in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={() => {}}
+          mode={mode}
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
+
+  it('does not open the file picker from the dropzone status button', async () => {
+    const user = userEvent.setup();
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click');
+    render(
+      <FileInput
+        label="Upload"
+        value={null}
+        onChange={() => {}}
+        mode="dropzone"
+        status={{type: 'error', message: 'File must be under 10MB'}}
+        statusVariant="tooltip"
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Error details'}));
+    expect(click).not.toHaveBeenCalled();
+    click.mockRestore();
+  });
+
+  it.each(['input', 'dropzone'] as const)(
+    'keeps a statusVariant="tooltip" message reachable while loading in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={() => {}}
+          mode={mode}
+          isLoading
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
 });

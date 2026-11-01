@@ -85,7 +85,7 @@ depends only on runtimes it can maintain.
   announcements). It is the same on every platform that offers the component.
   - A platform honors a prop when the prop behaves the way core already defines
     for that platform's input type. `tooltip` stays in the core: core defines
-    what a tooltip does where there is no hover (Tooltip `touchTrigger`), and a
+    what a tooltip does where there is no hover (Tooltip `pressTrigger`), and a
     touch platform behaves that way.
   - A prop leaves the core only when a platform that offers the component cannot
     match core's defined behavior for its input type. Such a prop belongs to the

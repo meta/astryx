@@ -78,7 +78,12 @@ function editComposerContext(comment: AnyComment): CommentComposerContext {
 }
 
 /** A failed comment action and how to run it again. */
-export type ActionFailure = {message: string; retry?: () => void};
+export type ActionFailure = {
+  message: string;
+  retry?: () => void;
+  /** Already spoken by whoever raised it, so the row's Banner stays silent. */
+  isAnnounced?: boolean;
+};
 
 type FocusTarget = 'reply' | 'actions' | 'history' | 'article' | 'thread';
 
@@ -348,6 +353,9 @@ export function useCommentsController({
     action: () => MaybePromise,
     failureMessage: string,
     retry?: () => void,
+    /** True when another owner announces this failure, so the row's banner
+     *  stays silent from its first render. */
+    isAnnounced?: boolean,
   ): Promise<boolean> => {
     setPendingActionIds(previous => new Set(previous).add(commentId));
     clearActionError(commentId);
@@ -362,6 +370,7 @@ export function useCommentsController({
           retry:
             retry ??
             (() => void runCommentAction(commentId, action, failureMessage)),
+          isAnnounced,
         },
       }));
       return false;
@@ -480,6 +489,9 @@ export function useCommentsController({
       t('@astryx.comments.deleteFailed'),
       // Retrying a delete asks for confirmation again.
       () => setDeleteTarget(target),
+      // The dialog announces a failed delete (AST-086 FR1, FR6), so the stored
+      // failure the row shows is marked before it first renders.
+      true,
     );
     if (succeeded) {
       commitAndFocus(

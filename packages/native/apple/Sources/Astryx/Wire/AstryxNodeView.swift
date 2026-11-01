@@ -15,8 +15,10 @@ public struct AstryxNodeView: View {
 
   public var body: some View {
     switch node {
+    case .button(let button): Button(button.viewProps(send: send))
     case .text(let text): Text(text.viewProps(send: send))
     case .heading(let heading): Heading(heading.viewProps(send: send))
+    case .textInput(let input): TextInput(input.viewProps(send: send))
     case .card(let card): Card(card.viewProps(send: send), children: card.props.children ?? [], send: send)
     case .icon(let icon): Icon(icon.viewProps(send: send))
     case .avatar(let avatar):

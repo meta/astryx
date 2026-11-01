@@ -52,13 +52,17 @@ validating, and reviewing individual native components while
 
 ## Requirements
 
-- **FR1 — A native component's spec lives beside its implementation.** Each
+- **FR1 — A native component's spec lives beside the core component's.** Each
   native component has its own folder in its language's implementation, named
-  as the core component, and its spec is `<Name>.spec.md` in that folder, as
-  core does (`packages/core/src/<Name>/<Name>.spec.md`). Each language has one
-  implementation package; for Swift that is `packages/native/apple/`, and the
-  spec is `packages/native/apple/Sources/Astryx/<Name>/<Name>.spec.md`, beside
-  the component's views. `<Name>` is the core component's name. The spec is a
+  as the core component. Its spec is `<Name>.<language>.spec.md` in the core
+  component's folder under `docs/specs/components/`, beside the core record
+  (`docs/specs/components/<ComponentRoot>/<Name>.spec.md`), as
+  `architecture:knowledge-contracts` DEC-15 places every component record. Each
+  language has one implementation package; for Swift that is
+  `packages/native/apple/`, with the component's views in
+  `packages/native/apple/Sources/Astryx/<Name>/`, and its spec is
+  `docs/specs/components/<ComponentRoot>/<Name>.swift.spec.md`. `<Name>` is the
+  core component's name, and `<ComponentRoot>` the folder core keeps it in. The spec is a
   knowledge record of kind `component` with id `component:<language>/<Name>`
   that names its core component in `platform_of`, built from
   `docs/templates/knowledge/component-spec.md`
@@ -113,7 +117,8 @@ validating, and reviewing individual native components while
     (`spec:AST-082/FR12`). A claim that could not be captured is reported as not
     measured.
 - **FR6 — Native changes from the native group are approved after a spec
-  review.** A pull request whose every changed file is under `packages/native/`,
+  review.** A pull request whose every changed file is under `packages/native/`
+  or is a native component spec (`docs/specs/components/**/<Name>.<language>.spec.md`),
   and whose author and every commit author are members of the native group, is
   approved by an engineering owner on its exact head, without a separate code or
   design review, once all three hold: its required checks pass; the review app
@@ -125,7 +130,7 @@ validating, and reviewing individual native components while
   the review records each such behavior as a spec gap so a spec can follow. The
   native group is the GitHub accounts `cixzhang`, `ejc3`, `ejhammond`,
   `ernestt`, `imdreamrunner`, and `vjeux`. A pull request that changes any file
-  outside `packages/native/`, or that carries a commit from anyone else, follows
+  outside those paths, or that carries a commit from anyone else, follows
   the repository's normal review gate. A request for changes from any reviewer
   still blocks the merge. Changing the group is a change to this record.
 
@@ -168,14 +173,14 @@ validating, and reviewing individual native components while
 
 ## Verification
 
-| Contract | Verification                                                                                                                 | Representative states                                                                                                                                        | Mutation or failure expectation                                                                                                                                                                                                           |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1      | Review of the spec's path beside the component, plus `pnpm check:knowledge` on its record frontmatter, id, and `platform_of` | a spec per language; a spec for a component with no core contract                                                                                            | A component spec outside its component's folder, without valid record frontmatter, under another id, naming no core component, or renaming a core prop passes                                                                             |
-| FR2      | The spec's account of the platform control it builds on, or why none fits, and the state captures                            | a component built on a platform control; a component with no platform control                                                                                | A component draws its own control where a platform control fits, with no reason in its spec                                                                                                                                               |
-| FR3      | The spec's account of the platform guidelines it follows, and the captures                                                   | hit target size; largest Dynamic Type; Reduce Motion; VoiceOver focus                                                                                        | A capture shows a hit target below the platform minimum or text that does not scale                                                                                                                                                       |
-| FR4      | Theme test with two themes, plus source review for literals                                                                  | default theme; a second theme with different color, type, and shape                                                                                          | A brand value stays the same across both themes, or a platform-only visual prop is added                                                                                                                                                  |
-| FR5      | The package's tests on every supported platform and the captures attached to the change                                      | light; dark; largest text; every state the core contract names                                                                                               | A change merges without tests, without captures, or with a capture-based claim backed only by source                                                                                                                                      |
-| FR6      | Changed paths, commit authors, the review app's exact-head review, the spec review's findings, and the approval              | all native paths by group members; a spec-defined requirement unmet; behavior no spec defines; a path outside `packages/native/`; a commit from someone else | An approval without an exact-head review-app pass or a spec review, an approval with a spec-defined requirement unmet, an out-of-scope pull request approved without review, or an in-scope one blocked only for behavior no spec defines |
+| Contract | Verification                                                                                                                             | Representative states                                                                                                                                                                                                                | Mutation or failure expectation                                                                                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1      | Review of the spec's path beside the core component's spec, plus `pnpm check:knowledge` on its record frontmatter, id, and `platform_of` | a spec per language; a spec for a component with no core contract                                                                                                                                                                    | A component spec outside the core component's folder under `docs/specs/components/`, without valid record frontmatter, under another id, naming no core component, or renaming a core prop passes                                         |
+| FR2      | The spec's account of the platform control it builds on, or why none fits, and the state captures                                        | a component built on a platform control; a component with no platform control                                                                                                                                                        | A component draws its own control where a platform control fits, with no reason in its spec                                                                                                                                               |
+| FR3      | The spec's account of the platform guidelines it follows, and the captures                                                               | hit target size; largest Dynamic Type; Reduce Motion; VoiceOver focus                                                                                                                                                                | A capture shows a hit target below the platform minimum or text that does not scale                                                                                                                                                       |
+| FR4      | Theme test with two themes, plus source review for literals                                                                              | default theme; a second theme with different color, type, and shape                                                                                                                                                                  | A brand value stays the same across both themes, or a platform-only visual prop is added                                                                                                                                                  |
+| FR5      | The package's tests on every supported platform and the captures attached to the change                                                  | light; dark; largest text; every state the core contract names                                                                                                                                                                       | A change merges without tests, without captures, or with a capture-based claim backed only by source                                                                                                                                      |
+| FR6      | Changed paths, commit authors, the review app's exact-head review, the spec review's findings, and the approval                          | all native paths by group members; a spec-defined requirement unmet; behavior no spec defines; a native component spec under `docs/specs/components/`; a path outside `packages/native/` and those specs; a commit from someone else | An approval without an exact-head review-app pass or a spec review, an approval with a spec-defined requirement unmet, an out-of-scope pull request approved without review, or an in-scope one blocked only for behavior no spec defines |
 
 ## Decision log
 

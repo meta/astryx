@@ -13,7 +13,9 @@
  * still announced its own content would be holding an Effect, observer, timer
  * or listener of its own for it, which INV10 rules out. The registry check at
  * the end keeps this list in step with every file that imports the module, so
- * a new adopter cannot skip the test.
+ * a new adopter cannot skip the test. The sheet case loads Tokenizer's
+ * on-demand sheet module before it opens the sheet, so its wait covers the
+ * open, not the module's load.
  */
 
 import fs from 'node:fs';
@@ -165,6 +167,13 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
   'Tokenizer/TokenizerBottomSheet.tsx': async () => {
     // The sheet's own content is a caller's `emptySearchText` element; the
     // default EmptyState announces itself.
+    //
+    // Tokenizer loads the sheet on demand (Tokenizer.tsx's
+    // loadTokenizerBottomSheet). Loading the module is not what this case
+    // checks, so it waits for it first, and the one-second wait for the
+    // sheet's search field below covers only the open: on a busy machine the
+    // module's load alone outlasts it.
+    await import('../Tokenizer/TokenizerBottomSheet');
     render(
       <TokenizerWithPresentation
         label="Tags"

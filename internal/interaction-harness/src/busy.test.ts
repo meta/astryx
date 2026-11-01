@@ -14,6 +14,8 @@
 
 import {describe, expect, it} from 'vitest';
 import {busyWindowProof} from './busy';
+import * as skip from './busy.skip.fixture';
+import * as slowTail from './busy.slowtail.fixture';
 import {inPresentationOrder, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -361,6 +363,15 @@ function drawn(
   return draws;
 }
 
+const skipFrames = (): TrackedFrame[] =>
+  skip.frames.map(
+    ([t, y]) =>
+      ({
+        t,
+        box: y == null ? null : {x: 0, y, width: 10, height: 10},
+      }) as TrackedFrame,
+  );
+
 describe('busyWindowProof with the compositor record', () => {
   it('with a compositor record, judges a sparse cast from its first to its last moved frame', () => {
     // One screencast frame in six, as on a loaded machine, with the compositor
@@ -400,6 +411,29 @@ describe('busyWindowProof with the compositor record', () => {
     });
     expect(clean.verdict.failures).toEqual([]);
     expect(clean.movedFraction).toBeLessThanOrEqual(1);
+  });
+
+  it('reads frames the screencast skipped while the compositor presented them as presented: a recorded run that fails without the record', () => {
+    const frames = skipFrames();
+    const alone = busyWindowProof(frames, skip.block, {settledWithin: 1});
+    expect(alone.verdict.failures.join('\n')).toMatch(
+      /longest stall 6\d\.\d ms = 4 intervals > 3/,
+    );
+    // Every frame the screencast delivered moved: only the stall remains,
+    // which the record resolves.
+    expect(alone.verdict.failures.join('\n')).not.toMatch(
+      /expected frames moved/,
+    );
+    const proof = busyWindowProof(frames, skip.block, {
+      settledWithin: 1,
+      presented: skip.presented,
+    });
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.recorderSkipped).toBe(5);
+    expect(proof.longestStallFrames).toBeLessThanOrEqual(2);
+    expect(proof.summary).toMatch(
+      /the screencast skipped 5 frames the compositor presented \(at \+3\d\d ms, \+4\d\d ms\)/,
+    );
   });
 
   it('counts a gap the compositor drew through as skipped, and one it did not draw through as a stall', () => {
@@ -499,5 +533,123 @@ describe('inPresentationOrder', () => {
     const proof = busyWindowProof(inPresentationOrder(shuffled), BLOCK);
     expect(proof.monotonic).toBe(true);
     expect(proof.verdict.failures).toEqual([]);
+  });
+});
+
+/** `slowTail`'s frames as tracked boxes on the x axis. */
+const slowTailFrames = (
+  frames: ReadonlyArray<readonly [number, number | null]>,
+): TrackedFrame[] =>
+  frames.map(
+    ([t, x]) =>
+      ({
+        t,
+        box: x == null ? null : {x, y: 0, width: 1, height: 1},
+      }) as TrackedFrame,
+  );
+
+describe('busyWindowProof in a slow tail', () => {
+  it('reads a frame that shows no step under two steps a frame, then a two-frame catch-up, as moved', () => {
+    // A spring settling: 3.6 px a frame over the window, about 1.7 in its
+    // tail on a 1 px grid. Its frame at +968 ms holds the position before
+    // while the control moves, and the next catches up 2 px.
+    const proof = busyWindowProof(
+      slowTailFrames(slowTail.tracked),
+      slowTail.block,
+      {
+        axis: 'x',
+        settledWithin: 2,
+        control: slowTailFrames(slowTail.control),
+      },
+    );
+    expect(proof.verdict.failures).toEqual([]);
+    expect(proof.notes.join('\n')).toMatch(
+      /under two of the cast's 1 px position steps from \+\d+ ms/,
+    );
+  });
+
+  it('still fails a two-frame freeze in a slow tail', () => {
+    const tracked = slowTailFrames(slowTail.tracked);
+    // Hold the tail's position for two frames before the catch-up.
+    const i = tracked.findIndex(f => f.t > 968 && f.t < 975);
+    const frozen = tracked.map((f, k) =>
+      k === i + 1 ? ({...f, box: {...tracked[i].box!}} as TrackedFrame) : f,
+    );
+    const proof = busyWindowProof(frozen, slowTail.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control: slowTailFrames(slowTail.control),
+    });
+    expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
+  });
+
+  it('still fails a two-frame freeze right after one frame that showed no step, at one step a frame or more', () => {
+    // 1.75 px a frame on a 1 px grid, the control moving on every frame: one
+    // frame shows no step (an early delivery can explain that), then the two
+    // frames after the next step hold too, which an early delivery cannot.
+    const j = at(1300);
+    const frames = moving().map((f, i) => {
+      const y =
+        i === j
+          ? Math.floor(1.75 * (j - 1))
+          : i === j + 2 || i === j + 3
+            ? Math.floor(1.75 * (j + 1))
+            : Math.floor(1.75 * i);
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const control = moving().map(
+      f =>
+        ({
+          ...f,
+          box: {x: f.box!.y, y: 0, width: 12, height: 12},
+        }) as TrackedFrame,
+    );
+    const proof = busyWindowProof(frames, BLOCK, {control});
+    expect(proof.stepPx).toBe(1);
+    expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
+  });
+
+  it('under one step a frame, still fails a two-frame freeze that ends in a three-step catch-up, and reads one early frame as moved', () => {
+    // 0.8 px a frame on a 1 px grid, then the same doubled on a 2 px grid,
+    // the control moving on every frame. Frame 42 shows 33 px (0.8 px a frame
+    // from 0); an early frame there adds at most one step to the catch-up.
+    const control = moving().map(
+      f =>
+        ({
+          ...f,
+          box: {x: f.box!.y, y: 0, width: 12, height: 12},
+        }) as TrackedFrame,
+    );
+    const at08 = (held: readonly number[], grid: number) =>
+      moving().map((f, i) => {
+        const shown = held.includes(i) ? 42 : i;
+        return {
+          ...f,
+          box: {...f.box!, y: grid * Math.floor(0.8 * shown)},
+        } as TrackedFrame;
+      });
+    for (const grid of [1, 2]) {
+      // 32, 32, 33, 33, 33, 36 (doubled on the 2 px grid): a freeze.
+      const frozen = busyWindowProof(at08([43, 44], grid), BLOCK, {control});
+      expect(frozen.stepPx).toBe(grid);
+      expect(frozen.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
+      // 32, 32, 33, 33, 35: one early frame, then the frames go on.
+      const early = busyWindowProof(at08([43], grid), BLOCK, {control});
+      expect(early.verdict.failures).toEqual([]);
+    }
+  });
+
+  it('still fails a frame that shows no step in a fast window', () => {
+    // 3 px a frame, the control moving on every frame: one repeated frame is
+    // a freeze there, and its 6 px catch-up two steps past the grid.
+    const control = moving().map(
+      f =>
+        ({
+          ...f,
+          box: {x: f.box!.y, y: 0, width: 12, height: 12},
+        }) as TrackedFrame,
+    );
+    const proof = busyWindowProof(repeating([at(1300)]), BLOCK, {control});
+    expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
   });
 });

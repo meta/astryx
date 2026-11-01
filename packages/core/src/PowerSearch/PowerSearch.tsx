@@ -30,6 +30,7 @@ import {
   type TokenizerHandle,
   type TokenizerOverflowBehavior,
 } from '../Tokenizer';
+import {TokenizerClearAllMessageContext} from '../Tokenizer/TokenizerClearAllMessageContext';
 import {TypeaheadItem} from '../Typeahead/TypeaheadItem';
 import {Token} from '../Token';
 import {Avatar} from '../Avatar';
@@ -37,7 +38,7 @@ import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {Icon} from '../Icon';
 import type {IconType} from '../Icon';
 import type {IconName} from '../Icon/globalIconRegistry';
-import type {InputStatus, FieldStatusVariant} from '../Field';
+import type {InputStatus} from '../Field';
 import {usePopover} from '../Popover/usePopover';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -76,6 +77,7 @@ import type {
 } from './types';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 // =============================================================================
 // Icon mapping for typeahead entries
 // =============================================================================
@@ -412,7 +414,7 @@ export interface PowerSearchProps extends Omit<
    * - 'detached': message floats below as a separate element with spacing
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Max width for dropdown menu. */
   menuWidth?: number;
   /** Max display length for filter token values. @default 40 */
@@ -1062,6 +1064,12 @@ export function PowerSearch({
   // replay (which resets a flag and would speak the count present on mount
   // unprompted) announces nothing until the count changes.
   const announce = useAnnounce();
+  // PowerSearch words its Clear all as its record does; the field announces
+  // these words instead of Tokenizer's (component:Tokenizer AR7).
+  const clearAllMessage = useMemo(
+    () => t('@astryx.powersearch.allFiltersRemoved'),
+    [t],
+  );
   const announcedResultCountRef = useRef(resultCountText);
   useEffect(() => {
     if (resultCountText === announcedResultCountRef.current) {
@@ -1076,6 +1084,7 @@ export function PowerSearch({
   // Build combined endContent from resultCount + endContent props
   const combinedEndContent = useMemo((): React.ReactNode => {
     const resultCountNode =
+      // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `resultCountText` is a formatted string, not a slot
       resultCountText != null ? (
         <span {...stylex.props(resultCountStyles.text)}>{resultCountText}</span>
       ) : null;
@@ -1099,37 +1108,41 @@ export function PowerSearch({
           popover.triggerRef as React.Ref<HTMLDivElement>,
         )}
         {...themeProps('power-search')}>
-        <Tokenizer
-          handleRef={tokenizerRef}
-          label={label}
-          isLabelHidden={isLabelHidden}
-          searchSource={searchSource}
-          value={tokenizerValue}
-          onChange={handleTokenizerChange}
-          renderToken={renderToken}
-          renderItem={renderItem}
-          maxMenuItems={MAX_BROWSE_MENU_ITEMS}
-          menuWidth={menuWidth}
-          placeholder={filters.length === 0 ? placeholder : ''}
-          hasAutoFocus={hasAutoFocus}
-          hasClear={hasClear && !isReadOnly}
-          startIcon={startIcon}
-          endContent={combinedEndContent}
-          isDisabled={isDisabled}
-          disabledMessage={disabledMessage}
-          size={size}
-          tokenOverflowBehavior={tokenOverflowBehavior}
-          hasEntriesOnFocus
-          debounceMs={0}
-          status={status}
-          statusVariant={statusVariant}
-          onFocus={onFocus}
-          onBlur={onBlur}
-          containerXstyle={xstyle}
-          containerClassName={className}
-          containerStyle={style}
-          data-testid={testId}
-        />
+        {/* The field's Clear all announces PowerSearch's own words
+            (component:PowerSearch; component:Tokenizer AR7). */}
+        <TokenizerClearAllMessageContext value={clearAllMessage}>
+          <Tokenizer
+            handleRef={tokenizerRef}
+            label={label}
+            isLabelHidden={isLabelHidden}
+            searchSource={searchSource}
+            value={tokenizerValue}
+            onChange={handleTokenizerChange}
+            renderToken={renderToken}
+            renderItem={renderItem}
+            maxMenuItems={MAX_BROWSE_MENU_ITEMS}
+            menuWidth={menuWidth}
+            placeholder={filters.length === 0 ? placeholder : ''}
+            hasAutoFocus={hasAutoFocus}
+            hasClear={hasClear && !isReadOnly}
+            startIcon={startIcon}
+            endContent={combinedEndContent}
+            isDisabled={isDisabled}
+            disabledMessage={disabledMessage}
+            size={size}
+            tokenOverflowBehavior={tokenOverflowBehavior}
+            hasEntriesOnFocus
+            debounceMs={0}
+            status={status}
+            statusVariant={statusVariant}
+            onFocus={onFocus}
+            onBlur={onBlur}
+            containerXstyle={xstyle}
+            containerClassName={className}
+            containerStyle={style}
+            data-testid={testId}
+          />
+        </TokenizerClearAllMessageContext>
       </div>
       {popover.render(popoverContent, {
         placement: 'below',

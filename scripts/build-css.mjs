@@ -376,16 +376,22 @@ export function composePackageStylesheet(banner, css) {
  * module, a value StyleX cannot inline in that position: a plain exported
  * object or string, or a `defineConsts` member passed to `firstThatWorks` on
  * its own. The dynamic-style variables StyleX sets inline (`--x-<property>`)
- * are not generated names and are never reported.
+ * are not generated names and are never reported, nor is a name that is not
+ * hash-shaped (StyleX's hash is four to seven base-36 characters).
+ *
+ * SYNC: packages/build/src/undefinedVariables.ts is the same check for an
+ * app's production build.
  */
 export function undefinedStyleXVariables(css, providerCss = '') {
   const declared = new Set(
-    [...`${css}\n${providerCss}`.matchAll(/(--x[a-z0-9]+)\s*:/g)].map(
+    [...`${css}\n${providerCss}`.matchAll(/(--[A-Za-z0-9_-]+)\s*:/g)].map(
       match => match[1],
     ),
   );
   const read = new Set(
-    [...css.matchAll(/var\(\s*(--x[a-z0-9]+)\s*[,)]/g)].map(match => match[1]),
+    [...css.matchAll(/var\(\s*(--x[a-z0-9]{4,7})\s*[,)]/g)].map(
+      match => match[1],
+    ),
   );
   return [...read].filter(name => !declared.has(name)).sort();
 }

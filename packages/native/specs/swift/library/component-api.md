@@ -103,6 +103,8 @@ same generated contract.
     draws a disabled `<button>`; a disabled Item with `href` stays a link that
     VoiceOver reads as dimmed and that does not open, as core keeps a disabled
     link; Avatar has no disabled state.
+    How a loading Button with `href` behaves is Button's own rule
+    (`component:swift/Button` FR4).
 - **A5 — Words and values take the contract's types.** A word prop is the
   contract's `String`, and a value prop and its change callback are the
   contract's two parameters, as AST-093 FR5 requires. A localizable spelling
@@ -152,12 +154,11 @@ same generated contract.
   (SwiftUI views with core's names, `Button`, `Text`, and so on, re-exporting
   SwiftUI and the contracts) and the `AstryxNative` product (generated contract
   types, unprefixed: `ButtonProps`, `ButtonVariant`).
-- Avatar, AvatarStatusDot, Card, Heading, Icon, Text, and Thumbnail take their
-  generated `<Name>Props`; Button and
-  TextInput still take hand-written parameters until each moves onto its
-  generated props; Banner has no generated contract.
-- `AstryxNodeView` draws Avatar (with its status dot), AvatarStatusDot, Card,
-  Heading, Icon, Text, and Thumbnail wire nodes. Any other
+- Avatar, AvatarStatusDot, Button, Card, Heading, Icon, Text, TextInput, and
+  Thumbnail take their generated `<Name>Props`; Banner has no generated
+  contract.
+- `AstryxNodeView` draws Avatar (with its status dot), AvatarStatusDot, Button,
+  Card, Heading, Icon, Text, TextInput, and Thumbnail wire nodes. Any other
   node, HStack and VStack included, renders in its place as unsupported, and
   its siblings still render, until the logic host draws stacks (A9).
 - The generated iOS `SwitchProps` still declares `size`, and `HStackProps` and
