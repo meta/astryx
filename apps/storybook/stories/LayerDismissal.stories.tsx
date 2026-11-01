@@ -2,8 +2,8 @@
 
 /**
  * @file LayerDismissal.stories.tsx
- * @input Uses Dialog, Popover, Tooltip, Lightbox, MobileNav, BottomSheet,
- *   Button, Layout from @astryxdesign/core; InfoTip from @astryxdesign/lab
+ * @input Uses Dialog, Popover, Tooltip, InfoTip, Lightbox, MobileNav,
+ *   BottomSheet, Button, Layout from @astryxdesign/core
  * @output Storybook stories demonstrating shared layer dismissal
  * @position Storybook; the visual contract for the layer dismissal stack
  *
@@ -31,7 +31,7 @@ import {
   VStack,
 } from '@astryxdesign/core';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
-import {InfoTip} from '@astryxdesign/lab/InfoTip';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
 import type {Meta, StoryObj} from '@storybook/react-vite';
 
 const sheetStyles = stylex.create({
@@ -727,7 +727,7 @@ export const PurposeFlipsWhileOpen: Story = {
 };
 
 /**
- * A lab InfoTip inside a modal, its tip showing. One Escape hides the tip and
+ * An InfoTip inside a modal, its tip showing. One Escape hides the tip and
  * leaves the modal open; a second closes the modal.
  *
  * The InfoTip used to `stopPropagation()` the press at its trigger, so the
