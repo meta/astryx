@@ -109,6 +109,8 @@ const styles = stylex.create({
     flex: 1,
     minWidth: 0,
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   exiting: {
     opacity: 0,

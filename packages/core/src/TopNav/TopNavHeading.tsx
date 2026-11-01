@@ -549,7 +549,10 @@ export function TopNavHeading({
             <button
               ref={setTriggerEl}
               type="button"
-              aria-label={t('@astryx.topNav.heading.openMenu')}
+              aria-label={t('@astryx.topNav.heading.openMenu', {
+                heading: heading ?? '',
+                hasHeading: heading ? 'true' : 'false',
+              })}
               onClick={e => {
                 e.stopPropagation();
                 triggerProps.onClick();
@@ -631,7 +634,10 @@ export function TopNavHeading({
               <button
                 ref={setTriggerEl}
                 type="button"
-                aria-label={t('@astryx.topNav.heading.openMenu')}
+                aria-label={t('@astryx.topNav.heading.openMenu', {
+                  heading: heading ?? '',
+                  hasHeading: heading ? 'true' : 'false',
+                })}
                 onClick={e => {
                   e.stopPropagation();
                   triggerProps.onClick();

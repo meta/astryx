@@ -257,6 +257,8 @@ const styles = stylex.create({
   message: {
     minWidth: 0,
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
     whiteSpace: 'pre-wrap',
   },
   messageTerminal: {

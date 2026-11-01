@@ -57,6 +57,7 @@ import {useTranslator} from '../i18n';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {getFocusableElements} from '../hooks/useFocusTrap';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {readAccessibleName} from '../utils/accessibleName';
 import {
   moveFocusLeftBehind,
@@ -417,6 +418,19 @@ export interface SideNavProps extends BaseProps<HTMLElement> {
 // Component
 // =============================================================================
 
+/** Where focus was before a collapse, as the move after it needs it. */
+interface PendingRailFocus {
+  focus: FocusWithin;
+  /** Whether the rail keeps the row that held focus. */
+  isRowKept: boolean;
+  /** Kept rows before the row that held focus. */
+  keptBefore: number;
+  /** The name of the control outside the rows that held focus. */
+  outside: {name: string} | null;
+  /** Whether focus was on the collapse toggle. */
+  wasOnToggle: boolean;
+}
+
 /**
  * Sidebar navigation container for application pages.
  *
@@ -507,7 +521,14 @@ export function SideNav({
   // it through AppShell's own handle (`component:AppShell` FR17); outside,
   // SideNav holds its own over its parent.
   const shell = use(SideNavShellContext);
-  const ownLayout = useMemo(() => createRailLayout(() => navRef.current), []);
+  // A resizable rail's wrapper holds the nav and the handle; outside AppShell
+  // it is the rail the motion moves and lays its copy beside (FR6).
+  const resizeWrapperRef = useRef<HTMLDivElement>(null);
+  const ownRail = useCallback(
+    () => resizeWrapperRef.current ?? navRef.current,
+    [],
+  );
+  const ownLayout = useMemo(() => createRailLayout(ownRail), [ownRail]);
   const railSnapshotRef = useRef<RailSnapshot | null>(null);
   const motionRef = useRef<{rail: RailMotion; endContent: () => void} | null>(
     null,
@@ -521,7 +542,7 @@ export function SideNav({
       running?.endContent();
       motionRef.current = null;
       railSnapshotRef.current = snapshotRail(
-        shell?.rail() ?? navRef.current,
+        shell?.rail() ?? ownRail(),
         shell?.animatedLayout ?? ownLayout,
         shown,
         wasCollapsed,
@@ -536,7 +557,7 @@ export function SideNav({
       }
       shell?.beforeRailChange();
     },
-    [shell, ownLayout],
+    [shell, ownLayout, ownRail],
   );
   useLayoutEffect(() => {
     const snapshot = railSnapshotRef.current;
@@ -549,13 +570,13 @@ export function SideNav({
     motionRef.current = {
       rail: playRail(
         snapshot,
-        shell?.rail() ?? navRef.current,
+        shell?.rail() ?? ownRail(),
         shell?.animatedLayout ?? ownLayout,
         shell?.column() ?? null,
       ),
       endContent,
     };
-  }, [collapsed, shell, ownLayout]);
+  }, [collapsed, shell, ownLayout, ownRail]);
   // An unmount mid-motion removes the copy at once.
   useLayoutEffect(
     () => () => {
@@ -572,11 +593,12 @@ export function SideNav({
   // nested), it moves to the rail's collapse toggle, or, with none, to the
   // nearest row the rail keeps. Rows and the toggle register through their
   // callback refs. Rows are matched across the commit by their place among
-  // the rows the rail keeps, not by element: a resizable SideNav remounts its
-  // nav when it collapses. Focus on a header or footer control that a
-  // resizable collapse remounts goes back to the control with the same
-  // accessible name. From one the collapse removes or renames, or the resize
-  // handle, focus goes to the toggle, or, with none, to the first kept row.
+  // the rows the rail keeps, not by element, since a row's control can be
+  // replaced by its collapsed form. Focus on a header or footer control that
+  // the collapse replaces goes to the new control with the same accessible
+  // name. From one the collapse removes or replaces under another name, or
+  // the resize handle, focus goes to the toggle, or, with none, to the first
+  // kept row.
   // Focus moves only if the collapse lost it.
   const rowsRef = useRef(new Map<HTMLElement, boolean>());
   const togglesRef = useRef(new Set<HTMLElement>());
@@ -597,87 +619,77 @@ export function SideNav({
     }),
     [],
   );
-  const resizeWrapperRef = useRef<HTMLDivElement>(null);
-  const pendingFocusRef = useRef<{
-    focus: FocusWithin;
-    /** Whether the rail keeps the row that held focus. */
-    isRowKept: boolean;
-    /** Kept rows before the row that held focus. */
-    keptBefore: number;
-    /** The name of the control outside the rows that held focus. */
-    outside: {name: string} | null;
-    /** Whether focus was on the collapse toggle. */
-    wasOnToggle: boolean;
-  } | null>(null);
-  const noteRailFocus = useCallback((wasCollapsed: boolean) => {
-    pendingFocusRef.current = null;
-    const nav = navRef.current;
-    // The resize handle sits beside the nav, in the resize wrapper, and goes
-    // with a collapse its Enter starts.
-    const focus = wasCollapsed
-      ? null
-      : (noteFocusWithin(nav) ?? noteFocusWithin(resizeWrapperRef.current));
-    if (focus == null || nav == null) {
-      return;
-    }
-    const rows = railRows(nav, rowsRef.current);
-    // The innermost row holding focus, the last in document order: a nested
-    // row's parent holds it too.
-    let index = -1;
-    rows.forEach((row, at) => {
-      if (row.contains(focus.element)) {
-        index = at;
+  const noteRailFocus = useFocusLeavingChange(
+    collapsed,
+    (wasCollapsed: boolean): PendingRailFocus | null => {
+      const nav = navRef.current;
+      // The resize handle sits beside the nav, in the resize wrapper, and goes
+      // with a collapse its Enter starts.
+      const focus = wasCollapsed
+        ? null
+        : (noteFocusWithin(nav) ?? noteFocusWithin(resizeWrapperRef.current));
+      if (focus == null || nav == null) {
+        return null;
       }
-    });
-    let outside = null;
-    if (index < 0) {
-      const controls = controlsOutsideRows(nav, rows);
-      const at = controls.findIndex(control => control.contains(focus.element));
-      outside = at < 0 ? null : {name: controlName(controls[at])};
-    }
-    pendingFocusRef.current = {
-      focus,
-      outside,
-      wasOnToggle: [...togglesRef.current].some(toggle =>
-        toggle.contains(focus.element),
-      ),
-      isRowKept: index >= 0 && rowsRef.current.get(rows[index]) === true,
-      keptBefore: rows
-        .slice(0, Math.max(index, 0))
-        .filter(row => rowsRef.current.get(row) === true).length,
-    };
-  }, []);
-  useLayoutEffect(() => {
-    const pending = pendingFocusRef.current;
-    pendingFocusRef.current = null;
-    const nav = navRef.current;
-    if (pending == null || !collapsed || nav == null) {
-      return;
-    }
-    // Collapsed, every row the nav renders is one the rail keeps, in order.
-    const kept = railRows(nav, rowsRef.current);
-    const controlOf = (row: HTMLElement | undefined) =>
-      row == null ? undefined : getFocusableElements(row)[0];
-    const toggle = [...togglesRef.current].find(element =>
-      nav.contains(element),
-    );
-    let sameOutside: HTMLElement | undefined;
-    if (pending.wasOnToggle) {
-      sameOutside = toggle;
-    } else if (pending.outside != null) {
-      const controls = controlsOutsideRows(nav, kept);
-      sameOutside = controls.find(
-        control => controlName(control) === pending.outside?.name,
+      const rows = railRows(nav, rowsRef.current);
+      // The innermost row holding focus, the last in document order: a nested
+      // row's parent holds it too.
+      let index = -1;
+      rows.forEach((row, at) => {
+        if (row.contains(focus.element)) {
+          index = at;
+        }
+      });
+      let outside = null;
+      if (index < 0) {
+        const controls = controlsOutsideRows(nav, rows);
+        const at = controls.findIndex(control =>
+          control.contains(focus.element),
+        );
+        outside = at < 0 ? null : {name: controlName(controls[at])};
+      }
+      return {
+        focus,
+        outside,
+        wasOnToggle: [...togglesRef.current].some(toggle =>
+          toggle.contains(focus.element),
+        ),
+        isRowKept: index >= 0 && rowsRef.current.get(rows[index]) === true,
+        keptBefore: rows
+          .slice(0, Math.max(index, 0))
+          .filter(row => rowsRef.current.get(row) === true).length,
+      };
+    },
+    (pending: PendingRailFocus, isCollapsed: boolean) => {
+      const nav = navRef.current;
+      if (!isCollapsed || nav == null) {
+        return;
+      }
+      // Collapsed, every row the nav renders is one the rail keeps, in order.
+      const kept = railRows(nav, rowsRef.current);
+      const controlOf = (row: HTMLElement | undefined) =>
+        row == null ? undefined : getFocusableElements(row)[0];
+      const toggle = [...togglesRef.current].find(element =>
+        nav.contains(element),
       );
-    }
-    const target = pending.isRowKept
-      ? controlOf(kept[pending.keptBefore])
-      : (sameOutside ??
-        toggle ??
-        controlOf(kept[pending.keptBefore - 1]) ??
-        controlOf(kept[pending.keptBefore]));
-    moveFocusLeftBehind(pending.focus, target);
-  }, [collapsed]);
+      let sameOutside: HTMLElement | undefined;
+      if (pending.wasOnToggle) {
+        sameOutside = toggle;
+      } else if (pending.outside != null) {
+        const controls = controlsOutsideRows(nav, kept);
+        sameOutside = controls.find(
+          control => controlName(control) === pending.outside?.name,
+        );
+      }
+      const target = pending.isRowKept
+        ? controlOf(kept[pending.keptBefore])
+        : (sameOutside ??
+          toggle ??
+          controlOf(kept[pending.keptBefore - 1]) ??
+          controlOf(kept[pending.keptBefore]));
+      moveFocusLeftBehind(pending.focus, target);
+    },
+  );
   const beforeRailChange = useCallback(
     (wasCollapsed: boolean) => {
       noteRailFocus(wasCollapsed);
@@ -885,26 +897,31 @@ export function SideNav({
   // Overlay drag handle inside the nav when resizable.
   // Uses ResizeHandle in overlay mode so the handle sits inside
   // the panel's overflow: clip bounds.
-  const rail = showResizeHandle ? (
+  // A resizable rail keeps its wrapper while collapsed, so collapsing or
+  // expanding never changes the nav's parent: the nav and its items stay
+  // mounted, and their state (an open nested group) and focus persist (FR6).
+  // Only the handle comes and goes.
+  const rail = isResizable ? (
     <div ref={resizeWrapperRef} {...stylex.props(styles.resizableContainer)}>
       {navElement}
-      <ResizeHandle
-        data-testid="astryx-sidenav-resize-handle"
-        direction="horizontal"
-        position="overlay"
-        pillPlacement="end"
-        isAlwaysVisible={false}
-        xstyle={styles.resizableHandle}
-        resizable={resizableHook.props}
-        label={t('@astryx.sideNav.resizeSidebar')}
-        aria-controls={navId}
-      />
+      {showResizeHandle && (
+        <ResizeHandle
+          data-testid="astryx-sidenav-resize-handle"
+          direction="horizontal"
+          position="overlay"
+          pillPlacement="end"
+          isAlwaysVisible={false}
+          xstyle={styles.resizableHandle}
+          resizable={resizableHook.props}
+          label={t('@astryx.sideNav.resizeSidebar')}
+          aria-controls={navId}
+        />
+      )}
     </div>
   ) : (
     navElement
   );
-  // The snapshot stays mounted outside the resize wrapper, which comes and
-  // goes with the collapse it measures.
+  // The snapshot stays mounted outside the resize wrapper.
   const content = (
     <>
       <LayoutChangeSnapshot
