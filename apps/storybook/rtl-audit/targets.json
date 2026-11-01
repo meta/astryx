@@ -872,5 +872,19 @@
     "component": "InputGroup",
     "storyId": "core-inputgroup--with-prefix",
     "dims": []
+  },
+  {
+    "component": "TopNavMegaMenuFeaturedCard",
+    "storyId": "core-topnavmenu--featured-card-link-arrow",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-top-nav-mega-menu-featured-card a > span",
+      "overlayRoot": ".astryx-top-nav-mega-menu-featured-card a"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--featured-card-link-arrow",
+    "dims": []
   }
 ]

@@ -312,3 +312,22 @@ export const MegaMenuSimple: Story = {
     </div>
   ),
 };
+
+/**
+ * Fixture for the RTL audit: a featured card on its own with a short link
+ * label, so the link arrow's inline-end position can be measured in both
+ * directions.
+ */
+export const FeaturedCardLinkArrow: Story = {
+  name: 'Featured card / Link arrow',
+  render: () => (
+    <div style={{width: 320}}>
+      <TopNavMegaMenuFeaturedCard
+        title="What's new in v4.0"
+        description="AI-powered analytics and real-time collaboration."
+        linkLabel="Read more"
+        linkHref="#announcement"
+      />
+    </div>
+  ),
+};
