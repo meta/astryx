@@ -24,6 +24,7 @@ import {CheckboxListItem} from './CheckboxListItem';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {List} from '../List/List';
+import {FormLayout} from '../FormLayout/FormLayout';
 
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
@@ -108,6 +109,87 @@ describe('CheckboxList', () => {
     expect(label.closest('label')).toBeNull();
     expect(label).not.toHaveAttribute('for');
     expect(group.getAttribute('aria-labelledby')).toBe(label.id);
+  });
+
+  it('shows the optional indicator after the group label with isOptional', () => {
+    const {rerender} = render(
+      <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    expect(screen.queryByText('Optional')).not.toBeInTheDocument();
+
+    rerender(
+      <CheckboxList
+        label="Preferences"
+        value={[]}
+        onChange={() => {}}
+        isOptional>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    const label = screen.getByText('Preferences');
+    expect(within(label).getByText('Optional')).toBeInTheDocument();
+    // A checkbox group has no required state to announce or validate.
+    expect(
+      screen.getByRole('group', {name: /^Preferences/}),
+    ).not.toHaveAttribute('aria-required');
+    expect(screen.getByRole('checkbox', {name: 'Option A'})).not.toBeRequired();
+  });
+
+  it('marks isOptional only where it deviates from the FormLayout default', () => {
+    const {rerender} = render(
+      <FormLayout defaultOptionality="required">
+        <CheckboxList
+          label="Preferences"
+          value={[]}
+          onChange={() => {}}
+          isOptional>
+          <CheckboxListItem label="Option A" value="a" />
+          <CheckboxListItem label="Option B" value="b" />
+        </CheckboxList>
+      </FormLayout>,
+    );
+    expect(screen.getByText('Optional')).toBeInTheDocument();
+    // The checkboxes follow the group, not the required form default.
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox).not.toHaveAttribute('aria-required');
+    }
+
+    rerender(
+      <FormLayout defaultOptionality="optional">
+        <CheckboxList
+          label="Preferences"
+          value={[]}
+          onChange={() => {}}
+          isOptional>
+          <CheckboxListItem label="Option A" value="a" />
+        </CheckboxList>
+      </FormLayout>,
+    );
+    expect(screen.queryByText('Optional')).not.toBeInTheDocument();
+  });
+
+  it('keeps a focused checkbox focused when isOptional changes', () => {
+    const {rerender} = render(
+      <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    const checkbox = screen.getByRole('checkbox', {name: 'Option A'});
+    checkbox.focus();
+
+    rerender(
+      <CheckboxList
+        label="Preferences"
+        value={[]}
+        onChange={() => {}}
+        isOptional>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('checkbox', {name: 'Option A'})).toBe(checkbox);
+    expect(checkbox).toHaveFocus();
   });
 
   it('renders checkbox items', () => {
