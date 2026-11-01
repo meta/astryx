@@ -116,13 +116,39 @@ describe('WebKit interaction proof routing', () => {
     expect(run).not.toContain('--project chromium');
   });
 
-  it("sizes llvmpipe's thread pool from the job's own CPUs before Playwright runs", () => {
+  it("caps llvmpipe's threads at the job's cgroup CPU quota before Playwright runs", async () => {
     const run = step(webkit, 'Run WebKit interaction proofs').run;
-    expect(run).toMatch(/^LP_NUM_THREADS="\$\(nproc\)"$/m);
-    expect(run).toMatch(/^export LP_NUM_THREADS$/m);
-    expect(run.indexOf('LP_NUM_THREADS')).toBeLessThan(
-      run.indexOf('playwright test'),
-    );
+    const setup = run.slice(0, run.indexOf('pnpm exec playwright test'));
+    expect(setup).toContain('export LP_NUM_THREADS');
+    // Run the setup against a quota file: a 2-CPU quota caps a 64-CPU view,
+    // no quota keeps nproc, and the quota never raises the count.
+    const {execFileSync} = await import('node:child_process');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-threads-'));
+    const threads = (cpuMax, cpus) => {
+      const quota = path.join(dir, 'cpu.max');
+      if (cpuMax == null) fs.rmSync(quota, {force: true});
+      else fs.writeFileSync(quota, `${cpuMax}\n`);
+      const script = `nproc() { echo ${cpus}; }\n${setup.replaceAll(
+        '/sys/fs/cgroup/cpu.max',
+        quota,
+      )}\necho "$LP_NUM_THREADS"`;
+      return execFileSync('bash', ['-c', script], {encoding: 'utf8'})
+        .trim()
+        .split('\n')
+        .at(-1);
+    };
+    try {
+      expect(threads('200000 100000', 64)).toBe('2');
+      expect(threads('150000 100000', 64)).toBe('2');
+      expect(threads('max 100000', 64)).toBe('64');
+      expect(threads(null, 4)).toBe('4');
+      expect(threads('800000 100000', 4)).toBe('4');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it('runs only the specs whose code its scope covers', () => {
