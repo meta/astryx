@@ -13,7 +13,8 @@
  * Supports trigger menus (@ mentions, / commands) via SearchSource,
  * inline token rendering, serialization, Enter-to-submit with
  * IME-composition guarding and an onKeyDown seam for platform-specific
- * key handling, message history, paste/drop file handling, and
+ * key handling, a touch-keyboard Return key that says Send
+ * (`enterkeyhint`), message history, paste/drop file handling, and
  * mobile-safe touch typography.
  *
  *
@@ -241,6 +242,14 @@ export interface ChatComposerInputProps extends Omit<
    * never submits while a composition is in progress.
    */
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  /**
+   * What the Return key of a touch keyboard says (the native
+   * `enterkeyhint`). Enter sends the message, so the key says so: iOS shows
+   * its Send key. When `onKeyDown` makes Enter insert a line break on touch
+   * keyboards, pass `'enter'` so the key shows Return again.
+   * @default 'send'
+   */
+  enterKeyHint?: React.HTMLAttributes<HTMLElement>['enterKeyHint'];
 }
 
 // =============================================================================
@@ -367,6 +376,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onFiles,
     onSubmit = composerCtx?.onSubmit,
     onKeyDown: onKeyDownProp,
+    enterKeyHint = 'send',
     xstyle,
     className,
     style,
@@ -927,6 +937,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         // Explicit in both states: losing editability must not lose focus.
         tabIndex={0}
         contentEditable={!isDisabled}
+        enterKeyHint={enterKeyHint}
         suppressContentEditableWarning
         onInput={handleInput}
         onKeyDown={handleKeyDown}
