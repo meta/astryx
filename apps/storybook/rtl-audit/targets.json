@@ -605,5 +605,42 @@
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
     }
+  },
+  {
+    "component": "SideNavHeading",
+    "storyId": "core-sidenav--default",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": ".astryx-side-nav-heading .astryx-nav-icon",
+      "next": ".astryx-side-nav-heading span:text-is(\"My App\")",
+      "subject": ".astryx-side-nav-heading"
+    }
+  },
+  {
+    "component": "SideNavItem",
+    "storyId": "core-sidenav--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-side-nav-item svg.astryx-icon",
+      "next": ".astryx-side-nav-item span:text-is(\"Dashboard\")"
+    }
+  },
+  {
+    "component": "SideNavSection",
+    "storyId": "core-sidenav--section-end-content",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-side-nav-section span:text-is(\"Projects\")",
+      "next": ".astryx-side-nav-section .astryx-badge"
+    }
+  },
+  {
+    "component": "SideNavCollapseButton",
+    "storyId": "core-sidenav--collapsible-sidebar",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"Collapse sidebar\"]",
+      "next": "button[aria-label=\"Help\"]"
+    }
   }
 ]
