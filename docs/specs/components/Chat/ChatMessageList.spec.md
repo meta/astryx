@@ -120,16 +120,16 @@ non-rendering React nodes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                | Basis                                               |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| FR1 | The outer root renders `role="log"`, `aria-live="polite"`, and `tabIndex=0`; `isStreaming=true` adds `aria-busy="true"`, which is absent otherwise.                      | Current source, tests, and docs                     |
-| FR2 | The chosen density is reflected as `data-density` on the root and flows to child messages through `ChatListContext`; it selects three spacing groups.                    | Current source, tests, and docs                     |
-| FR3 | The optional `gap` replaces only the top-level row gap; density still selects padding and context.                                                                       | Current source, tests, and docs                     |
-| FR4 | `emptyState` renders only when `children` is nullish, `false`, or an empty top-level array. Otherwise the passed children render unchanged.                              | Current source and tests                            |
-| FR5 | `align="bottom"` includes a flex spacer before messages; `align="top"` omits it. Overflowing content is not given a different rendering path.                            | Current source and tests                            |
-| FR6 | Supplying `scrollToTopAction` creates an observed top sentinel. An intersection starts its async transition, and a top-positioned spinner renders while it is pending.   | Current source, tests, and docs                     |
-| FR7 | Inside ChatLayout, the inner content element is passed to the layout's `contentRef` and removed from that registration on cleanup; standalone lists have no layout ref.  | Current source                                      |
-| FR8 | The root receives `ref`, accepted DOM/data/ARIA props, and composed `className`, `style`, and `xstyle`; component-owned log semantics are applied after forwarded props. | Current source; `architecture:public-component-api` |
+| ID  | Invariant                                                                                                                                                                                                                                                 | Basis                                               |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| FR1 | The outer root renders `role="log"`, `aria-live="polite"`, and `tabIndex=0`; `isStreaming=true` adds `aria-busy="true"`, which is absent otherwise.                                                                                                       | Current source, tests, and docs                     |
+| FR2 | The chosen density is reflected as `data-density` on the root and flows to child messages through `ChatListContext`; it selects three spacing groups.                                                                                                     | Current source, tests, and docs                     |
+| FR3 | The optional `gap` replaces only the top-level row gap; density still selects padding and context.                                                                                                                                                        | Current source, tests, and docs                     |
+| FR4 | `emptyState` renders only when `children` is nullish, `false`, or an empty top-level array. Otherwise the passed children render unchanged.                                                                                                               | Current source and tests                            |
+| FR5 | With `align="bottom"` a short list rests at the block end; with `align="top"` it rests at the block start. Overflowing content renders the same either way. Implementation gap: the bottom placement uses an added spacer element (Current-state impact). | Current source and tests                            |
+| FR6 | Supplying `scrollToTopAction` creates an observed top sentinel. An intersection starts its async transition, and a top-positioned spinner renders while it is pending.                                                                                    | Current source, tests, and docs                     |
+| FR7 | Inside ChatLayout, the inner content element is passed to the layout's `contentRef` and removed from that registration on cleanup; standalone lists have no layout ref.                                                                                   | Current source                                      |
+| FR8 | The root receives `ref`, accepted DOM/data/ARIA props, and composed `className`, `style`, and `xstyle`; component-owned log semantics are applied after forwarded props.                                                                                  | Current source; `architecture:public-component-api` |
 
 For the `emptyState` slot, numeric `0` is visible content. Nullish values,
 booleans, and an empty string do not create an empty wrapper. This describes
@@ -160,8 +160,8 @@ scalar output only; it does not decide how to inspect nested children.
 - **PR1 — Sentinel observer.** An `IntersectionObserver` is installed only when
   `scrollToTopAction` exists, and disconnected on cleanup. Its root is ChatLayout's scroll container when
   available, otherwise the document viewport.
-- **PR2 — Layout registration.** An Effect registers the inner content element
-  with ChatLayout, then clears that registration on cleanup.
+- **PR2 — Layout registration.** The inner content element is registered with
+  ChatLayout, and the registration is cleared on cleanup.
 
 ## Accessibility contract
 
@@ -195,22 +195,23 @@ migration, so the map is deferred.
 | Contract | Verification                                                                                                                                              | Representative states      | Mutation or failure expectation                              | Audit section              |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ | -------------------------- |
 | FR1, AR1 | `ChatMessageList.test.tsx` role and `aria-busy` tests                                                                                                     | rest, streaming            | A dropped log role or busy state fails.                      | `audit:ChatMessageList/§1` |
-| FR2–FR3  | `ChatMessageList.test.tsx` density and gap tests; `themingTargets.test.ts`                                                                                | densities; gap override    | Lost density reflection or a gap that changes density fails. | `audit:ChatMessageList/§2` |
+| FR2–FR3  | `ChatMessageList.test.tsx` density and gap tests                                                                                                          | densities; gap override    | Lost density reflection or a gap that changes density fails. | `audit:ChatMessageList/§2` |
 | FR2      | `ChatMessage.test.tsx` "inherits list density and lets an explicit prop override it"; `ChatMessageBubble.test.tsx` list-density case                      | child message in a list    | Density that stops reaching child messages fails.            | `audit:ChatMessageList/§2` |
 | FR7      | `ChatLayout.test.tsx` "first-fill scroll positioning" cases; `useChatNewMessages.test.tsx` "works end-to-end with ChatLayout conditional ChatMessageList" | list inside ChatLayout     | A list that stops registering its content element fails.     | `audit:ChatMessageList/§7` |
 | FR4      | `ChatMessageList.test.tsx` empty-state tests                                                                                                              | empty; numeric empty state | A missing or hidden empty state fails.                       | `audit:ChatMessageList/§4` |
 | FR5      | `ChatMessageList.test.tsx` spacer tests                                                                                                                   | default, bottom, top       | A spacer that appears or vanishes wrongly fails.             | `audit:ChatMessageList/§4` |
 | FR6      | `ChatMessageList.test.tsx` "loads older messages through the top sentinel and exposes pending status"                                                     | pending, settled           | A lost action or stuck spinner fails.                        | `audit:ChatMessageList/§6` |
-| FR8      | `ChatMessageList.test.tsx` `data-testid` test                                                                                                             | data prop                  | A dropped prop fails.                                        | `audit:ChatMessageList/§3` |
 
 Read from source, with no focused test yet:
 
 - FR1: `tabIndex=0` on the log.
+- FR2: the spacing each density selects.
+- FR3: `gap` replacing the top-level row gap.
 - FR4: `null` and `false` children selecting the empty state.
 - FR7: removing the registration on cleanup.
-- FR8: `ref`, `className`, `style`, and `xstyle` on the root, and owned log
-  semantics winning over forwarded props.
-- PR1–PR2: observer and registration cleanup.
+- FR8: `ref`, DOM, data, and ARIA props, `className`, `style`, and `xstyle` on
+  the root, and owned log semantics winning over forwarded props.
+- PR1–PR2: the observer's root, and observer and registration cleanup.
 
 ## Decision log
 
