@@ -327,10 +327,11 @@ they are separately named.
   runner class (standard GitHub-hosted or non-standard), job-minutes per
   pull-request update before and after, the change in runner-pool usage
   (runner-minutes a day and average concurrent jobs) and time to green. The
-  pull-request comment measures these from the workflow change and recent
-  pull-request runs, without starting a job: a changed job counts as often as
+  pull-request comment measures these for CI's own workflow (`ci.yml`) from
+  its change and recent pull-request runs, without starting a job: a changed job counts as often as
   it ran in those runs, time to green compares with runs that ran the same
-  jobs, and a changed composite action or CI script is named as not measured.
+  jobs, and another changed workflow, a composite action or a CI script is
+  named as not measured.
   A `node-tooling` pull request (FR8) gets no pull-request comment, so its
   description's line stands alone. The comment flags a job moving onto a
   non-standard runner, more than 10% added runner-pool usage, or more than two

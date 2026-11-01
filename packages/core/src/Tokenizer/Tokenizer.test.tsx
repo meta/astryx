@@ -2295,3 +2295,110 @@ describe('Tokenizer caller aria-labelledby', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('Tokenizer incremental results (spec:AST-092)', () => {
+  const ben = {id: 'u2', label: 'Ben'};
+  const benita = {id: 'u3', label: 'Benita'};
+  const benShah = {id: 'u7', label: 'Ben Shah'};
+
+  function pendingSource() {
+    let settle: (items: SearchableItem[]) => void = () => {};
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(_query, context) {
+        context?.update([ben, benita]);
+        return new Promise<SearchableItem[]>(resolve => {
+          settle = resolve;
+        });
+      },
+    };
+    return {source, settle: (items: SearchableItem[]) => settle(items)};
+  }
+
+  function optionLabels() {
+    return screen
+      .queryAllByRole('option', {hidden: true})
+      .map(option => option.textContent);
+  }
+
+  it('removes committed values from partial lists too (FR1, component:Tokenizer FR13)', async () => {
+    const {source, settle} = pendingSource();
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[benita]}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben'}});
+    });
+    expect(optionLabels()).toEqual(['Ben']);
+
+    await act(async () => {
+      settle([ben, benita, benShah]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Ben Shah']);
+  });
+
+  it('offers the create row only once a searched query settles (FR1)', async () => {
+    const {source, settle} = pendingSource();
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        hasCreate
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben s'}});
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Benita']);
+
+    await act(async () => {
+      settle([ben, benita]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Benita', 'Create "ben s"']);
+  });
+
+  it('keeps grouped rows in place and shows the create row after them when the query settles (FR1, FR2)', async () => {
+    const people = {id: 'p1', label: 'Ben', auxiliaryData: {group: 'People'}};
+    const teams = {id: 't1', label: 'Bento', auxiliaryData: {group: 'Teams'}};
+    let settle: (items: SearchableItem[]) => void = () => {};
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(_query, context) {
+        context?.update([people]);
+        return new Promise<SearchableItem[]>(resolve => {
+          settle = resolve;
+        });
+      },
+    };
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        hasCreate
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben x'}});
+    });
+    expect(optionLabels()).toEqual(['Ben']);
+    await act(async () => {
+      settle([people, teams]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Bento', 'Create "ben x"']);
+  });
+});

@@ -937,8 +937,9 @@ Storybook story for anything you added or altered.
   `CI impact:` line: each changed job's runner class (standard or
   non-standard), job-minutes per update and runner-pool usage before and
   after, and time to green. The pull-request comment's CI impact section
-  measures these from recent runs and flags a job moving onto a non-standard
-  runner, more than 10% added runner-pool usage, or more than two minutes
+  measures these for `ci.yml` from recent runs, names other changed workflows,
+  composite actions and CI scripts as not measured, and flags a job moving onto
+  a non-standard runner, more than 10% added runner-pool usage, or more than two minutes
   added to time to green.
 - **Pull requests from a branch in this repository run CI without the label**,
   since pushing a branch here needs write access. Maintainers who work from a

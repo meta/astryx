@@ -7,7 +7,6 @@ import path from 'node:path';
 import process from 'node:process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
-import yaml from 'yaml';
 
 const require = createRequire(import.meta.url);
 const ciImpact = require('./ci-impact.js');
@@ -190,6 +189,9 @@ async function workflowAt({
       path: file,
       ref,
     });
+    // Loaded here, not at the top: the PR Comment workflow's resolve and
+    // spec-only jobs import this module without installing dependencies.
+    const {default: yaml} = await import('yaml');
     return yaml.parse(Buffer.from(data.content, 'base64').toString('utf8'));
   } catch (error) {
     // A workflow the pull request adds has no base, one it removes no head.
@@ -822,6 +824,7 @@ export async function reconcilePrComment({
   ciHistoryPath = 'ci-history/ci-history.json',
   createIfMissing = true,
   fallbackMessage,
+  touchedPath = 'touched-components/touched-components.json',
   generator = GENERATOR,
   execute = execFileSync,
 }) {
@@ -923,6 +926,14 @@ export async function reconcilePrComment({
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
       ...(framesPath ? ['--visual-frames', framesPath] : []),
+      ...(trustedHeadReport({
+        reportPath: touchedPath,
+        label: 'touched-components report',
+        identity,
+        core,
+      })
+        ? ['--touched', touchedPath]
+        : []),
       ...(preview ? ['--preview', previewPath] : []),
       ...(jobs ? ['--jobs', jobsPath] : []),
       ...(impact ? ['--ci-impact', impactPath] : []),

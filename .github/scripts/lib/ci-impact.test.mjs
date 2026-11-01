@@ -356,6 +356,39 @@ describe('a label-gated suite tested with its label', () => {
   });
 });
 
+describe('a changed job that ran in none of the sampled runs', () => {
+  it('counts zero, not every later pull request', () => {
+    const history = summarizeHistory({
+      runsLast7Days: 70,
+      runs: [
+        {
+          run_started_at: at(0),
+          updated_at: at(10),
+          jobs: [job('lint', 0, 2), job('perf', 0, 9, 'skipped')],
+        },
+      ],
+    });
+    const impact = estimateImpact({
+      diff: {
+        changes: [
+          {
+            name: 'perf',
+            change: 'changed',
+            before: runnerClass('ubuntu-latest'),
+            after: runnerClass('ubuntu-latest'),
+          },
+        ],
+        triggersChanged: false,
+        names: {before: ['lint', 'perf'], after: ['lint', 'perf']},
+      },
+      history,
+      currentJobs: [job('lint', 0, 2), job('perf', 0, 9)],
+      currentWallMinutes: 11,
+    });
+    expect(impact.jobMinutes).toEqual({before: 2, after: 2});
+  });
+});
+
 describe('renderCiImpact', () => {
   const impact = {
     jobMinutes: {before: 52, after: 53},

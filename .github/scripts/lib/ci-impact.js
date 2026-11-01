@@ -253,12 +253,16 @@ function runMinutes(jobs) {
 function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
   const current = runMinutes(currentJobs);
   // A changed job counts this run's minutes only as often as it ran in the
-  // sampled runs (a label-gated suite tested with its label rarely runs); an
-  // added job, which has no history, as often as it ran here (once).
+  // sampled runs (a label-gated suite tested with its label rarely runs, and
+  // one that ran in none counts zero); an added job, which has no history, as
+  // often as it ran here (once).
+  const added = new Set(
+    diff.changes.filter(c => c.change === 'added').map(c => c.name),
+  );
   const share = name =>
-    history.sampled > 0 && history.jobMinutes[name] !== undefined
-      ? (history.jobRuns?.[name] ?? 0) / history.sampled
-      : 1;
+    added.has(name) || history.sampled === 0
+      ? 1
+      : (history.jobRuns?.[name] ?? 0) / history.sampled;
   const changed = new Set(
     diff.changes.filter(c => c.change !== 'removed').map(c => c.name),
   );

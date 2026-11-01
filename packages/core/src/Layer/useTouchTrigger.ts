@@ -5,7 +5,8 @@
 /**
  * @file useTouchTrigger.ts
  * @input Touch trigger mode, layer open state, trigger ref, show/hide callbacks
- * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type
+ * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
+ *   TOUCH_POINTER_TYPES and useTapStop (internal: not re-exported from index)
  * @position Layer hook; shared touch behavior for useTooltip and useHoverCard
  *
  * SYNC: When modified, update:
@@ -37,7 +38,14 @@
  * which is when UIKit dismisses a popover.
  */
 
-import {useCallback, useEffect, useRef, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react';
 import {currentGesture} from './gestureCounter';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 
@@ -59,6 +67,30 @@ export type LayerTouchTrigger = 'auto' | 'tap' | 'none';
  * once it lands. See `handlePointerEnter`.
  */
 export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
+
+export function useTapStop(event: 'click'): {
+  onPointerDown: (event: ReactPointerEvent<Element>) => void;
+  onClick: (event: ReactMouseEvent<Element>) => void;
+};
+export function useTapStop(event: 'mousedown'): {
+  onPointerDown: (event: ReactPointerEvent<Element>) => void;
+  onMouseDown: (event: ReactMouseEvent<Element>) => void;
+};
+export function useTapStop(event: 'click' | 'mousedown') {
+  const pressIsTapRef = useRef(false);
+  const onPointerDown = (pointer: ReactPointerEvent<Element>) => {
+    pressIsTapRef.current = TOUCH_POINTER_TYPES.has(pointer.pointerType);
+  };
+  const cancel = (mouse: ReactMouseEvent<Element>) => {
+    if (pressIsTapRef.current) {
+      mouse.preventDefault();
+    }
+    pressIsTapRef.current = false;
+  };
+  return event === 'click'
+    ? {onPointerDown, onClick: cancel}
+    : {onPointerDown, onMouseDown: cancel};
+}
 
 /**
  * ARIA roles that make an element do something when activated. An explicit
