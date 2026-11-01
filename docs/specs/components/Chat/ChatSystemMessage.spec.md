@@ -173,7 +173,8 @@ migration, so the map is deferred.
 
 Read from source, with no focused test yet:
 
-- FR1: centering, and the icon not shrinking.
+- FR1: centering, the icon rendering before the content, and the icon not
+  shrinking.
 - PR1, AR3: no state, Effect, or interaction of the component's own.
 
 ## Decision log
