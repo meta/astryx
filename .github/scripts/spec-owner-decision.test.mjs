@@ -28,7 +28,7 @@ const {
 
 const head = 'abcdef1234567890abcdef1234567890abcdef12';
 const owner = {login: 'cixzhang'};
-const componentPath = 'packages/core/src/Button/Button.spec.md';
+const componentPath = 'docs/specs/components/Button/Button.spec.md';
 
 function componentRecord({body = 'Body.', decision = null} = {}) {
   const block =
@@ -87,6 +87,33 @@ describe('spec owner decision', () => {
     expect(requiresOwnerApproval([], {complete: false})).toBe(true);
   });
 
+  it('requires an engineering owner when a platform record becomes current', () => {
+    const swiftRecord = authority =>
+      [
+        '---',
+        'schema_version: 3',
+        'kind: component',
+        'id: component:swift/TextInput',
+        'platform_of: component:TextInput',
+        `authority: ${authority}`,
+        '---',
+        '',
+        '## Purpose',
+        '',
+        'A text field.',
+        '',
+      ].join('\n');
+    expect(
+      requiredApprovalGroups([
+        {
+          path: 'docs/specs/components/TextInput/TextInput.swift.spec.md',
+          baseContent: swiftRecord('draft'),
+          headContent: swiftRecord('current'),
+        },
+      ]),
+    ).toEqual({spec: true, design: false, theme: false});
+  });
+
   it('parses DESIGNOWNERS without comment examples', () => {
     expect(
       parseOwnerFile(`
@@ -120,7 +147,7 @@ describe('spec owner decision', () => {
     expect(
       requiredApprovalGroups([
         {
-          path: 'packages/core/src/Button/Button.spec.md',
+          path: 'docs/specs/components/Button/Button.spec.md',
           baseContent: 'kind: component\nauthority: current',
           headContent: 'kind: component\nauthority: current',
         },
@@ -719,5 +746,26 @@ describe('one review gate', () => {
     expect(
       compose({known: true, satisfied: false, text: '⏳ wait', url}),
     ).toEqual({state: 'pending', description: '⏳ wait', target_url: url});
+  });
+  it('reads a too-large run as a pending spec half that names the dispatch', () => {
+    const url = 'https://github.com/meta/astryx/actions/runs/8/attempts/1';
+    const spec = readSpecGate([
+      {
+        context: 'spec-owner-approval',
+        state: 'pending',
+        description:
+          'Mirrors review-required · spec too large to reconcile automatically',
+        target_url: url,
+        creator: {login: 'github-actions[bot]'},
+      },
+    ]);
+    expect(
+      composeReviewGate({codeGated: false, codeDescription: noCode, spec}),
+    ).toEqual({
+      state: 'pending',
+      description:
+        '⏳ Too large to reconcile automatically: a maintainer can run the Review signal workflow for this PR',
+      target_url: url,
+    });
   });
 });

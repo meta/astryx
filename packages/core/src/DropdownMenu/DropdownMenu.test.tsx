@@ -937,6 +937,38 @@ describe('DropdownMenu', () => {
     ).toHaveFocus();
   });
 
+  it('typeahead reaches an accented item with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[{label: 'Copy'}, {label: 'Ánh'}, {label: 'Łódź'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'l'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Łódź', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('typeahead puts the exact item first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'People'}}
+        items={[{label: 'Anh'}, {label: 'Dung'}, {label: 'Đào'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /People/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'đ'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Đào', hidden: true}),
+    ).toHaveFocus();
+  });
+
   it('typeahead advances past an item that already starts with the letter', async () => {
     const user = userEvent.setup();
     render(
@@ -1641,6 +1673,41 @@ describe('DropdownMenuItem host attributes', () => {
 });
 
 describe('DropdownMenuGroup (compound mode)', () => {
+  it('renders a heading only for a title that renders something', () => {
+    const titles = ['', false, true, null, 0] as const;
+    render(
+      <>
+        <DropdownMenuGroup title="" data-testid="g0">
+          <DropdownMenuItem label="Row 0" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={false} data-testid="g1">
+          <DropdownMenuItem label="Row 1" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={true} data-testid="g2">
+          <DropdownMenuItem label="Row 2" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={null} data-testid="g3">
+          <DropdownMenuItem label="Row 3" onClick={() => {}} />
+        </DropdownMenuGroup>
+        <DropdownMenuGroup title={0} data-testid="g4">
+          <DropdownMenuItem label="Row 4" onClick={() => {}} />
+        </DropdownMenuGroup>
+      </>,
+    );
+    // '', false, true and null render nothing, so no empty heading names the
+    // group.
+    for (const index of [0, 1, 2, 3]) {
+      expect(
+        screen.getByTestId(`g${index}`),
+        String(titles[index]),
+      ).not.toHaveAttribute('aria-labelledby');
+    }
+    // 0 renders "0" and names the group.
+    expect(screen.getByRole('group', {name: '0'})).toBe(
+      screen.getByTestId('g4'),
+    );
+  });
+
   it('a focusable node in the heading is not reachable by the arrow keys', async () => {
     // The public ReactNode type permits a focusable descendant, but the menu's
     // roving focus model cannot reach it. Pin that shipped gap while the public

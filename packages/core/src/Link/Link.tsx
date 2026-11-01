@@ -43,7 +43,7 @@ import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
 import {useInteractiveRole} from '../hooks/useInteractiveRole';
-import {themeProps} from '../utils/themeProps';
+import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -335,6 +335,10 @@ export function Link({
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
 
+  // The reflected theme attributes win over a caller's same-named `data-*`, so
+  // theme targeting always sees the real value (public-component-api INV5).
+  const reflectedAttributes = themeDataAttributes({color});
+
   const sharedContent = (
     <>
       <Text
@@ -385,6 +389,7 @@ export function Link({
           style,
         )}
         {...props}
+        {...reflectedAttributes}
         // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
         {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
         {sharedContent}
@@ -419,6 +424,7 @@ export function Link({
           style,
         )}
         {...props}
+        {...reflectedAttributes}
         {...disabledInteractionProps(props.onKeyDown)}>
         {sharedContent}
       </a>
@@ -450,7 +456,8 @@ export function Link({
           className,
           style,
         )}
-        {...props}>
+        {...props}
+        {...reflectedAttributes}>
         {sharedContent}
       </LinkComponent>
     );

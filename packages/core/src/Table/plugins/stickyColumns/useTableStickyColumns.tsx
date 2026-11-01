@@ -33,7 +33,7 @@ import type {
 } from '../../types';
 import {resolveColumnFloorWidths} from '../../columnUtils';
 import {collapsedBottom} from '../../rowDivider';
-import {GLIDING_ATTRIBUTE} from '../../glidingDivider';
+import {GLIDING_ATTRIBUTE, PINNED_ATTRIBUTE} from '../../glidingDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 
 // =============================================================================
@@ -183,7 +183,6 @@ const SHADOW_VAR_END = '--table-sticky-shadow-end';
 // border on the row, or the next row's top border), it is read after each
 // commit and on resize and carried as the cell's `carry` state
 // (syncPinnedDividers).
-const PINNED_ATTRIBUTE = 'data-astryx-table-pinned';
 /** Spread into a pinned cell's props: the attribute the divider sync finds. */
 const PINNED_PROPS: Record<string, string> = {[PINNED_ATTRIBUTE]: ''};
 const CARRY = 'carry';

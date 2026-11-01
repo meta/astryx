@@ -4,6 +4,9 @@
  * @file Registry serializer contract tests.
  * @input Minimal component, block, page, and StyleX fixtures.
  * @output Regression coverage for schema, package boundaries, names, and output.
+ *   The stock-ShadCN cases leave nothing in the system temporary directory:
+ *   ShadCN's own scratch directories stay in each consumer project, and the
+ *   no-op package managers are removed after the file.
  * @position Node test lane for ShadCN compatibility.
  */
 
@@ -22,7 +25,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
-import {describe, expect, it} from 'vitest';
+import {afterAll, describe, expect, it} from 'vitest';
 import {reconcileRegistryCompositions} from '../../packages/cli/api/upgrade/registry/registry.mjs';
 import {
   createShadcnPrecompiledDeclaration,
@@ -79,6 +82,17 @@ const SHADCN_ENV = {
   ...process.env,
   PATH: `${NOOP_PACKAGE_MANAGERS}${path.delimiter}${process.env.PATH ?? ''}`,
 };
+afterAll(() => {
+  rmSync(NOOP_PACKAGE_MANAGERS, {recursive: true, force: true});
+});
+
+// ShadCN leaves an empty temporary directory behind for every file it
+// transforms, so it gets a TMPDIR inside the project, which each test removes.
+function shadcnEnv(project) {
+  const scratch = path.join(project, '.tmp');
+  mkdirSync(scratch, {recursive: true});
+  return {...SHADCN_ENV, TMPDIR: scratch};
+}
 
 const packages = [
   {
@@ -618,7 +632,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
 
       expect(
@@ -711,7 +725,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
 
       const sourcePath = path.join(
@@ -792,7 +806,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
       await new Promise((resolve, reject) => {
         server.once('error', reject);
@@ -941,7 +955,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
 
       expect(
@@ -1022,7 +1036,7 @@ describe('buildShadcnRegistry', () => {
           cwd: project,
           timeout: 30_000,
           env: {
-            ...SHADCN_ENV,
+            ...shadcnEnv(project),
             NO_PROXY: '127.0.0.1,localhost',
             no_proxy: '127.0.0.1,localhost',
           },

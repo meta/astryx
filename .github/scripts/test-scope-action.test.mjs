@@ -68,6 +68,8 @@ async function decide({
   headError,
   missingBase = [],
   baseOverrides = {},
+  truncated = [],
+  policyError,
 } = {}) {
   const outputs = {};
   const messages = {info: [], warning: [], notice: [], failed: []};
@@ -82,7 +84,29 @@ async function decide({
     setFailed: message => messages.failed.push(message),
   };
   const notFound = () => Object.assign(new Error('Not Found'), {status: 404});
+  const policyText = file => {
+    if (missingBase.includes(file)) return null;
+    if (file in baseOverrides) return baseOverrides[file];
+    return fs.readFileSync(path.join(root, file), 'utf8');
+  };
+  const graphqlCalls = [];
   const github = {
+    // The trusted policy: one aliased Blob per `<sha>:<path>` expression.
+    graphql: async (query, variables) => {
+      graphqlCalls.push({query, variables});
+      if (policyError) throw policyError;
+      const repository = {};
+      for (const [key, expression] of Object.entries(variables)) {
+        if (!/^f\d+$/.test(key)) continue;
+        const [ref, file] = [expression.slice(0, 40), expression.slice(41)];
+        contentCalls.push({file, ref});
+        const known = CLASSIFIER_FILES.has(file) || file === AUDIT_FILE;
+        const text = ref === BASE_SHA && known ? policyText(file) : null;
+        repository[key] =
+          text == null ? null : {text, isTruncated: truncated.includes(file)};
+      }
+      return {repository};
+    },
     paginate: async () => {
       if (files instanceof Error) throw files;
       return files;
@@ -91,27 +115,7 @@ async function decide({
       pulls: {listFiles: () => {}},
       repos: {
         getContent: async ({path: file, ref}) => {
-          contentCalls.push({file, ref});
-          if (
-            ref === BASE_SHA &&
-            (CLASSIFIER_FILES.has(file) || file === AUDIT_FILE)
-          ) {
-            if (missingBase.includes(file)) throw notFound();
-            if (file in baseOverrides) {
-              return {
-                data: {
-                  content: Buffer.from(baseOverrides[file]).toString('base64'),
-                },
-              };
-            }
-            return {
-              data: {
-                content: fs
-                  .readFileSync(path.join(root, file))
-                  .toString('base64'),
-              },
-            };
-          }
+          contentCalls.push({file, ref, rest: true});
           if (ref === HEAD_SHA && headError) {
             throw Object.assign(new Error('Server Error'), {status: headError});
           }
@@ -145,7 +149,7 @@ async function decide({
       else delete process.env[key];
     }
   }
-  return {outputs, messages, contentCalls};
+  return {outputs, messages, contentCalls, graphqlCalls};
 }
 
 const changed = (...names) =>
@@ -158,6 +162,7 @@ describe('per-job scope step', () => {
     expect(Object.keys(action.outputs).sort()).toEqual(
       [
         'applies',
+        'head_file_present',
         'changed_files_path',
         'decided',
         'docsite_only',
@@ -219,6 +224,46 @@ describe('per-job scope step', () => {
     expect(
       contentCalls.filter(call => CLASSIFIER_FILES.has(call.file)),
     ).toEqual([...CLASSIFIER_FILES].map(file => ({file, ref: BASE_SHA})));
+  });
+
+  it('reads the trusted policy in one GraphQL query and no REST call', async () => {
+    const {graphqlCalls, contentCalls} = await decide({
+      files: changed('packages/core/src/Button/Button.tsx'),
+      inputs: {'component-audit': 'true'},
+    });
+    expect(graphqlCalls).toHaveLength(1);
+    expect(graphqlCalls[0].variables).toEqual({
+      owner: 'o',
+      repo: 'r',
+      f0: `${BASE_SHA}:.github/scripts/change-scope.cjs`,
+      f1: `${BASE_SHA}:.github/scripts/knowledge-paths.cjs`,
+      f2: `${BASE_SHA}:scripts/component-packages.cjs`,
+      f3: `${BASE_SHA}:${AUDIT_FILE}`,
+    });
+    expect(contentCalls.filter(call => call.rest)).toEqual([]);
+  });
+
+  it.each([
+    ['the query fails', {policyError: new Error('Something went wrong')}],
+    [
+      'a policy file is truncated',
+      {truncated: ['.github/scripts/change-scope.cjs']},
+    ],
+  ])('puts everything in scope when %s', async (_, options) => {
+    const {outputs, messages} = await decide({
+      files: changed('docs/specs/AST-999-example/spec.md'),
+      ...options,
+    });
+    expect(outputs).toMatchObject({
+      spec_only: 'false',
+      full_suite: 'true',
+      decided: 'false',
+    });
+    expect(messages.warning).toEqual([
+      expect.stringMatching(
+        /^Scope could not be decided \(.+\); everything is in scope\.$/,
+      ),
+    ]);
   });
 
   it('does not apply when no changed path is in the declared scope', async () => {
@@ -364,6 +409,33 @@ describe('per-job scope step', () => {
         inputs,
       });
       expect(outputs.applies).toBe('true');
+    });
+
+    it('reports a head without the file whether or not touches holds', async () => {
+      for (const file of ['packages/core/src/Button/Button.tsx', 'README.md']) {
+        const {outputs} = await decide({files: changed(file), inputs});
+        expect(outputs.head_file_present, file).toBe('false');
+      }
+      const {outputs} = await decide({
+        files: changed('README.md'),
+        headFiles: ['playwright.interaction.config.ts'],
+        inputs,
+      });
+      expect(outputs.head_file_present).toBe('true');
+    });
+
+    it('keeps the file present for a pull request that renames or deletes it', async () => {
+      for (const file of [
+        {
+          filename: 'playwright.old-interaction.config.ts',
+          previous_filename: 'playwright.interaction.config.ts',
+          status: 'renamed',
+        },
+        {filename: 'playwright.interaction.config.ts', status: 'removed'},
+      ]) {
+        const {outputs} = await decide({files: [file], inputs});
+        expect(outputs.head_file_present).toBe('true');
+      }
     });
 
     it('still applies to a pull request that deletes the file, so the check fails', async () => {

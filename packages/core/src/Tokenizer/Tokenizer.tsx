@@ -51,6 +51,7 @@ import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -69,7 +70,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Token} from '../Token';
 import {Spinner} from '../Spinner';
@@ -85,13 +85,19 @@ import {
   sizeVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import type {SearchableItem, SearchSource} from '../Typeahead/types';
+import type {
+  SearchContext,
+  SearchableItem,
+  SearchSource,
+} from '../Typeahead/types';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {isFocusDetached} from '../utils/focusReturn';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 
 // Re-export status types for convenience
 export type {
@@ -193,7 +199,7 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Icon to display at the start of the input.
    * Accepts a ReactNode (e.g. `<Icon icon={SearchIcon} />`) or an SVG icon component directly.
@@ -259,7 +265,13 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
-  /** Whether the input is disabled. @default false */
+  /**
+   * Whether the input is disabled. The disabled input keeps its tab stop: it
+   * is announced as disabled (`aria-disabled`), is read-only, and opens and
+   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"` and no
+   * `disabledMessage`, the input is natively disabled and out of the tab order.
+   * @default false
+   */
   isDisabled?: boolean;
   /**
    * Explains why the tokenizer is disabled. When set together with
@@ -268,8 +280,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * reason is discoverable by keyboard and assistive technology. Input stays
    * blocked.
    *
-   * Use this instead of wrapping a disabled tokenizer in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled tokenizer in `Tooltip`, so the
+   * reason is attached to the field itself.
    */
   disabledMessage?: string;
   /** Show clear button (clears all tokens). @default false */
@@ -823,14 +835,6 @@ export function Tokenizer<T extends SearchableItem>({
     },
     [onChangeQuery],
   );
-  // Whether the field's control — the inline input or the trigger — holds
-  // focus. Kept in a ref by the focus and blur handlers of both, because a
-  // control unmounted while focused fires no blur: when a presentation swap
-  // removes the focused control (the latch releasing into the popover, or
-  // `adaptive` changing while the sheet is closed), the new presentation's
-  // control takes the focus over once it has mounted, so focus never lands on
-  // the page body (`component:Tokenizer` FR16, `spec:AST-085` FR4).
-  const isControlFocusedRef = useRef(false);
   // Set around a focus move the field makes itself — a presentation swap
   // handing focus from one control to the other — so the receiving control
   // does not report it as focus entering from outside.
@@ -841,38 +845,33 @@ export function Tokenizer<T extends SearchableItem>({
   // entry, and the one focus the trigger then gets — BottomSheet's return
   // focus — is the entry to report.
   const hasReportedFocusRef = useRef(false);
-  // A control can hold focus without the field having seen a focus event:
-  // the inline input server-rendered with `autofocus` (`hasAutoFocus`) is
-  // focused before hydration, and the swap to the trigger in the first
-  // render after it removes that input. React detaches the old control
-  // before any effect of the swapping commit runs, so the live focus is
-  // read during that render, while the control is still in the document —
-  // a read of `document.activeElement` only, with no update made in render.
-  const previousPresentationRef = useRef(isSheetPresentation);
-  if (previousPresentationRef.current !== isSheetPresentation) {
-    previousPresentationRef.current = isSheetPresentation;
-    if (typeof document !== 'undefined') {
-      const active = document.activeElement;
-      if (
-        active != null &&
-        (active === inputRef.current || active === triggerRef.current)
-      ) {
-        isControlFocusedRef.current = true;
+  // When a presentation swap removes the focused control (the latch
+  // releasing into the popover, or `adaptive` changing while the sheet is
+  // closed), the new presentation's control takes the focus over, so focus
+  // never lands on the page body (`component:Tokenizer` FR16, `spec:AST-085`
+  // FR4). Both controls' callback refs own the hand-off
+  // (`architecture:react-component-runtime` INV6): the detaching control
+  // notes that it held focus — it is still in the document then, so this also
+  // covers a control focused before hydration (`hasAutoFocus`), which no focus
+  // event reported — and the attaching control takes it.
+  const isFocusPendingHandOffRef = useRef(false);
+  const handOffFocusRef = useCallback((node: HTMLElement | null) => {
+    if (node == null) {
+      return;
+    }
+    const takesFocus = isFocusPendingHandOffRef.current;
+    isFocusPendingHandOffRef.current = false;
+    if (takesFocus && isFocusDetached(node.ownerDocument)) {
+      isHandingOffFocusRef.current = true;
+      node.focus();
+      isHandingOffFocusRef.current = false;
+    }
+    return () => {
+      if (node.ownerDocument.activeElement === node) {
+        isFocusPendingHandOffRef.current = true;
       }
-    }
-  }
-  useEffect(() => {
-    if (!isControlFocusedRef.current) {
-      return;
-    }
-    const active = document.activeElement;
-    if (active != null && active !== document.body) {
-      return;
-    }
-    isHandingOffFocusRef.current = true;
-    (isSheetPresentation ? triggerRef.current : inputRef.current)?.focus();
-    isHandingOffFocusRef.current = false;
-  }, [isSheetPresentation]);
+    };
+  }, []);
   // The trigger's accessible description names the selected tokens: the
   // button's children are tokens whose own content assistive technology
   // leaves out of a button's name (`spec:AST-020` FR1).
@@ -947,6 +946,29 @@ export function Tokenizer<T extends SearchableItem>({
     focusTrigger: 'always',
     isEnabled: showsDisabledMessage,
   });
+  // The inline field's wrapper holds every control a swap removes with the
+  // input — a token's Remove button, the inline Clear all — so it notes focus
+  // anywhere inside it for the hand-off above. It also anchors the
+  // disabled-message tooltip, whose handlers are gated internally by
+  // isEnabled, so attaching unconditionally is safe.
+  const tooltipAnchorRef = disabledMessageTooltip.ref;
+  const wrapperCallbackRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      wrapperRef.current = el;
+      tooltipAnchorRef(el);
+      if (el == null) {
+        return;
+      }
+      return () => {
+        if (el.contains(el.ownerDocument.activeElement)) {
+          isFocusPendingHandOffRef.current = true;
+        }
+        wrapperRef.current = null;
+        tooltipAnchorRef(null);
+      };
+    },
+    [tooltipAnchorRef],
+  );
 
   // The sheet presentation has no input; the public ref reaches the trigger,
   // the control it stands for (`family:input-fields` FR10).
@@ -954,6 +976,7 @@ export function Tokenizer<T extends SearchableItem>({
     triggerRef,
     ref as React.Ref<HTMLButtonElement> | undefined,
     disabledMessageTooltip.ref,
+    handOffFocusRef,
   );
 
   useImperativeHandle(handleRef, () => ({
@@ -1034,7 +1057,6 @@ export function Tokenizer<T extends SearchableItem>({
         layer.show();
       }
       if (comingFromOutside) {
-        isControlFocusedRef.current = true;
         if (!isHandingOffFocusRef.current) {
           hasReportedFocusRef.current = true;
           onFocus?.(e);
@@ -1052,8 +1074,9 @@ export function Tokenizer<T extends SearchableItem>({
   const handleBlurCapture = useCallback(
     (e: React.FocusEvent) => {
       if (!isFocusInTokenizer(e.relatedTarget)) {
-        isControlFocusedRef.current = false;
         hasReportedFocusRef.current = false;
+        // Focus left the field: no hand-off is owed any more.
+        isFocusPendingHandOffRef.current = false;
         setIsFocusedWithin(false);
         onBlur?.(e);
         if (isLayerMode) {
@@ -1086,8 +1109,16 @@ export function Tokenizer<T extends SearchableItem>({
 
   const filteredSource: SearchSource<T> = useMemo(
     () => ({
-      search: async (query: string) => {
-        const results = await searchSource.search(query);
+      // Committed values leave every list, partial or final
+      // (component:Tokenizer FR13, spec:AST-092 FR1).
+      search: async (query: string, context?: SearchContext<T>) => {
+        const results = await searchSource.search(
+          query,
+          context && {
+            update: items =>
+              context.update(items.filter(item => !selectedIds.has(item.id))),
+          },
+        );
         return results.filter(item => !selectedIds.has(item.id));
       },
       bootstrap: async () => {
@@ -1327,13 +1358,7 @@ export function Tokenizer<T extends SearchableItem>({
 
   const wrapperContent = (
     <div
-      ref={el => {
-        wrapperRef.current = el;
-        // Anchor + hover/focus listeners for the disabled-message tooltip.
-        // Handlers are gated internally by isEnabled, so attaching
-        // unconditionally is safe.
-        disabledMessageTooltip.ref(el);
-      }}
+      ref={wrapperCallbackRef}
       role="group"
       aria-label={label}
       onClick={handleWrapperClick}
@@ -1360,6 +1385,7 @@ export function Tokenizer<T extends SearchableItem>({
           isTruncated ? truncatedSizeStyles[size] : sizeStyle,
           isTruncated && styles.truncatedWrapper,
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.nestedRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -1399,6 +1425,7 @@ export function Tokenizer<T extends SearchableItem>({
               // With `experimental`, the ref type admits the trigger too; in
               // this presentation it receives the input.
               ref as React.Ref<HTMLInputElement> | undefined,
+              handOffFocusRef,
             )}
             searchSource={isAtMax ? emptySource : filteredSource}
             value={null}
@@ -1413,7 +1440,12 @@ export function Tokenizer<T extends SearchableItem>({
             minQueryLength={minQueryLength}
             emptySearchText={emptySearchText}
             isDisabled={isDisabled}
-            isFocusableDisabled={showsDisabledMessage}
+            // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
+            // unfocusedLayer mode, where the input lives in a layer a disabled
+            // field never opens; how that field takes focus is undecided.
+            isFocusableDisabled={
+              showsDisabledMessage || (isDisabled && !isLayerMode)
+            }
             hasAutoFocus={hasAutoFocus}
             inputId={inputId}
             ariaLabelledBy={fieldLabelledBy}
@@ -1533,7 +1565,6 @@ export function Tokenizer<T extends SearchableItem>({
               React.MouseEventHandler<HTMLButtonElement> | undefined,
           )}
           onFocus={event => {
-            isControlFocusedRef.current = true;
             // BottomSheet focuses the trigger only after its exit completes;
             // that focus is the signal that the retained sheet can leave. If
             // the resolution moved to the popover meanwhile, the inline input
@@ -1562,8 +1593,8 @@ export function Tokenizer<T extends SearchableItem>({
             if (isSheetOpen) {
               return;
             }
-            isControlFocusedRef.current = false;
             hasReportedFocusRef.current = false;
+            isFocusPendingHandOffRef.current = false;
             onBlur?.(event);
           }}
           onKeyDown={onKeyDown}

@@ -5,7 +5,10 @@
 /**
  * @file BaseTypeahead.tsx
  * @input Uses React, StyleX, usePopover, TypeaheadItem
- * @output Exports BaseTypeahead; empty feedback belongs to the current settled query
+ * @output Exports BaseTypeahead; empty feedback belongs to the current settled query;
+ *   focus bootstraps a replaced search source; a source shows partial lists
+ *   for a query through context.update, and later lists only append
+ *   (spec:AST-092)
  * @position Core implementation; used by Typeahead and Tokenizer
  *
  * Pure combobox engine: input, search, keyboard navigation, dropdown.
@@ -21,6 +24,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -57,7 +61,7 @@ import {
 } from '../utils';
 import {warnOnce} from '../utils/devWarning';
 import type {BaseProps} from '../BaseProps';
-import type {SearchableItem, SearchSource} from './types';
+import type {SearchContext, SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
@@ -150,10 +154,10 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   isDisabled?: boolean;
 
   /**
-   * When disabled with a reason, keeps the input focusable via `aria-disabled`
-   * (instead of the native `disabled` attribute) and `readOnly` so an
-   * associated disabled-reason tooltip stays discoverable by keyboard and
-   * assistive technology. Query and text mutation, opening the list, and a
+   * When disabled, keeps the input focusable via `aria-disabled` (instead of
+   * the native `disabled` attribute) and `readOnly`, so the field keeps its
+   * tab stop and any disabled-reason tooltip stays discoverable by keyboard
+   * and assistive technology (`spec:AST-085` FR1). Query and text mutation, opening the list, and a
    * pick by Enter or a press are blocked, also from a list that was open
    * before this state applied; Escape or Tab still closes it. Consumers
    * (Typeahead) own the tooltip and wrapper.
@@ -296,10 +300,16 @@ const styles = stylex.create({
   },
   dropdown: {
     boxSizing: 'border-box',
+    // Matches DROPDOWN_MAX_HEIGHT, which the room-below cap uses.
     maxHeight: '300px',
     overflowY: 'auto',
     padding: spacingVars['--spacing-1'],
   },
+  // Once a later list for the same query arrives, the popup holds its height
+  // above the field, or the room below it (spec:AST-092 FR6).
+  dropdownHeld: (height: number) => ({
+    maxHeight: `${height}px`,
+  }),
   // The menu prefers the input's width and renders an explicit menuWidth at
   // its size, both clamped to the layer runtime's viewport cap rather than to
   // the room beside the input (spec:AST-059 FR2, FR7).
@@ -408,6 +418,42 @@ const itemSizeStyles = stylex.create({
 // =============================================================================
 // Helpers
 // =============================================================================
+
+/** The result popup's maximum height in CSS pixels (`styles.dropdown`). */
+const DROPDOWN_MAX_HEIGHT = 300;
+
+/**
+ * Rows in the order the popup displays them: ungrouped source rows, then each
+ * group, then the trailing entries derived from the typed text (Tokenizer's
+ * create row), which always follow the rows (spec:AST-092 FR1).
+ */
+function displayOrder<T extends SearchableItem>(
+  list: T[],
+  queryEntryCount = 0,
+): T[] {
+  const end = list.length - queryEntryCount;
+  return [
+    ...groupItems(list.slice(0, end), {ungroupedFirst: true}).flatMap(
+      group => group.items,
+    ),
+    ...list.slice(end),
+  ];
+}
+
+/**
+ * Whether `next` starts with `shown`, item by item and in order, by `id`: the
+ * append-only rule a later list for the same query follows, applied to
+ * displayed order (spec:AST-092 FR2).
+ */
+function startsWithRows<T extends SearchableItem>(
+  next: ReadonlyArray<T>,
+  shown: ReadonlyArray<T>,
+): boolean {
+  return (
+    next.length >= shown.length &&
+    shown.every((item, index) => next[index].id === item.id)
+  );
+}
 
 /**
  * A query that has been typed but is still shorter than the caller's
@@ -529,6 +575,65 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [results]);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Bumped whenever the rows are replaced rather than appended to, so the
+  // highlighted-row scroll runs for a new list but not when a later list for
+  // the same query appends rows below (spec:AST-092 FR6).
+  const [listKey, setListKey] = useState(0);
+  // How many trailing rows are entries derived from the typed text rather
+  // than source results; they display after every group.
+  const [queryEntryCount, setQueryEntryCount] = useState(0);
+  const replaceResults = useCallback((next: T[], entryCount = 0) => {
+    setResults(next);
+    setQueryEntryCount(entryCount);
+    setListKey(key => key + 1);
+  }, []);
+  // Highlight indexes count rows in displayed order (ungrouped first, then
+  // groups), which is how the popup renders them.
+  const displayedResults = useMemo(
+    () => displayOrder(results, queryEntryCount),
+    [results, queryEntryCount],
+  );
+  // The popup's listbox, measured when a later list arrives so the appended
+  // rows scroll instead of moving the shown rows or flipping the popup to
+  // the other side of the field (spec:AST-092 FR6).
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [heldHeight, setHeldHeight] = useState<number | null>(null);
+  // The search generation the popup's close cancelled, so that search's
+  // rejection settles silently (spec:AST-092 FR9).
+  const closedGenRef = useRef(-1);
+  const isMountedRef = useRef(false);
+  const holdPopupInPlace = useCallback(() => {
+    const dropdown = dropdownRef.current;
+    const anchor = anchorRef?.current ?? fallbackAnchorRef.current;
+    if (dropdown == null || anchor == null) {
+      return;
+    }
+    const box = dropdown.getBoundingClientRect();
+    if (box.height <= 0) {
+      return;
+    }
+    if (box.bottom <= anchor.getBoundingClientRect().top + 1) {
+      // Above the field the popup grows upward, so any growth moves the
+      // shown rows: keep the height it has.
+      setHeldHeight(current => current ?? box.height);
+      return;
+    }
+    // Below the field, grow only within the room below, so the layer runtime
+    // never flips the popup above the field.
+    const layer = dropdown.closest<HTMLElement>('[popover]') ?? dropdown;
+    const layerBox = layer.getBoundingClientRect();
+    const gutter = parseFloat(getComputedStyle(layer).marginBlockEnd) || 0;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+    const room =
+      viewportHeight -
+      box.top -
+      Math.max(0, layerBox.bottom - box.bottom) -
+      gutter;
+    setHeldHeight(
+      current =>
+        current ?? Math.min(DROPDOWN_MAX_HEIGHT, Math.max(box.height, room)),
+    );
+  }, [anchorRef]);
   const [isLoading, setIsLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   // `isLoading` starts with the request, after debouncing. Until then the
@@ -647,6 +752,17 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
     loadingRef.current = false;
   }
+  // A field that becomes disabled stops showing a search as busy in the same
+  // render, and the dropped query shows no outcome, so no empty state; the
+  // layout effect below drops the work itself.
+  const [disabledOfState, setDisabledOfState] = useState(isDisabled);
+  if (disabledOfState !== isDisabled) {
+    setDisabledOfState(isDisabled);
+    if (isDisabled && isLoading) {
+      setIsLoading(false);
+      setHasSearched(false);
+    }
+  }
 
   // When the search source is replaced, any in-flight load from the previous
   // source is abandoned (generation bumped above). Notify the wrapper's busy lane
@@ -670,6 +786,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const handleLayerHide = useCallback(() => {
     onOpenChange?.(false);
     setHighlightedIndex(-1);
+    closedGenRef.current = searchGenRef.current;
+    setHeldHeight(null);
     searchSource.cancel?.();
   }, [onOpenChange, searchSource]);
 
@@ -692,6 +810,23 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const isDisabledRef = useRef(isDisabled);
   useIsomorphicLayoutEffect(() => {
     isDisabledRef.current = isDisabled;
+    if (!isDisabled) {
+      return;
+    }
+    // Search work scheduled or in flight when the field became disabled is
+    // dropped: a later answer lists, announces and spins nothing
+    // (spec:AST-085 FR2). Bumping the generation fails its checks.
+    searchGenRef.current++;
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    prevSearchSourceRef.current.cancel?.();
+    // The busy state itself cleared in the render that disabled the field.
+    if (loadingRef.current) {
+      loadingRef.current = false;
+      onLoadingChangeRef.current?.(false);
+    }
   }, [isDisabled]);
   const showLayer = useCallback(() => {
     if (isDisabledRef.current) {
@@ -724,7 +859,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     };
   }, [popover, anchorRef]);
 
-  // Perform search
+  // Perform search. A source may show lists for the query before it settles
+  // through `context.update`, and the value it returns is the final list
+  // (spec:AST-092). The first list shown for a query may replace the rows;
+  // every later one keeps the shown rows first, so nothing moves under the
+  // pointer or the highlight. Merging is the source's work: a later list that
+  // breaks that rule is shown as given, with a development warning.
   const performSearch = useCallback(
     async (searchQuery: string) => {
       searchSource.cancel?.();
@@ -735,41 +875,142 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setLastSearchedQuery(searchQuery);
       setLoading(true);
       setHasSearched(true);
+      let isSettled = false;
+      // The capped source rows last shown for this query, and the array handed
+      // to React for them. Null until the query's first non-empty list.
+      let shownRows: T[] | null = null;
+      let shownState: T[] | null = null;
+      let shownEntryCount = 0;
+
+      const showList = (list: T[], isFinal: boolean): T[] => {
+        const fetched = list.slice(0, maxMenuItems);
+        if (
+          shownRows != null &&
+          !startsWithRows(displayOrder(fetched), displayOrder(shownRows))
+        ) {
+          warnOnce(
+            'base-typeahead:append-only',
+            'BaseTypeahead',
+            'A later list for the same query moved, removed, or inserted ' +
+              'above rows already shown. After the first list for a query, ' +
+              'a search source keeps the shown rows first and in order and ' +
+              'adds new rows after them (spec:AST-092 FR2).',
+          );
+        }
+        // Entries derived from the typed text (Tokenizer's create row) wait
+        // for the query to settle: before then a pending server result may
+        // still show the value they would offer to create.
+        const entries = isFinal
+          ? (__queryEntries?.(searchQuery, fetched) ?? [])
+          : [];
+        const shown = [...fetched, ...entries];
+        resultsGenRef.current = gen;
+        const firstRow = shown.length > 0 ? 0 : -1;
+        const previous = shownState;
+        const previousEntryCount = shownEntryCount;
+        if (previous == null) {
+          setHeldHeight(null);
+          replaceResults(shown, entries.length);
+          setHighlightedIndex(firstRow);
+        } else {
+          holdPopupInPlace();
+          const previousOrder = displayOrder(previous, previousEntryCount);
+          const nextOrder = displayOrder(shown, entries.length);
+          if (startsWithRows(nextOrder, previousOrder)) {
+            setResults(shown);
+            setQueryEntryCount(entries.length);
+          } else {
+            replaceResults(shown, entries.length);
+          }
+          // Within one query only this function sets the rows, so the index
+          // the updater receives points into `previous`: the highlighted item
+          // keeps its highlight wherever it now sits (spec:AST-092 FR6).
+          setHighlightedIndex(index => {
+            const id = previousOrder[index]?.id;
+            const kept =
+              id == null ? -1 : nextOrder.findIndex(item => item.id === id);
+            return kept >= 0 ? kept : firstRow;
+          });
+        }
+        if (fetched.length > 0) {
+          shownRows = fetched;
+          shownState = shown;
+          shownEntryCount = entries.length;
+        }
+        return shown;
+      };
+
+      const announceCount = (count: number) => {
+        // Announce the outcome only for an active query (not the initial
+        // focus-open), so screen-reader users hear result counts / no-results.
+        // An empty result is announced from the rendered row instead, so the
+        // region speaks whatever the caller put there.
+        if (isMountedRef.current && searchQuery.length > 0 && count > 0) {
+          announce(t('@astryx.typeahead.resultCount', {count}));
+        }
+      };
+
+      const context: SearchContext<T> = {
+        update(items) {
+          // An empty list leaves the shown rows in place; a list for a query
+          // that is no longer current, or after it settled, is dropped.
+          if (isSettled || searchGenRef.current !== gen || items.length === 0) {
+            return;
+          }
+          showList(items, false);
+          showLayer();
+        },
+      };
+
       try {
-        const searchResults = await searchSource.search(searchQuery);
+        const searchResults = await searchSource.search(searchQuery, context);
         if (searchGenRef.current !== gen) {
           return;
         }
-        resultsGenRef.current = gen;
-        const fetched = searchResults.slice(0, maxMenuItems);
-        const shown = [
-          ...fetched,
-          ...(__queryEntries?.(searchQuery, fetched) ?? []),
-        ];
-        setResults(shown);
-        setHighlightedIndex(shown.length > 0 ? 0 : -1);
+        isSettled = true;
+        const shown = showList(searchResults, true);
         if (searchResults.length > 0 || searchQuery.length > 0) {
           showLayer();
         }
-        // Announce the outcome only for an active query (not the initial
-        // focus-open), so screen-reader users hear result counts / no-results.
         if (searchQuery.length > 0) {
           // This query's outcome is announced now (a count) or from the
           // rendered row (an empty result); a busy start not yet announced
           // would follow it, so it is dropped (spec:AST-086 FR8).
           settleBusyAnnouncement();
         }
-        if (searchQuery.length > 0 && shown.length > 0) {
-          announce(t('@astryx.typeahead.resultCount', {count: shown.length}));
-        }
-        // An empty result is announced from the rendered row instead, so the
-        // region speaks whatever the caller put there.
+        announceCount(shown.length);
       } catch {
         if (searchGenRef.current !== gen) {
           return;
         }
-        setResults([]);
-        setHighlightedIndex(-1);
+        isSettled = true;
+        if (closedGenRef.current === gen) {
+          // The popup closed and cancelled this search, so its rejection is
+          // not a failed answer: announce nothing, and keep only this query's
+          // own rows (spec:AST-092 FR9).
+          if (shownRows != null) {
+            showList(shownRows, true);
+          } else {
+            replaceResults([]);
+            setHighlightedIndex(-1);
+            setHasSearched(false);
+          }
+        } else {
+          // A failure settles this query: its outcome is announced now (the
+          // kept rows' count) or from the rendered empty row, so a busy start
+          // not yet announced is dropped, as on success (spec:AST-086 FR8).
+          if (searchQuery.length > 0) {
+            settleBusyAnnouncement();
+          }
+          if (shownRows != null) {
+            // A failed server answer keeps the last non-empty list the source
+            // showed for this query, which settles it.
+            announceCount(showList(shownRows, true).length);
+          } else {
+            replaceResults([]);
+            setHighlightedIndex(-1);
+          }
+        }
       } finally {
         if (searchGenRef.current === gen) {
           setLoading(false);
@@ -785,6 +1026,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setLoading,
       settleBusyAnnouncement,
       t,
+      holdPopupInPlace,
+      replaceResults,
     ],
   );
 
@@ -803,13 +1046,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       ) {
         return;
       }
-      setResults(shown);
+      setHeldHeight(null);
+      replaceResults(shown);
       setHighlightedIndex(nextHighlightedIndex);
       if (bootstrapResults.length > 0) {
         showLayer();
       }
     },
-    [highlightedIndex, maxMenuItems, results.length, showLayer],
+    [highlightedIndex, maxMenuItems, results.length, showLayer, replaceResults],
   );
 
   // Perform bootstrap
@@ -820,7 +1064,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       bootstrapResult = searchSource.bootstrap();
     } catch {
       if (searchGenRef.current === gen) {
-        setResults([]);
+        replaceResults([]);
         setLoading(false);
       }
       return;
@@ -837,14 +1081,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       applyBootstrapResults(await bootstrapResult, gen);
     } catch {
       if (searchGenRef.current === gen) {
-        setResults([]);
+        replaceResults([]);
       }
     } finally {
       if (searchGenRef.current === gen) {
         setLoading(false);
       }
     }
-  }, [searchSource, applyBootstrapResults, setLoading]);
+  }, [searchSource, applyBootstrapResults, setLoading, replaceResults]);
 
   // Handle query change
   const handleQueryChange = useCallback(
@@ -870,7 +1114,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         // the text itself. `hasSearched` stays false either way, so the menu
         // never reports "no results" for a query nobody looked for.
         const derived = __queryEntries?.(newQuery, []) ?? [];
-        setResults(derived);
+        replaceResults(derived, derived.length);
+        setHeldHeight(null);
         setHighlightedIndex(derived.length > 0 ? 0 : -1);
         setHasSearched(false);
         // Bumping the generation abandons any in-flight search, which means
@@ -903,6 +1148,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       }
     },
     [
+      replaceResults,
       onChangeQuery,
       hasEntriesOnFocus,
       minQueryLength,
@@ -943,7 +1189,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       searchSource.cancel?.();
       onChange(item);
       setQuery('');
-      setResults([]);
+      replaceResults([]);
+      setHeldHeight(null);
       setHasSearched(false);
       // Same reason as in handleQueryChange: the invalidated search will not
       // clear this itself. Selecting a stale result while the next search is
@@ -952,7 +1199,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
       inputRef.current?.focus();
     },
-    [isDisabled, onChange, popover, searchSource, setLoading],
+    [isDisabled, onChange, popover, searchSource, setLoading, replaceResults],
   );
 
   // Shared by handleFocus and handleClick: bootstrap entries if none are
@@ -1091,15 +1338,30 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (!popover.isOpen) {
         if (e.key === 'ArrowDown' && (hasEntriesOnFocus || query.length > 0)) {
           e.preventDefault();
-          if (results.length > 0) {
+          // Results held from a replaced search source are not current
+          // (spec:AST-092 FR4): they count as none, so the new source loads.
+          const hasResultsFromCurrentSource =
+            results.length > 0 && resultsGenRef.current >= sourceGenRef.current;
+          const isQueryBelowMinLength = isBelowMinQueryLength(
+            query,
+            minQueryLength,
+          );
+          if (hasResultsFromCurrentSource) {
             popover.show();
             setHighlightedIndex(0);
+          } else if (
+            results.length > 0 &&
+            query.length > 0 &&
+            !isQueryBelowMinLength
+          ) {
+            // The typed query runs again against the new source.
+            void performSearch(query);
           } else if (
             hasEntriesOnFocus &&
             // A below-threshold query was never searched; falling back to the
             // bootstrap entries here would open a menu of suggestions that
             // ignore what the user has already typed.
-            !isBelowMinQueryLength(query, minQueryLength)
+            !isQueryBelowMinLength
           ) {
             void performBootstrap();
           }
@@ -1127,7 +1389,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         case 'Enter':
           e.preventDefault();
           if (highlightedIndex >= 0 && highlightedIndex < results.length) {
-            handleSelect(results[highlightedIndex]);
+            handleSelect(displayedResults[highlightedIndex]);
           }
           break;
         case 'Escape':
@@ -1164,38 +1426,65 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       isDisabled,
       popover,
       results,
+      displayedResults,
       highlightedIndex,
       handleSelect,
       hasEntriesOnFocus,
       query,
       minQueryLength,
       performBootstrap,
+      performSearch,
       externalOnKeyDown,
     ],
   );
 
-  // Generate item ID for accessibility
+  // Option ids follow the item, not the row, so the active descendant keeps
+  // naming the same option while rows are added after it and a screen reader
+  // does not re-read it (spec:AST-092 FR7). A repeated id in one list falls
+  // back to its row so DOM ids stay unique.
+  const optionIds = useMemo(() => {
+    const seen = new Set<string>();
+    return displayedResults.map((item, index) => {
+      const byItem = `${listboxId}-option-${encodeURIComponent(item.id)}`;
+      const id = seen.has(byItem) ? `${byItem}-${index}` : byItem;
+      seen.add(byItem);
+      return id;
+    });
+  }, [displayedResults, listboxId]);
   const getItemId = useCallback(
-    (index: number) => `${listboxId}-option-${index}`,
-    [listboxId],
+    (index: number) => optionIds[index] ?? `${listboxId}-option-${index}`,
+    [optionIds, listboxId],
   );
 
   // Keep the highlighted option visible during keyboard navigation; hover
   // highlights never scroll (#6077). Both sides live in useHighlightedOptionScroll.
+  // The scroll follows the highlighted option's id and the list it belongs
+  // to, so rows a later list appends below do not scroll a list the person
+  // has scrolled (spec:AST-092 FR6, FR7).
+  const highlightedOptionId = optionIds[highlightedIndex];
+  const getHighlightedOptionId = useCallback(
+    (index: number) => highlightedOptionId ?? `${listboxId}-option-${index}`,
+    [highlightedOptionId, listboxId],
+  );
   const highlightOnHover = useHighlightedOptionScroll({
     isOpen: popover.isOpen,
     highlightedIndex,
     setHighlightedIndex,
-    getOptionId: getItemId,
-    itemCount: results.length,
+    getOptionId: getHighlightedOptionId,
+    itemCount: listKey,
   });
 
   const selectedKey =
     value == null ? null : getKey(value.id, () => results.indexOf(value));
 
-  // Unmount: clear the pending debounce and cancel in-flight work.
+  // Unmount: clear the pending debounce and cancel in-flight work, and stop
+  // announcing for a field that is gone (spec:AST-092 FR4). A flag rather than
+  // a generation bump, so StrictMode's simulated unmount keeps a search or
+  // bootstrap started during mount.
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
       }
@@ -1286,12 +1575,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       )}
       {popover.render(
         <div
+          ref={dropdownRef}
           id={listboxId}
           role="listbox"
           aria-label={t('@astryx.typeahead.searchResults')}
           {...mergeProps(
             themeProps('typeahead-dropdown'),
-            stylex.props(styles.dropdown),
+            stylex.props(
+              styles.dropdown,
+              heldHeight != null && styles.dropdownHeld(heldHeight),
+            ),
           )}>
           {results.length === 0 && hasSearched && !isSearchPending ? (
             <div
@@ -1348,7 +1641,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                 );
               };
 
-              return groupItems(results, {ungroupedFirst: true}).map(group => {
+              const sourceEnd = results.length - queryEntryCount;
+              const grouped = groupItems(results.slice(0, sourceEnd), {
+                ungroupedFirst: true,
+              }).map(group => {
                 const options = group.items.map(renderOption);
                 if (group.heading == null) {
                   return options;
@@ -1367,6 +1663,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
                   </div>
                 );
               });
+              // Entries derived from the typed text follow every group
+              // (spec:AST-092 FR1).
+              return [
+                ...grouped,
+                ...results.slice(sourceEnd).map(renderOption),
+              ];
             })()
           )}
         </div>,

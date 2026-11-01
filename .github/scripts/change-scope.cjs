@@ -4,7 +4,12 @@
 /* global console, module, process, require */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const {isComponentSpecRecordPath} = require('./knowledge-paths.cjs');
+const {
+  isComponentSpecRecordPath,
+  isLegacyComponentSpecPath,
+  isPackageArchitectureRecordPath,
+  isPlatformComponentSpecPath,
+} = require('./knowledge-paths.cjs');
 
 /**
  * Classifies changed paths without reading PR-controlled content.
@@ -111,6 +116,9 @@ const KNOWLEDGE_RECORD_PATTERNS = [
 function isSpecRecordPath(filePath) {
   return (
     isComponentSpecRecordPath(filePath) ||
+    // A platform record (`<Root>/<PublicName>.swift.spec.md`) is a component
+    // record for its language, gated like the core record beside it.
+    isPlatformComponentSpecPath(filePath) ||
     SPEC_RECORD_PATTERNS.some(pattern => pattern.test(filePath))
   );
 }
@@ -134,6 +142,10 @@ function isPackageReleasePath(filePath) {
 function isKnowledgeRecordPath(filePath) {
   return (
     isSpecRecordPath(filePath) ||
+    // Not a record and never spec-only, but the owner gate must still see it.
+    isLegacyComponentSpecPath(filePath) ||
+    // A package's architecture record, owner-gated like docs/architecture/.
+    isPackageArchitectureRecordPath(filePath) ||
     KNOWLEDGE_RECORD_PATTERNS.some(pattern => pattern.test(filePath))
   );
 }

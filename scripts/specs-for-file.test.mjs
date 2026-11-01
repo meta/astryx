@@ -14,6 +14,7 @@ import {
   findUnroutedFiles,
   loadKnowledgeIndex,
   resolveSpecsForFile,
+  formatResult,
 } from './specs-for-file.mjs';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -79,7 +80,7 @@ function popoverFixture() {
     'packages/core/src/Popover/Popover.doc.mjs',
     "export const docs = {name: 'Popover', usage: {anatomy: [{name: 'Table'}]}, components: [{name: 'PopoverTrigger', description: 'Opens it.'}, {name: 'Item'}]};\n",
   );
-  writeRecord(root, 'packages/core/src/Popover/Popover.spec.md', {
+  writeRecord(root, 'docs/specs/components/Popover/Popover.spec.md', {
     kind: 'component',
     id: 'component:Popover',
     review_triggers: ['behavior', 'layering'],
@@ -141,13 +142,17 @@ function popoverFixture() {
   write(root, 'packages/core/src/Dialog/modules/DialogHeader.tsx');
   write(root, 'packages/core/src/Dialog/modules/DialogHeader.test.tsx');
   write(root, 'packages/core/src/Dialog/modules/DialogFooter.tsx');
-  writeRecord(root, 'packages/core/src/Dialog/modules/DialogHeader.spec.md', {
-    kind: 'module',
-    id: 'module:Dialog/DialogHeader',
-    parent_component: 'component:Dialog',
-    references: [],
-  });
-  writeRecord(root, 'packages/core/src/Dialog/modules/DialogBody.spec.md', {
+  writeRecord(
+    root,
+    'docs/specs/components/Dialog/modules/DialogHeader.spec.md',
+    {
+      kind: 'module',
+      id: 'module:Dialog/DialogHeader',
+      parent_component: 'component:Dialog',
+      references: [],
+    },
+  );
+  writeRecord(root, 'docs/specs/components/Dialog/modules/DialogBody.spec.md', {
     kind: 'module',
     id: 'module:Dialog/DialogBody',
     parent_component: 'component:Dialog',
@@ -157,7 +162,7 @@ function popoverFixture() {
   write(root, 'packages/core/src/Table/plugins/activation/helpers/key.ts');
   writeRecord(
     root,
-    'packages/core/src/Table/plugins/activation/useTableActivation.spec.md',
+    'docs/specs/components/Table/plugins/activation/useTableActivation.spec.md',
     {
       kind: 'module',
       id: 'module:Table/useTableActivation',
@@ -180,7 +185,7 @@ function popoverFixture() {
     deciding_specs: [],
   });
   write(root, 'packages/core/src/Drawer/Drawer.tsx');
-  writeRecord(root, 'packages/core/src/Drawer/Drawer.spec.md', {
+  writeRecord(root, 'docs/specs/components/Drawer/Drawer.spec.md', {
     kind: 'component',
     id: 'component:Drawer',
     authority: 'draft',
@@ -211,7 +216,7 @@ function popoverFixture() {
     'packages/core/src/Chat/__tests__/ChatComposerDrawer.a11y.states.ts',
   );
   write(root, 'packages/core/src/Chat/ChatHeadingItem.tsx');
-  writeRecord(root, 'packages/core/src/Chat/ChatComposerDrawer.spec.md', {
+  writeRecord(root, 'docs/specs/components/Chat/ChatComposerDrawer.spec.md', {
     kind: 'component',
     id: 'component:ChatComposerDrawer',
     review_triggers: ['motion'],
@@ -223,18 +228,26 @@ function popoverFixture() {
   write(root, 'packages/core/src/Markdown/Markdown.tsx');
   write(root, 'packages/core/src/Markdown/plugins/headingLinks.ts');
   write(root, 'packages/core/src/Markdown/plugins/softBreaks.ts');
-  writeRecord(root, 'packages/core/src/Markdown/modules/headingLinks.spec.md', {
-    kind: 'module',
-    id: 'module:Markdown/headingLinks',
-    parent_component: 'component:Markdown',
-    references: [],
-  });
-  writeRecord(root, 'packages/core/src/Markdown/modules/softBreaks.spec.md', {
-    kind: 'module',
-    id: 'module:Markdown/softBreaks',
-    parent_component: 'component:Markdown',
-    references: [],
-  });
+  writeRecord(
+    root,
+    'docs/specs/components/Markdown/modules/headingLinks.spec.md',
+    {
+      kind: 'module',
+      id: 'module:Markdown/headingLinks',
+      parent_component: 'component:Markdown',
+      references: [],
+    },
+  );
+  writeRecord(
+    root,
+    'docs/specs/components/Markdown/modules/softBreaks.spec.md',
+    {
+      kind: 'module',
+      id: 'module:Markdown/softBreaks',
+      parent_component: 'component:Markdown',
+      references: [],
+    },
+  );
   write(root, 'packages/core/src/hooks/useMenuPress.ts');
   write(root, 'packages/core/src/hooks/useMenuPress.test.tsx');
   write(root, 'packages/core/src/hooks/useEntryAnimation.ts');
@@ -250,7 +263,7 @@ function popoverFixture() {
   );
   writeRecord(
     root,
-    'packages/core/src/DropdownMenu/modules/useMenuPress.spec.md',
+    'docs/specs/components/DropdownMenu/modules/useMenuPress.spec.md',
     {
       kind: 'module',
       id: 'module:DropdownMenu/useMenuPress',
@@ -267,7 +280,7 @@ function popoverFixture() {
     affects_consumer_docs: ['useEntryAnimation'],
   });
   write(root, 'apps/sandbox/src/app/(fullscreen)/pages/perf/benchmark.test.ts');
-  writeRecord(root, 'packages/core/src/Markdown/Markdown.spec.md', {
+  writeRecord(root, 'docs/specs/components/Markdown/Markdown.spec.md', {
     kind: 'component',
     id: 'component:Markdown',
     review_triggers: ['behavior'],
@@ -290,7 +303,7 @@ function popoverFixture() {
     affects_consumer_docs: ['color'],
   });
   write(root, 'packages/core/src/TabList/TabList.tsx');
-  writeRecord(root, 'packages/core/src/TabList/TabList.spec.md', {
+  writeRecord(root, 'docs/specs/components/TabList/TabList.spec.md', {
     kind: 'component',
     id: 'component:TabList',
     review_triggers: ['behavior'],
@@ -484,6 +497,65 @@ describe('resolveSpecsForFile', () => {
         ).records,
       ),
     ).toEqual(['component:ChatComposerDrawer']);
+  });
+
+  it("places a platform record over its language's code and brings in the core record", () => {
+    const root = fixtureRoot();
+    write(root, 'packages/core/src/Avatar/Avatar.tsx');
+    write(root, 'packages/native/apple/Sources/Astryx/Avatar/Avatar.swift');
+    write(
+      root,
+      'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.swift',
+    );
+    write(root, 'packages/native/apple/Sources/Astryx/Button/Button.swift');
+    writeRecord(root, 'docs/specs/components/Avatar/Avatar.spec.md', {
+      kind: 'component',
+      id: 'component:Avatar',
+    });
+    writeRecord(root, 'docs/specs/components/Avatar/Avatar.swift.spec.md', {
+      kind: 'component',
+      id: 'component:swift/Avatar',
+      platform_of: 'component:Avatar',
+    });
+    writeRecord(
+      root,
+      'docs/specs/components/Avatar/AvatarStatusDot.swift.spec.md',
+      {
+        kind: 'component',
+        id: 'component:swift/AvatarStatusDot',
+        platform_of: 'component:AvatarStatusDot',
+      },
+    );
+    const index = loadKnowledgeIndex(root);
+    const lookup = file => ids(resolveSpecsForFile(index, file).records);
+
+    expect(
+      lookup('packages/native/apple/Sources/Astryx/Avatar/Avatar.swift'),
+    ).toEqual(['component:Avatar', 'component:swift/Avatar']);
+    expect(
+      lookup(
+        'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.swift',
+      ),
+    ).toEqual([
+      'component:Avatar',
+      'component:swift/Avatar',
+      'component:swift/AvatarStatusDot',
+    ]);
+    expect(lookup('packages/core/src/Avatar/Avatar.tsx')).toEqual([
+      'component:Avatar',
+    ]);
+    expect(
+      lookup('packages/native/apple/Sources/Astryx/Button/Button.swift'),
+    ).toEqual([]);
+    expect(
+      lookup('docs/specs/components/Avatar/AvatarStatusDot.swift.spec.md'),
+    ).toEqual(['component:swift/AvatarStatusDot']);
+    expect(
+      findUnreachedRecords(index, [
+        'packages/core/src/Avatar/Avatar.tsx',
+        'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.swift',
+      ]).map(record => record.id),
+    ).toEqual([]);
   });
 
   it('names a member without its own consumer doc by its file stem', () => {
@@ -697,6 +769,99 @@ describe('resolveSpecsForFile', () => {
       'apps/docsite/src/content/blog/posts/release.md',
     );
     expect(none.triggers).toEqual([...GLOBAL_REVIEW_TRIGGERS].sort());
+  });
+});
+
+describe('concern routing', () => {
+  function concernFixture() {
+    const root = popoverFixture();
+    writeRecord(
+      root,
+      'docs/architecture/react-component-runtime.md',
+      {kind: 'architecture', id: 'architecture:react-component-runtime'},
+      [
+        '',
+        '<!-- review-applicability:v1 -->',
+        '',
+        '```json',
+        JSON.stringify({
+          scope: 'global',
+          concerns: {
+            'slot-presence': {
+              names: ['isRenderable'],
+              patterns: ["typeof [\\w.]+ !== 'boolean'"],
+              claims: ['INV16'],
+            },
+          },
+        }),
+        '```',
+        '',
+        '## Requirements',
+        '',
+        '- **INV16 — A shared concern is extended in its owner.** Detail.',
+        '',
+      ].join('\n'),
+    );
+    return loadKnowledgeIndex(root);
+  }
+  const file = 'packages/core/src/Popover/Popover.tsx';
+  const addedLines = [
+    {
+      file,
+      line: 7,
+      text: "  if (label != null && typeof label !== 'boolean') {",
+    },
+    {
+      file: 'packages/core/src/Other/Other.tsx',
+      line: 1,
+      text: 'isRenderable(x)',
+    },
+  ];
+
+  it("lists the claims a concern routes from the file's own added lines", () => {
+    const result = resolveSpecsForFile(concernFixture(), file, {addedLines});
+    expect(result.concernClaims).toEqual([
+      {
+        recordId: 'architecture:react-component-runtime',
+        path: 'docs/architecture/react-component-runtime.md',
+        concern: 'slot-presence',
+        claimId: 'INV16',
+        claim: 'A shared concern is extended in its owner.',
+        utilities: ['isRenderable'],
+        evidence: [
+          {
+            file,
+            line: 7,
+            text: "  if (label != null && typeof label !== 'boolean') {",
+            matched: "typeof label !== 'boolean'",
+            by: "typeof [\\w.]+ !== 'boolean'",
+          },
+        ],
+      },
+    ]);
+    expect(resolveSpecsForFile(concernFixture(), file).concernClaims).toEqual(
+      [],
+    );
+  });
+
+  it('prints the concern claims first and lists the linked records by id', () => {
+    const result = resolveSpecsForFile(concernFixture(), file, {addedLines});
+    const short = formatResult(result).split('\n');
+    expect(short[1]).toBe(
+      '  Follow first (the change touches a shared concern):',
+    );
+    expect(short[2]).toBe(
+      "    architecture:react-component-runtime  INV16  ← slot-presence (line 7: typeof label !== 'boolean'; shared: isRenderable)",
+    );
+    // Every linked record is still listed, by id (INV26).
+    expect(
+      short.some(line => /^ {2}Records: .*component:Popover/.test(line)),
+    ).toBe(true);
+    expect(short.join('\n')).not.toContain('via ');
+    const long = formatResult(result, {records: true}).split('\n');
+    expect(long.join('\n')).toContain('via ');
+    // --records prints the same concern claims first.
+    expect(long.slice(1, 3)).toEqual(short.slice(1, 3));
   });
 });
 

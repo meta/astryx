@@ -1,5 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
@@ -608,6 +610,29 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
       `${(SHELL_WIDTH - COLLAPSED) / 2}px`,
     );
     expect((copy as HTMLElement).style.width).toBe(`${EXPANDED}px`);
+  });
+
+  it("plays the animated-layout module's two-state edge reveal on its inline edge, keeping only its labels' and icons' fades (spec:AST-105 FR9)", () => {
+    const source = readFileSync(join(__dirname, 'railMotion.ts'), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    // The module holds the old rail, clips its inline-end edge and rides the
+    // content's glide (architecture:react-component-runtime INV12).
+    expect(source).toMatch(/\bholdLayoutEdge\(/);
+    expect(source).toMatch(/\bplayLayoutEdge\(/);
+    expect(source).toMatch(/edge: 'inline-end'/);
+    // No clip, copy or ride of the rail's own.
+    for (const own of [
+      'clipPath',
+      'inset(',
+      'holdLayoutSwap',
+      'playLayoutSwap',
+      'playLayoutFrames',
+      'zIndex',
+      'getBoundingClientRect',
+    ]) {
+      expect(source, own).not.toContain(own);
+    }
   });
 
   it('changes at once without Web Animations', async () => {
