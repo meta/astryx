@@ -583,6 +583,32 @@ describe('busyWindowProof in a slow tail', () => {
     expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
   });
 
+  it('still fails a two-frame freeze right after one frame that showed no step, at one step a frame or more', () => {
+    // 1.75 px a frame on a 1 px grid, the control moving on every frame: one
+    // frame shows no step (an early delivery can explain that), then the two
+    // frames after the next step hold too, which an early delivery cannot.
+    const j = at(1300);
+    const frames = moving().map((f, i) => {
+      const y =
+        i === j
+          ? Math.floor(1.75 * (j - 1))
+          : i === j + 2 || i === j + 3
+            ? Math.floor(1.75 * (j + 1))
+            : Math.floor(1.75 * i);
+      return {...f, box: {...f.box!, y}} as TrackedFrame;
+    });
+    const control = moving().map(
+      f =>
+        ({
+          ...f,
+          box: {x: f.box!.y, y: 0, width: 12, height: 12},
+        }) as TrackedFrame,
+    );
+    const proof = busyWindowProof(frames, BLOCK, {control});
+    expect(proof.stepPx).toBe(1);
+    expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
+  });
+
   it('still fails a frame that shows no step in a fast window', () => {
     // 3 px a frame, the control moving on every frame: one repeated frame is
     // a freeze there, and its 6 px catch-up two steps past the grid.

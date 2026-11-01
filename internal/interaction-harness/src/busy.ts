@@ -362,6 +362,37 @@ export interface BusyProof extends FrameStats {
 }
 
 /**
+ * The stretches of a judged series that move under `limitPx` per frame,
+ * read over four frames at a time, merged where they overlap: where the cast
+ * cannot show a step on every frame.
+ */
+function slowStretches(
+  values: readonly {t: number; value: number}[],
+  cadence: number,
+  limitPx: number,
+): {from: number; to: number; pxPerFrame: number}[] {
+  const SPAN = 4;
+  const stretches: {from: number; to: number; pxPerFrame: number}[] = [];
+  for (let k = 0; k + SPAN < values.length; k += 1) {
+    const a = values[k];
+    const b = values[k + SPAN];
+    const frames = (b.t - a.t) / cadence;
+    const pxPerFrame = frames > 0 ? Math.abs(b.value - a.value) / frames : 0;
+    if (pxPerFrame <= 0 || pxPerFrame >= limitPx) {
+      continue;
+    }
+    const last = stretches[stretches.length - 1];
+    if (last != null && a.t <= last.to) {
+      last.to = b.t;
+      last.pxPerFrame = Math.min(last.pxPerFrame, pxPerFrame);
+    } else {
+      stretches.push({from: a.t, to: b.t, pxPerFrame});
+    }
+  }
+  return stretches;
+}
+
+/**
  * Frame evidence for a busy window: how many frames the screencast presented
  * inside it, how many of them moved the tracked axis, and the longest stall.
  * The window is trimmed by `marginMs` at both ends so the frame the block
@@ -448,37 +479,6 @@ export interface BusyProof extends FrameStats {
  * `maxMedianFrameMs`, when given, still applies; `minMovedFraction` and the
  * absolute stall, frame and motion limits do not.
  */
-/**
- * The stretches of a judged series that move under `limitPx` per frame,
- * read over four frames at a time, merged where they overlap: where the cast
- * cannot show a step on every frame.
- */
-function slowStretches(
-  values: readonly {t: number; value: number}[],
-  cadence: number,
-  limitPx: number,
-): {from: number; to: number; pxPerFrame: number}[] {
-  const SPAN = 4;
-  const stretches: {from: number; to: number; pxPerFrame: number}[] = [];
-  for (let k = 0; k + SPAN < values.length; k += 1) {
-    const a = values[k];
-    const b = values[k + SPAN];
-    const frames = (b.t - a.t) / cadence;
-    const pxPerFrame = frames > 0 ? Math.abs(b.value - a.value) / frames : 0;
-    if (pxPerFrame <= 0 || pxPerFrame >= limitPx) {
-      continue;
-    }
-    const last = stretches[stretches.length - 1];
-    if (last != null && a.t <= last.to) {
-      last.to = b.t;
-      last.pxPerFrame = Math.min(last.pxPerFrame, pxPerFrame);
-    } else {
-      stretches.push({from: a.t, to: b.t, pxPerFrame});
-    }
-  }
-  return stretches;
-}
-
 export function busyWindowProof(
   tracked: readonly TrackedFrame[],
   window: BusyWindow,
@@ -855,13 +855,16 @@ export function busyWindowProof(
       // Under one step a frame the change that ends the run is a single step.
       // Under two, a frame delivered early can also show no step, and the
       // change then carries the motion of every frame the run held, at the
-      // pace of the frames before it, to the nearest step.
+      // pace of the frames before it, to the nearest step. At one step a
+      // frame or more, an early frame hides only that frame, so the run is
+      // one frame long.
       const catchUp = Math.abs(series[k].value - series[i].value);
       const pace = pxPerFrameBefore(start);
       const shown =
         catchUp < 1.5 * stepPx ||
         (pace != null &&
           pace < 2 * stepPx &&
+          (pace < stepPx || unchanged <= 1) &&
           catchUp <= (unchanged + 1) * pace + stepPx);
       if (!shown) {
         return false;
