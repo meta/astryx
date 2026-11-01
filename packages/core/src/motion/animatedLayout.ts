@@ -39,7 +39,10 @@
  *   old place to the new one, sampled from `springs.settle` into linear
  *   keyframes and corrected for a scaled ancestor. An element already gliding
  *   keeps that motion and adds the new move: the rest of its curve and the
- *   new move are summed into one new glide, velocity included. Nothing
+ *   new move are summed into one new glide, velocity included. Its place
+ *   before the change is read on its glide's own clock (the box with the
+ *   applied `translate` taken out, plus the glide's offset at its current
+ *   time), so the new glide starts where the old one is drawn. Nothing
  *   animates height, and nothing scrolls the area.
  * - A measurement no commit claims by the next frame is dropped.
  * - The changed element plays its own entrance on the same spring, started in
@@ -561,6 +564,45 @@ function isStuck(element: Element, cache: WalkCache): boolean {
     (Number.isFinite(top) && Math.abs(rect.top - (edge.start + top)) < 1) ||
     (Number.isFinite(bottom) && Math.abs(rect.bottom - (edge.end - bottom)) < 1)
   );
+}
+
+/**
+ * `rect`, a box read before a change, with the element's running glide (if
+ * any) put back on the glide's own clock. A box read samples a running
+ * `translate` wherever the engine evaluates it, and WebKit evaluates it at the
+ * moment of the read, while the glide's offset, and the glide a change
+ * retargets it into, run on the timeline's frame time: from the box alone, a
+ * change made `n` ms into a frame started the new glide `n` ms of motion
+ * ahead of the one drawn (up to about 3 px on a slow frame). The `translate`
+ * the engine applied is read first, then the box: WebKit samples a running
+ * animation for `getComputedStyle` at the moment of the call, and a box read
+ * after it shows that same sample, while the walk's earlier box read can be
+ * from an earlier one. Taken out of that box (scaled by the ancestors, as the
+ * glide's is), the `translate` leaves the element's place with no glide, and
+ * the glide's offset at its current time goes back in. The glide
+ * replaces any `translate` of the app's own while it runs, so the applied
+ * value is the glide's alone. Where the engine reports no applied
+ * `translate` at all (an environment without individual transform
+ * properties), the box is taken as it is.
+ */
+function onGlideClock(element: Element, rect: DOMRect): DOMRect {
+  const glide = glides.get(element);
+  const time = Number(glide?.animation.currentTime);
+  if (glide == null || !Number.isFinite(time)) {
+    return rect;
+  }
+  const translate =
+    element.ownerDocument.defaultView?.getComputedStyle(element).translate;
+  if (translate == null || translate === '') {
+    return rect;
+  }
+  const box = element.getBoundingClientRect();
+  const [appliedX = 0, appliedY = 0] = numbersIn(translate);
+  const offset = glide.offsetAt(Math.min(Math.max(0, time), glide.durationMs));
+  const scale = scaleOf(element, box, ownScaleOf(element));
+  const dx = (offset.x - appliedX) * scale.x;
+  const dy = (offset.y - appliedY) * scale.y;
+  return new DOMRect(box.x + dx, box.y + dy, box.width, box.height);
 }
 
 function rectOf(element: Element, cache: WalkCache): DOMRect {
@@ -1127,7 +1169,7 @@ export function reportLayoutChange(
         );
         for (const [candidate, rect] of candidates) {
           if (!batch.before.has(candidate)) {
-            batch.before.set(candidate, rect);
+            batch.before.set(candidate, onGlideClock(candidate, rect));
           }
         }
         batch.candidates.set(changed, [...candidates.keys()]);

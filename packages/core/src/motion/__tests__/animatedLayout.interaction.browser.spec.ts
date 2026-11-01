@@ -572,9 +572,16 @@ test.describe('spec:AST-105 Coverage', () => {
     expect(await page.evaluate(() => window.motionOf('#pop'))).toEqual([]);
   });
 
-  test('an element already moving keeps its motion and adds the new move: no jump, no lost speed', async ({
-    page,
-  }) => {
+  /**
+   * Opens a row gliding after #grow's change, then retargets its glide with
+   * a second change (#second) made `lateMs` into a frame, as a change in a
+   * slow frame is. Reads the row on the glides' own clock (`glideBoxOf`, at
+   * each frame's time): WebKit evaluates a running transform for
+   * `getBoundingClientRect` at the moment of the read, so a box read late in
+   * its frame places the row further on, and over one short frame read up to
+   * 1.8 times its speed.
+   */
+  async function retarget(page: Page, lateMs: number) {
     await open(
       page,
       `<div id="area" class="area"><div id="grow" class="grow"></div>
@@ -583,32 +590,50 @@ test.describe('spec:AST-105 Coverage', () => {
     await change(page);
     await page.waitForTimeout(100);
     const [first] = await page.evaluate(() => window.motionOf('#after'));
-    // The row's on-screen speed over the frame before the second change and
-    // the frame after it, and its place either side of the change.
-    const run = await page.evaluate(async mutate => {
-      const row = document.querySelector('#after') as HTMLElement;
-      const frame = async () =>
-        new Promise<number>(resolve => requestAnimationFrame(resolve));
-      const t0 = await frame();
-      const y0 = row.getBoundingClientRect().top;
-      const t1 = await frame();
-      const y1 = row.getBoundingClientRect().top;
-      await window.change({changed: '#second', mutate});
-      const y1After = row.getBoundingClientRect().top;
-      const t2 = await frame();
-      const y2 = row.getBoundingClientRect().top;
-      return {
-        before: (y1 - y0) / (t1 - t0),
-        after: (y2 - y1After) / (t2 - t1),
-        y1,
-        y1After,
-      };
-    }, `document.querySelector('#second').classList.add('open')`);
+    // The row's speed over the frame before the second change and the frame
+    // after it, and its place either side of the change.
+    const run = await page.evaluate(
+      async ({mutate, late}) => {
+        const row = document.querySelector('#after') as HTMLElement;
+        const frame = async () =>
+          new Promise<number>(resolve => requestAnimationFrame(resolve));
+        const t0 = await frame();
+        const y0 = window.glideBoxOf(row).top;
+        const t1 = await frame();
+        const y1 = window.glideBoxOf(row).top;
+        const until = performance.now() + late;
+        while (performance.now() < until) {
+          // The change comes `late` ms into the frame.
+        }
+        await window.change({changed: '#second', mutate});
+        const y1After = window.glideBoxOf(row).top;
+        const t2 = await frame();
+        const y2 = window.glideBoxOf(row).top;
+        return {
+          before: (y1 - y0) / (t1 - t0),
+          after: (y2 - y1After) / (t2 - t1),
+          y1,
+          y1After,
+        };
+      },
+      {
+        mutate: `document.querySelector('#second').classList.add('open')`,
+        late: lateMs,
+      },
+    );
+    return {first, run};
+  }
+
+  test('an element already moving keeps its motion and adds the new move: no jump, no lost speed', async ({
+    page,
+  }) => {
+    const {first, run} = await retarget(page, 0);
     const motions = await page.evaluate(() => window.motionOf('#after'));
     expect(motions).toHaveLength(1);
     expect(motions[0].composite).toBe('replace');
     expect(motions[0].startTime).not.toBe(first.startTime);
-    expect(run.y1After).toBeCloseTo(run.y1, 0);
+    // No jump: the new glide starts where the old one is drawn.
+    expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
     // Still gliding down at least as fast: the new move adds to the motion.
     expect(run.before).toBeGreaterThan(0);
     expect(run.after).toBeGreaterThan(run.before * 0.9);
@@ -621,6 +646,20 @@ test.describe('spec:AST-105 Coverage', () => {
     });
     expect(landed).toBeCloseTo(160, 0);
   });
+
+  for (const lateMs of [1, 9]) {
+    test(`a change made ${lateMs} ms into its frame retargets a glide where it is drawn`, async ({
+      page,
+    }) => {
+      // In WebKit the box read before the change sampled the old glide at
+      // that moment, while the new glide ran on the frame's time, so it
+      // started that many ms of motion ahead (0.3 px at 1 ms, about 3 px at
+      // 9 ms).
+      const {run} = await retarget(page, lateMs);
+      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
+      expect(run.after).toBeGreaterThan(run.before * 0.9);
+    });
+  }
 
   test('nested areas: motion stops at the inner area; an inner area moves as one unit', async ({
     page,
