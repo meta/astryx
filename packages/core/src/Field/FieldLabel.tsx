@@ -70,6 +70,9 @@ const styles = stylex.create({
     width: {default: 1, ':focus-visible': 'auto'},
     height: {default: 1, ':focus-visible': 'auto'},
     margin: {default: -1, ':focus-visible': 0},
+    // InfoTip's own padding, kept while it shows.
+    // SYNC: /packages/core/src/InfoTip/InfoTip.tsx (styles.trigger padding)
+    padding: {default: 0, ':focus-visible': spacingVars['--spacing-0-5']},
     overflow: {default: 'hidden', ':focus-visible': 'visible'},
     clip: {default: 'rect(0, 0, 0, 0)', ':focus-visible': 'auto'},
     whiteSpace: 'nowrap',
