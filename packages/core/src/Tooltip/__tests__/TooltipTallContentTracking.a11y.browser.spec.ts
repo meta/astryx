@@ -781,7 +781,8 @@ const STATE_ROWS: Record<
     set: "a.effect.setKeyframes([{translate: '0px'}, {translate: '50px'}])",
   },
   paused: {set: 'a.pause()'},
-  reversed: {set: 'a.reverse()'},
+  // Reversed 9 s into its 10 s, it runs back for 9 s, longer than the test.
+  reversed: {set: 'a.currentTime = 9000; a.reverse()'},
   finished: {css: 'animation-duration:1ms;animation-fill-mode:forwards'},
   persisted: {set: 'a.persist()'},
   // Shapes.
