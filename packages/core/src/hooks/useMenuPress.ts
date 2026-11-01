@@ -30,6 +30,9 @@
  * - A mouse press on the trigger opens the menu at once; a finger held on the
  *   trigger opens it after the long-press delay. The settle rule decides
  *   whether the opening gesture's release may act (see menuPressGesture.ts).
+ *   Under DropdownMenu's touch model (`useDropdownMenuPress`, `'uikit'`,
+ *   `spec:AST-094` FR29) the finger that opened the menu instead picks only
+ *   once it has travelled UIMenu's handoff distance.
  * - `pointercancel`, a second pointer, or the window losing focus end the
  *   gesture with nothing acting; the model never re-implements scrolling.
  * - While a press is tracked in an overflowing menu, a pointer resting near
@@ -60,10 +63,10 @@ import {
 import {currentGesture} from '../Layer/gestureCounter';
 import {
   IDLE_MENU_PRESS,
-  menuPressStep,
-  type MenuPressEffect,
-  type MenuPressEvent,
-  type MenuPressGesture,
+  menuPressTransition,
+  type MenuPressOutcome,
+  type MenuPressInput,
+  type MenuPressState,
   type MenuPressPointerType,
 } from './menuPressGesture';
 import {MENU_PRESS_MARKER} from './menuPressMarker';
@@ -312,6 +315,46 @@ interface ResolvedPoint {
   isOnTrigger: boolean;
 }
 
+/**
+ * DropdownMenu's options for the press model: everything the public hook
+ * takes, plus its touch model. The touch mode stays internal
+ * (`architecture:public-component-api` INV16 reaches it through
+ * DropdownMenu's `presentation`), so it is not an option of the public hook.
+ *
+ * @internal
+ */
+export interface DropdownMenuPressOptions extends UseMenuPressOptions {
+  /**
+   * How the finger that opened the menu from the trigger picks.
+   * `'pointer'`: its opening press follows the settle rule. `'uikit'`
+   * (`spec:AST-094` FR29): it picks only after UIMenu's handoff distance,
+   * so the row that appeared under it never acts on a still lift. A mouse is
+   * unaffected.
+   * @default 'pointer'
+   */
+  touchModel?: 'pointer' | 'uikit';
+}
+
+/**
+ * What core's own menus get from {@link useDropdownMenuPress}: the public
+ * return. Not exported from the hooks entry point.
+ *
+ * @internal
+ */
+export type DropdownMenuPressReturn = UseMenuPressReturn;
+
+/**
+ * Where a pointer is, for a finger's handoff distance: given with
+ * `touchModel: 'uikit'`, for the trigger's opening finger (`spec:AST-094`
+ * FR29). Without it the machine keeps the settle rule.
+ */
+function handoffPosition(
+  event: PointerEvent,
+  hasHandoff: boolean,
+): {x?: number; y?: number} {
+  return hasHandoff ? {x: event.clientX, y: event.clientY} : {};
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -337,13 +380,30 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
+  // The touch model is DropdownMenu's alone; an untyped caller's
+  // `touchModel` does not reach the model.
+  const {touchModel: _touchModel, ...publicOptions} =
+    options as DropdownMenuPressOptions;
+  return useDropdownMenuPress({...publicOptions, touchModel: 'pointer'});
+}
+
+/**
+ * The press model with DropdownMenu's touch model
+ * ({@link DropdownMenuPressOptions.touchModel}). Not exported from the hooks
+ * entry point.
+ *
+ * @internal
+ */
+export function useDropdownMenuPress(
+  options: DropdownMenuPressOptions,
+): DropdownMenuPressReturn {
   const optionsRef = useRef(options);
   optionsRef.current = options;
   // The highlight, and the hover focus of the rows in this menu, follow the
   // last input, which this tracks for the menu's own document.
   useInteractionModalityTrackingFor(options.menuRef);
 
-  const gestureRef = useRef<MenuPressGesture<HTMLElement>>(IDLE_MENU_PRESS);
+  const gestureRef = useRef<MenuPressState<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
   const detachRef = useRef<(() => void) | null>(null);
   // The held finger is detected by `useLongPress`, the same hook ContextMenu
@@ -514,13 +574,13 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
 
   // Declared before `step` so the mutual recursion through refs type-checks.
   const stepRef = useRef<
-    (event: MenuPressEvent<HTMLElement>, native?: PointerEvent) => void
+    (event: MenuPressInput<HTMLElement>, native?: PointerEvent) => void
   >(() => {});
 
   const applyEffect = useCallback(
     (
-      effect: MenuPressEffect<HTMLElement>,
-      gesture: MenuPressGesture<HTMLElement>,
+      effect: MenuPressOutcome<HTMLElement>,
+      gesture: MenuPressState<HTMLElement>,
       native: PointerEvent | undefined,
     ) => {
       const doc = getDocument();
@@ -569,8 +629,8 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   );
 
   const step = useCallback(
-    (event: MenuPressEvent<HTMLElement>, native?: PointerEvent) => {
-      const result = menuPressStep(gestureRef.current, event);
+    (event: MenuPressInput<HTMLElement>, native?: PointerEvent) => {
+      const result = menuPressTransition(gestureRef.current, event);
       gestureRef.current = result.gesture;
       applyEffect(result.effect, result.gesture, native);
     },
@@ -681,6 +741,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
             row: point.row,
             isInMenu: point.isInMenu,
             time: Date.now(),
+            ...handoffPosition(
+              event,
+              optionsRef.current.touchModel === 'uikit',
+            ),
           },
           event,
         );
@@ -698,6 +762,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
             isInMenu: point.isInMenu,
             isOnTrigger: point.isOnTrigger,
             time: Date.now(),
+            ...handoffPosition(
+              event,
+              optionsRef.current.touchModel === 'uikit',
+            ),
           },
           event,
         );
