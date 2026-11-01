@@ -297,6 +297,21 @@ function isFocusable(element: HTMLElement): boolean {
  */
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
+  return useTooltipInternal(options);
+}
+
+/**
+ * `useTooltip` with the internal options Core components pass:
+ * `repeatsTriggerText` marks a tooltip that repeats its trigger's own visible
+ * text (a truncated Text that is its own tab stop), which
+ * `triggerBehavior="toggle"` pins without a button trigger and without toggle
+ * state (component:Tooltip FR9).
+ *
+ * @internal
+ */
+export function useTooltipInternal(
+  options: TooltipOptions & {repeatsTriggerText?: boolean} = {},
+): TooltipReturn {
   const {
     placement = 'above',
     alignment = 'center',
@@ -305,6 +320,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     focusTrigger = 'auto',
     touchTrigger = 'auto',
     triggerBehavior = 'adaptive',
+    repeatsTriggerText = false,
     isEnabled = true,
     isOpen,
     isDefaultOpen = false,
@@ -390,6 +406,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     show: showNow,
     hide: hideNow,
     report: next => (next ? onShow?.() : onHide?.()),
+    repeatsTriggerText,
   });
 
   // A pinned tooltip's own rendered text is said once when it pins (FR10,
