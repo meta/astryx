@@ -266,6 +266,37 @@
     }
   },
   {
+    "component": "LayoutContent",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": ".astryx-layout-content"
+    }
+  },
+  {
+    "component": "LayoutPanel",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-layout-panel",
+      "next": ".astryx-layout-content"
+    }
+  },
+  {
+    "component": "ResizeHandle",
+    "storyId": "core-resizable--horizontal-split",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-resize-handle",
+      "overlayRoot": ".astryx-layout"
+    }
+  },
+  {
+    "component": "Layout",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": []
+  },
+  {
     "component": "Carousel",
     "storyId": "core-carousel--default",
     "dims": ["D3"],
@@ -483,6 +514,82 @@
     }
   },
   {
+    "component": "ListItem",
+    "storyId": "core-list--interactive",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-list-item:first-child > :first-child",
+      "next": ".astryx-list-item:first-child > :last-child"
+    }
+  },
+  {
+    "component": "MetadataList",
+    "storyId": "core-metadatalist--basic",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-metadata-list dl > dt:first-of-type",
+      "next": ".astryx-metadata-list dl > dd:first-of-type"
+    }
+  },
+  {
+    "component": "MetadataListItem",
+    "storyId": "core-metadatalist--basic",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-metadata-list-item:first-child",
+      "next": ".astryx-metadata-list-item:first-child + dd"
+    }
+  },
+  {
+    "component": "RadioListItem",
+    "storyId": "core-radiolist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-radio-list-item:first-child .astryx-radio-indicator",
+      "next": ".astryx-radio-list-item:first-child span:text-is(\"Email\")"
+    }
+  },
+  {
+    "component": "SelectorOption",
+    "storyId": "core-selector--with-icons",
+    "dims": ["D2"],
+    "setup": {"click": "[role=\"combobox\"]"},
+    "selectors": {
+      "prev": ".astryx-selector-option > span:first-child",
+      "next": ".astryx-selector-option > span:nth-child(2)"
+    }
+  },
+  {
+    "component": "TypeaheadItem",
+    "storyId": "core-typeahead--item-with-icon",
+    "dims": ["D2"],
+    "setup": {"click": "[role=\"combobox\"]"},
+    "selectors": {
+      "prev": ".astryx-typeahead-item > :first-child",
+      "next": ".astryx-typeahead-item > :last-child"
+    }
+  },
+  {
+    "component": "List",
+    "storyId": "core-list--interactive",
+    "dims": []
+  },
+  {
+    "component": "RadioList",
+    "storyId": "core-radiolist--default",
+    "dims": []
+  },
+  {
+    "component": "Selector",
+    "storyId": "core-selector--with-icons",
+    "dims": []
+  },
+  {
+    "component": "Typeahead",
+    "storyId": "core-typeahead--item-with-icon",
+    "dims": []
+  },
+  {
     "component": "Switch",
     "storyId": "core-switch--on",
     "dims": ["D4"],
@@ -662,6 +769,62 @@
       "prev": ".astryx-file-input > .astryx-icon:not(.astryx-input-status-icon)",
       "next": ".astryx-file-input > .astryx-input-status-icon"
     }
+  },
+  {
+    "component": "Tab",
+    "storyId": "core-tablist--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab svg",
+      "next": ".astryx-tab span:text-is(\"Home\")"
+    }
+  },
+  {
+    "component": "TabMenu",
+    "storyId": "core-tablist--with-menu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab-menu span:text-is(\"More\")",
+      "next": ".astryx-tab-menu .astryx-icon"
+    }
+  },
+  {
+    "component": "SegmentedControlItem",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"radio\"] svg.astryx-icon",
+      "next": "[role=\"radio\"] span:text-is(\"Grid\")"
+    }
+  },
+  {
+    "component": "ToggleButtonGroup",
+    "storyId": "core-togglebutton--group-single",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"List view\"]",
+      "next": "button[aria-label=\"Grid view\"]"
+    }
+  },
+  {
+    "component": "TabList",
+    "storyId": "core-tablist--with-icons",
+    "dims": []
+  },
+  {
+    "component": "TabList",
+    "storyId": "core-tablist--with-menu",
+    "dims": []
+  },
+  {
+    "component": "SegmentedControl",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": []
+  },
+  {
+    "component": "ToggleButton",
+    "storyId": "core-togglebutton--group-single",
+    "dims": []
   },
   {
     "component": "Outline",
@@ -883,6 +1046,117 @@
     }
   },
   {
+    "component": "ChatReactionBar",
+    "storyId": "lab-chatadditions--reactions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-reaction-bar button:has-text(\"\ud83c\udf89\")",
+      "next": ".astryx-chat-reaction-bar button:has-text(\"\ud83d\udc40\")"
+    }
+  },
+  {
+    "component": "ChatUnreadDivider",
+    "storyId": "lab-chatadditions--typing-and-unread",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-unread-divider > span:first-child",
+      "next": ".astryx-chat-unread-divider span:text-is(\"New\")"
+    }
+  },
+  {
+    "component": "ChatTypingIndicator",
+    "storyId": "lab-chatadditions--typing-and-unread",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-typing-indicator > span:first-child",
+      "next": ".astryx-chat-typing-indicator span:has-text(\"Ana and 2 others\")"
+    }
+  },
+  {
+    "component": "ChatEmojiPicker",
+    "storyId": "lab-chatadditions--emoji-picker",
+    "dims": ["D2"],
+    "setup": {"click": "#storybook-root button >> nth=0"},
+    "selectors": {
+      "prev": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(1)",
+      "next": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(2)"
+    }
+  },
+  {
+    "component": "Stat",
+    "storyId": "lab-stat--showcase",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span:text-is(\"$1.28M\")",
+      "next": "span:text-is(\"$1.28M\") + span"
+    }
+  },
+  {
+    "component": "TransferList",
+    "storyId": "lab-transferlist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-transfer-list-panel >> nth=0",
+      "next": ".astryx-transfer-list-panel >> nth=1"
+    }
+  },
+  {
+    "component": "TransferListSelector",
+    "storyId": "lab-transferlistselector--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-complex-selector button span:text-is(\"3 visible fields\")",
+      "next": ".astryx-complex-selector-indicator-icon"
+    }
+  },
+  {
+    "component": "LogStream",
+    "storyId": "lab-logstream--terminal-build",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span:text-is(\"12:04:38.207\")",
+      "next": "span:text-is(\"12:04:38.207\") + span"
+    }
+  },
+  {
+    "component": "MobileTokenizer",
+    "storyId": "lab-mobiletokenizer--touch-flow",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-token:has-text(\"Design\")",
+      "next": ".astryx-token:has-text(\"Eng\")"
+    }
+  },
+  {
+    "component": "MobilePowerSearch",
+    "storyId": "lab-mobilepowersearch--touch-flow",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-token:has-text(\"Status\")",
+      "next": ".astryx-token:has-text(\"Priority\")"
+    }
+  },
+  {
+    "component": "Tour",
+    "storyId": "lab-tour--showcase",
+    "dims": ["D4"],
+    "setup": {"click": "button:has-text(\"Start tour\")"},
+    "selectors": {
+      "overlay": "[role=\"dialog\"]",
+      "overlayRoot": "button:has-text(\"Save\")"
+    }
+  },
+  {
+    "component": "TourStep",
+    "storyId": "lab-tour--showcase",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Start tour\")"},
+    "selectors": {
+      "prev": "[role=\"dialog\"] span:text-is(\"1 of 3\")",
+      "next": "[role=\"dialog\"] span:text-is(\"1 of 3\") + div button"
+    }
+  },
+  {
     "component": "CommandPaletteItem",
     "storyId": "core-commandpaletteitem--states",
     "dims": []
@@ -943,6 +1217,20 @@
   {
     "component": "InputGroup",
     "storyId": "core-inputgroup--with-prefix",
+    "dims": []
+  },
+  {
+    "component": "TopNavMegaMenuFeaturedCard",
+    "storyId": "core-topnavmenu--featured-card-link-arrow",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-top-nav-mega-menu-featured-card a > span",
+      "overlayRoot": ".astryx-top-nav-mega-menu-featured-card a"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--featured-card-link-arrow",
     "dims": []
   }
 ]

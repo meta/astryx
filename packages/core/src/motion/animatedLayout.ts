@@ -39,7 +39,13 @@
  *   old place to the new one, sampled from `springs.settle` into linear
  *   keyframes and corrected for a scaled ancestor. An element already gliding
  *   keeps that motion and adds the new move: the rest of its curve and the
- *   new move are summed into one new glide, velocity included. Nothing
+ *   new move are summed into one new glide, velocity included. Its place
+ *   before the change is read on the clock of every glide that carries it,
+ *   its own and its gliding ancestors' in the area (the box with each applied
+ *   `translate` taken out, plus each glide's offset at its current time), and
+ *   so is its place after the change, where only the glides the change leaves
+ *   running remain: the new glide starts where the old one is drawn, and a
+ *   glide the change leaves running cancels out of the move. Nothing
  *   animates height, and nothing scrolls the area.
  * - A measurement no commit claims by the next frame is dropped.
  * - The changed element plays its own entrance on the same spring, started in
@@ -563,6 +569,91 @@ function isStuck(element: Element, cache: WalkCache): boolean {
   );
 }
 
+/**
+ * `rect`, a box read before a change or after it (in the flush, once the
+ * glides the change retargets have stopped), with every running glide that
+ * carries the element put back on its glide's own clock: its own and those of
+ * its ancestors inside `area`. A glide the change retargets is read on its
+ * clock before the change and is gone after it; one the change leaves running
+ * (a card inside an absolutely positioned panel, which the change takes no
+ * ancestors from) is read on the same clock in both places, so it cancels out
+ * of the move. A box read samples a running `translate`
+ * wherever the engine evaluates it, and WebKit evaluates it at the moment of
+ * the read, while a glide's offset, and the glide a change retargets it into,
+ * run on the timeline's frame time: from the box alone, a change made `n` ms
+ * into a frame started the new glide `n` ms of motion ahead of the one drawn
+ * (up to about 3 px on a slow frame), and a row inside a gliding card took up
+ * the card's difference. The box is read between two readings of every
+ * carrier's applied `translate` that agree: WebKit samples a running
+ * animation at the moment of each read, in steps of about a millisecond, so
+ * a box read between two equal readings is of that same sample, while the
+ * walk's earlier box read, or one read across a step, is of another. Taken
+ * out of that
+ * box (each scaled by its node's ancestors, as its glide is), the `translate`s
+ * leave the element's place with no glide, and each glide's offset at its
+ * current time goes back in. A glide replaces any `translate` of the app's
+ * own while it runs, so each applied value is the glide's alone. Where the
+ * engine reports no applied `translate` at all (an environment without
+ * individual transform properties), the box is taken as it is.
+ */
+/**
+ * How many times `onGlideClock` reads a box and the applied translates around
+ * it to take all of them from one sample: it bounds the reads for one
+ * consistent snapshot (WebKit's samples step about once a millisecond, and a
+ * second reading lands inside one step), not a retry around a result.
+ */
+const SAMPLE_READS = 3;
+
+function onGlideClock(element: Element, rect: DOMRect, area: Element): DOMRect {
+  const carriers: {node: Element; glide: Glide; time: number}[] = [];
+  for (
+    let node: Element | null = element;
+    node != null && node !== area;
+    node = node.parentElement
+  ) {
+    const glide = glides.get(node);
+    const time = Number(glide?.animation.currentTime);
+    if (glide != null && Number.isFinite(time)) {
+      carriers.push({node, glide, time});
+    }
+  }
+  if (carriers.length === 0) {
+    return rect;
+  }
+  const view = element.ownerDocument.defaultView;
+  const appliedNow = () =>
+    carriers.map(({node}) => view?.getComputedStyle(node).translate);
+  let applied = appliedNow();
+  if (applied.some(translate => translate == null || translate === '')) {
+    return rect;
+  }
+  let box = element.getBoundingClientRect();
+  for (let read = 0; read < SAMPLE_READS; read++) {
+    const again = appliedNow();
+    if (again.every((translate, index) => translate === applied[index])) {
+      break;
+    }
+    applied = again;
+    box = element.getBoundingClientRect();
+  }
+  let dx = 0;
+  let dy = 0;
+  carriers.forEach(({node, glide, time}, index) => {
+    const [appliedX = 0, appliedY = 0] = numbersIn(applied[index] as string);
+    const offset = glide.offsetAt(
+      Math.min(Math.max(0, time), glide.durationMs),
+    );
+    const scale = scaleOf(
+      node,
+      node === element ? box : node.getBoundingClientRect(),
+      ownScaleOf(node),
+    );
+    dx += (offset.x - appliedX) * scale.x;
+    dy += (offset.y - appliedY) * scale.y;
+  });
+  return new DOMRect(box.x + dx, box.y + dy, box.width, box.height);
+}
+
 function rectOf(element: Element, cache: WalkCache): DOMRect {
   let rect = cache.rects.get(element);
   if (rect === undefined) {
@@ -947,7 +1038,15 @@ function flush(batch: Batch): void {
   const nearer = (raw: number, shift: number) =>
     Math.abs(raw + shift) < Math.abs(raw) ? raw + shift : raw;
   for (const entry of entries) {
-    entry.after = entry.element.getBoundingClientRect();
+    // On the same clocks as the place before the change: only the glides this
+    // change does not retarget still run here (a card inside an absolutely
+    // positioned panel keeps its glide while the row in it moves), so each
+    // reads the same in both places and cancels out of the move.
+    entry.after = onGlideClock(
+      entry.element,
+      entry.element.getBoundingClientRect(),
+      batch.area,
+    );
     // The move is the inline-start edge's, by the container's direction (it
     // decides where the element sits): in a right-to-left container an
     // element that narrows keeps its left edge and moves its right one.
@@ -1127,7 +1226,7 @@ export function reportLayoutChange(
         );
         for (const [candidate, rect] of candidates) {
           if (!batch.before.has(candidate)) {
-            batch.before.set(candidate, rect);
+            batch.before.set(candidate, onGlideClock(candidate, rect, area));
           }
         }
         batch.candidates.set(changed, [...candidates.keys()]);
