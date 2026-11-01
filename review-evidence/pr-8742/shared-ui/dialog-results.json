@@ -1,0 +1,542 @@
+[
+  {
+    "name": "tokenizer-clear",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Cancel",
+      "buttons": [
+        {
+          "text": "Clear selection",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Cancel",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "tokenizer-clear-safe-focus",
+    "focus": {
+      "tag": "BUTTON",
+      "text": "Clear all",
+      "aria": null,
+      "class": "astryx-button astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx16bblx1 astryx1wfwxd8 astryx13aywxo astryx1n2onr6 astryx3nfvp2 astryx6s0dn4 astryxl56j7k astryx1txdalj astryxce4md1 astryxrrkdod astryxc342km astryxng3xce astryx1jxw6zd astryxjb2p0i astryxcr08ib astryx1kq96og astryx1e4wzip astryxuxw1ft astryxeuugli astryx193iq5w astryx1ypdohk astryx16khyan astryxrafxwg astryxuedmi6 astryx12w9bfk astryxlr8y92 astryxssyfek astryx11z29ks astryxli5ek3 astryxk1pyz astryx8s9nux astryxwkbtvz astryxziyay6 astryxz2mauf astryx1l7afqf astryx7uyq82 astryx3f84ok astryx7ngsy6 astryxubczrd astryxmvprkv astryxetgvay astryx3oybdh astryx8ppqj astryxom6oz5 astryx3y5scg astryx1gnnqk1 astryx17x4s8c astryx1tgivj0 astryx1iyjqo2 astryx1r8uery"
+    }
+  },
+  {
+    "name": "tokenizer-clear-scrim",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Cancel",
+      "buttons": [
+        {
+          "text": "Clear selection",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Cancel",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "tokenizer-clear-scrim-focus",
+    "focus": {
+      "tag": "BUTTON",
+      "text": "Clear all",
+      "aria": null,
+      "class": "astryx-button astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx16bblx1 astryx1wfwxd8 astryx13aywxo astryx1n2onr6 astryx3nfvp2 astryx6s0dn4 astryxl56j7k astryx1txdalj astryxce4md1 astryxrrkdod astryxc342km astryxng3xce astryx1jxw6zd astryxjb2p0i astryxcr08ib astryx1kq96og astryx1e4wzip astryxuxw1ft astryxeuugli astryx193iq5w astryx1ypdohk astryx16khyan astryxrafxwg astryxuedmi6 astryx12w9bfk astryxlr8y92 astryxssyfek astryx11z29ks astryxli5ek3 astryxk1pyz astryx8s9nux astryxwkbtvz astryxziyay6 astryxz2mauf astryx1l7afqf astryx7uyq82 astryx3f84ok astryx7ngsy6 astryxubczrd astryxmvprkv astryxetgvay astryx3oybdh astryx8ppqj astryxom6oz5 astryx3y5scg astryx1gnnqk1 astryx17x4s8c astryx1tgivj0 astryx1iyjqo2 astryx1r8uery"
+    }
+  },
+  {
+    "name": "tokenizer-clear-escape",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Cancel",
+      "buttons": [
+        {
+          "text": "Clear selection",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Cancel",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "tokenizer-clear-escape-focus",
+    "focus": {
+      "tag": "BUTTON",
+      "text": "Clear all",
+      "aria": null,
+      "class": "astryx-button astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx16bblx1 astryx1wfwxd8 astryx13aywxo astryx1n2onr6 astryx3nfvp2 astryx6s0dn4 astryxl56j7k astryx1txdalj astryxce4md1 astryxrrkdod astryxc342km astryxng3xce astryx1jxw6zd astryxjb2p0i astryxcr08ib astryx1kq96og astryx1e4wzip astryxuxw1ft astryxeuugli astryx193iq5w astryx1ypdohk astryx16khyan astryxrafxwg astryxuedmi6 astryx12w9bfk astryxlr8y92 astryxssyfek astryx11z29ks astryxli5ek3 astryxk1pyz astryx8s9nux astryxwkbtvz astryxziyay6 astryxz2mauf astryx1l7afqf astryx7uyq82 astryx3f84ok astryx7ngsy6 astryxubczrd astryxmvprkv astryxetgvay astryx3oybdh astryx8ppqj astryxom6oz5 astryx3y5scg astryx1gnnqk1 astryx17x4s8c astryx1tgivj0 astryx1iyjqo2 astryx1r8uery"
+    }
+  },
+  {
+    "name": "tokenizer-discard",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Keep editing",
+      "buttons": [
+        {
+          "text": "Discard changes",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Keep editing",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "tokenizer-discard-safe-focus",
+    "focus": {
+      "tag": "INPUT",
+      "text": "",
+      "aria": null,
+      "class": "astryx1lliihq astryx98rzlu astryxeuugli astryxc342km astryxng3xce astryx1717udv astryx9ynric astryxjm74w1 astryxf9zqsd astryxw6l6zx astryx1tgivj0 astryxjbqb8w astryx1a2a7pz astryxeyghm5"
+    }
+  },
+  {
+    "name": "tokenizer-discard-scrim",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Keep editing",
+      "buttons": [
+        {
+          "text": "Discard changes",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Keep editing",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "tokenizer-discard-scrim-focus",
+    "focus": {
+      "tag": "INPUT",
+      "text": "",
+      "aria": null,
+      "class": "astryx1lliihq astryx98rzlu astryxeuugli astryxc342km astryxng3xce astryx1717udv astryx9ynric astryxjm74w1 astryxf9zqsd astryxw6l6zx astryx1tgivj0 astryxjbqb8w astryx1a2a7pz astryxeyghm5"
+    }
+  },
+  {
+    "name": "tokenizer-discard-escape",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Keep editing",
+      "buttons": [
+        {
+          "text": "Discard changes",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Keep editing",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "tokenizer-discard-escape-focus",
+    "focus": {
+      "tag": "INPUT",
+      "text": "",
+      "aria": null,
+      "class": "astryx1lliihq astryx98rzlu astryxeuugli astryxc342km astryxng3xce astryx1717udv astryx9ynric astryxjm74w1 astryxf9zqsd astryxw6l6zx astryx1tgivj0 astryxjbqb8w astryx1a2a7pz astryxeyghm5"
+    }
+  },
+  {
+    "name": "powersearch-clear",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Keep filters",
+      "buttons": [
+        {
+          "text": "Clear filters",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Keep filters",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "powersearch-safe-focus",
+    "focus": {
+      "tag": "BUTTON",
+      "text": "Clear all",
+      "aria": null,
+      "class": "astryx-button astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx16bblx1 astryx1wfwxd8 astryx13aywxo astryx1n2onr6 astryx3nfvp2 astryx6s0dn4 astryxl56j7k astryx1txdalj astryxce4md1 astryxrrkdod astryxc342km astryxng3xce astryx1jxw6zd astryxjb2p0i astryxcr08ib astryx1kq96og astryx1e4wzip astryxuxw1ft astryx193iq5w astryx1ypdohk astryx16khyan astryxrafxwg astryxuedmi6 astryx12w9bfk astryxlr8y92 astryxssyfek astryx11z29ks astryxli5ek3 astryxk1pyz astryx8s9nux astryxwkbtvz astryxziyay6 astryxz2mauf astryx1l7afqf astryx7uyq82 astryx3f84ok astryx7ngsy6 astryxubczrd astryxmvprkv astryxetgvay astryx3oybdh astryx8ppqj astryxom6oz5 astryx3y5scg astryx1gnnqk1 astryx17x4s8c astryx1tgivj0 astryx1iyjqo2 astryx1r8uery astryxeuugli astryx1gg8mnh"
+    }
+  },
+  {
+    "name": "powersearch-clear-scrim",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Keep filters",
+      "buttons": [
+        {
+          "text": "Clear filters",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Keep filters",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "powersearch-scrim-focus",
+    "focus": {
+      "tag": "BUTTON",
+      "text": "Clear all",
+      "aria": null,
+      "class": "astryx-button astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx16bblx1 astryx1wfwxd8 astryx13aywxo astryx1n2onr6 astryx3nfvp2 astryx6s0dn4 astryxl56j7k astryx1txdalj astryxce4md1 astryxrrkdod astryxc342km astryxng3xce astryx1jxw6zd astryxjb2p0i astryxcr08ib astryx1kq96og astryx1e4wzip astryxuxw1ft astryx193iq5w astryx1ypdohk astryx16khyan astryxrafxwg astryxuedmi6 astryx12w9bfk astryxlr8y92 astryxssyfek astryx11z29ks astryxli5ek3 astryxk1pyz astryx8s9nux astryxwkbtvz astryxziyay6 astryxz2mauf astryx1l7afqf astryx7uyq82 astryx3f84ok astryx7ngsy6 astryxubczrd astryxmvprkv astryxetgvay astryx3oybdh astryx8ppqj astryxom6oz5 astryx3y5scg astryx1gnnqk1 astryx17x4s8c astryx1tgivj0 astryx1iyjqo2 astryx1r8uery astryxeuugli astryx1gg8mnh"
+    }
+  },
+  {
+    "name": "powersearch-clear-escape",
+    "confirmation": {
+      "class": "astryx-dialog astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx1wfwxd8 astryx1vwwbsn astryx9ynric astryxjm74w1 astryxxovm9e astryxw6l6zx astryx1j61x8r astryx1yc453h astryx7ssn7h astryxzugeeo astryx6mezaz astryx1i21sxh astryxp3md9m astryx19pm5ym astryxeaf4i8 astryx1lldw8n astryx1h4wwuj astryxxydokm astryx1qkaldv astryxixxii4 astryx1bpp3o7 astryx1717udv astryxc342km astryxng3xce astryx10xzikg astryxvuvksw astryxuacgfc astryx1kcpxr7 astryxdt5ytf astryxg7h5cd astryxish69e astryxqgcaz astryx1jq6yc9 astryx128ha8g astryxr5m3f0 astryxskzprw astryxrhngw9 astryxjsfl84 astryx1047aw6 astryxax9j7h astryxdt8ak2 astryx1rs4lu4 astryx1vii845 astryxojybgt astryx1qfll2g astryxyvxpqs astryx1f17rg1 astryx78zum5 astryx1hc1fzr astryx1wqjmi9 astryx1qk00nb astryxtuz6mp astryxnixb3f astryx1abwkk1 astryx5lhr3w astryxf68679 astryx1jols5v astryx-alert-dialog",
+      "rect": {
+        "x": 16,
+        "y": 299.0476379394531,
+        "width": 380.19049072265625,
+        "height": 191.99404907226562,
+        "top": 299.0476379394531,
+        "right": 396.19049072265625,
+        "bottom": 491.04168701171875,
+        "left": 16
+      },
+      "active": "Keep filters",
+      "buttons": [
+        {
+          "text": "Clear filters",
+          "variant": "destructive",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 387.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 387.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 423.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        },
+        {
+          "text": "Keep filters",
+          "variant": "secondary",
+          "size": "lg",
+          "rect": {
+            "x": 32,
+            "y": 439.04168701171875,
+            "width": 348.19049072265625,
+            "height": 36,
+            "top": 439.04168701171875,
+            "right": 380.19049072265625,
+            "bottom": 475.04168701171875,
+            "left": 32
+          },
+          "parentWidth": 348.19049072265625
+        }
+      ]
+    }
+  },
+  {
+    "name": "powersearch-escape-focus",
+    "focus": {
+      "tag": "BUTTON",
+      "text": "Clear all",
+      "aria": null,
+      "class": "astryx-button astryx1k57tk5 astryx1vidyx5 astryx1t137rt astryx1jhp3zv astryxx47ajj astryx16bblx1 astryx1wfwxd8 astryx13aywxo astryx1n2onr6 astryx3nfvp2 astryx6s0dn4 astryxl56j7k astryx1txdalj astryxce4md1 astryxrrkdod astryxc342km astryxng3xce astryx1jxw6zd astryxjb2p0i astryxcr08ib astryx1kq96og astryx1e4wzip astryxuxw1ft astryx193iq5w astryx1ypdohk astryx16khyan astryxrafxwg astryxuedmi6 astryx12w9bfk astryxlr8y92 astryxssyfek astryx11z29ks astryxli5ek3 astryxk1pyz astryx8s9nux astryxwkbtvz astryxziyay6 astryxz2mauf astryx1l7afqf astryx7uyq82 astryx3f84ok astryx7ngsy6 astryxubczrd astryxmvprkv astryxetgvay astryx3oybdh astryx8ppqj astryxom6oz5 astryx3y5scg astryx1gnnqk1 astryx17x4s8c astryx1tgivj0 astryx1iyjqo2 astryx1r8uery astryxeuugli astryx1gg8mnh"
+    }
+  }
+]

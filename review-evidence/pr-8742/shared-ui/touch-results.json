@@ -1,0 +1,104 @@
+[
+  {
+    "name": "tokenizer-typing-after-programmatic-scroll",
+    "query": "Tags",
+    "scroll": 299.80950927734375
+  },
+  {
+    "name": "tokenizer",
+    "handlerProbe": [
+      {
+        "case": "4px-no-blur",
+        "focused": true
+      },
+      {
+        "case": "input-owned-no-blur",
+        "focused": true
+      },
+      {
+        "case": "multitouch-no-blur",
+        "focused": true
+      },
+      {
+        "case": "cancel-resets",
+        "focused": true
+      },
+      {
+        "case": "16px-results-blur",
+        "focused": false
+      },
+      {
+        "case": "unowned-button-not-blurred",
+        "retained": true
+      }
+    ]
+  },
+  {
+    "name": "powersearch-field-typing-after-programmatic-scroll",
+    "query": "Stas",
+    "scroll": 15.2380952835083
+  },
+  {
+    "name": "powersearch-field",
+    "handlerProbe": [
+      {
+        "case": "4px-no-blur",
+        "focused": true
+      },
+      {
+        "case": "input-owned-no-blur",
+        "focused": true
+      },
+      {
+        "case": "multitouch-no-blur",
+        "focused": true
+      },
+      {
+        "case": "cancel-resets",
+        "focused": true
+      },
+      {
+        "case": "16px-results-blur",
+        "focused": false
+      },
+      {
+        "case": "unowned-button-not-blurred",
+        "retained": true
+      }
+    ]
+  },
+  {
+    "name": "powersearch-content-typing-after-programmatic-scroll",
+    "query": "Stas",
+    "scroll": 0
+  },
+  {
+    "name": "powersearch-content",
+    "handlerProbe": [
+      {
+        "case": "4px-no-blur",
+        "focused": true
+      },
+      {
+        "case": "input-owned-no-blur",
+        "focused": true
+      },
+      {
+        "case": "multitouch-no-blur",
+        "focused": true
+      },
+      {
+        "case": "cancel-resets",
+        "focused": true
+      },
+      {
+        "case": "16px-results-blur",
+        "focused": false
+      },
+      {
+        "case": "unowned-button-not-blurred",
+        "retained": true
+      }
+    ]
+  }
+]
