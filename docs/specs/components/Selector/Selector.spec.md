@@ -122,6 +122,8 @@ connection between the closed trigger and its selection surface.
 
 - Action or navigation menus; DropdownMenu owns those.
 - Multi-value selection; MultiSelector owns it.
+- The `SelectorOption` content row a caller returns from `renderOption` or
+  `renderValue` — owned by `component:SelectorOption`.
 - Product-specific option content or filtering performed outside the supplied
   option list.
 - Family-wide input state display, behavior, appearance, size, end-control,

@@ -236,29 +236,17 @@ function newestGateRun(statuses, repository) {
 }
 
 /**
- * The newest decision another run published on this head: its mirror says the
- * spec is approved or waiting. Runs still reconciling, or stopped as too large,
- * decided nothing and are passed over.
+ * Another run's newest status on this head, whatever it says: its decision,
+ * a stop as too large, or a reconcile it never finished.
  */
-function newestDecisionRun(statuses, repository, exceptRunId) {
-  let newest = null;
-  for (const status of statuses) {
-    const description = status.description ?? '';
-    if (
-      status.context !== GATE_STATUS_CONTEXT ||
-      !isTrustedWorkflowStatus(status, repository) ||
-      !description.startsWith(SPEC_MIRROR_PREFIX) ||
-      !/^(ok|waiting)\b/.test(description.slice(SPEC_MIRROR_PREFIX.length))
-    ) {
-      continue;
-    }
-    const runId = parseCanonicalRunId(status.target_url, repository);
-    if (runId === null || runId === exceptRunId) continue;
-    if (newest === null || runId > newest.runId) {
-      newest = {runId, status};
-    }
-  }
-  return newest;
+function newestOtherGateRun(statuses, repository, exceptRunId) {
+  return newestGateRun(
+    statuses.filter(
+      status =>
+        parseCanonicalRunId(status.target_url, repository) !== exceptRunId,
+    ),
+    repository,
+  );
 }
 
 function approvalGroupFor(content, filePath) {
@@ -418,7 +406,7 @@ module.exports = {
   fingerprintSpecContent,
   isDispatchableOwnerCommand,
   mirrorDescription,
-  newestDecisionRun,
+  newestOtherGateRun,
   newestGateRun,
   parseAuthority,
   parseCanonicalRunId,
