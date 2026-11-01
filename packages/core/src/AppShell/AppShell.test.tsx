@@ -1234,6 +1234,37 @@ describe('AppShell main keyboard access', () => {
     expect(main).toHaveAttribute('tabindex', '-1');
   });
 
+  // Main's ref owns both: React detaches it on unmount, and the detach
+  // releases the overflow observation and the keyboard delegation.
+  it('releases the overflow observation and the keyboard delegation on unmount', () => {
+    const {unmount} = render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const main = screen.getByRole('main');
+    setMainGeometry(main, 1200);
+    remeasure();
+    // Main is a scroll region, so the delegation is attached.
+    expect(main).toHaveAttribute('tabindex', '0');
+
+    const documentRemove = vi.spyOn(document, 'removeEventListener');
+    const windowRemove = vi.spyOn(window, 'removeEventListener');
+    unmount();
+
+    expect(documentRemove).toHaveBeenCalledWith(
+      'keydown',
+      expect.any(Function),
+      true,
+    );
+    expect(documentRemove).toHaveBeenCalledWith(
+      'focusin',
+      expect.any(Function),
+      true,
+    );
+    expect(windowRemove).toHaveBeenCalledWith('resize', expect.any(Function));
+  });
+
   it('observes main only with fill, where it can become a keyboard stop', () => {
     const observed: Element[] = [];
     vi.stubGlobal(
