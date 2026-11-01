@@ -79,7 +79,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   the tooltip text, where WCAG 2.2 2.1.1 expects functionality to be keyboard
   operable. The accessible name still carries the status. Today a tap opens a
   dot's tooltip, because the dot performs no action and Tooltip's default
-  `auto` opens on such a tap, and a standalone dot does not yet take
+  touch behavior (`touchTrigger="auto"`, which `triggerBehavior="adaptive"`
+  keeps) opens on such a tap, and a standalone dot does not yet take
   `triggerBehavior="toggle"`, so its tooltip has no pin for touch or keyboard.
   FR5 changes a dot inside a button, link, menu item, or option to an image
   whose tooltip previews on hover only, so sighted touch users lose its visible
