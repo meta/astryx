@@ -836,6 +836,20 @@ describe('Tooltip surface press', () => {
     expect(onContainerClick).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a middle-button press on the tooltip text from reaching a container', () => {
+    // useClickableContainer opens an href in a new tab on a middle mouseup.
+    const onContainerMouseUp = vi.fn();
+    render(
+      <div onMouseUp={onContainerMouseUp}>
+        <Tooltip content="Tooltip text" isOpen>
+          <button type="button">Trigger</button>
+        </Tooltip>
+      </div>,
+    );
+    fireEvent.mouseUp(screen.getByText('Tooltip text'), {button: 1});
+    expect(onContainerMouseUp).not.toHaveBeenCalled();
+  });
+
   it('keeps a click on the tooltip text inside a label from toggling its control', () => {
     render(
       <label>

@@ -18,6 +18,7 @@ import {
   useRef,
   type ReactNode,
   type RefCallback,
+  type SyntheticEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -273,6 +274,11 @@ function isFocusable(element: HTMLElement): boolean {
  * {hoverCard.renderHoverCard(<ProfileCard user={user} />)}
  * ```
  */
+
+function stopPropagation(event: SyntheticEvent): void {
+  event.stopPropagation();
+}
+
 export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const {
     placement = 'above',
@@ -667,9 +673,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       return renderLayer(
         <div
           {...stylex.props(styles.content)}
-          // FR11: a press inside the card acts only within the card; it must
-          // not reach a clickable container around the trigger.
-          onClick={event => event.stopPropagation()}
+          // FR11: a press inside the card acts only within the card; neither
+          // its click nor a middle-button mouseup may reach a clickable
+          // container around the trigger.
+          onClick={stopPropagation}
+          onMouseUp={stopPropagation}
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside
             // register as "hovering content" would block every later hide.

@@ -18,6 +18,7 @@ import {
   useRef,
   type ReactNode,
   type RefCallback,
+  type SyntheticEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -264,6 +265,11 @@ function isFocusable(element: HTMLElement): boolean {
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
+
+function stopPropagation(event: SyntheticEvent): void {
+  event.stopPropagation();
+}
+
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -636,12 +642,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       };
 
       return renderLayer(
-        // FR11: React bubbles a click on the surface to the trigger's
+        // FR11: React bubbles a press on the surface to the trigger's
         // ancestors, portaled or not, so it would otherwise reach a clickable
-        // container around the trigger.
+        // container around the trigger: its click, or the mouseup a
+        // middle-button press opens a link with.
         <div
           {...stylex.props(styles.content)}
-          onClick={event => event.stopPropagation()}>
+          onClick={stopPropagation}
+          onMouseUp={stopPropagation}>
           {children}
         </div>,
         renderProps,

@@ -1368,6 +1368,19 @@ describe('HoverCard surface press', () => {
     expect(onCardButton).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a middle-button press on card content from reaching a container', () => {
+    const onContainerMouseUp = vi.fn();
+    render(
+      <div onMouseUp={onContainerMouseUp}>
+        <HoverCard isOpen content={<span>Card content</span>}>
+          <button type="button">Trigger</button>
+        </HoverCard>
+      </div>,
+    );
+    fireEvent.mouseUp(screen.getByText('Card content'), {button: 1});
+    expect(onContainerMouseUp).not.toHaveBeenCalled();
+  });
+
   it('keeps a click on card text inside a label from toggling its control', () => {
     render(
       <label>
