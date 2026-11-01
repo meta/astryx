@@ -2531,24 +2531,20 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       ...(ariaLabelledByProp != null
         ? {'aria-labelledby': ariaLabelledByProp}
         : null),
-      ref: mergeRefs<HTMLElement>(
-        el => {
-          popover.triggerRef(el);
-          triggerRef.current = el;
-          // A control that takes no focus has nowhere for focus to return to
-          // when the panel closes, and focus would land on the body — the
-          // person loses their place in the page. Making it programmatically
-          // focusable repairs the return without putting it in the tab order,
-          // which is the caller's decision to make. It does not make the
-          // control openable from the keyboard: only a real control does
-          // that, which is what the warning below is for.
-          if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
-            el.tabIndex = -1;
-          }
-        },
-        triggerModality.ref,
-        ref,
-      ),
+      ref: mergeRefs<HTMLElement>(el => {
+        popover.triggerRef(el);
+        triggerRef.current = el;
+        // A control that takes no focus has nowhere for focus to return to
+        // when the panel closes, and focus would land on the body — the
+        // person loses their place in the page. Making it programmatically
+        // focusable repairs the return without putting it in the tab order,
+        // which is the caller's decision to make. It does not make the
+        // control openable from the keyboard: only a real control does
+        // that, which is what the warning below is for.
+        if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
+          el.tabIndex = -1;
+        }
+      }, triggerModality.ref, ref),
       id: triggerId,
       onClick: isEffectivelyReadOnly
         ? onClick
