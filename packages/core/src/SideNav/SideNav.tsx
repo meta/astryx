@@ -593,11 +593,12 @@ export function SideNav({
   // nested), it moves to the rail's collapse toggle, or, with none, to the
   // nearest row the rail keeps. Rows and the toggle register through their
   // callback refs. Rows are matched across the commit by their place among
-  // the rows the rail keeps, not by element: a resizable SideNav remounts its
-  // nav when it collapses. Focus on a header or footer control that a
-  // resizable collapse remounts goes back to the control with the same
-  // accessible name. From one the collapse removes or renames, or the resize
-  // handle, focus goes to the toggle, or, with none, to the first kept row.
+  // the rows the rail keeps, not by element, since a row's control can be
+  // replaced by its collapsed form. Focus on a header or footer control that
+  // the collapse replaces goes to the new control with the same accessible
+  // name. From one the collapse removes or replaces under another name, or
+  // the resize handle, focus goes to the toggle, or, with none, to the first
+  // kept row.
   // Focus moves only if the collapse lost it.
   const rowsRef = useRef(new Map<HTMLElement, boolean>());
   const togglesRef = useRef(new Set<HTMLElement>());
