@@ -273,7 +273,11 @@ those contracts.
   (`design:reduced-motion` DR1–DR3); and the touch hit-area expansion.
   Components import
   them statically, and the bundler
-  keeps one copy per page however many components use them. There is no
+  keeps one copy per page however many components use them. A gesture that
+  a prop turns on (a row's swipe actions, `spec:AST-057`) lives in a layer
+  that the component loads with `import()` the first time the prop is set;
+  the layer imports the modules statically, so a page that never sets the
+  prop ships none of them. There is no
   install call, no public entry, and no public installed check; tests reset
   the modules through an internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
