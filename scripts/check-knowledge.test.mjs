@@ -1827,6 +1827,46 @@ describe('knowledge validation', () => {
     ).toEqual([]);
   });
 
+  it('places a flat-package platform record by the same rules as its core record', async () => {
+    const root = fixtureRoot();
+    const source = path.join(root, 'packages/charts/src');
+    fs.writeFileSync(
+      path.join(source, 'index.ts'),
+      "export {Chart} from './Chart';\nexport {Ghost} from './Ghost';\n",
+    );
+    fs.writeFileSync(
+      path.join(source, 'Chart.tsx'),
+      'export function Chart() {}\n',
+    );
+    fs.writeFileSync(
+      path.join(source, 'Ghost.tsx'),
+      'export function Ghost() {}\n',
+    );
+    writeSwiftTest(root);
+    const swiftRecord = (folder, name) => {
+      const filePath = path.join(
+        root,
+        `docs/specs/components/${folder}/${name}.swift.spec.md`,
+      );
+      fs.mkdirSync(path.dirname(filePath), {recursive: true});
+      fs.writeFileSync(
+        filePath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+    };
+    swiftRecord('Chart', 'Chart');
+    swiftRecord('Chart', 'Ghost');
+
+    const problems = (await validateKnowledgeRoot(root)).join('\n');
+    expect(problems).not.toContain('Chart/Chart.swift.spec.md');
+    expect(problems).toContain(
+      'docs/specs/components/Chart/Ghost.swift.spec.md: platform record for Ghost must match component root "Chart"',
+    );
+  });
+
   it('rejects a nested component record instead of treating it as a module', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');

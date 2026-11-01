@@ -1038,18 +1038,18 @@ export function validatePlatformComponentRecords(root, {ids, repositoryFiles}) {
       problems.push(
         `${filePath}: platform records must live at ${COMPONENT_SPEC_ROOT}/<ComponentRoot>/, where exactly one registered component package owns <ComponentRoot>.`,
       );
-    } else if (
-      location.layout === 'flat'
-        ? !packageHasPublicComponent(root, location.packageName, publicName)
-        : publicName !== componentRoot &&
-          !componentRootDefinesPublicComponent(
-            location.componentSourcePath,
-            publicName,
-          )
-    ) {
-      problems.push(
-        `${filePath}: platform record for ${publicName} must match component root ${JSON.stringify(componentRoot)} or an exact public component entry in that root's consumer docs.`,
-      );
+    } else {
+      const placement = componentNamePlacement(root, location, publicName);
+      if (placement.missingFlatExport) {
+        problems.push(
+          `${filePath}: platform record for ${publicName} must match a public named export and TSX module in packages/${location.packageName}/src.`,
+        );
+      }
+      if (placement.outsideRoot) {
+        problems.push(
+          `${filePath}: platform record for ${publicName} must match component root ${JSON.stringify(componentRoot)} or an exact public component entry in that root's consumer docs.`,
+        );
+      }
     }
     if (fs.existsSync(path.join(root, corePath))) {
       const core = ids.get(coreId);
@@ -1189,6 +1189,25 @@ export function consumerDocPublicNames(docPath) {
   return [...names].sort();
 }
 
+/**
+ * Whether a component record's public name fits where its folder places it: a
+ * flat package exports it, and it is the component root or an exact public
+ * component entry in that root's consumer docs.
+ */
+function componentNamePlacement(root, location, publicName) {
+  return {
+    missingFlatExport:
+      location.layout === 'flat' &&
+      !packageHasPublicComponent(root, location.packageName, publicName),
+    outsideRoot:
+      publicName !== location.componentRoot &&
+      !componentRootDefinesPublicComponent(
+        location.componentSourcePath,
+        publicName,
+      ),
+  };
+}
+
 function componentRootDefinesPublicComponent(componentRootPath, publicName) {
   for (const docPath of matchingFilesRecursively(
     componentRootPath,
@@ -1270,21 +1289,13 @@ export function validateComponentModuleRelationships(
           `${record.filePath}: component record id must be ${expectedId} to match its filename.`,
         );
       }
-      if (
-        location.layout === 'flat' &&
-        !packageHasPublicComponent(root, location.packageName, publicName)
-      ) {
+      const placement = componentNamePlacement(root, location, publicName);
+      if (placement.missingFlatExport) {
         problems.push(
           `${record.filePath}: flat-package component record ${expectedId} must match a public named export and TSX module in packages/${location.packageName}/src.`,
         );
       }
-      if (
-        publicName !== location.componentRoot &&
-        !componentRootDefinesPublicComponent(
-          location.componentSourcePath,
-          publicName,
-        )
-      ) {
+      if (placement.outsideRoot) {
         problems.push(
           `${record.filePath}: flat component record ${expectedId} must match component root ${JSON.stringify(location.componentRoot)} or an exact public component entry in that root's consumer docs.`,
         );
