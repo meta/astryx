@@ -42,15 +42,15 @@ system_specs: [spec:AST-029]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                           |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `children`, `emptyState`, `scrollToTopAction`, `density`, `gap`, `align`, `isStreaming`, the root's `BaseProps<HTMLDivElement>`, and `ref`.                                        |
-| Behavior                | A polite log holds caller messages. Density selects row spacing and passes through context. A top sentinel can request older messages. A spacer moves short lists down by default. |
-| End-user impact         | Readers get one focusable, polite log of the conversation that reports when a response is streaming; older messages load when they scroll to the top.                              |
-| Builder impact          | None.                                                                                                                                                                              |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact; two owner questions stay open.                                              |
-| Review checks           | Reject a claim that the list owns ChatLayout auto-scroll, that this record settles the loading-overlap policy, or that DOM `aria-busy` proves spoken output.                       |
-| Governing rules         | `architecture:public-component-api/INV1, INV5–INV8`; `architecture:react-component-runtime/INV3, INV5–INV6`; `spec:AST-029/FR2–FR5`.                                               |
+| Area                    | Contract                                                                                                                                                                               |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `children`, `emptyState`, `scrollToTopAction`, `density`, `gap`, `align`, `isStreaming`, the root's `BaseProps<HTMLDivElement>`, and `ref`.                                            |
+| Behavior                | A polite log holds caller messages. Density selects row spacing and passes through context. A top sentinel can request older messages. A short list rests at the block end by default. |
+| End-user impact         | Readers get one focusable, polite log of the conversation that reports when a response is streaming; older messages load when they scroll to the top.                                  |
+| Builder impact          | None.                                                                                                                                                                                  |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact; two owner questions stay open.                                                  |
+| Review checks           | Reject a claim that the list owns ChatLayout auto-scroll, that this record settles the loading-overlap policy, or that DOM `aria-busy` proves spoken output.                           |
+| Governing rules         | `architecture:public-component-api/INV1, INV5–INV8`; `architecture:react-component-runtime/INV3, INV5–INV6`; `spec:AST-029/FR2–FR5`.                                                   |
 
 This table is a review projection; the body below is authoritative.
 
@@ -86,7 +86,7 @@ Consumer prop syntax and examples remain in `ChatMessageList.doc.mjs`.
 - The outer log element, its public DOM/ref/style passthrough, and the
   `chat-message-list` target with its `density` selector.
 - The inner flex-column message box and density-based padding and gap.
-- The short-list block spacer when `align` is `bottom`.
+- Where a short list rests: the block end for `bottom`, the block start for `top`.
 - The optional `emptyState` substitution and older-message sentinel/loading
   indicator.
 - Passing the inner content element to `ChatLayoutContext.contentRef` while a
@@ -151,7 +151,7 @@ scalar output only; it does not decide how to inspect nested children.
 | Two messages and a system row | Polite log with messages in source order              | Caller controls row content                |
 | Empty top-level children      | Optional centered empty state                         | An omitted empty state leaves an empty log |
 | Compact/balanced/spacious     | Different token-derived row spacing and child density | `gap` may override only row spacing        |
-| Short top/bottom list         | Bottom includes a spacer, top omits it                | Container height is caller-owned           |
+| Short top/bottom list         | Bottom rests at the block end, top at the block start | Container height is caller-owned           |
 | Streaming                     | Log has `aria-busy=true`                              | Message content remains caller-owned       |
 | Top action pending            | Spinner above content while transition is pending     | Async action result is caller-owned        |
 
@@ -194,12 +194,11 @@ migration, so the map is deferred.
 
 | Contract | Verification                                                                                                                                              | Representative states      | Mutation or failure expectation                              | Audit section              |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ | -------------------------- |
-| FR1, AR1 | `ChatMessageList.test.tsx` role and `aria-busy` tests                                                                                                     | rest, streaming            | A dropped log role or busy state fails.                      | `audit:ChatMessageList/§1` |
+| FR1, AR1 | `ChatMessageList.test.tsx` role and `aria-busy` tests; `ChatMessageList.a11y.chromium.spec.ts` `aria-live` assertion                                      | rest, streaming            | A dropped log role or busy state fails.                      | `audit:ChatMessageList/§1` |
 | FR2–FR3  | `ChatMessageList.test.tsx` density and gap tests                                                                                                          | densities; gap override    | Lost density reflection or a gap that changes density fails. | `audit:ChatMessageList/§2` |
 | FR2      | `ChatMessage.test.tsx` "inherits list density and lets an explicit prop override it"; `ChatMessageBubble.test.tsx` list-density case                      | child message in a list    | Density that stops reaching child messages fails.            | `audit:ChatMessageList/§2` |
 | FR7      | `ChatLayout.test.tsx` "first-fill scroll positioning" cases; `useChatNewMessages.test.tsx` "works end-to-end with ChatLayout conditional ChatMessageList" | list inside ChatLayout     | A list that stops registering its content element fails.     | `audit:ChatMessageList/§7` |
 | FR4      | `ChatMessageList.test.tsx` empty-state tests                                                                                                              | empty; numeric empty state | A missing or hidden empty state fails.                       | `audit:ChatMessageList/§4` |
-| FR5      | `ChatMessageList.test.tsx` spacer tests                                                                                                                   | default, bottom, top       | A spacer that appears or vanishes wrongly fails.             | `audit:ChatMessageList/§4` |
 | FR6      | `ChatMessageList.test.tsx` "loads older messages through the top sentinel and exposes pending status"                                                     | pending, settled           | A lost action or stuck spinner fails.                        | `audit:ChatMessageList/§6` |
 
 Read from source, with no focused test yet:
@@ -208,10 +207,12 @@ Read from source, with no focused test yet:
 - FR2: the spacing each density selects.
 - FR3: `gap` replacing the top-level row gap.
 - FR4: `null` and `false` children selecting the empty state.
+- FR5: where a short list rests; the spacer tests count the added element
+  behind the Current-state impact gap.
 - FR7: removing the registration on cleanup.
 - FR8: `ref`, DOM, data, and ARIA props, `className`, `style`, and `xstyle` on
   the root, and owned log semantics winning over forwarded props.
-- PR1–PR2: the observer's root, and observer and registration cleanup.
+- PR1–PR2: the observer's root, and registration cleanup.
 
 ## Decision log
 
