@@ -15,7 +15,6 @@ const {
   parseOwnerCommandTarget,
   canonicalRunUrl,
   describeOwnerCommandProblem,
-  newestOtherGateRun,
   newestGateRun,
   parseOwnerCommandIntent,
   parseAuthority,
@@ -739,52 +738,11 @@ async function reconcileWithinBudget({
   // From here a run can reach the request budget. It then says so on both
   // statuses, so an owner's command never reads as taken, and leaves the
   // decision to a maintainer's dispatch.
-  async function keepDispatchedDecision() {
-    // Only when the newest other run is that dispatch and it decided: an
-    // owner act since then, or a run that never finished, leaves it pending.
-    const prior = newestOtherGateRun(
-      await listStatuses(initialHead),
-      repository,
-      runId,
-    );
-    const description = prior?.status.description ?? '';
-    if (
-      !description.startsWith(SPEC_MIRROR_PREFIX) ||
-      !/^(ok|waiting)\b/.test(description.slice(SPEC_MIRROR_PREFIX.length))
-    ) {
-      return false;
-    }
-    const {data: priorRun} = await github.rest.actions.getWorkflowRun({
-      owner,
-      repo,
-      run_id: Number(prior.runId),
-    });
-    if (priorRun.event !== 'workflow_dispatch') return false;
-    await createStatus({
-      sha: initialHead,
-      context: GATE_STATUS_CONTEXT,
-      state: prior.status.state,
-      description: prior.status.description,
-      targetUrl: prior.status.target_url,
-    });
-    if (await restoreNewerStatus(initialHead)) return true;
-    await publishReviewGate(initialHead, readSpecGate([prior.status]));
-    core.info(
-      `Kept the decision of run ${prior.runId}, a maintainer's dispatch.`,
-    );
-    return true;
-  }
   budget.onExceeded = async () => {
     core.warning(
       `Stopped after ${requestCount()} GitHub API requests: this pull request is too large to reconcile automatically. Run the Review signal workflow with pr=${pullNumber} to decide it.`,
     );
     if (!(await isPublishable(initialHead))) return;
-    // A maintainer's dispatch decided this head; only an owner's review or
-    // command can change that decision, so any other event keeps it.
-    const isOwnerAct =
-      context.eventName === 'pull_request_review' ||
-      context.eventName === 'issue_comment';
-    if (!isOwnerAct && (await keepDispatchedDecision())) return;
     await createStatus({
       sha: initialHead,
       context: GATE_STATUS_CONTEXT,

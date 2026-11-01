@@ -235,20 +235,6 @@ function newestGateRun(statuses, repository) {
   return newest;
 }
 
-/**
- * Another run's newest status on this head, whatever it says: its decision,
- * a stop as too large, or a reconcile it never finished.
- */
-function newestOtherGateRun(statuses, repository, exceptRunId) {
-  return newestGateRun(
-    statuses.filter(
-      status =>
-        parseCanonicalRunId(status.target_url, repository) !== exceptRunId,
-    ),
-    repository,
-  );
-}
-
 function approvalGroupFor(content, filePath) {
   const kind = parseKind(content, filePath);
   if (kind === 'design') return 'design';
@@ -406,7 +392,6 @@ module.exports = {
   fingerprintSpecContent,
   isDispatchableOwnerCommand,
   mirrorDescription,
-  newestOtherGateRun,
   newestGateRun,
   parseAuthority,
   parseCanonicalRunId,
