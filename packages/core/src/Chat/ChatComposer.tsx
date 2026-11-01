@@ -434,7 +434,7 @@ export function ChatComposer(props: ChatComposerProps) {
     // Focus the input when clicking empty space in the body.
     // Skip if the click target is a button, link, or interactive element.
     // A press inside an open Tooltip or HoverCard stays in that surface
-    // (component:Tooltip FR11).
+    // (component:Tooltip FR11, component:HoverCard FR11).
     const target = e.target as HTMLElement;
     if (
       target.closest(
