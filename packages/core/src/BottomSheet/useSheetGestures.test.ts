@@ -1349,7 +1349,7 @@ describe('useSheetGestures', () => {
     expect(travel(t)).toBe(150);
   });
 
-  it('keeps the sheet under the finger until the host renders the height a drag above its base restores', async () => {
+  it("writes the height a drag above its base restores with the travel that pairs with it, in the move's own task", async () => {
     const {hook} = setup({snapHeights: () => [200]});
     const t = makeTarget();
     // Rest at the 200px working detent: the sheet gives 200px up as layout,
@@ -1359,20 +1359,21 @@ describe('useSheetGestures', () => {
     up(hook, 200, 800, t);
     expect(hook.result.current.settledLayoutOffset).toBe(200);
     // A press, then a move 50px above the base, handled before React renders
-    // the restored height: the travel is written against the height still on
-    // screen (200px less layout), so the sheet is drawn where the pointer
-    // is ...
+    // the restored height: the move writes the full height with the travel
+    // that pairs with it, in its own task, so the sheet is drawn where the
+    // pointer is ...
     act(() => {
       mouseEvent('pointerdown', handleOf(t), 200, 1000);
     });
     // 60 px up: 50 past the pan's 10 px.
     mouseEvent('pointermove', handleOf(t), 140, 1016);
     expect(liveOffset(hook)).toBe(150);
-    expect(travel(t)).toBe(150 - 200);
-    // ... and the commit that restores the full height moves the travel
-    // with it, before anything paints.
+    expect(travel(t)).toBe(150);
+    expect(t.style.height).toBe(`${SHEET_HEIGHT}px`);
+    // ... and the commit that renders it changes nothing on screen.
     await act(async () => {});
     expect(travel(t)).toBe(150);
+    expect(t.style.height).toBe(`${SHEET_HEIGHT}px`);
     act(() => {
       mouseEvent('pointerup', handleOf(t), 140, 1600);
     });

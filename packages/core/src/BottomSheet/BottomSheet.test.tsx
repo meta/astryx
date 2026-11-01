@@ -1614,7 +1614,7 @@ describe('BottomSheet', () => {
       expect(sheet.style.transition).toBe('');
     });
 
-    it('restores the layout height in the same task as the transform when a drag crosses its detent, without a synchronous render', async () => {
+    it('restores the layout height in the same task as the travel when a drag crosses its detent, without a synchronous render', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1661,7 +1661,12 @@ describe('BottomSheet', () => {
         }
       });
       mutations.observe(sheet, {childList: true, subtree: true});
-      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+      // The press lands one pan threshold below the drag's start, as every
+      // pointer's pan begins past its threshold (spec:AST-094 FR17, FR43):
+      // the positions below are the drag's.
+      act(() => {
+        mouse(getHandle(), 'pointerdown', 336 + PAN_THRESHOLD, 3000);
+      });
 
       // Each finger sample arrives outside act(), as a browser delivers it:
       // a render React schedules for later is still pending when this task
@@ -1670,29 +1675,34 @@ describe('BottomSheet', () => {
       const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
       reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
       const sampleAt = (time: number, y: number) => {
-        const event = new Event('pointermove', {bubbles: true});
-        Object.defineProperties(event, {
-          clientY: {value: y},
-          isPrimary: {value: true},
-          pointerId: {value: 1},
-          timeStamp: {value: time},
+        const event = new PointerEvent('pointermove', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+          clientX: 50,
+          clientY: y,
+          buttons: 1,
         });
+        Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
         getHandle().dispatchEvent(event);
         return {
           height: sheet.style.height,
-          transform: sheet.style.transform,
+          translation: translationOf(sheet),
           inset: getBody().style.paddingBlockEnd,
         };
       };
-      let above: {height: string; transform: string; inset: string};
-      let below: {height: string; transform: string; inset: string};
+      let above: {height: string; translation: number; inset: string};
+      let below: {height: string; translation: number; inset: string};
       const commitsBeforeCrossing = commits;
       let commitsInCrossingTasks: number;
       try {
-        // Up past the detent: the transform is written for the full height
-        // (no layout split), so the full height has to be there too.
+        // Up past the detent: the travel is written for the full height (no
+        // layout split), so the full height has to be there too.
         above = sampleAt(4000, 136);
-        // Back down past it: the split returns with the transform.
+        // Back down past it: the split returns with the travel.
         below = sampleAt(5000, 436);
         // React committed nothing inside those input tasks: the elements were
         // written directly, not through a forced synchronous render.
@@ -1702,18 +1712,20 @@ describe('BottomSheet', () => {
       }
       await act(async () => {});
 
-      expect(above.transform).toMatch(/^translateY\(/);
+      // Drawn above the detent, between it and fully open.
+      expect(above.translation).toBeGreaterThan(0);
+      expect(above.translation).toBeLessThan(336);
       expect(above.height).toBe('784px');
       // The scrolling area keeps its scroll position across the taller
       // height: its end inset lands with it.
       expect(above.inset).toBe('336px');
-      expect(below.transform).toBe('translateY(100px)');
+      expect(below.translation).toBe(100);
       expect(below.height).toBe('448px');
       expect(below.inset).toBe('');
       expect(commitsInCrossingTasks).toBe(0);
       // The scheduled render caught up to the values already on screen.
       expect(sheet.style.height).toBe('448px');
-      expect(sheet.style.transform).toBe('translateY(100px)');
+      expect(translationOf(sheet)).toBe(100);
       // Nothing in the sheet was replaced along the way.
       mutations.disconnect();
       expect(replacedNodes).toEqual([]);
@@ -1749,11 +1761,16 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
       expect(sheet.style.height).toBe('448px');
-      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+      // The press lands one pan threshold below the drag's start (every
+      // pointer's pan begins past its threshold, spec:AST-094 FR17, FR43).
+      act(() => {
+        mouse(getHandle(), 'pointerdown', 336 + PAN_THRESHOLD, 3000);
+      });
 
-      // A 3px nudge up crosses the detent, and the finger lifts before the
-      // render that move scheduled has committed: both arrive in one task,
-      // outside act(), as a browser can deliver them.
+      // A 3px nudge up past the pan's start crosses the detent, and the
+      // finger lifts before the render that move scheduled has committed:
+      // both arrive in one task, outside act(), as a browser can deliver
+      // them.
       const reactGlobals = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
       const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
       reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
@@ -1762,14 +1779,19 @@ describe('BottomSheet', () => {
         time: number,
         y: number,
       ) => {
-        const event = new Event(type, {bubbles: true, cancelable: true});
-        Object.defineProperties(event, {
-          button: {value: 0},
-          clientY: {value: y},
-          isPrimary: {value: true},
-          pointerId: {value: 1},
-          timeStamp: {value: time},
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+          clientX: 50,
+          clientY: y,
+          button: type === 'pointermove' ? -1 : 0,
+          buttons: type === 'pointerup' ? 0 : 1,
         });
+        Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
         getHandle().dispatchEvent(event);
       };
       let heightAboveDetent: string;
@@ -1777,10 +1799,13 @@ describe('BottomSheet', () => {
         dispatch('pointermove', 4000, 333);
         heightAboveDetent = sheet.style.height;
         dispatch('pointerup', 4500, 333);
+        // That pointer lifted: nothing is left pressed for the next test.
+        pressed = null;
       } finally {
         reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
       }
       await act(async () => {});
+      await landSpring();
 
       // The crossing move drew the sheet at its full height...
       expect(heightAboveDetent).toBe('784px');
@@ -1788,6 +1813,7 @@ describe('BottomSheet', () => {
       // offset, and no end inset left over from the drag.
       expect(sheet.style.height).toBe('448px');
       expect(sheet.style.transform).toBe('');
+      expect(translationOf(sheet)).toBe(0);
       expect(getBody().style.paddingBlockEnd).toBe('');
     });
 
