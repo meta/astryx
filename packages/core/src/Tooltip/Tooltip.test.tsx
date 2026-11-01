@@ -29,6 +29,10 @@ import {useRef} from 'react';
 import {Tooltip} from './Tooltip';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import userEvent from '@testing-library/user-event';
+import {IconButton} from '../IconButton/IconButton';
+import {Toolbar} from '../Toolbar/Toolbar';
+import {TestIcon} from '../__tests__/TestIcon';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -815,5 +819,54 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     // Unmounting detaches: the aria-describedby the tooltip added is removed.
     unmount();
     expect(anchor.getAttribute('aria-describedby')).toBe(null);
+  });
+});
+
+describe('Tooltip in a roving Toolbar (focusTrigger="auto")', () => {
+  it('opens on arrow-key focus for a member whose tooltip was added after mount', async () => {
+    const user = userEvent.setup();
+    function FormatToolbar({hasHints}: {hasHints: boolean}) {
+      return (
+        <Toolbar
+          label="Format"
+          startContent={
+            <>
+              <IconButton
+                label="Copy"
+                icon={<TestIcon />}
+                tooltip="Copy"
+                onClick={() => {}}
+              />
+              <IconButton
+                label="Filter"
+                icon={<TestIcon />}
+                tooltip={hasHints ? 'Filter (F)' : undefined}
+                onClick={() => {}}
+              />
+            </>
+          }
+        />
+      );
+    }
+    const {rerender} = render(<FormatToolbar hasHints={false} />);
+    rerender(<FormatToolbar hasHints />);
+    const filter = screen.getByRole('button', {name: 'Filter'});
+    const realMatches = filter.matches.bind(filter);
+    vi.spyOn(filter, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+
+    screen.getByRole('button', {name: 'Copy'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(filter).toHaveFocus();
+    const describedBy = filter.getAttribute('aria-describedby') ?? '';
+    await waitFor(() => {
+      const layer = describedBy
+        .split(' ')
+        .map(id => document.getElementById(id))
+        .find(element => element?.textContent === 'Filter (F)');
+      expect(layer).toBeDefined();
+      expect(layer?.matches(':popover-open')).toBe(true);
+    });
   });
 });
