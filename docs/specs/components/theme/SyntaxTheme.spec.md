@@ -85,10 +85,10 @@ No component-local concept beyond the consumer props.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                   | Basis                    |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | SyntaxTheme renders one block `div` wrapper carrying `data-astryx-syntax-theme` with the theme's name and, as inline custom properties, every syntax token the definition carries. Presets and `defineSyntaxTheme()` fill every diff slot; only a hand-built definition missing a slot leaves it to the CSS default.                                                                                        | Current source and tests |
-| FR2 | Descendants read the syntax theme through context. The syntax theme hook resolves each token for light or dark from `prefers-color-scheme`; unset marker slots take the theme's own punctuation, and unset `added` and `removed` derive from the page theme. Implementation gap: under a Theme with a forced mode, the hook can resolve the other side from the wrapper's variables (Current-state impact). | Current source and tests |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Basis                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | SyntaxTheme renders one block `div` wrapper carrying `data-astryx-syntax-theme` with the theme's name and, as inline custom properties, every syntax token the definition carries. Presets and `defineSyntaxTheme()` fill every diff slot; only a hand-built definition missing a slot leaves it to the CSS default.                                                                                                                                                                                           | Current source and tests |
+| FR2 | Descendants read the syntax theme through context. The syntax theme hook resolves each token for the nearest Theme's effective mode (`architecture:theme-application` INV1); unset marker slots take the theme's own punctuation, and unset `added` and `removed` derive from the page theme. Implementation gap: the hook reads the operating system's `prefers-color-scheme` instead, so under a Theme with a forced mode it can resolve the other side from the wrapper's variables (Current-state impact). | Current source and tests |
 
 ### Allowed variation
 
@@ -96,10 +96,10 @@ No component-local concept beyond the consumer props.
 
 ### Representative states
 
-| State                                     | Required invariant                               | Allowed variation |
-| ----------------------------------------- | ------------------------------------------------ | ----------------- |
-| Preset theme                              | Wrapper carries the preset's variables and name. | Preset.           |
-| Hand-built definition missing a diff slot | No variable written; the hook derives it.        | Theme.            |
+| State                                     | Required invariant                                                                                                     | Allowed variation |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| Preset theme                              | Wrapper carries the preset's variables and name.                                                                       | Preset.           |
+| Hand-built definition missing a diff slot | No variable written; the hook derives a missing marker or row paint, and a missing header resolves to an empty string. | Theme.            |
 
 ### Transformation and precedence order
 
