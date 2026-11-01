@@ -1074,7 +1074,7 @@ jobs:
             for (const [output, prefix, missing] of [
               ['component_run_id', 'component-size-main', 'the merge base is built here instead'],
               ['package_run_id', 'package-size-main', 'package sizes are shown without a budget'],
-              ['api_run_id', 'api-surface-main', 'the merge base is built here for its API surface'],
+              ['api_run_id', 'api-surface-main', 'the API changes compare with its committed reports unless the merge base is built for its sizes'],
             ]) {
               const name = `${prefix}-${process.env.BASE_SHA}`;
               const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
@@ -1108,10 +1108,10 @@ jobs:
       # its download failed): build the base beside the Storybook build and
       # record its sizes with this head's analyzer, so every changed component
       # still has a before size (AST-080 FR8). When Main kept no API surface
-      # either, the same build writes the base's API reports with this head's
-      # generator (INV24); a head predating `--surface` cannot. A missing API
-      # surface alone starts no build: the API changes then compare with the
-      # merge base's committed reports, marked as such. It runs in the
+      # either, it also builds the published packages the pull request
+      # changes, and the API changes step reports this base (INV24). A missing
+      # API surface alone starts no build: the API changes then compare with
+      # the merge base's committed reports, marked as such. It runs in the
       # background; the wait before the analysis collects it.
       - name: Start building the merge base without a record
         id: base-build
@@ -1121,10 +1121,6 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           NEED_API: ${{ steps.api-download.outcome != 'success' }}
         run: |
-          if ! grep -q -- "'--surface'" scripts/api-report/cli.mjs 2>/dev/null; then
-            NEED_API=false
-          fi
-          export NEED_API
           git worktree add --detach .size-base "$BASE_SHA"
           mkdir -p .component-size-base
           # The inner script reads BASE_SHA, HEAD_SHA and NEED_API from this
@@ -1151,8 +1147,7 @@ jobs:
                 done
                 # The CLI publishes declarations generated from its JSDoc.
                 git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
-                node ../scripts/api-report/cli.mjs --surface ../.api-surface-build --root .
-              } || echo "The merge base API surface was not written; the API changes compare with its committed reports."
+              } || echo "Building the merge base's published packages failed; those packages compare with its committed reports."
             fi
             touch ../base-build.done
           ' > base-build.log 2>&1 || touch base-build.failed &
@@ -1360,13 +1355,19 @@ jobs:
         run: |
           BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
           [ -n "$BASE_SHA" ] || exit 0
-          # A head that predates the built surface compares committed reports.
+          # Main's surface of the merge base, else the base built above for its
+          # sizes, reported here. A head that predates the built surface
+          # compares committed reports.
           SURFACE=()
           if grep -q -- "'--base-surface'" scripts/api-report/cli.mjs; then
             if [ -f .api-surface-base/surface.json ]; then
               SURFACE=(--base-surface .api-surface-base --base-record main)
-            elif [ -f .api-surface-build/surface.json ]; then
-              SURFACE=(--base-surface .api-surface-build --base-record build)
+            elif [ -f base-build.done ] && [ -d .size-base ]; then
+              node scripts/api-report/cli.mjs --surface .api-surface-build --root .size-base \
+                || echo "::notice::The merge base's API surface was not written; the API changes compare with its committed reports."
+              if [ -f .api-surface-build/surface.json ]; then
+                SURFACE=(--base-surface .api-surface-build --base-record build)
+              fi
             fi
           fi
           node scripts/api-report/cli.mjs --changes --base "$BASE_SHA" "${SURFACE[@]}"

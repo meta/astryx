@@ -385,7 +385,9 @@ Known verification gaps:
 - INV24: the reports cover declarations, CSS custom properties, theme targets,
   and public attributes; context-member behavior, undeclared defaults, CLI
   schemas, and observable behavior for both the branch and synthetic merge
-  still need explicit review.
+  still need explicit review. When no build of the merge base is kept, the
+  API changes compare with the merge base's committed reports, marked as
+  such, and list the rows a stale committed report carries.
 - INV18: shipped content slots that their anatomy does not name yet include
   PowerSearch's `startIcon` and `endContent`, SideNav's `topContent`,
   `footer`, and `footerIcons`, Tokenizer's `startIcon`, DropdownMenu's

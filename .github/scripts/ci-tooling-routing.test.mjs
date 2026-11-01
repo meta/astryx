@@ -394,15 +394,12 @@ describe('Node-tooling CI routing', () => {
     // the base builds only for a missing size record, and then also writes
     // its API surface when Main kept none and the head can.
     expect(start.if).not.toContain('api-download');
-    expect(start.run).toContain(
-      `grep -q -- "'--surface'" scripts/api-report/cli.mjs`,
-    );
+    // The head's API report script runs only in the step guarded for it.
+    expect(start.run).not.toContain('scripts/api-report/cli.mjs');
     expect(start.env.NEED_API).toBe(
       "${{ steps.api-download.outcome != 'success' }}",
     );
-    expect(start.run).toContain(
-      'node ../scripts/api-report/cli.mjs --surface ../.api-surface-build --root .',
-    );
+    expect(start.run).toContain('pnpm -F @astryxdesign/cli sync:api-types');
     const names = job.steps.map(entry => entry.name);
     const at = name => names.indexOf(name);
     expect(at("Download main's API surface for the merge base")).toBeLessThan(
@@ -414,24 +411,43 @@ describe('Node-tooling CI routing', () => {
     expect(step(job, 'Report API changes')['continue-on-error']).toBe(true);
   });
 
+  // The stub CLI writes a surface when asked for one (or fails to, for a
+  // base whose surface cannot be written) and prints the --changes call.
+  const stubCli = ({supported, surfaceWrites = true}) =>
+    `${supported ? "// '--base-surface'\n" : ''}import fs from 'node:fs';
+const args = process.argv.slice(2);
+if (args[0] === '--surface') {
+  if (!${surfaceWrites}) process.exit(1);
+  fs.mkdirSync(args[1], {recursive: true});
+  fs.writeFileSync(args[1] + '/surface.json', JSON.stringify(args));
+} else console.log(JSON.stringify(args));
+`;
+
   it.each([
     [
       'main kept',
-      '.api-surface-base',
-      true,
+      {main: true},
       ['--base-surface', '.api-surface-base', '--base-record', 'main'],
     ],
     [
-      'this run built',
-      '.api-surface-build',
-      true,
+      'of the base this run built for its sizes',
+      {built: true},
       ['--base-surface', '.api-surface-build', '--base-record', 'build'],
     ],
-    ['nobody kept', null, true, []],
-    ['main kept, for a head predating it,', '.api-surface-base', false, []],
+    ['nobody kept or built', {}, []],
+    [
+      'of a built base whose surface cannot be written',
+      {built: true, surfaceWrites: false},
+      [],
+    ],
+    ['main kept, for a head predating it,', {main: true, supported: false}, []],
   ])(
     'compares the API changes with the surface %s',
-    (_label, dir, supported, extra) => {
+    (
+      _label,
+      {main = false, built = false, supported = true, surfaceWrites = true},
+      extra,
+    ) => {
       const report = step(ci.jobs['build-storybook'], 'Report API changes');
       const root = fs.mkdtempSync(path.join(os.tmpdir(), 'api-changes-'));
       try {
@@ -444,23 +460,44 @@ describe('Node-tooling CI routing', () => {
         fs.chmodSync(path.join(root, '.github/scripts/merge-base.sh'), 0o755);
         fs.writeFileSync(
           path.join(root, 'scripts/api-report/cli.mjs'),
-          `${supported ? "// '--base-surface'\n" : ''}console.log(JSON.stringify(process.argv.slice(2)));\n`,
+          stubCli({supported, surfaceWrites}),
         );
-        if (dir) {
-          fs.mkdirSync(path.join(root, dir));
-          fs.writeFileSync(path.join(root, dir, 'surface.json'), '{}');
+        if (main) {
+          fs.mkdirSync(path.join(root, '.api-surface-base'));
+          fs.writeFileSync(
+            path.join(root, '.api-surface-base/surface.json'),
+            '{}',
+          );
+        }
+        if (built) {
+          fs.mkdirSync(path.join(root, '.size-base'));
+          fs.writeFileSync(path.join(root, 'base-build.done'), '');
         }
         const out = execFileSync('bash', ['-e', '-c', report.run], {
           cwd: root,
           encoding: 'utf8',
           env: {...process.env, BASE_REF: 'main'},
         });
-        expect(JSON.parse(out.trim())).toEqual([
+        expect(JSON.parse(out.trim().split('\n').at(-1))).toEqual([
           '--changes',
           '--base',
           'abc123',
           ...extra,
         ]);
+        if (built && surfaceWrites && supported)
+          expect(
+            JSON.parse(
+              fs.readFileSync(
+                path.join(root, '.api-surface-build/surface.json'),
+                'utf8',
+              ),
+            ),
+          ).toEqual([
+            '--surface',
+            '.api-surface-build',
+            '--root',
+            '.size-base',
+          ]);
       } finally {
         fs.rmSync(root, {recursive: true, force: true});
       }

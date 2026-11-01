@@ -25,9 +25,9 @@
  *                                        CI: write the API changes; always exits 0
  *
  * The merge base's report for each package comes from, best first: its built
- * surface (`--base-surface`); this build, when the package's directory is
- * unchanged since `--base` and the surface lacks it (a merge base CI built
- * without that package); the report committed at `--base`.
+ * surface (`--base-surface`); this build, when the surface lacks it (a merge
+ * base CI built without that package) and neither its directory nor any of
+ * SHARED_INPUTS changed since `--base`; the report committed at `--base`.
  */
 
 import {execFileSync} from 'node:child_process';
@@ -144,13 +144,28 @@ function showAt(ref, file) {
   }
 }
 
-/** Whether `dir` is the same at `ref` as in this checkout's HEAD. */
+/**
+ * What every report also depends on: themes get their stylesheets from Core
+ * through the CLI, and every report reads the CLI's theming targets and the
+ * lint rule's public attributes.
+ */
+export const SHARED_INPUTS = [
+  'packages/core',
+  'packages/cli',
+  'internal/eslint-plugin-astryx/no-raw-private-attribute.js',
+];
+
+/** Whether a package's report inputs are the same at `ref` as at HEAD. */
 function unchangedSince(ref, dir) {
   try {
-    execFileSync('git', ['diff', '--quiet', ref, 'HEAD', '--', dir], {
-      cwd: REPO_ROOT,
-      stdio: 'ignore',
-    });
+    execFileSync(
+      'git',
+      ['diff', '--quiet', ref, 'HEAD', '--', dir, ...SHARED_INPUTS],
+      {
+        cwd: REPO_ROOT,
+        stdio: 'ignore',
+      },
+    );
     return true;
   } catch {
     return false;
