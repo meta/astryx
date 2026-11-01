@@ -15,6 +15,8 @@ After:
 ```tsx
 <TextInput
   label="Name"
+  value={name}
+  onChange={setName}
   status={{type: 'error', message: 'Required'}}
   statusVariant="tooltip"
 />
