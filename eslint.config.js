@@ -11,6 +11,7 @@ import reactCompiler from 'eslint-plugin-react-compiler';
 import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
 import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
+import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
 
 /* global process */
 
@@ -54,6 +55,19 @@ const nullishGuardBaseline = JSON.parse(
     path.join(
       import.meta.dirname,
       'internal/eslint-plugin-astryx/no-nullish-jsx-guard.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Private `data-astryx-*` attributes written by hand before
+// `@astryx/no-raw-private-attribute` arrived, by repo-relative file, once per
+// site. The list only shrinks.
+const privateAttributeBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.json',
     ),
     'utf8',
   ),
@@ -913,6 +927,28 @@ export default defineConfig(
       '@astryx/no-nullish-jsx-guard': [
         reactSeverity,
         {baseline: nullishGuardBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A private `data-astryx-*` attribute is written once, in its owner module
+  // under packages/<package>/src/privateAttributes, which exports ready-made
+  // styles, setter props and readers (`architecture:public-component-api`
+  // INV23, which also lists the public attributes the rule allows). The
+  // hand-written sites that predate this block are listed in the baseline,
+  // once per site, and that many stay allowed until they move into an owner
+  // module; one more is reported (an error in strict mode, so a pull request
+  // that adds one fails lint, while main stays green). Tests are out of scope:
+  // they assert the DOM a component renders.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-raw-private-attribute': [
+        reactSeverity,
+        {baseline: privateAttributeBaseline, root: import.meta.dirname},
       ],
     },
   },

@@ -245,7 +245,9 @@ async function reconcileSpecOwnerGate({
     return !(await restoreNewerStatus(headSha));
   }
 
-  async function removeLabel(name) {
+  async function removeLabel(name, pr = null) {
+    // A pull request read in this run that lacks the label needs no call.
+    if (pr && !(pr.labels ?? []).some(label => label?.name === name)) return;
     try {
       await github.rest.issues.removeLabel({
         owner,
@@ -499,29 +501,11 @@ async function reconcileSpecOwnerGate({
   async function fetchSnapshot() {
     const before = await getPullRequest();
     const headSha = before.head.sha;
-    const [files, reviews, comments, timeline, statuses] = await Promise.all([
+    const [files, statuses] = await Promise.all([
       github.paginate(github.rest.pulls.listFiles, {
         owner,
         repo,
         pull_number: pullNumber,
-        per_page: 100,
-      }),
-      github.paginate(github.rest.pulls.listReviews, {
-        owner,
-        repo,
-        pull_number: pullNumber,
-        per_page: 100,
-      }),
-      github.paginate(github.rest.issues.listComments, {
-        owner,
-        repo,
-        issue_number: pullNumber,
-        per_page: 100,
-      }),
-      github.paginate(github.rest.issues.listEventsForTimeline, {
-        owner,
-        repo,
-        issue_number: pullNumber,
         per_page: 100,
       }),
       listStatuses(headSha),
@@ -530,6 +514,21 @@ async function reconcileSpecOwnerGate({
     if (after.head.sha !== headSha) return null;
 
     const scope = classifyChanges(files, {expectedCount: after.changed_files});
+    // Owner reviews, commands and dismissals only decide a change to
+    // knowledge records; every other pull request skips those reads, which
+    // spend the repository's shared API budget on each event. The head is
+    // confirmed again after them, below.
+    const list = (method, target) =>
+      scope.touchesKnowledgeRecords
+        ? github.paginate(method, {owner, repo, ...target, per_page: 100})
+        : Promise.resolve([]);
+    const [reviews, comments, timeline] = await Promise.all([
+      list(github.rest.pulls.listReviews, {pull_number: pullNumber}),
+      list(github.rest.issues.listComments, {issue_number: pullNumber}),
+      list(github.rest.issues.listEventsForTimeline, {
+        issue_number: pullNumber,
+      }),
+    ]);
     const knowledgeChanges = files.filter(
       file =>
         scope.complete &&
@@ -627,7 +626,7 @@ async function reconcileSpecOwnerGate({
       : null;
 
   if (!scope.touchesKnowledgeRecords) {
-    await removeLabel(env.REVIEW_LABEL);
+    await removeLabel(env.REVIEW_LABEL, pr);
     await setFinalStatus(
       initialHead,
       'success',

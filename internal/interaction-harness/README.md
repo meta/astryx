@@ -50,7 +50,7 @@ committed: a pull request links or attaches it.
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                             |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
-| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                                                                       |
+| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).                |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`.                                                |
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event): PNG contact sheet + JSON trace.                                                                                                                                      |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
@@ -257,7 +257,7 @@ in all, and lists each retake under `recaptures` in the trace.
 |                                                        | Chromium 149                                                                                                           | WebKit 26.5 (Linux build)                                                                                                                          |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Trusted touch + pointer events, multi-touch            | yes                                                                                                                    | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                |
-| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; real-time pacing keeps velocities within ~1 ms                                                                             |
+| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner, but a CPU-starved one sends some steps late, then back to back     |
 | Sub-pixel touch positions                              | yes                                                                                                                    | no: integer CSS px                                                                                                                                 |
 | Native scroll, fling, pinch-zoom from injected touches | yes                                                                                                                    | no                                                                                                                                                 |
 | Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                              |
@@ -290,8 +290,11 @@ steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
 listener received it (`wheelArrivals`). Two things can split a run past
 `maxGapMs`. When a step reached the page within one frame of its own wheel
-listeners finishing the step before, those listeners held it back: the burst
-throws `WheelPageStallError`, the page split the gesture, and the proof fails.
+listeners finishing the step before, and the gap is more than a frame wider
+than the harness's own spacing of those sends, those listeners held it back:
+the burst throws `WheelPageStallError`, the page split the gesture, and the
+proof fails. A page can only widen a gap, so one no wider than the send
+spacing is the dispatch's even when a starved renderer also held the step.
 Otherwise the dispatch stalled before the page (a loaded runner) and it throws
 `WheelPacingError` with the gaps. Wrap such a
 proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on

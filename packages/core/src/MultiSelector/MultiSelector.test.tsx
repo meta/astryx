@@ -20,6 +20,7 @@ import {
 } from 'vitest';
 import {
   act,
+  cleanup,
   render,
   screen,
   fireEvent,
@@ -34,6 +35,7 @@ import {
   type MultiSelectorChange,
 } from './MultiSelector';
 import {useRef, useState} from 'react';
+import {createPortal} from 'react-dom';
 import {Dialog} from '../Dialog/Dialog';
 import {Icon} from '../Icon';
 import {InternationalizationProvider} from '../i18n';
@@ -4580,6 +4582,67 @@ describe('MultiSelector option actions (grid)', () => {
     expect(trigger).toHaveAttribute('aria-activedescendant', actionCell.id);
     for (const token of ringClasses) {
       expect(actionCell).toHaveClass(token);
+    }
+  });
+
+  // A caller-rendered trigger in a same-origin iframe reads the iframe's last
+  // input, as the built-in trigger does: after a click on the page and keys
+  // in the iframe, the highlighted action cell takes the ring.
+  it('rings the action cell after keyboard input in the iframe a caller-rendered trigger lives in', () => {
+    const ring = stylex.create({
+      active: {
+        outlineWidth: focusVars['--focus-outline-width'],
+        outlineStyle: focusVars['--focus-outline-style'],
+        outlineColor: focusVars['--focus-outline-color'],
+        outlineOffset: focusVars['--focus-outline-offset'],
+      },
+    });
+    const ringClasses = stylex
+      .props(ring.active)
+      .className!.split(' ')
+      .filter(token => /^x[a-z0-9]+$/.test(token));
+    const frame = document.createElement('iframe');
+    document.body.appendChild(frame);
+    const frameDocument = frame.contentDocument!;
+    // The test setup's popover stand-ins, on the second window's prototype.
+    const {prototype} = frameDocument.defaultView!.HTMLElement;
+    prototype.showPopover = HTMLElement.prototype.showPopover;
+    prototype.hidePopover = HTMLElement.prototype.hidePopover;
+    prototype.togglePopover = HTMLElement.prototype.togglePopover;
+    try {
+      render(
+        createPortal(
+          <MultiSelector
+            label="Labels"
+            options={OPTIONS}
+            value={[]}
+            onChange={() => {}}
+            renderTrigger={props => (
+              <button type="button" {...props}>
+                Pick labels
+              </button>
+            )}
+          />,
+          frameDocument.body,
+        ),
+      );
+      const frameScreen = within(frameDocument.body);
+      const opener = frameScreen.getByRole('button', {name: 'Pick labels'});
+      fireEvent.click(opener);
+      // The page saw a pointer; the iframe sees the keys.
+      document.dispatchEvent(new Event('pointerdown'));
+      // With a caller-rendered trigger the open grid holds focus and the keys.
+      const grid = within(frameDocument.documentElement).getByRole('grid', h);
+      fireEvent.keyDown(grid, {key: 'ArrowRight'});
+      const bug = within(grid).getByRole('row', {name: 'Bug', ...h});
+      const actionCell = bug.children[1] as HTMLElement;
+      expect(grid).toHaveAttribute('aria-activedescendant', actionCell.id);
+      for (const token of ringClasses) {
+        expect(actionCell).toHaveClass(token);
+      }
+    } finally {
+      cleanup();
+      frame.remove();
     }
   });
 
