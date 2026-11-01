@@ -107,6 +107,39 @@ describe('duration-balanced Node legs', () => {
     }
   });
 
+  it('runs a new test file that has no recorded time in exactly one leg', async () => {
+    const added = 'packages/cli/a-brand-new.test.mjs';
+    expect(recorded[added]).toBeUndefined();
+    const node = [...slowest.slice(0, 20), added].map(file => ({
+      project: {name: 'node'},
+      moduleId: path.join(ROOT, file),
+    }));
+    const legs = [];
+    for (let index = 1; index <= 6; index += 1) {
+      const sequencer = new DurationShardSequencer({
+        config: {root: ROOT, shard: {index, count: 6}},
+      });
+      legs.push((await sequencer.shard(node)).map(item => item.moduleId));
+    }
+    expect(
+      legs.filter(leg => leg.includes(path.join(ROOT, added))),
+    ).toHaveLength(1);
+    expect(legs.flat().sort()).toEqual(node.map(item => item.moduleId).sort());
+  });
+
+  it('documents how to regenerate the recorded times', () => {
+    const {$comment} = JSON.parse(fs.readFileSync(DURATIONS, 'utf8'));
+    expect($comment).toContain(
+      'node scripts/vitest-shard-sequencer.mjs record',
+    );
+    expect(
+      fs.readFileSync(
+        path.join(ROOT, 'scripts/vitest-shard-sequencer.mjs'),
+        'utf8',
+      ),
+    ).toContain("command !== 'record'");
+  });
+
   it('is the sequencer every Vitest run uses', () => {
     const config = fs.readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf8');
     expect(config).toContain(
