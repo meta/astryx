@@ -771,10 +771,10 @@ CI can still pass ninety in four bounded ways, the first three rare:
 - A run starts when the GitHub API cannot be read, a rate limit included. It is
   over by at most its own jobs.
 - A waiting run's own waiting job starts before it finds room; its Storybook
-  build starts only once there is room for it. With at most ten pull-request
-  runs waiting, CI is over by at most ten slim waiting jobs, plus one for a
-  waiting `main` run, for at most a wait (twelve minutes for a pull request,
-  fifteen for `main`).
+  build starts only once there is room for it. CI is over by at most one slim
+  job per waiting run: at most ten for pull requests, plus one for each waiting
+  merge-queue entry and `main` run, which are never turned away, for at most a
+  wait (twelve minutes for a pull request, fifteen for `main`).
 
 Rejected: a fixed reserve for `main` (it left about half the ceiling idle and
 stalled the pull-request queue); starting `main`'s checks at once (a burst would
