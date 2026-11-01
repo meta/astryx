@@ -87,6 +87,21 @@ private func surface(
 }
 
 @MainActor
+@Test func aDisabledProminentBarButtonDrawsAsABarItemInItsVariantsColor() {
+  // FR11: disabled keeps core's meaning in a bar, a dimmed label with no fill
+  // or press response, and the label keeps primary's accent.
+  let accent = rgba(Theme.default.light.color.accent)
+  let drawn = Pixels(barStyled(surface: .glass(.barProminent(.accent)), isDimmed: true))
+  #expect(drawn.at(drawn.width / 2, 1)[3] == 0)
+  // Pixels are premultiplied: a glyph pixel's color over its alpha is the
+  // label's color, and half opacity caps its alpha.
+  #expect(drawn.contains { p in
+    p[3] > 40 && (1...2).allSatisfy { abs(p[$0] * 255 / p[3] - accent[$0]) <= 24 }
+  })
+  #expect(!drawn.contains { $0[3] > 140 })
+}
+
+@MainActor
 @Test func aSolidFallbackDrawsTheFillWithAnEmphasizedEdge() {
   let tokens = Theme.default.light
   let solid = Pixels(barStyled(surface: .solid(.surface, inBar: false)))
@@ -108,7 +123,7 @@ private func surface(
 /// A Button's style drawn alone at a given surface.
 @MainActor
 private func barStyled(
-  surface: ButtonSurface, background: Color? = nil
+  surface: ButtonSurface, background: Color? = nil, isDimmed: Bool = false
 ) -> some View {
   let astryx = EnvironmentValues().astryx
   return SwiftUI.Button("Share") {}
@@ -116,7 +131,7 @@ private func barStyled(
       AstryxButtonStyle(
         astryx: astryx, height: astryx.tokens.size.elementMd, fillsWidth: false,
         foreground: astryx.tokens.color.textPrimary,
-        background: background ?? astryx.tokens.color.neutral, shadow: [], surface: surface
+        background: background ?? astryx.tokens.color.neutral, shadow: [], isDimmed: isDimmed, surface: surface
       )
     )
     .fixedSize()
