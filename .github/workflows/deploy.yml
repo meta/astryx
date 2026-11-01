@@ -167,15 +167,16 @@ jobs:
 
       - run: pnpm build
 
-      # A pull request measures its merge base's component sizes from this
-      # build instead of building the base again (ci.yml size-base).
-      - name: Keep this commit's package builds for PR size reports
+      # A pull request reads its merge base's component sizes from this record
+      # instead of building the base (ci.yml build-storybook).
+      - name: Record component sizes
+        run: node .github/scripts/analyze-pr.js --main-record --output component-size.json
+
+      - name: Keep this commit's component sizes for PR size reports
         uses: actions/upload-artifact@v7
         with:
-          name: dists-main-${{ needs.main-commit.outputs.sha }}
-          path: |
-            packages/*/dist/
-            packages/themes/*/dist/
+          name: component-size-main-${{ needs.main-commit.outputs.sha }}
+          path: component-size.json
           retention-days: 14
 
       # A pull request compares its published package sizes with its merge

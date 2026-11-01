@@ -45,10 +45,7 @@ import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {joinAriaIDs} from '../utils/inputAria';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {
   type FieldInputBaseProps,
@@ -560,16 +557,14 @@ export function Slider({ref, ...props}: SliderProps) {
     null,
   );
 
-  useInteractionModalityTracking();
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
 
   const handleThumbFocus = useCallback(
     (thumbIndex: number, _e: FocusEvent<HTMLDivElement>) => {
       // A focused disabled thumb still shows the ring (spec:AST-085 FR6).
-      setKeyboardFocusThumb(
-        getInteractionModality() === 'keyboard' ? thumbIndex : null,
-      );
+      setKeyboardFocusThumb(readModality() === 'keyboard' ? thumbIndex : null);
     },
-    [],
+    [readModality],
   );
 
   const handleThumbBlur = useCallback((_e: FocusEvent<HTMLDivElement>) => {
@@ -834,6 +829,14 @@ export function Slider({ref, ...props}: SliderProps) {
         pressedThumbIndex >= 0 ? pressedThumbIndex : getClosestThumb(newVal);
       const parks =
         isCoincident && (pressedThumbIndex >= 0 || newVal === values[0]);
+      // Until the first movement, a parked press is held by the upper thumb,
+      // the one drawn over the lower one, wherever it landed: on the thumbs
+      // (which the upper thumb covers) or on their shared value elsewhere,
+      // such as its mark label. So its pressed paint shows, and a press that
+      // never moves leaves focus on the same thumb.
+      if (parks && pressedThumbIndex < 0) {
+        thumbIndex = 1;
+      }
       // The first movement is measured from the pointer itself, not from a
       // mark it pressed (a wide label sits away from its mark's value).
       coincidentDragRef.current = parks
@@ -967,7 +970,7 @@ export function Slider({ref, ...props}: SliderProps) {
         !e.metaKey &&
         !e.altKey &&
         !e.ctrlKey &&
-        getInteractionModality() === 'keyboard'
+        readModality() === 'keyboard'
       ) {
         setKeyboardFocusThumb(thumbIndex);
       }
@@ -1047,6 +1050,7 @@ export function Slider({ref, ...props}: SliderProps) {
       minStepsBetweenThumbs,
       updateValue,
       fireChangeEnd,
+      readModality,
     ],
   );
 
@@ -1266,6 +1270,7 @@ export function Slider({ref, ...props}: SliderProps) {
           ref={useMergedRefs(
             isRange ? ref : undefined,
             trackRef,
+            modalityRef,
             disabledMessageTooltip.ref,
           )}
           {...(isRange

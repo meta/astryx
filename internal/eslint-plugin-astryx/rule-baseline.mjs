@@ -6,12 +6,44 @@
  * violations, per repo-relative file, that existed when the repository config
  * began enforcing it. The rule takes the baseline as `{baseline, root}` and
  * reports only what it does not list. Shared by each rule's
- * `<rule>.baseline.mjs` so the write and `--check` flows stay one.
+ * `<rule>.baseline.mjs` so the write and `--check` flows stay one, and by the
+ * rules that spend a counted baseline (`baselineAllowance`).
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import {ESLint} from 'eslint';
+
+/**
+ * The allowance a baselined rule spends as it reports, for the file being
+ * linted. The rule's options are `{baseline, root}`: `baseline` maps a file,
+ * relative to `root` (the repository root; default: the directory ESLint runs
+ * from), to its entries. Each entry allows as many reports as it is listed;
+ * the next one is reported. Returns `isAllowed(entry)`, which spends one
+ * allowance when one is left. Shared by every rule that takes a counted
+ * baseline, so matching stays one implementation.
+ *
+ * @param {import('eslint').Rule.RuleContext} context
+ * @returns {(entry: string) => boolean}
+ */
+export function baselineAllowance(context) {
+  const options = context.options[0] ?? {};
+  const root = options.root ?? context.cwd;
+  const filename = context.filename ?? context.getFilename();
+  const relative = path.relative(root, filename).split(path.sep).join('/');
+  const left = new Map();
+  for (const entry of options.baseline?.[relative] ?? []) {
+    left.set(entry, (left.get(entry) ?? 0) + 1);
+  }
+  return entry => {
+    const count = left.get(entry) ?? 0;
+    if (count === 0) {
+      return false;
+    }
+    left.set(entry, count - 1);
+    return true;
+  };
+}
 
 /**
  * Lint `targets` with the repository config and an empty baseline, so every

@@ -679,35 +679,55 @@ test('a finished animation leaves the element once the curve ends', async ({
   page,
 }) => {
   await open(page);
+  // Counted in frames, on the document timeline: an animation's time moves
+  // only at a frame, so neither the animator nor this loop can see the end
+  // between two frames, and under load WebKit's frames come up to 114 ms
+  // apart.
   const result = await page.evaluate(
-    async spring =>
-      new Promise<{curveEnd: number; leftAt: number}>(resolve => {
-        const start = performance.now();
-        window.animator.animate({x: 120}, {spring});
-        const box = document.getElementById('box') as HTMLElement;
-        const solved = Motion.solveSpring(Motion.toSpring(spring), {
-          from: 0,
-          to: 120,
-        });
-        const curveEnd = solved.settleTime(0.05) * 1000;
-        const tick = () => {
-          if (box.getAnimations().length === 0) {
-            resolve({curveEnd, leftAt: performance.now() - start});
-          } else {
+    async spring => {
+      const box = document.getElementById('box') as HTMLElement;
+      const handle = window.animator.animate({x: 120}, {spring});
+      const solved = Motion.solveSpring(Motion.toSpring(spring), {
+        from: 0,
+        to: 120,
+      });
+      // The curve ends this long after the browser starts it.
+      const end = (await handle.started) + solved.settleTime(0.05) * 1000;
+      // Each frame's time, and whether the animation is still on the element.
+      const frames: {time: number; present: boolean}[] = [];
+      await new Promise<void>(resolve => {
+        const tick = (time: number) => {
+          const present = box.getAnimations().length > 0;
+          frames.push({time, present});
+          if (present) {
             requestAnimationFrame(tick);
+          } else {
+            resolve();
           }
         };
         requestAnimationFrame(tick);
-      }),
+      });
+      return {end, frames};
+    },
     {response: 0.3, dampingRatio: 1},
   );
   test.info().annotations.push({
     type: 'animation lifetime',
-    description: JSON.stringify(result),
+    description: JSON.stringify({
+      end: result.end,
+      frames: result.frames.map(f => [
+        Math.round(f.time - result.end),
+        f.present,
+      ]),
+    }),
   });
-  // Gone within a couple of frames of the curve's end, not after the hold.
-  expect(result.leftAt).toBeGreaterThanOrEqual(result.curveEnd - 1);
-  expect(result.leftAt).toBeLessThan(result.curveEnd + 100);
+  const before = result.frames.filter(f => f.time < result.end);
+  const after = result.frames.filter(f => f.time >= result.end);
+  // On every frame before the curve's end, it is still there.
+  expect(before.every(f => f.present)).toBe(true);
+  // Gone by the second frame at or after it, not after the hold.
+  expect(after.filter(f => f.present).length).toBeLessThanOrEqual(1);
+  expect(after.at(-1)?.present).toBe(false);
 });
 
 test('a fade-in on an element its stylesheet hides stays visible once it retires', async ({

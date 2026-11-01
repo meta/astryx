@@ -73,8 +73,8 @@ they are separately named.
 - Define compatibility semantics or release-pair delta classes. Those belong to
   [`spec:AST-017`](../AST-017/spec.md); this record routes their checks and owns the
   exact-main release-check execution boundary.
-- Remove required check names (other than retiring the `spec-owner-approval`
-  mirror, FR15), branch protection, merge-queue coverage, or owner approval of
+- Remove required check names (other than dropping
+  `spec-owner-approval` from them, FR15), branch protection, merge-queue coverage, or owner approval of
   spec content.
 - Infer safety from file extensions, directory names, or the absence of a known
   risky path.
@@ -171,7 +171,63 @@ they are separately named.
   owner includes its production CSS-layer cascade behavior. Theme-family
   compilation remains `theme-build` and does not become Build merely because both
   behaviors concern CSS.
-- **FR12 — Visual regression has one shared pull-request workflow.** Every visual-regression test from every surface MUST use the existing Storybook framework and the single shared owner in `.github/workflows/ci.yml` (`pr-visual`). That workflow MAY use multiple jobs, steps, and artifacts, but visual capture and regression comparison MUST NOT run in another workflow, including scheduled, post-CI, post-merge, or manual replacement owners. Publication of the canonical run's reports is not another test owner: it MUST consume that run's artifacts without recapturing or recomparing pixels. Explicit full-plan baseline capture MUST remain in `ci.yml`; it is a maintenance operation, not a release gate. A reviewed baseline update MUST consume that capture, update the versioned repository baseline through a normal pull request, and remain separate from automatic merge or release work. GitHub Pages MUST NOT be baseline or report storage. Release evidence MUST come from an explicit `operation=release-check` `workflow_dispatch` in this same workflow, dispatched from `main` and bound to its exact event SHA. It MUST run the canonical `pr-visual` (**Stable visual regression**), `pr-a11y`, and `pr-rtl` owners with full scope: the closed stable visual plan and unfiltered accessibility/RTL component rosters. Changed-file, focused, smoke, and no-op paths MUST NOT narrow release checks. On a pull request, the visual (`visual-scout`, `pr-visual`), accessibility (`pr-a11y` with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST each run only when the pull request carries that suite's label at the event: `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by someone with write, maintain or admin access, and a lookup that cannot confirm that runs nothing. A label runs only its own suite; a pull request update without one runs none of them, and no required context depends on them. An opted-in PR's a11y MUST remain scoped to changed components plus fast interaction guards; full a11y sweeps, whole-repository spec-test contracts, and their evidence uploads MUST run only for `release-check` in this workflow. Missing, failed, cancelled, or skipped required work MUST block the release-check join. The request and join MUST verify that the checked SHA is the dispatch event SHA and remains an ancestor of current remote `main` at the start and completion of the run. Release callers MUST fetch and recheck that same ancestry immediately before creating the release branch. Later fast-forward movement of `main` does not invalidate that receipt: the release MUST cut from the exact checked SHA, and later commits remain next-release input. A rewrite or divergence that removes the checked SHA from current `main` history invalidates the receipt. This replaces constituent-PR-only release gating, not the canonical checks' existing finding policies. A main-push workflow MUST dispatch that release-check for every push to `main`, bound to the pushed commit; the dispatched checks share one concurrency group that cancels a running check only for a release re-check (FR23): at most one runs and one waits, and a burst of pushes is checked once, at its newest commit. A commit `main` has already moved past leaves its check to the newer push. That release-check run is main's result, and a failure is fixed forward by an atomic pull request. Main's own fast checks still run for every push. Release checks MUST NOT capture baseline candidates, publish baselines, or use a separate daily workflow or retroactive acceptance status. Deployment, accessibility, RTL, and vibe evidence MAY retain their workflows and artifacts when they do not duplicate visual regression. A new or existing surface, component, package, theme family, or visual suite MUST join the canonical workflow. A repository guard MUST reject independent visual owners while preserving legitimate non-visual artifact use.
+- **FR12 — Visual regression has one shared pull-request workflow.** Every
+  visual-regression test from every surface MUST use the existing Storybook
+  framework and the single shared owner in `.github/workflows/ci.yml`
+  (`pr-visual`). That workflow MAY use multiple jobs, steps, and artifacts, but
+  visual capture and regression comparison MUST NOT run in another workflow,
+  including scheduled, post-CI, post-merge, or manual replacement owners.
+  Publication of the canonical run's reports is not another test owner: it MUST
+  consume that run's artifacts without recapturing or recomparing pixels.
+  Explicit full-plan baseline capture MUST remain in `ci.yml`; it is a maintenance
+  operation, not a release gate. A reviewed baseline update MUST consume that
+  capture, update the versioned repository baseline through a normal pull request,
+  and remain separate from automatic merge or release work. GitHub Pages MUST NOT
+  be baseline or report storage.
+  Release evidence MUST come from an explicit `operation=release-check`
+  `workflow_dispatch` in this same workflow, dispatched from `main` and bound to
+  its exact event SHA. It MUST run the canonical `pr-visual` (**Stable visual
+  regression**), `pr-a11y`, and `pr-rtl` owners with full scope: the closed stable
+  visual plan and unfiltered accessibility/RTL component rosters. Changed-file,
+  focused, smoke, and no-op paths MUST NOT narrow release checks. On a pull
+  request, the visual (`visual-scout`, `pr-visual`), accessibility (`pr-a11y`
+  with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST each
+  run only when the pull request carries that suite's label at the event:
+  `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
+  someone with write, maintain or admin access, and a lookup that cannot
+  confirm that runs nothing. A label runs only its own suite; a pull request
+  update without one runs none of them, and no required context depends on
+  them. An opted-in PR's a11y MUST remain scoped to changed components
+  plus fast interaction guards; full a11y
+  sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
+  run only for `release-check` in this workflow. Missing,
+  failed, cancelled, or skipped required work MUST block the release-check join.
+  The request and join MUST verify that the checked SHA is the dispatch event SHA
+  and remains an ancestor of current remote `main` at the start and completion of
+  the run. Release callers MUST fetch and recheck that same ancestry immediately
+  before creating the release branch. Later fast-forward movement of `main` does
+  not invalidate that receipt: the release MUST cut from the exact checked SHA, and
+  later commits remain next-release input. A rewrite or divergence that removes
+  the checked SHA from current `main` history invalidates the receipt.
+  This replaces constituent-PR-only release gating, not the canonical checks'
+  existing finding policies. Main's heavy-lane workflow MUST dispatch that
+  release-check for `main`'s tip, bound to that commit, on a push to `main` and
+  on a quarter-hourly schedule, unless the tip already has one or one was
+  dispatched in the last 55 minutes (DEC-11). A check replaced while waiting,
+  which never ran, does not count. A check covers every merge up to its commit,
+  so every merge is covered by the next one. The dispatched checks share one
+  concurrency group that cancels a running check only for a release re-check
+  (FR23): at most one runs and one waits. A push whose commit `main` has already moved past leaves its check
+  to the newer push. That release-check run is main's result, and a failure is
+  fixed forward by an atomic pull request. Main's own fast
+  checks still run for every push. Release checks MUST NOT capture
+  baseline candidates, publish baselines, or use a separate daily workflow or
+  retroactive acceptance status.
+  Deployment, accessibility, RTL, and vibe evidence MAY retain their workflows
+  and artifacts when they do not duplicate visual regression. A new or existing
+  surface, component, package, theme family, or visual suite MUST join the
+  canonical workflow. A repository guard MUST reject independent visual owners
+  while preserving legitimate non-visual artifact use.
 - **FR13 — Broad CI on a pull request runs what the change reaches.** On a
   `pull_request` event whose trusted classification finds no shared
   infrastructure, broad CI keeps every required context and every owner FR12
@@ -208,8 +264,7 @@ they are separately named.
   relevant on that trigger (`paths:`), and those paths name what the workflow
   reads or runs, never everything; a merge-group entry, which cannot filter by
   path, keeps running. A workflow that reports a required context (`build`,
-  `test`, `docsite-test`, `lint`, `review-required`, and the
-  `spec-owner-approval` mirror while it is required, FR15)
+  `test`, `docsite-test`, `lint`, `review-required`)
   starts on every pull request and is never path-filtered: the trusted
   classifier's positive surfaces (FR1–FR5) choose the work inside it, and a job
   whose suite does not apply reports success without running it (FR7). A push
@@ -222,8 +277,9 @@ they are separately named.
   review workflow (`review-signal.yml`) and `review-clear.yml` publish
   `review-required`, which carries both the code review and spec-owner approval
   (`architecture:knowledge-contracts` DEC-14); no other workflow publishes a
-  review or spec context. `spec-owner-approval` is published only as a mirror of
-  the spec half while branch protection still requires it. The spec-owner job
+  review or spec context. `spec-owner-approval` carries the spec-owner job's decision,
+  which the other writers of `review-required` read; it is not a required
+  check. The spec-owner job
   evaluates pull-request, review, and owner-command comment events, runs
   without cancel-in-progress, and publishes a terminal state for the head it
   read. It skips fork review events, whose tokens are read-only; fork approvals
@@ -447,6 +503,8 @@ retroactive status as release evidence.
 
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
+**Superseded in part by:** `spec:AST-030/DEC-11` (main is checked about hourly,
+not on every push)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
@@ -507,11 +565,32 @@ required context (its check would never report).
 The spec-owner gate and the review gate read the same pull-request events, so
 they run in one workflow, and a contributor reads one review gate:
 `review-required` names whichever review is still missing, code first.
-`spec-owner-approval` remains a mirror until branch protection stops requiring
-it, so the merge rules change only when an administrator removes it.
+`spec-owner-approval` stays as the spec-owner job's decision record, which the
+other writers read; it is not a required check, so a contributor waits on
+`review-required` alone.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+### DEC-11 — Main's release-check runs about once an hour
+
+**Reference:** `spec:AST-030/DEC-11`
+**Decider:** `cixzhang`
+
+Dispatched on every push, main's release-check ran back to back through busy
+hours, about 65 full runs a day of roughly 165 runner-minutes each. A check
+covers every merge up to its commit, so one check about an hour keeps every
+merge covered with about a third of the runs. A push after a quiet hour is
+checked at once; in a burst, the next check starts at most 55 minutes after
+the last one, plus up to 15 minutes for the schedule to notice, so a failing
+merge is reported within about two hours of landing instead of about one and a
+quarter. A release cut dispatches its own exact-commit check, which this does
+not affect.
+
+Rejected: waiting for main to be quiet for some minutes (busy hours never go
+quiet, so the check would starve); holding a runner to wait out each push (it
+is billed while it waits); a daily check (main's result would lag a whole
+day).
 
 ### DEC-17 — Main's full runs spend runner-minutes to finish in minutes
 
