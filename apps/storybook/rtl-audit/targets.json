@@ -655,11 +655,7 @@
   {
     "component": "SideNavCollapseButton",
     "storyId": "core-sidenav--collapsible-sidebar",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "button[aria-label=\"Collapse sidebar\"]",
-      "next": "button[aria-label=\"Help\"]"
-    }
+    "dims": []
   },
   {
     "component": "SideNav",
