@@ -16,6 +16,7 @@ import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {UIKIT_GESTURES} from '../../motion/uikit/gestures';
 import {createHarness, RecordingConsumer} from './harness';
+import {internals} from '../recognizerInternals';
 
 const INTERVAL = UIKIT_GESTURES.tap.maximumIntervalBetweenTaps.value;
 
@@ -31,13 +32,38 @@ describe('conflict matrix', () => {
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(80);
     expect(single.state).toBe('possible');
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
     h.advance(80 + INTERVAL);
     expect(h.log).toEqual([
       `double:failed@${80 + INTERVAL}`,
       `single:ended@${80 + INTERVAL}`,
       `single:possible@${80 + INTERVAL}`,
       `double:possible@${80 + INTERVAL}`,
+    ]);
+  });
+
+  it('a requirement stopped inside deferResolution leaves the recognition waiting on it to a pass a microtask later', async () => {
+    const h = createHarness();
+    const single = new TapGestureRecognizer({name: 'single'});
+    const double = new TapGestureRecognizer({
+      name: 'double',
+      numberOfTapsRequired: 2,
+    });
+    single.requireToFail(double);
+    h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
+    h.finger(1).up(80);
+    // Code outside input (a React Effect) turns the double tap off: it fails
+    // at once, at the last event's time, and the single tap waiting on it
+    // resolves only in the next pass.
+    h.arena.deferResolution(() => double.setEnabled(false));
+    expect(h.log).toEqual(['double:failed@80']);
+    expect(internals(single).pending).toBe('ended');
+    await Promise.resolve();
+    expect(h.log).toEqual([
+      'double:failed@80',
+      'single:ended@80',
+      'single:possible@80',
+      'double:possible@80',
     ]);
   });
 
@@ -95,7 +121,7 @@ describe('conflict matrix', () => {
     });
     h.finger(1).down(0, 0, 0, {recognizers: [single, double]});
     h.finger(1).up(50);
-    expect(single.pending).toBe('ended');
+    expect(internals(single).pending).toBe('ended');
   });
 });
 
