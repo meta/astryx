@@ -61,6 +61,7 @@ import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
   cancelNestedTouchPress,
+  hasInteractiveAncestor,
   PRESSABLE_CONTAINER_ATTRIBUTE,
   useClickableContainerProxy,
 } from '../hooks/useClickableContainer';
@@ -824,7 +825,13 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
+    if (
+      // React bubbles a click through a portal rendered from the row (a
+      // MoreMenu's menu in `endContent`), but its target is not in the row.
+      !e.currentTarget.contains(target) ||
+      // A nested control, native or role-based, owns the click.
+      hasInteractiveAncestor(target, e.currentTarget)
+    ) {
       return;
     }
     if (isLinkRow) {
