@@ -455,6 +455,62 @@
     }
   },
   {
+    "component": "Tab",
+    "storyId": "core-tablist--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab svg",
+      "next": ".astryx-tab span:text-is(\"Home\")"
+    }
+  },
+  {
+    "component": "TabMenu",
+    "storyId": "core-tablist--with-menu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab-menu span:text-is(\"More\")",
+      "next": ".astryx-tab-menu .astryx-icon"
+    }
+  },
+  {
+    "component": "SegmentedControlItem",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"radio\"] svg.astryx-icon",
+      "next": "[role=\"radio\"] span:text-is(\"Grid\")"
+    }
+  },
+  {
+    "component": "ToggleButtonGroup",
+    "storyId": "core-togglebutton--group-single",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"List view\"]",
+      "next": "button[aria-label=\"Grid view\"]"
+    }
+  },
+  {
+    "component": "TabList",
+    "storyId": "core-tablist--with-icons",
+    "dims": []
+  },
+  {
+    "component": "TabList",
+    "storyId": "core-tablist--with-menu",
+    "dims": []
+  },
+  {
+    "component": "SegmentedControl",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": []
+  },
+  {
+    "component": "ToggleButton",
+    "storyId": "core-togglebutton--group-single",
+    "dims": []
+  },
+  {
     "component": "Outline",
     "storyId": "core-outline--controlled",
     "dims": ["D2"],
@@ -616,6 +672,15 @@
     }
   },
   {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
     "component": "DrawerHeader",
     "storyId": "core-drawerheader--audit",
     "dims": ["D2"],
@@ -625,59 +690,34 @@
     }
   },
   {
-    "component": "Tab",
-    "storyId": "core-tablist--with-icons",
-    "dims": ["D2"],
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
     "selectors": {
-      "prev": ".astryx-tab svg",
-      "next": ".astryx-tab span:text-is(\"Home\")"
+      "subject": ".astryx-blockquote"
     }
   },
   {
-    "component": "TabMenu",
-    "storyId": "core-tablist--with-menu",
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-tab-menu span:text-is(\"More\")",
-      "next": ".astryx-tab-menu .astryx-icon"
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
     }
   },
   {
-    "component": "SegmentedControlItem",
-    "storyId": "core-segmentedcontrol--with-icons",
-    "dims": ["D2"],
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
+    "dims": ["D4"],
     "selectors": {
-      "prev": "[role=\"radio\"] svg.astryx-icon",
-      "next": "[role=\"radio\"] span:text-is(\"Grid\")"
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
     }
   },
   {
-    "component": "ToggleButtonGroup",
-    "storyId": "core-togglebutton--group-single",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "button[aria-label=\"List view\"]",
-      "next": "button[aria-label=\"Grid view\"]"
-    }
-  },
-  {
-    "component": "TabList",
-    "storyId": "core-tablist--with-icons",
-    "dims": []
-  },
-  {
-    "component": "TabList",
-    "storyId": "core-tablist--with-menu",
-    "dims": []
-  },
-  {
-    "component": "SegmentedControl",
-    "storyId": "core-segmentedcontrol--with-icons",
-    "dims": []
-  },
-  {
-    "component": "ToggleButton",
-    "storyId": "core-togglebutton--group-single",
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": []
   }
 ]
