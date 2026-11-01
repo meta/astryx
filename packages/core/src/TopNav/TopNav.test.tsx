@@ -9,6 +9,7 @@
  * SYNC: When TopNav components change, update tests to match new behavior
  */
 
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen, act} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
@@ -24,6 +25,7 @@ import {TopNavMegaMenuFeaturedCard} from './TopNavMegaMenuFeaturedCard';
 import {LinkProvider} from '../Link/LinkProvider';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import koreanCatalog from '../../locales/ko-KR.json';
+import {rtlStyles} from '../utils';
 
 function CustomLink({
   children,
@@ -820,6 +822,35 @@ describe('TopNavItem', () => {
       expect(screen.getByText("What's new")).toBeInTheDocument();
       const link = screen.getByRole('link', {name: /Read the announcement/});
       expect(link).toHaveAttribute('href', '/blog/v4');
+    });
+
+    // design:bidirectionality DR4: the arrow points toward the inline end, so
+    // it mirrors in RTL. jsdom does not apply compiled StyleX CSS, so this pins
+    // the structure the mirror relies on: the arrow sits in its own element
+    // carrying the shared rtlStyles.mirror, and the link name is unchanged.
+    it('wraps the link arrow in the shared RTL mirror', () => {
+      const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
+      const mirrorClasses = mirrorClassName?.split(' ') ?? [];
+      expect(mirrorClasses.length).toBeGreaterThan(0);
+      render(
+        <div dir="rtl">
+          <TopNavMegaMenuFeaturedCard
+            title="What's new"
+            linkLabel="Read the announcement"
+            linkHref="/blog/v4"
+          />
+        </div>,
+      );
+      const link = screen.getByRole('link', {
+        name: 'Read the announcement →',
+      });
+      const arrow = Array.from(link.querySelectorAll('span')).find(
+        span => span.textContent === '→',
+      );
+      expect(arrow).toBeDefined();
+      for (const className of mirrorClasses) {
+        expect(arrow).toHaveClass(className);
+      }
     });
   });
 });
