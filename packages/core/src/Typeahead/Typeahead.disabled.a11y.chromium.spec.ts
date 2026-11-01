@@ -33,7 +33,10 @@ for (const story of ['core-typeahead--disabled', 'core-tokenizer--disabled']) {
     );
     const input = page.getByRole('combobox');
     await input.waitFor();
-    await expect(input).not.toBeDisabled();
+    // Disabled through aria-disabled, not the native attribute, so it keeps
+    // its tab stop. Playwright's toBeDisabled counts aria-disabled too, so
+    // the native attribute is checked directly.
+    await expect(input).not.toHaveAttribute('disabled');
     await expect(input).toHaveAttribute('aria-disabled', 'true');
 
     await page.keyboard.press('Tab');
