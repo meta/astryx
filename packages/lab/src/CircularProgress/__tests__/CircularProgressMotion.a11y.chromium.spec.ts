@@ -24,6 +24,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {inPresentationOrder} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -304,12 +305,10 @@ test('a value change keeps moving while a script holds the main thread', async (
   // A lost acknowledgement stalls the screencast and thins the frames.
   expect(ackFailures).toEqual([]);
   // Chromium encodes each frame off its main thread and can send a slow one
-  // after the next: frames go by the swap timestamp each one carries, and a
-  // frame repeating one already kept goes. A frame that shows the arc behind
-  // an earlier one still has its own later timestamp, so it stays.
-  const presented = [...raw]
-    .sort((a, b) => a.t - b.t)
-    .filter((frame, i, ordered) => i === 0 || frame.t > ordered[i - 1].t);
+  // after the next: frames go by the swap timestamp each one carries. A frame
+  // that shows the arc behind an earlier one still has its own later
+  // timestamp, so it stays in place.
+  const presented = inPresentationOrder(raw);
   // Crop each frame to the ring, then read how far the arc reaches.
   const scratch = await page.context().newPage();
   let crops: string[];

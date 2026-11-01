@@ -164,12 +164,10 @@ async function startScreencast(page: Page) {
       // Chromium encodes each frame off its main thread and can send a slow
       // one after the next: on a loaded runner, the frame that applied a new
       // value arrived after the first frame that moved. Frames go by the
-      // swap timestamp each one carries, and a frame repeating one already
-      // kept goes; a frame that shows the fill behind an earlier one still
-      // has its own later timestamp, so it stays and fails the trace.
-      return inPresentationOrder(frames).filter(
-        (frame, i, ordered) => i === 0 || frame.t > ordered[i - 1].t,
-      );
+      // swap timestamp each one carries; a frame that shows the fill behind
+      // an earlier one still has its own later timestamp, so it stays in
+      // place and fails the trace.
+      return inPresentationOrder(frames);
     },
   };
 }
