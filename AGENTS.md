@@ -24,7 +24,8 @@ nested `AGENTS.md`.
   global baseline claims with `node scripts/review-global-baselines.mjs
 --authority-commit <base-sha> --review-head <head-sha> --triggers
 <comma-separated-triggers>`, then read
-  the component's `{Name}.spec.md` when one exists and any `module:*` records it
+  the component's `docs/specs/components/<ComponentRoot>/{Name}.spec.md` when
+  one exists and any `module:*` records it
   lists. Load global records before narrower owners, but resolve the direct
   component or family owner first when it governs the exact delta. A global
   route exposes only the listed claim; it never makes the whole record govern
