@@ -22,7 +22,7 @@
  * @position Browser fixture of presentedHitTesting.interaction.browser.spec.ts; test-only
  */
 
-import {createAnimator} from '../../../motion/animator';
+import {createMotionAnimator} from '../../../motion/animator';
 import {presentedOffsetOf} from '../../../motion/presentation';
 import {GestureHost} from '../../GestureHost';
 import {PanGestureRecognizer} from '../../PanGestureRecognizer';
@@ -101,7 +101,7 @@ const TRAVEL = 444;
  */
 const SPRING = {response: 6, dampingRatio: 1} as const;
 
-const animator = createAnimator(sheet);
+const animator = createMotionAnimator(sheet);
 const drawn = (target: Element): DOMRect =>
   Element.prototype.getBoundingClientRect.call(target);
 

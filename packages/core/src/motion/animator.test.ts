@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   animatorFor,
-  createAnimator,
+  createMotionAnimator,
   END_HOLD_MS,
   PROMOTION_LINGER_MS,
   type AnimatorOptions,
@@ -205,7 +205,7 @@ function setup({
 }: AnimatorOptions & {reduced?: boolean; coarse?: boolean} = {}) {
   stubMedia(reduced, coarse);
   const element = document.createElement('div');
-  const animator = createAnimator(element, {
+  const animator = createMotionAnimator(element, {
     now: () => clock,
     requestFrame,
     ...options,
@@ -1711,11 +1711,11 @@ describe('promotion: a compositing layer while it moves', () => {
         .mock.calls.filter(([read]) => read === node).length;
     const removed = document.createElement('div');
     document.body.append(removed);
-    createAnimator(removed, {now: () => clock, requestFrame});
+    createMotionAnimator(removed, {now: () => clock, requestFrame});
     removed.remove();
     const kept = document.createElement('div');
     document.body.append(kept);
-    createAnimator(kept, {now: () => clock, requestFrame});
+    createMotionAnimator(kept, {now: () => clock, requestFrame});
     await vi.advanceTimersByTimeAsync(0);
     expect(readsOf(removed)).toBe(0);
     // A node still in the document is read, once, in that task.
@@ -1729,7 +1729,7 @@ describe('promotion: a compositing layer while it moves', () => {
     stylesheet['will-change'] = 'transform, opacity';
     stubMedia(false, false);
     const element = document.createElement('div');
-    const animator = createAnimator(element, {
+    const animator = createMotionAnimator(element, {
       now: () => clock,
       requestFrame,
     });
@@ -2474,7 +2474,7 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = async (
-      animator: ReturnType<typeof createAnimator>,
+      animator: ReturnType<typeof createMotionAnimator>,
       start: number,
     ): Promise<number> => {
       // The plan lands by timer: step the clock to the landing.
@@ -3811,7 +3811,7 @@ describe('pseudoElement: a dialog\u2019s ::backdrop', () => {
 
 describe('attach', () => {
   it('keeps state without an element and resumes the curve on attach', () => {
-    const animator = createAnimator(null, {
+    const animator = createMotionAnimator(null, {
       now: () => clock,
     });
     animator.animate({x: 300}, {spring: springs.settle});
@@ -3902,7 +3902,7 @@ describe('attach', () => {
 
   it('writes nothing for channels at identity', () => {
     const element = document.createElement('div');
-    createAnimator(element);
+    createMotionAnimator(element);
     expect(element.getAttribute('style')).toBeNull();
   });
 });
