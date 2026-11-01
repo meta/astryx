@@ -1337,3 +1337,49 @@ describe('HoverCard theme target names', () => {
     });
   });
 });
+
+// FR11: a press inside an open card acts only within the card.
+describe('HoverCard surface press', () => {
+  it('keeps a click on card content from reaching a clickable container', () => {
+    const onContainerClick = vi.fn();
+    const onCardButton = vi.fn();
+    render(
+      <div onClick={onContainerClick}>
+        <HoverCard
+          isOpen
+          content={
+            <span>
+              Card content{' '}
+              <button type="button" onClick={onCardButton}>
+                Card action
+              </button>
+            </span>
+          }>
+          <button type="button">Trigger</button>
+        </HoverCard>
+      </div>,
+    );
+    fireEvent.click(screen.getByText(/Card content/));
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Card action', hidden: true}),
+    );
+    expect(onContainerClick).not.toHaveBeenCalled();
+    // The card's own button keeps its activation.
+    expect(onCardButton).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on card text inside a label from toggling its control', () => {
+    render(
+      <label>
+        <input type="checkbox" /> Accept{' '}
+        <HoverCard isOpen content={<span>Card content</span>}>
+          <button type="button">Info</button>
+        </HoverCard>
+      </label>,
+    );
+    // The card mounts outside the label (a label cannot contain it), so a
+    // click on its text is not label activation.
+    fireEvent.click(screen.getByText('Card content'));
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+});

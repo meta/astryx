@@ -667,6 +667,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       return renderLayer(
         <div
           {...stylex.props(styles.content)}
+          // FR11: a press inside the card acts only within the card; it must
+          // not reach a clickable container around the trigger.
+          onClick={event => event.stopPropagation()}
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside
             // register as "hovering content" would block every later hide.

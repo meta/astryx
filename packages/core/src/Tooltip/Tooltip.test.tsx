@@ -817,3 +817,40 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     expect(anchor.getAttribute('aria-describedby')).toBe(null);
   });
 });
+
+// FR11: a press inside an open tooltip acts only within the tooltip.
+describe('Tooltip surface press', () => {
+  it('keeps a click on the tooltip text from reaching a clickable container', () => {
+    const onContainerClick = vi.fn();
+    render(
+      <div onClick={onContainerClick}>
+        <Tooltip content="Tooltip text" isOpen>
+          <button type="button">Trigger</button>
+        </Tooltip>
+      </div>,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onContainerClick).not.toHaveBeenCalled();
+    // Positive control: the trigger's own click still reaches the container.
+    fireEvent.click(screen.getByRole('button', {name: 'Trigger'}));
+    expect(onContainerClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text inside a label from toggling its control', () => {
+    render(
+      <label>
+        <input type="checkbox" /> Accept{' '}
+        <Tooltip content="Why we ask" isOpen>
+          <button type="button">Info</button>
+        </Tooltip>
+      </label>,
+    );
+    // The surface mounts outside the label (a label cannot contain it), so
+    // a click on its text is not label activation.
+    fireEvent.click(screen.getByText('Why we ask'));
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    // Positive control: a click on the label's own text still toggles it.
+    fireEvent.click(screen.getByText('Accept'));
+    expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+});
