@@ -183,6 +183,9 @@ function median(values) {
 function summarizeHistory({runs, runsLast7Days}) {
   const perJob = new Map();
   const wall = [];
+  // Each run's set of jobs that did work, beside its wall-clock time, so time
+  // to green compares only with runs that ran the same jobs.
+  const wallBySet = [];
   for (const run of runs || []) {
     const totals = new Map();
     for (const job of run.jobs || []) {
@@ -200,16 +203,33 @@ function summarizeHistory({runs, runsLast7Days}) {
       Number.isFinite(started) &&
       Number.isFinite(finished) &&
       finished > started
-    )
+    ) {
       wall.push((finished - started) / 60000);
+      wallBySet.push({
+        jobs: [...totals.keys()].sort().join('\n'),
+        minutes: (finished - started) / 60000,
+      });
+    }
   }
   const count = Math.max(1, (runs || []).length);
+  // How many sampled runs each job did work in.
+  const jobRuns = {};
+  for (const run of runs || []) {
+    const ran = new Set(
+      (run.jobs || [])
+        .filter(job => job.conclusion !== 'skipped')
+        .map(job => displayName(job.name, job)),
+    );
+    for (const name of ran) jobRuns[name] = (jobRuns[name] ?? 0) + 1;
+  }
   return {
     sampled: (runs || []).length,
     jobMinutes: Object.fromEntries(
       [...perJob].map(([name, total]) => [name, total / count]),
     ),
+    jobRuns,
     wallMinutes: median(wall),
+    wallBySet,
     runsPerDay: num(runsLast7Days) / 7,
   };
 }
@@ -232,6 +252,13 @@ function runMinutes(jobs) {
  */
 function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
   const current = runMinutes(currentJobs);
+  // A changed job counts this run's minutes only as often as it ran in the
+  // sampled runs (a label-gated suite tested with its label rarely runs); an
+  // added job, which has no history, as often as it ran here (once).
+  const share = name =>
+    history.sampled > 0 && history.jobMinutes[name] !== undefined
+      ? (history.jobRuns?.[name] ?? 0) / history.sampled
+      : 1;
   const changed = new Set(
     diff.changes.filter(c => c.change !== 'removed').map(c => c.name),
   );
@@ -239,8 +266,8 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
     [...new Set(names)].reduce((total, name) => total + pick(name), 0);
   const before = sum(diff.names.before, name => history.jobMinutes[name] ?? 0);
   const after = sum(diff.names.after, name =>
-    changed.has(name)
-      ? (current[name] ?? history.jobMinutes[name] ?? 0)
+    changed.has(name) && current[name] !== undefined
+      ? current[name] * share(name)
       : (history.jobMinutes[name] ?? 0),
   );
   const perDay = value => value * history.runsPerDay;
@@ -248,9 +275,16 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
   const poolAfter = perDay(after);
   const poolPercent =
     poolBefore > 0 ? ((poolAfter - poolBefore) / poolBefore) * 100 : 0;
+  // Time to green compares with the median of sampled runs that ran the
+  // same jobs as this run; with none, it is not compared.
+  const ranHere = Object.keys(current).sort().join('\n');
+  const alike = (history.wallBySet || [])
+    .filter(entry => entry.jobs === ranHere)
+    .map(entry => entry.minutes);
+  const wallBefore = alike.length > 0 ? median(alike) : null;
   const wallDelta =
-    history.wallMinutes !== null && Number.isFinite(currentWallMinutes)
-      ? currentWallMinutes - history.wallMinutes
+    wallBefore !== null && Number.isFinite(currentWallMinutes)
+      ? currentWallMinutes - wallBefore
       : null;
   const flags = [
     ...(diff.movedOntoNonStandard || []).map(
@@ -271,7 +305,7 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
     pool: {before: poolBefore, after: poolAfter, percent: poolPercent},
     concurrent: {before: poolBefore / 1440, after: poolAfter / 1440},
     wall: {
-      before: history.wallMinutes,
+      before: wallBefore,
       after: currentWallMinutes ?? null,
       delta: wallDelta,
     },
@@ -443,7 +477,7 @@ function renderCiImpact(impact) {
     .map(row => `| ${row.join(' | ')} |`)
     .join(
       '\n',
-    )}\n\n${jobs ? `Changed jobs: ${jobs}\n\n` : ''}${workflows ? `Other workflows: ${workflows}\n\n` : ''}${unmeasured}${impact.flags.length > 0 ? `**Flags:** ${impact.flags.join('; ')}.\n\n` : ''}Assumptions: before is each job's average over the last ${num(impact.sampled)} pull-request runs; after keeps that for unchanged jobs and uses this run's minutes for added or changed ones; runs a day averages the seven whole days before today; time to green compares this run with the median.\n\n</details>\n\n`;
+    )}\n\n${jobs ? `Changed jobs: ${jobs}\n\n` : ''}${workflows ? `Other workflows: ${workflows}\n\n` : ''}${unmeasured}${impact.flags.length > 0 ? `**Flags:** ${impact.flags.join('; ')}.\n\n` : ''}Assumptions: before is each job's average over the last ${num(impact.sampled)} pull-request runs; after keeps that for unchanged jobs and uses this run's minutes for added or changed ones, weighted by how often each changed job ran in those runs; runs a day averages the seven whole days before today; time to green compares this run with the median of those runs that ran the same jobs.\n\n</details>\n\n`;
 }
 
 module.exports = {

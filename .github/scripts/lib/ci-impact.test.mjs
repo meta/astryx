@@ -285,7 +285,8 @@ describe('estimateImpact', () => {
     expect(impact.jobMinutes).toEqual({before: 10.5, after: 12});
     expect(impact.pool.before).toBe(105);
     expect(impact.pool.after).toBe(120);
-    expect(impact.wall).toEqual({before: 11, after: 11.5, delta: 0.5});
+    // Time to green compares with the one sampled run that ran lint and build only.
+    expect(impact.wall).toEqual({before: 12, after: 11.5, delta: -0.5});
     expect(impact.flags).toEqual(['runner-pool usage +14%']);
   });
 
@@ -305,14 +306,53 @@ describe('estimateImpact', () => {
         names: {before: ['build'], after: ['build']},
       },
       history,
-      currentJobs: [job('build', 0, 8)],
-      currentWallMinutes: 14,
+      currentJobs: [job('lint', 0, 2), job('build', 0, 8)],
+      currentWallMinutes: 15,
     });
     expect(impact.flags).toEqual([
       'build moves onto a non-standard runner',
       'time to green +3.0 min',
       'the workflow triggers changed, so runs a day may change too',
     ]);
+  });
+});
+
+describe('a label-gated suite tested with its label', () => {
+  // Ten sampled runs; the visual suite ran in one of them (its label).
+  const runs = Array.from({length: 10}, (_, i) => ({
+    run_started_at: at(0),
+    updated_at: at(i === 0 ? 20 : 10),
+    jobs: [
+      job('lint', 0, 2),
+      job('visual', 0, 10, i === 0 ? 'success' : 'skipped'),
+    ],
+  }));
+  const history = summarizeHistory({runsLast7Days: 70, runs});
+
+  it('weights the changed suite by how often it ran, and compares time to green with alike runs', () => {
+    const impact = estimateImpact({
+      diff: {
+        changes: [
+          {
+            name: 'visual',
+            change: 'changed',
+            before: runnerClass('ubuntu-latest'),
+            after: runnerClass('ubuntu-latest'),
+          },
+        ],
+        triggersChanged: false,
+        names: {before: ['lint', 'visual'], after: ['lint', 'visual']},
+      },
+      history,
+      // This run had the label: the suite ran, a little slower.
+      currentJobs: [job('lint', 0, 2), job('visual', 0, 11)],
+      currentWallMinutes: 21,
+    });
+    // Before: lint 2 + visual 10 × 1/10; after: lint 2 + visual 11 × 1/10.
+    expect(impact.jobMinutes.before).toBeCloseTo(3);
+    expect(impact.jobMinutes.after).toBeCloseTo(3.1);
+    expect(impact.wall).toEqual({before: 20, after: 21, delta: 1});
+    expect(impact.flags).toEqual([]);
   });
 });
 
