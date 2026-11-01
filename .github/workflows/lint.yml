@@ -156,6 +156,21 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: node packages/cli/scripts/generate-cli-readme.mjs --check
 
+      # The pre-commit hook formats staged files with Prettier, but a commit
+      # made without it can land unformatted source. A later local merge of
+      # main then reformats that file inside the merging pull request, which
+      # fails Changeset coverage there for a change it never meant to make.
+      # Check the files this pull request changes, with the Prettier and the
+      # file patterns the hook uses.
+      - name: Check formatting of changed files
+        if: github.event_name == 'pull_request' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        env:
+          MERGE_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- '*.ts' '*.tsx' '*.md' \
+            | xargs -0 -r pnpm exec prettier --check --ignore-unknown
+
       # The full pass, type-aware rules over packages/core/src included, needs
       # about 1.9 GB of heap on main. Node's default limit on this 16 GB runner
       # is about 2 GB, so a pull request that adds a few percent of source can
