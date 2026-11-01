@@ -229,8 +229,8 @@ guidance owns the process used to propose and test APIs.
   `useAnimatedLayout`, `useEntryAnimation`, `useContainerReveal`,
   `useTouchTrigger`, `useTableRowExpansion`, and `useTableColumnResize`. A hook
   whose current signature cannot delegate gains a ref-taking signature beside
-  it; the old signature is deprecated under INV9. A factory's announced strings
-  follow `architecture:internationalization` INV3a's per-message options.
+  it; the old signature is deprecated under INV9. A factory's announced and shown
+  strings follow `architecture:internationalization` INV3a's options.
 - **INV23 — Each private data attribute has one owner module.** A
   `data-astryx-*` attribute is private unless this invariant names it public.
   Each private attribute has one internal owner module in the package that
