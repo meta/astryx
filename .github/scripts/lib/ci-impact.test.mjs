@@ -110,6 +110,44 @@ describe('describeWorkflow', () => {
   });
 });
 
+describe('runner classes shared with the free-runner contract', () => {
+  it('reads a variable with a default as unknown, never standard', () => {
+    expect(
+      runnerClass("${{ vars.LARGE_RUNNER || 'ubuntu-latest' }}").kind,
+    ).toBe('unknown');
+  });
+
+  it('merges the classes of jobs that share a name', () => {
+    const diff = diffWorkflow(
+      {
+        on: 'pull_request',
+        jobs: {
+          a: {name: 'pr-a11y (browser)', 'runs-on': 'ubuntu-latest'},
+          b: {name: 'pr-a11y (full)', 'runs-on': 'ubuntu-latest'},
+        },
+      },
+      {
+        on: 'pull_request',
+        jobs: {
+          a: {
+            name: 'pr-a11y (browser)',
+            'runs-on': 'ubuntu-latest',
+            steps: [1],
+          },
+          b: {
+            name: 'pr-a11y (full)',
+            'runs-on':
+              "${{ inputs.release && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}",
+          },
+        },
+      },
+    );
+    expect(diff.changes).toHaveLength(1);
+    expect(diff.changes[0].after.kind).toBe('mixed');
+    expect(diff.changes[0].after.nonStandard).toEqual(['2-core-ubuntu-arm']);
+  });
+});
+
 describe('non-standard moves', () => {
   it('are decided per job id, before variants share a name', () => {
     const diff = diffWorkflow(
@@ -292,7 +330,9 @@ describe('renderCiImpact', () => {
         }),
       ],
     });
-    expect(section).toContain('· 1 workflow added</summary>');
+    expect(section).toContain(
+      '· 1 other workflow changed (not measured)</summary>',
+    );
     expect(section).toContain(
       'Other workflows: perf-nightly.yml added: runs on schedule (17 9 \\* \\* \\*); standard runners; its minutes are not measured here',
     );

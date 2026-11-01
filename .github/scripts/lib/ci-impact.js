@@ -18,14 +18,15 @@
 
 const {inline, num} = require('./report-text');
 const {baseJobName} = require('./pr-status');
+const {
+  STANDARD_RUNNERS,
+  labelsOf,
+  isUnresolved,
+} = require('./runner-labels.cjs');
 
 /** Paths whose change makes a pull request a CI change. */
 const CI_PATH =
   /^(\.github\/workflows\/|\.github\/actions\/|\.github\/scripts\/|\.github\/ci-|scripts\/ci-)/;
-
-/** GitHub's standard hosted runner labels; anything else is non-standard. */
-const STANDARD_RUNNER =
-  /^(ubuntu-slim|(ubuntu|windows|macos)-(latest|\d+(\.\d+)?)(-arm)?)$/;
 
 const FLAG_POOL_PERCENT = 10;
 const FLAG_WALL_MINUTES = 2;
@@ -35,32 +36,39 @@ function isCiChange(files) {
 }
 
 /**
- * The runner labels a `runs-on` value can pick: a literal, or in an
- * expression the strings it can yield (those after `&&` or `||`); none for
- * an expression that names no label (its runner is unknown here).
+ * A runner class from the labels a job can resolve to (runner-labels.cjs):
+ * `standard`, `non-standard`, `mixed` (an expression that picks either), or
+ * `unknown` (a label no reading can resolve, such as `${{ vars.X }}`).
  */
-function runnerLabels(runsOn) {
-  if (Array.isArray(runsOn)) return runsOn.map(String);
-  const text = String(runsOn ?? '');
-  if (!text.includes('${{')) return [text.trim()].filter(Boolean);
-  return [...text.matchAll(/(?:&&|\|\|)\s*'([^']+)'/g)].map(match => match[1]);
+function classifyLabels(all) {
+  const labels = [...new Set(all.map(String))];
+  const unresolved = labels.filter(isUnresolved);
+  const resolved = labels.filter(label => !isUnresolved(label));
+  const nonStandard = resolved.filter(label => !STANDARD_RUNNERS.has(label));
+  if (labels.length === 0 || unresolved.length > 0)
+    return {kind: 'unknown', labels, nonStandard};
+  if (nonStandard.length === 0) return {kind: 'standard', labels};
+  if (nonStandard.length === resolved.length)
+    return {kind: 'non-standard', labels};
+  return {kind: 'mixed', labels, nonStandard};
 }
 
-/**
- * `standard`, `non-standard`, `mixed` (an expression that can pick either),
- * or `unknown` (an expression that names no label).
- */
-function runnerClass(runsOn) {
-  const labels = runnerLabels(runsOn);
-  if (labels.length === 0) return {kind: 'unknown', labels};
-  const standard = labels.filter(label => STANDARD_RUNNER.test(label));
-  if (standard.length === labels.length) return {kind: 'standard', labels};
-  if (standard.length === 0) return {kind: 'non-standard', labels};
-  return {
-    kind: 'mixed',
-    labels,
-    nonStandard: labels.filter(label => !STANDARD_RUNNER.test(label)),
-  };
+/** A job's runner class: from the job, or from a bare `runs-on` value. */
+function runnerClass(jobOrRunsOn) {
+  const job =
+    jobOrRunsOn &&
+    typeof jobOrRunsOn === 'object' &&
+    !Array.isArray(jobOrRunsOn)
+      ? jobOrRunsOn
+      : {'runs-on': jobOrRunsOn};
+  return classifyLabels(labelsOf(job));
+}
+
+/** One class for jobs that share a name: every label any of them can pick. */
+function mergeClasses(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  return classifyLabels([...a.labels, ...b.labels]);
 }
 
 /** A job's name as the run shows it, without its matrix suffix. */
@@ -101,8 +109,8 @@ function diffWorkflow(base, head) {
       id,
       name: displayName(id, after ?? before),
       change: !before ? 'added' : !after ? 'removed' : 'changed',
-      before: before ? runnerClass(before['runs-on']) : null,
-      after: after ? runnerClass(after['runs-on']) : null,
+      before: before ? runnerClass(before) : null,
+      after: after ? runnerClass(after) : null,
     });
   }
   // Decided per job id, before variants share a name below.
@@ -114,14 +122,24 @@ function diffWorkflow(base, head) {
     ),
   ];
   // Variants of one job (`pr-a11y (browser specs)`, `pr-a11y (full audit)`)
-  // share a name in the report: one entry per name and kind of change.
-  const seen = new Set();
-  const unique = changes.filter(change => {
+  // share a name in the report: one entry per name and kind of change, with
+  // the runner classes of all of them merged.
+  const byKey = new Map();
+  for (const change of changes) {
     const key = `${change.name}:${change.change}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const seen = byKey.get(key);
+    byKey.set(
+      key,
+      seen
+        ? {
+            ...seen,
+            before: mergeClasses(seen.before, change.before),
+            after: mergeClasses(seen.after, change.after),
+          }
+        : change,
+    );
+  }
+  const unique = [...byKey.values()];
   return {
     changes: unique,
     movedOntoNonStandard,
@@ -281,7 +299,7 @@ function describeWorkflow(file, base, head) {
   const doc = head ?? base;
   const jobs = Object.entries(doc?.jobs || {}).map(([id, job]) => ({
     name: displayName(id, job),
-    runner: runnerClass(job['runs-on']),
+    runner: runnerClass(job),
   }));
   const baseJobs = base?.jobs || {};
   return {
@@ -291,8 +309,8 @@ function describeWorkflow(file, base, head) {
     jobs,
     nonStandard: Object.entries(head?.jobs || {}).some(([id, job]) =>
       movesOntoNonStandard(
-        baseJobs[id] ? runnerClass(baseJobs[id]['runs-on']) : null,
-        runnerClass(job['runs-on']),
+        baseJobs[id] ? runnerClass(baseJobs[id]) : null,
+        runnerClass(job),
       ),
     ),
   };
@@ -313,10 +331,20 @@ function amount(value, digits = 0) {
 function runnerText(cls) {
   if (!cls) return '—';
   if (cls.kind === 'standard') return 'standard';
-  if (cls.kind === 'unknown') return 'unknown (chosen by an expression)';
+  if (cls.kind === 'unknown')
+    return 'unknown (an expression this report cannot resolve)';
   if (cls.kind === 'non-standard')
     return `non-standard (${cls.labels.map(inline).join(', ')})`;
   return `standard or non-standard by event (${cls.nonStandard.map(inline).join(', ')})`;
+}
+
+/** The runner classes of what changed, in a few words. */
+function runnerSummary(classes) {
+  if (classes.some(cls => cls.kind === 'non-standard'))
+    return 'non-standard runners';
+  if (classes.some(cls => cls.kind === 'mixed' || cls.kind === 'unknown'))
+    return 'some runners chosen by event or unknown';
+  return 'standard runners';
 }
 
 /** The report section: a visible summary line, the table collapsed under it. */
@@ -334,21 +362,17 @@ function renderCiImpact(impact) {
     wall.delta === null
       ? null
       : `time to green ${signed(wall.delta, 1, ' min')}`,
-    impact.changes.some(change => change.after?.kind === 'non-standard')
-      ? 'non-standard runners'
-      : impact.changes.some(change =>
-            ['mixed', 'unknown'].includes(change.after?.kind),
-          )
-        ? 'some runners chosen by event'
-        : 'standard runners',
-    ...['added', 'removed'].map(kind => {
-      const count = (impact.otherWorkflows || []).filter(
-        workflow => workflow.change === kind,
-      ).length;
-      return count > 0
-        ? `${count} workflow${count === 1 ? '' : 's'} ${kind}`
-        : null;
-    }),
+    runnerSummary([
+      ...impact.changes.map(change => change.after).filter(Boolean),
+      ...(impact.otherWorkflows || []).flatMap(workflow =>
+        workflow.change === 'removed'
+          ? []
+          : workflow.jobs.map(job => job.runner),
+      ),
+    ]),
+    (impact.otherWorkflows || []).length > 0
+      ? `${(impact.otherWorkflows || []).length} other workflow${(impact.otherWorkflows || []).length === 1 ? '' : 's'} changed (not measured)`
+      : null,
   ].filter(Boolean);
   const rows = [
     [
