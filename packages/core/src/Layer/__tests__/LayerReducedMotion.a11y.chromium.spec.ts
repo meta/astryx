@@ -64,12 +64,13 @@ async function entranceOf(page: Page, selector: string) {
   return page.evaluate(sel => {
     const layer = document.querySelector<HTMLElement>(`${sel}:popover-open`);
     if (layer == null) {
-      return {name: 'missing', properties: [], duration: NaN};
+      return {name: 'missing', properties: [], duration: NaN, easing: ''};
     }
     const computed = getComputedStyle(layer);
     const name = computed.animationName;
-    // Seconds; the first animation's duration.
+    // Seconds; the first animation's duration and curve.
     const duration = parseFloat(computed.animationDuration.split(',')[0]);
+    const easing = computed.animationTimingFunction.split(/,(?![^(]*\))/)[0];
     const properties = new Set<string>();
     for (const sheet of Array.from(document.styleSheets)) {
       let rules: CSSRuleList;
@@ -94,7 +95,7 @@ async function entranceOf(page: Page, selector: string) {
       };
       visit(rules);
     }
-    return {name, properties: Array.from(properties).sort(), duration};
+    return {name, properties: Array.from(properties).sort(), duration, easing};
   }, selector);
 }
 
@@ -124,6 +125,9 @@ for (const {name, story, trigger, layer} of cases) {
       // design:reduced-motion DR2: a cross-fade of 200 ms or less.
       expect(entrance.duration).toBeGreaterThan(0);
       expect(entrance.duration).toBeLessThanOrEqual(0.2);
+      // The motion foundation's cross-fade: Core Animation's easeInOut,
+      // cubic-bezier(0.42, 0, 0.58, 1), which the engine names ease-in-out.
+      expect(entrance.easing).toBe('ease-in-out');
     });
   });
 
@@ -145,6 +149,9 @@ for (const {name, story, trigger, layer} of cases) {
       expect(entrance.properties).toEqual(['opacity']);
       expect(entrance.duration).toBeGreaterThan(0);
       expect(entrance.duration).toBeLessThanOrEqual(0.2);
+      // The motion foundation's cross-fade: Core Animation's easeInOut,
+      // cubic-bezier(0.42, 0, 0.58, 1), which the engine names ease-in-out.
+      expect(entrance.easing).toBe('ease-in-out');
     });
   });
 
@@ -168,6 +175,10 @@ for (const {name, story, trigger, layer} of cases) {
       await page.goto(
         `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
       );
+      // A fine primary pointer in this context.
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(false);
       await page.getByText(trigger, {exact: true}).hover();
       const entrance = await entranceOf(page, layer);
       expect(entrance.name).toBe('none');
