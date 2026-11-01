@@ -383,23 +383,25 @@ describe('ci admission', () => {
   }
 
   it("admits at once at today's load: 56 live jobs and many pull-request runs waiting", async () => {
-    // 2026-11-01 ~01:50Z: 56 jobs ran while about a dozen pull-request runs
-    // waited here. The first estimate counted each waiting run at 12 and saw
-    // about 180 jobs, so every run waited out its twelve minutes.
+    // 2026-11-01 ~01:50Z: 56 jobs ran, a dozen of them the waiting jobs of
+    // pull-request runs. The first estimate counted each waiting run at 12 and
+    // saw about 180 jobs, so every run waited out its twelve minutes. Counting
+    // what runs: 33 + 11 + 12 waiting jobs + 18 kept for small workflows + this
+    // run's 16 = 90.
     const active = [
-      ...prs(4, 11),
-      admittedRun(30, 12, {
+      ...prs(3, 11),
+      admittedRun(30, 11, {
         event: 'push',
         path: '.github/workflows/deploy.yml',
       }),
       ...Array.from({length: 12}, (_, i) => waitingRun(40 + i)),
       ...slims(8),
     ];
-    const result = await admit({active, maxWait: 12, maxLooks: 2});
+    const result = await admit({active, peak: 16, maxWait: 12, maxLooks: 2});
     expect(result.looks).toBe(1);
     expect(result.warning).toEqual([]);
     // Two run listings plus one jobs call per CI or Main run.
-    expect(result.calls).toBe(2 + 4 + 1 + 12);
+    expect(result.calls).toBe(2 + 3 + 1 + 12);
   });
 
   it('counts live jobs, and a run admitted in the last three minutes at least at its most', async () => {
@@ -474,10 +476,16 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(held.looks).toBe(2);
-    // Other pull-request runs waiting for room hold nothing.
+    // Other pull-request runs waiting for room hold only their waiting jobs:
+    // 48 + 8 waiting + 18 + 16 = 90 fits; a ninth waiting run does not.
+    const waiting = count =>
+      Array.from({length: count}, (_, i) => waitingRun(80 + i));
     expect(
-      (await admit({active: [waitingRun(71), waitingRun(72)]})).looks,
+      (await admit({active: [...prs(4), ...waiting(8)], peak: 16})).looks,
     ).toBe(1);
+    expect(
+      (await admit({active: [...prs(4), ...waiting(9)], peak: 16})).looks,
+    ).toBeGreaterThan(1);
     // A main run does not wait for another main run's wait, but counts its peak.
     expect(
       (

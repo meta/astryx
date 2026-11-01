@@ -21,10 +21,11 @@
 #   plus a random 0-20 s so runs that look together spread out, and then
 #   starts.
 # - Each CI or Main run counts its live jobs, read once per look. A
-#   pull-request run still waiting here counts none, so waiting runs never hold
-#   each other back; a waiting `main` run counts its whole peak. A run admitted
-#   in the last three minutes counts at least its planned most until its jobs
-#   appear. Every other workflow's run counts an estimate.
+#   pull-request run still waiting here counts only that waiting job, so
+#   waiting runs never hold each other back by more than they use; a waiting
+#   `main` run counts its whole peak. A run admitted in the last three minutes
+#   counts at least its planned most until its jobs appear. Every other
+#   workflow's run counts an estimate.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
 #   after its longest wait), every two minutes for the rare `main` run. When the
@@ -149,11 +150,14 @@ runs:
                     .flatMap(job => job.steps ?? [])
                     .find(step => step.name === STEP);
                   if (wait?.status === 'in_progress') {
-                    // Still waiting for room. A pull-request run holds none
-                    // yet; a `main` run holds its whole peak, ahead of this one.
+                    // Still waiting for room. A pull-request run holds only
+                    // the job that waits; a `main` run holds its whole peak,
+                    // ahead of this one.
                     if (isMain(run)) {
                       large += estimate(run);
                       if (!main) mainWaiting = true;
+                    } else {
+                      large += 1;
                     }
                     continue;
                   }
