@@ -48,6 +48,8 @@ export function ungated(condition) {
   }
   if (expression.startsWith(`${HEAVY_RUNS} && (`))
     expression = expression.slice(HEAVY_RUNS.length + 5, -1);
+  if (expression.startsWith(`${HEAVY_ADMITTED} && (`))
+    expression = expression.slice(HEAVY_ADMITTED.length + 5, -1);
   return expression;
 }
 
@@ -78,6 +80,14 @@ export const HEAVY_DEFERRED = "needs.heavy-ci.outputs.deferred == 'true'";
  */
 export const HEAVY_RUNS =
   "!cancelled() && needs.heavy-ci.outputs.deferred != 'true'";
+
+/**
+ * `!cancelled()` above also drops Actions' implicit success check, so a heavy
+ * job that needs admission and had no status check of its own checks
+ * admission itself: when CI is full admission fails, and the job must stop
+ * (spec:AST-030 FR16).
+ */
+export const HEAVY_ADMITTED = "needs.admission.result == 'success'";
 
 /** What a deferred required check and the PR report say. */
 export const HEAVY_DEFERRED_MESSAGE =

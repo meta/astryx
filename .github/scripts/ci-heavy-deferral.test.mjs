@@ -341,7 +341,7 @@ describe("heavy-ci's skip on every other run", () => {
   });
 
   /** Every job's start as Actions decides it, ancestors included. */
-  function plan(github, inputs = {}) {
+  function plan(github, inputs = {}, {full = false} = {}) {
     const results = {};
     const order = [];
     const visit = id => {
@@ -393,12 +393,17 @@ describe("heavy-ci's skip on every other run", () => {
           ),
         );
       results[id] = {
-        result: runs ? 'success' : 'skipped',
+        // When CI is full, admission fails at its first step.
+        result: !runs
+          ? 'skipped'
+          : id === 'admission' && full
+            ? 'failure'
+            : 'success',
         outputs:
           id === 'run-labels'
             ? {a11y: 'true', rtl: 'true', visual: 'true'}
             : id === 'room'
-              ? {full: 'false'}
+              ? {full: String(full)}
               : {},
       };
     }
@@ -422,6 +427,20 @@ describe("heavy-ci's skip on every other run", () => {
       'release-check',
     ])
       expect(results[id].result, id).toBe('success');
+  });
+
+  it('starts no heavy job when CI is full (spec:AST-030 FR16)', () => {
+    // A fork's run with ci:run cannot cancel itself, so only the jobs' own
+    // conditions stop it.
+    const github = pushEvent({login: 'someone'});
+    github.event.pull_request.head.repo.full_name = 'someone/astryx';
+    github.event.pull_request.labels = [{name: 'ci:run'}];
+    const results = plan(github, {}, {full: true});
+    expect(results.admission.result).toBe('failure');
+    expect(results['heavy-ci'].result).toBe('skipped');
+    // test-native-swift always runs to report its runner, as on main.
+    for (const id of HEAVY.filter(item => item !== 'test-native-swift'))
+      expect(results[id].result, id).toBe('skipped');
   });
 
   it('runs the suites an opt-in label asks for on a pull request', () => {
