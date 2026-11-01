@@ -10,6 +10,7 @@
  */
 
 import {use, useRef, type ReactNode} from 'react';
+import {createPortal} from 'react-dom';
 import {
   afterEach,
   beforeAll,
@@ -1606,5 +1607,71 @@ describe('Item empty slots', () => {
       <Item label="Item" startContent={0} endContent={0} description={0} />,
     );
     expect(screen.getAllByText('0')).toHaveLength(3);
+  });
+});
+
+describe('Item row onClick: clicks that belong to something else', () => {
+  it('runs for a click on the row itself', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(<Item label="Invoice 42" onClick={onClick} />);
+    await user.click(screen.getByText('Invoice 42'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not run for a click inside a portal rendered from the row', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onPortalClick = vi.fn();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={onClick}
+        endContent={createPortal(
+          <div data-testid="portal-content" onClick={onPortalClick}>
+            Edit
+          </div>,
+          document.body,
+        )}
+      />,
+    );
+    await user.click(screen.getByTestId('portal-content'));
+    expect(onPortalClick).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it.each(['tab', 'switch', 'menuitem', 'checkbox', 'option'])(
+    'does not run for a click on a role="%s" control in endContent',
+    async role => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      render(
+        <Item
+          label="Invoice 42"
+          onClick={onClick}
+          endContent={
+            <div role={role} tabIndex={0} data-testid="control">
+              Control
+            </div>
+          }
+        />,
+      );
+      await user.click(screen.getByTestId('control'));
+      expect(onClick).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not run for a click on a native control in endContent', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={onClick}
+        endContent={<button type="button">Action</button>}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Action'}));
+    expect(onClick).not.toHaveBeenCalled();
   });
 });

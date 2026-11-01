@@ -48,7 +48,6 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
-import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
@@ -58,7 +57,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {
-  innermostInteractive,
+  hasInteractiveAncestor,
   useClickableContainer,
 } from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -769,10 +768,13 @@ export function Item({
     }
     const target = e.target as HTMLElement;
     if (
-      target.closest('button, a, input, select, textarea') ||
-      // A press inside an open Tooltip or HoverCard belongs to it
-      // (component:Tooltip FR11, component:HoverCard FR11).
-      innermostInteractive(target, e.currentTarget, isLayerSurface) != null
+      // React bubbles a click through a portal rendered from the row (a
+      // MoreMenu's menu in `endContent`), but its target is not in the row.
+      !e.currentTarget.contains(target) ||
+      // A nested control, native or role-based, or an open Tooltip or
+      // HoverCard surface owns the click (component:Tooltip FR11,
+      // component:HoverCard FR11).
+      hasInteractiveAncestor(target, e.currentTarget)
     ) {
       return;
     }
