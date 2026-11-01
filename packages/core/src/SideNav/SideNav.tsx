@@ -884,26 +884,31 @@ export function SideNav({
   // Overlay drag handle inside the nav when resizable.
   // Uses ResizeHandle in overlay mode so the handle sits inside
   // the panel's overflow: clip bounds.
-  const rail = showResizeHandle ? (
+  // A resizable rail keeps its wrapper while collapsed, so collapsing or
+  // expanding never changes the nav's parent: the nav and its items stay
+  // mounted, and their state (an open nested group) and focus persist (FR6).
+  // Only the handle comes and goes.
+  const rail = isResizable ? (
     <div ref={resizeWrapperRef} {...stylex.props(styles.resizableContainer)}>
       {navElement}
-      <ResizeHandle
-        data-testid="astryx-sidenav-resize-handle"
-        direction="horizontal"
-        position="overlay"
-        pillPlacement="end"
-        isAlwaysVisible={false}
-        xstyle={styles.resizableHandle}
-        resizable={resizableHook.props}
-        label={t('@astryx.sideNav.resizeSidebar')}
-        aria-controls={navId}
-      />
+      {showResizeHandle && (
+        <ResizeHandle
+          data-testid="astryx-sidenav-resize-handle"
+          direction="horizontal"
+          position="overlay"
+          pillPlacement="end"
+          isAlwaysVisible={false}
+          xstyle={styles.resizableHandle}
+          resizable={resizableHook.props}
+          label={t('@astryx.sideNav.resizeSidebar')}
+          aria-controls={navId}
+        />
+      )}
     </div>
   ) : (
     navElement
   );
-  // The snapshot stays mounted outside the resize wrapper, which comes and
-  // goes with the collapse it measures.
+  // The snapshot stays mounted outside the resize wrapper.
   const content = (
     <>
       <LayoutChangeSnapshot

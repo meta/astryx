@@ -4500,7 +4500,7 @@ describe('SideNav collapse focus (AR3)', () => {
     },
   );
 
-  it('moves focus from a heading link the collapse renames (its subheading dropped) to the toggle in a resizable SideNav', () => {
+  it('keeps focus on a heading link whose subheading the collapsed rail drops, in a resizable SideNav that keeps its nav mounted (FR6)', () => {
     const rail = (isCollapsed: boolean) => (
       <SideNav
         resizable
@@ -4523,7 +4523,8 @@ describe('SideNav collapse focus (AR3)', () => {
     heading?.focus();
     expect(heading).toHaveFocus();
     rerender(rail(true));
-    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+    expect(heading).toHaveFocus();
+    expect(heading).toHaveAttribute('aria-label', 'Acme');
   });
 
   it('moves no focus when the rail expands', () => {
@@ -4535,4 +4536,32 @@ describe('SideNav collapse focus (AR3)', () => {
       screen.getByRole('button', {name: 'Collapse sidebar'}),
     ).toHaveFocus();
   });
+});
+
+describe('SideNav keeps its items mounted across a collapse (FR6)', () => {
+  it.each([{resizable: false}, {resizable: true}])(
+    'keeps an open nested group open after a collapse and an expand, resizable $resizable',
+    ({resizable}) => {
+      const rail = (isCollapsed: boolean) => (
+        <SideNav
+          resizable={resizable}
+          collapsible={{isCollapsed, onCollapsedChange: () => {}}}>
+          <SideNavItem
+            label="Settings"
+            icon={StubIcon}
+            collapsible={{defaultIsCollapsed: true}}>
+            <SideNavItem label="Billing" href="/settings/billing" />
+          </SideNavItem>
+        </SideNav>
+      );
+      const {rerender} = render(rail(false));
+      expect(screen.queryByRole('link', {name: 'Billing'})).toBeNull();
+      fireEvent.click(screen.getByRole('button', {name: 'Settings'}));
+      expect(screen.getByRole('link', {name: 'Billing'})).toBeInTheDocument();
+      rerender(rail(true));
+      rerender(rail(false));
+      // The group the person opened is still open.
+      expect(screen.getByRole('link', {name: 'Billing'})).toBeInTheDocument();
+    },
+  );
 });
