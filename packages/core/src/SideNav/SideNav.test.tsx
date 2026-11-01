@@ -4423,6 +4423,30 @@ describe('SideNav collapse focus (AR3)', () => {
     expect(screen.getByRole('link', {name: 'Project'})).toHaveFocus();
   });
 
+  it('keeps focus on a footer control or the toggle that a resizable collapse re-renders', () => {
+    const resizable = (isCollapsed: boolean) => (
+      <SideNav
+        resizable
+        collapsible={{isCollapsed, onCollapsedChange: () => {}}}
+        footerIcons={
+          <button type="button" aria-label="Help">
+            ?
+          </button>
+        }>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem label="Reports" href="/reports" />
+      </SideNav>
+    );
+    const {rerender} = render(resizable(false));
+    screen.getByRole('button', {name: 'Help'}).focus();
+    rerender(resizable(true));
+    expect(screen.getByRole('button', {name: 'Help'})).toHaveFocus();
+    rerender(resizable(false));
+    screen.getByRole('button', {name: 'Collapse sidebar'}).focus();
+    rerender(resizable(true));
+    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+  });
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});

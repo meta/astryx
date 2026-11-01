@@ -473,7 +473,10 @@ export function SideNav({
   // nav needs an id; a consumer's own id wins.
   const generatedNavId = useId();
   const navId = props.id ?? generatedNavId;
-  const mergedNavRef = useMergedRefs(ref, navRef);
+  // The nav's own document's last input decides the moved focus's ring
+  // (AR3), so a SideNav in a second document tracks input there.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const mergedNavRef = useMergedRefs(ref, navRef, modalityRef);
   const collapseStateRef = useRef<SideNavCollapseState>({
     isCollapsed: false,
     toggle: () => {},
@@ -569,8 +572,9 @@ export function SideNav({
   // nearest row the rail keeps. Rows and the toggle register through their
   // callback refs. Rows are matched across the commit by their place among
   // the rows the rail keeps, not by element: a resizable SideNav remounts its
-  // nav when it collapses. Focus moves only if the collapse lost it.
-  useInteractionModalityTracking();
+  // nav when it collapses. Focus on a control outside the rows (the header,
+  // the footer) that a resizable collapse remounts goes back to the same
+  // control. Focus moves only if the collapse lost it.
   const rowsRef = useRef(new Map<HTMLElement, boolean>());
   const togglesRef = useRef(new Set<HTMLElement>());
   const focusTargets = useMemo<SideNavFocusTargets>(
@@ -596,6 +600,10 @@ export function SideNav({
     isRowKept: boolean;
     /** Kept rows before the row that held focus. */
     keptBefore: number;
+    /** The control outside the rows that held focus, by name and place. */
+    outside: {name: string; index: number} | null;
+    /** Whether focus was on the collapse toggle. */
+    wasOnToggle: boolean;
   } | null>(null);
   const noteRailFocus = useCallback((wasCollapsed: boolean) => {
     pendingFocusRef.current = null;
@@ -613,8 +621,18 @@ export function SideNav({
         index = at;
       }
     });
+    let outside = null;
+    if (index < 0) {
+      const controls = controlsOutsideRows(nav, rows);
+      const at = controls.findIndex(control => control.contains(focus.element));
+      outside = at < 0 ? null : {name: controlName(controls[at]), index: at};
+    }
     pendingFocusRef.current = {
       focus,
+      outside,
+      wasOnToggle: [...togglesRef.current].some(toggle =>
+        toggle.contains(focus.element),
+      ),
       isRowKept: index >= 0 && rowsRef.current.get(rows[index]) === true,
       keptBefore: rows
         .slice(0, Math.max(index, 0))
@@ -635,9 +653,20 @@ export function SideNav({
     const toggle = [...togglesRef.current].find(element =>
       nav.contains(element),
     );
+    let sameOutside: HTMLElement | undefined;
+    if (pending.wasOnToggle) {
+      sameOutside = toggle;
+    } else if (pending.outside != null) {
+      const controls = controlsOutsideRows(nav, kept);
+      sameOutside =
+        controls.find(
+          control => controlName(control) === pending.outside?.name,
+        ) ?? controls[pending.outside.index];
+    }
     const target = pending.isRowKept
       ? controlOf(kept[pending.keptBefore])
-      : (toggle ??
+      : (sameOutside ??
+        toggle ??
         controlOf(kept[pending.keptBefore - 1]) ??
         controlOf(kept[pending.keptBefore]));
     moveFocusLeftBehind(pending.focus, target);
@@ -890,6 +919,21 @@ export function SideNav({
   }
 
   return content;
+}
+
+/** The focusable controls in `nav` outside every row: header and footer. */
+function controlsOutsideRows(
+  nav: HTMLElement,
+  rows: HTMLElement[],
+): HTMLElement[] {
+  return getFocusableElements(nav).filter(
+    control => !rows.some(row => row.contains(control)),
+  );
+}
+
+/** A control's accessible name as its attributes or text give it. */
+function controlName(control: HTMLElement): string {
+  return control.getAttribute('aria-label') ?? control.textContent.trim();
 }
 
 /**
