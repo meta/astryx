@@ -598,6 +598,9 @@ importers:
 
   internal/test-utils:
     dependencies:
+      '@stylexjs/stylex':
+        specifier: 'catalog:'
+        version: 0.19.0
       '@testing-library/jest-dom':
         specifier: 'catalog:'
         version: 6.9.1
