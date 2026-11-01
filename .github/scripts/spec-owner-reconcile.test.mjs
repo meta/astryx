@@ -607,6 +607,70 @@ describe('spec owner workflow reconciliation', () => {
     },
   );
 
+  it('keeps a Swift platform record made current pending without exact-head approval', async () => {
+    const harness = createHarness({
+      changedFile: {
+        filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md',
+        status: 'modified',
+      },
+      baseContent:
+        '---\nkind: component\nid: component:swift/TextInput\nauthority: draft\n---\n',
+      headContent:
+        '---\nkind: component\nid: component:swift/TextInput\nauthority: current\n---\n',
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestReviewGate(harness.state)).toMatchObject({state: 'pending'});
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'pending',
+      description: 'Mirrors review-required · spec waiting (eng)',
+    });
+    expect(
+      harness.state.calls.some(call =>
+        call.includes('No knowledge records changed'),
+      ),
+    ).toBe(false);
+    expect(harness.state.calls).not.toContain('enable-auto-merge');
+  });
+
+  it('leaves the gate clear when a Swift view changes and its platform record does not', async () => {
+    const harness = createHarness({
+      changedFile: {
+        filename:
+          'packages/native/apple/Sources/Astryx/TextInput/TextInput.swift',
+        status: 'modified',
+      },
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestGateStatus(harness.state)).toMatchObject({state: 'success'});
+    expect(harness.state.calls).not.toContain('enable-auto-merge');
+  });
+
+  it('needs no owner approval for an edit to a draft Swift platform record', async () => {
+    const draft =
+      '---\nkind: component\nid: component:swift/TextInput\nauthority: draft\n---\n';
+    const harness = createHarness({
+      changedFile: {
+        filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md',
+        status: 'modified',
+      },
+      baseContent: draft,
+      headContent: `${draft}\n## Intent\n\nUpdated.\n`,
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestReviewGate(harness.state).state).toBe('success');
+    expect(
+      harness.state.calls.some(call =>
+        call.includes('No knowledge records changed'),
+      ),
+    ).toBe(false);
+  });
+
   it('accepts an exact-head derived theme-owner review for a current theme record', async () => {
     const review = {
       user: {login: 'rubyycheung'},

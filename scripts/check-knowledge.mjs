@@ -31,6 +31,8 @@ const {
 } = require('../.github/scripts/component-design-decisions.cjs');
 const {
   COMPONENT_SPEC_ROOT,
+  PLATFORM_SOURCE_ROOTS,
+  classifyPlatformComponentSpecPath,
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
@@ -985,6 +987,124 @@ export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
 }
 
 /**
+ * Platform implementation records:
+ * `docs/specs/components/<ComponentRoot>/<PublicName>.<language>.spec.md`.
+ */
+export function discoverPlatformComponentRecords(root = DEFAULT_ROOT) {
+  return matchingFilesRecursively(
+    path.join(root, COMPONENT_SPEC_ROOT),
+    (_name, candidate) =>
+      isPlatformComponentSpecPath(
+        path.relative(root, candidate).split(path.sep).join('/'),
+      ),
+    {skipDirectory: isIgnoredComponentKnowledgeSegment},
+  ).sort();
+}
+
+/**
+ * Checks a platform record's frontmatter until the schema carries
+ * `platform_of`: its kind, its language-qualified id, the core component it
+ * names, its owners, its authority and approval, the `verified_by` paths it
+ * cites. `ids` maps every other record id to its path and authority.
+ */
+export function validatePlatformComponentRecords(
+  root,
+  {ids, schema, engineeringApprovalOwners, repositoryFiles},
+) {
+  const problems = [];
+  const tracked = repositoryFiles ? new Set(repositoryFiles) : null;
+  for (const absolutePath of discoverPlatformComponentRecords(root)) {
+    const filePath = path
+      .relative(root, absolutePath)
+      .split(path.sep)
+      .join('/');
+    const {componentRoot, language, publicName} =
+      classifyPlatformComponentSpecPath(filePath);
+    const document = parseKnowledgeDocument(
+      fs.readFileSync(absolutePath, 'utf8'),
+      filePath,
+    );
+    problems.push(...(document.problems ?? []));
+    const frontmatter = document.frontmatter;
+
+    if (frontmatter.get('kind') !== 'component') {
+      problems.push(`${filePath}: a platform record must be kind: component.`);
+    }
+    const expectedId = `component:${language}/${publicName}`;
+    if (frontmatter.get('id') !== expectedId) {
+      problems.push(
+        `${filePath}: a platform record's id must be ${expectedId}.`,
+      );
+    }
+    const coreId = `component:${publicName}`;
+    if (frontmatter.get('platform_of') !== coreId) {
+      problems.push(
+        `${filePath}: platform_of must name the core component, ${coreId}.`,
+      );
+    }
+    const corePath = `${COMPONENT_SPEC_ROOT}/${componentRoot}/${publicName}.spec.md`;
+    if (fs.existsSync(path.join(root, corePath))) {
+      const core = ids.get(coreId);
+      if (!core || core.filePath.split(path.sep).join('/') !== corePath) {
+        problems.push(
+          `${filePath}: the core record beside it, ${corePath}, must declare id ${coreId}.`,
+        );
+      }
+    }
+    const owners = frontmatter.get('owners');
+    if (!Array.isArray(owners) || owners.length === 0) {
+      problems.push(`${filePath}: owners must be a non-empty inline list.`);
+    }
+
+    const authority = frontmatter.get('authority');
+    if (!schema.authorities.includes(authority)) {
+      problems.push(
+        `${filePath}: authority must be ${schema.authorities.join(', ')}.`,
+      );
+    }
+    if (authority === 'current') {
+      if (!engineeringApprovalOwners.includes(frontmatter.get('approved_by'))) {
+        problems.push(
+          `${filePath}: current records require approved_by to name an authorized owner.`,
+        );
+      }
+      const approvedAt = frontmatter.get('approved_at');
+      if (
+        typeof approvedAt !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(approvedAt)
+      ) {
+        problems.push(
+          `${filePath}: current records require approved_at as YYYY-MM-DD.`,
+        );
+      }
+    }
+    if (authority === 'archived') {
+      const reason = frontmatter.get('archive_reason');
+      if (!schema.archiveReasons.includes(reason)) {
+        problems.push(
+          `${filePath}: archived records require archive_reason (${schema.archiveReasons.join(', ')}).`,
+        );
+      }
+    }
+
+    const verifiedBy = frontmatter.get('verified_by');
+    for (const entry of Array.isArray(verifiedBy) ? verifiedBy : []) {
+      const cited = String(entry).replace(/\/+$/, '');
+      const exists = tracked
+        ? tracked.has(cited) ||
+          [...tracked].some(file => file.startsWith(`${cited}/`))
+        : fs.existsSync(path.join(root, cited));
+      if (!exists) {
+        problems.push(
+          `${filePath}: verified_by path ${entry} is not in the repository.`,
+        );
+      }
+    }
+  }
+  return problems;
+}
+
+/**
  * Spec files outside the component record layout: a `*.spec.md` left in a
  * registered component package's source tree, and a `*.spec.md` under
  * `docs/specs/components/` that is neither a component or module record nor a
@@ -1014,7 +1134,7 @@ export function discoverMisplacedComponentSpecs(root = DEFAULT_ROOT) {
     }
   }
 
-  const nativeSources = path.join(root, 'packages/native/apple/Sources');
+  const nativeSources = path.join(root, PLATFORM_SOURCE_ROOTS.swift);
   for (const candidate of matchingFilesRecursively(
     nativeSources,
     name => isSpecFile(name) && !name.startsWith('.'),
@@ -2227,6 +2347,12 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
   }
 
   problems.push(
+    ...validatePlatformComponentRecords(root, {
+      ids,
+      schema,
+      engineeringApprovalOwners,
+      repositoryFiles,
+    }),
     ...validateComponentModuleRelationships(
       root,
       records,

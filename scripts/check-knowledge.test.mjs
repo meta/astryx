@@ -154,6 +154,30 @@ function componentRecord(overrides = {}) {
   return `---\n${frontmatter}\n---\n\n# Button component contract\n\n${sections}\n`;
 }
 
+function platformRecord(overrides = {}) {
+  const values = {
+    schema_version: '3',
+    template_version: '7',
+    kind: 'component',
+    id: 'component:swift/Button',
+    platform_of: 'component:Button',
+    authority: 'draft',
+    archive_reason: 'null',
+    superseded_by: 'null',
+    approved_by: 'null',
+    approved_at: 'null',
+    owners: '[owner]',
+    review_triggers: '[behavior]',
+    verified_by: '[]',
+    system_specs: '[]',
+    ...overrides,
+  };
+  const frontmatter = Object.entries(values)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('\n');
+  return `---\n${frontmatter}\n---\n\n# Button in Swift\n\n## Intent\n\nBody.\n`;
+}
+
 function moduleRecord(overrides = {}) {
   const values = {
     schema_version: '3',
@@ -1697,8 +1721,10 @@ describe('knowledge validation', () => {
       componentRecord(),
     );
     const folder = path.join(root, 'docs/specs/components/Button');
-    // Platform records are not checked yet (no platform_of in the schema).
-    fs.writeFileSync(path.join(folder, 'Button.swift.spec.md'), '# Swift\n');
+    fs.writeFileSync(
+      path.join(folder, 'Button.swift.spec.md'),
+      platformRecord(),
+    );
     fs.writeFileSync(path.join(folder, 'Button.klingon.spec.md'), '# ?\n');
     fs.writeFileSync(
       path.join(root, 'docs/specs/components/Loose.spec.md'),
@@ -1709,6 +1735,51 @@ describe('knowledge validation', () => {
     expect(
       problems.filter(problem => problem.includes('must be <ComponentRoot>')),
     ).toHaveLength(2);
+  });
+
+  it('checks a platform record against the core component it implements', async () => {
+    const root = fixtureRoot();
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
+    fs.writeFileSync(
+      recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
+      componentRecord(),
+    );
+    const swift = path.join(
+      root,
+      'docs/specs/components/Button/Button.swift.spec.md',
+    );
+    const swiftProblems = async overrides => {
+      fs.writeFileSync(swift, platformRecord(overrides));
+      return (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+      );
+    };
+
+    expect(await swiftProblems()).toEqual([]);
+    expect(
+      await swiftProblems({
+        id: 'component:Button',
+        platform_of: 'component:Card',
+        owners: '[]',
+        verified_by: '[packages/native/apple/Tests/Missing.swift]',
+      }),
+    ).toEqual([
+      "docs/specs/components/Button/Button.swift.spec.md: a platform record's id must be component:swift/Button.",
+      'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
+      'docs/specs/components/Button/Button.swift.spec.md: owners must be a non-empty inline list.',
+      'docs/specs/components/Button/Button.swift.spec.md: verified_by path packages/native/apple/Tests/Missing.swift is not in the repository.',
+    ]);
+    expect(await swiftProblems({authority: 'current'})).toEqual([
+      'docs/specs/components/Button/Button.swift.spec.md: current records require approved_by to name an authorized owner.',
+      'docs/specs/components/Button/Button.swift.spec.md: current records require approved_at as YYYY-MM-DD.',
+    ]);
+    expect(
+      await swiftProblems({
+        authority: 'current',
+        approved_by: 'cixzhang',
+        approved_at: '2026-11-01',
+      }),
+    ).toEqual([]);
   });
 
   it('rejects a nested component record instead of treating it as a module', async () => {

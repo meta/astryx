@@ -87,6 +87,33 @@ describe('spec owner decision', () => {
     expect(requiresOwnerApproval([], {complete: false})).toBe(true);
   });
 
+  it('requires an engineering owner when a platform record becomes current', () => {
+    const swiftRecord = authority =>
+      [
+        '---',
+        'schema_version: 3',
+        'kind: component',
+        'id: component:swift/TextInput',
+        'platform_of: component:TextInput',
+        `authority: ${authority}`,
+        '---',
+        '',
+        '## Purpose',
+        '',
+        'A text field.',
+        '',
+      ].join('\n');
+    expect(
+      requiredApprovalGroups([
+        {
+          path: 'docs/specs/components/TextInput/TextInput.swift.spec.md',
+          baseContent: swiftRecord('draft'),
+          headContent: swiftRecord('current'),
+        },
+      ]),
+    ).toEqual({spec: true, design: false, theme: false});
+  });
+
   it('parses DESIGNOWNERS without comment examples', () => {
     expect(
       parseOwnerFile(`
