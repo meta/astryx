@@ -378,6 +378,33 @@ describe('per-component results', () => {
     expect(rtlResult(ownerIdentity('core/Toolbar'), reports).result).toBe(
       'not-run',
     );
+    // A sub-component audits its parent's stories: the audit's filterAliases
+    // name them (ResizeHandle → Core/Resizable's `core/resizable`).
+    const resizeHandle = ownerIdentity('core/ResizeHandle');
+    const resizable = [
+      {
+        scope: {filterAliases: {'core/resizehandle': ['core/resizable']}},
+        autoDiscovery: {
+          results: [{component: 'core/resizable', verdict: 'pass'}],
+        },
+        positionalMirror: {
+          results: [{component: 'core/resizable', verdict: 'fail'}],
+        },
+      },
+    ];
+    expect(rtlResult(resizeHandle, resizable)).toEqual({
+      result: 'fail',
+      detail: '1 RTL check(s) failed',
+    });
+    // An owner with no story is N/A (the comment shows —), not a failure,
+    // even when the step around it failed.
+    expect(
+      rtlResult(
+        resizeHandle,
+        [{scope: {filterAliases: {}, noStories: ['core/resizehandle']}}],
+        'failure',
+      ),
+    ).toEqual({result: 'not-run', detail: 'no stories found'});
     // The audit's coverage gap fails, and an audit that crashed before its
     // report fails rather than reading not-run.
     expect(

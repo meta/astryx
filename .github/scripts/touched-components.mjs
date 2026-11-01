@@ -337,6 +337,20 @@ const CURATED_VERDICT = {
  * sections and the curated targets' cards.
  */
 export function rtlResult(identity, reports, stepOutcome = null) {
+  // The audit resolves each filter through the Storybook index (filters are
+  // lowercase there): a sub-component audits its parent's stories, and an
+  // owner with no story has nothing to render.
+  const filterKey = identity.key.toLowerCase();
+  const aliases = reports.flatMap(
+    report => report?.scope?.filterAliases?.[filterKey] ?? [],
+  );
+  const noStories = reports.some(report =>
+    (report?.scope?.noStories ?? []).includes(filterKey),
+  );
+  const names = value =>
+    namesOwner(value, identity) ||
+    (typeof value === 'string' &&
+      aliases.some(alias => alias.toLowerCase() === value.toLowerCase()));
   const results = reports.flatMap(report => [
     ...RTL_SECTIONS.flatMap(section => report?.[section]?.results ?? []),
     ...(report?.curated?.results ?? []).map(card => ({
@@ -344,17 +358,20 @@ export function rtlResult(identity, reports, stepOutcome = null) {
       verdict: CURATED_VERDICT[card.rollup] ?? 'N-A',
     })),
   ]);
-  const mine = results.filter(result => namesOwner(result.component, identity));
+  const mine = results.filter(result => names(result.component));
   // The audit's own coverage: no applicable dimension and no verified-N/A
   // reason is a gap, which the audit signals as a failure.
   const coverage = reports
     .flatMap(report => report?.coverage?.results ?? [])
-    .find(entry => namesOwner(entry.component, identity));
+    .find(entry => names(entry.component));
   if (
     coverage?.status === 'coverage-gap' ||
     coverage?.status === 'stale-verified-na'
   ) {
     return {result: 'fail', detail: `RTL ${coverage.status}`};
+  }
+  if (mine.length === 0 && noStories) {
+    return {result: 'not-run', detail: 'no stories found'};
   }
   if (mine.length === 0) {
     return stepOutcome === 'failure'

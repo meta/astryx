@@ -23,6 +23,7 @@ import {
   finishFiniteAnimations,
   orderD1StoryCandidates,
   resolveD1Applicability,
+  resolveFilterRoutes,
   storyIdsForComponentFilters,
   unresolvedComponentFilters,
   validateStoryRtlAuditParameters,
@@ -1012,5 +1013,63 @@ describe('finishFiniteAnimations', () => {
 
   it('does nothing in a document without the Web Animations API', () => {
     expect(finishFiniteAnimations({})).toBe(0);
+  });
+});
+
+describe('resolveFilterRoutes (filters resolve through the Storybook index)', () => {
+  // Core/Resizable's stories route to `core/resizable` (no public component
+  // of that name); ResizeHandle, the folder's public export, has no title.
+  const routes = [
+    {id: 'core-resizable--horizontal-split', component: 'core/resizable'},
+    {id: 'core-resizable--snap-points', component: 'core/resizable'},
+    {id: 'core-button--primary', component: 'core/Button'},
+  ];
+  const componentPaths = {
+    'core-resizable--horizontal-split':
+      '../../packages/core/src/Resizable/index.ts',
+    'core-resizable--snap-points': '../../packages/core/src/Resizable/index.ts',
+    'core-button--primary': '../../packages/core/src/Button/index.ts',
+  };
+  const folders = {
+    'core/resizehandle': {pkg: 'core', folder: 'Resizable'},
+    'core/button': {pkg: 'core', folder: 'Button'},
+  };
+  const resolve = filters =>
+    resolveFilterRoutes({
+      routes,
+      filters,
+      componentPathOf: id => componentPaths[id],
+      folderOf: filter => folders[filter] ?? null,
+    });
+
+  it("audits a sub-component's stories under its parent's title (ResizeHandle → Core/Resizable)", () => {
+    const resolved = resolve(['core/resizehandle']);
+    expect(resolved.routes.map(route => route.id)).toEqual([
+      'core-resizable--horizontal-split',
+      'core-resizable--snap-points',
+    ]);
+    expect(resolved.aliases).toEqual({'core/resizehandle': ['core/resizable']});
+    expect(resolved.noStories).toEqual([]);
+    // The coverage roster checks the stories' component, not the export.
+    expect(resolved.rosterFilters).toEqual(['core/resizable']);
+  });
+
+  it('keeps a filter a story title names, without aliasing it', () => {
+    const resolved = resolve(['core/button']);
+    expect(resolved.routes.map(route => route.id)).toEqual([
+      'core-button--primary',
+    ]);
+    expect(resolved.aliases).toEqual({});
+    expect(resolved.rosterFilters).toEqual(['core/button']);
+  });
+
+  it('reports a filter with no story as having none, instead of failing the run', () => {
+    const resolved = resolve(['core/nosuchthing', 'core/button']);
+    expect(resolved.noStories).toEqual(['core/nosuchthing']);
+    expect(resolved.routes).toHaveLength(1);
+  });
+
+  it('is the whole route list when no filter is given', () => {
+    expect(resolve([]).routes).toBe(routes);
   });
 });

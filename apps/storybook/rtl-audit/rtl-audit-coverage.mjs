@@ -207,6 +207,72 @@ export function componentRoutesForFilters(routes, filters) {
   );
 }
 
+/**
+ * Resolve component filters to story routes through the Storybook index, not
+ * the export name alone. A filter a route names selects that route. A filter
+ * no route names (a sub-component whose stories live under its parent, such
+ * as `core/ResizeHandle` under `Core/Resizable`) selects the stories whose
+ * `componentPath` lies in its source folder, and `aliases` records the route
+ * components it stands for. A filter with neither has no stories.
+ * @param {{
+ *   routes: {id: string, component: string}[],
+ *   filters: string[],
+ *   componentPathOf: (storyId: string) => string | undefined,
+ *   folderOf: (filter: string) => {pkg: string, folder: string} | null,
+ * }} input
+ */
+export function resolveFilterRoutes({
+  routes,
+  filters,
+  componentPathOf,
+  folderOf,
+}) {
+  if (filters.length === 0) {
+    return {routes, aliases: {}, noStories: [], rosterFilters: []};
+  }
+  const selected = new Map();
+  const aliases = {};
+  const noStories = [];
+  const rosterFilters = [];
+  for (const filter of filters) {
+    let mine = routes.filter(route =>
+      routeMatchesComponentFilter(route, filter),
+    );
+    if (mine.length > 0) {
+      rosterFilters.push(filter);
+    } else {
+      const located = folderOf(filter);
+      const prefix = located
+        ? `packages/${located.pkg}/src/${located.folder}/`
+        : null;
+      mine = prefix
+        ? routes.filter(route =>
+            (componentPathOf(route.id) ?? '')
+              .replace(/^(\.\.\/)+/, '')
+              .startsWith(prefix),
+          )
+        : [];
+      if (mine.length === 0) {
+        noStories.push(filter);
+        continue;
+      }
+      const components = [
+        ...new Set(mine.map(route => route.component)),
+      ].sort();
+      aliases[filter] = components;
+      rosterFilters.push(...components);
+    }
+    for (const route of mine)
+      selected.set(`${route.component}::${route.id}`, route);
+  }
+  return {
+    routes: [...selected.values()],
+    aliases,
+    noStories,
+    rosterFilters: [...new Set(rosterFilters)],
+  };
+}
+
 /** Story ids owned by any bare or package-qualified component filter. */
 export function storyIdsForComponentFilters(routes, filters) {
   return [

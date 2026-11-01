@@ -66,6 +66,7 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  resolveFilterRoutes,
   finishFiniteAnimations,
   orderD1StoryCandidates,
   resolveD1Applicability,
@@ -1193,6 +1194,26 @@ function matchesFilter(component) {
   return !FILTER.length || FILTER.includes(normalized) || FILTER.includes(name);
 }
 
+/**
+ * A filter's source folder: the package folder holding `<Name>.tsx`, for a
+ * package-qualified filter (`core/resizehandle` → core, Resizable).
+ */
+function sourceFolderOf(filter) {
+  const [pkg, name] = filter.includes('/') ? filter.split('/') : [null, filter];
+  for (const packageName of pkg ? [pkg] : ACTIVE_PACKAGE_NAMES) {
+    const src = path.join(PROJECT_ROOT, 'packages', packageName, 'src');
+    if (!fs.existsSync(src)) continue;
+    for (const entry of fs.readdirSync(src, {withFileTypes: true})) {
+      if (!entry.isDirectory()) continue;
+      const found = fs
+        .readdirSync(path.join(src, entry.name))
+        .some(file => file.toLowerCase() === `${name}.tsx`);
+      if (found) return {pkg: packageName, folder: entry.name};
+    }
+  }
+  return null;
+}
+
 function belongsToActivePackage(route) {
   return filterStoryRoutesByPackages([route], ACTIVE_PACKAGE_NAMES).length === 1;
 }
@@ -1267,14 +1288,40 @@ async function cleanupRuntime() {
     targets,
     publicComponentsByPackage,
   }).filter(belongsToActivePackage);
-  const scopedStoryRoutes = storyRoutes.filter(route => matchesFilter(route.component));
+  // Filters resolve through the index: a sub-component whose stories live
+  // under its parent's title audits those stories (filterAliases records it).
+  const resolvedFilters = resolveFilterRoutes({
+    routes: storyRoutes,
+    filters: FILTER,
+    componentPathOf: id => entries[id]?.componentPath,
+    folderOf: filter => sourceFolderOf(filter),
+  });
+  const scopedStoryRoutes = resolvedFilters.routes;
+  for (const filter of resolvedFilters.noStories) {
+    console.error(`NOTE ${filter}: no stories found, so RTL has nothing to render (N/A).`);
+  }
   if (scopedStoryRoutes.length === 0) {
+    if (FILTER.length > 0 && SHARD === null) {
+      // Every filter has no story: nothing to render, which is N/A, not a crash.
+      const scope = {
+        packages: ACTIVE_PACKAGE_NAMES,
+        filters: FILTER,
+        filterAliases: {},
+        noStories: resolvedFilters.noStories,
+      };
+      fs.writeFileSync(
+        OUT,
+        `${JSON.stringify({generatedAt: new Date().toISOString(), scope}, null, 2)}\n`,
+      );
+      console.error(`WROTE ${OUT} (no stories for ${FILTER.join(',')})`);
+      return;
+    }
     throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
   }
   const auditedComponents = buildAuditedComponentRoster({
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
-    filters: FILTER,
+    filters: resolvedFilters.rosterFilters,
   });
 
   // The audit's plan: D1 uses one deterministic representative story per
@@ -1304,7 +1351,10 @@ async function cleanupRuntime() {
       publicComponentsByPackage,
     );
     if (!belongsToActivePackage({component, id: t.storyId})) continue;
-    if (!matchesFilter(component)) continue;
+    const aliased = Object.values(resolvedFilters.aliases)
+      .flat()
+      .some(alias => alias.toLowerCase() === component.toLowerCase());
+    if (!matchesFilter(component) && !aliased) continue;
     if (!entries[t.storyId]) {
       curatedTargets.push({t, component, missing: true});
       continue;
@@ -1510,6 +1560,8 @@ async function cleanupRuntime() {
     scope: {
       packages: ACTIVE_PACKAGE_NAMES,
       filters: FILTER,
+      filterAliases: resolvedFilters.aliases,
+      noStories: resolvedFilters.noStories,
     },
     completion: {
       plannedComponentScans: new Set(scopedStoryRoutes.map(route => route.component)).size,
