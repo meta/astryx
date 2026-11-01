@@ -718,20 +718,22 @@ describe('ci admission', () => {
     });
 
     it('leaves fits unset when a later look stops early, so the rest starts', async () => {
-      // Room's first look finds no room for the build (far over); its second,
-      // four minutes on, meets a low budget and stops.
-      let look = 0;
+      // Room's first look finds no room even for the build (far over) and
+      // records that the run did not fit; its second look meets a low budget
+      // and stops.
+      let looksSoFar = 0;
       const room = await admit({
-        active: () => {
-          look += 1;
+        active: looks => {
+          looksSoFar = looks;
           return prs(7);
         },
         peak: 16,
         phase: 'room',
         maxWait: 12,
         maxLooks: 4,
-        budget: () => (look >= 2 ? 1000 : 4000),
+        budget: () => (looksSoFar >= 2 ? 1000 : 4000),
       });
+      expect(room.looks).toBe(2);
       expect(room.warning.at(-1)).toContain('API calls left this hour');
       expect(room.outputs.fits).toBe('');
       const rest = await admit({
