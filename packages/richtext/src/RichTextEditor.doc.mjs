@@ -241,6 +241,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Cmd+A (Ctrl+A on other platforms) in a code block or a table cell selects the code or the cell text first; pressing it again selects the whole document. Anywhere else it selects the whole document at once.',
+      },
+      {
+        guidance: true,
+        description:
           'Thematic breaks (---, ***, ___, with or without spaces between) import as horizontal rules and export as ---. A dash line directly under a paragraph line stays with that paragraph, as in Markdown. Click a rule or arrow onto it to select it; Backspace removes it. RichTextView draws the same rules. Install @lexical/extension with the other lexical peers.',
       },
       {
