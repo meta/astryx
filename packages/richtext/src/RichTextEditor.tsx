@@ -414,6 +414,16 @@ export interface RichTextEditorProps extends Omit<
    */
   plugins?: ReactNode;
   /**
+   * Whether the editor keeps its own undo and redo history (Lexical's
+   * `HistoryPlugin`). Turn it off when a plugin passed in `plugins` brings its
+   * own history, such as a collaboration plugin whose undo manager tracks
+   * shared edits, so that only one history records edits and answers undo and
+   * redo. The toolbar's Undo and Redo follow whichever history dispatches
+   * `CAN_UNDO_COMMAND` and `CAN_REDO_COMMAND`.
+   * @default true
+   */
+  hasHistory?: boolean;
+  /**
    * Whether to enable Markdown shortcut typing (e.g. `# ` for a heading,
    * `- ` for a list). Uses the `transformers` prop (defaults to the standard
    * `@lexical/markdown` transformers plus GFM tables).
@@ -526,6 +536,7 @@ export const RichTextEditor = function RichTextEditor({
   nodes,
   toolbar,
   plugins,
+  hasHistory = true,
   hasMarkdownShortcuts = true,
   transformers = DEFAULT_TRANSFORMERS,
   markdownExtensions,
@@ -705,7 +716,7 @@ export const RichTextEditor = function RichTextEditor({
                 placeholder={null}
                 ErrorBoundary={LexicalErrorBoundary}
               />
-              <HistoryPlugin />
+              {hasHistory && <HistoryPlugin />}
               <ListPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
