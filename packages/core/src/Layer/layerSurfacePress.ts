@@ -9,7 +9,8 @@
  * @position component:Tooltip FR11 and component:HoverCard FR11. The surfaces
  *   register their content element; every clickable container that asks
  *   hasInteractiveAncestor (useClickableContainer, TreeListItem, Table row
- *   plugins) or isInLayerSurface (Item) leaves the press alone. The event
+ *   plugins), or walks with isLayerSurface (Item, Token), leaves the press
+ *   alone. The event
  *   keeps propagating, so document and window listeners still see it. Not
  *   exported from the package.
  */
@@ -26,19 +27,4 @@ export function registerLayerSurface(element: Element | null): void {
 /** Whether this element is a registered layer surface. */
 export function isLayerSurface(element: Element): boolean {
   return surfaces.has(element);
-}
-
-/**
- * Whether `element` sits inside a layer surface, walking up to (not including)
- * `root` or the document body.
- */
-export function isInLayerSurface(element: Element, root: Element): boolean {
-  let current: Element | null = element;
-  while (current != null && current !== root && current !== document.body) {
-    if (surfaces.has(current)) {
-      return true;
-    }
-    current = current.parentElement;
-  }
-  return false;
 }

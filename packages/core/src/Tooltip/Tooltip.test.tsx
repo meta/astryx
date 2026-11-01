@@ -29,6 +29,7 @@ import {useRef} from 'react';
 import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
+import {Token} from '../Token/Token';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
@@ -856,6 +857,25 @@ describe('Tooltip surface press', () => {
     expect(onRowClick).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText('Row'));
     expect(onRowClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text from running a Token', () => {
+    const onTokenClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        onClick={onTokenClick}
+        endContent={
+          <Tooltip content="Tooltip text" isOpen>
+            <span tabIndex={0}>Info</span>
+          </Tooltip>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onTokenClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Tag'));
+    expect(onTokenClick).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a middle-button press on the tooltip text from opening a card link', () => {
