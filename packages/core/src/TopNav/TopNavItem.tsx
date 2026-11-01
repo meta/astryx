@@ -213,8 +213,7 @@ export function TopNavItem({
   const isAction = href == null && onClick != null;
   const Root = isDisabled && !isAction ? 'a' : LinkComponent;
   const spacePressedRef = useRef<HTMLAnchorElement | null>(null);
-  // Cancel the browser's in-flight Space press when availability or the
-  // renderer changes, and release its target when this owner unmounts.
+  // Discard pending Space activation across availability/renderer changes.
   useEffect(() => {
     spacePressedRef.current = null;
     return () => {
@@ -222,8 +221,7 @@ export function TopNavItem({
     };
   }, [isAction, isDisabled, Root]);
 
-  // Keep the public anchor host/ref contract; add the keyboard behavior that
-  // role="button" alone does not provide. Space activates on release.
+  // Keep the anchor host/ref contract while adding button keyboard behavior.
   const actionKeyboardProps = isAction
     ? {
         role: props.role ?? 'button',

@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'TopNav',
   displayName: 'Top Nav Item',
   isHiddenFromOverview: true,
-  description: 'Navigation item for use in TopNav startContent: renders as an anchor with hover and selected states. An onClick item without href has button semantics and keyboard activation.',
+  description: 'Navigation link item for use in TopNav startContent: renders as an anchor with hover and selected states.',
   playground: {
     defaults: {label: 'Projects', href: '#', isSelected: true},
   },
@@ -72,7 +72,7 @@ export const docsZh = {
   name: 'TopNavItem',
   isHiddenFromOverview: true,
   displayName: 'Top Nav Item',
-  description: '用于 TopNav startContent 的导航项，渲染为具有悬停和选中状态的锚点。有 onClick 且无 href 时提供按钮语义和键盘激活。',
+  description: '用于 TopNav startContent 的导航链接项，渲染为具有悬停和选中状态的锚点。',
   props: [
     {
       name: 'label',
@@ -119,7 +119,7 @@ export const docsDense = {
   name: 'TopNavItem',
   isHiddenFromOverview: true,
   displayName: 'Top Nav Item',
-  description: 'Nav item for TopNav startContent; anchor w/ hover+selected states. onClick without href: button semantics + keyboard activation.',
+  description: 'Nav link for TopNav startContent; renders as anchor w/ hover+selected states.',
   propDescriptions: {
     label: 'Visible text or aria-label when isIconOnly is true.',
     href: 'Navigation URL.',

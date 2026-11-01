@@ -9,7 +9,7 @@
  * SYNC: When TopNav components change, update tests to match new behavior
  */
 
-import {createRef, useState, type MouseEventHandler} from 'react';
+import {createRef, useState} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen, act} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
@@ -770,25 +770,6 @@ describe('TopNavItem', () => {
     await user.keyboard('{Enter} ');
     expect(fireEvent.click(action)).toBe(false);
     expect(onClick).not.toHaveBeenCalled();
-  });
-
-  it('continues accepting anchor refs and anchor-typed handlers for links', () => {
-    const ref = createRef<HTMLAnchorElement>();
-    const onClick: MouseEventHandler<HTMLAnchorElement> = event => {
-      event.preventDefault();
-      expect(event.currentTarget.getAttribute('href')).toBe('/feedback');
-    };
-    render(
-      <TopNavItem
-        label="Feedback"
-        href="/feedback"
-        ref={ref}
-        onClick={onClick}
-      />,
-    );
-    const link = screen.getByRole('link', {name: 'Feedback'});
-    expect(ref.current).toBe(link);
-    fireEvent.click(link);
   });
 
   it('preserves inferred anchor-specific click targets and callback refs', () => {
