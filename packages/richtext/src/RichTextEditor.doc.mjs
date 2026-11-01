@@ -129,7 +129,7 @@ export const docs = {
       name: 'hasMarkdownShortcuts',
       type: 'boolean',
       description:
-        'Enable Markdown shortcut typing (e.g. "# " for a heading). Uses the transformers prop (defaults to thematic breaks, the standard @lexical/markdown transformers, hard line breaks, and GFM tables).',
+        'Enable Markdown shortcut typing (e.g. "# " for a heading). Uses the transformers prop (defaults to thematic breaks, the standard @lexical/markdown transformers, hard line breaks, and GFM tables). The same markers work at the start of a list item: "- ", "1. ", or "[ ] " switches its list between bullets, numbers, and tasks (so "- [ ] " typed in a paragraph makes a task item), and "# " or "> " takes the item out of its list as a heading or a quote, the rest of the list continuing after it. Each change is one undo step, back to the marker as typed.',
       default: 'true',
     },
     {

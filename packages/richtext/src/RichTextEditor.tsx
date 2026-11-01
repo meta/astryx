@@ -83,6 +83,7 @@ import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
 import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
+import {ListItemShortcutsPlugin} from './ListItemShortcutsPlugin';
 import {type Transformer} from '@lexical/markdown';
 import {$generateHtmlFromNodes} from '@lexical/html';
 import {DEFAULT_NODES} from './editorNodes';
@@ -416,7 +417,10 @@ export interface RichTextEditorProps extends Omit<
   /**
    * Whether to enable Markdown shortcut typing (e.g. `# ` for a heading,
    * `- ` for a list). Uses the `transformers` prop (defaults to the standard
-   * `@lexical/markdown` transformers plus GFM tables).
+   * `@lexical/markdown` transformers plus GFM tables). At the start of a list
+   * item, `- `, `1. `, or `[ ] ` switches its list between bullets, numbers,
+   * and tasks, and `# ` or `> ` takes the item out of its list as a heading
+   * or a quote.
    * @default true
    */
   hasMarkdownShortcuts?: boolean;
@@ -732,6 +736,10 @@ export const RichTextEditor = function RichTextEditor({
               <TabFocusEscapePlugin />
               {hasMarkdownShortcuts && (
                 <MarkdownShortcutPlugin transformers={markdownTransformers} />
+              )}
+              {/* The same shortcuts typed at the start of a list item. */}
+              {hasMarkdownShortcuts && (
+                <ListItemShortcutsPlugin transformers={markdownTransformers} />
               )}
               {hasAutoFocus && <AutoFocusOnMount />}
               {onChange && (
