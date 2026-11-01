@@ -573,8 +573,8 @@ export function SideNav({
   // callback refs. Rows are matched across the commit by their place among
   // the rows the rail keeps, not by element: a resizable SideNav remounts its
   // nav when it collapses. Focus on a header or footer control that a
-  // resizable collapse remounts goes back to the same control, found by name.
-  // From a header or footer control the collapse removes, or the resize
+  // resizable collapse remounts goes back to the control with the same
+  // accessible name. From one the collapse removes or renames, or the resize
   // handle, focus goes to the toggle, or, with none, to the first kept row.
   // Focus moves only if the collapse lost it.
   const rowsRef = useRef(new Map<HTMLElement, boolean>());

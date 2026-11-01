@@ -4500,6 +4500,32 @@ describe('SideNav collapse focus (AR3)', () => {
     },
   );
 
+  it('moves focus from a heading link the collapse renames (its subheading dropped) to the toggle in a resizable SideNav', () => {
+    const rail = (isCollapsed: boolean) => (
+      <SideNav
+        resizable
+        collapsible={{isCollapsed, onCollapsedChange: () => {}}}
+        header={
+          <SideNavHeading
+            icon={<span>A</span>}
+            heading="Acme"
+            subheading="Workspace"
+            headingHref="/"
+          />
+        }>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+      </SideNav>
+    );
+    const {rerender} = render(rail(false));
+    const heading = screen
+      .getAllByRole('link')
+      .find(link => link.getAttribute('href') === '/');
+    heading?.focus();
+    expect(heading).toHaveFocus();
+    rerender(rail(true));
+    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+  });
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});
