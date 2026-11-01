@@ -41,6 +41,8 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {useScrollLock} from '../hooks/useScrollLock';
@@ -225,6 +227,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         'none',
     },
+  },
+  // A dialog present on page load opens where it rests (spec:AST-013 FR13).
+  openSettled: {
+    animationName: 'none',
   },
   // Backdrop using ::backdrop pseudo-element
   backdrop: {
@@ -463,7 +469,7 @@ export interface DialogProps extends BaseProps<HTMLDialogElement> {
  * ```
  */
 export function Dialog({
-  isOpen,
+  isOpen: isOpenProp,
   isInline = false,
   onOpenChange,
   width = 400,
@@ -479,6 +485,17 @@ export function Dialog({
   ref,
   ...props
 }: DialogProps) {
+  // A modal dialog open on the server renders closed until hydration, and
+  // opens in the render after it, the first one that can call showModal(): a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have, over a live page (FR8). An inline dialog is not modal and
+  // renders as it is.
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && (isInline || !isHydrating);
+  // A dialog open on the server was present on page load, so it opens settled,
+  // with no entry motion; its later opens animate as usual (spec:AST-013 FR13).
+  const [settledOpen] = useSettledOpen(isOpenProp && !isInline, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   // When no explicit padding prop, use theme default (--astryx-dialog-padding)
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;
@@ -826,6 +843,7 @@ export function Dialog({
             })(),
           isFullscreen && styles.fullscreen,
           isFullscreen && isOpen && styles.fullscreenOpen,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,
@@ -833,7 +851,7 @@ export function Dialog({
       )}
       onClick={chainEventHandlers(handleClick, onClickProp)}
       onCancel={handleCancel}
-      aria-modal="true"
+      aria-modal={isHydrating ? undefined : 'true'}
       // The default aria-labelledby (from a DialogHeader title) is set
       // imperatively in `attachDialog`; a consumer-provided aria-labelledby
       // flows through {...safeProps} above and wins.
