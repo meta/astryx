@@ -2,8 +2,9 @@
 
 /**
  * @file pressFeedback.ts
- * @input The press state machine (pressGesture.ts) and the document's pointer,
- *   keyboard, scroll and visibility events
+ * @input The press state machine (pressGesture.ts), the menu-press marker
+ *   (hooks/menuPressMarker.ts) and the document's pointer, keyboard, scroll and
+ *   visibility events
  * @output Exports PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps and
  *   installPressFeedback
  * @position The DOM half of the touch press model: one delegated controller
@@ -44,6 +45,7 @@
  * pressFeedback.test.ts.
  */
 
+import {MENU_PRESS_MARKER} from '../hooks/menuPressMarker';
 import type {PressGesture, PressPaint, PressStep} from './pressGesture';
 import {
   idlePressGesture,
@@ -107,7 +109,7 @@ const SPACE_ACTIVATED_INPUT_TYPES: ReadonlySet<string> = new Set([
  * FR6, DEC-6): a press held on one row while the highlight follows the
  * pointer to another would light two rows.
  */
-const MENU_PRESS_ROOT = '[data-astryx-menu-press]';
+const MENU_PRESS_ROOT = `[${MENU_PRESS_MARKER}]`;
 
 interface LiveGesture {
   element: HTMLElement;

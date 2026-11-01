@@ -85,7 +85,11 @@ import {
   sizeVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import type {SearchableItem, SearchSource} from '../Typeahead/types';
+import type {
+  SearchContext,
+  SearchableItem,
+  SearchSource,
+} from '../Typeahead/types';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/focusReturn';
@@ -1098,8 +1102,16 @@ export function Tokenizer<T extends SearchableItem>({
 
   const filteredSource: SearchSource<T> = useMemo(
     () => ({
-      search: async (query: string) => {
-        const results = await searchSource.search(query);
+      // Committed values leave every list, partial or final
+      // (component:Tokenizer FR13, spec:AST-092 FR1).
+      search: async (query: string, context?: SearchContext<T>) => {
+        const results = await searchSource.search(
+          query,
+          context && {
+            update: items =>
+              context.update(items.filter(item => !selectedIds.has(item.id))),
+          },
+        );
         return results.filter(item => !selectedIds.has(item.id));
       },
       bootstrap: async () => {

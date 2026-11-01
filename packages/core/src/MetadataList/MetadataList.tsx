@@ -30,6 +30,7 @@ import {
 } from './MetadataListContext';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
@@ -238,8 +239,9 @@ export function MetadataList({
       ? childrenArray.slice(0, effectiveMax)
       : childrenArray;
 
-  const titleContent =
-    title != null ? <div {...stylex.props(styles.title)}>{title}</div> : null;
+  const titleContent = isRenderable(title) ? (
+    <div {...stylex.props(styles.title)}>{title}</div>
+  ) : null;
 
   // Determine grid style based on columns and label position
   const getGridStyle = () => {
