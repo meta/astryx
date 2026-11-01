@@ -33,7 +33,7 @@ system_specs: []
 | Behavior                | Marks a subtree as sitting on a dark or light surface so tokens switch to match, through a layout-neutral wrapper; `auto` measures the surface. |
 | End-user impact         | Text and controls placed over images or video stay readable against that surface while keeping the app's theme.                                 |
 | Builder impact          | None.                                                                                                                                           |
-| Compatibility/readiness | Records shipped behavior; no public change.                                                                                                     |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact.                                          |
 | Review checks           | Reject a wrapper that remounts children when the mode changes, a probe element left behind, or a surface mode that replaces the theme.          |
 | Governing rules         | `architecture:theme-application` INV8.                                                                                                          |
 
@@ -54,6 +54,14 @@ the active theme. Consumer usage lives in `MediaTheme.doc.mjs`.
 - Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **A surface that stops being measurable keeps its old side.** With `auto`,
+  once a surface has been measured, a later change that makes it unmeasurable,
+  such as a new background image, keeps the last measured side instead of
+  `fallback`. The consumer docs promise `fallback` whenever the backdrop is not
+  knowable, so text can stay styled for the old surface (FR3).
 
 ## Ownership boundary
 
@@ -77,11 +85,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                          | Basis                    |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | MediaTheme always renders one wrapper with `display: contents`, so switching to or from `off` never remounts its children.                                                                                                                                                                         | Current source and tests |
-| FR2 | `dark` and `light` mark the wrapper with that surface and the primary text color; `off` renders no marker.                                                                                                                                                                                         | Current source and tests |
-| FR3 | `auto` measures the surface behind the wrapper on each render and marks it dark or light, renders no marker when the surface's own text already reads on it at 3:1, and uses `fallback` when the surface cannot be measured; it leaves no probe element. `fallback` is ignored for explicit modes. | Current source and tests |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Basis                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | MediaTheme always renders one wrapper with `display: contents`, so switching to or from `off` never remounts its children.                                                                                                                                                                                                                                                                                                                                              | Current source and tests |
+| FR2 | `dark` and `light` mark the wrapper with that surface and the primary text color; `off` renders no marker.                                                                                                                                                                                                                                                                                                                                                              | Current source and tests |
+| FR3 | `auto` measures the surface behind the wrapper on each render and marks it dark or light, renders no marker when the surface's own text already reads on it at 3:1, and uses `fallback` when the surface cannot be measured; it leaves no probe element. `fallback` is ignored for explicit modes. Implementation gap: once a measurement has succeeded, a surface that becomes unmeasurable keeps the last measured side instead of `fallback` (Current-state impact). | Current source and tests |
 
 ### Allowed variation
 
@@ -89,13 +97,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                      | Required invariant                 | Allowed variation |
-| -------------------------- | ---------------------------------- | ----------------- |
-| `dark` or `light`          | Surface marker set.                | Content.          |
-| `off`                      | No marker; children not remounted. | Content.          |
-| `auto`, unmeasured         | Marker from `fallback`.            | Fallback.         |
-| `auto`, measured           | Marker from the measured surface.  | Surface.          |
-| `auto`, text already reads | No marker.                         | Surface.          |
+| State                      | Required invariant                                                                                   | Allowed variation |
+| -------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------- |
+| `dark` or `light`          | Surface marker set.                                                                                  | Content.          |
+| `off`                      | No marker; children not remounted.                                                                   | Content.          |
+| `auto`, unmeasured         | Marker from `fallback`; after an earlier measurement, the last measured side (Current-state impact). | Fallback.         |
+| `auto`, measured           | Marker from the measured surface.                                                                    | Surface.          |
+| `auto`, text already reads | No marker.                                                                                           | Surface.          |
 
 ### Transformation and precedence order
 
