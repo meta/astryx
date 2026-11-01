@@ -765,7 +765,7 @@ export function SideNavHeading({
             <button
               ref={setTriggerEl}
               type="button"
-              aria-label={t('@astryx.sideNav.heading.openMenu')}
+              aria-label={t('@astryx.sideNav.heading.openMenu', {heading})}
               onClick={e => {
                 e.stopPropagation();
                 triggerProps.onClick();
@@ -848,7 +848,7 @@ export function SideNavHeading({
               <button
                 ref={setTriggerEl}
                 type="button"
-                aria-label={t('@astryx.sideNav.heading.openMenu')}
+                aria-label={t('@astryx.sideNav.heading.openMenu', {heading})}
                 onClick={e => {
                   e.stopPropagation();
                   triggerProps.onClick();

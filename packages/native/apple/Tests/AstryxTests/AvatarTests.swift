@@ -125,6 +125,20 @@ import Testing
   #expect(Avatar("Ada").linkURL == nil)
 }
 
+// family:navigation-destinations FR4: a script URL or an HTML document in a
+// data URL never makes the avatar a link; it stays a button with onClick, or
+// static, as Swift Button and Item refuse them.
+@MainActor
+@Test func aRefusedDestinationLeavesTheAvatarWithoutALink() {
+  for refused in ["javascript:alert(1)", " JavaScript: alert(1)", "vbscript:msgbox", "data:text/html,<p>", "data: text/html,<p>"] {
+    #expect(Avatar("Ada", href: refused).linkURL == nil, "\(refused)")
+    #expect(Avatar("Ada", href: refused).tap == .none, "\(refused)")
+    #expect(Avatar("Ada", href: refused, onClick: {}).tap == .button, "\(refused)")
+  }
+  // Other schemes still open, as before.
+  #expect(Avatar("Ada", href: "data:image/png;base64,AAAA").linkURL != nil)
+}
+
 @MainActor
 @Test func avatarsReadTheirTapAndTraits() {
   #expect(Avatar("Ada").tap == .none)

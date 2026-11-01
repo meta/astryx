@@ -118,7 +118,7 @@ export const docs = {
       name: 'wordBreak',
       type: "'break-word' | 'break-all'",
       description:
-        "Word break behavior when truncating. Defaults to 'break-all' for single-line truncation, 'break-word' otherwise. Without truncation, a token longer than its line (a URL, an ID) always wraps, so text never makes the page scroll sideways; inside a flex row, give the flex child `min-width: 0` so it can shrink.",
+        "Word break behavior when truncating. Defaults to 'break-all' for single-line truncation, 'break-word' otherwise. Without truncation, a token longer than its line (a URL, an ID) wraps (`overflow-wrap: break-word`), so in ordinary flow text does not make the page scroll sideways. Inside a flex row, give the flex child `min-width: 0` so it can shrink; a container's `overflow-wrap: anywhere` no longer reaches this text.",
     },
     {
       name: 'textWrap',
