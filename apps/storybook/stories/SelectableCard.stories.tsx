@@ -91,6 +91,50 @@ export const SingleSelect: Story = {
   },
 };
 
+export const RadioInput: Story = {
+  name: 'Single choice (radio input)',
+  render: () => {
+    const [selected, setSelected] = useState('basic');
+    const plans = [
+      {id: 'basic', name: 'Basic', price: '$9/mo'},
+      {id: 'pro', name: 'Pro', price: '$29/mo'},
+      {id: 'enterprise', name: 'Enterprise', price: '$99/mo'},
+    ];
+
+    return (
+      <HStack gap={3} role="radiogroup" aria-label="Plan">
+        {plans.map(plan => (
+          <SelectableCard
+            key={plan.id}
+            label={plan.name}
+            inputType="radio"
+            htmlName="plan"
+            isSelected={selected === plan.id}
+            onChange={() => setSelected(plan.id)}
+            width={200}>
+            <VStack gap={1}>
+              <Text type="body" weight="bold">
+                {plan.name}
+              </Text>
+              <Text type="supporting" color="secondary">
+                {plan.price}
+              </Text>
+            </VStack>
+          </SelectableCard>
+        ))}
+      </HStack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'A single choice with radio semantics: each card takes inputType="radio" and the set\'s htmlName, inside a named radiogroup. The set is one tab stop, the arrow keys move and select, and a click never deselects.',
+      },
+    },
+  },
+};
+
 export const MultiSelect: Story = {
   name: 'Multi-Select (Checkbox)',
   render: () => {

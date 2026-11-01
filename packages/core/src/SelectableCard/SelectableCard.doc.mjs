@@ -24,7 +24,9 @@ export const docs = {
   props: [
     {name: 'label', type: 'string', description: 'Accessibility label.', required: true},
     {name: 'isSelected', type: 'boolean', description: 'Controlled selection state.', required: true},
-    {name: 'onChange', type: '(isSelected: boolean) => void', description: 'Called when toggled.', required: true},
+    {name: 'onChange', type: '(isSelected: boolean) => void', description: 'Called when toggled. A radio card only calls it with true.', required: true},
+    {name: 'inputType', type: "'checkbox' | 'radio'", description: "The native control inside the card. 'radio' makes the card one choice of a single-select set; SelectableCardGroup (lab) builds that set and documents it.", default: "'checkbox'"},
+    {name: 'htmlName', type: 'string', description: 'The native input name, as on RadioList and CheckboxInput. Radio cards that share it form one group; a disabled card submits nothing.'},
     {name: 'isDisabled', type: 'boolean', description: 'Disables the card.', default: 'false'},
     {name: 'children', type: 'ReactNode', description: 'Card content.'},
     {name: 'padding', type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10', description: 'Inner padding.', default: '4'},
