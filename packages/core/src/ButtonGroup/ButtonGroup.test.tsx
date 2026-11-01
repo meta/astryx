@@ -12,8 +12,8 @@
  */
 
 import {describe, it, expect} from 'vitest';
-import type {ReactNode} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {useState, type ReactNode} from 'react';
+import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {transformSync} from '@babel/core';
 import stylexBabelPlugin from '@stylexjs/babel-plugin';
@@ -1400,6 +1400,56 @@ describe('ButtonGroup', () => {
       expect(tabIndexOf('A')).toBe('0');
       expect(tabIndexOf('B')).toBe('-1');
       expect(tabIndexOf('C')).toBe('-1');
+    });
+
+    it('transitions to toolbar when a wrapper component adds a third button', async () => {
+      const user = userEvent.setup();
+      let addMember: () => void = () => {};
+
+      function DynamicWrapper() {
+        const [items, setItems] = useState(['A', 'B']);
+        addMember = () => setItems(['A', 'B', 'C']);
+        return (
+          <>
+            {items.map(name => (
+              <Button key={name} label={name} />
+            ))}
+          </>
+        );
+      }
+
+      render(
+        bracketed(
+          <ButtonGroup label="Wrapper actions">
+            <DynamicWrapper />
+          </ButtonGroup>,
+        ),
+      );
+
+      // Initially 2 buttons -> group mode with standard Tab order
+      expect(screen.getByRole('group')).toBeInTheDocument();
+      expect(tabIndexOf('A')).toBeNull();
+      expect(tabIndexOf('B')).toBeNull();
+
+      // Wrapper updates internally without ButtonGroup re-rendering directly
+      act(() => {
+        addMember();
+      });
+
+      // Now 3 buttons -> transitions to toolbar with roving tabindex (single Tab stop)
+      await waitFor(() => {
+        expect(screen.getByRole('toolbar')).toBeInTheDocument();
+      });
+      expect(tabIndexOf('A')).toBe('0');
+      expect(tabIndexOf('B')).toBe('-1');
+      expect(tabIndexOf('C')).toBe('-1');
+
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'before'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'A'})).toHaveFocus();
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'after'})).toHaveFocus();
     });
   });
 });

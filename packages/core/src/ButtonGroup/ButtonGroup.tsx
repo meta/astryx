@@ -36,6 +36,7 @@ import {themeProps} from '../utils/themeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useToolbar} from '../Toolbar/ToolbarContext';
+import {observeMutations} from '../utils/sharedMutationObserver';
 
 // =============================================================================
 // Props
@@ -185,18 +186,16 @@ export function ButtonGroup({
   const size = useSize(sizeProp, 'md');
 
   const toolbarContext = useToolbar();
-  const [isNestedInToolbar, setIsNestedInToolbar] = useState(false);
+  const isInsideToolbar = toolbarContext != null;
 
   // Initial estimate from renderable children; accurately synchronized with
-  // actual rendered members collected by useListFocus after layout.
+  // actual rendered members collected by useListFocus after layout and DOM mutations.
   const [renderedCount, setRenderedCount] = useState<number>(() => {
     if (Array.isArray(children)) {
       return children.flat().filter(isRenderable).length;
     }
     return isRenderable(children) ? 1 : 0;
   });
-
-  const isInsideToolbar = toolbarContext != null || isNestedInToolbar;
 
   // When nested inside a Toolbar, preserve role="group" and yield roving tabindex
   // and focus management to the parent Toolbar so it retains a single Tab stop.
@@ -232,24 +231,31 @@ export function ButtonGroup({
 
   useIsomorphicLayoutEffect(() => {
     const listEl = listRef.current;
-    if (listEl) {
-      const closestBoundary = listEl.parentElement?.closest(
-        '[role="toolbar"], [popover], dialog',
-      );
-      const inToolbar =
-        toolbarContext != null ||
-        (closestBoundary != null &&
-          closestBoundary.getAttribute('role') === 'toolbar');
-      if (inToolbar !== isNestedInToolbar) {
-        setIsNestedInToolbar(inToolbar);
-      }
+    if (!listEl) {
+      return;
     }
+    const syncCount = () => {
+      const count = getItems().length;
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- rendered member count is derived from DOM layout
+      setRenderedCount(prev => (prev === count ? prev : count));
+    };
+    syncCount();
+    return observeMutations(
+      listEl,
+      {childList: true, subtree: true},
+      syncCount,
+    );
+  });
+
+  const handleContainerFocus = (e: React.FocusEvent) => {
     const count = getItems().length;
     if (count !== renderedCount) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- rendered member count is derived from DOM layout
       setRenderedCount(count);
     }
-  });
+    if (isToolbar) {
+      handleFocus(e);
+    }
+  };
 
   const contextValue = useMemo(
     () => ({orientation, isDisabled}),
@@ -280,10 +286,7 @@ export function ButtonGroup({
             onKeyDown,
             isToolbar ? handleKeyDown : undefined,
           )}
-          onFocus={composeEventHandlers(
-            onFocus,
-            isToolbar ? handleFocus : undefined,
-          )}
+          onFocus={composeEventHandlers(onFocus, handleContainerFocus)}
           aria-disabled={isDisabled || undefined}
           data-testid={testId}>
           {children}

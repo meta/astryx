@@ -32,7 +32,7 @@ export const docs = {
         {name: 'elevation', type: "'none' | 'low' | 'med' | 'high'", description: 'Resting shadow depth for the whole group. The connected buttons share one surface, so the shadow lifts them as a unit. Use for a group that floats above content.', default: "'none'"},
         {name: 'ref', type: 'React.Ref<HTMLDivElement>', description: 'Ref forwarded to the root element.'},
         {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX styles for layout customization. Must be a stylex.create() value.'},
-        {name: 'role', type: "'group' | 'toolbar'", description: 'Explicit role override. By default, ButtonGroup adapts: 3 or more members use role="toolbar" with aria-orientation and roving tabindex; 2 or fewer members use role="group" in standard Tab order.'},
+        {name: 'role', type: 'AriaRole', description: 'Explicit role override. By default, ButtonGroup adapts: 3 or more members use role="toolbar" with aria-orientation and roving tabindex; 2 or fewer members use role="group" in standard Tab order.'},
         {name: 'data-testid', type: 'string', description: 'Test selector for automated testing frameworks.'},
       ],
     },
