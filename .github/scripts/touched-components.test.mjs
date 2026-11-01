@@ -17,6 +17,8 @@ import yaml from 'yaml';
 import {ungated} from './ci-pr-gate.mjs';
 import {
   MAX_TOUCHED_COMPONENTS,
+  withVisualBaseline,
+  wideVisualVerdict,
   a11yResult,
   buildTouchedReport,
   decideWideChange,
@@ -71,6 +73,38 @@ describe('touched scope', () => {
     expect(
       resolveTouchedScope({forceFullComponentAudits: true}).touched,
     ).toEqual([]);
+  });
+
+  it('expands a changed multi-component folder to its members, counted as one component', () => {
+    const scope = resolveTouchedScope({
+      unresolvedComponentSources: ['core/Chat'],
+      modifiedComponentOwners: ['core/Toast'],
+    });
+    expect(scope.touched).toContain('core/ChatComposer');
+    expect(scope.touched).toContain('core/Toast');
+    expect(scope.folders).toEqual(['core/Chat', 'core/Toast']);
+    // Visual stories are keyed by folder.
+    expect(scope.visualComponents).toEqual(['Chat', 'Toast']);
+    expect(scope.visualKeyByOwner['core/ChatComposer']).toBe('Chat');
+    expect(decideWideChange(scope, []).componentCount).toBe(2);
+  });
+
+  it('compares only visual components that have an accepted baseline shot', () => {
+    const scope = withVisualBaseline(
+      resolveTouchedScope({
+        modifiedComponentOwners: ['core/Toast', 'core/Brand'],
+      }),
+      {
+        a: {storyId: 'core-toast--default'},
+        b: {storyId: 'core-forms-textarea--default'},
+      },
+    );
+    expect(scope.visualComponents).toEqual(['Toast']);
+    expect(scope.noVisualBaseline).toEqual(['Brand']);
+    expect(visualResult(ownerIdentity('core/Brand'), null, scope)).toEqual({
+      result: 'not-run',
+      detail: 'no accepted visual baseline yet',
+    });
   });
 
   it('names a component by package and name', () => {
@@ -128,6 +162,34 @@ describe('wide changes', () => {
     expect(decideWideChange(owners(1), behaviour).wideChange).toBe(false);
   });
 
+  it('writes a skipped visual verdict for a wide change, carrying the run identity', () => {
+    const verdict = wideVisualVerdict(
+      {componentCount: 7},
+      {
+        GITHUB_SHA: 'a'.repeat(40),
+        GITHUB_RUN_ID: '42',
+        GITHUB_RUN_ATTEMPT: '1',
+        ASTRYX_PR_HEAD_SHA: 'b'.repeat(40),
+        ASTRYX_PR_BASE_SHA: 'c'.repeat(40),
+      },
+    );
+    expect(verdict).toMatchObject({
+      version: 1,
+      status: 'skipped',
+      context: {
+        sha: 'a'.repeat(40),
+        runId: '42',
+        runAttempt: '1',
+        headSha: 'b'.repeat(40),
+        baseSha: 'c'.repeat(40),
+        scope: 'touched',
+      },
+      counts: {total: 0, failed: 0},
+    });
+    expect(verdict.reason).toContain('Wide change (7 components)');
+    expect(verdict.reason).toContain('ci:run-visual');
+  });
+
   it('writes the wide record and points to the full-suite labels', () => {
     const scope = owners(6);
     const report = wideReport({
@@ -182,6 +244,26 @@ describe('per-component results', () => {
       ).result,
     ).toBe('fail');
     expect(visualResult(button, null, scope).result).toBe('not-run');
+    // A visual job that failed without a verdict is a failure, not a not-run.
+    expect(visualResult(button, null, scope, {}, 'failure').result).toBe(
+      'fail',
+    );
+    // A failed capture is matched to its component through the manifest, and
+    // a failure that names no component fails every audited one.
+    const failed = {
+      status: 'failed',
+      changes: [],
+      added: [],
+      removed: [],
+      failures: [{key: 'f1', error: 'timeout'}],
+    };
+    expect(
+      visualResult(button, failed, scope, {f1: {component: 'Button'}}).result,
+    ).toBe('fail');
+    expect(
+      visualResult(badge, failed, scope, {f1: {component: 'Button'}}).result,
+    ).toBe('pass');
+    expect(visualResult(badge, failed, scope, {}).result).toBe('fail');
     expect(visualResult(button, {status: 'skipped'}, scope).result).toBe(
       'not-run',
     );
@@ -229,6 +311,22 @@ describe('per-component results', () => {
     expect(rtlResult(ownerIdentity('core/Toolbar'), reports).result).toBe(
       'not-run',
     );
+    // A curated target's card counts: not-RTL fails, RTL-ready passes.
+    expect(
+      rtlResult(button, [
+        {
+          autoDiscovery: {
+            results: [{component: 'core/Button', verdict: 'pass'}],
+          },
+          curated: {results: [{component: 'core/Button', rollup: 'not-RTL'}]},
+        },
+      ]).result,
+    ).toBe('fail');
+    expect(
+      rtlResult(button, [
+        {curated: {results: [{component: 'core/Button', rollup: 'RTL-ready'}]}},
+      ]).result,
+    ).toBe('pass');
     // Every check not applicable is not a pass.
     expect(
       rtlResult(ownerIdentity('core/Toast'), [
@@ -311,6 +409,45 @@ describe('pr-touched-components routing', () => {
       contents: 'read',
       'pull-requests': 'read',
     });
+  });
+
+  it('skips the analysis download for a change with no components, and reads a failed pr-visual too', () => {
+    expect(step('Download analysis artifact').if).toBe(
+      "steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.tooling_only != 'true'",
+    );
+    expect(step("Download pr-visual's verdict").if).toContain(
+      "needs.pr-visual.result == 'failure'",
+    );
+    const report = step('Report per-component results');
+    expect(report.env.VISUAL_JOB).toBe('${{ needs.pr-visual.result }}');
+    expect(report.run).toContain('--visual-job "$VISUAL_JOB"');
+    expect(report.run).toContain(
+      '--baseline-manifest .github/visual-baseline/manifest.json',
+    );
+  });
+
+  it("marks pr-visual's default verdict with its run identity and touched scope", () => {
+    const visual = ci.jobs['pr-visual'];
+    const visualStep = name =>
+      visual.steps.find(candidate => candidate.name === name);
+    const decide = visualStep('Decide the default touched visual check');
+    expect(decide.run).toContain('--wide-verdict .visual-run/verdict.json');
+    expect(decide.run).toContain(
+      '--baseline-manifest .github/visual-baseline/manifest.json',
+    );
+    expect(decide.env.ASTRYX_PR_HEAD_SHA).toBe(
+      '${{ github.event.pull_request.head.sha }}',
+    );
+    const check = visualStep('Visual check for the default touched components');
+    expect(check.env).toMatchObject({
+      ASTRYX_PR_HEAD_SHA: '${{ github.event.pull_request.head.sha }}',
+      ASTRYX_PR_BASE_SHA: '${{ github.event.pull_request.base.sha }}',
+      ASTRYX_VISUAL_SCOPE: 'touched',
+    });
+    // A scope with nothing to compare leaves no verdict instead of failing.
+    expect(check.run).toContain(
+      'planned no shots|no stable visual representative',
+    );
   });
 
   it('exposes the wide-change flag and count', () => {

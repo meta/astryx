@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Visual, accessibility and RTL run on main, not on pull request updates.
+ * @file Full visual, accessibility and RTL suites run on main; pull request
+ *   updates check only touched components.
  * @input CI, Main and Main heavy lanes workflows, and a mocked GitHub API
  * @output Routing for the heavy owners, the required joins, and Main's
  *   release-check dispatch

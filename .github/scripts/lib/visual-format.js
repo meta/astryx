@@ -20,6 +20,20 @@ const {inline, num, safeUrl} = require('./report-text');
  * @returns {string} markdown
  */
 function buildVisualSection(verdict, reportUrl, imageUrl) {
+  const section = buildVisualSectionBody(verdict, reportUrl, imageUrl);
+  // pr-visual's default check compares only the touched components (spec:
+  // AST-030 FR12); say so, and name the label for the full suite.
+  if (
+    section &&
+    verdict?.context?.scope === 'touched' &&
+    verdict.status !== 'skipped'
+  ) {
+    return `${section}Only the touched components were checked; add \`ci:run-visual\` to run the full suite.\n\n`;
+  }
+  return section;
+}
+
+function buildVisualSectionBody(verdict, reportUrl, imageUrl) {
   if (!verdict) return '';
 
   // Verdict fields are report data: render them as literal inline text (and

@@ -166,7 +166,12 @@ they are separately named.
   independently routed test lane and, when applicable, one independently routed
   build lane MUST own them. New coverage inside an existing surface MUST join
   those owners and MUST NOT create a separately routed lane or required context.
-  Existing historical joins remain stable. A selected surface whose dedicated
+  Existing historical joins remain stable. The default touched-components
+  check (FR12) is the visual, accessibility and RTL owners' pull-request
+  coverage for the components a change touches: its visual part runs inside
+  `pr-visual`, and its accessibility and RTL part runs in one advisory job
+  beside them that reports no required context, so it routes no new surface
+  lane. A selected surface whose dedicated
   owner is not yet admitted continues through broad CI. The Build package's test
   owner includes its production CSS-layer cascade behavior. Theme-family
   compilation remains `theme-build` and does not become Build merely because both
@@ -192,7 +197,8 @@ they are separately named.
   focused, smoke, and no-op paths MUST NOT narrow release checks. On a pull
   request, the visual (`visual-scout`, `pr-visual`), accessibility (`pr-a11y`
   with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST each
-  run only when the pull request carries that suite's label at the event:
+  run at their opted-in scope (FR13) only when the pull request carries that
+  suite's label at the event:
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
   confirm that runs nothing. A label runs only its own suite. Without a label, a pull request update
@@ -250,17 +256,20 @@ they are separately named.
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
   sources; and every test that loads a changed workspace package from its build,
   by the package's name or a path into its `dist/`. When a pull request runs
-  them (FR12: only with their `ci:run-visual` or `ci:run-rtl` label), the visual and RTL owners
-  audit one affected set of component folders: the changed components
+  them at their opted-in scope (FR12: only with their `ci:run-visual` or
+  `ci:run-rtl` label), the visual and RTL owners audit one affected set of
+  component folders: the changed components
   and their reverse dependents, the folders of the components, in any package,
   whose built bundle, `import()` targets included, reaches a changed module.
   Visual audits each dependent folder that has a stable story, and runs the
   whole plan when the dependents exceed its focused budget or none has one; RTL
   audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
   a readable build the audits run in full. PR accessibility, when it runs, stays
-  scoped to changed components (FR12). Shared infrastructure runs the full suite of
-  the owners the pull request runs (visual, accessibility and RTL only with
-  their `ci:run-*` labels, FR12): root
+  scoped to changed components (FR12). Without a label, the default
+  touched-components check audits only the touched components and never
+  widens (FR12). Shared infrastructure runs the full suite of the owners the
+  pull request runs (visual, accessibility and RTL only with their `ci:run-*`
+  labels, FR12): root
   dependency manifests and lockfile, root configuration, a package's manifest,
   build or test configuration and test setup, `internal/` (the test harness
   included), `theme-build` paths (tokens and themes), Storybook configuration,
@@ -443,6 +452,10 @@ registers its cases with the one shared Storybook-backed PR visual owner in
 visual lanes; a second workflow that captures or compares those pixels is.
 The single-workflow wording clarifies the existing shared-system requirement;
 it does not admit a new owner.
+The default touched-components check (FR12) is the visual, accessibility and
+RTL owners' own pull-request coverage of touched components: its visual part
+is `pr-visual`'s default mode, and its advisory accessibility and RTL job feeds
+no required context, so it is not a new lane.
 
 Build's production CSS-layer cascade is a Build package integration contract, so
 it belongs to Build's test owner. Theme-family compilation remains owned by
@@ -484,7 +497,7 @@ pushes to `main`), and treating a maintenance
 capture, skipped check, a checked SHA no longer in current `main` history, or
 retroactive status as release evidence.
 
-### DEC-7 — Visual, accessibility and RTL run on main, not on pull request updates
+### DEC-7 — Full visual, accessibility and RTL suites run on main; pull request updates check only touched components
 
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
@@ -521,8 +534,9 @@ the module graph for tests and built-bundle reach for components. Tests that
 read sources through the file system run whole, because no import reaches what
 they read. Shared infrastructure, uncertainty, `main`, merge-group entries and
 release checks run everything, so no landing or release gate narrows; a pull
-request runs the visual, accessibility and RTL owners only with the
-suite's `ci:run-*` label (DEC-7).
+request runs the visual, accessibility and RTL owners at their opted-in scope
+only with the suite's `ci:run-*` label, and otherwise only the
+touched-components check for the components it touches (DEC-7).
 
 Rejected: a full run triggered by approval, a label or a draft-to-ready change,
 which tests the pull request's head rather than the merged result.

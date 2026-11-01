@@ -177,6 +177,8 @@ export function publishPrReport({
       // The attempt that produced this evidence, which can precede the
       // reported attempt after a rerun of only the failed jobs.
       runAttempt: String(raw.context.runAttempt),
+      // pr-visual's default touched check; any other value is dropped.
+      ...(raw.context.scope === 'touched' ? {scope: 'touched'} : {}),
     },
     baseline: {sha: text(raw.baseline?.sha ?? '')},
     counts,

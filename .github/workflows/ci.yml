@@ -2353,16 +2353,22 @@ jobs:
       # only the Core components it touches, never their reverse dependents
       # and never the release plan; a wide change skips it (spec:AST-030
       # FR12).
+      # A wide change writes a skipped verdict naming ci:run-visual, so the
+      # pull-request comment says how to run the full suite.
       - name: Decide the default touched visual check
         id: touched
         if: github.event_name == 'pull_request' && needs.run-labels.outputs.visual != 'true' && steps.visual-scope.outputs.has_stable_visual == 'true'
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          ASTRYX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASTRYX_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
             --files "$FILES_PATH" \
-            --out touched-scope.json
+            --baseline-manifest .github/visual-baseline/manifest.json \
+            --out touched-scope.json \
+            --wide-verdict .visual-run/verdict.json
 
       - name: Download Storybook artifact
         if: (github.event_name == 'pull_request' || inputs.operation == 'release-check') && (github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true')
@@ -2492,13 +2498,18 @@ jobs:
             *) echo "Visual evidence is incomplete: $STATUS"; exit 1 ;;
           esac
 
-      # Exit 0 is clean, 2 is a change for review and 3 means nothing touched
-      # has a stable story (no verdict); anything else is an infrastructure
-      # failure.
+      # Only touched components with an accepted baseline shot are compared
+      # (one a pull request adds has nothing to compare yet). Exit 0 is clean
+      # and 2 a change for review. A scope that plans no shot or has no stable
+      # story leaves no verdict, which reads as not-run; anything else is an
+      # infrastructure failure.
       - name: Visual check for the default touched components
         if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.visual_components != ''
         env:
           COMPONENTS: ${{ steps.touched.outputs.visual_components }}
+          ASTRYX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASTRYX_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ASTRYX_VISUAL_SCOPE: touched
         run: |
           set +e
           node .github/scripts/visual-gate/gate.mjs check \
@@ -2508,11 +2519,18 @@ jobs:
             --tiers component \
             --components "$COMPONENTS" \
             --no-scout \
-            --summary-output visual-summary.md
+            --summary-output visual-summary.md 2> >(tee visual-gate.err >&2)
           code=$?
           set -e
           case "$code" in
             0|2) ;;
+            1)
+              if grep -qE 'planned no shots|no stable visual representative' visual-gate.err; then
+                rm -f .visual-run/verdict.json
+              else
+                exit 1
+              fi
+              ;;
             3) rm -f .visual-run/verdict.json ;;
             *) exit "$code" ;;
           esac
@@ -3038,7 +3056,10 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
+      # A spec-only, docsite-only or tooling-only change has no analysis; it
+      # has no component either.
       - name: Download analysis artifact
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: actions/download-artifact@v8
         with:
           name: pr-analysis
@@ -3055,6 +3076,7 @@ jobs:
           node .github/scripts/touched-components.mjs scope \
             --analysis analysis.json \
             --files "$FILES_PATH" \
+            --baseline-manifest .github/visual-baseline/manifest.json \
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
@@ -3129,7 +3151,7 @@ jobs:
       # The visual result comes from pr-visual, the one visual owner: its
       # default touched check, or its full check under ci:run-visual.
       - name: Download pr-visual's verdict
-        if: always() && steps.touched.outputs.has_components == 'true' && needs.pr-visual.result == 'success'
+        if: always() && steps.touched.outputs.has_components == 'true' && (needs.pr-visual.result == 'success' || needs.pr-visual.result == 'failure')
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -3140,11 +3162,14 @@ jobs:
         if: always() && steps.touched.outputs.has_components == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          VISUAL_JOB: ${{ needs.pr-visual.result }}
         run: |
           node .github/scripts/touched-components.mjs report \
             --analysis analysis.json \
             --visual .visual-run/verdict.json \
             --visual-manifest .visual-run/manifest.json \
+            --visual-job "$VISUAL_JOB" \
+            --baseline-manifest .github/visual-baseline/manifest.json \
             --a11y a11y-report.json \
             --a11y-baseline .github/a11y-baseline.json \
             --rtl-dir rtl-reports \

@@ -26,6 +26,25 @@ describe('buildVisualSection', () => {
     expect(buildVisualSection(null)).toBe('');
   });
 
+  it("names ci:run-visual under pr-visual's default touched check", () => {
+    const touched = verdict({context: {scope: 'touched'}});
+    expect(buildVisualSection(touched)).toContain(
+      'Only the touched components were checked; add `ci:run-visual` to run the full suite.',
+    );
+    expect(buildVisualSection(verdict())).not.toContain('ci:run-visual');
+    // A wide change's skipped verdict carries its own reason.
+    expect(
+      buildVisualSection(
+        verdict({
+          status: 'skipped',
+          reason:
+            'Wide change (7 components): add ci:run-visual to run the full suite.',
+          context: {scope: 'touched'},
+        }),
+      ),
+    ).toContain('Skipped — Wide change (7 components)');
+  });
+
   it('says so plainly when nothing moved', () => {
     expect(buildVisualSection(verdict())).toContain(
       'No visual change across 16 compared shot(s)',

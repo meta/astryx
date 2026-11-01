@@ -17,9 +17,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
+import componentPackages from '../../scripts/component-packages.cjs';
 
 const require = createRequire(import.meta.url);
 const {diffAgainstBaseline} = require('./lib/a11y-baseline.js');
+const {
+  componentPackage,
+  componentExportsFromBarrel,
+  documentedComponentNames,
+  flatPackageComponentNames,
+  nestedPackageComponentNames,
+} = componentPackages;
 
 const SUITES = ['visual', 'a11y', 'rtl'];
 
@@ -52,17 +60,20 @@ export function foundationChanges(files) {
 }
 
 /**
- * Whether the default check runs: at most MAX_TOUCHED_COMPONENTS touched and
- * no foundation changed. A wide change skips it; nothing starts a full suite
- * on its own.
+ * Whether the default check runs: at most MAX_TOUCHED_COMPONENTS touched
+ * component folders and no foundation changed. A wide change skips it;
+ * nothing starts a full suite on its own. Folders are counted, as the
+ * threshold's data counted them, so one change inside a multi-component
+ * folder such as Chat is one component.
  */
 export function decideWideChange(scope, files) {
   const foundations = foundationChanges(files);
+  const componentCount = scope.folders.length;
   return {
-    componentCount: scope.touched.length,
+    componentCount,
     foundations,
     wideChange:
-      scope.touched.length > MAX_TOUCHED_COMPONENTS || foundations.length > 0,
+      componentCount > MAX_TOUCHED_COMPONENTS || foundations.length > 0,
   };
 }
 
@@ -82,34 +93,108 @@ const strings = value =>
   Array.isArray(value) ? value.filter(item => typeof item === 'string') : [];
 
 /**
- * What each suite audits for this pull request: the touched owners only.
- * Reverse dependents stay with the opted-in owners (FR13): the analysis
- * reports every component whose bundle reaches a change, which for a shared
- * primitive is most of Core, so they would not fit this check's 15-minute limit.
- * Nothing here selects a full suite either: a change the analysis cannot
- * scope audits its touched owners, and the comment points to the labels for
- * the rest.
+ * The public components a changed multi-component folder (such as Chat or
+ * Table) implements. The analysis leaves those folders unresolved; this
+ * expands only the changed folder, as the accessibility scope does, without
+ * reading Storybook.
  */
-export function resolveTouchedScope(analysis) {
-  const touched = [
-    ...new Set([
-      ...strings(analysis.newComponentOwners),
-      ...strings(analysis.modifiedComponentOwners),
-    ]),
-  ].filter(owner => owner.includes('/'));
+export function expandFolderOwners(sources, repoRoot = process.cwd()) {
+  const members = [];
+  const publicByPackage = new Map();
+  for (const source of sources) {
+    const [shortPackage, directory, extra] = source.split('/');
+    const pkg = componentPackage(shortPackage);
+    if (
+      !pkg ||
+      extra !== undefined ||
+      !/^[A-Za-z0-9_.-]+$/.test(directory ?? '')
+    ) {
+      continue;
+    }
+    const sourceRoot = path.join(repoRoot, pkg.src);
+    const changedDirectory = path.join(sourceRoot, directory);
+    if (!fs.existsSync(changedDirectory)) continue;
+    const names = documentedComponentNames(changedDirectory);
+    if (names.length === 0) continue;
+    if (!publicByPackage.has(shortPackage)) {
+      publicByPackage.set(
+        shortPackage,
+        new Set(
+          pkg.layout === 'flat'
+            ? flatPackageComponentNames(repoRoot, pkg)
+            : nestedPackageComponentNames(repoRoot, pkg),
+        ),
+      );
+    }
+    const exports = componentExportsFromBarrel(
+      path.join(sourceRoot, 'index.ts'),
+      sourceRoot,
+    );
+    for (const name of names) {
+      if (!publicByPackage.get(shortPackage).has(name)) continue;
+      if (exports.get(name)?.startsWith(`${changedDirectory}${path.sep}`)) {
+        members.push({owner: `${shortPackage}/${name}`, folder: directory});
+      }
+    }
+  }
+  return members;
+}
+
+/**
+ * What each suite audits for this pull request: the touched components only,
+ * in every package, with a changed multi-component folder expanded to its
+ * members. Reverse dependents stay with the opted-in owners (FR13): the
+ * analysis reports every component whose bundle reaches a change, which for a
+ * shared primitive is most of Core, so they would not fit this check's
+ * 15-minute limit. Nothing here selects a full suite either: a change the
+ * analysis cannot scope audits its touched components, and the comment
+ * points to the labels for the rest. Visual stories are keyed by folder, so
+ * a folder member's visual result is its folder's.
+ */
+export function resolveTouchedScope(
+  analysis,
+  {repoRoot = process.cwd(), expand = expandFolderOwners} = {},
+) {
+  const entries = new Map();
+  for (const owner of [
+    ...strings(analysis.newComponentOwners),
+    ...strings(analysis.modifiedComponentOwners),
+  ]) {
+    if (owner.includes('/') && !entries.has(owner)) {
+      entries.set(owner, ownerIdentity(owner).name);
+    }
+  }
+  for (const {owner, folder} of expand(
+    strings(analysis.unresolvedComponentSources),
+    repoRoot,
+  )) {
+    if (!entries.has(owner)) entries.set(owner, folder);
+  }
+  const touched = [...entries.keys()].sort();
+  const visualKeyByOwner = Object.fromEntries(entries);
+  const folders = [
+    ...new Set(
+      touched.map(
+        owner =>
+          `${ownerIdentity(owner).shortPackage}/${visualKeyByOwner[owner]}`,
+      ),
+    ),
+  ].sort();
   const packages = [
     ...new Set(touched.map(owner => ownerIdentity(owner).shortPackage)),
   ].sort();
   return {
     touched,
+    folders,
+    visualKeyByOwner,
     visualComponents: [
       ...new Set(
         touched
-          .map(ownerIdentity)
-          .filter(identity => identity.shortPackage === 'core')
-          .map(identity => identity.name),
+          .filter(owner => ownerIdentity(owner).shortPackage === 'core')
+          .map(owner => visualKeyByOwner[owner]),
       ),
     ].sort(),
+    noVisualBaseline: [],
     rtlOwnersByPackage: Object.fromEntries(
       packages.map(pkg => [
         pkg,
@@ -118,6 +203,29 @@ export function resolveTouchedScope(analysis) {
     ),
     a11yOwners: touched,
     broad: analysis.forceFullComponentAudits === true,
+  };
+}
+
+/**
+ * Keep only the visual components the accepted baseline has a shot for: a
+ * component that has none yet (one a pull request adds) has nothing to
+ * compare, so it is reported not-run instead of failing the check. Baseline
+ * story ids are `core-<title path>--<story>`, ending in the component.
+ */
+export function withVisualBaseline(scope, baselineShots) {
+  const storyIds = Object.values(baselineShots ?? {})
+    .map(shot => shot?.storyId)
+    .filter(id => typeof id === 'string');
+  const hasShot = name => {
+    const lower = name.toLowerCase();
+    return storyIds.some(id =>
+      new RegExp(`^core-(?:[a-z0-9-]+-)?${lower}--`).test(id),
+    );
+  };
+  return {
+    ...scope,
+    visualComponents: scope.visualComponents.filter(hasShot),
+    noVisualBaseline: scope.visualComponents.filter(name => !hasShot(name)),
   };
 }
 
@@ -141,26 +249,46 @@ function namesOwner(value, identity) {
 }
 
 /**
- * The visual result for one owner, from the gate's verdict. Added and removed
- * shots are listed by key; the run's manifest names their components.
+ * The visual result for one owner, from pr-visual's verdict for its folder
+ * (visual stories are keyed by folder). Added, removed and failed shots are
+ * listed by key; the run's manifest names their components. `jobResult` is
+ * pr-visual's job result: a failed job that left no verdict is a failure,
+ * never a not-run.
  */
-export function visualResult(identity, verdict, scope, shots = {}) {
-  if (verdict == null) return {result: 'not-run'};
+export function visualResult(
+  identity,
+  verdict,
+  scope,
+  shots = {},
+  jobResult = null,
+) {
   if (identity.shortPackage !== 'core') {
     return {result: 'not-run', detail: 'no stable visual stories outside Core'};
   }
-  if (
-    !scope.visualComponents.includes(identity.name) ||
-    verdict.status === 'skipped'
-  ) {
-    return {result: 'not-run'};
+  const key = scope.visualKeyByOwner?.[identity.key] ?? identity.name;
+  if ((scope.noVisualBaseline ?? []).includes(key)) {
+    return {result: 'not-run', detail: 'no accepted visual baseline yet'};
   }
-  const mine = entry =>
-    namesOwner(
-      typeof entry === 'string' ? shots[entry]?.component : entry?.component,
-      identity,
-    );
-  if ((verdict.failures ?? []).some(mine)) return {result: 'fail'};
+  if (!scope.visualComponents.includes(key)) return {result: 'not-run'};
+  if (verdict == null) {
+    return jobResult === 'failure'
+      ? {result: 'fail', detail: 'the visual check failed before its verdict'}
+      : {result: 'not-run'};
+  }
+  if (verdict.status === 'skipped') return {result: 'not-run'};
+  const componentOf = entry =>
+    typeof entry === 'string'
+      ? shots[entry]?.component
+      : (entry?.component ?? shots[entry?.key]?.component);
+  const mine = entry => componentOf(entry) === key;
+  const failures = verdict.failures ?? [];
+  // A failure that names no component may be this one's.
+  if (
+    failures.some(mine) ||
+    failures.some(entry => componentOf(entry) == null)
+  ) {
+    return {result: 'fail', detail: 'a story image could not be captured'};
+  }
   const changed =
     (verdict.changes ?? []).filter(mine).length +
     (verdict.added ?? []).filter(mine).length +
@@ -197,11 +325,26 @@ const RTL_SECTIONS = [
   'directionalDecorations',
 ];
 
-/** The RTL result for one owner, across every package report. */
+/** A curated card's rollup, as one of the section verdicts. */
+const CURATED_VERDICT = {
+  'RTL-ready': 'pass',
+  'not-RTL': 'fail',
+  ERROR: 'fail',
+  'MISSING-STORY': 'fail',
+};
+
+/**
+ * The RTL result for one owner, across every package report: the automatic
+ * sections and the curated targets' cards.
+ */
 export function rtlResult(identity, reports) {
-  const results = reports.flatMap(report =>
-    RTL_SECTIONS.flatMap(section => report?.[section]?.results ?? []),
-  );
+  const results = reports.flatMap(report => [
+    ...RTL_SECTIONS.flatMap(section => report?.[section]?.results ?? []),
+    ...(report?.curated?.results ?? []).map(card => ({
+      component: card.component,
+      verdict: CURATED_VERDICT[card.rollup] ?? 'N-A',
+    })),
+  ]);
   const mine = results.filter(result => namesOwner(result.component, identity));
   if (mine.length === 0) return {result: 'not-run'};
   if (mine.every(result => result.verdict === 'N-A')) {
@@ -222,6 +365,7 @@ export function buildTouchedReport({
   scope,
   verdict,
   visualShots = {},
+  visualJobResult = null,
   a11yReport,
   a11yBaseline,
   rtlReports,
@@ -232,7 +376,13 @@ export function buildTouchedReport({
       : [];
   const row = owner => {
     const identity = ownerIdentity(owner);
-    const visual = visualResult(identity, verdict, scope, visualShots);
+    const visual = visualResult(
+      identity,
+      verdict,
+      scope,
+      visualShots,
+      visualJobResult,
+    );
     const a11y = a11yResult(identity, a11yReport, newViolations);
     const rtl = rtlResult(identity, rtlReports);
     const details = Object.entries({visual, a11y, rtl})
@@ -249,7 +399,7 @@ export function buildTouchedReport({
   return {
     headSha,
     wideChange: false,
-    componentCount: scope.touched.length,
+    componentCount: scope.folders.length,
     broad: scope.broad,
     components: scope.touched.map(row),
   };
@@ -259,6 +409,46 @@ export function hasFailure(report) {
   return report.components.some(component =>
     SUITES.some(suite => component.results[suite] === 'fail'),
   );
+}
+
+/**
+ * The skipped verdict pr-visual writes for a wide change, so the pull-request
+ * comment names the label for the full suite. It carries the run's identity,
+ * as a captured verdict does, so the report publisher accepts it.
+ */
+export function wideVisualVerdict(decision, env = process.env) {
+  return {
+    version: 1,
+    status: 'skipped',
+    generatedAt: new Date().toISOString(),
+    reason: `Wide change (${decision.componentCount} components): add ci:run-visual to run the full suite.`,
+    context: {
+      sha: env.GITHUB_SHA ?? null,
+      runId: env.GITHUB_RUN_ID ?? null,
+      runAttempt: env.GITHUB_RUN_ATTEMPT ?? null,
+      headSha: env.ASTRYX_PR_HEAD_SHA ?? null,
+      baseSha: env.ASTRYX_PR_BASE_SHA ?? null,
+      ref: env.GITHUB_REF ?? null,
+      scope: 'touched',
+    },
+    counts: {
+      total: 0,
+      unchanged: 0,
+      changed: 0,
+      added: 0,
+      removed: 0,
+      failed: 0,
+    },
+    changes: [],
+    added: [],
+    removed: [],
+    failures: [],
+    targeting: {
+      unexercisedOverrides: [],
+      uncoveredTargets: [],
+      undeclaredTargets: [],
+    },
+  };
 }
 
 /** The record a wide change writes instead of results. */
@@ -328,7 +518,12 @@ function writeOutputs(entries) {
 export function main(argv = process.argv.slice(2)) {
   const [command] = argv;
   const analysis = readJson(arg(argv, 'analysis')) ?? {};
-  const scope = resolveTouchedScope(analysis);
+  const baselinePath = arg(argv, 'baseline-manifest');
+  const resolved = resolveTouchedScope(analysis);
+  const scope =
+    baselinePath == null
+      ? resolved
+      : withVisualBaseline(resolved, readJson(baselinePath)?.shots);
   if (command === 'scope') {
     const filesPath = arg(argv, 'files');
     const files =
@@ -351,6 +546,14 @@ export function main(argv = process.argv.slice(2)) {
         fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
       }
       console.log(summary);
+      const wideVerdict = arg(argv, 'wide-verdict');
+      if (wideVerdict != null) {
+        fs.mkdirSync(path.dirname(wideVerdict), {recursive: true});
+        fs.writeFileSync(
+          wideVerdict,
+          `${JSON.stringify(wideVisualVerdict(decision), null, 2)}\n`,
+        );
+      }
     }
     writeOutputs({
       wide_change: String(decision.wideChange),
@@ -378,6 +581,7 @@ export function main(argv = process.argv.slice(2)) {
       scope,
       verdict: readJson(arg(argv, 'visual')),
       visualShots: readJson(arg(argv, 'visual-manifest'))?.shots ?? {},
+      visualJobResult: arg(argv, 'visual-job') ?? null,
       a11yReport: readJson(arg(argv, 'a11y')),
       a11yBaseline: readJson(arg(argv, 'a11y-baseline')),
       rtlReports,
