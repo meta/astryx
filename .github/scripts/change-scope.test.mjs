@@ -18,13 +18,13 @@ describe('spec-only change scope', () => {
       {filename: 'docs/families/input-fields.md'},
       {filename: 'docs/design/selection-inputs.md'},
       {filename: 'packages/themes/neutral/neutral.spec.md'},
-      {filename: 'packages/core/src/Selector/Selector.spec.md'},
+      {filename: 'docs/specs/components/Selector/Selector.spec.md'},
       {
         filename:
-          'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+          'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md',
       },
       {filename: 'packages/lab/src/FutureInput/FutureInput.spec.md'},
-      {filename: 'packages/charts/src/Chart.spec.md'},
+      {filename: 'docs/specs/components/Chart/Chart.spec.md'},
       {filename: 'packages/richtext/src/RichTextView.spec.md'},
       {filename: 'packages/vega/src/VegaChart.spec.md'},
     ]);
@@ -205,7 +205,7 @@ describe('spec-only change scope', () => {
     expect(
       classifyChanges([
         {
-          filename: 'packages/core/src/Selector/Selector.spec.md',
+          filename: 'docs/specs/components/Selector/Selector.spec.md',
           previous_filename: 'packages/core/src/Selector/Selector.tsx',
         },
       ]).specOnly,
@@ -257,7 +257,7 @@ describe('positive CI surfaces', () => {
 
   it('keeps pure specification records in the knowledge singleton', () => {
     const result = classifyChanges([
-      {filename: 'packages/core/src/Button/Button.spec.md'},
+      {filename: 'docs/specs/components/Button/Button.spec.md'},
     ]);
     expect(result.specOnly).toBe(true);
     expect(result.toolingOnly).toBe(false);
@@ -268,7 +268,7 @@ describe('positive CI surfaces', () => {
     {
       name: 'component spec plus component code',
       files: [
-        'packages/core/src/Button/Button.spec.md',
+        'docs/specs/components/Button/Button.spec.md',
         'packages/core/src/Button/Button.tsx',
       ],
       surfaces: [SURFACES.KNOWLEDGE, 'runtime:core'],
@@ -276,7 +276,7 @@ describe('positive CI surfaces', () => {
     {
       name: 'module spec plus Table plugin code',
       files: [
-        'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+        'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md',
         'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.tsx',
       ],
       surfaces: [SURFACES.KNOWLEDGE, 'runtime:core'],

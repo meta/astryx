@@ -13,22 +13,22 @@ describe('component knowledge paths', () => {
   it.each([
     [
       'directory-layout Core component record',
-      'packages/core/src/Button/Button.spec.md',
+      'docs/specs/components/Button/Button.spec.md',
       'component',
     ],
     [
       'directory-layout public member record',
-      'packages/core/src/NavMenu/NavHeadingMenu.spec.md',
+      'docs/specs/components/NavMenu/NavHeadingMenu.spec.md',
       'component',
     ],
     [
       'directory-layout module record',
-      'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+      'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md',
       'module',
     ],
     [
       'flat Charts component record',
-      'packages/charts/src/Chart.spec.md',
+      'docs/specs/components/Chart/Chart.spec.md',
       'component',
     ],
     [

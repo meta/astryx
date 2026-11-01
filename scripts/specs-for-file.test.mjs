@@ -80,7 +80,7 @@ function popoverFixture() {
     'packages/core/src/Popover/Popover.doc.mjs',
     "export const docs = {name: 'Popover', usage: {anatomy: [{name: 'Table'}]}, components: [{name: 'PopoverTrigger', description: 'Opens it.'}, {name: 'Item'}]};\n",
   );
-  writeRecord(root, 'packages/core/src/Popover/Popover.spec.md', {
+  writeRecord(root, 'docs/specs/components/Popover/Popover.spec.md', {
     kind: 'component',
     id: 'component:Popover',
     review_triggers: ['behavior', 'layering'],
@@ -142,7 +142,7 @@ function popoverFixture() {
   write(root, 'packages/core/src/Dialog/modules/DialogHeader.tsx');
   write(root, 'packages/core/src/Dialog/modules/DialogHeader.test.tsx');
   write(root, 'packages/core/src/Dialog/modules/DialogFooter.tsx');
-  writeRecord(root, 'packages/core/src/Dialog/modules/DialogHeader.spec.md', {
+  writeRecord(root, 'docs/specs/components/Dialog/modules/DialogHeader.spec.md', {
     kind: 'module',
     id: 'module:Dialog/DialogHeader',
     parent_component: 'component:Dialog',
@@ -158,7 +158,7 @@ function popoverFixture() {
   write(root, 'packages/core/src/Table/plugins/activation/helpers/key.ts');
   writeRecord(
     root,
-    'packages/core/src/Table/plugins/activation/useTableActivation.spec.md',
+    'docs/specs/components/Table/plugins/activation/useTableActivation.spec.md',
     {
       kind: 'module',
       id: 'module:Table/useTableActivation',
@@ -181,7 +181,7 @@ function popoverFixture() {
     deciding_specs: [],
   });
   write(root, 'packages/core/src/Drawer/Drawer.tsx');
-  writeRecord(root, 'packages/core/src/Drawer/Drawer.spec.md', {
+  writeRecord(root, 'docs/specs/components/Drawer/Drawer.spec.md', {
     kind: 'component',
     id: 'component:Drawer',
     authority: 'draft',
@@ -212,7 +212,7 @@ function popoverFixture() {
     'packages/core/src/Chat/__tests__/ChatComposerDrawer.a11y.states.ts',
   );
   write(root, 'packages/core/src/Chat/ChatHeadingItem.tsx');
-  writeRecord(root, 'packages/core/src/Chat/ChatComposerDrawer.spec.md', {
+  writeRecord(root, 'docs/specs/components/Chat/ChatComposerDrawer.spec.md', {
     kind: 'component',
     id: 'component:ChatComposerDrawer',
     review_triggers: ['motion'],
@@ -224,13 +224,13 @@ function popoverFixture() {
   write(root, 'packages/core/src/Markdown/Markdown.tsx');
   write(root, 'packages/core/src/Markdown/plugins/headingLinks.ts');
   write(root, 'packages/core/src/Markdown/plugins/softBreaks.ts');
-  writeRecord(root, 'packages/core/src/Markdown/modules/headingLinks.spec.md', {
+  writeRecord(root, 'docs/specs/components/Markdown/modules/headingLinks.spec.md', {
     kind: 'module',
     id: 'module:Markdown/headingLinks',
     parent_component: 'component:Markdown',
     references: [],
   });
-  writeRecord(root, 'packages/core/src/Markdown/modules/softBreaks.spec.md', {
+  writeRecord(root, 'docs/specs/components/Markdown/modules/softBreaks.spec.md', {
     kind: 'module',
     id: 'module:Markdown/softBreaks',
     parent_component: 'component:Markdown',
@@ -251,7 +251,7 @@ function popoverFixture() {
   );
   writeRecord(
     root,
-    'packages/core/src/DropdownMenu/modules/useMenuPress.spec.md',
+    'docs/specs/components/DropdownMenu/modules/useMenuPress.spec.md',
     {
       kind: 'module',
       id: 'module:DropdownMenu/useMenuPress',
@@ -268,7 +268,7 @@ function popoverFixture() {
     affects_consumer_docs: ['useEntryAnimation'],
   });
   write(root, 'apps/sandbox/src/app/(fullscreen)/pages/perf/benchmark.test.ts');
-  writeRecord(root, 'packages/core/src/Markdown/Markdown.spec.md', {
+  writeRecord(root, 'docs/specs/components/Markdown/Markdown.spec.md', {
     kind: 'component',
     id: 'component:Markdown',
     review_triggers: ['behavior'],
@@ -291,7 +291,7 @@ function popoverFixture() {
     affects_consumer_docs: ['color'],
   });
   write(root, 'packages/core/src/TabList/TabList.tsx');
-  writeRecord(root, 'packages/core/src/TabList/TabList.spec.md', {
+  writeRecord(root, 'docs/specs/components/TabList/TabList.spec.md', {
     kind: 'component',
     id: 'component:TabList',
     review_triggers: ['behavior'],
