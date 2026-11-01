@@ -60,8 +60,8 @@ import {
   plainDateFormat,
   plainDateWeekFieldName,
   DATE_FORMAT_WITH_WEEKDAY,
-  DATE_FORMAT_MONTH_YEAR,
 } from '../utils/plainDate';
+import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
 import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -389,14 +389,15 @@ export function Calendar({ref, ...props}: CalendarProps) {
   );
 
   // Format month header
-  const monthYearLabel = useMemo(() => {
-    if (numberOfMonths === 1) {
-      return plainDateFormat(visibleMonths[0], DATE_FORMAT_MONTH_YEAR, locale);
-    }
-    return visibleMonths
-      .map(m => plainDateFormat(m, DATE_FORMAT_MONTH_YEAR, locale))
-      .join(' – ');
-  }, [visibleMonths, numberOfMonths, locale]);
+  // Each month is its own stand-alone label, so each starts with a capital
+  // where the locale capitalizes one (FR1).
+  const monthYearLabel = useMemo(
+    () =>
+      visibleMonths
+        .map(m => plainDateFormatStandaloneMonthYear(m, locale))
+        .join(' – '),
+    [visibleMonths, locale],
+  );
 
   // Announce the newly visible month to screen readers whenever it changes.
   // The visible month label (`<span>`) carries no live semantics, so paging the
@@ -1087,7 +1088,7 @@ function MonthGrid({
 
   // Month label for announcements
   const monthLabel = useMemo(() => {
-    return plainDateFormat(month, DATE_FORMAT_MONTH_YEAR, locale);
+    return plainDateFormatStandaloneMonthYear(month, locale);
   }, [month, locale]);
 
   return (

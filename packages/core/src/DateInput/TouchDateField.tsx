@@ -108,10 +108,10 @@ import {
   plainDateFromISO,
   plainDateToday,
   plainDateFormat,
-  DATE_FORMAT_MONTH_YEAR,
   DATE_FORMAT_WEEKDAY_ONLY,
   type ISODateString,
 } from '../utils';
+import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -754,9 +754,8 @@ export function TouchDateField({
       ),
     [locale, weekStartsOn],
   );
-  const monthYearLabel = plainDateFormat(
+  const monthYearLabel = plainDateFormatStandaloneMonthYear(
     {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
     locale,
   );
 
