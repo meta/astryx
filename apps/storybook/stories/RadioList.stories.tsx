@@ -40,7 +40,7 @@ const meta: Meta<typeof RadioList> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the group is disabled (whole-group state, not per item). With isDisabled, shows a tooltip on hover/keyboard focus and keeps the radios focusable via aria-disabled (selection stays blocked). Use this instead of wrapping a disabled RadioList in Tooltip.',
+        'Explains why the group is disabled (whole-group state, not per item). Shows a tooltip on hover/keyboard focus and describes each radio. Disabled radios remain focusable without a reason too; selection and activation stay blocked.',
     },
     isRequired: {
       control: 'boolean',
@@ -381,17 +381,20 @@ export const AllVariations: Story = {
 // why it's disabled — the reason is announced to assistive tech via
 // aria-describedby, and the radios stay focusable (selection is still blocked).
 // disabledMessage applies to the whole-group disabled state. Use it instead of
-// wrapping a disabled RadioList in Tooltip: disabled controls swallow the
-// pointer events a Tooltip wrapper needs.
+// wrapping a disabled RadioList in Tooltip.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState(args.value ?? 'email');
     const {value: _value, onChange: _onChange, ...restArgs} = args;
     return (
       <RadioList {...restArgs} value={value} onChange={setValue}>
-        <RadioListItem label="Email" value="email" />
+        <RadioListItem
+          label="Email"
+          value="email"
+          description="Delivered to your inbox"
+        />
         <RadioListItem label="SMS" value="sms" />
-        <RadioListItem label="Push notification" value="push" />
+        <RadioListItem label="Push notification" value="push" isDisabled />
       </RadioList>
     );
   },

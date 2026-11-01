@@ -214,7 +214,7 @@ export const RADIO_GROUP_BINDING_STATES = [
       checked: true,
       disabled: true,
       operable: false,
-      tabReachable: false,
+      tabReachable: true,
       pointerCancellation: false,
     }),
     subjectName: 'Standard',
@@ -227,6 +227,7 @@ export const RADIO_GROUP_BINDING_STATES = [
     facts: optionFacts({
       checked: true,
       disabled: true,
+      description: 'Managed by your administrator',
       operable: false,
       tabReachable: true,
       pointerCancellation: false,

@@ -30,6 +30,8 @@ import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
 import {useTooltip} from '../Tooltip';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {isRtlElement} from '../hooks/isRtlElement';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
@@ -38,6 +40,7 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {RadioListPrivateContext} from './RadioListPrivateContext';
 
 /**
  * Size of the radio controls, matching CheckboxInput sizes.
@@ -50,10 +53,7 @@ export interface RadioListContextValue {
   onChange: (value: string) => void;
   isDisabled: boolean;
   /**
-   * True when the whole group is disabled *and* a `disabledMessage` is set. In
-   * that mode radios stay focusable via `aria-disabled` (instead of the native
-   * `disabled` attribute) so the disabled-reason tooltip is keyboard- and
-   * AT-discoverable; selection is still blocked in the item's onChange guard.
+   * True when the whole group is disabled *and* a `disabledMessage` is set.
    */
   hasDisabledMessage: boolean;
   isRequired: boolean;
@@ -108,6 +108,10 @@ export interface RadioListProps extends Omit<
    */
   onChange: (value: string) => void;
   /**
+   * Runs before arrow selection. Calling preventDefault cancels it.
+   */
+  onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  /**
    * Layout direction of the radio items.
    * @default "vertical"
    */
@@ -119,7 +123,7 @@ export interface RadioListProps extends Omit<
   isDisabled?: boolean;
 
   /**
-   * The HTML name attribute shared by the radio inputs in the group.
+   * The HTML name attribute shared by the enabled radio inputs in the group.
    * Useful for form submissions; when omitted, a unique internal name is
    * generated so the group still roves correctly.
    */
@@ -131,8 +135,7 @@ export interface RadioListProps extends Omit<
    * focus, and its radios stay focusable (via `aria-disabled`) so the reason is
    * discoverable by keyboard and assistive technology. Selection stays blocked.
    *
-   * Use this instead of wrapping a disabled group in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled group in `Tooltip`.
    */
   disabledMessage?: string;
   /**
@@ -217,6 +220,7 @@ export function RadioList({
   htmlName,
   children,
   onFocus,
+  onKeyDown,
   'aria-labelledby': ariaLabelledByProp,
   'aria-describedby': ariaDescribedByProp,
   ...restProps
@@ -242,11 +246,8 @@ export function RadioList({
   // on browser validation for the group.
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
 
-  // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
-  // controls swallow pointer events, so the tooltip listeners attach to the
-  // radiogroup container and the radios stay perceivable via aria-disabled
-  // instead of the disabled attribute. Selection is blocked in the item's
-  // onChange guard.
+  // Disabled-reason tooltip. Applies to the whole-group disabled state.
+  // Selection is blocked in the item's onChange guard.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -278,6 +279,206 @@ export function RadioList({
       status,
     ],
   );
+
+  // Disabled members have a private native name and no form owner. Repair
+  // that split only while the checked radio can own the group's Tab stop.
+  // Query the mounted controls rather than interpreting opaque children or
+  // assuming that the controlled value matches an option.
+  // Ref cleanup precedes host removal. Keep departures across prop updates,
+  // without retaining removed nodes beyond this group's lifetime.
+  const detachedRef = useRef(new WeakSet<HTMLInputElement>());
+  const nativeSync = useMemo(() => {
+    const normalize = (element: HTMLElement, committed: boolean) => {
+      // Member effects/ref attachment precede the group's ref on first mount.
+      const group = element.closest('[role="radiogroup"]');
+      if (!group) {
+        return;
+      }
+      const radios = Array.from(
+        group.querySelectorAll<HTMLInputElement>(
+          'input[data-radio-list-input]',
+        ),
+      ).filter(
+        radio =>
+          radio.closest('[role="radiogroup"]') === group &&
+          (committed || !detachedRef.current.has(radio)),
+      );
+      if (committed) {
+        for (const radio of radios) {
+          // StrictMode can replay a later sibling's ref after this member's
+          // consumer effect. All form mutations are already complete here:
+          // restore only enabled names released by our own ref cleanups.
+          if (
+            detachedRef.current.has(radio) &&
+            radio.name === '' &&
+            radio.getAttribute('aria-disabled') !== 'true'
+          ) {
+            radio.name = name;
+          }
+        }
+        detachedRef.current = new WeakSet();
+      }
+      const checked = radios.find(radio => radio.checked);
+      const hasAvailableItem = radios.some(
+        radio => !radio.hasAttribute('data-radio-item-disabled'),
+      );
+      let tabStop =
+        checked &&
+        radios.some(
+          radio => radio.form !== checked.form || radio.name !== checked.name,
+        )
+          ? checked
+          : undefined;
+      if (tabStop) {
+        const view = tabStop.ownerDocument.defaultView;
+        for (
+          let element: HTMLElement | null = tabStop;
+          element;
+          element = element.parentElement
+        ) {
+          const style = view?.getComputedStyle(element);
+          if (
+            element.hasAttribute('inert') ||
+            style?.display === 'none' ||
+            (element === tabStop &&
+              (style?.visibility === 'hidden' ||
+                style?.visibility === 'collapse'))
+          ) {
+            tabStop = undefined;
+            break;
+          }
+        }
+      }
+      for (const radio of radios) {
+        // Native required groups count a checked disabled member even though
+        // its value is not submitted. Do not make enabled siblings invalidate
+        // the form just because that checked member is in a different native
+        // group. Visibility/inertness affects entry, not checked participation.
+        radio.required =
+          isRequired &&
+          (!checked ||
+            (checked.form === radio.form && checked.name === radio.name));
+        radio.tabIndex = tabStop
+          ? radio === tabStop
+            ? 0
+            : -1
+          : radio !== checked &&
+              hasAvailableItem &&
+              radio.hasAttribute('data-radio-item-disabled')
+            ? -1
+            : 0;
+      }
+    };
+    return {
+      sync(element: HTMLElement) {
+        // All host mutations are complete at attachment/layout or observation.
+        // Include later siblings even before their refs attach, and restore
+        // members whose refs were only replayed by StrictMode.
+        normalize(element, true);
+      },
+      detach(radio: HTMLInputElement) {
+        detachedRef.current.add(radio);
+        normalize(radio, false);
+      },
+    };
+  }, [isRequired, name]);
+
+  const privateContextValue = useMemo(
+    () => ({
+      disabledName: `${autoName}-disabled`,
+      disabledDescriptionID: showsDisabledMessage
+        ? disabledMessageTooltip.describedBy
+        : undefined,
+      nativeSync,
+    }),
+    [
+      autoName,
+      showsDisabledMessage,
+      disabledMessageTooltip.describedBy,
+      nativeSync,
+    ],
+  );
+
+  useIsomorphicLayoutEffect(() => {
+    const group = groupRef.current;
+    if (!group) {
+      return;
+    }
+    const sync = () => nativeSync.sync(group);
+    sync();
+    // Member commits synchronize immediately through the private bridge. Keep
+    // observing independent caller-owned row visibility/DOM changes, but not
+    // our own required/tabindex writes. This group owns the observer's lifetime.
+    const observer = new MutationObserver(sync);
+    observer.observe(group, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: [
+        'checked',
+        'name',
+        'form',
+        'data-radio-item-disabled',
+        'class',
+        'style',
+        'hidden',
+        'inert',
+      ],
+    });
+    return () => observer.disconnect();
+  });
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.defaultPrevented ||
+      !/^Arrow(Up|Down|Left|Right)$/.test(event.key)
+    ) {
+      return;
+    }
+    const group = groupRef.current;
+    const target = event.target;
+    if (
+      !group ||
+      !(target instanceof HTMLInputElement) ||
+      !target.hasAttribute('data-radio-list-input') ||
+      target.closest('[role="radiogroup"]') !== group
+    ) {
+      return;
+    }
+    const radios = Array.from(
+      group.querySelectorAll<HTMLInputElement>('input[data-radio-list-input]'),
+    ).filter(radio => radio.closest('[role="radiogroup"]') === group);
+    // Native arrows still own ordinary groups, including whole-group disabled
+    // discovery. The individual-disabled fallback spans the list's native
+    // name/form split so a focused disabled member can reach enabled peers.
+    if (
+      target.form ||
+      !radios.some(radio => radio.hasAttribute('data-radio-item-disabled'))
+    ) {
+      return;
+    }
+    event.preventDefault();
+    const backwards =
+      event.key === 'ArrowUp' ||
+      (isRtlElement(group)
+        ? event.key === 'ArrowRight'
+        : event.key === 'ArrowLeft');
+    const step = backwards ? -1 : 1;
+    const start = radios.indexOf(target);
+    for (let offset = 1; offset <= radios.length; offset++) {
+      const next =
+        radios[(start + step * offset + radios.length) % radios.length];
+      if (!next.hasAttribute('data-radio-item-disabled')) {
+        next.focus();
+        // Preserve native skipping of hidden, inert, or otherwise unfocusable
+        // options. A failed focus move must never select that option.
+        if (next.ownerDocument.activeElement === next) {
+          next.click();
+          return;
+        }
+      }
+    }
+  };
 
   /**
    * Make the tab stop deterministic when a radio group has no selected value.
@@ -331,9 +532,9 @@ export function RadioList({
 
       const radios = Array.from(
         group.querySelectorAll<HTMLInputElement>(
-          'input[type="radio"]:not([disabled])',
+          'input[data-radio-list-input]:not([data-radio-item-disabled])',
         ),
-      );
+      ).filter(radio => radio.closest('[role="radiogroup"]') === group);
       if (radios.length === 0) {
         return;
       }
@@ -404,6 +605,7 @@ export function RadioList({
         // A caller aria-labelledby names the group together with its label.
         aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
         onFocus={composeEventHandlers(handleFocus, onFocus)}
+        onKeyDown={composeEventHandlers(onKeyDown, handleKeyDown)}
         aria-describedby={
           [
             ariaDescribedByProp,
@@ -426,7 +628,11 @@ export function RadioList({
           controlClassName,
           controlStyle,
         )}>
-        <RadioListContext value={contextValue}>{children}</RadioListContext>
+        <RadioListContext value={contextValue}>
+          <RadioListPrivateContext value={privateContextValue}>
+            {children}
+          </RadioListPrivateContext>
+        </RadioListContext>
       </div>
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}

@@ -18,11 +18,13 @@
  * - /packages/cli/assets/templates/blocks/components/RadioList/ (showcase blocks)
  */
 
-import React, {use, useId, useRef, type ReactNode} from 'react';
+import React, {use, useCallback, useId, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
+import {RadioListPrivateContext} from './RadioListPrivateContext';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {colorVars, radiusVars} from '../theme/tokens.stylex';
 import {mergeProps, isRenderable, rtlStyles} from '../utils';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
@@ -31,6 +33,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useIndicator} from '../Indicator';
 import {Item, type ItemAlign} from '../Item';
 import {themeProps} from '../utils/themeProps';
+import {joinAriaIDs} from '../utils/inputAria';
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -257,6 +260,13 @@ export function RadioListItem({
   className,
   style,
   onClick,
+  onClickCapture,
+  onKeyDown,
+  onKeyDownCapture,
+  onKeyPress,
+  onKeyPressCapture,
+  onKeyUp,
+  onKeyUpCapture,
   ...rest
 }: RadioListItemProps) {
   // Item marks itself as a pressable surface (the row delegates to the radio,
@@ -265,6 +275,8 @@ export function RadioListItem({
   // the touch press controller (pressableCoverage.test.ts).
   const pressable = usePressFeedback();
   const context = use(RadioListContext);
+  const privateContext = use(RadioListPrivateContext);
+  const nativeSync = privateContext?.nativeSync;
   if (!context) {
     throw new Error('RadioListItem must be used within an RadioList');
   }
@@ -273,12 +285,9 @@ export function RadioListItem({
   const labelID = useId();
   const descriptionID = useId();
   const isDisabled = context.isDisabled || isItemDisabled;
-  // When the whole group is disabled with a disabledMessage, radios stay
-  // focusable via aria-disabled (instead of native `disabled`) so the group's
-  // reason tooltip is keyboard-discoverable. Per-item disabling is unaffected
-  // and always uses the native disabled attribute.
-  const keepsFocusableForMessage =
-    context.hasDisabledMessage && !isItemDisabled;
+  const nativeName = isDisabled
+    ? (privateContext?.disabledName ?? context.name)
+    : context.name;
   const isChecked = context.value === value;
   // One predicate for both the rendered element and the aria-describedby that
   // points at it. A ReactNode description can be `false` or `''`, which render
@@ -303,6 +312,58 @@ export function RadioListItem({
   // since the visible label is now a plain (non-`<label>`) text node — a real
   // `<label htmlFor>` would double-fire under delegation.
   const radioRef = useRef<HTMLInputElement>(null);
+  const setRadioRef = useCallback(
+    (radio: HTMLInputElement | null) => {
+      radioRef.current = radio;
+      if (radio) {
+        // Restore on attachment too: StrictMode can replay the ref without a
+        // host update. Render owns the final name and form, including SSR.
+        radio.name = nativeName;
+        nativeSync?.sync(radio);
+        return () => {
+          // React detaches the old ref before updating `form`, then commits
+          // `name`/`checked`. Release an enabled radio's public group before
+          // detaching from its form. Disabled radios already have a private
+          // name, so re-enable reconnects before restoring the public name.
+          // Both attributes finish before consumer parent effects can read them.
+          if (!isDisabled) {
+            radio.name = '';
+          }
+          nativeSync?.detach(radio);
+          radioRef.current = null;
+        };
+      }
+    },
+    [isDisabled, nativeName, nativeSync],
+  );
+
+  // A child can update without rendering RadioList. Finish native required/Tab
+  // normalization before that child's consumer layout effects, including when
+  // checked state changes without changing the input ref. No resource is held.
+  useIsomorphicLayoutEffect(() => {
+    if (radioRef.current) {
+      nativeSync?.sync(radioRef.current);
+    }
+  });
+
+  // Guard every accepted keyboard phase before the consumer can act. Keep the
+  // event itself intact for group observers and independent caller children.
+  const guardActivationKeys = (
+    handler: React.KeyboardEventHandler<HTMLDivElement> | undefined,
+  ): React.KeyboardEventHandler<HTMLDivElement> | undefined => {
+    if (!handler || !isDisabled) {
+      return handler;
+    }
+    return event => {
+      if (
+        event.target === radioRef.current &&
+        (event.key === ' ' || event.key === 'Enter')
+      ) {
+        return;
+      }
+      handler(event);
+    };
+  };
 
   const radioCircle = (
     <div
@@ -313,18 +374,19 @@ export function RadioListItem({
       )}
       {...focusProps}>
       <input
-        ref={radioRef}
+        ref={setRadioRef}
         id={id}
         type="radio"
-        name={context.name}
+        name={nativeName}
         value={value}
         checked={isChecked}
-        disabled={isDisabled && !keepsFocusableForMessage}
-        aria-disabled={keepsFocusableForMessage ? 'true' : undefined}
-        // A focusable-disabled radio is not natively disabled, so detach it
-        // from the form instead: it keeps its name (grouping) but is excluded
-        // from submission, matching a natively disabled control.
-        form={keepsFocusableForMessage ? '' : undefined}
+        aria-disabled={isDisabled || undefined}
+        // Detach disabled values from submission/validation without dropping
+        // focus. Their private name keeps independent forms' same-name lists
+        // distinct when all of these inputs have a null native form owner.
+        form={isDisabled ? '' : undefined}
+        data-radio-list-input=""
+        data-radio-item-disabled={isItemDisabled ? '' : undefined}
         required={context.isRequired}
         // Chromium reports an unanswered native-required radio invalid before
         // any interaction; the invalid state follows the group's status
@@ -340,18 +402,25 @@ export function RadioListItem({
         }}
         // A consumer onClick rides on the radio input itself, so it fires for
         // both direct control clicks and row-surface clicks the row delegates
-        // to the input — the same routing CheckboxListItem uses. A disabled
-        // radio that stays focusable (`aria-disabled`, not native `disabled`)
-        // is not silenced by the browser, so drop the handler here
-        // (`spec:AST-085` FR2), as CheckboxInput does.
-        onClick={isDisabled ? undefined : onClick}
+        // to the input — the same routing CheckboxListItem uses.
+        onClick={event => {
+          if (isDisabled) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          onClick?.(event);
+        }}
         // The radio names itself from the visible label element, which works
         // for a rich label as well as a plain string. `aria-label` replaces
         // that name rather than adding to it, so the two are mutually
         // exclusive — aria-labelledby would otherwise win over it.
         aria-label={ariaLabel}
         aria-labelledby={ariaLabel == null ? labelID : undefined}
-        aria-describedby={hasDescription ? descriptionID : undefined}
+        aria-describedby={joinAriaIDs(
+          hasDescription ? descriptionID : undefined,
+          privateContext?.disabledDescriptionID,
+        )}
         {...stylex.props(
           styles.input,
           rtlStyles.centerInline('-50%'),
@@ -389,6 +458,15 @@ export function RadioListItem({
       // focusable control, so the row adds no second tab stop.
       interactiveRef={radioRef}
       isDisabled={isDisabled}
+      // Capture runs before the input's bubble guard. Guard only this accepted
+      // callback; do not cancel events belonging to independent slot controls.
+      onClickCapture={isDisabled ? undefined : onClickCapture}
+      onKeyDown={guardActivationKeys(onKeyDown)}
+      onKeyDownCapture={guardActivationKeys(onKeyDownCapture)}
+      onKeyPress={guardActivationKeys(onKeyPress)}
+      onKeyPressCapture={guardActivationKeys(onKeyPressCapture)}
+      onKeyUp={guardActivationKeys(onKeyUp)}
+      onKeyUpCapture={guardActivationKeys(onKeyUpCapture)}
       label={<span id={labelID}>{label}</span>}
       description={
         hasDescription ? (

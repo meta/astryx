@@ -12,8 +12,10 @@
  * SYNC: When RadioList.tsx or RadioListItem.tsx changes, update tests to match new behavior
  */
 
+import {StrictMode, useLayoutEffect, useState} from 'react';
+import {renderToString} from 'react-dom/server';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   hasReleaseFade,
@@ -434,6 +436,365 @@ describe('RadioList', () => {
     });
   });
 
+  describe('focusable disabled controls', () => {
+    it('preserves focus and independent same-name forms through group disablement', () => {
+      const onChange = vi.fn();
+      const view = (isDisabled: boolean) => (
+        <>
+          {['a', 'b'].map(value => (
+            <form key={value}>
+              <RadioList
+                label={`Delivery ${value}`}
+                htmlName="delivery"
+                value={value}
+                onChange={onChange}
+                isRequired
+                isDisabled={isDisabled}>
+                <RadioListItem label="A" value="a" />
+                <RadioListItem label="B" value="b" />
+              </RadioList>
+            </form>
+          ))}
+        </>
+      );
+      const {container, rerender} = render(view(false));
+      const radios = Array.from(container.querySelectorAll('input'));
+      const forms = Array.from(container.querySelectorAll('form'));
+      radios[0].focus();
+      for (const disabled of [true, false]) {
+        rerender(view(disabled));
+        expect(Array.from(container.querySelectorAll('input'))).toEqual(radios);
+        expect(radios[0]).toHaveFocus();
+        expect(radios.map(radio => radio.checked)).toEqual([
+          true,
+          false,
+          false,
+          true,
+        ]);
+        expect(radios.every(radio => !radio.disabled)).toBe(true);
+        expect(radios[0].getAttribute('aria-disabled')).toBe(
+          disabled ? 'true' : null,
+        );
+        // jsdom does not reproduce checked-state loss across form owners.
+        expect(
+          radios[0].form !== radios[2].form ||
+            radios[0].name !== radios[2].name,
+        ).toBe(true);
+        expect(forms.map(form => [...new FormData(form)])).toEqual(
+          disabled ? [[], []] : [[['delivery', 'a']], [['delivery', 'b']]],
+        );
+        expect(forms.every(form => form.checkValidity())).toBe(true);
+      }
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('synchronizes an independently disabled selected member before consumer effects', async () => {
+      const user = userEvent.setup();
+      type OptionState = {value: string | null; disabled: boolean};
+      let updateOption = (_state: OptionState) => {};
+      const observe = vi.fn();
+      const groupRender = vi.fn();
+      function Option() {
+        const [state, setState] = useState<OptionState>({
+          value: 'a',
+          disabled: false,
+        });
+        updateOption = setState;
+        useLayoutEffect(() => {
+          const form = document.querySelector('form')!;
+          observe(form.checkValidity(), [...new FormData(form)]);
+        });
+        return state.value === null ? null : (
+          <div>
+            <RadioListItem
+              label="A"
+              value={state.value}
+              isDisabled={state.disabled}
+            />
+            <RadioListItem label="C" value="c" isDisabled />
+          </div>
+        );
+      }
+      function App() {
+        groupRender();
+        return (
+          <form>
+            <RadioList
+              label="Delivery"
+              htmlName="delivery"
+              value="a"
+              onChange={() => {}}
+              isRequired>
+              <Option />
+              <RadioListItem label="B" value="b" />
+            </RadioList>
+            <button type="button">After</button>
+          </form>
+        );
+      }
+      render(
+        <StrictMode>
+          <App />
+        </StrictMode>,
+      );
+      const renders = groupRender.mock.calls.length;
+      const radio = screen.getByRole('radio', {name: 'A'});
+      radio.focus();
+      act(() => updateOption({value: 'a', disabled: true}));
+      expect(screen.getByRole('radio', {name: 'A'})).toBe(radio);
+      expect(radio).toHaveFocus();
+      expect(radio).toHaveAttribute('aria-disabled', 'true');
+      expect(radio).not.toHaveAttribute('disabled');
+      expect(radio).toBeChecked();
+      expect(observe).toHaveBeenLastCalledWith(true, []);
+      await user.tab();
+      expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+      await user.tab({shift: true});
+      expect(radio).toHaveFocus();
+      for (const value of ['unmatched', 'a', null, 'a']) {
+        act(() => updateOption({value, disabled: true}));
+        expect(observe).toHaveBeenLastCalledWith(value === 'a', []);
+        screen.getByRole('button', {name: 'After'}).focus();
+        await user.tab({shift: true});
+        expect(
+          screen.getByRole('radio', {name: value === 'a' ? 'A' : 'B'}),
+        ).toHaveFocus();
+      }
+      act(() => updateOption({value: 'a', disabled: false}));
+      expect(observe).toHaveBeenLastCalledWith(true, [['delivery', 'a']]);
+      expect(groupRender).toHaveBeenCalledTimes(renders);
+    });
+
+    it('blocks owned activation callbacks without blocking caller slot controls', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onClick = vi.fn();
+      const onCapture = vi.fn();
+      const onKey = vi.fn();
+      const onGroupKey = vi.fn();
+      const onSlotClick = vi.fn();
+      const view = (isDisabled: boolean) => (
+        <RadioList
+          label="Delivery"
+          value="a"
+          onChange={onChange}
+          onKeyDown={onGroupKey}>
+          <RadioListItem label="A" value="a" />
+          <RadioListItem
+            label="B"
+            value="b"
+            isDisabled={isDisabled}
+            onClick={onClick}
+            onClickCapture={onCapture}
+            onKeyDown={onKey}
+            onKeyDownCapture={onKey}
+            onKeyPress={onKey}
+            onKeyPressCapture={onKey}
+            onKeyUp={onKey}
+            onKeyUpCapture={onKey}
+            endContent={
+              <>
+                <button type="button" onClick={onSlotClick}>
+                  Details
+                </button>
+                <input type="radio" aria-label="Independent" name="other" />
+              </>
+            }
+          />
+        </RadioList>
+      );
+      const {rerender} = render(view(true));
+      const radio = screen.getByRole('radio', {name: 'B'});
+      radio.focus();
+      for (const key of [' ', 'Enter']) {
+        fireEvent.keyDown(radio, {key});
+        fireEvent.keyPress(radio, {key, charCode: key === 'Enter' ? 13 : 32});
+        fireEvent.keyUp(radio, {key});
+      }
+      fireEvent.click(radio);
+      await user.keyboard(' ');
+      expect(onKey).not.toHaveBeenCalled();
+      expect(onCapture).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onGroupKey).toHaveBeenCalledTimes(3);
+      expect(radio).not.toBeChecked();
+      fireEvent.keyDown(radio, {key: 'x'});
+      expect(onKey).toHaveBeenCalledTimes(2);
+      onKey.mockClear();
+      screen.getByRole('button', {name: 'Details'}).focus();
+      await user.keyboard('{Enter}');
+      expect(onSlotClick).toHaveBeenCalledTimes(1);
+      expect(onKey).toHaveBeenCalledTimes(6);
+      expect(
+        screen.getByRole('radio', {name: 'Independent'}),
+      ).not.toHaveAttribute('tabindex');
+      rerender(view(false));
+      radio.focus();
+      await user.keyboard(' ');
+      expect(onCapture).toHaveBeenCalledTimes(1);
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith('b');
+    });
+
+    it('merges the disabled reason into each radio description', () => {
+      const view = (isDisabled: boolean) => (
+        <RadioList
+          label="Delivery"
+          value="a"
+          onChange={() => {}}
+          isDisabled={isDisabled}
+          disabledMessage="Locked">
+          <RadioListItem label="A" value="a" description="Standard" />
+          <RadioListItem label="B" value="b" description="Express" isDisabled />
+        </RadioList>
+      );
+      const {rerender} = render(view(true));
+      expect(
+        screen.getByRole('radio', {name: 'A'}),
+      ).toHaveAccessibleDescription('Standard Locked');
+      expect(
+        screen.getByRole('radio', {name: 'B'}),
+      ).toHaveAccessibleDescription('Express Locked');
+      rerender(view(false));
+      expect(
+        screen.getByRole('radio', {name: 'A'}),
+      ).toHaveAccessibleDescription('Standard');
+      expect(
+        screen.getByRole('radio', {name: 'B'}),
+      ).toHaveAccessibleDescription('Express');
+    });
+
+    it('excludes an unanswered disabled group from required validation', () => {
+      const view = (isDisabled: boolean) => (
+        <form>
+          <RadioList
+            label="Delivery"
+            htmlName="delivery"
+            value=""
+            onChange={() => {}}
+            isRequired
+            isDisabled={isDisabled}>
+            <RadioListItem label="A" value="a" />
+            <RadioListItem label="B" value="b" />
+          </RadioList>
+        </form>
+      );
+      const {container, rerender} = render(view(false));
+      const form = container.querySelector('form')!;
+      expect(form.checkValidity()).toBe(false);
+      rerender(view(true));
+      expect(form.checkValidity()).toBe(true);
+      expect([...new FormData(form)]).toEqual([]);
+      expect(form.querySelector('[disabled]')).toBeNull();
+      rerender(view(false));
+      expect(form.checkValidity()).toBe(false);
+    });
+
+    it('excludes an unanswered group when every member is individually disabled', () => {
+      const view = (isDisabled: boolean) => (
+        <form>
+          <RadioList
+            label="Delivery"
+            htmlName="delivery"
+            value=""
+            onChange={() => {}}
+            isRequired>
+            <RadioListItem label="A" value="a" isDisabled={isDisabled} />
+            <RadioListItem label="B" value="b" isDisabled={isDisabled} />
+          </RadioList>
+        </form>
+      );
+      const {container, rerender} = render(view(false));
+      const form = container.querySelector('form')!;
+      expect(form.checkValidity()).toBe(false);
+      rerender(view(true));
+      expect(form.checkValidity()).toBe(true);
+      expect([...new FormData(form)]).toEqual([]);
+      expect(form.querySelector('[disabled]')).toBeNull();
+      rerender(view(false));
+      expect(form.checkValidity()).toBe(false);
+    });
+
+    it('excludes a selected disabled value before hydration', () => {
+      const doc = new DOMParser().parseFromString(
+        renderToString(
+          <form>
+            <RadioList
+              label="Delivery"
+              htmlName="delivery"
+              value="a"
+              onChange={() => {}}>
+              <RadioListItem label="A" value="a" isDisabled />
+              <RadioListItem label="B" value="b" />
+            </RadioList>
+          </form>,
+        ),
+        'text/html',
+      );
+      expect(
+        doc.querySelector<HTMLInputElement>('input[value="a"]')?.checked,
+      ).toBe(true);
+      expect([...new FormData(doc.forms[0])]).toEqual([]);
+      expect(doc.querySelector('[disabled]')).toBeNull();
+    });
+
+    it('restores Tab candidates when the selected disabled row becomes hidden or inert', async () => {
+      const {container} = render(
+        <form>
+          <RadioList label="Delivery" value="a" onChange={() => {}} isRequired>
+            <div data-testid="availability">
+              <RadioListItem label="A" value="a" isDisabled />
+            </div>
+            <RadioListItem label="B" value="b" />
+          </RadioList>
+        </form>,
+      );
+      const row = screen.getByTestId('availability');
+      const radio = screen.getByRole('radio', {name: 'A'});
+      const other = screen.getByRole('radio', {name: 'B'});
+      expect(other).toHaveAttribute('tabindex', '-1');
+      for (const attribute of ['hidden', 'inert']) {
+        row.setAttribute(attribute, '');
+        await waitFor(() => expect(other).toHaveAttribute('tabindex', '0'));
+        expect(radio).toBeChecked();
+        expect(container.querySelector('form')!.checkValidity()).toBe(true);
+        row.removeAttribute(attribute);
+        await waitFor(() => expect(other).toHaveAttribute('tabindex', '-1'));
+      }
+    });
+
+    it('honors cancellation before moving to an enabled peer in a split group', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const view = (cancel: boolean) => (
+        <RadioList
+          label="Delivery"
+          value="a"
+          onChange={onChange}
+          onKeyDown={event => {
+            if (cancel) {
+              event.preventDefault();
+            }
+          }}>
+          <RadioListItem label="A" value="a" />
+          <RadioListItem label="B" value="b" isDisabled />
+          <RadioListItem label="C" value="c" />
+        </RadioList>
+      );
+      const {rerender} = render(view(true));
+      const radio = screen.getByRole('radio', {name: 'A'});
+      radio.focus();
+      await user.keyboard('{ArrowDown}');
+      expect(radio).toHaveFocus();
+      expect(onChange).not.toHaveBeenCalled();
+      rerender(view(false));
+      await user.keyboard('{ArrowDown}');
+      expect(screen.getByRole('radio', {name: 'C'})).toHaveFocus();
+      expect(onChange).toHaveBeenCalledExactlyOnceWith('c');
+    });
+  });
+
   describe('disabledMessage', () => {
     const h = {hidden: true} as const;
 
@@ -502,6 +863,7 @@ describe('RadioList', () => {
 
     it('does not run a caller onClick while focusable-disabled', () => {
       const onClick = vi.fn();
+      const onCapture = vi.fn();
       render(
         <RadioList
           label="Plan"
@@ -509,18 +871,30 @@ describe('RadioList', () => {
           onChange={() => {}}
           isDisabled
           disabledMessage="Upgrade your account to change plans">
-          <RadioListItem label="Free" value="free" onClick={onClick} />
-          <RadioListItem label="Pro" value="pro" onClick={onClick} />
+          <RadioListItem
+            label="Free"
+            value="free"
+            onClick={onClick}
+            onClickCapture={onCapture}
+          />
+          <RadioListItem
+            label="Pro"
+            value="pro"
+            onClick={onClick}
+            onClickCapture={onCapture}
+          />
         </RadioList>,
       );
       fireEvent.click(screen.getByRole('radio', {name: 'Pro', hidden: true}));
       fireEvent.click(screen.getByRole('radio', {name: 'Free', hidden: true}));
       expect(onClick).not.toHaveBeenCalled();
+      expect(onCapture).not.toHaveBeenCalled();
     });
 
     it('does not run a caller onClick from the keyboard while focusable-disabled', async () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
+      const onCapture = vi.fn();
       render(
         <RadioList
           label="Plan"
@@ -528,8 +902,18 @@ describe('RadioList', () => {
           onChange={() => {}}
           isDisabled
           disabledMessage="Upgrade your account to change plans">
-          <RadioListItem label="Free" value="free" onClick={onClick} />
-          <RadioListItem label="Pro" value="pro" onClick={onClick} />
+          <RadioListItem
+            label="Free"
+            value="free"
+            onClick={onClick}
+            onClickCapture={onCapture}
+          />
+          <RadioListItem
+            label="Pro"
+            value="pro"
+            onClick={onClick}
+            onClickCapture={onCapture}
+          />
         </RadioList>,
       );
       await user.tab();
@@ -539,9 +923,11 @@ describe('RadioList', () => {
       // Space activates the focused radio.
       await user.keyboard(' ');
       expect(onClick).not.toHaveBeenCalled();
+      expect(onCapture).not.toHaveBeenCalled();
       // An arrow key moves onto the next radio, and the browser clicks it.
       await user.keyboard('{ArrowDown}');
       expect(onClick).not.toHaveBeenCalled();
+      expect(onCapture).not.toHaveBeenCalled();
     });
 
     it('still runs a caller onClick on an enabled radio', () => {
