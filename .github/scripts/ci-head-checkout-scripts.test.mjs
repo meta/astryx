@@ -13,10 +13,14 @@
  * none, and the step fails with "Cannot find module" on an unrelated pull
  * request. Every script such a step runs is either established (older than
  * any branch still expected to run CI, listed below with its reason) or
- * guarded: the step's condition requires `hashFiles('<script>') != ''`, or
- * the job's scope step names it as `requires-head-file` and the step reads
- * `head_file_present`. A job that does not measure the head takes the
- * default merge checkout instead, and this test does not apply to it.
+ * guarded: the step's condition requires `hashFiles('<script>') != ''`, the
+ * job's scope step names it as `requires-head-file` and the step reads
+ * `head_file_present`, the step loads it from the workflow's own commit
+ * (`git show "$WORKFLOW_SHA:<script>"`), or the step checks for it itself
+ * (`[ ! -f ... ]`). A job that does not measure the head takes the default
+ * merge checkout instead, and this test does not apply to it.
+ *
+ * Scope: `.js`, `.mjs` and `.cjs` scripts named in a step's `run:`.
  */
 
 import fs from 'node:fs';
@@ -80,9 +84,19 @@ function unguardedScripts(job) {
   const findings = [];
   for (const step of job.steps ?? []) {
     const condition = String(step.if ?? '');
-    for (const [script] of String(step.run ?? '').matchAll(SCRIPT)) {
+    const run = String(step.run ?? '');
+    for (const [script] of run.matchAll(SCRIPT)) {
       if (ESTABLISHED.has(script)) continue;
       if (condition.includes(`hashFiles('${script}') != ''`)) continue;
+      // Loaded from the workflow's own commit, not the head.
+      if (run.includes(`$WORKFLOW_SHA:${script}`)) continue;
+      // The step skips a head without the script on its own.
+      if (
+        /\[ ! -f "?\$?[A-Za-z0-9_]*"? \]/.test(run) &&
+        run.includes('exit 0')
+      ) {
+        continue;
+      }
       if (
         script === requiredHeadFile &&
         condition.includes('head_file_present')
@@ -128,9 +142,15 @@ describe('pull-request jobs that check out the head', () => {
         )) {
           if (!SCRIPT.test(script)) continue;
           SCRIPT.lastIndex = 0;
+          // The notice runs exactly when the guarded step would have, but
+          // the head lacks the script: never on a pull request the step skips.
+          const base = String(step.if)
+            .replace(` && hashFiles('${script}') != ''`, '')
+            .replace(/^\((.*)\)$/, '$1');
           const notice = job.steps.find(
             candidate =>
-              String(candidate.if ?? '') === `hashFiles('${script}') == ''` &&
+              String(candidate.if ?? '') ===
+                `(${base}) && hashFiles('${script}') == ''` &&
               String(candidate.run ?? '').includes('::notice::'),
           );
           expect(notice, `${step.name}: ${script}`).toBeDefined();
