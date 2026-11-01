@@ -82,8 +82,9 @@ Membership follows public responsibility, not an import of Button or a rendered
   surface contract without creating another action model.
 - ToggleButton reuses the Button surface and adds a persistent controlled pressed
   state, pressed-state visuals, and an interruptible pressed Action.
-- ButtonGroup owns connected action-group geometry, roving focus, inherited size
-  and disabled state, and one shared connected elevation.
+- ButtonGroup owns connected action-group geometry, its keyboard model (roving
+  focus in toolbar mode, standard Tab order in group mode), inherited size and
+  disabled state, and one shared connected elevation.
 - ToggleButtonGroup owns single- or multiple-selection state and the layout of
   distinct ToggleButton surfaces. It does not become a connected visual surface
   merely because it groups selection.
@@ -171,7 +172,8 @@ Membership follows public responsibility, not an import of Button or a rendered
   Action or report member Action-pending feedback.
 - **FR12 — Connected and spaced groups stay distinct.** ButtonGroup's connected
   presentation removes inter-member gaps, shares outer edges, owns one elevation,
-  and uses its documented roving-focus keyboard model. The current
+  and uses its documented keyboard model (roving focus in toolbar mode, standard
+  Tab order in group mode). The current
   ToggleButtonGroup keeps distinct child surfaces separated by a gap; each child
   may own its own elevation, and the wrapper owns no shadow. A future connected
   toggle presentation MUST move elevation to the group and make members flat.
@@ -193,7 +195,8 @@ Membership follows public responsibility, not an import of Button or a rendered
   supplied. ToggleButton remains an action with `aria-pressed`; navigation backed
   by its Action does not turn the control into a destination link.
 - **AV5 — Group keyboard model.** ButtonGroup may use roving focus for a connected
-  action cluster. ToggleButtonGroup retains the keyboard and selection behavior
+  action cluster in toolbar mode (or standard Tab order in group mode).
+  ToggleButtonGroup retains the keyboard and selection behavior
   documented for its pressed-button set. Visual similarity alone does not require
   both groups to use the same composite-widget model.
 - **AV6 — Tooltip ownership.** A component may require an explicit tooltip or
@@ -202,24 +205,24 @@ Membership follows public responsibility, not an import of Button or a rendered
 
 ## Representative matrix
 
-| Member and state                                   | Shared invariant                                                   | Deliberate variation                                                    |
-| -------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| `component:Button` / ordinary action               | named, sized, focusable action surface; fire-once pending behavior | visible content, variants, form type, and optional link mode            |
-| `component:IconButton` / compact action or FAB     | Button behavior, square geometry, family elevation                 | required icon; label is programmatic rather than visible                |
-| `component:ToggleButton` / pressed and unpressed   | Button geometry, naming, focus, pending, and surface ownership     | controlled `aria-pressed`, pressed icon/treatment, interruptible Action |
-| `component:ButtonGroup` / horizontal or vertical   | labeled group; inherited size/disabled state                       | connected edges, one shared elevation, roving focus                     |
-| `component:ToggleButtonGroup` / single or multiple | labeled group; inherited size/disabled state                       | selection owner; spaced child surfaces; no wrapper elevation            |
-| future connected toggle group                      | labeled selection group and pressed semantics                      | one painted group surface owns elevation; members paint none            |
+| Member and state                                   | Shared invariant                                                   | Deliberate variation                                                                                        |
+| -------------------------------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `component:Button` / ordinary action               | named, sized, focusable action surface; fire-once pending behavior | visible content, variants, form type, and optional link mode                                                |
+| `component:IconButton` / compact action or FAB     | Button behavior, square geometry, family elevation                 | required icon; label is programmatic rather than visible                                                    |
+| `component:ToggleButton` / pressed and unpressed   | Button geometry, naming, focus, pending, and surface ownership     | controlled `aria-pressed`, pressed icon/treatment, interruptible Action                                     |
+| `component:ButtonGroup` / horizontal or vertical   | labeled group; inherited size/disabled state                       | connected edges, one shared elevation, count-based keyboard model (toolbar roving focus or group Tab order) |
+| `component:ToggleButtonGroup` / single or multiple | labeled group; inherited size/disabled state                       | selection owner; spaced child surfaces; no wrapper elevation                                                |
+| future connected toggle group                      | labeled selection group and pressed semantics                      | one painted group surface owns elevation; members paint none                                                |
 
 ## Adoption and exceptions
 
-| Component                     | Current adoption                                                                       | Gap or exception                                                                              |
-| ----------------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `component:Button`            | owns the shared surface, size, state, Action, link, and elevation mechanisms           | link mode additionally follows `family:navigation-destinations`                               |
-| `component:IconButton`        | inherits Button props and always selects icon-only presentation                        | tooltip remains explicit consumer guidance                                                    |
-| `component:ToggleButton`      | inherits Button geometry, focus, pending presentation, and rendered elevation state    | approved adoption gap: add the existing optional `elevation` prop and matching theme metadata |
-| `component:ButtonGroup`       | connected surface, inherited size/disabled state, shared elevation, and roving focus   | member elevation is intentionally suppressed while connected                                  |
-| `component:ToggleButtonGroup` | controlled single/multiple selection, inherited size/disabled state, and spaced layout | wrapper is not a painted surface and therefore exposes no family elevation                    |
+| Component                     | Current adoption                                                                                                                             | Gap or exception                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `component:Button`            | owns the shared surface, size, state, Action, link, and elevation mechanisms                                                                 | link mode additionally follows `family:navigation-destinations`                               |
+| `component:IconButton`        | inherits Button props and always selects icon-only presentation                                                                              | tooltip remains explicit consumer guidance                                                    |
+| `component:ToggleButton`      | inherits Button geometry, focus, pending presentation, and rendered elevation state                                                          | approved adoption gap: add the existing optional `elevation` prop and matching theme metadata |
+| `component:ButtonGroup`       | connected surface, inherited size/disabled state, shared elevation, and count-based keyboard model (toolbar roving focus or group Tab order) | member elevation is intentionally suppressed while connected                                  |
+| `component:ToggleButtonGroup` | controlled single/multiple selection, inherited size/disabled state, and spaced layout                                                       | wrapper is not a painted surface and therefore exposes no family elevation                    |
 
 ToggleButton elevation is an approved implementation gap. Adding the existing
 optional `Elevation` axis restores family parity without changing no-prop

@@ -32,6 +32,7 @@ export const docs = {
         {name: 'elevation', type: "'none' | 'low' | 'med' | 'high'", description: 'Resting shadow depth for the whole group. The connected buttons share one surface, so the shadow lifts them as a unit. Use for a group that floats above content.', default: "'none'"},
         {name: 'ref', type: 'React.Ref<HTMLDivElement>', description: 'Ref forwarded to the root element.'},
         {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX styles for layout customization. Must be a stylex.create() value.'},
+        {name: 'role', type: 'AriaRole', description: 'Explicit role override. By default, ButtonGroup adapts: 3 or more members use role="toolbar" with aria-orientation and roving tabindex; 2 or fewer members use role="group" in standard Tab order.'},
         {name: 'data-testid', type: 'string', description: 'Test selector for automated testing frameworks.'},
       ],
     },
@@ -94,7 +95,7 @@ export const docs = {
       {guidance: false, description: "Don't use ButtonGroup for navigation. Use SegmentedControl or TabList for switching between views."},
       {guidance: false, description: "Don't nest ButtonGroups. If you need multiple groups, place them side by side with a gap."},
       {guidance: true, description: 'Name the group for what its buttons act on. The label is the group\'s accessible name and a screen reader reads it before each member.'},
-      {guidance: true, description: 'Keep the group a single Tab stop. Arrow keys move between members along the orientation, Home/End jump to the ends, and disabled members are skipped. This is the WAI-ARIA APG roving tabindex technique: https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/#kbd_roving_tabindex'},
+      {guidance: true, description: 'Keep a 3+ button group a single Tab stop with role="toolbar" and aria-orientation. Arrow keys move between members along the orientation, Home/End jump to the ends, and disabled members are skipped. A 2-button group stays role="group" with standard Tab order.'},
       {guidance: false, description: "Don't disable the group to show that an action is in flight. A disabled member drops focus, so a keyboard user loses their place; leave the group enabled and show progress on the button that started the work."},
     ],
     anatomy: [
