@@ -3,10 +3,13 @@
 /**
  * Render the CDN starter page in a browser, and report what went wrong.
  *
- * One render loads the page until its network goes idle, then reads the first
- * button: a page that throws while rendering still goes idle with an empty
- * root, so the render itself is asserted, not only the error streams. A page
- * with a request that never finishes never goes idle, so its navigation times
+ * One render loads the page until its load event, which waits for the module
+ * script and every module it imports to load and run, then reads the first
+ * button: a page that throws while rendering still fires its load event with
+ * an empty root, so the render itself is asserted, not only the error streams.
+ * Not network idle: a request the page does not wait on (a web font) can keep
+ * the network busy long after the page has rendered. A page whose module graph
+ * never finishes loading never fires its load event, so its navigation times
  * out: that is an unclean render like any other, reported with the requests
  * still in flight when the wait gave up, so the output names the asset that
  * hung instead of ending the run on a stack trace. renderUntilClean retries
@@ -86,7 +89,7 @@ export async function renderPage(
 
     try {
       await page.goto(url, {
-        waitUntil: 'networkidle',
+        waitUntil: 'load',
         timeout: withinBudget(navigationTimeoutMs),
       });
     } catch (error) {

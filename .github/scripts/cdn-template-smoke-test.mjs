@@ -108,7 +108,7 @@ if (rendered !== pinned) {
 // request that arrives mid-build is answered with an error document that is then
 // cached. A page pinned to a version published minutes ago therefore loads its
 // CSS as `text/plain`, which Chromium rejects as an opaque response
-// (net::ERR_BLOCKED_BY_ORB) and `networkidle` never settles on. Asking for the
+// (net::ERR_BLOCKED_BY_ORB), and the page never renders. Asking for the
 // same URLs over plain HTTP starts and finishes the build first, and turns the
 // remaining case into a line that names the asset instead of a navigation
 // timeout at the end of a 17-minute run.
