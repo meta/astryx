@@ -15,6 +15,7 @@
 export {useTooltip} from './useTooltip';
 export type {
   TooltipFocusTrigger,
+  TooltipPressTrigger,
   TooltipTouchTrigger,
   TooltipOptions,
   TooltipReturn,
