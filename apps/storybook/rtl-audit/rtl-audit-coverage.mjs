@@ -291,7 +291,7 @@ export function withD1CompletionIdentity(result, plannedStoryId) {
   };
 }
 
-const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1']);
+const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1', 'D5']);
 
 /** Validate resolved Storybook RTL-audit applicability metadata. */
 export function validateStoryRtlAuditParameters(value, storyId) {
@@ -304,6 +304,10 @@ export function validateStoryRtlAuditParameters(value, storyId) {
   for (const [dimension, applicability] of Object.entries(value)) {
     if (!STORY_RTL_AUDIT_DIMENSIONS.has(dimension)) {
       throw new Error(`${storyId} rtlAudit has unknown dimension ${dimension}`);
+    }
+    if (dimension === 'D5') {
+      result.D5 = validatePhysicalPosition(applicability, storyId);
+      continue;
     }
     if (
       applicability == null ||
@@ -333,6 +337,25 @@ export function validateStoryRtlAuditParameters(value, storyId) {
     };
   }
   return result;
+}
+
+// rtlAudit.D5 declares a region whose positioned elements stay physical
+// (DR5); it never turns D5 off for the story.
+function validatePhysicalPosition(value, storyId) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${storyId} rtlAudit.D5 must be an object`);
+  }
+  if (!PHYSICAL_POSITION_MARKERS.includes(value.physical)) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.physical must be one of ${PHYSICAL_POSITION_MARKERS.join(', ')}`,
+    );
+  }
+  if (typeof value.within !== 'string' || !value.within.trim()) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.within must name the plot with a non-empty selector`,
+    );
+  }
+  return {physical: value.physical, within: value.within.trim()};
 }
 
 /** Selected owners for which the canonical Storybook route has no story. */
@@ -527,10 +550,10 @@ export function finishFiniteAnimations(doc) {
 }
 
 /**
- * Declared position semantics D5 accepts on an ancestor's
- * `data-astryx-rtl-physical` attribute. `chart`: the element sits in chart
- * coordinates, which stay physical in RTL (`design:bidirectionality` DR5), such
- * as a tooltip that follows a plotted bar.
+ * Declared position semantics a story's `rtlAudit.D5.physical` may name.
+ * `chart`: elements inside the declared plot sit in chart coordinates, which
+ * stay physical in RTL (`design:bidirectionality` DR5), such as a tooltip that
+ * follows a plotted bar.
  */
 export const PHYSICAL_POSITION_MARKERS = Object.freeze(['chart']);
 
@@ -549,7 +572,7 @@ export function gradePositionedPair(ltr, rtl, tolerance) {
       expected: null,
       delta: null,
       pass: false,
-      reason: `unknown data-astryx-rtl-physical value "${marker}"`,
+      reason: `unknown rtlAudit.D5 physical kind "${marker}"`,
     };
   }
   const expectation = marker === 'chart' ? 'physical' : 'mirror';

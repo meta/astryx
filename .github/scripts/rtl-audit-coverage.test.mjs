@@ -1042,10 +1042,38 @@ describe('gradePositionedPair', () => {
     });
   });
 
-  it('fails closed on an unknown marker', () => {
+  it('fails closed on an unknown physical kind', () => {
     expect(gradePositionedPair(ltr('map'), at(200), 3)).toMatchObject({
       expectation: 'invalid-marker',
       pass: false,
     });
+  });
+});
+
+describe('rtlAudit.D5 physical-region metadata', () => {
+  const within = '[aria-label="Quarterly performance chart"]';
+
+  it('admits a chart plot declaration', () => {
+    expect(
+      validateStoryRtlAuditParameters({D5: {physical: 'chart', within}}, 's'),
+    ).toEqual({D5: {physical: 'chart', within}});
+  });
+
+  it('rejects an unknown physical kind', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'map', within}}, 's'),
+    ).toThrow(/D5.physical/);
+  });
+
+  it('rejects a declaration without a plot selector', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'chart'}}, 's'),
+    ).toThrow(/D5.within/);
+    expect(() =>
+      validateStoryRtlAuditParameters(
+        {D5: {physical: 'chart', within: '  '}},
+        's',
+      ),
+    ).toThrow(/D5.within/);
   });
 });

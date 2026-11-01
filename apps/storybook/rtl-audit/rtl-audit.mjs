@@ -539,7 +539,7 @@ function decorationCard(component, storyId, ltr, rtl) {
 // or "wildly off" reading that is pure noise — the spike's single false
 // positive came from exactly this, and the guard removes it.
 const PM_DETECTOR = /* js */ `
-(() => {
+((PHYSICAL) => {
   function parseMatrixX(t) {
     if (!t || t === 'none') return null;
     let m = t.match(/^matrix\\(([^)]+)\\)/);
@@ -595,17 +595,18 @@ const PM_DETECTOR = /* js */ `
       cls: (el.className && el.className.toString().slice(0, 48)) || '',
       parentW: pr.width,
       relCenterX,
-      // Declared position semantics (chart coordinates stay physical, DR5).
-      physical:
-        el.closest('[data-astryx-rtl-physical]')?.getAttribute('data-astryx-rtl-physical') ?? null,
+      // Inside the story-declared plot (rtlAudit.D5), chart coordinates stay
+      // physical (DR5).
+      physical: PHYSICAL && el.closest(PHYSICAL.within) ? PHYSICAL.physical : null,
     });
   }
   return out;
-})()
+})(__RTL_PHYSICAL__)
 `;
 
-async function detectPositioned(page) {
-  return page.evaluate(PM_DETECTOR).catch(() => []);
+async function detectPositioned(page, physical = null) {
+  const detector = PM_DETECTOR.replace('__RTL_PHYSICAL__', JSON.stringify(physical));
+  return page.evaluate(detector).catch(() => []);
 }
 
 // Auto-discovery D5 for one story: compare LTR vs RTL positioned-element
@@ -704,11 +705,16 @@ async function measureAutoStory(page, port, storyId, rtl, {positioned, decoratio
   await page.goto(storyUrl(port, storyId, rtl), {waitUntil: 'domcontentloaded'});
   await settle(page);
   const measure = {positioned: [], decorations: [], revealed: false};
-  if (positioned && !PM_REVEAL) measure.positioned = await detectPositioned(page);
+  // A story may declare a plot whose overlays stay physical (rtlAudit.D5);
+  // D5 still scans it. Malformed metadata throws (INV13).
+  const physical = positioned
+    ? (await readStoryRtlAuditParameters(page, storyId)).D5 ?? null
+    : null;
+  if (positioned && !PM_REVEAL) measure.positioned = await detectPositioned(page, physical);
   if (decorations || (positioned && PM_REVEAL)) {
     measure.revealed = await revealInteractionGated(page);
   }
-  if (positioned && PM_REVEAL) measure.positioned = await detectPositioned(page);
+  if (positioned && PM_REVEAL) measure.positioned = await detectPositioned(page, physical);
   if (decorations) measure.decorations = await detectDirectionalDecorations(page);
   return measure;
 }
