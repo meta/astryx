@@ -4447,6 +4447,29 @@ describe('SideNav collapse focus (AR3)', () => {
     expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
   });
 
+  it.each([
+    {
+      toggle: true,
+      lands: () => screen.getByRole('button', {name: 'Expand sidebar'}),
+    },
+    {toggle: false, lands: () => screen.getByRole('link', {name: 'Dashboard'})},
+  ])(
+    'moves focus from the resize handle that Enter collapses, toggle $toggle',
+    async ({toggle, lands}) => {
+      const user = userEvent.setup();
+      render(
+        <SideNav resizable collapsible={{hasButton: toggle}}>
+          <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+          <SideNavItem label="Reports" href="/reports" />
+        </SideNav>,
+      );
+      screen.getByTestId('astryx-sidenav-resize-handle').focus();
+      await user.keyboard('{Enter}');
+      expect(screen.queryByTestId('astryx-sidenav-resize-handle')).toBeNull();
+      expect(lands()).toHaveFocus();
+    },
+  );
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});

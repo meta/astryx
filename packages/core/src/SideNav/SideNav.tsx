@@ -574,7 +574,9 @@ export function SideNav({
   // the rows the rail keeps, not by element: a resizable SideNav remounts its
   // nav when it collapses. Focus on a control outside the rows (the header,
   // the footer) that a resizable collapse remounts goes back to the same
-  // control. Focus moves only if the collapse lost it.
+  // control. Focus on the resize handle, which the collapse removes, goes to
+  // the toggle, or, with none, to the first kept row. Focus moves only if the
+  // collapse lost it.
   const rowsRef = useRef(new Map<HTMLElement, boolean>());
   const togglesRef = useRef(new Set<HTMLElement>());
   const focusTargets = useMemo<SideNavFocusTargets>(
@@ -594,6 +596,7 @@ export function SideNav({
     }),
     [],
   );
+  const resizeWrapperRef = useRef<HTMLDivElement>(null);
   const pendingFocusRef = useRef<{
     focus: FocusWithin;
     /** Whether the rail keeps the row that held focus. */
@@ -608,7 +611,11 @@ export function SideNav({
   const noteRailFocus = useCallback((wasCollapsed: boolean) => {
     pendingFocusRef.current = null;
     const nav = navRef.current;
-    const focus = wasCollapsed ? null : noteFocusWithin(nav);
+    // The resize handle sits beside the nav, in the resize wrapper, and goes
+    // with a collapse its Enter starts.
+    const focus = wasCollapsed
+      ? null
+      : (noteFocusWithin(nav) ?? noteFocusWithin(resizeWrapperRef.current));
     if (focus == null || nav == null) {
       return;
     }
@@ -879,7 +886,7 @@ export function SideNav({
   // Uses ResizeHandle in overlay mode so the handle sits inside
   // the panel's overflow: clip bounds.
   const rail = showResizeHandle ? (
-    <div {...stylex.props(styles.resizableContainer)}>
+    <div ref={resizeWrapperRef} {...stylex.props(styles.resizableContainer)}>
       {navElement}
       <ResizeHandle
         data-testid="astryx-sidenav-resize-handle"
