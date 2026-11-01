@@ -605,5 +605,10 @@
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
     }
+  },
+  {
+    "component": "LayerProvider",
+    "storyId": "core-layer--provider",
+    "dims": []
   }
 ]
