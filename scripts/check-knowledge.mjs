@@ -30,9 +30,12 @@ const {
   validateDesignDecisionsBlock,
 } = require('../.github/scripts/component-design-decisions.cjs');
 const {
-  classifyComponentKnowledgePath,
+  COMPONENT_SPEC_ROOT,
+  componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
+  isPlatformComponentSpecPath,
+  locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -232,12 +235,7 @@ function parseOverlayBlock(content, markerName, filePath) {
     };
   }
 
-  const propertyNames = [...block[1].matchAll(/"((?:\\.|[^"\\])*)"\s*:/g)].map(
-    match => JSON.parse(`"${match[1]}"`),
-  );
-  const duplicates = propertyNames.filter(
-    (name, index) => propertyNames.indexOf(name) !== index,
-  );
+  const duplicates = duplicateJsonKeys(block[1]);
   if (duplicates.length > 0) {
     return {
       config: null,
@@ -259,6 +257,41 @@ function parseOverlayBlock(content, markerName, filePath) {
   }
 }
 
+/**
+ * Keys repeated within one JSON object. `JSON.parse` keeps the last value
+ * silently, so a repeated key would hide an entry; the same key in two
+ * different objects (two concerns that both list `names`) is not a repeat.
+ */
+function duplicateJsonKeys(text) {
+  const duplicates = [];
+  const objects = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === '{') objects.push(new Set());
+    else if (character === '}') objects.pop();
+    else if (character === '"') {
+      let end = index + 1;
+      while (end < text.length && text[end] !== '"') {
+        end += text[end] === '\\' ? 2 : 1;
+      }
+      const raw = text.slice(index, end + 1);
+      index = end;
+      if (!/^\s*:/.test(text.slice(end + 1))) continue;
+      const keys = objects.at(-1);
+      let key;
+      try {
+        key = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      if (keys == null) continue;
+      if (keys.has(key)) duplicates.push(key);
+      keys.add(key);
+    }
+  }
+  return duplicates;
+}
+
 export function parseReviewApplicabilityBlock(
   content,
   filePath = '<knowledge record>',
@@ -273,9 +306,17 @@ export function validateReviewApplicability(
 ) {
   if (config == null) return [];
   const problems = [];
-  if (!exactKeys(config, ['scope', 'triggers'])) {
+  const keys =
+    config != null && typeof config === 'object' && !Array.isArray(config)
+      ? Object.keys(config)
+      : [];
+  if (
+    !keys.includes('scope') ||
+    keys.some(key => !['scope', 'triggers', 'concerns'].includes(key)) ||
+    !(keys.includes('triggers') || keys.includes('concerns'))
+  ) {
     return [
-      `${filePath}: ${REVIEW_APPLICABILITY_MARKER} requires exactly scope and triggers.`,
+      `${filePath}: ${REVIEW_APPLICABILITY_MARKER} requires scope with triggers, concerns, or both, and nothing else.`,
     ];
   }
   if (config.scope !== 'global') {
@@ -283,6 +324,16 @@ export function validateReviewApplicability(
       `${filePath}: ${REVIEW_APPLICABILITY_MARKER} scope must be "global".`,
     );
   }
+  if (keys.includes('concerns')) {
+    problems.push(
+      ...validateReviewConcerns(
+        config.concerns,
+        extractKnowledgeClaims(content),
+        filePath,
+      ),
+    );
+  }
+  if (!keys.includes('triggers')) return problems;
   if (
     config.triggers == null ||
     typeof config.triggers !== 'object' ||
@@ -488,6 +539,175 @@ function isKnowledgeRecordPath(filePath) {
   return isComponentSpecRecordPath(filePath);
 }
 
+const REVIEW_CONCERN_NAME_PATTERN = REVIEW_TRIGGER_PATTERN;
+const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
+
+/**
+ * A record's `concerns` map names the shared utilities it owns and the code
+ * that re-implements them. Each entry lists identifiers (`names`), regular
+ * expressions (`patterns`), or both, and the claims they route.
+ */
+function validateReviewConcerns(concerns, knownClaims, filePath) {
+  const where = `${filePath}: ${REVIEW_APPLICABILITY_MARKER} concerns`;
+  if (
+    concerns == null ||
+    typeof concerns !== 'object' ||
+    Array.isArray(concerns) ||
+    Object.keys(concerns).length === 0
+  ) {
+    return [`${where} must map at least one concern name to its entry.`];
+  }
+  const problems = [];
+  for (const [name, entry] of Object.entries(concerns)) {
+    const at = `${where} ${JSON.stringify(name)}`;
+    if (!REVIEW_CONCERN_NAME_PATTERN.test(name)) {
+      problems.push(`${at} must use lower-kebab-case.`);
+    }
+    const entryKeys =
+      entry != null && typeof entry === 'object' && !Array.isArray(entry)
+        ? Object.keys(entry)
+        : null;
+    if (
+      entryKeys == null ||
+      !entryKeys.includes('claims') ||
+      entryKeys.some(key => !['names', 'patterns', 'claims'].includes(key))
+    ) {
+      problems.push(
+        `${at} requires claims with names, patterns, or both, and nothing else.`,
+      );
+      continue;
+    }
+    const names = entry.names ?? [];
+    const patterns = entry.patterns ?? [];
+    if (!Array.isArray(names) || !Array.isArray(patterns)) {
+      problems.push(`${at} names and patterns must be lists.`);
+      continue;
+    }
+    if (names.length + patterns.length === 0) {
+      problems.push(`${at} requires at least one name or pattern.`);
+    }
+    for (const value of names) {
+      if (typeof value !== 'string' || !IDENTIFIER_PATTERN.test(value)) {
+        problems.push(
+          `${at} has a name that is not an identifier: ${JSON.stringify(value)}.`,
+        );
+      }
+    }
+    for (const value of patterns) {
+      try {
+        if (typeof value !== 'string' || value.length === 0) throw new Error();
+        new RegExp(value);
+      } catch {
+        problems.push(`${at} has an invalid pattern ${JSON.stringify(value)}.`);
+      }
+    }
+    if (!Array.isArray(entry.claims) || entry.claims.length === 0) {
+      problems.push(`${at} requires a non-empty claim list.`);
+      continue;
+    }
+    const seen = new Set();
+    for (const claimId of entry.claims) {
+      if (
+        typeof claimId !== 'string' ||
+        !REVIEW_CLAIM_ID_PATTERN.test(claimId)
+      ) {
+        problems.push(
+          `${at} has malformed claim id ${JSON.stringify(claimId)}.`,
+        );
+      } else if (seen.has(claimId)) {
+        problems.push(`${at} repeats claim ${JSON.stringify(claimId)}.`);
+      } else if (!knownClaims.has(claimId)) {
+        problems.push(
+          `${at} references missing claim ${JSON.stringify(claimId)}.`,
+        );
+      }
+      seen.add(claimId);
+    }
+  }
+  return problems;
+}
+
+function concernMatchers(entry) {
+  return [
+    ...(entry.names ?? []).map(name => ({
+      label: name,
+      expression: new RegExp(
+        `(?<![\\w$])${name.replace(/\$/g, '\\$')}(?![\\w$])`,
+      ),
+    })),
+    ...(entry.patterns ?? []).map(pattern => ({
+      label: pattern,
+      expression: new RegExp(pattern),
+    })),
+  ];
+}
+
+/**
+ * Route each claim whose owning record's concern matches an added line.
+ * `addedLines` are `{file, line, text}` rows of shipped source a diff adds.
+ * Every row names the record, concern, claim, and the first added lines that
+ * matched it, so a reviewer sees why the claim applies.
+ */
+export function collectConcernMatches(records, addedLines, authorityCommit) {
+  const matches = [];
+  if (addedLines.length === 0) return matches;
+  for (const record of records) {
+    const parsed = parseReviewApplicabilityBlock(record.content, record.path);
+    if (parsed.config?.concerns == null) continue;
+    const document = parseKnowledgeDocument(record.content, record.path);
+    const problems = [
+      ...document.problems,
+      ...parsed.problems,
+      ...validateReviewApplicability(
+        parsed.config,
+        record.content,
+        record.path,
+      ),
+    ];
+    if (problems.length > 0) throw new Error(problems.join('\n'));
+    if (document.frontmatter.get('authority') !== 'current') continue;
+    const recordId = document.frontmatter.get('id');
+    const claims = extractKnowledgeClaims(record.content);
+    const recordDigest = createHash('sha256')
+      .update(record.content)
+      .digest('hex');
+    for (const [concern, entry] of Object.entries(parsed.config.concerns)) {
+      const matchers = concernMatchers(entry);
+      const evidence = [];
+      for (const added of addedLines) {
+        for (const matcher of matchers) {
+          const found = matcher.expression.exec(added.text);
+          if (found) {
+            evidence.push({...added, matched: found[0], by: matcher.label});
+            break;
+          }
+        }
+      }
+      if (evidence.length === 0) continue;
+      const first = evidence[0];
+      for (const claimId of entry.claims) {
+        matches.push({
+          recordId,
+          path: record.path,
+          concern,
+          claimId,
+          claim: claims.get(claimId),
+          utilities: entry.names ?? [],
+          matchReason: `Added line ${first.file}:${first.line} matched ${JSON.stringify(first.matched)} in concern ${JSON.stringify(concern)}${entry.names?.length ? ` (shared: ${entry.names.join(', ')})` : ''}, which routes claim ${JSON.stringify(`${recordId}/${claimId}`)}.`,
+          evidence: evidence.slice(0, 5),
+          authorityCommit,
+          recordDigest,
+        });
+      }
+    }
+  }
+  return matches.sort((left, right) =>
+    [left.recordId, left.concern, left.claimId]
+      .join('\0')
+      .localeCompare([right.recordId, right.concern, right.claimId].join('\0')),
+  );
+}
+
 export function collectGlobalReviewMatches(
   records,
   requestedTriggers,
@@ -535,7 +755,7 @@ export function collectGlobalReviewMatches(
       .update(record.content)
       .digest('hex');
     for (const trigger of requested) {
-      for (const claimId of parsed.config.triggers[trigger] ?? []) {
+      for (const claimId of parsed.config.triggers?.[trigger] ?? []) {
         matches.push({
           recordId,
           path: record.path,
@@ -563,6 +783,24 @@ export function routeGlobalReviewBaselinesAtRevision(
   authorityCommit,
   reviewHead,
   requestedTriggers,
+) {
+  const {records, authority} = readKnowledgeRecordsAtAuthority(
+    root,
+    authorityCommit,
+    reviewHead,
+  );
+  return collectGlobalReviewMatches(records, requestedTriggers, authority);
+}
+
+/**
+ * The knowledge records at a review's base authority commit, after checking
+ * that commit is the full, resolved `origin/main` merge base of the reviewed
+ * head, so a proposed head can never serve as its own authority.
+ */
+export function readKnowledgeRecordsAtAuthority(
+  root,
+  authorityCommit,
+  reviewHead,
 ) {
   const resolvedCommit = execFileSync(
     'git',
@@ -625,7 +863,7 @@ export function routeGlobalReviewBaselinesAtRevision(
       {encoding: 'utf8'},
     ),
   }));
-  return collectGlobalReviewMatches(records, requestedTriggers, resolvedCommit);
+  return {records, authority: resolvedCommit};
 }
 
 function immediateDirectories(directory) {
@@ -732,46 +970,94 @@ export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
 
   records.push(...discoverThemeRecordCandidates(root).records);
 
-  for (const packageName of COMPONENT_PACKAGE_NAMES) {
-    const sourceRoot = path.join(root, `packages/${packageName}/src`);
-    records.push(
-      ...matchingFilesRecursively(
-        sourceRoot,
-        (_name, candidate) =>
-          isComponentSpecRecordPath(
-            path.relative(root, candidate).split(path.sep).join('/'),
-          ),
-        {skipDirectory: isIgnoredComponentKnowledgeSegment},
-      ),
-    );
-  }
+  records.push(
+    ...matchingFilesRecursively(
+      path.join(root, COMPONENT_SPEC_ROOT),
+      (_name, candidate) =>
+        isComponentSpecRecordPath(
+          path.relative(root, candidate).split(path.sep).join('/'),
+        ),
+      {skipDirectory: isIgnoredComponentKnowledgeSegment},
+    ),
+  );
 
   return records.sort();
 }
 
+/**
+ * Spec files outside the component record layout: a `*.spec.md` left in a
+ * registered component package's source tree, and a `*.spec.md` under
+ * `docs/specs/components/` that is neither a component or module record nor a
+ * platform implementation's `<PublicName>.<language>.spec.md`.
+ */
+export function discoverMisplacedComponentSpecs(root = DEFAULT_ROOT) {
+  const problems = [];
+  const toPosix = candidate =>
+    path.relative(root, candidate).split(path.sep).join('/');
+  const isSpecFile = name =>
+    name.endsWith('.spec.md') && !name.endsWith('.generated.spec.md');
+
+  for (const packageName of COMPONENT_PACKAGE_NAMES) {
+    const sourceRoot = path.join(root, `packages/${packageName}/src`);
+    for (const candidate of matchingFilesRecursively(
+      sourceRoot,
+      name => isSpecFile(name) && !name.startsWith('.'),
+      {skipDirectory: isIgnoredComponentKnowledgeSegment},
+    )) {
+      const relativeToSource = path
+        .relative(sourceRoot, candidate)
+        .split(path.sep)
+        .join('/');
+      problems.push(
+        `${toPosix(candidate)}: component records live under ${COMPONENT_SPEC_ROOT}/; move this record to ${componentSpecPathForSource(packageName, relativeToSource)}.`,
+      );
+    }
+  }
+
+  const nativeSources = path.join(root, 'packages/native/apple/Sources');
+  for (const candidate of matchingFilesRecursively(
+    nativeSources,
+    name => isSpecFile(name) && !name.startsWith('.'),
+    {skipDirectory: isIgnoredComponentKnowledgeSegment},
+  )) {
+    const relative = path
+      .relative(nativeSources, candidate)
+      .split(path.sep)
+      .join('/')
+      .split('/');
+    // Sources/<Module>/<ComponentRoot>/.../<Name>.spec.md
+    const componentRoot =
+      relative.length >= 3 ? relative[1] : '<ComponentRoot>';
+    const name = relative.at(-1).slice(0, -'.spec.md'.length);
+    problems.push(
+      `${toPosix(candidate)}: Swift component records live beside the core record; move this record to ${COMPONENT_SPEC_ROOT}/${componentRoot}/${name}.swift.spec.md.`,
+    );
+  }
+
+  for (const candidate of matchingFilesRecursively(
+    path.join(root, COMPONENT_SPEC_ROOT),
+    name => isSpecFile(name) && !name.startsWith('.'),
+    {skipDirectory: isIgnoredComponentKnowledgeSegment},
+  )) {
+    const filePath = toPosix(candidate);
+    if (isComponentSpecRecordPath(filePath)) continue;
+    if (isPlatformComponentSpecPath(filePath)) continue;
+    problems.push(
+      `${filePath}: a file under ${COMPONENT_SPEC_ROOT}/ must be <ComponentRoot>/<PublicName>.spec.md, a module record nested below it, or a platform record <ComponentRoot>/<PublicName>.<language>.spec.md.`,
+    );
+  }
+
+  return problems;
+}
+
 function componentRecordLocation(root, absolutePath) {
   const filePath = path.relative(root, absolutePath).split(path.sep).join('/');
-  const classified = classifyComponentKnowledgePath(filePath);
-  if (!classified) return null;
+  const location = locateComponentKnowledgePath(root, filePath);
+  if (!location) return null;
   return {
-    ...classified,
-    componentRootPath: path.join(
-      root,
-      'packages',
-      classified.packageName,
-      'src',
-      classified.componentRoot,
-    ),
-    componentSourcePath:
-      classified.layout === 'flat'
-        ? path.join(root, 'packages', classified.packageName, 'src')
-        : path.join(
-            root,
-            'packages',
-            classified.packageName,
-            'src',
-            classified.componentRoot,
-          ),
+    ...location,
+    componentRootPath: path.join(root, location.componentRootDirectory),
+    componentSourcePath: path.join(root, location.componentSourceDirectory),
   };
 }
 
@@ -874,7 +1160,7 @@ export function validateComponentModuleRelationships(
     const location = componentRecordLocation(root, record.absolutePath);
     if (!location) {
       problems.push(
-        `${record.filePath}: ${kind} records must live under a registered component package source root.`,
+        `${record.filePath}: ${kind} records must live at ${COMPONENT_SPEC_ROOT}/<ComponentRoot>/, where exactly one registered component package owns <ComponentRoot>.`,
       );
       continue;
     }
@@ -925,7 +1211,7 @@ export function validateComponentModuleRelationships(
     const expectedParent = `component:${idMatch[1]}`;
     if (location.layout === 'flat' && location.componentRoot !== idMatch[1]) {
       problems.push(
-        `${record.filePath}: flat-package module ${id} must live under packages/${location.packageName}/src/${idMatch[1]}/ to match its parent component.`,
+        `${record.filePath}: flat-package module ${id} must live under ${COMPONENT_SPEC_ROOT}/${idMatch[1]}/ to match its parent component.`,
       );
     }
     if (frontmatter.get('parent_component') !== expectedParent) {
@@ -1359,7 +1645,13 @@ export function validateDelegations(
 }
 
 function loadComponentContract(root, specPath, componentName) {
-  const directory = path.dirname(specPath);
+  const location = componentRecordLocation(root, specPath);
+  if (!location) {
+    return {
+      problem: `${path.relative(root, specPath)}: component record is outside a component root.`,
+    };
+  }
+  const directory = path.join(root, location.codeDirectory);
   for (const docPath of matchingFiles(directory, name =>
     name.endsWith('.doc.mjs'),
   )) {
@@ -1769,7 +2061,10 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
   const engineeringApprovalOwners = fs.existsSync(engineeringOwnersPath)
     ? parseOwnerFile(fs.readFileSync(engineeringOwnersPath, 'utf8'))
     : [];
-  const problems = [...discoverThemeRecordCandidates(root).problems];
+  const problems = [
+    ...discoverThemeRecordCandidates(root).problems,
+    ...discoverMisplacedComponentSpecs(root),
+  ];
   const ids = new Map();
   const records = [];
   const delegations = [];

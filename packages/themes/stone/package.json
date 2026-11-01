@@ -68,6 +68,7 @@
     "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-stone-palette-refs.mjs --check && astryx theme build src/stoneTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {

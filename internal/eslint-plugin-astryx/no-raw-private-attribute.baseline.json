@@ -1,0 +1,157 @@
+{
+  "packages/core/src/Button/Button.tsx": [
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/Chat/ChatComposerInput.tsx": [
+    "data-astryx-dictation-interim"
+  ],
+  "packages/core/src/Chat/useChatComposerTokens.ts": ["data-astryx-token-id"],
+  "packages/core/src/Chat/useChatDictation.ts": [
+    "data-astryx-dictation-interim"
+  ],
+  "packages/core/src/Chat/useChatStreamScroll.ts": [
+    "data-astryx-chat-following",
+    "data-astryx-chat-following-style"
+  ],
+  "packages/core/src/Chat/useTriggerMenu.tsx": ["data-astryx-trigger-anchor"],
+  "packages/core/src/CheckboxInput/CheckboxInput.tsx": [
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/ClickableCard/ClickableCard.tsx": [
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/CodeBlock/highlightRanges.ts": [
+    "data-astryx-highlight-dynamic"
+  ],
+  "packages/core/src/CodeBlock/highlightStyles.ts": [
+    "data-astryx-highlight-styles"
+  ],
+  "packages/core/src/ComplexSelector/ComplexSelector.tsx": [
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/DateInput/nativeDateSegments.ts": [
+    "data-astryx-date-probe"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenu.tsx": [
+    "data-astryx-submenu-host",
+    "data-astryx-submenu-host",
+    "data-astryx-submenu-regions"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenuSubMenu.tsx": [
+    "data-astryx-submenu-regions",
+    "data-astryx-submenu-regions"
+  ],
+  "packages/core/src/InputGroup/groupStyles.ts": [
+    "data-astryx-input-group-item",
+    "data-astryx-input-group-item"
+  ],
+  "packages/core/src/Layer/layerSlideRules.ts": [
+    "data-astryx-clears-anchor",
+    "data-astryx-layer-scrolls"
+  ],
+  "packages/core/src/MultiSelector/MultiSelector.tsx": [
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/NavItem/navItemStyles.stylex.ts": [
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/Popover/Popover.tsx": [
+    "data-astryx-popover-fallback-close"
+  ],
+  "packages/core/src/Popover/usePopover.tsx": [
+    "data-astryx-popover-fallback-close",
+    "data-astryx-popover-fallback-close"
+  ],
+  "packages/core/src/RadioList/RadioListItem.tsx": [
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/SelectableCard/SelectableCard.tsx": [
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/Selector/Selector.tsx": [
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/Switch/Switch.tsx": [
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/TabList/Tab.tsx": [
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/Table/glidingDivider.ts": [
+    "data-astryx-cell-gliding",
+    "data-astryx-cell-gliding",
+    "data-astryx-cell-gliding",
+    "data-astryx-row-gliding",
+    "data-astryx-row-gliding",
+    "data-astryx-table-pinned"
+  ],
+  "packages/core/src/Table/plugins/stickyColumns/useTableStickyColumns.tsx": [
+    "data-astryx-cell-gliding",
+    "data-astryx-table-pinned"
+  ],
+  "packages/core/src/Thumbnail/Thumbnail.tsx": [
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/Toast/useToast.tsx": ["data-astryx-toast-fallback"],
+  "packages/core/src/TopNav/TopNavItem.tsx": [
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/gestures/haptics.ts": ["data-astryx-haptic-switch"],
+  "packages/core/src/gestures/touchActionRule.ts": ["data-astryx-touch-action"],
+  "packages/core/src/hooks/useAnnounce.ts": [
+    "data-astryx-live-region",
+    "data-astryx-modal-live-region"
+  ],
+  "packages/core/src/hooks/useMenuPress.ts": ["data-astryx-menu-press-surface"],
+  "packages/core/src/theme/Theme.tsx": [
+    "data-astryx-id",
+    "data-astryx-id",
+    "data-astryx-id",
+    "data-astryx-id",
+    "data-astryx-theme-prose",
+    "data-astryx-theme-prose"
+  ],
+  "packages/core/src/theme/syntax/SyntaxTheme.tsx": [
+    "data-astryx-syntax-theme"
+  ],
+  "packages/core/src/utils/interactionOverlay.stylex.ts": [
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press"
+  ],
+  "packages/core/src/utils/pressFeedback.ts": ["data-astryx-press"],
+  "packages/lab/src/Schedule/useScheduleViewPopover.ts": [
+    "data-astryx-popover-fallback-close"
+  ],
+  "packages/richtext/src/CodeSyntaxPlugin.tsx": [
+    "data-astryx-richtext-code-syntax"
+  ]
+}

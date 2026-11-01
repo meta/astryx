@@ -39,7 +39,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
 import {InternalInputClearButton} from '../Field/InputClearButton';
@@ -77,10 +76,7 @@ import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {devWarn, warnOnce} from '../utils/devWarning';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
@@ -110,6 +106,7 @@ import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 
 // Sentinel value for the select-all item in keyboard navigation
 const SELECT_ALL_VALUE = '__xds_select_all__';
@@ -807,7 +804,7 @@ export interface MultiSelectorProps<
    * - 'tooltip': message is exposed from the on-field status icon
    * @default 'attached' for input selectors; 'detached' for secondary and ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -1192,7 +1189,17 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // Read by the live region above so it speaks what this element renders.
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
-  const triggerButtonRef = useMergedRefs<HTMLElement>(triggerRef, ref);
+  // A hover moves the highlight too, but the focus ring follows the shared
+  // interaction modality (architecture:interaction-modality INV1): it is read
+  // whenever a key or the pointer moves the highlight, so an action cell
+  // highlighted after pointer input keeps the hover treatment and no ring.
+  const triggerModality = useInteractionModalityTracking();
+  const readModality = triggerModality.readModality;
+  const triggerButtonRef = useMergedRefs<HTMLElement>(
+    triggerRef,
+    triggerModality.ref,
+    ref,
+  );
   const searchRef = useRef<HTMLInputElement>(null);
   const listboxRef = useRef<HTMLDivElement>(null);
 
@@ -1448,6 +1455,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
     isFocusReturnAlways: hasExternalTrigger,
     popoverOptions: {
       hasLightDismiss: true,
@@ -1850,27 +1858,22 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
-  // A hover moves the highlight too, but the focus ring follows the shared
-  // interaction modality (architecture:interaction-modality INV1): it is read
-  // whenever a key or the pointer moves the highlight, so an action cell
-  // highlighted after pointer input keeps the hover treatment and no ring.
-  useInteractionModalityTracking();
   const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
-    () => getInteractionModality() === 'keyboard',
+    () => readModality() === 'keyboard',
   );
   const onKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLElement>) => {
       onComboboxKeyDown(event);
-      setIsKeyboardHighlight(getInteractionModality() === 'keyboard');
+      setIsKeyboardHighlight(readModality() === 'keyboard');
     },
-    [onComboboxKeyDown],
+    [onComboboxKeyDown, readModality],
   );
   const onItemMouseEnter = useCallback(
     (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
       onComboboxItemMouseEnter(...args);
-      setIsKeyboardHighlight(getInteractionModality() === 'keyboard');
+      setIsKeyboardHighlight(readModality() === 'keyboard');
     },
-    [onComboboxItemMouseEnter],
+    [onComboboxItemMouseEnter, readModality],
   );
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
@@ -2528,20 +2531,24 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       ...(ariaLabelledByProp != null
         ? {'aria-labelledby': ariaLabelledByProp}
         : null),
-      ref: mergeRefs<HTMLElement>(el => {
-        popover.triggerRef(el);
-        triggerRef.current = el;
-        // A control that takes no focus has nowhere for focus to return to
-        // when the panel closes, and focus would land on the body — the
-        // person loses their place in the page. Making it programmatically
-        // focusable repairs the return without putting it in the tab order,
-        // which is the caller's decision to make. It does not make the
-        // control openable from the keyboard: only a real control does
-        // that, which is what the warning below is for.
-        if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
-          el.tabIndex = -1;
-        }
-      }, ref),
+      ref: mergeRefs<HTMLElement>(
+        el => {
+          popover.triggerRef(el);
+          triggerRef.current = el;
+          // A control that takes no focus has nowhere for focus to return to
+          // when the panel closes, and focus would land on the body — the
+          // person loses their place in the page. Making it programmatically
+          // focusable repairs the return without putting it in the tab order,
+          // which is the caller's decision to make. It does not make the
+          // control openable from the keyboard: only a real control does
+          // that, which is what the warning below is for.
+          if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
+            el.tabIndex = -1;
+          }
+        },
+        triggerModality.ref,
+        ref,
+      ),
       id: triggerId,
       onClick: isEffectivelyReadOnly
         ? onClick

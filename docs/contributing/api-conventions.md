@@ -15,8 +15,8 @@ owner first when one is linked or easy to find. Human contributors do not need t
 understand or edit the spec system to contribute; reviewers and maintainers route
 new decisions and record final rulings.
 
-1. The component's `<Name>.spec.md`, when one exists beside its code in
-   [`packages/core/src/`](../../packages/core/src/), owns component behavior.
+1. The component's `<Name>.spec.md`, when one exists in its folder under
+   [`docs/specs/components/`](../specs/components/), owns component behavior.
 2. A current contract under [`docs/families/`](../families/) owns behavior shared
    by sibling components.
 3. Current architecture and accepted system decisions own cross-component rules.

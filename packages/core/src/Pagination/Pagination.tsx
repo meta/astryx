@@ -768,6 +768,7 @@ export function Pagination({
               {inputLabelText}
             </span>
             {inputNode}
+            {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `computedTotalPages` is a page count, not a slot */}
             {computedTotalPages != null && (
               <span
                 {...mergeProps(

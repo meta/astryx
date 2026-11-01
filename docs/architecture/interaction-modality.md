@@ -38,6 +38,30 @@ deciding_specs: [spec:AST-100/DEC-1, spec:AST-094/DEC-17]
   "scope": "global",
   "triggers": {
     "interaction": ["INV1", "INV2", "INV3", "INV4", "INV7", "INV8", "INV11"]
+  },
+  "concerns": {
+    "modality-tracking": {
+      "names": [
+        "useInteractionModalityTracking",
+        "useInteractionModalityTrackingFor",
+        "trackInteractionModalityIn",
+        "getInteractionModality"
+      ],
+      "patterns": ["addEventListener\\(\\s*['\"](?:pointerdown|keydown)['\"]"],
+      "claims": ["INV1", "INV2", "INV3"]
+    },
+    "focus-return": {
+      "names": [
+        "focusForLastInput",
+        "isFocusDetached",
+        "useFocusReturnVisibility"
+      ],
+      "claims": ["INV1"]
+    },
+    "press-tracking": {
+      "names": ["createActionGroupTracker", "useMenuPress"],
+      "claims": ["INV13"]
+    }
   }
 }
 ```
@@ -132,7 +156,11 @@ work.
   tooltip pattern, so content too tall for the viewport scrolls inside it with
   no keyboard path; its full content stays available to assistive technology
   through the trigger's accessible description, and long or essential content
-  belongs in a HoverCard or Popover.
+  belongs in a HoverCard or Popover. A tooltip that labels an action trigger
+  whose accessible name already carries its text is not a separate
+  interaction, so a tap on that trigger performs the action and does not open
+  the tooltip; information that lives only in a hint is reachable on touch
+  through `pressTrigger="toggle"` (`component:Tooltip` DEC-1).
 - **INV5 — Existing state semantics win.** Disabled controls do not become
   interactive because of modality. Read-only and busy controls preserve their
   documented focus and activation behavior.
@@ -303,7 +331,7 @@ reachability, newer-intent precedence, and the evidence/scope guard were approve
 | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV2 | Programmatic-focus cases after keyboard and pointer input in representative component tests                                                                                                                                                    | Programmatic focus invents a modality, or pointer history paints the keyboard indicator                                                                                                                                                                                                                     |
 | INV3       | Direct-owner, wrapper-owner, replaceable-indicator, and nested-action cases, including a Token inside an Item and a control inside a card; evidence gap for the shared-module cases: the module does not exist yet                             | No indicator, two indicators, replacement content that can opt out, or a component that writes the focus-owner attribute or selector itself                                                                                                                                                                 |
-| INV4       | Keyboard, mouse, touch, and pen browser paths where applicable                                                                                                                                                                                 | Hover-only behavior, sticky touch hover, or unreachable action                                                                                                                                                                                                                                              |
+| INV4       | Keyboard, mouse, touch, and pen browser paths where applicable; tap cases on an action trigger with a label tooltip and on a hint-only trigger with `pressTrigger="toggle"`                                                                    | Hover-only behavior, sticky touch hover, unreachable action, a tap on an action trigger that opens its label tooltip, or hint-only information with no touch path                                                                                                                                           |
 | INV5       | Disabled, busy, and read-only DOM and activation assertions                                                                                                                                                                                    | Inactive control reacts, eligible control loses focus, or state changes with modality                                                                                                                                                                                                                       |
 | INV6       | Public API review and representative source inspection                                                                                                                                                                                         | A component adds caller-controlled modality without a separate API decision                                                                                                                                                                                                                                 |
 | INV7       | Rendered-browser affected-state checks across geometry, clipping, scrolling, hit testing, built-in and custom-renderer paths                                                                                                                   | At an offered interaction point one modality loses every essential path, or evidence substitutes class equality for reachability/perceptibility                                                                                                                                                             |
