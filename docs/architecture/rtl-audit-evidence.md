@@ -152,7 +152,7 @@ Lint and rendered audit are complementary:
 - **INV7 — PR scope and full-roster scope answer different questions.** The RTL
   audit runs after merges to `main` (a burst of pushes is checked once, at its
   newest commit) and before each release, at full scope; a pull request runs it
-  only with the `ci:heavy-lanes` label (spec:AST-030 FR12, DEC-7). When a pull
+  only with the `ci:run-rtl` label (spec:AST-030 FR12, DEC-7). When a pull
   request runs it, it checks components affected by the change; it may run per
   package, but the PR result is the join of every package scope and cannot pass
   with one scope missing. The full-scope run checks the live roster and shared
@@ -280,8 +280,8 @@ component/composition contract; absent or invalid dimensions produce an error.
 - `.github/scripts/rtl-scorecard-summary.mjs` — review-facing scorecard projection;
   report completeness and exclusion visibility remain requirements, not authority
   to suppress findings.
-- `.github/workflows/ci.yml` release-check — the full-roster audit on every push
-  to main.
+- `.github/workflows/ci.yml` release-check — the full-roster audit on main's tip
+  about hourly and before a release cut (`spec:AST-030` DEC-11).
 - `internal/eslint-plugin-astryx/no-physical-properties.js` — source-provable
   physical/logical declaration constraints.
 - `design:bidirectionality` — human product intent, owned separately.

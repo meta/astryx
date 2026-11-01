@@ -381,6 +381,34 @@ describe('NumberInput', () => {
       expect(input.selectionEnd).toBe('1500000'.length);
     });
 
+    it('selects the editable text when Tab moves focus into the field', async () => {
+      const user = userEvent.setup();
+      const onFocus = vi.fn();
+      render(
+        <>
+          <button type="button">Before</button>
+          <NumberInput
+            label="Amount"
+            value={1500000}
+            onChange={() => {}}
+            onFocus={onFocus}
+            formatValue={number => number.toLocaleString('en-US')}
+          />
+        </>,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      await user.click(screen.getByRole('button', {name: 'Before'}));
+      await user.tab();
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('1500000');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe('1500000'.length);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      // Typing replaces the whole number.
+      await user.keyboard('42');
+      expect(input).toHaveValue('42');
+    });
+
     it('does not swallow keystrokes when focus swaps no text', async () => {
       const user = userEvent.setup();
       function Controlled() {

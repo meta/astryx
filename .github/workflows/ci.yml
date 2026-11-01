@@ -56,10 +56,12 @@ permissions: {}
 #
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates: they run for release-check,
-# which the Main heavy lanes workflow (main-heavy-lanes.yml) dispatches on every
-# push to main and the release gate dispatches before a cut, and on a pull request labelled `ci:heavy-lanes` (add the label,
-# then push or close and reopen). A main failure is fixed forward
-# (spec:AST-030 FR12, DEC-7).
+# which the Main heavy lanes workflow (main-heavy-lanes.yml) dispatches for
+# main's tip about once an hour and the release gate dispatches before a cut. A pull request
+# opts into one suite with its label, `ci:run-visual`, `ci:run-a11y` or
+# `ci:run-rtl`, applied by someone with write access (add the label, then push
+# or close and reopen); run-labels decides. A main failure is fixed forward
+# (spec:AST-030 FR12, FR17, DEC-7).
 #
 # Runners: every job uses GitHub's standard hosted runners, except the release
 # path's long jobs, which take a paid larger-runner pool so pull request load
@@ -810,9 +812,9 @@ jobs:
         run: node internal/shadcn-registry/verify-full-catalog.mjs
 
   # Historical required check name. The Vitest lanes, the Build test owner,
-  # native Swift and the interaction proofs always report (each skips its own
-  # work outside its scope), so this join projects their combined result
-  # without creating another surface lane.
+  # native Swift and the interaction proofs (Chromium and WebKit) always
+  # report (each skips its own work outside its scope), so this join projects
+  # their combined result without creating another surface lane.
   test:
     needs:
       [
@@ -822,6 +824,7 @@ jobs:
         test-build,
         test-native-swift,
         pr-interaction,
+        pr-interaction-webkit,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     runs-on: ubuntu-slim
@@ -866,12 +869,54 @@ jobs:
           TEST_BUILD_RESULT: ${{ needs.test-build.result }}
           TEST_NATIVE_SWIFT_RESULT: ${{ needs.test-native-swift.result }}
           PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}
+          PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
   # test). Uploads the storybook preview and analysis artifacts for downstream
   # jobs. Sandbox previews come from the exact-head Vercel deployment, so CI
   # builds no Sandbox of its own.
+  # Which heavy suites this pull request opted into: one output per suite,
+  # `true` while the pull request carries that suite's `ci:run-<suite>` label
+  # and its newest application came from someone with write, maintain or
+  # admin access (spec:AST-030 FR12). It reads the event that started the run,
+  # so a label takes effect on the next push or reopen (FR17). Outside a pull
+  # request every output is `false`; the release check runs every suite on its
+  # own terms. The decision script comes from the merge commit's trusted
+  # sparse checkout, and a lookup that fails denies the suite.
+  run-labels:
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') }}
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      visual: ${{ steps.decide.outputs.visual }}
+      a11y: ${{ steps.decide.outputs.a11y }}
+      rtl: ${{ steps.decide.outputs.rtl }}
+    steps:
+      - name: Check out the decision script
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            .github/scripts/run-labels.cjs
+            .github/scripts/review-signal-decision.cjs
+          sparse-checkout-cone-mode: false
+          path: .run-labels
+          persist-credentials: false
+
+      - name: Decide which suites run
+        id: decide
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const {decideRunLabels} = require(
+              `${process.env.GITHUB_WORKSPACE}/.run-labels/.github/scripts/run-labels.cjs`,
+            );
+            await decideRunLabels({github, context, core});
+
   build-storybook:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
     # Every browser lane waits for this job, and the package builds and the
@@ -879,6 +924,8 @@ jobs:
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
+      # actions: read finds Main's kept package-size measurement of the merge base.
+      actions: read
       contents: read
       pull-requests: read
     outputs:
@@ -898,6 +945,12 @@ jobs:
       - name: Decide this job's scope
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
+        with:
+          # `touches` scopes only the package-size check (a package, the
+          # lockfile, the root build inputs, or the check itself; shared
+          # infrastructure, `full_suite`, runs it too); the build itself
+          # follows the specialized-lane outputs.
+          paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/merge-base\.sh$)'
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -929,6 +982,83 @@ jobs:
       - name: Setup Node and pnpm
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: ./.github/actions/setup
+
+      # Main keeps each commit's size records for 14 days (deploy.yml): every
+      # public component's sizes and every published package's. The merge
+      # base is compared from them; it is built here only when Main kept no
+      # component record for it. The lookup runs before the Storybook build so
+      # that build can run beside it.
+      - name: Find the merge base
+        id: merge-base
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: echo "sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Find main's size records for the merge base
+        id: size-records
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != ''
+        continue-on-error: true
+        uses: actions/github-script@v9
+        env:
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
+        with:
+          retries: 3
+          script: |
+            const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
+            for (const [output, prefix, missing] of [
+              ['component_run_id', 'component-size-main', 'the merge base is built here instead'],
+              ['package_run_id', 'package-size-main', 'package sizes are shown without a budget'],
+            ]) {
+              const name = `${prefix}-${process.env.BASE_SHA}`;
+              const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
+              core.setOutput(output, runId ?? '');
+              core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; ${missing}.`);
+            }
+
+      - name: Download main's component sizes for the merge base
+        id: component-download
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.size-records.outputs.component_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: component-size-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.component_run_id }}
+          github-token: ${{ github.token }}
+          path: .component-size-base
+
+      # No component record of this merge base was read (Main kept none, or
+      # its download failed): build the base beside
+      # the Storybook build and record its sizes with this head's analyzer, so
+      # every changed component still has a before size (AST-080 FR8). It runs
+      # in the background; the wait before the analysis collects it.
+      - name: Start building the merge base without a record
+        id: base-build
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.component-download.outcome != 'success'
+        env:
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git worktree add --detach .size-base "$BASE_SHA"
+          mkdir -p .component-size-base
+          # The inner script reads BASE_SHA and HEAD_SHA from this step's env.
+          # shellcheck disable=SC2016
+          nohup bash -c '
+            set -e
+            cd .size-base
+            pnpm install --frozen-lockfile
+            # Core and its build tooling always build: the other component
+            # packages depend on them. Another package builds only when the
+            # pull request changes its source.
+            pnpm -F @astryxdesign/build build
+            pnpm -F @astryxdesign/core build
+            for pkg in lab charts richtext vega; do
+              git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src" || pnpm -F "@astryxdesign/$pkg" build
+            done
+            node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
+            touch ../base-build.done
+          ' > base-build.log 2>&1 || touch base-build.failed &
+          echo "started=true" >> "$GITHUB_OUTPUT"
 
       # The same steps as `pnpm build` and the Storybook build, overlapped: a
       # package builds once its workspace dependencies have, and Storybook once
@@ -1008,6 +1138,25 @@ jobs:
             packages/core/dist/
           retention-days: 1
 
+      # The merge base built beside the Storybook build: its record, or a
+      # warning that Before and Delta stay empty. The wait is what it adds to
+      # this job.
+      - name: Wait for the merge base's sizes
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.base-build.outputs.started == 'true'
+        run: |
+          waited=0
+          while [ ! -f base-build.done ] && [ ! -f base-build.failed ] && [ "$waited" -lt 600 ]; do
+            sleep 1
+            waited=$((waited + 1))
+          done
+          tail -n 20 base-build.log || true
+          if [ -f base-build.done ]; then
+            echo "::notice title=Merge base built::Main kept no record of the merge base; it was built beside Storybook (waited ${waited}s after the build)."
+          else
+            rm -f .component-size-base/component-size.json
+            echo "::warning title=Merge base not built::Building the merge base failed or timed out; Before and Delta stay empty."
+          fi
+
       - name: Analyze components
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
         env:
@@ -1017,11 +1166,56 @@ jobs:
           # dependents, unless the change touches shared infrastructure.
           FORCE_FULL=()
           if [ "$FULL_SUITE" != false ]; then FORCE_FULL=(--force-full); fi
+          BASE_RECORD=()
+          if [ -f .component-size-base/component-size.json ]; then
+            BASE_RECORD=(--base-record .component-size-base/component-size.json)
+          fi
           node .github/scripts/analyze-pr.js \
             --base origin/${{ github.base_ref }} \
             --head HEAD \
             --output analysis.json \
+            "${BASE_RECORD[@]}" \
             "${FORCE_FULL[@]}"
+
+      # Published package size: this head's packages are built above, and Main
+      # keeps each main commit's measurement for 14 days, so the merge base is
+      # compared without building it. Only a pull request that changes a
+      # package or the lockfile runs it.
+      - name: Measure published package size
+        id: package-size
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
+        run: node .github/scripts/package-size.mjs measure --output package-size-head.json
+
+      - name: Download main's package size for the merge base
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success' && steps.size-records.outputs.package_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: package-size-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.package_run_id }}
+          github-token: ${{ github.token }}
+          path: .package-size-base
+
+      # Advisory: a package over its budget is flagged in the job summary and
+      # the PR report, and fails nothing.
+      - name: Compare published package size
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
+        run: |
+          # Without a base, the report names why: no merge base was found, or
+          # Main kept (or the lookup read) no measurement for it.
+          BASE_REASON=not-kept
+          if [ -z "$BASE_SHA" ]; then BASE_REASON=no-merge-base; fi
+          node .github/scripts/package-size.mjs compare \
+            --head package-size-head.json \
+            --base .package-size-base/package-size.json \
+            --base-reason "$BASE_REASON" \
+            --head-sha "$HEAD_SHA" \
+            --base-sha "$BASE_SHA" \
+            --output package-size.json \
+            --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Write PR comment metadata
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
@@ -1041,6 +1235,22 @@ jobs:
           }
           EOF
 
+      # Advisory API changes (architecture:public-component-api INV24): each
+      # published package's report from this build, compared with the reports
+      # committed at the merge base (read with git, no API calls). It reads the
+      # dists built above and never fails the job; api-changes.json goes into
+      # the pr-analysis artifact. With no merge base there is nothing to compare.
+      - name: Report API changes
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
+          [ -n "$BASE_SHA" ] || exit 0
+          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA"
+
       - name: Upload analysis artifact
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
         uses: actions/upload-artifact@v7
@@ -1049,148 +1259,9 @@ jobs:
           path: |
             analysis.json
             pr-meta.json
-          retention-days: 1
-
-  # Measures the PR's merge base so the PR comment can show component and
-  # package sizes before and after. It runs beside build-storybook rather than
-  # inside it, so no browser lane waits for the second build; the head sizes
-  # still come from build-storybook's analysis.
-  size-base:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-    steps:
-      # This job decides its own scope (no separate scope job): the step
-      # reads the PR's file list and the base's trusted classifier, and
-      # everything is in scope when it cannot decide.
-      - name: Check out the scope action
-        uses: actions/checkout@v7
-        with:
-          sparse-checkout: .github/actions/test-scope
-          path: .test-scope
-          persist-credentials: false
-
-      - name: Decide this job's scope
-        id: scope
-        uses: ./.test-scope/.github/actions/test-scope
-
-      - name: Checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 50
-
-      - name: Fetch base branch
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        run: git fetch origin ${{ github.base_ref }} --depth=50
-
-      - name: Setup Node and pnpm
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: ./.github/actions/setup
-
-      # A branch far behind main may have no merge base within the fetched
-      # history even after deepening. The report then keeps Before and Delta
-      # as N/A rather than failing the run.
-      - name: Check out the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        id: merge-base
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          if ! BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD); then
-            git fetch --deepen=200 origin "$BASE_REF:refs/remotes/origin/$BASE_REF" || true
-            if ! BASE_SHA=$(git merge-base "origin/$BASE_REF" HEAD); then
-              echo "::warning::no merge base within the fetched history; skipping base size measurement"
-              echo "found=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-          git worktree add --detach .size-base "$BASE_SHA"
-          echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "found=true" >> "$GITHUB_OUTPUT"
-
-      # The merge base's dependencies install either way: measuring bundles
-      # each base component with esbuild, which resolves its imports there.
-      - name: Install the merge base's dependencies
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        working-directory: .size-base
-        run: pnpm install --frozen-lockfile
-
-      # Main keeps each commit's package builds for 14 days. A merge base on
-      # main within that window is measured from them, with no build.
-      - name: Find main's build of the merge base
-        id: cached
-        continue-on-error: true
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/github-script@v9
-        env:
-          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
-        with:
-          retries: 3
-          script: |
-            const name = `dists-main-${process.env.BASE_SHA}`;
-            const {data} = await github.rest.actions.listArtifactsForRepo({...context.repo, name, per_page: 100});
-            // Only Main's own run on main for this exact commit: a pull
-            // request's run can upload an artifact under any name.
-            const artifact = data.artifacts.find(candidate =>
-              !candidate.expired &&
-              candidate.workflow_run?.head_branch === 'main' &&
-              candidate.workflow_run?.head_sha === process.env.BASE_SHA &&
-              candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id);
-            core.setOutput('run_id', artifact ? String(artifact.workflow_run.id) : '');
-            core.info(artifact ? `Using ${name} from run ${artifact.workflow_run.id}.` : `No ${name}; building the merge base.`);
-
-      - name: Download main's build of the merge base
-        id: download
-        if: steps.cached.outputs.run_id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: dists-main-${{ steps.merge-base.outputs.sha }}
-          run-id: ${{ steps.cached.outputs.run_id }}
-          github-token: ${{ github.token }}
-          path: .size-base/packages
-
-      # Without a kept build: core and its build tooling always build, because
-      # the other component packages depend on them; another package builds
-      # only when the PR changes its source.
-      - name: Build the merge base's component packages
-        if: (steps.merge-base.outputs.found == 'true') && steps.download.outcome != 'success' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        working-directory: .size-base
-        env:
-          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          pnpm -F @astryxdesign/build build
-          pnpm -F @astryxdesign/core build
-          for pkg in lab charts richtext vega; do
-            if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src"; then
-              continue
-            fi
-            pnpm -F "@astryxdesign/$pkg" build
-          done
-
-      - name: Measure the merge base
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        run: |
-          node .github/scripts/analyze-pr.js \
-            --base origin/${{ github.base_ref }} \
-            --head HEAD \
-            --base-root .size-base \
-            --base-only \
-            --output size-base.json
-
-      - name: Upload base size stats
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr-size-base
-          path: size-base.json
+            package-size.json
+            api-changes.json
+            api-changes.md
           retention-days: 1
 
   # Typechecks run beside build-storybook instead of before its Storybook
@@ -1401,8 +1472,8 @@ jobs:
 
   pr-a11y-guards:
     name: pr-a11y (audit and guards)
-    needs: [build-storybook]
-    if: ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
+    needs: [build-storybook, run-labels]
+    if: ((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
@@ -1532,8 +1603,8 @@ jobs:
   # inside the budget without weakening the stable pr-a11y join.
   pr-a11y-specs:
     name: pr-a11y (browser specs)
-    needs: [build-storybook]
-    if: ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
+    needs: [build-storybook, run-labels]
+    if: ((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
@@ -1622,8 +1693,8 @@ jobs:
 
   # Stable required context joining the scoped audit/guards and browser specs.
   pr-a11y:
-    needs: [pr-a11y-guards, pr-a11y-specs]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
+    needs: [pr-a11y-guards, pr-a11y-specs, run-labels]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && ((github.event_name == 'pull_request' && needs.run-labels.outputs.a11y == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -1861,6 +1932,129 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The gesture, motion and harness interaction proofs in WebKit, the engine
+  # of every iOS browser, for the code where WebKit and Chromium differ on
+  # touch: the gesture host and recognizers, the motion runtime, the touch and
+  # press helpers and the menu press model, plus the harness and the shared
+  # setup that runs them (spec:AST-030 FR13). The run is limited to the specs
+  # whose bundles reach only that same code, so a WebKit break elsewhere never
+  # turns an unrelated pull request red; the motion adopters spec renders
+  # Storybook components and stays with the Chromium proofs. Out of scope every step after the scope step skips and
+  # the job reports success, so the `test` join reads it without a new
+  # required context. Specs that need Chromium-only evidence skip themselves
+  # in WebKit.
+  pr-interaction-webkit:
+    needs: [build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    # Frame evidence measures timing: four cores, one Playwright worker.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      # The heavy-suite caps read the author's pull requests and runs.
+      actions: read
+      contents: read
+      pull-requests: read
+    steps:
+      # This job decides its own scope (no separate scope job): the step
+      # reads the PR's file list and the base's trusted classifier, and
+      # everything is in scope when it cannot decide.
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform)|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          outside-pull-request: skip
+          requires-head-file: playwright.interaction.config.ts
+
+      - name: Require this pull request's Storybook build
+        if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The proofs read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      - name: Skip the WebKit proofs outside their scope
+        if: steps.scope.outputs.applies != 'true'
+        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
+
+      # The caps step comes from the merge commit, not the pull request's
+      # head: a head that predates the step does not have it. The head
+      # checkout below replaces this directory.
+      - name: Check out the heavy-suite caps
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          path: .heavy-caps
+          sparse-checkout: .github/actions/heavy-caps
+          persist-credentials: false
+
+      - name: Per-author heavy-suite caps
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.heavy-caps/.github/actions/heavy-caps
+
+      # The daily heavy-run cap counts this step (spec:AST-030 FR16).
+      - name: Heavy suite runs
+        if: steps.scope.outputs.applies == 'true'
+        run: 'true'
+
+      - name: Checkout
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Verify evidence checkout
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          EXPECTED_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_HEAD_SHA"
+
+      - name: Setup Node and pnpm
+        if: steps.scope.outputs.applies == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      # WebKit needs system libraries the runner image lacks; --with-deps
+      # installs them.
+      - name: Install Playwright WebKit
+        if: steps.scope.outputs.applies == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
+
+      - name: Run WebKit interaction proofs
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          pnpm exec playwright test \
+            packages/core/src/gestures/ \
+            packages/core/src/motion/__tests__/animatedLayout.interaction \
+            packages/core/src/motion/__tests__/animator.interaction \
+            internal/interaction-harness/ \
+            --config playwright.interaction.config.ts \
+            --project webkit \
+            --output interaction-proof-output-webkit
+
+      - name: Upload WebKit interaction evidence
+        if: always() && steps.scope.outputs.applies == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: interaction-evidence-webkit
+          path: test-results/interaction-evidence
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Build package test owner. The plugin's production CSS partition is a Build
   # integration contract: source inspection cannot prove which declaration
   # paints after Vite emits the final bundle. The `test-build` name makes that
@@ -1934,11 +2128,11 @@ jobs:
   # joins them only when every shard succeeded, and otherwise scouts inline.
   visual-scout:
     name: Stable visual scout (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [build-storybook]
+    needs: [build-storybook, run-labels]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() &&
       needs.build-storybook.result == 'success' &&
-      ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) ||
+      ((github.event_name == 'pull_request' && needs.run-labels.outputs.visual == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')))
     # Five legs: at three, each leg's scout took ~4.5 minutes and the visual
     # regression waited for the slowest one.
@@ -2049,10 +2243,10 @@ jobs:
   # Audit and interaction fixtures stay with their existing browser checks.
   pr-visual:
     name: Stable visual regression
-    needs: [build-storybook, maintenance-request, visual-scout]
+    needs: [build-storybook, maintenance-request, visual-scout, run-labels]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() &&
-      (((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) &&
+      (((github.event_name == 'pull_request' && needs.run-labels.outputs.visual == 'true') &&
         needs.build-storybook.result == 'success') ||
        (github.event_name == 'workflow_dispatch' &&
         ((inputs.operation == 'release-check' &&
@@ -2353,7 +2547,7 @@ jobs:
   # eight browser pages on its four cores (the audit waits on page loads), and
   # the stable pr-rtl join requires all five scope manifests plus a report from
   # every applicable package.
-  # The full-roster sweep is the release-check run on every push to main.
+  # The full-roster sweep is the release-check run on main about hourly.
   #
   # Three auto dimensions: D1 icon-mirror, D5 positional-mirror, and D6
   # contextual directional decorations. Curated D2/D3/D4/D7/D8/D9 add
@@ -2367,9 +2561,9 @@ jobs:
   # To promote findings too, remove the audit step's continue-on-error.
   pr-rtl-shard:
     name: pr-rtl (${{ matrix.package }}${{ matrix.parts > 1 && format(' {0}/{1}', matrix.part, matrix.parts) || '' }})
-    needs: [build-storybook]
+    needs: [build-storybook, run-labels]
     if: >-
-      ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) ||
+      ((github.event_name == 'pull_request' && needs.run-labels.outputs.rtl == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))
     # Core is the largest package, so its audit is split three ways
     # (`--shard`) and joined by pr-rtl-merge; every other package runs whole.
@@ -2569,10 +2763,10 @@ jobs:
   # part fails here.
   pr-rtl-merge:
     name: pr-rtl (core)
-    needs: [build-storybook, pr-rtl-shard]
+    needs: [build-storybook, pr-rtl-shard, run-labels]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && !cancelled() &&
-      ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) ||
+      ((github.event_name == 'pull_request' && needs.run-labels.outputs.rtl == 'true') ||
        (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check')))
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: 15
@@ -2677,8 +2871,8 @@ jobs:
 
   # Stable required context joining the five package shards above.
   pr-rtl:
-    needs: [pr-rtl-shard, pr-rtl-merge]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && !cancelled() && ((github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:heavy-lanes')) || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
+    needs: [pr-rtl-shard, pr-rtl-merge, run-labels]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (always() && !cancelled() && ((github.event_name == 'pull_request' && needs.run-labels.outputs.rtl == 'true') || (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'))) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:

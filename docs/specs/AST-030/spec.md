@@ -73,8 +73,8 @@ they are separately named.
 - Define compatibility semantics or release-pair delta classes. Those belong to
   [`spec:AST-017`](../AST-017/spec.md); this record routes their checks and owns the
   exact-main release-check execution boundary.
-- Remove required check names (other than retiring the `spec-owner-approval`
-  mirror, FR15), branch protection, merge-queue coverage, or owner approval of
+- Remove required check names (other than dropping
+  `spec-owner-approval` from them, FR15), branch protection, merge-queue coverage, or owner approval of
   spec content.
 - Infer safety from file extensions, directory names, or the absence of a known
   risky path.
@@ -191,10 +191,13 @@ they are separately named.
   visual plan and unfiltered accessibility/RTL component rosters. Changed-file,
   focused, smoke, and no-op paths MUST NOT narrow release checks. On a pull
   request, the visual (`visual-scout`, `pr-visual`), accessibility (`pr-a11y`
-  with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST run
-  only when the pull request carries the `ci:heavy-lanes` label at the event; a
-  pull request update without it runs none of them, and no required context
-  depends on them. An opted-in PR's a11y MUST remain scoped to changed components
+  with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST each
+  run only when the pull request carries that suite's label at the event:
+  `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
+  someone with write, maintain or admin access, and a lookup that cannot
+  confirm that runs nothing. A label runs only its own suite; a pull request
+  update without one runs none of them, and no required context depends on
+  them. An opted-in PR's a11y MUST remain scoped to changed components
   plus fast interaction guards; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
@@ -207,11 +210,14 @@ they are separately named.
   later commits remain next-release input. A rewrite or divergence that removes
   the checked SHA from current `main` history invalidates the receipt.
   This replaces constituent-PR-only release gating, not the canonical checks'
-  existing finding policies. A main-push workflow MUST dispatch that
-  release-check for every push to `main`, bound to the pushed commit; the
-  dispatched checks share one concurrency group that never cancels a running
-  check: at most one runs and one waits, and a burst of pushes is checked once,
-  at its newest commit. A commit `main` has already moved past leaves its check
+  existing finding policies. Main's heavy-lane workflow MUST dispatch that
+  release-check for `main`'s tip, bound to that commit, on a push to `main` and
+  on a quarter-hourly schedule, unless the tip already has one or one was
+  dispatched in the last 55 minutes (DEC-11). A check replaced while waiting,
+  which never ran, does not count. A check covers every merge up to its commit,
+  so every merge is covered by the next one. The dispatched checks share one
+  concurrency group that never cancels a running check: at most one runs and
+  one waits. A push whose commit `main` has already moved past leaves its check
   to the newer push. That release-check run is main's result, and a failure is
   fixed forward by an atomic pull request. Main's own fast
   checks still run for every push. Release checks MUST NOT capture
@@ -232,7 +238,7 @@ they are separately named.
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
   sources; and every test that loads a changed workspace package from its build,
   by the package's name or a path into its `dist/`. When a pull request runs
-  them (FR12: only with the `ci:heavy-lanes` label), the visual and RTL owners
+  them (FR12: only with their `ci:run-visual` or `ci:run-rtl` label), the visual and RTL owners
   audit one affected set of component folders: the changed components
   and their reverse dependents, the folders of the components, in any package,
   whose built bundle, `import()` targets included, reaches a changed module.
@@ -241,8 +247,8 @@ they are separately named.
   audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
   a readable build the audits run in full. PR accessibility, when it runs, stays
   scoped to changed components (FR12). Shared infrastructure runs the full suite of
-  the owners the pull request runs (visual, accessibility and RTL only with the
-  `ci:heavy-lanes` label, FR12): root
+  the owners the pull request runs (visual, accessibility and RTL only with
+  their `ci:run-*` labels, FR12): root
   dependency manifests and lockfile, root configuration, a package's manifest,
   build or test configuration and test setup, `internal/` (the test harness
   included), `theme-build` paths (tokens and themes), Storybook configuration,
@@ -258,8 +264,7 @@ they are separately named.
   relevant on that trigger (`paths:`), and those paths name what the workflow
   reads or runs, never everything; a merge-group entry, which cannot filter by
   path, keeps running. A workflow that reports a required context (`build`,
-  `test`, `docsite-test`, `lint`, `review-required`, and the
-  `spec-owner-approval` mirror while it is required, FR15)
+  `test`, `docsite-test`, `lint`, `review-required`)
   starts on every pull request and is never path-filtered: the trusted
   classifier's positive surfaces (FR1–FR5) choose the work inside it, and a job
   whose suite does not apply reports success without running it (FR7). A push
@@ -272,8 +277,9 @@ they are separately named.
   review workflow (`review-signal.yml`) and `review-clear.yml` publish
   `review-required`, which carries both the code review and spec-owner approval
   (`architecture:knowledge-contracts` DEC-14); no other workflow publishes a
-  review or spec context. `spec-owner-approval` is published only as a mirror of
-  the spec half while branch protection still requires it. The spec-owner job
+  review or spec context. `spec-owner-approval` carries the spec-owner job's decision,
+  which the other writers of `review-required` read; it is not a required
+  check. The spec-owner job
   evaluates pull-request, review, and owner-command comment events, runs
   without cancel-in-progress, and publishes a terminal state for the head it
   read. It skips fork review events, whose tokens are read-only; fork approvals
@@ -301,7 +307,8 @@ they are separately named.
   suites. A re-run, which is the pre-merge restart, is exempt from both limits,
   and when the limits cannot be looked up the suite runs. Merge-queue entries,
   `main`, release checks and the visual, accessibility and RTL owners a
-  maintainer opts a pull request into with `ci:heavy-lanes` are unaffected.
+  maintainer opts a pull request into with their `ci:run-*` labels are
+  unaffected.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -469,10 +476,12 @@ retroactive status as release evidence.
 
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
+**Superseded in part by:** `spec:AST-030/DEC-11` (main is checked about hourly,
+not on every push)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
-a pull request runs them only when it opts in with the `ci:heavy-lanes` label. Main-push checks are throttled: one runs at a time, a
+a pull request runs each only when it opts in with that suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label. Main-push checks are throttled: one runs at a time, a
 burst of pushes collapses to its newest commit, and a running check is never
 cancelled, so every check that starts finishes.
 Pull request updates keep the fast checks and every required context; the
@@ -500,7 +509,7 @@ read sources through the file system run whole, because no import reaches what
 they read. Shared infrastructure, uncertainty, `main`, merge-group entries and
 release checks run everything, so no landing or release gate narrows; a pull
 request runs the visual, accessibility and RTL owners only with the
-`ci:heavy-lanes` label (DEC-7).
+suite's `ci:run-*` label (DEC-7).
 
 Rejected: a full run triggered by approval, a label or a draft-to-ready change,
 which tests the pull request's head rather than the merged result.
@@ -529,11 +538,32 @@ required context (its check would never report).
 The spec-owner gate and the review gate read the same pull-request events, so
 they run in one workflow, and a contributor reads one review gate:
 `review-required` names whichever review is still missing, code first.
-`spec-owner-approval` remains a mirror until branch protection stops requiring
-it, so the merge rules change only when an administrator removes it.
+`spec-owner-approval` stays as the spec-owner job's decision record, which the
+other writers read; it is not a required check, so a contributor waits on
+`review-required` alone.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+### DEC-11 — Main's release-check runs about once an hour
+
+**Reference:** `spec:AST-030/DEC-11`
+**Decider:** `cixzhang`
+
+Dispatched on every push, main's release-check ran back to back through busy
+hours, about 65 full runs a day of roughly 165 runner-minutes each. A check
+covers every merge up to its commit, so one check about an hour keeps every
+merge covered with about a third of the runs. A push after a quiet hour is
+checked at once; in a burst, the next check starts at most 55 minutes after
+the last one, plus up to 15 minutes for the schedule to notice, so a failing
+merge is reported within about two hours of landing instead of about one and a
+quarter. A release cut dispatches its own exact-commit check, which this does
+not affect.
+
+Rejected: waiting for main to be quiet for some minutes (busy hours never go
+quiet, so the check would starve); holding a runner to wait out each push (it
+is billed while it waits); a daily check (main's result would lag a whole
+day).
 
 ## Open questions
 

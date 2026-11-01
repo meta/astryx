@@ -31,6 +31,7 @@ import {
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
 import {Tooltip} from '../Tooltip/Tooltip';
+import {useTapStop} from '../Layer/useTouchTrigger';
 import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
@@ -256,6 +257,12 @@ export function FieldLabel({
   // a ref-shaped object, since FieldLabel points at the control by id rather
   // than holding a ref to it.
   const descriptionRef = useRef<HTMLSpanElement>(null);
+  // A tap on the info icon asks for the help, so it stops there: it does not
+  // go on to activate the label's control, as a press anywhere else on the
+  // label would (focus the field, toggle a switch). A mouse click on the icon
+  // keeps that native activation, and hover shows the help.
+  const {onPointerDown: handleIconPointerDown, onClick: handleIconClick} =
+    useTapStop('click');
   const controlRef = useMemo<RefObject<HTMLElement | null>>(
     () => ({
       get current() {
@@ -285,8 +292,17 @@ export function FieldLabel({
         </span>
       )}
       {labelTooltip && (
-        <Tooltip content={labelTooltip} placement="above">
-          <Icon icon="info" size="sm" color="inherit" />
+        // The icon's one job is to reveal the help, so a tap on it opens or
+        // closes the help (`touchTrigger="tap"`), although it sits inside a
+        // `<label>`.
+        <Tooltip content={labelTooltip} placement="above" touchTrigger="tap">
+          <Icon
+            icon="info"
+            size="sm"
+            color="inherit"
+            onPointerDown={handleIconPointerDown}
+            onClick={handleIconClick}
+          />
         </Tooltip>
       )}
     </>
