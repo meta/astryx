@@ -196,6 +196,20 @@ jobs:
               echo "[dry-run] Would publish $NAME@$VERSION"
               continue
             fi
+            # A package that depends on (or peers on) a package that failed
+            # here would reach `latest` uninstallable: hold it back as failed
+            # too, so the re-run publishes both together.
+            BLOCKED_BY=$(node -e "
+              const p = require('./$pkg_dir/package.json');
+              const failed = new Set(process.argv[1].split(' ').filter(Boolean));
+              const deps = Object.keys({...p.dependencies, ...p.peerDependencies});
+              process.stdout.write(deps.filter(d => failed.has(d)).join(' '));
+            " "$FAILED")
+            if [ -n "$BLOCKED_BY" ]; then
+              echo "::error::Not publishing $NAME@$VERSION because $BLOCKED_BY failed"
+              FAILED="$FAILED $NAME"
+              continue
+            fi
             echo "Publishing $NAME@$VERSION"
             # At most once, retried while the registry lacks the version (see
             # scripts/npm/publish-package.mjs). One package that cannot

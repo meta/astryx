@@ -7,9 +7,9 @@
  * @input `--dir <package dir> --tag <dist-tag>`; the package's own
  *   package.json supplies its name and version. `ASTRYX_PUBLISH_REGISTRY`
  *   (default https://registry.npmjs.org), `ASTRYX_PUBLISH_ATTEMPTS` (3) and
- *   `ASTRYX_PUBLISH_WAITS_MS` (seconds to wait before each retry and between
- *   registry reads, default "20000,60000" and 5000) exist so tests can run
- *   the real script quickly.
+ *   `ASTRYX_PUBLISH_WAITS_MS` (milliseconds to wait before each retry, default
+ *   "20000,60000"; its first value is also the wait between registry reads,
+ *   default 5000) exist so tests can run the real script quickly.
  * @output Exit 0 when the registry has `name@version` (already there, just
  *   published, or published by an attempt whose client reported a failure);
  *   exit 1 when every attempt failed and the registry still does not have it.
@@ -32,7 +32,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
+import {DEFAULT_REGISTRY, fetchVersionDocument} from './registry.mjs';
+
 const DEFAULT_ATTEMPTS = 3;
 const DEFAULT_RETRY_WAITS_MS = [20_000, 60_000];
 const DEFAULT_READ_INTERVAL_MS = 5_000;
@@ -50,15 +51,12 @@ export async function registryHas({
   registry = DEFAULT_REGISTRY,
   fetchImpl = fetch,
 }) {
-  const url = new URL(
-    `${encodeURIComponent(name)}/${encodeURIComponent(version)}`,
-    `${registry.replace(/\/+$/u, '')}/`,
-  ).href;
   try {
-    const response = await fetchImpl(url, {
-      cache: 'no-store',
-      headers: {accept: 'application/json'},
-      signal: AbortSignal.timeout(30_000),
+    const response = await fetchVersionDocument({
+      name,
+      version,
+      registry,
+      fetchImpl,
     });
     await response.body?.cancel();
     if (response.status === 200) return true;

@@ -41,9 +41,11 @@ function writeExecutable(root, name, contents) {
  * unknown, so nothing is skipped) and no waits between attempts.
  */
 function withPublisher(root) {
-  const target = path.join(root, 'scripts/npm/publish-package.mjs');
-  fs.mkdirSync(path.dirname(target), {recursive: true});
-  fs.copyFileSync(path.join(ROOT, 'scripts/npm/publish-package.mjs'), target);
+  for (const file of ['publish-package.mjs', 'registry.mjs']) {
+    const target = path.join(root, 'scripts/npm', file);
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    fs.copyFileSync(path.join(ROOT, 'scripts/npm', file), target);
+  }
   return {
     ASTRYX_PUBLISH_REGISTRY: 'http://127.0.0.1:9',
     ASTRYX_PUBLISH_WAITS_MS: '0',
@@ -135,6 +137,12 @@ function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
     writeJson(root, 'packages/themes/neutral/package.json', {
       name: '@astryxdesign/theme-neutral',
       version: '0.7.7',
+    });
+    // Publishes after core in the loop and peers on it.
+    writeJson(root, 'packages/themes/stone/package.json', {
+      name: '@astryxdesign/theme-stone',
+      version: '0.7.7',
+      peerDependencies: {'@astryxdesign/core': '0.7.7'},
     });
     // `npm view` finds nothing on the registry, so every package publishes.
     writeExecutable(root, 'npm', '#!/bin/sh\nexit 1\n');
@@ -379,6 +387,20 @@ describe('stable and canary publication authority', () => {
     expect(result.stdout).toContain(
       'Re-running this workflow on the same tag publishes only what is missing.',
     );
+    expect(result.published).toContain('publish ./packages/themes/neutral');
+  });
+
+  it('holds back a stable package whose dependency failed, as failed too', () => {
+    const result = runStablePublish({failingPackage: 'packages/core'});
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'Not publishing @astryxdesign/theme-stone@0.7.7 because @astryxdesign/core failed',
+    );
+    expect(result.stdout).toMatch(
+      /Stable publish failed for: @astryxdesign\/core @astryxdesign\/theme-stone\./u,
+    );
+    expect(result.published).not.toContain('publish ./packages/themes/stone');
     expect(result.published).toContain('publish ./packages/themes/neutral');
   });
 
