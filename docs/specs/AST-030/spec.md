@@ -166,7 +166,12 @@ they are separately named.
   independently routed test lane and, when applicable, one independently routed
   build lane MUST own them. New coverage inside an existing surface MUST join
   those owners and MUST NOT create a separately routed lane or required context.
-  Existing historical joins remain stable. A selected surface whose dedicated
+  Existing historical joins remain stable. The default touched-components
+  check (FR12) is the visual, accessibility and RTL owners' pull-request
+  coverage for the components a change touches: its visual part runs inside
+  `pr-visual`, and its accessibility and RTL part runs in one advisory job
+  beside them that reports no required context, so it routes no new surface
+  lane. A selected surface whose dedicated
   owner is not yet admitted continues through broad CI. The Build package's test
   owner includes its production CSS-layer cascade behavior. Theme-family
   compilation remains `theme-build` and does not become Build merely because both
@@ -192,12 +197,28 @@ they are separately named.
   focused, smoke, and no-op paths MUST NOT narrow release checks. On a pull
   request, the visual (`visual-scout`, `pr-visual`), accessibility (`pr-a11y`
   with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST each
-  run only when the pull request carries that suite's label at the event:
+  run at their opted-in scope (FR13) only when the pull request carries that
+  suite's label at the event:
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
-  confirm that runs nothing. A label runs only its own suite; a pull request
-  update without one runs none of them, and no required context depends on
-  them. An opted-in PR's a11y MUST remain scoped to changed components
+  confirm that runs nothing. A label runs only its own suite. Without a label, a pull request update
+  runs none of these owners at their opted-in scope, and no required context
+  depends on them; it runs one default touched-components check instead:
+  visual, accessibility and RTL for only the components the change touches,
+  never their reverse dependents, against the pull request's Storybook build
+  and within the 15-minute budget. Its visual part is `pr-visual`'s default
+  mode, a focused check of the touched Core components that never escalates
+  to the release plan, so `pr-visual` stays the one visual owner; its
+  accessibility and RTL parts and the per-component record are
+  `pr-touched-components`, on one standard runner. A wide change skips it: one
+  that touches more than five components, or changes shared styles (themes,
+  tokens, or a `.stylex.ts` file in a package's shared `theme`, `utils`,
+  `hooks`, `internal` or `Layer` folder); behaviour-only shared code is not a
+  wide change. Nothing starts a full suite on its own; a wide change's check
+  is the full suites behind the labels. No required context depends on the
+  touched check, and it records each touched component's pass, fail, changed
+  or not-run result per suite, or that the change was wide and how many
+  components it touched, for the pull-request comment. An opted-in PR's a11y MUST remain scoped to changed components
   plus fast interaction guards; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
@@ -240,17 +261,20 @@ they are separately named.
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
   sources; and every test that loads a changed workspace package from its build,
   by the package's name or a path into its `dist/`. When a pull request runs
-  them (FR12: only with their `ci:run-visual` or `ci:run-rtl` label), the visual and RTL owners
-  audit one affected set of component folders: the changed components
+  them at their opted-in scope (FR12: only with their `ci:run-visual` or
+  `ci:run-rtl` label), the visual and RTL owners audit one affected set of
+  component folders: the changed components
   and their reverse dependents, the folders of the components, in any package,
   whose built bundle, `import()` targets included, reaches a changed module.
   Visual audits each dependent folder that has a stable story, and runs the
   whole plan when the dependents exceed its focused budget or none has one; RTL
   audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
   a readable build the audits run in full. PR accessibility, when it runs, stays
-  scoped to changed components (FR12). Shared infrastructure runs the full suite of
-  the owners the pull request runs (visual, accessibility and RTL only with
-  their `ci:run-*` labels, FR12): root
+  scoped to changed components (FR12). Without a label, the default
+  touched-components check audits only the touched components and never
+  widens (FR12). Shared infrastructure runs the full suite of the owners the
+  pull request runs (visual, accessibility and RTL only with their `ci:run-*`
+  labels, FR12): root
   dependency manifests and lockfile, root configuration, a package's manifest,
   build or test configuration and test setup, `internal/` (the test harness
   included), `theme-build` paths (tokens and themes), Storybook configuration,
@@ -323,10 +347,28 @@ they are separately named.
   required check would count as passing. Events other than a pull request (a
   push to `main`, a merge-group entry, a dispatch) are unaffected, and a fork's
   code never runs with the repository's secrets.
+- **FR19 — A pull request that changes CI states its CI impact.** A pull
+  request that changes a workflow, a composite action or a CI script carries
+  its CI impact in its description's `CI impact:` line: each changed job's
+  runner class (standard GitHub-hosted or non-standard), job-minutes per
+  pull-request update before and after, the change in runner-pool usage
+  (runner-minutes a day and average concurrent jobs) and time to green. The
+  pull-request comment measures these for CI's own workflow (`ci.yml`) from
+  its change and recent pull-request runs, without starting a job: a changed job counts as often as
+  it ran in those runs, time to green compares with runs that ran the same
+  jobs, and another changed workflow, a composite action or a CI script is
+  named as not measured.
+  A `node-tooling` pull request (FR8) gets no pull-request comment, so its
+  description's line stands alone. The comment flags a job moving onto a
+  non-standard runner, more than 10% added runner-pool usage, or more than two
+  minutes added to time to green. A flag asks the reviewer to weigh the cost;
+  it fails no check.
+
 - **FR21 — Main's full unit run is about hourly and always finishes.** The
   Main workflow runs its unit suites (every Vitest project of every package,
-  never scoped to a change) only in a run that main's heavy-lane workflow
-  dispatches for `main`'s tip about once an hour, on its own schedule: a push
+  never scoped to a change) only in a dispatched run, such as the one main's
+  heavy-lane workflow dispatches for `main`'s tip, naming that commit, about
+  once an hour on its own schedule: a push
   dispatches it at once when none started in the last 55 minutes, and the
   quarter-hourly schedule picks up the tip a burst left. Every release-check of
   `main`'s tip (FR12), the scheduler's or one a person dispatches such as the
@@ -340,6 +382,19 @@ they are separately named.
   guardian's issue; a newer run that replaced it, such as a recheck, leaves
   nothing to report. A stable release publishes only from a cut commit with
   both a passing release-check and a passing full unit run (DEC-15).
+
+- **FR22 — Main's full unit run finishes in minutes.** The Main workflow runs
+  every Vitest leg of `main`'s full unit run at once, with no `max-parallel`
+  hold: six UI legs and six Node legs beside the build-and-typecheck lane, each
+  inside the fifteen-minute job budget (DEC-17). A dispatch may name `sha`, a
+  commit in `main`'s history that has the size records the build lane keeps, and
+  every lane checks that commit out; without it the run validates `main`'s tip.
+  A person's `sha` run waits for nothing and replaces nothing. One full unit
+  run of `main` runs at a time and a newer one waits (FR21); a push's fast
+  checks run beside it. Only a release re-check, which the workflow token sends
+  with `recheck` and no `sha`, cancels the running unit run, because the
+  re-check validates `main`'s tip in full itself.
+  Pull-request legs keep their shape.
 
 ### Platform support
 
@@ -376,22 +431,24 @@ read change (FR14).
 
 ## Verification
 
-| Contract | Verification                                                                                                         | Representative states                                                                                                                                                                                                                                                                                                                        | Mutation or failure expectation                                                                                                                                                                                       |
-| -------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR2  | classifier unit tests expose the surface set                                                                         | knowledge; docsite; admitted tool; Core/Lab/Charts/Rich Text/Vega source; shared config; unknown                                                                                                                                                                                                                                             | an unclassified path receives a specialized lane or a category has no check owner                                                                                                                                     |
-| FR3–FR4  | workflow contract tests execute an isolated trusted-base classifier                                                  | valid base; missing merge base; missing matcher/registry; classifier self-change; merge group                                                                                                                                                                                                                                                | PR-controlled policy grants a lane, or missing trust data skips checks                                                                                                                                                |
-| FR5      | mixed-surface and incomplete-owner routing tests                                                                     | spec+component; tooling+component; named surface without admitted lane; docsite+shared                                                                                                                                                                                                                                                       | one surface hides another owner or a named-but-incomplete surface skips broad CI                                                                                                                                      |
-| FR6–FR8  | Node-tooling dependency, CI workflow, and trusted post-CI workflow tests                                             | both admitted score-ledger paths; Sandbox projection imports; test/build joins; preview/visual publisher                                                                                                                                                                                                                                     | UI/browser/build work or preview publication runs for the singleton tool set, an operational consumer is untested, a visual status stays pending, or a required context disappears                                    |
-| FR9      | mutation-sensitive classifier and workflow fixtures                                                                  | unknown path; rename from unknown; truncated list; package-specific public paths                                                                                                                                                                                                                                                             | weakening a fail-closed rule leaves the suite green                                                                                                                                                                   |
-| FR10     | surface-admission and routing contract tests                                                                         | existing surface; proposed surface with and without the full admission contract                                                                                                                                                                                                                                                              | a new surface adds lanes without its approved paths, commands, ownership, projections, and routing tests                                                                                                              |
-| FR11     | surface owner, internal-job, and required-join contract tests                                                        | Build package browser behavior; CLI; theme-family broad fallback; mixed Core+CLI                                                                                                                                                                                                                                                             | a second owner is routed for one surface, an internal job masquerades as a lane, an owned failure misses its join, or an unrelated owner runs                                                                         |
-| FR12     | Storybook visual-plan, canonical workflow, and repository-owner guard tests                                          | PR scope; full-plan maintenance; report-only publication; deployment/a11y/RTL/vibe artifacts                                                                                                                                                                                                                                                 | another workflow captures or compares pixels, a renamed or aliased owner escapes the guard, or legitimate non-visual artifacts are rejected                                                                           |
-| FR13     | classifier, workflow contract, component-analysis and RTL-scope tests                                                | component change; shared module; Changeset beside code; infrastructure path; incomplete list; no build                                                                                                                                                                                                                                       | an infrastructure path is scoped, a file-system guard test is skipped, a reverse dependent leaves visual/RTL or enters PR accessibility, or a full-suite event is narrowed                                            |
-| FR14     | `workflow-paths.test.mjs` over every workflow                                                                        | path allowlist; required-context workflow                                                                                                                                                                                                                                                                                                    | a `paths-ignore`, a match-all or exclusion glob, or a path filter on a workflow that reports a required context fails                                                                                                 |
-| FR15     | workflow contract and reconciler tests                                                                               | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR                                                                                                                                                                                                                                                                     | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, or a non-command comment starts a runner                                |
-| FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract                                                        | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head fails |
-| FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions                                   | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                        |
-| FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs` | push run; dispatched unit run; tip with the scheduler's or a person's release-check, or a person's maintenance capture; unit run cancelled, skipped or timed out; newer recheck; cut commit with and without a passing unit run                                                                                                              | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run    |
+| Contract | Verification                                                                                                         | Representative states                                                                                                                                                                                                                                                                                                                        | Mutation or failure expectation                                                                                                                                                                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR2  | classifier unit tests expose the surface set                                                                         | knowledge; docsite; admitted tool; Core/Lab/Charts/Rich Text/Vega source; shared config; unknown                                                                                                                                                                                                                                             | an unclassified path receives a specialized lane or a category has no check owner                                                                                                                                                                                      |
+| FR3–FR4  | workflow contract tests execute an isolated trusted-base classifier                                                  | valid base; missing merge base; missing matcher/registry; classifier self-change; merge group                                                                                                                                                                                                                                                | PR-controlled policy grants a lane, or missing trust data skips checks                                                                                                                                                                                                 |
+| FR5      | mixed-surface and incomplete-owner routing tests                                                                     | spec+component; tooling+component; named surface without admitted lane; docsite+shared                                                                                                                                                                                                                                                       | one surface hides another owner or a named-but-incomplete surface skips broad CI                                                                                                                                                                                       |
+| FR6–FR8  | Node-tooling dependency, CI workflow, and trusted post-CI workflow tests                                             | both admitted score-ledger paths; Sandbox projection imports; test/build joins; preview/visual publisher                                                                                                                                                                                                                                     | UI/browser/build work or preview publication runs for the singleton tool set, an operational consumer is untested, a visual status stays pending, or a required context disappears                                                                                     |
+| FR9      | mutation-sensitive classifier and workflow fixtures                                                                  | unknown path; rename from unknown; truncated list; package-specific public paths                                                                                                                                                                                                                                                             | weakening a fail-closed rule leaves the suite green                                                                                                                                                                                                                    |
+| FR10     | surface-admission and routing contract tests                                                                         | existing surface; proposed surface with and without the full admission contract                                                                                                                                                                                                                                                              | a new surface adds lanes without its approved paths, commands, ownership, projections, and routing tests                                                                                                                                                               |
+| FR11     | surface owner, internal-job, and required-join contract tests                                                        | Build package browser behavior; CLI; theme-family broad fallback; mixed Core+CLI                                                                                                                                                                                                                                                             | a second owner is routed for one surface, an internal job masquerades as a lane, an owned failure misses its join, or an unrelated owner runs                                                                                                                          |
+| FR12     | Storybook visual-plan, canonical workflow, and repository-owner guard tests                                          | PR scope; full-plan maintenance; report-only publication; deployment/a11y/RTL/vibe artifacts                                                                                                                                                                                                                                                 | another workflow captures or compares pixels, a renamed or aliased owner escapes the guard, or legitimate non-visual artifacts are rejected                                                                                                                            |
+| FR13     | classifier, workflow contract, component-analysis and RTL-scope tests                                                | component change; shared module; Changeset beside code; infrastructure path; incomplete list; no build                                                                                                                                                                                                                                       | an infrastructure path is scoped, a file-system guard test is skipped, a reverse dependent leaves visual/RTL or enters PR accessibility, or a full-suite event is narrowed                                                                                             |
+| FR14     | `workflow-paths.test.mjs` over every workflow                                                                        | path allowlist; required-context workflow                                                                                                                                                                                                                                                                                                    | a `paths-ignore`, a match-all or exclusion glob, or a path filter on a workflow that reports a required context fails                                                                                                                                                  |
+| FR15     | workflow contract and reconciler tests                                                                               | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR                                                                                                                                                                                                                                                                     | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, or a non-command comment starts a runner                                                                                 |
+| FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract                                                        | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head fails                                                  |
+| FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions                                   | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                                                                         |
+| FR19     | `ci-impact.test.mjs`, `pr-preview.test.mjs` and the maintenance template                                             | CI change and non-CI change; standard, non-standard and expression runners; added, removed and changed jobs; trigger change                                                                                                                                                                                                                  | a CI change reports no impact, a move onto a non-standard runner or a pool or time-to-green rise past its threshold goes unflagged, or the section names a price                                                                                                       |
+| FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs` | push run; dispatched unit run; tip with the scheduler's or a person's release-check, or a person's maintenance capture; unit run cancelled, skipped or timed out; newer recheck or person's run of the tip; a person's validation of an older commit; cut commit with and without a passing unit run                                         | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run                                                     |
+| FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver                                   | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces                                                             | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip fails |
 
 ## Decision log
 
@@ -451,6 +508,10 @@ registers its cases with the one shared Storybook-backed PR visual owner in
 visual lanes; a second workflow that captures or compares those pixels is.
 The single-workflow wording clarifies the existing shared-system requirement;
 it does not admit a new owner.
+The default touched-components check (FR12) is the visual, accessibility and
+RTL owners' own pull-request coverage of touched components: its visual part
+is `pr-visual`'s default mode, and its advisory accessibility and RTL job feeds
+no required context, so it is not a new lane.
 
 Build's production CSS-layer cascade is a Build package integration contract, so
 it belongs to Build's test owner. Theme-family compilation remains owned by
@@ -476,9 +537,11 @@ history.
 Baseline capture and the reviewed pull request that
 versions an accepted candidate remain separate operations.
 
-PR accessibility, when a pull request runs it (DEC-7), is a scoped, fast check:
-audit only explicitly resolved changed component owners and retain the fast
-modal-close, theme-var, and story-play browser guards. Never widen a PR to the exhaustive accessibility sweep because a
+PR accessibility, when a pull request runs it at its opted-in scope (DEC-7), is
+a scoped, fast check: audit only explicitly resolved changed component owners
+and retain the fast modal-close, theme-var, and story-play browser guards. The
+default touched-components check (FR12) audits the touched components' stories
+without the guards, which run with the accessibility owner. Never widen a PR to the exhaustive accessibility sweep because a
 shared path changed or the component set is empty. Missing or approximate analysis
 fails the scoped check rather than silently claiming no work. Multi-component
 folders expand only to their own canonical component owners or existing umbrella
@@ -492,7 +555,7 @@ pushes to `main`), and treating a maintenance
 capture, skipped check, a checked SHA no longer in current `main` history, or
 retroactive status as release evidence.
 
-### DEC-7 — Visual, accessibility and RTL run on main, not on pull request updates
+### DEC-7 — Full visual, accessibility and RTL suites run on main; pull request updates check only touched components
 
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
@@ -501,10 +564,17 @@ not on every push)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
-a pull request runs each only when it opts in with that suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label. Main-push checks are throttled: one runs at a time, a
+a pull request runs each at its opted-in scope only when it opts in with that
+suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label, and otherwise
+only the touched-components check (FR12). Main-push checks are throttled: one runs at a time, a
 burst of pushes collapses to its newest commit, and a running check is never
 cancelled, so every check that starts finishes.
-Pull request updates keep the fast checks and every required context; the
+Pull request updates keep the fast checks and every required context, and add
+the touched-components check (FR12), which audits only what the change touches,
+its visual part in `pr-visual`'s default mode and its accessibility and RTL
+parts in one standard-runner job, so each update spends few runner-minutes
+while the full
+suites stay behind their labels; the
 modal-close, theme-var and story-play guards are steps of the accessibility
 owner, so they run with it, after merge or on a labelled pull request. A
 failure on `main` is repaired forward with an atomic pull request, not reverted
@@ -528,8 +598,9 @@ the module graph for tests and built-bundle reach for components. Tests that
 read sources through the file system run whole, because no import reaches what
 they read. Shared infrastructure, uncertainty, `main`, merge-group entries and
 release checks run everything, so no landing or release gate narrows; a pull
-request runs the visual, accessibility and RTL owners only with the
-suite's `ci:run-*` label (DEC-7).
+request runs the visual, accessibility and RTL owners at their opted-in scope
+only with the suite's `ci:run-*` label, and otherwise only the
+touched-components check for the components it touches (DEC-7).
 
 Rejected: a full run triggered by approval, a label or a draft-to-ready change,
 which tests the pull request's head rather than the merged result.
@@ -603,6 +674,23 @@ Rejected: running the unit suites on main's push cadence with a scope (a
 scoped run on main would miss the cross-change break it exists for);
 cancelling an older unit run for a newer push (a run that never finishes
 covers nothing).
+
+### DEC-17 — Main's full runs spend runner-minutes to finish in minutes
+
+**Reference:** `spec:AST-030/DEC-17`
+**Decider:** `cixzhang`, `2026-10-31`
+
+A full check of `main` may cost more runner-minutes if it finishes sooner: the
+release train can then fix and re-check within minutes, and pull requests, which
+run far more often, carry the per-update cost. A full run starts every
+leg at once, with no `max-parallel` hold, on standard runners, and gets as many
+legs as shorten its slowest lane. Legs stop growing where one indivisible piece
+of work sets the floor, such as the longest test file. Pull requests keep their
+shape, which bounds the spend of each update.
+
+Rejected: larger runners for these lanes (measured no faster than the standard
+four-core runners); keeping four unit legs, whose slowest leg took about eight
+minutes.
 
 ## Open questions
 

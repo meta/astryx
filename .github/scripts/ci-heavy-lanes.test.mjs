@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Visual, accessibility and RTL run on main, not on pull request updates.
+ * @file Full visual, accessibility and RTL suites run on main; pull request
+ *   updates check only touched components.
  * @input CI, Main and Main heavy lanes workflows, and a mocked GitHub API
  * @output Routing for the heavy owners, the required joins, and Main's
  *   release-check dispatch
@@ -32,7 +33,6 @@ const SUITE = {
   'pr-a11y-specs': 'a11y',
   'pr-a11y': 'a11y',
   'visual-scout': 'visual',
-  'pr-visual': 'visual',
   'pr-rtl-shard': 'rtl',
   'pr-rtl-merge': 'rtl',
   'pr-rtl': 'rtl',
@@ -62,6 +62,32 @@ describe('visual, accessibility and RTL owners', () => {
       expect([ci.jobs[name].needs].flat()).toContain('run-labels');
     },
   );
+
+  it('runs pr-visual on every pull request: its full check only with ci:run-visual, otherwise the default touched check', () => {
+    const visual = ci.jobs['pr-visual'];
+    const condition = ungated(visual.if);
+    expect(condition).toContain(
+      "(github.event_name == 'pull_request' &&\n  needs.build-storybook.result == 'success')",
+    );
+    expect(visual.needs).toContain('run-labels');
+    const step = name =>
+      visual.steps.find(candidate => candidate.name === name);
+    expect(step('Run the visual gate for the touched components').if).toContain(
+      "needs.run-labels.outputs.visual == 'true'",
+    );
+    expect(step('Decide the default touched visual check').if).toContain(
+      "needs.run-labels.outputs.visual != 'true'",
+    );
+    const touched = step('Visual check for the default touched components');
+    expect(touched.if).toBe(
+      "steps.touched.outputs.has_components == 'true' && steps.touched.outputs.visual_components != ''",
+    );
+    expect(touched.run).toContain('gate.mjs check');
+    expect(touched.run).toContain('--tiers component');
+    expect(touched.run).toContain('--no-scout');
+    expect(touched.run).not.toContain('--dependents');
+    expect(touched.run).not.toContain('gate.mjs release');
+  });
 
   it('decides the suites in one gate job from the trusted decision script', () => {
     const gate = ci.jobs['run-labels'];
@@ -262,12 +288,15 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       'expected-head': tip,
     },
   });
-  const unitRun = {
+  // A unit run names the commit it tests (FR21, FR22).
+  const unitRunOf = tip => ({
     owner: 'meta',
     repo: 'astryx',
     workflow_id: 'deploy.yml',
     ref: 'main',
-  };
+    inputs: {sha: tip},
+  });
+  const unitRun = unitRunOf(sha);
 
   it("dispatches a release-check and a full unit run for main's tip when neither started in the last 55 minutes", async () => {
     const calls = await run({
@@ -432,7 +461,7 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       runs: [check(60)],
       units: [check(60)],
     });
-    expect(calls.dispatch).toEqual([releaseCheck(tip), unitRun]);
+    expect(calls.dispatch).toEqual([releaseCheck(tip), unitRunOf(tip)]);
   });
 
   it('leaves a commit main has moved past to the newer push', async () => {
@@ -495,6 +524,34 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       });
       expect(calls.dispatch).toEqual([]);
       expect(calls.issues).toEqual([]);
+    });
+
+    it("leaves a run that a person's newer run of main's tip replaced", async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          check(5, {head_sha: sha, actor: {login: 'someone'}}),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
+      expect(calls.dispatch).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
+
+    it('still runs the next one when the newer run only validated an older commit', async () => {
+      const older = 'd'.repeat(40);
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          check(5, {
+            head_sha: sha,
+            actor: {login: 'someone'},
+            display_title: `Main validation of ${older}`,
+          }),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
+      expect(calls.dispatch).toEqual([unitRun]);
     });
 
     it('does not count a failed run as incomplete', async () => {

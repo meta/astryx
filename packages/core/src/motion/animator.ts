@@ -59,7 +59,11 @@
  * commit: a main-thread block before that frame delays the motion instead of
  * skipping into it. Everything the call starts, and every
  * call from rest in the same task, starts at that one time, which
- * `handle.started` reports. A call that continues motion on
+ * `handle.started` reports. Where the compositor starts it and the page
+ * learns that start only a frame or more later (Chromium), the call starts
+ * at the frame that commits it, the start the compositor takes, so a
+ * retarget or a rebase before then continues from the frame on screen. A
+ * call that continues motion on
  * screen (a retarget, a catch) keeps an explicit start at the call time, or
  * `options.at` to line several animators up, so the new curve continues
  * from the frame on screen. Keyframes are sampled from the call's start, so
@@ -504,6 +508,12 @@ interface StartGroup {
    * browser's, whatever it says (startAfterBlock).
    */
   framed?: boolean;
+  /**
+   * Made in an animation-frame callback of an animator's own (a presented
+   * call's second frame): the browser commits its animations in that frame,
+   * so the frame after it is not the one that starts them.
+   */
+  madeInFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
   /** A later call in the same task that took over its curves. */
@@ -662,6 +672,9 @@ interface TaskMark {
 
 /** The task the current calls from rest are made in, until it ends. */
 let openTask: TaskMark | null = null;
+
+/** How many of the animators' animation-frame callbacks are running now. */
+let frameDepth = 0;
 
 /** The mark of the running task, opened by its first call from rest. */
 function markTask(time: number, clock: () => number): TaskMark {
@@ -909,13 +922,28 @@ export function createAnimator(
   options: AnimatorOptions = {},
 ): Animator {
   const now = options.now ?? defaultNow;
-  const requestFrame =
+  const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
       ? (callback: () => void) => {
           requestAnimationFrame(() => callback());
         }
       : null);
+  // Every frame callback of an animator's counts itself, so a call made in
+  // one knows its animations commit in that frame.
+  const requestFrame =
+    frameSource == null
+      ? null
+      : (callback: () => void) => {
+          frameSource(() => {
+            frameDepth += 1;
+            try {
+              callback();
+            } finally {
+              frameDepth -= 1;
+            }
+          });
+        };
   const pseudoElement = options.pseudoElement;
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4).
@@ -1921,6 +1949,7 @@ export function createAnimator(
     // call's is its second frame's callback, wherever in its frame the call
     // was made.
     group.task = markTask(now(), now);
+    group.madeInFrame = frameDepth > 0;
     queueMicrotask(() => {
       group.fresh = false;
     });
@@ -1940,6 +1969,30 @@ export function createAnimator(
     requestFrame?.(() => {
       syncGroup(group);
       group.framed = true;
+      // Chromium's compositor starts a composited animation when the frame
+      // that commits it reaches it, and tells the page that start a frame or
+      // more later (longer under load). Until then the call would read as
+      // not started while the screen moves it, and a retarget or a rebase
+      // would replay its curve from the start. A call made in a task, still
+      // waiting in the first frame after it, starts now, which the compositor
+      // then takes as its start: the time this frame runs, not its timestamp,
+      // which after a block is the frame time from before the block. Only
+      // when this frame is the one that commits it: not for a call made in a
+      // frame callback, whose frame committed it already, nor when a block
+      // ran between the call and this frame (more than LATE_START_MS), after
+      // which this frame cannot tell a call made in a task from one a page's
+      // own frame callback made; those keep the browser's start.
+      if (
+        !group.resolved &&
+        group.madeInFrame !== true &&
+        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        group.animations.some(
+          animation =>
+            animation.startTime == null && animation.playState === 'running',
+        )
+      ) {
+        resolveGroup(group, now());
+      }
     });
     ready.then(
       () => syncGroup(group),

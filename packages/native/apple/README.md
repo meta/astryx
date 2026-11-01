@@ -26,13 +26,13 @@ apple/
 │   │   │   └── Generated/ # typed tokens and every published theme, generated; do not edit
 │   │   ├── Resources/     # core's messages per locale, generated; do not edit
 │   │   ├── Localization/
-│   │   ├── Icon/          # Icon, Icon.spec.md
-│   │   ├── Avatar/        # Avatar, Avatar.spec.md
+│   │   ├── Icon/          # Icon
+│   │   ├── Avatar/        # Avatar
 │   │   ├── Text/          # Text
 │   │   ├── Heading/       # Heading
 │   │   ├── Button/        # Button
 │   │   ├── TextInput/     # TextInput
-│   │   ├── Thumbnail/     # Thumbnail, Thumbnail.spec.md
+│   │   ├── Thumbnail/     # Thumbnail
 │   │   ├── Card/          # Card
 │   │   └── Banner/        # Banner
 │   └── AstryxNative/      # contracts, wire, logic host (module AstryxNative)
@@ -45,6 +45,9 @@ apple/
     ├── Login/             # LoginTemplate, from `astryx template login`
     └── Tests/
 ```
+
+Each component's Swift spec sits beside its core spec, at
+`docs/specs/components/<ComponentRoot>/<Name>.swift.spec.md`.
 
 - **`Sources/Astryx/<Name>/`** holds one folder per component, named as in
   `packages/core/src/<Name>/`. Each view has core's component name in the
@@ -142,6 +145,15 @@ export:
 ```sh
 node packages/native/scripts/swift-ios-theme.mjs --theme ./src/acmeTheme.ts#acmeTheme --out ./Sources/Theme
 ```
+
+The generator reads the CSS forms its spec lists
+(`specs/swift/library/theme-generator.md`, G7): hex and named colors, `rgb()`,
+`hsl()`, `hwb()`, Lab, LCH, OKLab, OKLCH, `color()` in the listed spaces,
+`color-mix()`, and relative colors (wide-gamut colors kept as Display P3;
+a color outside Display P3 clips, as browsers draw it, with a warning),
+lengths with `calc()`, and `[light, dark]` tuples. A value with no static form,
+such as `currentColor` or `50%`, stops the run naming the theme, mode, token,
+and value; so does a form the generator does not read yet, saying so.
 
 A theme's local tokens are not generated yet; the generator names each one it
 leaves out.

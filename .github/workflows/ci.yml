@@ -951,6 +951,8 @@ jobs:
           # infrastructure, `full_suite`, runs it too); the build itself
           # follows the specialized-lane outputs.
           paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/merge-base\.sh$)'
+          # A head cut before the package-size check has no script for it.
+          requires-head-file: .github/scripts/package-size.mjs
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -982,6 +984,83 @@ jobs:
       - name: Setup Node and pnpm
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: ./.github/actions/setup
+
+      # Main keeps each commit's size records for 14 days (deploy.yml): every
+      # public component's sizes and every published package's. The merge
+      # base is compared from them; it is built here only when Main kept no
+      # component record for it. The lookup runs before the Storybook build so
+      # that build can run beside it.
+      - name: Find the merge base
+        id: merge-base
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: echo "sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the size comparisons' || true)" >> "$GITHUB_OUTPUT"
+
+      - name: Find main's size records for the merge base
+        id: size-records
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != ''
+        continue-on-error: true
+        uses: actions/github-script@v9
+        env:
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
+        with:
+          retries: 3
+          script: |
+            const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
+            for (const [output, prefix, missing] of [
+              ['component_run_id', 'component-size-main', 'the merge base is built here instead'],
+              ['package_run_id', 'package-size-main', 'package sizes are shown without a budget'],
+            ]) {
+              const name = `${prefix}-${process.env.BASE_SHA}`;
+              const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
+              core.setOutput(output, runId ?? '');
+              core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; ${missing}.`);
+            }
+
+      - name: Download main's component sizes for the merge base
+        id: component-download
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.size-records.outputs.component_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: component-size-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.component_run_id }}
+          github-token: ${{ github.token }}
+          path: .component-size-base
+
+      # No component record of this merge base was read (Main kept none, or
+      # its download failed): build the base beside
+      # the Storybook build and record its sizes with this head's analyzer, so
+      # every changed component still has a before size (AST-080 FR8). It runs
+      # in the background; the wait before the analysis collects it.
+      - name: Start building the merge base without a record
+        id: base-build
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.component-download.outcome != 'success'
+        env:
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git worktree add --detach .size-base "$BASE_SHA"
+          mkdir -p .component-size-base
+          # The inner script reads BASE_SHA and HEAD_SHA from this step's env.
+          # shellcheck disable=SC2016
+          nohup bash -c '
+            set -e
+            cd .size-base
+            pnpm install --frozen-lockfile
+            # Core and its build tooling always build: the other component
+            # packages depend on them. Another package builds only when the
+            # pull request changes its source.
+            pnpm -F @astryxdesign/build build
+            pnpm -F @astryxdesign/core build
+            for pkg in lab charts richtext vega; do
+              git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src" || pnpm -F "@astryxdesign/$pkg" build
+            done
+            node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
+            touch ../base-build.done
+          ' > base-build.log 2>&1 || touch base-build.failed &
+          echo "started=true" >> "$GITHUB_OUTPUT"
 
       # The same steps as `pnpm build` and the Storybook build, overlapped: a
       # package builds once its workspace dependencies have, and Storybook once
@@ -1061,6 +1140,25 @@ jobs:
             packages/core/dist/
           retention-days: 1
 
+      # The merge base built beside the Storybook build: its record, or a
+      # warning that Before and Delta stay empty. The wait is what it adds to
+      # this job.
+      - name: Wait for the merge base's sizes
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.base-build.outputs.started == 'true'
+        run: |
+          waited=0
+          while [ ! -f base-build.done ] && [ ! -f base-build.failed ] && [ "$waited" -lt 600 ]; do
+            sleep 1
+            waited=$((waited + 1))
+          done
+          tail -n 20 base-build.log || true
+          if [ -f base-build.done ]; then
+            echo "::notice title=Merge base built::Main kept no record of the merge base; it was built beside Storybook (waited ${waited}s after the build)."
+          else
+            rm -f .component-size-base/component-size.json
+            echo "::warning title=Merge base not built::Building the merge base failed or timed out; Before and Delta stay empty."
+          fi
+
       - name: Analyze components
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
         env:
@@ -1070,10 +1168,15 @@ jobs:
           # dependents, unless the change touches shared infrastructure.
           FORCE_FULL=()
           if [ "$FULL_SUITE" != false ]; then FORCE_FULL=(--force-full); fi
+          BASE_RECORD=()
+          if [ -f .component-size-base/component-size.json ]; then
+            BASE_RECORD=(--base-record .component-size-base/component-size.json)
+          fi
           node .github/scripts/analyze-pr.js \
             --base origin/${{ github.base_ref }} \
             --head HEAD \
             --output analysis.json \
+            "${BASE_RECORD[@]}" \
             "${FORCE_FULL[@]}"
 
       # Published package size: this head's packages are built above, and Main
@@ -1082,49 +1185,31 @@ jobs:
       # package or the lockfile runs it.
       - name: Measure published package size
         id: package-size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
-        run: node .github/scripts/package-size.mjs measure --output package-size-head.json
-
-      - name: Find the merge base for package size
-        id: package-size-merge-base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: echo "sha=$(.github/scripts/merge-base.sh "$BASE_REF" 'the package-size comparison')" >> "$GITHUB_OUTPUT"
-
-      - name: Find main's package size for the merge base
-        id: package-size-cached
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size-merge-base.outputs.sha != ''
-        continue-on-error: true
-        uses: actions/github-script@v9
-        env:
-          BASE_SHA: ${{ steps.package-size-merge-base.outputs.sha }}
-        with:
-          retries: 3
-          script: |
-            const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
-            const name = `package-size-main-${process.env.BASE_SHA}`;
-            const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
-            core.setOutput('run_id', runId ?? '');
-            core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; sizes are shown without a budget.`);
+        # A head cut before the check has no script to run (the workflow comes
+        # from the merge ref, the checkout from the head): the scope step notes
+        # it, and the check skips until the branch merges main.
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.head_file_present != 'false' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
+        run: |
+          node .github/scripts/package-size.mjs measure --output package-size-head.json
+          echo "measured=true" >> "$GITHUB_OUTPUT"
 
       - name: Download main's package size for the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size-cached.outputs.run_id != ''
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true' && steps.size-records.outputs.package_run_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: package-size-main-${{ steps.package-size-merge-base.outputs.sha }}
-          run-id: ${{ steps.package-size-cached.outputs.run_id }}
+          name: package-size-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.package_run_id }}
           github-token: ${{ github.token }}
           path: .package-size-base
 
       # Advisory: a package over its budget is flagged in the job summary and
       # the PR report, and fails nothing.
       - name: Compare published package size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_SHA: ${{ steps.package-size-merge-base.outputs.sha }}
+          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
         run: |
           # Without a base, the report names why: no merge base was found, or
           # Main kept (or the lookup read) no measurement for it.
@@ -1157,6 +1242,22 @@ jobs:
           }
           EOF
 
+      # Advisory API changes (architecture:public-component-api INV24): each
+      # published package's report from this build, compared with the reports
+      # committed at the merge base (read with git, no API calls). It reads the
+      # dists built above and never fails the job; api-changes.json goes into
+      # the pr-analysis artifact. With no merge base there is nothing to compare.
+      - name: Report API changes
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
+          [ -n "$BASE_SHA" ] || exit 0
+          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA"
+
       - name: Upload analysis artifact
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
         uses: actions/upload-artifact@v7
@@ -1166,139 +1267,8 @@ jobs:
             analysis.json
             pr-meta.json
             package-size.json
-          retention-days: 1
-
-  # Measures the PR's merge base so the PR comment can show component and
-  # package sizes before and after. It runs beside build-storybook rather than
-  # inside it, so no browser lane waits for the second build; the head sizes
-  # still come from build-storybook's analysis.
-  size-base:
-    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      actions: read
-      contents: read
-      pull-requests: read
-    steps:
-      # This job decides its own scope (no separate scope job): the step
-      # reads the PR's file list and the base's trusted classifier, and
-      # everything is in scope when it cannot decide.
-      - name: Check out the scope action
-        uses: actions/checkout@v7
-        with:
-          sparse-checkout: .github/actions/test-scope
-          path: .test-scope
-          persist-credentials: false
-
-      - name: Decide this job's scope
-        id: scope
-        uses: ./.test-scope/.github/actions/test-scope
-
-      - name: Checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 50
-
-      - name: Fetch base branch
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        run: git fetch origin ${{ github.base_ref }} --depth=50
-
-      - name: Setup Node and pnpm
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: ./.github/actions/setup
-
-      # A branch far behind main may have no merge base within the fetched
-      # history even after deepening. The report then keeps Before and Delta
-      # as N/A rather than failing the run.
-      - name: Check out the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        id: merge-base
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
-          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'base size measurement' || true)
-          if [ -z "$BASE_SHA" ]; then
-            echo "found=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          git worktree add --detach .size-base "$BASE_SHA"
-          echo "sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "found=true" >> "$GITHUB_OUTPUT"
-
-      # The merge base's dependencies install either way: measuring bundles
-      # each base component with esbuild, which resolves its imports there.
-      - name: Install the merge base's dependencies
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        working-directory: .size-base
-        run: pnpm install --frozen-lockfile
-
-      # Main keeps each commit's package builds for 14 days. A merge base on
-      # main within that window is measured from them, with no build.
-      - name: Find main's build of the merge base
-        id: cached
-        continue-on-error: true
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/github-script@v9
-        env:
-          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
-        with:
-          retries: 3
-          script: |
-            const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
-            const name = `dists-main-${process.env.BASE_SHA}`;
-            const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
-            core.setOutput('run_id', runId ?? '');
-            core.info(runId ? `Using ${name} from run ${runId}.` : `No ${name}; building the merge base.`);
-
-      - name: Download main's build of the merge base
-        id: download
-        if: steps.cached.outputs.run_id != ''
-        continue-on-error: true
-        uses: actions/download-artifact@v8
-        with:
-          name: dists-main-${{ steps.merge-base.outputs.sha }}
-          run-id: ${{ steps.cached.outputs.run_id }}
-          github-token: ${{ github.token }}
-          path: .size-base/packages
-
-      # Without a kept build: core and its build tooling always build, because
-      # the other component packages depend on them; another package builds
-      # only when the PR changes its source.
-      - name: Build the merge base's component packages
-        if: (steps.merge-base.outputs.found == 'true') && steps.download.outcome != 'success' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        working-directory: .size-base
-        env:
-          BASE_SHA: ${{ steps.merge-base.outputs.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          pnpm -F @astryxdesign/build build
-          pnpm -F @astryxdesign/core build
-          for pkg in lab charts richtext vega; do
-            if git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src"; then
-              continue
-            fi
-            pnpm -F "@astryxdesign/$pkg" build
-          done
-
-      - name: Measure the merge base
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        run: |
-          node .github/scripts/analyze-pr.js \
-            --base origin/${{ github.base_ref }} \
-            --head HEAD \
-            --base-root .size-base \
-            --base-only \
-            --output size-base.json
-
-      - name: Upload base size stats
-        if: (steps.merge-base.outputs.found == 'true') && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: pr-size-base
-          path: size-base.json
+            api-changes.json
+            api-changes.md
           retention-days: 1
 
   # Typechecks run beside build-storybook instead of before its Storybook
@@ -2071,9 +2041,27 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
 
+      # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
+      # from the CPUs the process may run on. A container's CPU quota is not
+      # that mask, so a runner that shows the host's CPUs oversubscribes the
+      # job's share. Cap llvmpipe's threads at the cgroup quota when one is
+      # set (the job's share, rounded up); without a quota the count stays
+      # nproc, llvmpipe's own default.
       - name: Run WebKit interaction proofs
         if: steps.scope.outputs.applies == 'true'
         run: |
+          LP_NUM_THREADS="$(nproc)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            if [ "$quota" != max ]; then
+              share=$(( (quota + period - 1) / period ))
+              if [ "$share" -lt "$LP_NUM_THREADS" ]; then
+                LP_NUM_THREADS="$share"
+              fi
+            fi
+          fi
+          export LP_NUM_THREADS
+          echo "llvmpipe threads: $LP_NUM_THREADS"
           pnpm exec playwright test \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \
@@ -2283,7 +2271,7 @@ jobs:
     needs: [build-storybook, maintenance-request, visual-scout, run-labels]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() &&
-      (((github.event_name == 'pull_request' && needs.run-labels.outputs.visual == 'true') &&
+      ((github.event_name == 'pull_request' &&
         needs.build-storybook.result == 'success') ||
        (github.event_name == 'workflow_dispatch' &&
         ((inputs.operation == 'release-check' &&
@@ -2349,6 +2337,27 @@ jobs:
         with:
           name: pr-analysis
 
+      # Without ci:run-visual a pull request gets the default touched check:
+      # only the Core components it touches, never their reverse dependents
+      # and never the release plan; a wide change skips it (spec:AST-030
+      # FR12).
+      # A wide change writes a skipped verdict naming ci:run-visual, so the
+      # pull-request comment says how to run the full suite.
+      - name: Decide the default touched visual check
+        id: touched
+        if: github.event_name == 'pull_request' && needs.run-labels.outputs.visual != 'true' && steps.visual-scope.outputs.has_stable_visual == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          ASTRYX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASTRYX_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          node .github/scripts/touched-components.mjs scope \
+            --analysis analysis.json \
+            --files "$FILES_PATH" \
+            --baseline-manifest .github/visual-baseline/manifest.json \
+            --out touched-scope.json \
+            --wide-verdict .visual-run/verdict.json
+
       - name: Download Storybook artifact
         if: (github.event_name == 'pull_request' || inputs.operation == 'release-check') && (github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true')
         uses: actions/download-artifact@v8
@@ -2389,7 +2398,7 @@ jobs:
 
       - name: Run the visual gate for the touched components
         id: visual
-        if: (github.event_name == 'pull_request') && steps.visual-scope.outputs.has_stable_visual == 'true'
+        if: (github.event_name == 'pull_request' && needs.run-labels.outputs.visual == 'true') && steps.visual-scope.outputs.has_stable_visual == 'true'
         env:
           BROAD_STABLE_VISUAL: ${{ steps.visual-scope.outputs.broad_stable_visual }}
           ASTRYX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -2476,6 +2485,44 @@ jobs:
             pass|changed) ;;
             *) echo "Visual evidence is incomplete: $STATUS"; exit 1 ;;
           esac
+
+      # Only touched components with an accepted baseline shot are compared
+      # (one a pull request adds has nothing to compare yet). Exit 0 is clean
+      # and 2 a change for review. A scope that plans no shot or has no stable
+      # story leaves no verdict, which reads as not-run; anything else is an
+      # infrastructure failure.
+      - name: Visual check for the default touched components
+        if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.visual_components != ''
+        env:
+          COMPONENTS: ${{ steps.touched.outputs.visual_components }}
+          ASTRYX_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ASTRYX_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          ASTRYX_VISUAL_SCOPE: touched
+        run: |
+          set +e
+          node .github/scripts/visual-gate/gate.mjs check \
+            --storybook-dir apps/storybook/dist \
+            --baseline .github/visual-baseline \
+            --out .visual-run \
+            --tiers component \
+            --components "$COMPONENTS" \
+            --no-scout \
+            --summary-output visual-summary.md 2> >(tee visual-gate.err >&2)
+          code=$?
+          set -e
+          case "$code" in
+            0|2) ;;
+            1)
+              if grep -qE 'planned no shots|no stable visual representative' visual-gate.err; then
+                rm -f .visual-run/verdict.json
+              else
+                exit 1
+              fi
+              ;;
+            3) rm -f .visual-run/verdict.json ;;
+            *) exit "$code" ;;
+          esac
+          if [ -f visual-summary.md ]; then cat visual-summary.md >> "$GITHUB_STEP_SUMMARY"; fi
 
       - name: Upload visual verdict and report
         if: (always() && github.event_name == 'pull_request') && steps.visual-scope.outputs.has_stable_visual == 'true'
@@ -2951,6 +2998,203 @@ jobs:
             --should-run "${{ steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true' }}" \
             --force-full "${{ steps.scope.outputs.force_full_component_audits }}" \
             --reports-dir rtl-shard-reports
+
+  # The default pull-request check for components: accessibility and RTL for
+  # only the components the change touches, on one standard runner, against
+  # this pull request's Storybook build, with pr-visual's verdict for the same
+  # components folded in (pr-visual stays the one visual owner, spec:AST-030
+  # FR12). It never widens to reverse dependents or a full suite: those run
+  # behind the ci:run-<suite> labels and in the release check. It writes
+  # touched-components.json, one row per component with each suite's
+  # pass/fail/changed/not-run result, or the wide flag and count, for the
+  # pull-request comment. No required context depends on it.
+  pr-touched-components:
+    name: Touched components (visual, accessibility, RTL)
+    needs: [build-storybook, pr-visual]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success') }}
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      wide_change: ${{ steps.touched.outputs.wide_change }}
+      component_count: ${{ steps.touched.outputs.component_count }}
+    steps:
+      # The shared scope action lists the pull request's changed files, which
+      # decide a wide change.
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: List the changed files
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          component-audit: 'true'
+
+      # The tested merge commit, as pr-visual checks out: a branch that
+      # predates this check has none of its scripts at its own head.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The accessibility baseline is read from the head, which built the
+      # Storybook this job audits: a branch behind a main fix that dropped a
+      # baseline entry would otherwise report that entry as new.
+      - name: Check out the head's accessibility baseline
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: .head-baseline
+          sparse-checkout: .github/a11y-baseline.json
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # A spec-only, docsite-only or tooling-only change has no analysis; it
+      # has no component either.
+      - name: Download analysis artifact
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-analysis
+
+      # More than five touched components, or a change to shared styles
+      # (themes, tokens, shared .stylex.ts), is a wide change: this check
+      # skips and the comment points to the ci:run-<suite> labels.
+      - name: Decide the touched components
+        id: touched
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          node .github/scripts/touched-components.mjs scope \
+            --analysis analysis.json \
+            --files "$FILES_PATH" \
+            --baseline-manifest .github/visual-baseline/manifest.json \
+            --head-sha "$HEAD_SHA" \
+            --out touched-components.json
+
+      - name: Skip when no component changed or the change is wide
+        if: steps.touched.outputs.has_components != 'true'
+        env:
+          WIDE: ${{ steps.touched.outputs.wide_change }}
+          COUNT: ${{ steps.touched.outputs.component_count }}
+        run: |
+          if [ "$WIDE" = true ]; then
+            echo "Wide change ($COUNT components): add ci:run-visual, ci:run-a11y or ci:run-rtl to run the full suite."
+          else
+            echo "No component changed; nothing to audit."
+          fi
+
+      - name: Setup Node and pnpm
+        if: steps.touched.outputs.has_components == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.touched.outputs.has_components == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        id: playwright
+        if: steps.touched.outputs.has_components == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # The same changed-component filters an opted-in pull request uses.
+      - name: Accessibility audit for the touched components
+        id: a11y
+        if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != ''
+        run: |
+          COMPONENTS=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)
+          if [ -z "$COMPONENTS" ]; then
+            echo "No touched component has accessibility stories."
+            exit 0
+          fi
+          node .github/scripts/accessibility-audit.js \
+            --storybook-dir apps/storybook/dist \
+            --output a11y-report.json \
+            --concurrency 4 \
+            --components "$COMPONENTS"
+
+      # A failed accessibility audit must not skip RTL: each suite reports
+      # its own result.
+      - name: RTL audit for the touched components
+        id: rtl
+        if: always() && steps.playwright.outcome == 'success' && steps.touched.outputs.has_components == 'true' && steps.touched.outputs.rtl_packages != ''
+        env:
+          PACKAGES: ${{ steps.touched.outputs.rtl_packages }}
+          OWNERS: ${{ steps.touched.outputs.rtl_owners }}
+        run: |
+          mkdir -p rtl-reports
+          IFS=',' read -ra PACKAGE_LIST <<< "$PACKAGES"
+          for PACKAGE in "${PACKAGE_LIST[@]}"; do
+            FILTER=$(tr ',' '\n' <<< "$OWNERS" | grep "^$PACKAGE/" | paste -sd, -)
+            [ -n "$FILTER" ] || continue
+            # Findings are the report's to judge, as in pr-rtl-shard: a
+            # nonzero exit (a failed check or a coverage gap) still writes the
+            # package report.
+            node apps/storybook/rtl-audit/rtl-audit.mjs \
+              --storybook-dir apps/storybook/dist \
+              --output "rtl-reports/$PACKAGE.json" \
+              --packages "$PACKAGE" \
+              --concurrency 8 \
+              --filter "$FILTER" ||
+              echo "RTL audit for $PACKAGE exited $?; the per-component report judges it."
+            test -s "rtl-reports/$PACKAGE.json"
+          done
+
+      # The visual result comes from pr-visual, the one visual owner: its
+      # default touched check, or its full check under ci:run-visual.
+      - name: Download pr-visual's verdict
+        if: always() && steps.touched.outputs.has_components == 'true' && (needs.pr-visual.result == 'success' || needs.pr-visual.result == 'failure')
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: visual-pr-report
+          path: .visual-run
+
+      - name: Report per-component results
+        if: always() && steps.touched.outputs.has_components == 'true'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          VISUAL_JOB: ${{ needs.pr-visual.result }}
+          A11Y_STEP: ${{ steps.a11y.outcome }}
+          RTL_STEP: ${{ steps.rtl.outcome }}
+        run: |
+          node .github/scripts/touched-components.mjs report \
+            --analysis analysis.json \
+            --visual .visual-run/verdict.json \
+            --visual-manifest .visual-run/manifest.json \
+            --visual-job "$VISUAL_JOB" \
+            --baseline-manifest .github/visual-baseline/manifest.json \
+            --a11y a11y-report.json \
+            --a11y-baseline .head-baseline/.github/a11y-baseline.json \
+            --a11y-step "$A11Y_STEP" \
+            --rtl-dir rtl-reports \
+            --rtl-step "$RTL_STEP" \
+            --head-sha "$HEAD_SHA" \
+            --out touched-components.json
+
+      - name: Upload touched-components results
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
+        uses: actions/upload-artifact@v7
+        with:
+          name: touched-components
+          path: |
+            touched-components.json
+            a11y-report.json
+            rtl-reports/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Release-time projection only: the existing owners above do all measurement.
   # A skipped owner or main drift must never look like passing release evidence.

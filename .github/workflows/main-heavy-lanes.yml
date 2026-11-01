@@ -101,15 +101,18 @@ jobs:
               });
               return jobs.some(job => job.name === 'release-authority' && job.conclusion === 'failure');
             };
+            // The commit a Main run tests: the one its name gives when it was
+            // dispatched with `sha`, otherwise its event's commit (FR22).
+            const tested = run => /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ?? run.head_sha;
             const covered = async (runs, checkAuthority) => {
-              for (const run of runs.filter(item => item.conclusion !== 'cancelled' && item.head_sha === tip)) {
+              for (const run of runs.filter(item => item.conclusion !== 'cancelled' && tested(item) === tip)) {
                 if (!checkAuthority || run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) return true;
               }
               return false;
             };
-            const due = async (runs, label, checkAuthority) => {
+            const due = async (runs, label, checkAuthority, coverRuns = runs) => {
               const counted = runs.filter(run => run.conclusion !== 'cancelled');
-              if (await covered(runs, checkAuthority)) {
+              if (await covered(coverRuns, checkAuthority)) {
                 core.notice(`main's tip ${short} already has a ${label}.`);
                 return false;
               }
@@ -126,13 +129,17 @@ jobs:
             const checks = byBot(allChecks);
             const units = byBot(allUnits);
             const heavy = await due(checks, 'release-check', true);
-            let unit = await due(units, 'full unit run', false);
+            // A person's run of main's tip covers it too.
+            let unit = await due(units, 'full unit run', false, allUnits);
 
             // A full unit run that did not complete (FR21): run the next one at
             // once and tell the guardian, after the dispatches below. A newer
             // run, such as a recheck that replaced it, leaves nothing to do.
             const INCOMPLETE = ['cancelled', 'skipped', 'timed_out', 'startup_failure', 'stale', 'action_required'];
-            const newest = units[0];
+            // The newest run of main that may replace it: any dispatched run of
+            // main's tip, a person's included, but not a person's validation
+            // of an older commit.
+            const newest = allUnits.find(run => tested(run) === run.head_sha);
             const incomplete = newest?.status === 'completed' && INCOMPLETE.includes(newest.conclusion);
             if (incomplete) unit = true;
 
@@ -171,7 +178,9 @@ jobs:
               }
             }
             if (unit || ((heavy || personCheckAtTip) && !unitAtTip)) {
-              await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'deploy.yml', ref: 'main'});
+              // Named, so the run tests exactly this commit even if main moves
+              // before it starts.
+              await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'deploy.yml', ref: 'main', inputs: {sha: tip}});
             }
 
             if (incomplete) {

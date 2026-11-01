@@ -3,24 +3,43 @@
 # Validate every push to main. Stable docs, Storybook, and Sandbox deploy through
 # the Vercel project; this workflow preserves the post-merge test gates only.
 name: Main
+# A run that validates an older commit is named for it, so it never reads as a
+# check of main's tip; every other run keeps its default name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.sha != '' && format('Main validation of {0}', inputs.sha) || '' }}"
 
 on:
   push:
     branches: ['main']
   workflow_dispatch:
+    inputs:
+      sha:
+        description: "Full SHA of a commit in main's history from #9164 on to validate; empty validates main's tip"
+        type: string
+        required: false
+      recheck:
+        description: "Release re-check of main's tip, sent by the release re-check workflow: takes the validation group at once"
+        type: boolean
+        default: false
 
 permissions: {}
 
-# Push runs (the fast checks) share one group, and a waiting one is replaced by
-# a newer push. The full unit runs main-heavy-lanes.yml dispatches have their
-# own group and are never cancelled by a push (spec:AST-030 FR21).
+# Push runs (the fast checks) share one group, and a newer push replaces an
+# older waiting one. Full unit runs have a group of their own that no push
+# cancels: the scheduler's (main-heavy-lanes.yml, which names the commit) and a
+# person's run of main's tip queue there, one at a time (spec:AST-030 FR21).
+# A person's dispatch that names an older `sha` validates it in a group of its
+# own, so it never replaces or cancels another run. Only a release re-check,
+# which the release re-check workflow sends with the workflow token and without
+# `sha`, cancels the running unit run: it is itself a full validation of main's
+# tip, so the cancelled run's commits stay covered (spec:AST-030 FR22).
 concurrency:
-  group: "${{ github.event_name == 'push' && 'main-validation' || 'main-unit-tests' }}"
-  cancel-in-progress: false
+  group: "${{ github.event_name == 'push' && 'main-validation' || (inputs.sha != '' && github.triggering_actor != 'github-actions[bot]' && format('main-validation-sha-{0}', github.run_id)) || 'main-unit-tests' }}"
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && inputs.sha == '' && github.triggering_actor == 'github-actions[bot]' }}
 
 jobs:
   # The one commit every lane and leg of this run tests. A push validates the
-  # pushed commit; a dispatch, main's tip when it starts. Each leg resolving
+  # pushed commit; a dispatch, its `sha` input when given (it must be in main's
+  # history), else main's tip when it starts. Each leg resolving
   # `main` itself could straddle a merge, shard different file lists, and skip
   # a file in every leg.
   main-commit:
@@ -35,18 +54,51 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            // The event's commit: the pushed one, or main's tip when the run
-            // was dispatched, so the run's pass or fail is that exact commit's.
-            core.setOutput('sha', context.sha);
+            let sha = context.sha;
+            if (context.eventName !== 'push') {
+              const {data} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+              sha = data.commit.sha;
+              // Not trimmed: the concurrency group reads the raw input, so a
+              // value of only spaces must fail here, not validate the tip.
+              const requested = context.payload.inputs?.sha ?? '';
+              if (requested !== '') {
+                if (!/^[0-9a-f]{40}$/.test(requested)) {
+                  throw new Error(`sha must be a full 40-character commit SHA, got "${requested}".`);
+                }
+                const {data: comparison} = await github.rest.repos.compareCommitsWithBasehead({
+                  ...context.repo,
+                  basehead: `${requested}...${sha}`,
+                });
+                if (!['identical', 'ahead'].includes(comparison.status)) {
+                  throw new Error(`${requested} is not in main's history.`);
+                }
+                // The typecheck lane keeps this commit's size records, which
+                // needs main's size-record scripts (the commit of #9164 and
+                // later); an older commit cannot run that lane.
+                const FLOOR = 'f0039ff70521b4f51a2a64ea15f2b687e6374482';
+                const {data: since} = await github.rest.repos.compareCommitsWithBasehead({
+                  ...context.repo,
+                  basehead: `${FLOOR}...${requested}`,
+                });
+                if (!['identical', 'ahead'].includes(since.status)) {
+                  throw new Error(`${requested} predates the size records this run's typecheck lane keeps; validate a later commit.`);
+                }
+                sha = requested;
+              }
+            }
+            core.setOutput('sha', sha);
 
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
   sync-exports:
+    needs: [main-commit]
     runs-on: ubuntu-slim
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.main-commit.outputs.sha }}
 
       - name: Check package.json exports are in sync
         run: node scripts/sync-exports.js --check
@@ -64,18 +116,24 @@ jobs:
   # typecheck needs the `pnpm build` it follows, so they stay together in
   # their own lane and take the build with them.
   #
-  # Both Vitest lanes split into four legs, as in ci.yml: one job each ran
-  # test-ui in ~18 minutes and test-node in ~28, so main's gate took about half
-  # an hour while the PR gate took under fifteen. `test` joins the legs.
-  # The unit lanes run the full suites in a dispatched run (main-heavy-lanes.yml,
-  # about hourly, spec:AST-030 FR21), never on a push.
+  # Both Vitest lanes split into legs that all run at once, with no
+  # max-parallel hold: a validation of main may cost more runner-minutes to
+  # finish sooner, so the release train can re-check a fix within minutes
+  # (spec:AST-030 FR22, DEC-17). At four legs each, test-node's slowest leg took ~8 minutes
+  # and test-ui's ~6. Six legs each bring every leg near the typecheck lane
+  # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
+  # its own) sets the floor, and more legs would not move it. `test` joins the
+  # legs.
+  # The unit lanes run the full suites only in a dispatched run (about hourly,
+  # from main-heavy-lanes.yml; spec:AST-030 FR21), never on a push.
   test-ui:
     needs: [main-commit]
     if: github.event_name != 'push'
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -98,10 +156,11 @@ jobs:
   test-node:
     needs: [main-commit]
     if: github.event_name != 'push'
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     # Vitest runs one test file per CPU beyond the first, so the 2-core runner
     # ran this suite one file at a time (~23 min). Four cores give it three.
     runs-on: ubuntu-latest
@@ -135,15 +194,16 @@ jobs:
 
       - run: pnpm build
 
-      # A pull request measures its merge base's component sizes from this
-      # build instead of building the base again (ci.yml size-base).
-      - name: Keep this commit's package builds for PR size reports
+      # A pull request reads its merge base's component sizes from this record
+      # instead of building the base (ci.yml build-storybook).
+      - name: Record component sizes
+        run: node .github/scripts/analyze-pr.js --main-record --output component-size.json
+
+      - name: Keep this commit's component sizes for PR size reports
         uses: actions/upload-artifact@v7
         with:
-          name: dists-main-${{ needs.main-commit.outputs.sha }}
-          path: |
-            packages/*/dist/
-            packages/themes/*/dist/
+          name: component-size-main-${{ needs.main-commit.outputs.sha }}
+          path: component-size.json
           retention-days: 14
 
       # A pull request compares its published package sizes with its merge

@@ -4,6 +4,11 @@ This directory contains records for consequential shared-system changes. Each
 spec lives under `docs/specs/<id>-<slug>/spec.md`; an optional sibling `plan.md`
 is used only for multi-step implementation.
 
+Component and module contracts live under `docs/specs/components/`, one folder
+per component, holding the core record beside each platform's
+(`components/Avatar/Avatar.spec.md` and `components/Avatar/Avatar.swift.spec.md`).
+[`docs/README.md`](../README.md) has the layout.
+
 Templates live separately under `docs/templates/knowledge/`. Existing records
 are validated against `docs/schemas/knowledge/`; changing a template does not
 silently change accepted history.

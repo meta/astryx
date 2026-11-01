@@ -198,6 +198,24 @@ describe('the full unit run receipt for a cut commit (spec:AST-030 FR21)', () =>
     });
   });
 
+  it('takes a validation that names the cut commit, and not one that names another', async () => {
+    const LATER = 'f'.repeat(40);
+    const named = (id, tested) => ({
+      ...run(id, LATER),
+      display_title: `Main validation of ${tested}`,
+    });
+    const {result} = await unit({
+      runs: [named(31, OTHER), named(30, CUT)],
+      jobs: {30: legs('success'), 31: legs('success')},
+    });
+    expect(result.id).toBe(30);
+    const none = await unit({
+      runs: [{...run(32, CUT), display_title: `Main validation of ${OTHER}`}],
+      jobs: {32: legs('success')},
+    });
+    expect(none.result).toBeNull();
+  });
+
   it('does not take a push run, whose unit legs skipped, for a unit run', async () => {
     const {result, messages} = await unit({
       runs: [run(6, CUT)],

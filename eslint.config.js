@@ -47,19 +47,6 @@ const internalBarrelBaseline = JSON.parse(
   ),
 );
 
-// Guarded values whose bare nullish JSX guard or hand-written isRenderable
-// check predates making `@astryx/no-nullish-jsx-guard` fail strict lint, by
-// repo-relative file, once per check. The list only shrinks.
-const nullishGuardBaseline = JSON.parse(
-  readFileSync(
-    path.join(
-      import.meta.dirname,
-      'internal/eslint-plugin-astryx/no-nullish-jsx-guard.baseline.json',
-    ),
-    'utf8',
-  ),
-);
-
 // Private `data-astryx-*` attributes written by hand before
 // `@astryx/no-raw-private-attribute` arrived, by repo-relative file, once per
 // site. The list only shrinks.
@@ -912,11 +899,9 @@ export default defineConfig(
     },
   },
   // A slot's presence is decided by `isRenderable`, never a bare `!= null`
-  // guard or a hand-written copy of its checks. The checks that predate this
-  // block are listed in the baseline, once per check of each value, and that
-  // many stay allowed until migrated; one more is reported (an error in
-  // strict mode, so a pull request that adds one fails lint, while main stays
-  // green).
+  // guard or a hand-written copy of its checks (an error in strict mode). A
+  // check of a string, number or data value says so with a disable comment
+  // for this rule that gives its reason.
   {
     files: nullishGuardScope.files,
     ignores: nullishGuardScope.ignores,
@@ -924,10 +909,7 @@ export default defineConfig(
       '@astryx': astryxEslintPlugin,
     },
     rules: {
-      '@astryx/no-nullish-jsx-guard': [
-        reactSeverity,
-        {baseline: nullishGuardBaseline, root: import.meta.dirname},
-      ],
+      '@astryx/no-nullish-jsx-guard': reactSeverity,
     },
   },
   // A private `data-astryx-*` attribute is written once, in its owner module

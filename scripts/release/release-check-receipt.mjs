@@ -121,19 +121,39 @@ async function passedUnitRun({github, owner, repo, run}) {
   );
 }
 
-/** The passing full unit run for exactly `sha`, or null. */
+/**
+ * The commit a Main run tests: the one its name gives when it was dispatched
+ * with `sha`, otherwise its event's commit (spec:AST-030 FR22).
+ */
+function testedSha(run) {
+  return (
+    /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ??
+    run.head_sha
+  );
+}
+
+/** The passing full unit run that tested exactly `sha`, or null. */
 export async function findUnitRun({github, owner, repo, sha}) {
-  const {data} = await github.rest.actions.listWorkflowRuns({
-    owner,
-    repo,
-    workflow_id: 'deploy.yml',
-    branch: 'main',
-    status: 'success',
-    head_sha: sha,
-    per_page: 30,
-  });
-  for (const run of data.workflow_runs.filter(item => item.head_sha === sha)) {
-    if (await passedUnitRun({github, owner, repo, run})) return run;
+  const list = async extra => {
+    const {data} = await github.rest.actions.listWorkflowRuns({
+      owner,
+      repo,
+      workflow_id: 'deploy.yml',
+      branch: 'main',
+      status: 'success',
+      ...extra,
+    });
+    return data.workflow_runs.filter(item => testedSha(item) === sha);
+  };
+  // A run of main's tip carries the commit as its event's; a validation of an
+  // older commit names it, under a later event commit.
+  for (const runs of [
+    await list({head_sha: sha, per_page: 30}),
+    await list({event: 'workflow_dispatch', per_page: 100}),
+  ]) {
+    for (const run of runs) {
+      if (await passedUnitRun({github, owner, repo, run})) return run;
+    }
   }
   return null;
 }

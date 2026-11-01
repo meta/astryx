@@ -241,19 +241,21 @@ function createHarness({
           state.calls.push(`status:${input.context}:${input.state}`);
           return {data: status};
         },
-        getContent: async ({ref, path: filePath}) => ({
-          data: {
-            content: Buffer.from(
-              `${ref}:${filePath}` in contentAt
-                ? contentAt[`${ref}:${filePath}`]
-                : ref in contentAt
-                  ? contentAt[ref]
-                  : ref === state.pr.head.sha
-                    ? headContent
-                    : baseContent,
-            ).toString('base64'),
-          },
-        }),
+        getContent: async ({ref, path: filePath}) => {
+          const text =
+            `${ref}:${filePath}` in contentAt
+              ? contentAt[`${ref}:${filePath}`]
+              : ref in contentAt
+                ? contentAt[ref]
+                : ref === state.pr.head.sha
+                  ? headContent
+                  : baseContent;
+          // null: the path is absent at that commit.
+          if (text === null) {
+            throw Object.assign(new Error('Not Found'), {status: 404});
+          }
+          return {data: {content: Buffer.from(text).toString('base64')}};
+        },
       },
     },
     graphql: async query => {
@@ -303,6 +305,33 @@ function published(state) {
   );
 }
 
+/** Count every GitHub API call a run makes (paginated lists count once). */
+function countApiCalls(harness) {
+  const counter = {total: 0};
+  for (const namespace of Object.values(harness.github.rest)) {
+    for (const [name, method] of Object.entries(namespace)) {
+      if (typeof method !== 'function') continue;
+      namespace[name] = async (...args) => {
+        counter.total += 1;
+        return method(...args);
+      };
+    }
+  }
+  return counter;
+}
+
+const codeOnlyFile = {
+  filename: 'packages/core/src/Button/Button.tsx',
+  status: 'modified',
+};
+
+/** A pull_request_target event that carries the full pull request. */
+function fullPrContext(harness, runId) {
+  const ctx = context({runId, action: 'synchronize'});
+  ctx.payload.pull_request = structuredClone(harness.state.pr);
+  return ctx;
+}
+
 function latestReviewGate(state) {
   return state.statuses.find(status => status.context === 'review-required');
 }
@@ -319,7 +348,7 @@ const designRecord = {
 };
 const currentDesign = 'kind: design\nauthority: current\n';
 const componentRecord = {
-  filename: 'packages/core/src/Button/Button.spec.md',
+  filename: 'docs/specs/components/Button/Button.spec.md',
   status: 'modified',
 };
 function currentComponentSpec(decision, body = 'Body.') {
@@ -1353,6 +1382,232 @@ describe('spec owner workflow reconciliation', () => {
       });
     });
 
+    describe('a large spec move', () => {
+      // Every component record moved, unchanged, from packages to docs.
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+        sha: `blob-${i}`,
+      }));
+
+      function countContentReads(harness) {
+        const counter = {reads: 0};
+        const getContent = harness.github.rest.repos.getContent;
+        harness.github.rest.repos.getContent = async input => {
+          counter.reads += 1;
+          return getContent(input);
+        };
+        return counter;
+      }
+
+      it('keeps an approval without re-reading files whose blobs match', async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[oldHead]: currentRecord},
+          filesAt: {[oldHead]: moved},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        const counter = countContentReads(harness);
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state).state).toBe('success');
+        // The snapshot's base and head text for each moved record, and
+        // nothing more: the fingerprint reuses the head text, and the
+        // approved commit's identical blobs need no read (was 1,800).
+        expect(counter.reads).toBe(600);
+      });
+
+      it('reads and normalizes only a path whose blob differs', async () => {
+        const target = moved[7];
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          // A bookkeeping-only edit: normalization drops it, so the approval
+          // still counts.
+          contentAt: {
+            [`${oldHead}:${target.filename}`]: currentRecord.replace(
+              'approved_at: 2026-10-28',
+              'approved_at: 2026-10-27',
+            ),
+          },
+          filesAt: {
+            [oldHead]: moved.map(file =>
+              file === target ? {...file, sha: 'blob-earlier'} : file,
+            ),
+          },
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        const counter = countContentReads(harness);
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state).state).toBe('success');
+        expect(counter.reads).toBe(601);
+      });
+
+      it('resets when the head copies a record the approval renamed', async () => {
+        // The approved commit moved docs/specs/x to docs/specs/y; the head
+        // copies it instead, so docs/specs/x is still there.
+        const x = 'docs/specs/x/spec.md';
+        const moveOrCopy = status => [
+          {
+            filename: 'docs/specs/y/spec.md',
+            previous_filename: x,
+            status,
+            changes: 0,
+            sha: 'blob-y',
+          },
+        ];
+        const harness = createHarness({
+          changedFiles: moveOrCopy('copied'),
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${x}`]: null},
+          filesAt: {[oldHead]: moveOrCopy('renamed')},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+
+      it('resets when a path renamed away is re-added with other text', async () => {
+        // docs/specs/a moves to docs/specs/b, and docs/specs/c takes its
+        // place at docs/specs/a, with text that changed since the approval.
+        const a = 'docs/specs/a/spec.md';
+        const swap = sha => [
+          {
+            filename: a,
+            previous_filename: 'docs/specs/c/spec.md',
+            status: 'renamed',
+            changes: 2,
+            sha,
+          },
+          {
+            filename: 'docs/specs/b/spec.md',
+            previous_filename: a,
+            status: 'renamed',
+            changes: 0,
+            sha: 'blob-b',
+          },
+        ];
+        const harness = createHarness({
+          changedFiles: swap('blob-a-now'),
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${a}`]: changedRecord},
+          filesAt: {[oldHead]: swap('blob-a-approved')},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+
+      it("still resets when a moved file's text changed", async () => {
+        const target = moved[7];
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${target.filename}`]: changedRecord},
+          filesAt: {
+            [oldHead]: moved.map(file =>
+              file === target ? {...file, sha: 'blob-earlier'} : file,
+            ),
+          },
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+    });
+
+    describe('renamed records', () => {
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+        sha: `blob-${i}`,
+      }));
+      const baseTree = moved.map(file => ({
+        path: file.previous_filename,
+        type: 'blob',
+        sha: file.sha,
+      }));
+
+      async function reconcileCounting({tree, edited = null}) {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          comments: [ownerComment(`/approve-spec ${head}`)],
+        });
+        harness.github.rest.git = {
+          getTree: async () => {
+            if (!tree) throw new Error('Not available');
+            return {
+              data: {
+                tree: tree.map(entry =>
+                  entry.path === edited
+                    ? {...entry, sha: 'blob-edited'}
+                    : entry,
+                ),
+                truncated: false,
+              },
+            };
+          },
+        };
+        const counter = {reads: 0};
+        const getContent = harness.github.rest.repos.getContent;
+        harness.github.rest.repos.getContent = async input => {
+          counter.reads += 1;
+          return getContent(input);
+        };
+        await run(harness, context({runId: 100n}));
+        return {reads: counter.reads, gate: latestReviewGate(harness.state)};
+      }
+
+      it('reuses the head text as the base text of an unchanged rename', async () => {
+        const withoutTree = await reconcileCounting({tree: null});
+        const withTree = await reconcileCounting({tree: baseTree});
+
+        expect(withTree.gate).toEqual(withoutTree.gate);
+        expect(withTree.gate.state).toBe('success');
+        expect(withoutTree.reads - withTree.reads).toBe(300);
+      });
+
+      it('still reads the base text when the base changed the old path', async () => {
+        const withoutTree = await reconcileCounting({tree: null});
+        const oneEdited = await reconcileCounting({
+          tree: baseTree,
+          edited: moved[7].previous_filename,
+        });
+
+        expect(withoutTree.reads - oneEdited.reads).toBe(299);
+      });
+    });
+
     it('reads a spec wait as satisfied code review, not an older code wait', async () => {
       const harness = createHarness({
         headContent: currentRecord,
@@ -1451,6 +1706,83 @@ describe('spec owner workflow reconciliation', () => {
       await run(harness, context({runId: 100n}));
 
       expect(latestReviewGate(harness.state).state).toBe('pending');
+    });
+  });
+});
+
+describe('a head that changes no knowledge record', () => {
+  it('is decided once, then read back in two calls with nothing written', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+
+    await run(harness, fullPrContext(harness, 100n));
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
+    });
+    expect(latestReviewGate(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'No code review required.',
+    });
+
+    const statusCount = harness.state.statuses.length;
+    const counter = countApiCalls(harness);
+    await run(harness, fullPrContext(harness, 101n));
+
+    // The file list and the head's statuses; no status is written again.
+    expect(counter.total).toBe(2);
+    expect(harness.state.statuses).toHaveLength(statusCount);
+  });
+
+  it('decides a new head in a handful of calls, not a full reconcile', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    const counter = countApiCalls(harness);
+
+    await run(harness, fullPrContext(harness, 100n));
+
+    // Was 27 (pull ×3, files, reviews, comments, timeline, statuses ×6,
+    // mirror and gate writes) before this head path.
+    expect(counter.total).toBeLessThanOrEqual(8);
+  });
+
+  it('answers an owner review on a decided head in three calls', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    await run(harness, fullPrContext(harness, 100n));
+    const counter = countApiCalls(harness);
+
+    await run(
+      harness,
+      context({
+        runId: 101n,
+        eventName: 'pull_request_review',
+        action: 'submitted',
+        review: {state: 'approved', user: {login: 'cixzhang'}},
+      }),
+    );
+
+    // The review event carries no file count, so the pull request is read.
+    expect(counter.total).toBe(3);
+  });
+
+  it('falls back to the full reconcile when its file read fails', async () => {
+    const harness = createHarness({changedFile: codeOnlyFile});
+    let failed = false;
+    const listFiles = harness.github.rest.pulls.listFiles;
+    harness.github.rest.pulls.listFiles = async options => {
+      if (!failed) {
+        failed = true;
+        throw new Error('listFiles failed');
+      }
+      return listFiles(options);
+    };
+
+    await run(harness, fullPrContext(harness, 100n));
+
+    expect(harness.state.calls).toContain(
+      'warning:Falling back to the full reconcile: listFiles failed',
+    );
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'success',
+      description: 'Mirrors review-required · spec ok',
     });
   });
 });
