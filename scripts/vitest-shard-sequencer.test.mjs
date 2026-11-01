@@ -57,16 +57,17 @@ describe('duration-balanced Node legs', () => {
   );
 
   it('counts a file with no recorded time as the median', () => {
-    const seconds = {'a.test.mjs': 10, 'b.test.mjs': 2, 'c.test.mjs': 1};
+    const seconds = {'a.test.mjs': 10, 'b.test.mjs': 6, 'c.test.mjs': 1};
     const legs = partitionByDuration(
       ['a.test.mjs', 'b.test.mjs', 'c.test.mjs', 'new.test.mjs'],
       2,
       seconds,
     );
-    // a (10) alone; b, new (2, as the median) and c share the other leg.
+    // new counts as 6, the median: a (10) and c (1) share one leg, b and new
+    // (6 each) the other. Counted as 1 or as 10 it would land elsewhere.
     expect(legs).toEqual([
-      ['a.test.mjs'],
-      ['b.test.mjs', 'c.test.mjs', 'new.test.mjs'],
+      ['a.test.mjs', 'c.test.mjs'],
+      ['b.test.mjs', 'new.test.mjs'],
     ]);
   });
 
