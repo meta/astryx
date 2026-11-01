@@ -7,13 +7,15 @@
  *   the CLI's docs; core's and Lab's component source
  * @output Pins architecture:react-component-runtime INV13's bundle and
  *   boundary claims: a public import of Core (each subpath, and each hook on
- *   its own) carries none of the gesture code unless it is listed as using a
+ *   its own) ships none of the gesture code at once (in its entry chunk and
+ *   the chunks that chunk imports statically) unless it is listed as using a
  *   gesture, Button and TextInput never do, and a failure names the import
- *   chain that brings it; the root entry
- *   carries only the gesture code its touch components import; two components
+ *   chain that brings it; the root entry ships at once only the gesture code
+ *   its touch components import; a chunk that brings it later is a
+ *   component's prop-gated gesture layer, each named here; two components
  *   that import the touch module share one copy per page; only the internal
  *   `internal/touch` entry reaches it, and no consumer doc or component
- *   `import()` does
+ *   `import()` names it
  * @position Node test over source, so it needs no build
  */
 
@@ -81,6 +83,41 @@ function outputsOf(entries) {
   );
 }
 
+/**
+ * The bytes each source module puts in what a build's entry ships at once:
+ * the entry's chunk and every chunk it imports statically, not a chunk only
+ * an `import()` brings (INV13: a component's prop-gated gesture layer).
+ */
+function shippedAtOnce(metafile, entryPoint) {
+  const outputs = metafile.outputs;
+  const start = Object.keys(outputs).find(
+    file => outputs[file].entryPoint === entryPoint,
+  );
+  const seen = new Set();
+  const queue = start == null ? [] : [start];
+  while (queue.length > 0) {
+    const file = queue.shift();
+    if (seen.has(file)) {
+      continue;
+    }
+    seen.add(file);
+    for (const {path: next, kind} of outputs[file].imports) {
+      if (kind !== 'dynamic-import' && outputs[next] != null) {
+        queue.push(next);
+      }
+    }
+  }
+  const bytes = {};
+  for (const file of seen) {
+    for (const [input, {bytesInOutput}] of Object.entries(
+      outputs[file].inputs,
+    )) {
+      bytes[input] = (bytes[input] ?? 0) + bytesInOutput;
+    }
+  }
+  return bytes;
+}
+
 /** The inputs matching `pattern` that put bytes in `bytes`. */
 function bytesOf(bytes, pattern = PRIMITIVE_INPUT) {
   return Object.entries(bytes).filter(
@@ -118,7 +155,21 @@ function filesUnder(dir, pattern) {
  * gives a component its gesture adds that component's import, and each import
  * that reaches it, with a comment naming the gesture.
  */
-const GESTURE_USERS = new Set([]);
+const GESTURE_USERS = new Set([
+  // The public pan, which the root's createPanGesture shares.
+  'hooks: usePanGesture',
+  // The snap-point drag, which moves an element on that pan.
+  'hooks: useDragToSnapPoints',
+]);
+
+/**
+ * The prop-gated gesture layers a component loads with import() (INV13): each
+ * names the prop that turns its gesture on.
+ */
+const LAZY_GESTURE_LAYERS = [
+  // Item's swipe actions (`swipeActions`, spec:AST-057).
+  'packages/core/src/Item/ItemSwipeLayer.tsx',
+];
 
 /** Public imports that carry no gesture code, whatever the list above says. */
 const NEVER_GESTURE_USERS = ['Button', 'TextInput'];
@@ -175,11 +226,28 @@ function exportNamesOf(file) {
 }
 
 /**
- * The gesture modules each of `imports` ships, with their bytes and the import
- * chain that brings the first of them. Each import is an entry point of one
- * build: without code splitting, each output holds only what its own entry
- * reaches, so it is that import built on its own, and esbuild builds them all
- * at once instead of one rebuild after another.
+ * Leaves every `import()` out of a build: what it loads comes later, in a
+ * chunk of its own (INV13: a component's prop-gated gesture layer), so an
+ * output holds only what its import ships at once.
+ */
+const DYNAMIC_IMPORTS_LATER = {
+  name: 'dynamic-imports-later',
+  setup(build) {
+    build.onResolve({filter: /.*/}, args =>
+      args.kind === 'dynamic-import'
+        ? {path: args.path, external: true}
+        : undefined,
+    );
+  },
+};
+
+/**
+ * The gesture modules each of `imports` ships at once, with their bytes and
+ * the import chain that brings the first of them. Each import is an entry
+ * point of one build: without code splitting, each output holds only what its
+ * own entry reaches, so it is that import built on its own, and esbuild
+ * builds them all at once instead of one rebuild after another. An
+ * `import()` stays out of the build (DYNAMIC_IMPORTS_LATER).
  */
 async function gestureCarriers(imports) {
   const dir = fs.mkdtempSync(path.join(scratch, 'public-imports-'));
@@ -192,6 +260,7 @@ async function gestureCarriers(imports) {
     ...BUILD_OPTIONS,
     entryPoints: entries.map(entry => path.join(REPO, entry)),
     splitting: false,
+    plugins: [DYNAMIC_IMPORTS_LATER],
   });
   const outputs = new Map(
     Object.values(metafile.outputs).map(output => [output.entryPoint, output]),
@@ -230,8 +299,12 @@ function importChain(metafile, from, to) {
     if (current === to) {
       break;
     }
-    for (const {path: next} of metafile.inputs[current]?.imports ?? []) {
-      if (!previous.has(next) && metafile.inputs[next] != null) {
+    for (const {path: next, kind} of metafile.inputs[current]?.imports ?? []) {
+      if (
+        kind !== 'dynamic-import' &&
+        !previous.has(next) &&
+        metafile.inputs[next] != null
+      ) {
         previous.set(next, current);
         queue.push(next);
       }
@@ -261,6 +334,32 @@ describe('the touch module in bundles', () => {
     ).toEqual([]);
   }, 120_000);
 
+  it('counts what an import ships at once, not a layer it loads later', async () => {
+    // INV13: a gesture a prop turns on lives in a layer the component loads
+    // with import(); a page that never sets the prop carries none of it.
+    const touch = JSON.stringify(path.join(CORE_SRC, 'internal/touch.ts'));
+    const layer = entryWith(
+      'lazy-layer.ts',
+      `import {GestureArena} from ${touch};
+export default () => new GestureArena();
+`,
+    );
+    const carriers = await gestureCarriers([
+      {
+        name: 'Eager',
+        source: `import {GestureArena} from ${touch};
+export const Eager = () => new GestureArena();
+`,
+      },
+      {
+        name: 'Lazy',
+        source: `export const Lazy = () => import(${JSON.stringify(layer)});
+`,
+      },
+    ]);
+    expect(carriers.map(({name}) => name)).toEqual(['Eager']);
+  }, 120_000);
+
   it('is in none of the imports that never use a gesture', async () => {
     const strict = publicImports().filter(({name}) =>
       NEVER_GESTURE_USERS.includes(name),
@@ -283,14 +382,50 @@ describe('the touch module in bundles', () => {
         )
       ).flatMap(({gestureModules}) => gestureModules.map(([input]) => input)),
     );
-    const inRoot = outputsOf([path.join(CORE_SRC, 'index.ts')]).flatMap(bytes =>
-      bytesOf(bytes).map(([input]) => input),
-    );
+    const root = path.join(CORE_SRC, 'index.ts');
+    const {metafile} = esbuild.buildSync({
+      ...BUILD_OPTIONS,
+      entryPoints: [root],
+      splitting: true,
+    });
+    const inRoot = bytesOf(
+      shippedAtOnce(metafile, path.relative(REPO, root)),
+    ).map(([input]) => input);
     expect(
       [...new Set(inRoot)]
         .filter(input => !used.has(input))
         .map(input => input.replace('packages/core/src/', '')),
     ).toEqual([]);
+  }, 120_000);
+
+  it('is brought later only by a component’s prop-gated gesture layer', () => {
+    // INV13: a gesture a prop turns on lives in a layer its component loads
+    // with import() when the prop is first set. Each such layer is named in
+    // LAZY_GESTURE_LAYERS, so a new one shows up in review.
+    const root = path.join(CORE_SRC, 'index.ts');
+    const {metafile} = esbuild.buildSync({
+      ...BUILD_OPTIONS,
+      entryPoints: [root],
+      splitting: true,
+    });
+    const atOnce = shippedAtOnce(metafile, path.relative(REPO, root));
+    const lazyLayers = new Set();
+    for (const output of Object.values(metafile.outputs)) {
+      for (const {path: next, kind} of output.imports) {
+        const chunk = metafile.outputs[next];
+        if (kind !== 'dynamic-import' || chunk == null) {
+          continue;
+        }
+        const later = Object.entries(chunk.inputs).filter(
+          ([input, {bytesInOutput}]) =>
+            PRIMITIVE_INPUT.test(input) && bytesInOutput > 0 && !atOnce[input],
+        );
+        if (later.length > 0) {
+          lazyLayers.add(chunk.entryPoint);
+        }
+      }
+    }
+    expect([...lazyLayers].sort()).toEqual([...LAZY_GESTURE_LAYERS].sort());
   }, 120_000);
 
   it('is absent from the utils entry', () => {

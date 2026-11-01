@@ -16,7 +16,8 @@
  * names, each by its table path, such as `springs.settle` or
  * `timing.curves.move`: a table lists its roles when it registers, and every
  * other value, a component's measured spring included, stays an internal
- * constant. No shipped component reads the roles yet.
+ * constant. The snap-point drag's settle (`springs.settle`) is one a shipped
+ * component reads.
  * A role is carried by one CSS custom property, `--motion-` followed by its id
  * in kebab case (`--motion-springs-settle`), which nothing public writes; an
  * empty property means the table's value, so the table stays the one measured

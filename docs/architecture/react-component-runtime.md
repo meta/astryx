@@ -257,7 +257,13 @@ those contracts.
   (`spec:AST-105` FR1); a pull that a scroll area hands over only at its
   edge (`spec:AST-094` FR14, FR19); a snap-point drag whose release can
   dismiss its surface, judged by the use's measured projection (`spec:AST-094`
-  FR36); a drag on one element that moves another (a sheet's handle and
+  FR36); a drag's own pointer and scroll filter, claim distance and begin
+  gate, and a snap-point drag's own model of where a drag draws its element
+  and where a release lands (a row's swipe: no mouse drag, UIKit's dead zone,
+  tracking spring and release rule for a finger, and a full swipe reached by
+  position only, `spec:AST-057` AR2, FR5); a drag drawn into one custom
+  property that every part of its component reads (`spec:AST-057` FR2); a
+  drag on one element that moves another (a sheet's handle and
   scrolling body move the sheet; its dim is the layer runtime's backdrop
   tint, `architecture:layer-runtime` INV14); the animator's jobs beyond the
   public handle: a motion role other than `springs.stateChange`
@@ -267,12 +273,16 @@ those contracts.
   (`design:reduced-motion` DR1–DR3); and the touch hit-area expansion.
   Components import
   them statically, and the bundler
-  keeps one copy per page however many components use them. There is no
+  keeps one copy per page however many components use them. A gesture that
+  a prop turns on (a row's swipe actions, `spec:AST-057`) lives in a layer
+  that the component loads with `import()` the first time the prop is set;
+  the layer imports the modules statically, so a page that never sets the
+  prop ships none of them. There is no
   install call, no public entry, and no public installed check; tests reset
   the modules through an internal hook only. A component's own touch logic is
   small glue in its own build over these modules. The gesture host attaches for
   every pointer, with no touch-only query; under a fine pointer only a component that
-  uses a gesture listens (`spec:AST-094` FR19, FR24, FR43). The modules are not public exports and are not
+  uses a gesture listens (`spec:AST-094` FR19, FR24, FR43). The gesture host, press feedback, page hold, finger-scroll watch and click guard hear document-wide input through one capture-phase listener per event type on the window, present while a subscriber needs it. They run in subscription order, before any document or element listener; it is passive unless a subscriber cancels the event. The modules are not public exports and are not
   documented for consumers; Core and Lab components reach them through
   `@astryxdesign/core/internal/touch`, a subpath reserved for Astryx's own
   packages: undocumented, outside the compatibility promise, versioned in

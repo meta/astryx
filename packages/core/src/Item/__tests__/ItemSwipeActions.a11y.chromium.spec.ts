@@ -6,17 +6,20 @@
  * @input The checked-in Core/Item › Swipe Actions story, a built Storybook and
  *   real Chromium touch input on a phone-sized viewport
  * @output Pixel and geometry proof of Item's swipe actions: no pixel of a
- *   panel at rest, the panel fixed in the space the row vacates while the row
- *   translates, none again when the drag comes back to its start without
- *   lifting, the row resting open with a real button that fires on a tap and
- *   closes the row, the panel shrinking with the row on the spring back, and a
- *   fling toward the trailing side firing the outermost entry
+ *   panel at rest, the panel painting exactly the space the row vacates while
+ *   the row translates, none again when the drag comes back to its start
+ *   without lifting, the row resting open with a real button that fires on a
+ *   tap and closes the row, the panel's edge moving with the row on the spring
+ *   back, a fling opening the row without firing anything, and a drag past the
+ *   commit point firing the outermost entry
  * @position Browser-only regression test for Item's swipeActions. jsdom can
  *   hold the declared rules but not the paint or the geometry, and a real
- *   device has already disagreed with jsdom once on this gesture.
+ *   device has already disagreed with jsdom once on this gesture. The swipe
+ *   reads each touch's pointer, the same on every device; the context's
+ *   touchscreen gives Chromium a phone's (a coarse primary pointer).
  */
 
-import {expect, test, type Locator} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -41,6 +44,14 @@ test.afterAll(async () => {
 // a context that has a touchscreen. A phone-sized viewport keeps the commit
 // point within a finger's reach.
 test.use({hasTouch: true, viewport: {height: 800, width: 420}});
+
+/** Opens the story under a finger: the context's touchscreen makes the primary pointer coarse. */
+async function openUnderFinger(page: Page, url: string) {
+  await page.goto(url, {waitUntil: 'load'});
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
+}
 
 type Rgb = [number, number, number];
 
@@ -100,6 +111,9 @@ async function translationOf(row: Locator): Promise<number> {
   });
 }
 
+/** The fill of a side's panel: the track inside the panel's window. */
+const trackOf = (panel: Locator) => panel.locator(':scope > div').first();
+
 interface Box {
   x: number;
   y: number;
@@ -118,9 +132,9 @@ async function boxOf(locator: Locator): Promise<Box> {
 test('paints no panel at rest, keeps the panel fixed while the row moves, rests open on a real button, and springs back with the panel', async ({
   page,
 }) => {
-  await page.goto(
+  await openUnderFinger(
+    page,
     `${storybook.origin}/iframe.html?id=core-item--swipe-actions&viewMode=story`,
-    {waitUntil: 'load'},
   );
   const row = page.locator('.astryx-item').first();
   await expect(row).toBeVisible();
@@ -153,37 +167,53 @@ test('paints no panel at rest, keeps the panel fixed while the row moves, rests 
       await page.waitForTimeout(40);
     }
   };
+  // A finger coming to rest: UIKit's velocity filter never decays on its
+  // own (a finger at rest sends no events, and a browser drops a move that
+  // goes nowhere), so the finger creeps a tenth of a pixel a frame until the
+  // velocity it reports is nearly zero.
+  const holdStill = async (dx: number) => {
+    for (let i = 1; i <= 20; i += 1) {
+      await touch('touchMove', startX + dx + i / 10);
+      await page.waitForTimeout(16);
+    }
+  };
 
   await touch('touchStart', startX);
-  // Past the axis lock and clearly horizontal, short of the commit point.
-  await dragTo([6, 14, 28, 44, 60]);
+  // Past the 25 px the swipe needs to begin and clearly horizontal, short of
+  // the commit point: the swipe is the travel past those 25 px.
+  await dragTo([6, 14, 28, 50, 70, 90]);
 
-  // Under the drag: the row has moved by the travel, the panel is fixed at
-  // the row's resting edge (counter-translated) and exactly as wide as the
-  // travel, and its colour fills the vacated edge.
-  await expect.poll(async () => translationOf(row)).toBeGreaterThan(50);
+  // Under the drag: the row has caught up with the finger (it follows on a
+  // spring), the panel's window is fixed over the row's resting box, its
+  // fill ends exactly at the row's moved edge, and its colour fills the
+  // vacated edge.
+  await expect.poll(async () => translationOf(row)).toBeGreaterThan(55);
   const dragged = await boxOf(panel);
   expect(Math.abs(dragged.x - rest.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(dragged.width - rest.width)).toBeLessThanOrEqual(1);
+  const fill = await boxOf(trackOf(panel));
   expect(
-    Math.abs(dragged.width - (await translationOf(row))),
+    Math.abs(fill.x + fill.width - (rest.x + (await translationOf(row)))),
   ).toBeLessThanOrEqual(1);
   expect(paintedAtEdge(await shoot())).toBeGreaterThan(0);
 
   // Back to the start and past it without lifting: the row is home and the
-  // panel is a zero-width box again, so nothing of it paints.
-  await dragTo([40, 20, 4, -6]);
+  // fill is beside the window again, so nothing of it paints.
+  await dragTo([60, 30, 10, -6]);
   await expect.poll(async () => translationOf(row)).toBe(0);
   await expect.poll(async () => paintedAtEdge(await shoot())).toBe(0);
 
-  // Out again past half the panel, then released: the row rests open at the
-  // panel's width with its entry a real, focusable button.
-  await dragTo([10, 30, 45, 60]);
+  // Out again past half the panel, held still, then released: the row rests
+  // open at the panel's width with its entry a real, focusable button.
+  await dragTo([30, 60, 90, 110]);
+  await page.waitForTimeout(100);
   await touch('touchEnd');
   await expect(panel).not.toHaveAttribute('inert');
   const entry = panel.getByRole('button', {name: 'Read'});
   await expect(entry).toBeVisible();
   await expect.poll(async () => translationOf(row)).toBe(72);
-  expect(Math.abs((await boxOf(panel)).width - 72)).toBeLessThanOrEqual(1);
+  const open = await boxOf(trackOf(panel));
+  expect(Math.abs(open.x + open.width - (rest.x + 72))).toBeLessThanOrEqual(1);
   await entry.focus();
   await expect(entry).toBeFocused();
 
@@ -211,41 +241,43 @@ test('paints no panel at rest, keeps the panel fixed while the row moves, rests 
   });
   await expect.poll(async () => paintedAtEdge(await shoot())).toBe(0);
 
-  // The spring back: a short drag released before half the panel. The row
-  // slides home on its clock and the panel's width runs on the same one, so
-  // mid-flight the gap the row has not yet covered is still the panel.
+  // The spring back: a short drag held still and released before half the
+  // panel. The row and the panel's fill run on one clock, so mid-flight the
+  // gap the row has not yet covered is exactly the fill.
   await touch('touchStart', startX);
-  await dragTo([8, 16, 24, 30]);
+  await dragTo([10, 30, 40, 50]);
   await expect.poll(async () => translationOf(row)).toBeGreaterThan(20);
+  await holdStill(50);
   await touch('touchEnd');
   const midFlight = await row.evaluate(
     async (node, selector) =>
-      new Promise<{rowX: number; panelWidth: number}>(resolve => {
+      new Promise<{rowX: number; fillEnd: number}>(resolve => {
         setTimeout(() => {
-          const panelEl = node.querySelector(selector) as HTMLElement;
-          const matrix = new DOMMatrix(getComputedStyle(node).transform);
+          const track = node.querySelector(selector) as HTMLElement;
           resolve({
-            panelWidth: parseFloat(getComputedStyle(panelEl).width),
-            rowX: Math.abs(matrix.e),
+            fillEnd:
+              track.getBoundingClientRect().right -
+              (node.parentElement as HTMLElement).getBoundingClientRect().left,
+            rowX:
+              node.getBoundingClientRect().left -
+              (node.parentElement as HTMLElement).getBoundingClientRect().left,
           });
         }, 60);
       }),
-    '[data-swipe-panel="leading"]',
+    '[data-swipe-panel="leading"] > div',
   );
   expect(midFlight.rowX).toBeGreaterThan(2);
-  expect(Math.abs(midFlight.panelWidth - midFlight.rowX)).toBeLessThanOrEqual(
-    6,
-  );
+  expect(Math.abs(midFlight.fillEnd - midFlight.rowX)).toBeLessThanOrEqual(1);
   await expect.poll(async () => translationOf(row)).toBe(0);
   await expect.poll(async () => paintedAtEdge(await shoot())).toBe(0);
 });
 
-test('fires the outermost trailing entry on a fling and the row leaves', async ({
+test('opens the row on a fling without firing, and fires the outermost trailing entry past the commit point, and the row leaves', async ({
   page,
 }) => {
-  await page.goto(
+  await openUnderFinger(
+    page,
     `${storybook.origin}/iframe.html?id=core-item--swipe-actions&viewMode=story`,
-    {waitUntil: 'load'},
   );
   const rows = page.locator('.astryx-item');
   const row = rows.first();
@@ -263,20 +295,45 @@ test('fires the outermost trailing entry on a fling and the row leaves', async (
 
   // Toward the inline start: the trailing panel, Delete outermost. A slow
   // start claims the drag; the last step is quick, so the release is a fling
-  // short of the commit point.
+  // short of the commit point: it opens the row, as UIKit's does, and fires
+  // nothing.
   await at(startX, 'touchStart');
-  for (const dx of [6, 14, 28]) {
+  for (const dx of [6, 14, 28, 36]) {
     await at(startX - dx, 'touchMove');
     await page.waitForTimeout(40);
   }
-  await at(startX - 44, 'touchMove');
+  await at(startX - 60, 'touchMove');
   await at(startX - 90, 'touchMove');
   await cdp.send('Input.dispatchTouchEvent', {
     touchPoints: [],
     type: 'touchEnd',
   });
+  const panel = row.locator('[data-swipe-panel="trailing"]');
+  await expect(panel).not.toHaveAttribute('inert');
+  // How far the row opens: the entries (the track's children) together.
+  const panelWidth = await trackOf(panel).evaluate(node =>
+    Array.from(node.children).reduce(
+      (width, entry) => width + entry.getBoundingClientRect().width,
+      0,
+    ),
+  );
+  await expect.poll(async () => translationOf(row)).toBeCloseTo(-panelWidth, 0);
+  await expect(rows).toHaveCount(before);
 
-  // One beat: the slide out, then the entry fires; the story removes the row.
+  // From open, a drag on past the commit point fires the outermost entry:
+  // one beat, the slide out, then the entry fires and the story removes the
+  // row.
+  const from = rest.x + rest.width - panelWidth - 24;
+  await at(from, 'touchStart');
+  for (const dx of [10, 30, 60, 120, 180, 240]) {
+    await at(from - dx, 'touchMove');
+    await page.waitForTimeout(40);
+  }
+  await page.waitForTimeout(100);
+  await cdp.send('Input.dispatchTouchEvent', {
+    touchPoints: [],
+    type: 'touchEnd',
+  });
   await expect(page.getByText('Message 1')).toHaveCount(0);
   await expect(rows).toHaveCount(before - 1);
 });
@@ -284,9 +341,9 @@ test('fires the outermost trailing entry on a fling and the row leaves', async (
 test('the trailing panel: Delete is outermost and the panel wears its colour', async ({
   page,
 }) => {
-  await page.goto(
+  await openUnderFinger(
+    page,
     `${storybook.origin}/iframe.html?id=core-item--swipe-actions&viewMode=story`,
-    {waitUntil: 'load'},
   );
   const row = page.locator('.astryx-item').first();
   const panel = row.locator('[data-swipe-panel="trailing"]');
@@ -300,7 +357,7 @@ test('the trailing panel: Delete is outermost and the panel wears its colour', a
     touchPoints: [{x: startX, y}],
     type: 'touchStart',
   });
-  for (const dx of [6, 14, 28, 44, 60, 80]) {
+  for (const dx of [6, 14, 28, 44, 60, 80, 100]) {
     await cdp.send('Input.dispatchTouchEvent', {
       touchPoints: [{x: startX - dx, y}],
       type: 'touchMove',
@@ -308,24 +365,45 @@ test('the trailing panel: Delete is outermost and the panel wears its colour', a
     await page.waitForTimeout(40);
   }
   await expect.poll(async () => translationOf(row)).toBeLessThan(-60);
-  // Fixed at the row's resting trailing edge, as wide as the travel.
+  // The window is fixed over the row's resting box; the fill starts exactly
+  // at the row's moved trailing edge.
   const dragged = await boxOf(panel);
   expect(
     Math.abs(dragged.x + dragged.width - (rest.x + rest.width)),
   ).toBeLessThanOrEqual(1);
-  // The entries run Archive then Delete toward the outer edge; the panel's
-  // own background is Delete's.
-  const [panelColor, deleteColor, archiveColor] = await panel.evaluate(node => {
+  const fill = await boxOf(trackOf(panel));
+  expect(
+    Math.abs(fill.x - (rest.x + rest.width + (await translationOf(row)))),
+  ).toBeLessThanOrEqual(1);
+  // The entries run Archive then Delete toward the outer edge. Delete, the
+  // outermost, wears its own colour and paints it beside itself out to the
+  // edge (its pseudo-element); the track paints the surface the entries sit
+  // on and keeps Delete's colour as its confirm fill, hidden until a full
+  // swipe confirms.
+  const [
+    trackColor,
+    fillColor,
+    fillOpacity,
+    extensionColor,
+    deleteColor,
+    archiveColor,
+  ] = await trackOf(panel).evaluate(node => {
     const buttons = Array.from(node.querySelectorAll('button'));
     const last = buttons[buttons.length - 1];
     const first = buttons[0];
     return [
       getComputedStyle(node).backgroundColor,
+      getComputedStyle(node, '::before').backgroundColor,
+      getComputedStyle(node, '::before').opacity,
+      getComputedStyle(last, '::after').backgroundColor,
       getComputedStyle(last).backgroundColor,
       getComputedStyle(first).backgroundColor,
     ];
   });
-  expect(panelColor).toBe(deleteColor);
+  expect(extensionColor).toBe(deleteColor);
+  expect(fillColor).toBe(deleteColor);
+  expect(fillOpacity).toBe('0');
+  expect(trackColor).not.toBe(deleteColor);
   expect(archiveColor).not.toBe(deleteColor);
   const deleteBox = await boxOf(panel.getByRole('button', {name: 'Delete'}));
   const archiveBox = await boxOf(panel.getByRole('button', {name: 'Archive'}));
