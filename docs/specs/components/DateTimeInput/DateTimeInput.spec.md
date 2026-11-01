@@ -92,6 +92,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   Calendar.
 - Popover and sheet hosting or dismissal — owned by the composed layer components
   and `family:overlay-dismissal`.
+- The sheet wheels' rest, motion, scroll input, and look — owned by
+  `component:DateInput` (FR13–FR15, DEC-1, DEC-2).
 - Cross-component picker-presentation vocabulary and deprecated-prop mapping —
   owned by `spec:AST-043`.
 
