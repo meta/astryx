@@ -10,7 +10,11 @@ approved_by: cixzhang
 approved_at: 2026-11-01
 owners: [cixzhang]
 review_triggers: [public-api, behavior, theming]
-verified_by: [packages/core/src/theme/MediaTheme.dom.test.tsx]
+verified_by:
+  [
+    packages/core/src/theme/MediaTheme.dom.test.tsx,
+    packages/core/src/hooks/useAutoMediaMode.test.ts,
+  ]
 modules: []
 families: []
 design_specs: []
@@ -73,11 +77,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                       | Basis                    |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | MediaTheme always renders one wrapper with `display: contents`, so switching to or from `off` never remounts its children.                                                                                                                      | Current source and tests |
-| FR2 | `dark` and `light` mark the wrapper with that surface and the primary text color; `off` renders no marker.                                                                                                                                      | Current source and tests |
-| FR3 | `auto` measures the surface behind the wrapper and marks it dark or light, using `fallback` when the surface cannot be measured; it re-measures when the surface changes and leaves no probe element. `fallback` is ignored for explicit modes. | Current source and tests |
+| ID  | Invariant                                                                                                                                                                                                                                                                                          | Basis                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | MediaTheme always renders one wrapper with `display: contents`, so switching to or from `off` never remounts its children.                                                                                                                                                                         | Current source and tests |
+| FR2 | `dark` and `light` mark the wrapper with that surface and the primary text color; `off` renders no marker.                                                                                                                                                                                         | Current source and tests |
+| FR3 | `auto` measures the surface behind the wrapper on each render and marks it dark or light, renders no marker when the surface's own text already reads on it at 3:1, and uses `fallback` when the surface cannot be measured; it leaves no probe element. `fallback` is ignored for explicit modes. | Current source and tests |
 
 ### Allowed variation
 
@@ -85,12 +89,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State              | Required invariant                 | Allowed variation |
-| ------------------ | ---------------------------------- | ----------------- |
-| `dark` or `light`  | Surface marker set.                | Content.          |
-| `off`              | No marker; children not remounted. | Content.          |
-| `auto`, unmeasured | Marker from `fallback`.            | Fallback.         |
-| `auto`, measured   | Marker from the measured surface.  | Surface.          |
+| State                      | Required invariant                 | Allowed variation |
+| -------------------------- | ---------------------------------- | ----------------- |
+| `dark` or `light`          | Surface marker set.                | Content.          |
+| `off`                      | No marker; children not remounted. | Content.          |
+| `auto`, unmeasured         | Marker from `fallback`.            | Fallback.         |
+| `auto`, measured           | Marker from the measured surface.  | Surface.          |
+| `auto`, text already reads | No marker.                         | Surface.          |
 
 ### Transformation and precedence order
 
@@ -122,17 +127,18 @@ applies.
 
 ## Verification map
 
-| Contract | Verification                                                                             | Representative states  | Mutation or failure expectation                                | Audit section               |
-| -------- | ---------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------- | --------------------------- |
-| FR1, FR2 | `MediaTheme.dom.test.tsx` explicit-mode marker and `off` tests                           | `dark`; `light`; `off` | A wrong marker, a marker on `off`, or a missing element fails. | `audit:MediaTheme/behavior` |
-| FR3      | `MediaTheme.dom.test.tsx` fallback, explicit-fallback, ignored-fallback, and probe tests | `auto` unmeasured      | A wrong fallback or a leftover probe fails.                    | `audit:MediaTheme/behavior` |
+| Contract | Verification                                                                                                                        | Representative states              | Mutation or failure expectation                                | Audit section               |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------- | --------------------------- |
+| FR1, FR2 | `MediaTheme.dom.test.tsx` explicit-mode marker and `off` tests                                                                      | `dark`; `light`; `off`             | A wrong marker, a marker on `off`, or a missing element fails. | `audit:MediaTheme/behavior` |
+| FR3      | `MediaTheme.dom.test.tsx` fallback, explicit-fallback, ignored-fallback, and probe tests                                            | `auto` unmeasured                  | A wrong fallback or a leftover probe fails.                    | `audit:MediaTheme/behavior` |
+| FR3      | `useAutoMediaMode.test.ts` surface-picking tests, including "answers off for a chromatic surface its ambient text already reads on" | dark, light, and readable surfaces | A wrong side, or a marker where the text already reads, fails. | `audit:MediaTheme/behavior` |
 
 Read from source, with no focused test yet:
 
 - FR1: `display: contents`, and children not remounting when the mode
   switches to or from `off`.
 - FR2: the primary text color.
-- FR3: re-measuring when the surface changes.
+- FR3: measuring again on each render.
 
 ## Decision log
 
