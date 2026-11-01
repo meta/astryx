@@ -363,6 +363,7 @@ export const RADIO_GROUP_BINDING_STATES = [
       checked: true,
       disabled: true,
       operable: false,
+      tabReachable: true,
       pointerCancellation: false,
     }),
     subjectName: 'List',
