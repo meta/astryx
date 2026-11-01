@@ -20,11 +20,16 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
-  glyphRendersOnBlockAxis,
+  assertSelectorParses,
+  bindDetectorValue,
   d1GlyphKey,
   d1PairKey,
+  glyphRendersOnBlockAxis,
   isUnchangedBlockAxisPair,
   finishFiniteAnimations,
+  gradeDirectionalPair,
+  gradePositionedPair,
+  ignoredStoryIdentities,
   orderD1StoryCandidates,
   resolveD1Applicability,
   resolveFilterRoutes,
@@ -610,6 +615,87 @@ describe('buildAuditedComponentRoster', () => {
     ).toEqual(['core/chat']);
   });
 
+  it('leaves out a story identity that names no public component', () => {
+    const input = {
+      sourceComponents: ['core/Button', 'core/Table'],
+      storyComponents: [
+        'core/button',
+        'core/hooks-useclipboard',
+        'core/tablesortable',
+      ],
+    };
+    // A public component keeps its entry (the story spelling, as before).
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Table',
+    ]);
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/hooks-useclipboard', reason: 'no-public-component'},
+      {component: 'core/tablesortable', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('keeps a documented component discovery misses, whatever its story is titled', () => {
+    // The caller passes Core's Theme and MediaTheme as package-qualified
+    // public components; a retitled or missing story cannot drop them.
+    const input = {
+      sourceComponents: [
+        'core/Button',
+        'core/Theme',
+        'core/MediaTheme',
+        'lab/CodeEditor',
+      ],
+      storyComponents: [
+        'core/button',
+        'core/appearance-theming',
+        'lab/codeeditor',
+        'lab/themes-codeeditortheme',
+      ],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Theme',
+      'core/MediaTheme',
+      'lab/codeeditor',
+    ]);
+    // Core's Theme no longer keeps a Lab story identity that ends in "theme".
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/appearance-theming', reason: 'no-public-component'},
+      {component: 'lab/themes-codeeditortheme', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('ignores nothing in a package whose public roster is empty', () => {
+    const input = {
+      sourceComponents: ['core/Button'],
+      storyComponents: ['core/button', 'lab/chart-interactions'],
+    };
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'lab/chart-interactions',
+    ]);
+  });
+
+  it('keeps a public component with no story as a roster entry', () => {
+    expect(
+      buildAuditedComponentRoster({
+        sourceComponents: ['core/Button', 'core/LayerProvider'],
+        storyComponents: ['core/button'],
+      }),
+    ).toEqual(['core/button', 'core/LayerProvider']);
+  });
+
+  it('keeps a story identity a filter names explicitly', () => {
+    const input = {
+      sourceComponents: ['core/ChatComposer'],
+      storyComponents: ['core/chat'],
+      filters: ['chat'],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual(['core/chat']);
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+  });
+
   it('retains an unknown entry when neither source nor stories match', () => {
     expect(
       buildAuditedComponentRoster({
@@ -618,6 +704,25 @@ describe('buildAuditedComponentRoster', () => {
         filters: ['missing'],
       }),
     ).toEqual(['unknown/missing']);
+  });
+});
+
+describe('documented components outside component directories', () => {
+  it('routes a Core/Themes/Theme story to the documented Theme component', () => {
+    const routes = buildStoryComponentRoutes({
+      stories: [{id: 'core-themes-theme--default', title: 'Core/Themes/Theme'}],
+      publicComponentsByPackage: {core: ['Button', 'Theme']},
+    });
+    expect(routes.map(route => route.component)).toEqual(['core/Theme']);
+  });
+
+  it('finds Core Theme-family exports that live in a lowercase directory', () => {
+    const names =
+      componentPackages.documentedComponentsOutsideComponentDirectories(
+        new URL('../..', import.meta.url).pathname,
+        componentPackages.componentPackage('core'),
+      );
+    expect(names).toEqual(expect.arrayContaining(['MediaTheme', 'Theme']));
   });
 });
 
@@ -1020,6 +1125,108 @@ describe('finishFiniteAnimations', () => {
   });
 });
 
+describe('gradePositionedPair', () => {
+  const ltr = (physical = null) => ({parentW: 1000, relCenterX: 200, physical});
+  const at = relCenterX => ({parentW: 1000, relCenterX});
+
+  it('requires an unmarked element to mirror about its parent center', () => {
+    expect(gradePositionedPair(ltr(), at(800), 3)).toMatchObject({
+      expectation: 'mirror',
+      pass: true,
+    });
+    expect(gradePositionedPair(ltr(), at(200), 3).pass).toBe(false);
+  });
+
+  it('requires a chart overlay to keep its physical position (DR5)', () => {
+    expect(gradePositionedPair(ltr('chart'), at(200), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: true,
+    });
+  });
+
+  it('fails a mirrored chart tooltip', () => {
+    expect(gradePositionedPair(ltr('chart'), at(800), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: false,
+    });
+  });
+
+  it('fails closed on an unknown physical kind', () => {
+    expect(gradePositionedPair(ltr('map'), at(200), 3)).toMatchObject({
+      expectation: 'invalid-marker',
+      pass: false,
+    });
+  });
+});
+
+describe('rtlAudit.D5 physical-region metadata', () => {
+  const within = '[aria-label="Quarterly performance chart"]';
+
+  it('admits a chart plot declaration', () => {
+    expect(
+      validateStoryRtlAuditParameters({D5: {physical: 'chart', within}}, 's'),
+    ).toEqual({D5: {physical: 'chart', within}});
+  });
+
+  it('rejects an unknown physical kind', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'map', within}}, 's'),
+    ).toThrow(/D5.physical/);
+  });
+
+  it('rejects a declaration without a plot selector', () => {
+    expect(() =>
+      validateStoryRtlAuditParameters({D5: {physical: 'chart'}}, 's'),
+    ).toThrow(/D5.within/);
+    expect(() =>
+      validateStoryRtlAuditParameters(
+        {D5: {physical: 'chart', within: '  '}},
+        's',
+      ),
+    ).toThrow(/D5.within/);
+  });
+});
+
+describe('assertSelectorParses', () => {
+  const doc = {
+    querySelector(selector) {
+      if (selector.includes('[[')) {
+        throw new SyntaxError('not a valid selector');
+      }
+      return null;
+    },
+  };
+
+  it('accepts a selector the page can parse, matched or not', () => {
+    expect(() =>
+      assertSelectorParses(doc, '[aria-label="Plot"]'),
+    ).not.toThrow();
+  });
+
+  it('fails closed on a selector the page cannot parse', () => {
+    expect(() => assertSelectorParses(doc, '[[aria-label')).toThrow(
+      /rtlAudit.D5.within/,
+    );
+  });
+});
+
+describe('bindDetectorValue', () => {
+  it('binds a selector containing $ patterns verbatim', () => {
+    const physical = {physical: 'chart', within: "[data-plot='q$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', physical)).toBe(
+      `run(${JSON.stringify(physical)})`,
+    );
+    const tricky = {physical: 'chart', within: "[data-plot='$&$1$$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', tricky)).toBe(
+      `run(${JSON.stringify(tricky)})`,
+    );
+  });
+
+  it('binds null when no region is declared', () => {
+    expect(bindDetectorValue('run(__P__)', '__P__', null)).toBe('run(null)');
+  });
+});
+
 describe('glyphRendersOnBlockAxis', () => {
   // CSS matrix(a, b, c, d) order: rotate(90deg) is [0, 1, -1, 0].
   const identity = [1, 0, 0, 1];
@@ -1197,5 +1404,20 @@ describe('resolveFilterRoutes (filters resolve through the Storybook index)', ()
 
   it('is the whole route list when no filter is given', () => {
     expect(resolve([]).routes).toBe(routes);
+  });
+});
+
+describe('gradeDirectionalPair (D2 order, D3 scroll direction)', () => {
+  it('passes a relationship that holds in LTR and reverses in RTL', () => {
+    expect(gradeDirectionalPair(true, true)).toBe('pass');
+  });
+
+  it('fails a relationship that keeps its LTR physical order in RTL', () => {
+    expect(gradeDirectionalPair(true, false)).toBe('fail');
+  });
+
+  it('fails a relationship already wrong in LTR, or wrong in both', () => {
+    expect(gradeDirectionalPair(false, true)).toBe('fail');
+    expect(gradeDirectionalPair(false, false)).toBe('fail');
   });
 });

@@ -4398,7 +4398,7 @@ describe('SideNav collapse focus (AR3)', () => {
     expect(screen.getByRole('link', {name: 'Project'})).toHaveFocus();
   });
 
-  it('moves focus to the nearest kept row in a resizable SideNav with no toggle, whose nav remounts as it collapses', () => {
+  it('moves focus to the nearest kept row in a resizable SideNav with no toggle', () => {
     const resizable = (isCollapsed: boolean) => (
       <SideNav
         resizable
@@ -4517,7 +4517,7 @@ describe('SideNav collapse focus (AR3)', () => {
     },
   );
 
-  it('moves focus from a heading link the collapse renames (its subheading dropped) to the toggle in a resizable SideNav', () => {
+  it('keeps focus on a heading link whose subheading the collapsed rail drops, in a resizable SideNav that keeps its nav mounted (FR6)', () => {
     const rail = (isCollapsed: boolean) => (
       <SideNav
         resizable
@@ -4540,7 +4540,8 @@ describe('SideNav collapse focus (AR3)', () => {
     heading?.focus();
     expect(heading).toHaveFocus();
     rerender(rail(true));
-    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+    expect(heading).toHaveFocus();
+    expect(heading).toHaveAttribute('aria-label', 'Acme');
   });
 
   it('keeps focus on a heading link the resizable collapse re-renders under the same accessible name, aria-hidden icon text left out', () => {
@@ -4564,6 +4565,29 @@ describe('SideNav collapse focus (AR3)', () => {
     expect(screen.getByRole('link', {name: 'Acme'})).toHaveFocus();
   });
 
+  it('moves focus to a header control the collapse replaces with a new element under the same accessible name', () => {
+    // The app swaps its header button for a new element (a new key) on
+    // collapse, under the same name.
+    const rail = (isCollapsed: boolean) => (
+      <SideNav
+        collapsible={{isCollapsed, onCollapsedChange: () => {}}}
+        topContent={
+          <button key={isCollapsed ? 'compact' : 'full'} type="button">
+            Search
+          </button>
+        }>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+      </SideNav>
+    );
+    const {rerender} = render(rail(false));
+    const before = screen.getByRole('button', {name: 'Search'});
+    before.focus();
+    rerender(rail(true));
+    const after = screen.getByRole('button', {name: 'Search'});
+    expect(after).not.toBe(before);
+    expect(after).toHaveFocus();
+  });
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});
@@ -4573,4 +4597,32 @@ describe('SideNav collapse focus (AR3)', () => {
       screen.getByRole('button', {name: 'Collapse sidebar'}),
     ).toHaveFocus();
   });
+});
+
+describe('SideNav keeps its items mounted across a collapse (FR6)', () => {
+  it.each([{resizable: false}, {resizable: true}])(
+    'keeps an open nested group open after a collapse and an expand, resizable $resizable',
+    ({resizable}) => {
+      const rail = (isCollapsed: boolean) => (
+        <SideNav
+          resizable={resizable}
+          collapsible={{isCollapsed, onCollapsedChange: () => {}}}>
+          <SideNavItem
+            label="Settings"
+            icon={StubIcon}
+            collapsible={{defaultIsCollapsed: true}}>
+            <SideNavItem label="Billing" href="/settings/billing" />
+          </SideNavItem>
+        </SideNav>
+      );
+      const {rerender} = render(rail(false));
+      expect(screen.queryByRole('link', {name: 'Billing'})).toBeNull();
+      fireEvent.click(screen.getByRole('button', {name: 'Settings'}));
+      expect(screen.getByRole('link', {name: 'Billing'})).toBeInTheDocument();
+      rerender(rail(true));
+      rerender(rail(false));
+      // The group the person opened is still open.
+      expect(screen.getByRole('link', {name: 'Billing'})).toBeInTheDocument();
+    },
+  );
 });

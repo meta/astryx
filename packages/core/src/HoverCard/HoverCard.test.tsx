@@ -30,6 +30,7 @@ import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
 import {StrictMode} from 'react';
 import {Button} from '../Button/Button';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Theme, defineTheme} from '../theme';
 import {HoverCard} from './HoverCard';
 import {useHoverCard} from './useHoverCard';
@@ -1335,5 +1336,100 @@ describe('HoverCard theme target names', () => {
       expect(layer).toHaveClass('astryx-hover-card');
       expect(layer).not.toHaveClass('astryx-hovercard');
     });
+  });
+});
+
+// FR11: a press inside an open card acts only within the card.
+describe('HoverCard surface press', () => {
+  it('keeps a click on card content from activating a clickable card', () => {
+    const onCardClick = vi.fn();
+    const onCardButton = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCardClick}>
+        <span>Card body</span>
+        <HoverCard
+          isOpen
+          content={
+            <span>
+              Hover content{' '}
+              <button type="button" onClick={onCardButton}>
+                Card action
+              </button>
+            </span>
+          }>
+          <button type="button">Trigger</button>
+        </HoverCard>
+      </ClickableCard>,
+    );
+    fireEvent.click(screen.getByText(/Hover content/));
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Card action', hidden: true}),
+    );
+    expect(onCardClick).not.toHaveBeenCalled();
+    // The hover card's own button keeps its activation.
+    expect(onCardButton).toHaveBeenCalledTimes(1);
+    // Positive control: a click on the card's own content still activates it.
+    fireEvent.click(screen.getByText('Card body'));
+    expect(onCardClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a click on a padded card's own edge from activating a clickable card", () => {
+    const onCardClick = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCardClick}>
+        <HoverCard
+          isOpen
+          style={{padding: 24}}
+          content={<span>Hover content</span>}>
+          <button type="button">Trigger</button>
+        </HoverCard>
+      </ClickableCard>,
+    );
+    // The padding belongs to the layer root around the content.
+    const root = screen.getByText('Hover content').closest('[popover]')!;
+    fireEvent.click(root);
+    expect(onCardClick).not.toHaveBeenCalled();
+  });
+
+  it('keeps a middle-button press on card content from opening a card link', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <ClickableCard label="Card" href="https://example.com/">
+        <HoverCard isOpen content={<span>Hover content</span>}>
+          <button type="button">Trigger</button>
+        </HoverCard>
+      </ClickableCard>,
+    );
+    fireEvent.mouseUp(screen.getByText('Hover content'), {button: 1});
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('still lets document listeners see a click inside the card', () => {
+    const onDocumentClick = vi.fn();
+    document.addEventListener('click', onDocumentClick);
+    render(
+      <HoverCard isOpen content={<span>Hover content</span>}>
+        <button type="button">Trigger</button>
+      </HoverCard>,
+    );
+    fireEvent.click(screen.getByText('Hover content'));
+    document.removeEventListener('click', onDocumentClick);
+    expect(onDocumentClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on card text inside a label from toggling its control', () => {
+    render(
+      <label>
+        <input type="checkbox" /> Accept{' '}
+        <HoverCard isOpen content={<span>Card content</span>}>
+          <button type="button">Info</button>
+        </HoverCard>
+      </label>,
+    );
+    // The card mounts outside the label (a label cannot contain it), so a
+    // click on its text is not label activation.
+    fireEvent.click(screen.getByText('Card content'));
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
 });

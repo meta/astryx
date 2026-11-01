@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/SideNav/SideNav.test.tsx,
     apps/storybook/stories/SideNavCollapseOwnership.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: []
@@ -131,12 +132,13 @@ anatomy-theming map is recorded.
 
 ## Verification map
 
-| Contract       | Verification                                                               | Representative states                                                     | Mutation or failure expectation                                          | Audit section                               |
-| -------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
-| FR1, FR2       | `SideNav.test.tsx` handleRef, outside-button, and collapse-ownership tests | Inside, handleRef, controlled                                             | A stale or wrong state source fails.                                     | `audit:SideNavCollapseButton/behavior`      |
-| FR1, FR3, ORD2 | `SideNav.test.tsx` outside-button and controlled-collapsible tests         | Own `collapsible`; `label` override; expanded and collapsed default names | A wrong state source, an ignored `label`, or a stale default name fails. | `audit:SideNavCollapseButton/accessibility` |
-| FR4            | `SideNav.test.tsx` consumer onClick test                                   | Outside with handleRef                                                    | A replaced toggle fails.                                                 | `audit:SideNavCollapseButton/behavior`      |
-| FR3            | `SideNav.test.tsx` footer icon row sizing tests                            | Built-in button; explicit `size` outside the nav                          | A Button-default size or an ignored explicit size fails.                 | `audit:SideNavCollapseButton/behavior`      |
+| Contract       | Verification                                                                                                                       | Representative states                                                     | Mutation or failure expectation                                          | Audit section                               |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------- |
+| FR1, FR2       | `SideNav.test.tsx` handleRef, outside-button, and collapse-ownership tests                                                         | Inside, handleRef, controlled                                             | A stale or wrong state source fails.                                     | `audit:SideNavCollapseButton/behavior`      |
+| FR1, FR3, ORD2 | `SideNav.test.tsx` outside-button and controlled-collapsible tests                                                                 | Own `collapsible`; `label` override; expanded and collapsed default names | A wrong state source, an ignored `label`, or a stale default name fails. | `audit:SideNavCollapseButton/accessibility` |
+| FR4            | `SideNav.test.tsx` consumer onClick test                                                                                           | Outside with handleRef                                                    | A replaced toggle fails.                                                 | `audit:SideNavCollapseButton/behavior`      |
+| FR3            | `SideNav.test.tsx` footer icon row sizing tests                                                                                    | Built-in button; explicit `size` outside the nav                          | A Button-default size or an ignored explicit size fails.                 | `audit:SideNavCollapseButton/behavior`      |
+| RTL relation   | RTL audit automatic D1 on `SideNav / Collapsible sidebar`, routed by a route-only entry in `apps/storybook/rtl-audit/targets.json` | The collapse button's chevron; LTR and RTL                                | A chevron that does not mirror fails D1.                                 | `audit:SideNavCollapseButton/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 

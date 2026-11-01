@@ -4,7 +4,7 @@
 
 /**
  * @file useTriggerMenu.tsx
- * @input Uses React, usePopover, SearchSource
+ * @input Uses React, usePopover, SearchSource, useBusyAnnouncement
  * @output Exports useTriggerMenu hook for trigger-based menus in contentEditable
  * @position Internal hook; consumed by ChatComposerInput
  *
@@ -32,7 +32,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
-import {useAnnounce} from '../hooks/useAnnounce';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {
   colorVars,
@@ -355,36 +355,22 @@ export function useTriggerMenu(
   });
 
   // The loading row carries no live role: it mounts already holding its text
-  // and is removed when results arrive, so it would be skipped. The shared
-  // channel announces each loading episode once instead (spec:AST-086 FR2,
-  // FR6), once the row has been painted: the second animation frame runs
-  // after the first paint, and a search that settles before then never shows
-  // the row, so it announces nothing (FR7). The flag clears when the loading
-  // row goes away, so the next search is a new occasion.
-  const announce = useAnnounce();
-  const hasAnnouncedLoadingRef = useRef(false);
+  // and is removed when results arrive, so it would be skipped. "Searching…"
+  // is the menu's busy state, so the shared busy path announces each loading
+  // episode once (spec:AST-086 FR6, FR8): rerenders and further keystrokes
+  // while loading do not repeat it, results arriving re-arm it, and a search
+  // that settles before the announcement goes out announces nothing.
   // Mirrors renderMenu: no row exists without an active trigger or while hidden.
   const isLoadingRowShown =
     state.isLoading && !state.isHidden && state.activeTrigger !== null;
   // One catalog string serves the row and the announcement (FR7).
   const loadingText =
     state.activeTrigger?.loadingText ?? t('@astryx.chatTriggerMenu.searching');
-  useEffect(() => {
-    if (!isLoadingRowShown) {
-      hasAnnouncedLoadingRef.current = false;
-      return;
-    }
-    if (hasAnnouncedLoadingRef.current) {
-      return;
-    }
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        hasAnnouncedLoadingRef.current = true;
-        announce(loadingText, 'polite');
-      });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [announce, isLoadingRowShown, loadingText]);
+  const settleBusyAnnouncement = useBusyAnnouncement(
+    isLoadingRowShown,
+    loadingText,
+    editableRef,
+  );
 
   const triggerStartRef = useRef<number>(-1);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -570,6 +556,9 @@ export function useTriggerMenu(
       };
 
       const applyResults = (items: SearchableItem[]) => {
+        // Results that arrive before the busy start is heard withdraw it, so a
+        // search that settles on its first frame announces nothing (FR8).
+        settleBusyAnnouncement();
         const isHidden = isUnmatchedMultiWordQuery(trigger, items, false);
         setState(prev => ({
           ...prev,
@@ -596,7 +585,7 @@ export function useTriggerMenu(
           trigger.searchSource.cancel?.();
           const result = trigger.searchSource.search(query);
           // A synchronous source already has its results, so it never shows
-          // or announces the loading row (spec:AST-086 FR7).
+          // or announces the loading row.
           if (!Array.isArray(result)) {
             setState(prev => ({...prev, isLoading: true}));
           }
@@ -638,6 +627,7 @@ export function useTriggerMenu(
       setAnchor,
       hidePopover,
       showPopover,
+      settleBusyAnnouncement,
     ],
   );
 
