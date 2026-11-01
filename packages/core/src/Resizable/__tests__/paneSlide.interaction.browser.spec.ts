@@ -11,8 +11,11 @@
  * @output Proves the pane slides closed and open by spec:AST-105 FR9's edge
  *   reveal from the edge facing its handle, which it never leaves at any
  *   moment of the motion (component:Resizable FR8; component:LayoutPanel
- *   FR7), and that focus inside the collapsing pane moves to the handle and
- *   the collapsed pane is inert and hidden (component:LayoutPanel AR2), in
+ *   FR7), by every path: collapse() and Enter, a toggle, a controlled
+ *   isCollapsed, a double-click, the grow arrow, and a drag past the
+ *   threshold, while a drag that reopens follows the pointer with no slide;
+ *   and that focus inside the collapsing pane moves to the handle and the
+ *   collapsed pane is inert and hidden (component:LayoutPanel AR2), in
  *   Chromium and WebKit, with and without Reduce Motion; the hook's own props
  *   slide the same way, and a hand-built object collapses without a slide but
  *   still moves focus and goes inert
@@ -32,6 +35,7 @@ const STORY = {
   end: 'core-resizable--sliding-end-panel',
   hookProps: 'core-resizable--sliding-panel-with-hook-props',
   handBuilt: 'core-resizable--panel-with-hand-built-props',
+  controlled: 'core-resizable--sliding-controlled-panel',
 } as const;
 
 /** How many evenly spaced moments of a motion are captured. */
@@ -427,6 +431,157 @@ test('a panel that takes a hand-built ResizableProps object collapses and opens 
   expect(opening.glides).toBe(false);
   expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
   await expect(handle).toBeFocused();
+  await expect(pane).not.toHaveAttribute('inert', '');
+});
+
+/** A slide: the pane clips and the handle glides, with the edge on the handle. */
+function expectSlid(motion: Motion): void {
+  expect(motion.clips).toBe(true);
+  expect(motion.glides).toBe(true);
+  expect(travelling(motion.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
+  expectEdgeOnHandle(motion.frames);
+}
+
+test('a toggle outside the panel slides it closed and open, and keeps its focus', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const toggle = page.getByRole('button', {name: 'Toggle panel'});
+  await toggle.focus();
+  expectSlid(
+    await captureMotion(page, 'start', async () => {
+      await page.keyboard.press('Enter');
+    }),
+  );
+  await expect(toggle).toBeFocused();
+  await expect(pane).toHaveAttribute('inert', '');
+  const opening = await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Enter');
+  });
+  expect(opening.glides).toBe(true);
+  expect(travelling(opening.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
+  expectEdgeOnHandle(opening.frames);
+  expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
+  await expect(toggle).toBeFocused();
+});
+
+test('a controlled isCollapsed change slides the panel closed and open', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.controlled);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const toggle = page.getByRole('button', {name: 'Toggle panel'});
+  await toggle.focus();
+  expectSlid(
+    await captureMotion(page, 'start', async () => {
+      await page.keyboard.press('Enter');
+    }),
+  );
+  expect((await pane.boundingBox())?.width).toBeCloseTo(
+    await collapsedWidthOf(page),
+    0,
+  );
+  await expect(pane).toHaveAttribute('inert', '');
+  const opening = await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Enter');
+  });
+  expect(opening.glides).toBe(true);
+  expect(travelling(opening.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
+  expectEdgeOnHandle(opening.frames);
+  expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
+  await expect(pane).not.toHaveAttribute('inert', '');
+});
+
+test('a double-click on the handle slides the panel closed and open', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  expectSlid(
+    await captureMotion(page, 'start', async () => {
+      await handle.dblclick();
+    }),
+  );
+  expect((await pane.boundingBox())?.width).toBeCloseTo(
+    await collapsedWidthOf(page),
+    0,
+  );
+  const opening = await captureMotion(page, 'start', async () => {
+    await handle.dblclick();
+  });
+  expect(opening.glides).toBe(true);
+  expectEdgeOnHandle(opening.frames);
+  expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
+});
+
+test('the grow arrow opens a collapsed panel with a slide', async ({page}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  await handle.focus();
+  await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('Enter');
+  });
+  expect((await pane.boundingBox())?.width).toBeCloseTo(
+    await collapsedWidthOf(page),
+    0,
+  );
+  const opening = await captureMotion(page, 'start', async () => {
+    await page.keyboard.press('ArrowRight');
+  });
+  expect(opening.glides).toBe(true);
+  expect(travelling(opening.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
+  expectEdgeOnHandle(opening.frames);
+  expect((await pane.boundingBox())?.width ?? 0).toBeGreaterThan(100);
+});
+
+test('a drag past the threshold slides the panel closed, and a drag that reopens it follows the pointer with no slide', async ({
+  page,
+}) => {
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
+  const pane = page.getByTestId('sliding-panel');
+  const handle = page.getByRole('separator', {name: 'Resize panel'});
+  const start = await handle.boundingBox();
+  if (start == null) {
+    throw new Error('the handle is not laid out');
+  }
+  const y = start.y + start.height / 2;
+  await page.mouse.move(start.x + start.width / 2, y);
+  await page.mouse.down();
+  expectSlid(
+    await captureMotion(page, 'start', async () => {
+      await page.mouse.move(start.x + start.width / 2 - 190, y, {steps: 4});
+    }),
+  );
+  await page.mouse.up();
+  expect((await pane.boundingBox())?.width).toBeCloseTo(
+    await collapsedWidthOf(page),
+    0,
+  );
+
+  const collapsed = await handle.boundingBox();
+  if (collapsed == null) {
+    throw new Error('the handle is not laid out');
+  }
+  await page.mouse.move(collapsed.x + collapsed.width / 2, y);
+  await page.mouse.down();
+  const reopening = await captureMotion(page, 'start', async () => {
+    await page.mouse.move(collapsed.x + collapsed.width / 2 + 160, y, {
+      steps: 4,
+    });
+  });
+  await page.mouse.up();
+  // The pointer drives the edge: no clip and no glide play.
+  expect(reopening.clips).toBe(false);
+  expect(reopening.glides).toBe(false);
+  expect((await pane.boundingBox())?.width ?? 0).toBeGreaterThan(100);
   await expect(pane).not.toHaveAttribute('inert', '');
 });
 
