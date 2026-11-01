@@ -118,32 +118,189 @@ const KNOWN_SECTION_KEYS = new Set([
   'changedFrom',
 ]);
 
+/**
+ * The fields `LedgerBlock` declares, with the shape each must have. A BLOCK is
+ * inlined whole too, two levels down (`blocks.open` and each section's
+ * `blocks`), so an undeclared key there reds every build the same way:
+ * `severity` (2026-09-27) and `fix` (2026-10-15) did. `issue` is required, and
+ * a BLOCK recorded without one has no issue filed. A Map, so a wiki key named
+ * like a member of `Object.prototype` (`constructor`, `valueOf`, `__proto__`)
+ * is undeclared, as it is, rather than found on the prototype.
+ */
+const isText = value => typeof value === 'string';
+const isOptionalText = value =>
+  value === undefined || typeof value === 'string';
+const BLOCK_KEY_SHAPES = new Map([
+  ['id', isText],
+  ['summary', isText],
+  ['section', isOptionalText],
+  ['evidence', isOptionalText],
+  ['severity', isOptionalText],
+  ['fix', isOptionalText],
+  ['issue', value => value === null || Number.isInteger(value)],
+]);
+
 /** Drop keys `LedgerEntry` doesn't declare, or whose shape it rejects. */
 const droppedKeys = new Set();
 const malformedKeys = new Set();
 
+/**
+ * One BLOCK as `LedgerBlock` declares it, or null when it cannot be one: not
+ * an object, or without a text `id` and `summary`. `where` names it in the
+ * build's warnings.
+ */
+function pruneBlock(block, where) {
+  if (block == null || typeof block !== 'object' || Array.isArray(block)) {
+    malformedKeys.add(where);
+    return null;
+  }
+  const kept = {};
+  for (const [k, v] of Object.entries(block)) {
+    const shape = BLOCK_KEY_SHAPES.get(k);
+    if (!shape) droppedKeys.add(`${where.replace(/\[\d+\]$/, '[]')}.${k}`);
+    else if (!shape(v)) malformedKeys.add(`${where}.${k}`);
+    else kept[k] = v;
+  }
+  if (!isText(kept.id) || !isText(kept.summary)) {
+    malformedKeys.add(where);
+    return null;
+  }
+  if (!('issue' in kept)) kept.issue = null;
+  return kept;
+}
+
+/**
+ * A section's `blocks`. An entry names a BLOCK it already lists by its id
+ * (`["B15"]`, 2026-10-17): that id stands for the entry's open BLOCK.
+ */
+function pruneSectionBlocks(blocks, open, where) {
+  if (!Array.isArray(blocks)) {
+    malformedKeys.add(where);
+    return [];
+  }
+  return blocks
+    .map((block, i) => {
+      if (typeof block !== 'string') return pruneBlock(block, `${where}[${i}]`);
+      const named = open.find(each => each.id === block);
+      if (!named) malformedKeys.add(`${where}[${i}]`);
+      return named ?? null;
+    })
+    .filter(block => block != null);
+}
+
 /** Prune each section object to the keys `LedgerSection` declares. */
-function pruneSections(sections) {
+function pruneSections(sections, open, component) {
   if (sections == null || typeof sections !== 'object' || Array.isArray(sections)) {
     return sections;
   }
   const kept = {};
   for (const [id, section] of Object.entries(sections)) {
+    // A section id named like a member of Object.prototype cannot be written
+    // into the typed literal: `__proto__` would set its prototype, and any
+    // other such name takes the member's type instead of LedgerSection's.
+    if (id in Object.prototype) {
+      malformedKeys.add(`${component}.sections.${id}`);
+      continue;
+    }
     if (section == null || typeof section !== 'object' || Array.isArray(section)) {
       kept[id] = section;
       continue;
     }
     const kept_section = {};
     for (const [k, v] of Object.entries(section)) {
-      if (KNOWN_SECTION_KEYS.has(k)) kept_section[k] = v;
-      else droppedKeys.add(`sections.*.${k}`);
+      if (!KNOWN_SECTION_KEYS.has(k)) droppedKeys.add(`sections.*.${k}`);
+      else if (k === 'blocks') {
+        kept_section[k] = pruneSectionBlocks(
+          v,
+          open,
+          `${component}.sections.${id}.blocks`,
+        );
+      } else kept_section[k] = v;
     }
     kept[id] = kept_section;
   }
   return kept;
 }
 
+/**
+ * A plain object pruned to the keys `shapes` declares, each holding its shape:
+ * any other key, or a declared one of the wrong shape, is dropped and named in
+ * the build's warnings under `where`.
+ */
+function pruneToShapes(value, shapes, where) {
+  const kept = {};
+  for (const [k, v] of Object.entries(value)) {
+    const shape = shapes.get(k);
+    if (!shape) droppedKeys.add(`${where}.${k}`);
+    else if (!shape(v)) malformedKeys.add(`${where}.${k}`);
+    else kept[k] = v;
+  }
+  return kept;
+}
+const isPlainObject = value =>
+  value != null && typeof value === 'object' && !Array.isArray(value);
+const isNumberOrNull = value => value === null || typeof value === 'number';
+
+/**
+ * The top-level fields `Ledger` declares. Without the three it requires there
+ * is no snapshot, and the page relies on its runtime fetch, as it does when the
+ * wiki cannot be reached; any other field is pruned like an entry's.
+ */
+const LEDGER_KEY_SHAPES = new Map([
+  ['ledgerVersion', value => typeof value === 'number'],
+  ['rubricVersion', isText],
+  ['updated', isText],
+  ['about', isText],
+  ['caveats', value => Array.isArray(value) && value.every(isText)],
+]);
+function pruneLedger(parsed) {
+  const {components, ...fields} = parsed;
+  for (const k of ['ledgerVersion', 'rubricVersion', 'updated']) {
+    if (!LEDGER_KEY_SHAPES.get(k)(fields[k])) {
+      throw new Error(`its \`${k}\` is missing or malformed`);
+    }
+  }
+  return {
+    ...pruneToShapes(fields, LEDGER_KEY_SHAPES, 'ledger'),
+    components: components.map(pruneEntry),
+  };
+}
+
+/**
+ * `regression` as `LedgerEntry` declares it, and its `from`. It is optional,
+ * so one without its reason, its date, or the score and BLOCK count it fell
+ * from is dropped whole, named in the build's warnings.
+ */
+const REGRESSION_KEY_SHAPES = new Map([
+  ['reason', isText],
+  ['from', isPlainObject],
+  ['recordedAt', isText],
+]);
+const REGRESSION_FROM_KEY_SHAPES = new Map([
+  ['score', isNumberOrNull],
+  ['blocks', value => typeof value === 'number'],
+]);
+function pruneRegression(value, where) {
+  const kept = isPlainObject(value)
+    ? pruneToShapes(value, REGRESSION_KEY_SHAPES, where)
+    : {};
+  if (kept.from) {
+    kept.from = pruneToShapes(
+      kept.from,
+      REGRESSION_FROM_KEY_SHAPES,
+      `${where}.from`,
+    );
+  }
+  const complete =
+    ['reason', 'from', 'recordedAt'].every(k => Object.hasOwn(kept, k)) &&
+    ['score', 'blocks'].every(k => Object.hasOwn(kept.from, k));
+  if (complete) return kept;
+  malformedKeys.add(where);
+  return null;
+}
+
 function pruneEntry(entry) {
+  const component = entry.component ?? '?';
   const kept = {};
   for (const [k, v] of Object.entries(entry)) {
     if (!KNOWN_ENTRY_KEYS.has(k)) {
@@ -156,7 +313,33 @@ function pruneEntry(entry) {
       if (shape.repair) kept[k] = shape.repair(v);
       continue;
     }
-    kept[k] = k === 'sections' ? pruneSections(v) : v;
+    kept[k] = v;
+  }
+  if (kept.blocks) {
+    // `count` and `open` only: any other key in the object is undeclared.
+    const {count, open, ...undeclared} = kept.blocks;
+    for (const k of Object.keys(undeclared)) droppedKeys.add(`blocks.${k}`);
+    kept.blocks = {
+      count,
+      open: open
+        .map((block, i) => pruneBlock(block, `${component}.blocks.open[${i}]`))
+        .filter(block => block != null),
+    };
+  }
+  if ('sections' in kept) {
+    kept.sections = pruneSections(
+      kept.sections,
+      kept.blocks?.open ?? [],
+      component,
+    );
+  }
+  if (Object.hasOwn(kept, 'regression')) {
+    const regression = pruneRegression(
+      kept.regression,
+      `${component}.regression`,
+    );
+    if (regression) kept.regression = regression;
+    else delete kept.regression;
   }
   return kept;
 }
@@ -177,7 +360,7 @@ try {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const parsed = JSON.parse(await res.text());
   if (!Array.isArray(parsed.components)) throw new Error('missing a components array');
-  snapshot = {...parsed, components: parsed.components.map(pruneEntry)};
+  snapshot = pruneLedger(parsed);
   snapshotFetchedAt = new Date().toISOString();
   console.log(
     `componentScores: snapshot of ${parsed.components.length} audited component(s) from the wiki`,
@@ -195,7 +378,7 @@ if (droppedKeys.size > 0) {
   console.warn(
     `componentScores: the wiki ledger carries ${droppedKeys.size} field(s) LedgerEntry does not declare ` +
       `(${[...droppedKeys].sort().join(', ')}) — dropped from the snapshot. ` +
-      `Add them to LedgerEntry/LedgerSection and the matching KNOWN_*_KEYS set to surface them.`,
+      `Add them to LedgerEntry, LedgerSection or LedgerBlock and to KNOWN_*_KEYS or BLOCK_KEY_SHAPES to surface them.`,
   );
 }
 
@@ -227,6 +410,10 @@ export interface LedgerBlock {
   summary: string;
   section?: string;
   evidence?: string;
+  /** How the audit rated it, when it says: \`BLOCK\`. */
+  severity?: string;
+  /** What would close it, when the audit says. */
+  fix?: string;
   /** The \`hardening\` issue filed for this BLOCK, or null if none is filed. */
   issue: number | null;
 }
