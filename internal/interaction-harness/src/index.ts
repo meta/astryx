@@ -6,8 +6,10 @@
  * @output The `@astryxdesign/interaction-harness` entry point for Playwright
  *   specs. Pure helpers are also reachable without Playwright through
  *   `@astryxdesign/interaction-harness/math` and `/scripts` (unit tests).
- * @position Imported only from `*.interaction.browser.spec.ts` files (run by
- *   playwright.interaction.config.ts) and from this package's own tests.
+ * @position Imported from `*.interaction.browser.spec.ts` files (run by
+ *   playwright.interaction.config.ts), from accessibility specs that hold an
+ *   animation (`*.a11y.browser.spec.ts`, run by playwright.config.ts), and
+ *   from this package's own tests.
  *
  * SYNC: When a module is added, export it here and describe it in README.md.
  */

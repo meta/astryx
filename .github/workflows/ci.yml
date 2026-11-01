@@ -967,6 +967,8 @@ jobs:
           # infrastructure, `full_suite`, runs it too); the build itself
           # follows the specialized-lane outputs.
           paths: '^(packages/|pnpm-lock\.yaml$|package\.json$|tsconfig\.json$|scripts/|\.github/workflows/ci\.yml$|\.github/scripts/package-size\.mjs$|\.github/scripts/lib/package-size\.js$|\.github/scripts/merge-base\.sh$)'
+          # A head cut before the package-size check has no script for it.
+          requires-head-file: .github/scripts/package-size.mjs
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -1199,11 +1201,16 @@ jobs:
       # package or the lockfile runs it.
       - name: Measure published package size
         id: package-size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
-        run: node .github/scripts/package-size.mjs measure --output package-size-head.json
+        # A head cut before the check has no script to run (the workflow comes
+        # from the merge ref, the checkout from the head): the scope step notes
+        # it, and the check skips until the branch merges main.
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request' && steps.scope.outputs.head_file_present != 'false' && (steps.scope.outputs.touches == 'true' || steps.scope.outputs.full_suite != 'false')
+        run: |
+          node .github/scripts/package-size.mjs measure --output package-size-head.json
+          echo "measured=true" >> "$GITHUB_OUTPUT"
 
       - name: Download main's package size for the merge base
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success' && steps.size-records.outputs.package_run_id != ''
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true' && steps.size-records.outputs.package_run_id != ''
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
@@ -1215,7 +1222,7 @@ jobs:
       # Advisory: a package over its budget is flagged in the job summary and
       # the PR report, and fails nothing.
       - name: Compare published package size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outcome == 'success'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
@@ -1251,6 +1258,22 @@ jobs:
           }
           EOF
 
+      # Advisory API changes (architecture:public-component-api INV24): each
+      # published package's report from this build, compared with the reports
+      # committed at the merge base (read with git, no API calls). It reads the
+      # dists built above and never fails the job; api-changes.json goes into
+      # the pr-analysis artifact. With no merge base there is nothing to compare.
+      - name: Report API changes
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
+          [ -n "$BASE_SHA" ] || exit 0
+          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA"
+
       - name: Upload analysis artifact
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
         uses: actions/upload-artifact@v7
@@ -1260,6 +1283,8 @@ jobs:
             analysis.json
             pr-meta.json
             package-size.json
+            api-changes.json
+            api-changes.md
           retention-days: 1
 
   # Typechecks run beside build-storybook instead of before its Storybook
@@ -2034,9 +2059,27 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
 
+      # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
+      # from the CPUs the process may run on. A container's CPU quota is not
+      # that mask, so a runner that shows the host's CPUs oversubscribes the
+      # job's share. Cap llvmpipe's threads at the cgroup quota when one is
+      # set (the job's share, rounded up); without a quota the count stays
+      # nproc, llvmpipe's own default.
       - name: Run WebKit interaction proofs
         if: steps.scope.outputs.applies == 'true'
         run: |
+          LP_NUM_THREADS="$(nproc)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            if [ "$quota" != max ]; then
+              share=$(( (quota + period - 1) / period ))
+              if [ "$share" -lt "$LP_NUM_THREADS" ]; then
+                LP_NUM_THREADS="$share"
+              fi
+            fi
+          fi
+          export LP_NUM_THREADS
+          echo "llvmpipe threads: $LP_NUM_THREADS"
           pnpm exec playwright test \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \

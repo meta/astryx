@@ -5,7 +5,8 @@
 /**
  * @file useSheetGestures.ts
  * @input Uses React (useCallback, useEffect, useMemo, useRef, useState)
- * @output Exports useSheetGestures hook and its option/result types
+ * @output Exports useSheetGestures hook, its option/result types, and the
+ *   height and end-inset formats a host renders for the layout split
  * @position Internal to BottomSheet; not exported from the core entry point
  *
  * Drag + snap machinery for the bottom sheet. Tracks a pointer drag down the
@@ -26,10 +27,18 @@
  * A live drag writes that transform straight to the sheet element, once per
  * input sample, and renders nothing: React state changes when the drag begins
  * and ends, and in between only when the layout split changes (a drag that
- * crosses above its base detent restores the full height). The live offset
- * is readable through `activeOffsetRef`. The host owns the element's
- * transform outside a drag and writes the resting value after each commit,
- * so a settle animates from wherever the finger left the sheet.
+ * crosses above its base detent restores the full height). That crossing
+ * changes three things that only look right together: the transform, the
+ * sheet's height and the scrolling area's end inset. The move writes all
+ * three to the elements in the same task, so the browser paints them in one
+ * frame, and the render it schedules catches the host up to the same values
+ * whenever it commits; it never decides what the next frame shows. The live
+ * offset is readable through `activeOffsetRef`. The host owns the element's
+ * transform, height and end inset outside a drag and writes their resting
+ * values after each commit (a host with a fixed height of its own keeps that
+ * height, and the drag never writes it), so a settle animates from wherever the finger
+ * left the sheet, and a release processed before the crossing move's render
+ * commits still leaves the sheet drawn at its resting detent.
  *
  * Those are pixels, and the stops behind them are relative to the viewport, so
  * a sheet at rest re-resolves its detent on `resize` / `orientationchange`,
@@ -206,6 +215,28 @@ function preservationInsetForOffset(
   return Math.max(0, baseOffset - targetOffset - naturalEndGap);
 }
 
+/**
+ * The sheet's height, in px, while it is in motion or rests with a layout
+ * split: the fully open height less the part the scrolling area gives up.
+ * The host renders it and a live drag writes it; one format keeps the two
+ * identical, so the render that follows a written value changes nothing.
+ */
+export function sheetLayoutHeight(
+  sheetHeight: number,
+  layoutOffset: number,
+): string {
+  return `${Math.max(0, sheetHeight - Math.max(0, layoutOffset))}px`;
+}
+
+/**
+ * The scrolling area's end padding that preserves its scroll position across
+ * a height change, or nothing when there is none to add. Shared by the host's
+ * render and a live drag's write for the same reason as sheetLayoutHeight.
+ */
+export function scrollPreservationPadding(inset: number): string | undefined {
+  return inset > 0 ? `${inset}px` : undefined;
+}
+
 function renderedBlockEndPadding(element: HTMLElement): number {
   const value = Number.parseFloat(getComputedStyle(element).paddingBlockEnd);
   return Number.isFinite(value) ? value : 0;
@@ -368,6 +399,14 @@ export interface UseSheetGesturesOptions {
    * on the dismiss overshoot. Lets the owner mirror it onto the scrim.
    */
   onScrimOpacity?: (opacity: number) => void;
+  /**
+   * Whether the host draws the sheet at a fixed height of its own (a caller's
+   * height) rather than the layout-split height. A drag across the base
+   * detent then writes only the transform and the end inset, and leaves the
+   * element's height to the host.
+   * @default false
+   */
+  hasFixedHeight?: boolean;
 }
 
 export interface SheetContentProps {
@@ -508,6 +547,7 @@ export function useSheetGestures({
   snapHeights,
   onSnap,
   onScrimOpacity,
+  hasFixedHeight = false,
 }: UseSheetGesturesOptions): UseSheetGesturesResult {
   const [dragOffset, setDragOffset] = useState(0);
   const [settledOffset, setSettledOffset] = useState(0);
@@ -657,11 +697,13 @@ export function useSheetGestures({
   const canDismissRef = useRef(canDismiss);
   const onSnapRef = useRef(onSnap);
   const onScrimOpacityRef = useRef(onScrimOpacity);
+  const hasFixedHeightRef = useRef(hasFixedHeight);
   useEffect(() => {
     onDismissRef.current = onDismiss;
     canDismissRef.current = canDismiss;
     onSnapRef.current = onSnap;
     onScrimOpacityRef.current = onScrimOpacity;
+    hasFixedHeightRef.current = hasFixedHeight;
   });
 
   // Live drag bookkeeping (refs so pointermove doesn't churn renders).
@@ -950,6 +992,31 @@ export function useSheetGestures({
       const translation = offset - layoutOffset;
       element.style.transform =
         translation !== 0 ? `translateY(${translation}px)` : '';
+    },
+    [],
+  );
+
+  // A live drag's layout split moved. The transform written beside this call
+  // is only correct on the new split, so the height and end inset that pair
+  // with it go to the elements in the same task. They are the values the host
+  // renders from the state this move also sets, in the same format, so its
+  // commit, whenever it lands, leaves them as they are. If the drag ends
+  // before that commit, the host's post-commit write puts the resting values
+  // back, since React sees no change from what it committed before the drag.
+  // A host with a fixed height of its own renders that height throughout and
+  // never restores a written one, so its height is not written.
+  const writeLiveLayout = useCallback(
+    (sheetHeight: number, layoutOffset: number) => {
+      const element = sheetElRef.current;
+      // Unmeasured, the host renders no height to pair with.
+      if (element != null && sheetHeight > 0 && !hasFixedHeightRef.current) {
+        element.style.height = sheetLayoutHeight(sheetHeight, layoutOffset);
+      }
+      const body = bodyNodeRef.current;
+      if (body != null) {
+        body.style.paddingBlockEnd =
+          scrollPreservationPadding(scrollPreservationInsetRef.current) ?? '';
+      }
     },
     [],
   );
@@ -1262,16 +1329,6 @@ export function useSheetGestures({
       state.renderedOffset = next;
       state.layoutOffset = layoutOffset;
       activeOffsetRef.current = next;
-      writeLiveTransform(next, layoutOffset);
-      if (hasLayoutChanged) {
-        // The layout split moved: the host renders the new height, reading
-        // the offset it has to pair with it from state.
-        setDragOffset(next);
-      }
-      if (!state.hasTraveled && next !== state.baseOffset) {
-        state.hasTraveled = true;
-        setIsTraveling(true);
-      }
       updateScrollPreservationInset(
         preservationInsetForOffset(
           state.baseLayoutOffset,
@@ -1279,6 +1336,21 @@ export function useSheetGestures({
           state.naturalEndGap,
         ),
       );
+      writeLiveTransform(next, layoutOffset);
+      if (hasLayoutChanged) {
+        // The layout split moved. The new height and end inset are written
+        // with the transform, in this task: a render scheduled normally can
+        // commit after the next paint, and the transform alone on the old
+        // height would put the sheet the whole split away from the finger
+        // for that frame. The host still renders them from state, reading
+        // the offset it has to pair with the height from here.
+        writeLiveLayout(state.height, layoutOffset);
+        setDragOffset(next);
+      }
+      if (!state.hasTraveled && next !== state.baseOffset) {
+        state.hasTraveled = true;
+        setIsTraveling(true);
+      }
 
       // Mirror the scrim to the live drag: full at/above the mid detent,
       // fading to hidden as it collapses onto the peek detent and through the
@@ -1295,7 +1367,12 @@ export function useSheetGestures({
         scrimOpacityForOffset(next, offsets, dismissOffset, peekOffset),
       );
     },
-    [resolveDetents, updateScrollPreservationInset, writeLiveTransform],
+    [
+      resolveDetents,
+      updateScrollPreservationInset,
+      writeLiveLayout,
+      writeLiveTransform,
+    ],
   );
 
   const endDrag = useCallback(

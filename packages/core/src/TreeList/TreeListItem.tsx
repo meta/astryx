@@ -15,6 +15,7 @@
  */
 
 import {useId, useMemo, useRef, type ReactNode} from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -520,6 +521,7 @@ export function TreeListItem({
         )}>
         {label}
       </span>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `description` is a string field: an empty string still describes the item */}
       {description != null && (
         <span
           id={descriptionId}
@@ -601,7 +603,7 @@ export function TreeListItem({
   const innerContent = (
     <>
       {chevron}
-      {startContent != null && (
+      {isRenderable(startContent) && (
         <span {...stylex.props(styles.startContent)}>{startContent}</span>
       )}
       {href != null && isDisabled ? (
@@ -649,7 +651,7 @@ export function TreeListItem({
       ) : (
         <span {...stylex.props(styles.content)}>{labelAndDescription}</span>
       )}
-      {endContent != null && (
+      {isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>
       )}
     </>
@@ -728,7 +730,7 @@ export function TreeListItem({
           <div {...stylex.props(styles.indentedContent)}>{innerContent}</div>
         </div>
       </div>
-      {(isExpanded || isExiting) && renderedChildren != null && (
+      {(isExpanded || isExiting) && isRenderable(renderedChildren) && (
         <ul
           role="group"
           data-tree-exiting={isExiting ? '' : undefined}

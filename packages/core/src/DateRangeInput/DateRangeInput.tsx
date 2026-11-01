@@ -50,7 +50,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
@@ -82,6 +81,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale, useTranslator} from '../i18n';
 import type {Locale} from '../i18n/types';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 
 export type {DateRange} from '../Calendar';
 
@@ -443,7 +443,7 @@ export interface DateRangeInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is

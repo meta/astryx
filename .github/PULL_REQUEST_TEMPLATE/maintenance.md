@@ -17,6 +17,7 @@
 - Failure before the change:
 - Success after the change:
 - Product/runtime behavior verified unchanged:
+- CI impact (for a change to workflows, actions or CI scripts): <!-- runner class of each changed job, job-minutes per update and runner-pool usage before and after, time to green; the PR report's CI impact section measures them -->
 
 ## Scope
 

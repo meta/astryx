@@ -855,6 +855,7 @@
     "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
     "postinstall": "node scripts/postinstall.mjs",
     "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",

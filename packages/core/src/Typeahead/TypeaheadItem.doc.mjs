@@ -6,7 +6,8 @@ export const docs = {
   name: 'TypeaheadItem',
   subComponentOf: 'Typeahead',
   displayName: 'Typeahead Item',
-  description: 'Default dropdown item renderer for typeahead results. Shows label with optional icon, description, and avatar. Exported for use in custom renderItem implementations.',
+  description:
+    'Default dropdown item renderer for typeahead results. Shows label with optional icon, description, and avatar. Exported for use in custom renderItem implementations.',
   props: [
     {
       name: 'item',
@@ -50,7 +51,8 @@ export const docs = {
 export const docsZh = {
   name: 'TypeaheadItem',
   displayName: 'Typeahead Item',
-  description: '预输入结果的默认下拉项渲染器。显示标签以及可选的图标、描述和头像。导出供自定义 renderItem 实现使用。',
+  description:
+    '预输入结果的默认下拉项渲染器。显示标签以及可选的图标、描述和头像。导出供自定义 renderItem 实现使用。',
   props: [
     {
       name: 'item',
@@ -85,7 +87,8 @@ export const docsZh = {
 export const docsDense = {
   name: 'TypeaheadItem',
   displayName: 'Typeahead Item',
-  description: 'Default dropdown item renderer. Label w/ optional icon, description, avatar. Exported for custom renderItem.',
+  description:
+    'Default dropdown item renderer. Label w/ optional icon, description, avatar. Exported for custom renderItem.',
   propDescriptions: {
     item: 'Search result item to render.',
     icon: 'Icon/avatar before label.',
