@@ -1,4 +1,4 @@
-Results for "icon set" (20 of 373)
+Results for "icon set" (20 of 374)
 name:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons
 section:     use-astryx-icon
 domain:      doc
@@ -42,6 +42,11 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/IconButton
 command:     pnpm exec astryx component IconButton
+name:        InfoTip
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/InfoTip
+command:     pnpm exec astryx component InfoTip
 name:        useInputContainer
 domain:      hook
 package:     @astryxdesign/core
@@ -88,7 +93,3 @@ name:        CenterInsideACard
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template CenterInsideACard --type block
-name:        ChatComposerDrawerShowcase
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatComposerDrawerShowcase --type block

@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {InfoTip} from '@astryxdesign/lab/InfoTip';
+import {InfoTip} from '@astryxdesign/core/InfoTip';
 import {HStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 
 const meta: Meta<typeof InfoTip> = {
-  title: 'Lab/InfoTip',
+  title: 'Core/InfoTip',
   component: InfoTip,
   tags: ['autodocs'],
   argTypes: {
@@ -42,11 +42,10 @@ export const NextToALabel: Story = {
 };
 
 /**
- * The trigger is a button, so `Tooltip`'s `auto` touch rule would give the tap
- * to the control and suppress the tooltip. `InfoTip` sets `touchTrigger="tap"`
- * because revealing the tooltip is the button's only purpose — tap the icon on
- * a phone (or with touch emulation on) and the tooltip opens; tap outside and
- * it dismisses.
+ * Revealing the help is the button's only purpose, so `InfoTip` sets
+ * `pressTrigger="toggle"`: tap the icon on a phone (or with touch emulation
+ * on), click it, or press Enter or Space and the help pins open; tap outside
+ * and it dismisses.
  */
 export const Touch: Story = {
   render: () => (
