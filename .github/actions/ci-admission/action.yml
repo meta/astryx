@@ -83,7 +83,7 @@ runs:
           // (ci-admission.test.mjs), a pull-request ci.yml run from its
           // measured most, every other workflow's run one or two slim jobs.
           const ESTIMATE = {
-            '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 36 : 12),
+            '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 36 : 16),
             '.github/workflows/deploy.yml': () => 14,
             '.github/workflows/review-signal.yml': () => 2,
           };

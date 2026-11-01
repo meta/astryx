@@ -16,6 +16,7 @@ import path from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
+import {PR_CI_GATE} from './ci-pr-gate.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const read = file => yaml.parse(fs.readFileSync(path.join(root, file), 'utf8'));
@@ -66,10 +67,10 @@ describe('where runs wait', () => {
     }
   });
 
-  it('can never skip or fail, so every job and required check decides as before', () => {
-    // No condition: it runs for every event, drafts and forks included, and
-    // the action returns at once for a pull request that may not run CI.
-    expect(admission.if).toBeUndefined();
+  it('skips only with every other job, and never fails, so every job and required check decides as before', () => {
+    // The pull-request gate every job carries: a draft or an unlabelled fork
+    // runs no CI (FR17). Every other event is admitted.
+    expect(admission.if).toBe(PR_CI_GATE);
     expect(needsOf(admission)).toEqual([]);
     // Whatever the step does, a lookup error or its own time limit, the job
     // succeeds, and it finishes before the job's own limit.
@@ -198,6 +199,29 @@ describe('peaks', () => {
     const peak = stepOf(main.jobs['main-commit']).with.peak;
     expect(peak).toBeGreaterThanOrEqual(held);
     expect(estimateOf('deploy.yml')).toContain(`() => ${peak},`);
+  });
+
+  it('gives a pull request a peak that covers every job it starts at once', () => {
+    // The jobs that need only admission start together the moment it ends.
+    const first = Object.keys(ci.jobs).filter(
+      name =>
+        name !== 'admission' &&
+        needsOf(ci.jobs[name]).every(need => need === 'admission'),
+    );
+    const onPullRequest = first.filter(name => {
+      const condition = String(ci.jobs[name].if ?? '');
+      return !/^(\$\{\{\s*)?(always\(\) && )?github\.event_name == 'workflow_dispatch'/.test(
+        condition,
+      );
+    });
+    const started = onPullRequest
+      .map(name => legs(ci.jobs[name], 'pull_request'))
+      .reduce((sum, count) => sum + count, 0);
+    const peak = Number(
+      /\|\| (\d+) \}\}$/.exec(stepOf(ci.jobs.admission).with.peak)[1],
+    );
+    expect(peak).toBeGreaterThanOrEqual(started);
+    expect(estimateOf('ci.yml')).toContain(`: ${peak}),`);
   });
 
   it('adds the jobs each opt-in label brings to a pull request', () => {
@@ -373,7 +397,7 @@ describe('ci admission', () => {
   it('counts live jobs, and a run admitted in the last three minutes at least at its most', async () => {
     // 4 x 12 live + 18 small + 13 = 79: room.
     expect((await admit({active: prs(4), peak: 13})).looks).toBe(1);
-    // A just-admitted run with 2 jobs so far counts 12 (91); a long-running one, 2 (81).
+    // A just-admitted run with 2 jobs so far counts its planned 16 (95); a long-running one, 2 (81).
     const fresh = admittedRun(60, 2, {admittedMinutesAgo: 1});
     const old = admittedRun(60, 2, {admittedMinutesAgo: 9});
     expect(

@@ -84,13 +84,15 @@ concurrency:
 jobs:
   # Admits the whole run under CI's ceiling of about ninety concurrent jobs
   # (spec:AST-030 FR16, DEC-16). Every job here needs this one, directly or
-  # through the jobs it needs. It never fails and never skips, so each job's
-  # own condition decides exactly as before, and a draft or an unlabelled fork
-  # starts at once (FR17). `peak` is the most jobs a run holds at once: a
+  # through the jobs it needs. Like every other job it skips for a draft or an
+  # unlabelled fork, which run no CI (FR17); the required contexts still report
+  # through their own status rules. Otherwise it never fails, so each job's own
+  # condition decides exactly as before. `peak` is the most jobs a run holds at once: a
   # release-check's from its legs, a pull request's from its measured most plus
   # the suites its labels opt into (ci-admission.test.mjs). A pull request
   # waits at most twelve minutes, inside the fifteen-minute job budget.
   admission:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
     runs-on: ubuntu-slim
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
     permissions:
@@ -109,7 +111,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
         with:
-          peak: ${{ github.event_name == 'workflow_dispatch' && 36 || 12 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 36 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}

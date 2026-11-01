@@ -307,14 +307,14 @@ they are separately named.
   pre-merge restart, is exempt from both limits, and when the limits cannot be
   looked up the suite runs. Merge-queue entries, `main`, release checks and the
   visual, accessibility and RTL owners a maintainer opts a pull request into
-  with their `ci:run-*` labels are unaffected. Every run of the CI and Main
-  workflows, of any event, waits for room before its jobs start: it starts once
-  the other active runs' estimated jobs plus its own most fit under about
-  ninety, and a pull-request run also waits while a `main` full check or release
-  re-check is waiting, looking twice on a pull request, at once and after twelve
-  minutes, and every two minutes for at most fifteen for `main` (DEC-16). A pull
-  request that may not run CI starts at once, and waiting never skips or fails a
-  job, so every required context reports as before.
+  with their `ci:run-*` labels are unaffected by these per-author limits. Every
+  run of the CI and Main workflows, of any event, waits for room before its jobs
+  start: it starts once the other active runs' estimated jobs plus its own most
+  fit under about ninety, and a pull-request run also waits while a `main` full
+  check or release re-check is waiting, looking twice on a pull request, at once
+  and after twelve minutes, and every two minutes for at most fifteen for `main`
+  (DEC-16). A pull request that may not run CI admits nothing, and waiting never
+  fails a job, so every required context reports as before.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -585,8 +585,9 @@ measured running at once, eighteen jobs, so the room they can take stays free.
 Each CI or Main run counts its live jobs: a pull-request run still waiting
 counts none, so waiting runs never hold each other back, and a run admitted in
 the last three minutes counts at least its planned most. A look reads the active
-runs and each CI or Main run's jobs once, a pull request looks at most twice,
-and a run starts rather than spend a low API budget. A `main`
+runs and each CI or Main run's jobs once, so it costs two run listings plus one
+call per active CI or Main run. A pull request looks at most twice, and a run
+starts rather than spend a low API budget. A `main`
 full check or release re-check goes first: while one waits, pull-request runs
 wait too. Every job ends within its fifteen-minute budget, so `main` fits within
 fifteen minutes. Nothing is reserved for `main` outside those minutes.
@@ -594,9 +595,9 @@ fifteen minutes. Nothing is reserved for `main` outside those minutes.
 CI can still pass ninety in three rare, bounded ways:
 
 - A run that has waited its longest (fifteen minutes for `main`, twelve for a
-  pull request) starts anyway when a job has outlived its budget, such as the
-  thirty-minute macOS Swift job. It is over by at most its own jobs until that
-  job ends.
+  pull request) starts whatever the load, even while a `main` check waits. That
+  happens when a job outlives its budget, such as the thirty-minute macOS Swift
+  job, and the run is over by at most its own jobs until that job ends.
 - Runs that look within the same few seconds can each see room. A random
   0–20 s on every later look spreads them, and the excess is at most one run's
   jobs until its next look.
