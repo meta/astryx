@@ -433,5 +433,21 @@
       "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
       "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
     }
+  },
+  {
+    "component": "core/TableBody",
+    "reason": "TableBody renders a plain `<tbody>` that adds only its theme target and caller styles. It owns no glyph, inline spacing, physical positioning, order, scroll, drag, overlay or keyboard behavior. The rows and cells inside it mirror with the native table under `dir`, and the cells' own logical edge padding and order are measured on TableHeaderCell and TableCell (D2, D8)."
+  },
+  {
+    "component": "core/TableFooter",
+    "reason": "TableFooter renders a plain `<tfoot>` that adds only its theme target and caller styles. It owns no glyph, inline spacing, physical positioning, order, scroll, drag, overlay or keyboard behavior. The rows and cells inside it mirror with the native table under `dir`, and the cells' own logical edge padding and order are measured on TableHeaderCell and TableCell (D2, D8)."
+  },
+  {
+    "component": "core/TableHeader",
+    "reason": "TableHeader renders a plain `<thead>` that adds only its theme target and caller styles. It owns no glyph, inline spacing, physical positioning, order, scroll, drag, overlay or keyboard behavior. The rows and cells inside it mirror with the native table under `dir`, and the cells' own logical edge padding and order are measured on TableHeaderCell and TableCell (D2, D8)."
+  },
+  {
+    "component": "core/TableRow",
+    "reason": "TableRow renders a `<tr>` whose own styles are block-axis only: hover and striped backgrounds, and a block-end row divider that spans both inline edges and glides with the row. It owns no glyph, inline spacing, physical positioning, order, scroll, drag, overlay or keyboard behavior. Its cells mirror with the native table under `dir`; their logical edge padding and order are measured on TableHeaderCell and TableCell (D2, D8)."
   }
 ]
