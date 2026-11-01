@@ -45,6 +45,7 @@ import {
   decorationStyles,
   tabularNumbersStyle,
   truncationTooltipStyles,
+  textBlockMarker,
 } from './text.stylex';
 import {useTruncation} from './useTruncation';
 import type {LayerPlacement} from '../Layer';
@@ -294,6 +295,7 @@ export function Text({
             size && sizeStyles[size],
             defaultWeightByTypeStyles[styleType],
             weight && weightStyles[weight],
+            resolvedDisplay === 'block' && textBlockMarker,
             // Display: use truncation styles when maxLines > 0
             maxLines === 1
               ? truncationStyles.singleLine

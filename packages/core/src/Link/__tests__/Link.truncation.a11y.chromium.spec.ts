@@ -88,9 +88,10 @@ test('a wrapping Link shares its first and last lines with the sentence', async 
     const after = text.lastChild as Text;
     range.selectNodeContents(before);
     const beforeTop = range.getClientRects()[0].top;
+    // Where the trailing text starts, so a font that wraps "example.com"
+    // itself onto a further line does not matter.
     range.selectNodeContents(after);
-    const afterRects = range.getClientRects();
-    const afterTop = afterRects[afterRects.length - 1].top;
+    const afterTop = range.getClientRects()[0].top;
     const linkRects = Array.from(link.getClientRects());
     return {
       pieces: linkRects.length,
@@ -127,9 +128,11 @@ test("an external Link's icon stays on its last line", async ({page}) => {
   expect(measured.iconMiddle).toBeLessThan(measured.lastLineBottom);
 });
 
-for (const [slot, presses] of [
-  ['block-child', 4],
-  ['span-stack-child', 5],
+for (const slot of [
+  'block-child',
+  'clamped-text-child',
+  'block-text-child',
+  'span-stack-child',
 ] as const) {
   test(`keyboard focus paints the outline around a Link with a ${slot}`, async ({
     page,
@@ -137,16 +140,21 @@ for (const [slot, presses] of [
     await page.goto(`${storybook.origin}/${INLINE_FLOW}`);
     const link = page.locator(`[data-inline-flow="${slot}"] a`);
     await expect(link).toBeVisible();
-    // Tab through the story's links until the back link holds focus.
-    for (let i = 0; i < presses; i++) {
+    // Tab through the story's links until this one holds focus.
+    for (let i = 0; i < 12; i++) {
       await page.keyboard.press('Tab');
+      if (await link.evaluate(el => el === document.activeElement)) {
+        break;
+      }
     }
     await expect(link).toBeFocused();
     const measured = await link.evaluate(el => {
       const style = getComputedStyle(el);
       const box = el.getBoundingClientRect();
+      // The block child: the Stack, or the caller's block Text.
       const child = (
-        el.querySelector('.astryx-stack') as HTMLElement
+        (el.querySelector('.astryx-stack') ??
+          el.querySelector('.astryx-text .astryx-text')) as HTMLElement
       ).getBoundingClientRect();
       return {
         outlineStyle: style.outlineStyle,

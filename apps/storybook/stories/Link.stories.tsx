@@ -209,6 +209,18 @@ export const InlineFlow: Story = {
           </HStack>
         </Link>
       </div>
+      <div style={{width: 220}} data-inline-flow="clamped-text-child">
+        <Link href="/notes/planning">
+          <Text maxLines={1}>
+            Quarterly planning notes for the design systems team
+          </Text>
+        </Link>
+      </div>
+      <div data-inline-flow="block-text-child">
+        <Link href="/notes/planning">
+          <Text display="block">Planning notes</Text>
+        </Link>
+      </div>
       <div data-inline-flow="span-stack-child">
         <Link href="/work-items" color="secondary">
           <HStack as="span" gap={1} vAlign="center">

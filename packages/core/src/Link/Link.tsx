@@ -30,6 +30,7 @@ import {
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
+import {textBlockMarker} from '../Text/text.stylex';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,
@@ -56,17 +57,19 @@ import {disabledInteractionProps} from '../utils/disabledInteraction';
 const styles = stylex.create({
   // Link's text behaves as inline text: it truncates with an ancestor Text
   // clamp and, when it wraps, shares its first and last lines with the words
-  // around it (`component:Link` FR6). Content with a block-level element (a
-  // block HTML element, or a Stack rendered as any element, `HStack
-  // as="span"` included) gets a flex box instead, because an inline element
-  // paints no focus outline around a block child (AR5). Decided in CSS, not
-  // by reading children; a phrasing element made block by styling alone is
-  // not detected (FR6 records the gap).
+  // around it (`component:Link` FR6). Content with a block-level element gets
+  // a flex box instead, because an inline element paints no focus outline
+  // around a block child (AR5): a block HTML element, a Stack rendered as any
+  // element (`HStack as="span"` included), or a block Text, Link's own label
+  // included when its `maxLines` or `display` makes it one. Decided in CSS,
+  // not by reading children; a caller element made block by its own styling
+  // is not detected (FR6 records the gap).
   base: {
     display: {
       default: 'inline',
       ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr, .astryx-stack))':
         'inline-flex',
+      [stylex.when.descendant(':is(*)', textBlockMarker)]: 'inline-flex',
     },
     alignItems: 'center',
     fontFamily: 'inherit',
@@ -87,14 +90,9 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
-  // Text renders a block when Link's own `maxLines` or `display` asks for
-  // one, so the root lays it out as a flex box. A truncating label's box stops
-  // at its container: it otherwise grows to its whole text, so its Text never
-  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
-  // FR4).
-  blockText: {
-    display: 'inline-flex',
-  },
+  // A truncating label's box stops at its container: it otherwise grows to its
+  // whole text, so its Text never overflows and draws no ellipsis
+  // (`component:Link` FR6, `component:Text` FR4).
   truncating: {
     maxWidth: '100%',
     minWidth: 0,
@@ -349,9 +347,6 @@ export function Link({
     relFromProps,
   );
 
-  // Text resolves to a block for these (`component:Text` display).
-  const hasBlockText = maxLines > 0 || display !== 'inline';
-
   // When role resolves to 'button' (no href, or context-provided),
   // render as a <button> with link styling for semantic correctness.
   const renderAsButton =
@@ -412,7 +407,6 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
-            hasBlockText && styles.blockText,
             maxLines > 0 && styles.truncating,
             xstyle,
           ),
@@ -448,7 +442,6 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             styles.disabled,
-            hasBlockText && styles.blockText,
             maxLines > 0 && styles.truncating,
             xstyle,
           ),
@@ -482,7 +475,6 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
-            hasBlockText && styles.blockText,
             maxLines > 0 && styles.truncating,
             xstyle,
           ),
