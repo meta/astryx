@@ -178,27 +178,18 @@ public struct Button: View {
       .opacity(isLoading ? 0 : 1)
       .overlay {
         if isLoading {
-          ProgressView().controlSize(.small).tint(labelColor)
+          ProgressView().controlSize(.small).tint(foreground)
         }
       }
       .modifier(SystemBarLabel(tint: systemBarTint, style: style))
   }
 
-  /// The label's and spinner's color: the variant's foreground, or, for a
-  /// disabled primary or destructive in a bar, which draws with no tinted
-  /// fill behind it, the variant's own color (FR11).
-  var labelColor: Color {
-    if isDisabled, case .glass(.barProminent(let role)) = surface { return role.color(astryx.tokens) }
-    return foreground
-  }
-
-  /// The tint an enabled primary or destructive Button in a bar gives the
-  /// bar's glass, through SwiftUI's prominent glass style (FR7, FR8); nil
-  /// elsewhere. A disabled one keeps its focus stop, so that style would
-  /// still draw its full tint and press response; it draws as a bar item
-  /// instead, its label dimmed in the variant's color (FR11).
+  /// The tint a primary or destructive Button in a bar gives the bar's
+  /// glass, through SwiftUI's prominent glass style (FR7, FR8); nil
+  /// elsewhere. It depends on placement and variant only, so disabling the
+  /// Button keeps one view structure and its focus (FR6).
   var systemBarTint: Color? {
-    guard !isDisabled, case .glass(.barProminent(let role)) = surface else { return nil }
+    guard case .glass(.barProminent(let role)) = surface else { return nil }
     return role.color(astryx.tokens)
   }
 
@@ -208,8 +199,13 @@ public struct Button: View {
   @ViewBuilder private var styledControl: some View {
     #if os(iOS) && compiler(>=6.2)
     if #available(iOS 26, *), let tint = systemBarTint {
-      // The elevation paints beneath the system's capsule (FR11).
-      control.buttonStyle(.glassProminent).tint(tint).astryxShadow(shadow, in: Capsule())
+      // The elevation paints beneath the system's capsule (FR11). Disabled,
+      // the whole control dims and takes no touch, so the style shows no
+      // press response, while it keeps its focus stop (FR6, FR11).
+      control.buttonStyle(.glassProminent).tint(tint)
+        .opacity(isDisabled ? 0.5 : 1)
+        .allowsHitTesting(!isDisabled)
+        .astryxShadow(shadow, in: Capsule())
     } else {
       control.buttonStyle(style)
     }
@@ -348,8 +344,8 @@ struct AstryxButtonStyle: ButtonStyle {
     case .glass(.barItem):
       barItemBody(configuration, labelColor: foreground)
     case .glass(.barProminent(let role)):
-      // An enabled one draws through SwiftUI's prominent style; a disabled
-      // one draws here, its label in the variant's color, dimmed.
+      // Drawn through SwiftUI's prominent style wherever glass draws; this
+      // is only a fallback, the label in the variant's color on the bar.
       barItemBody(configuration, labelColor: role.color(astryx.tokens))
     case .glass(let glass):
       glassBody(configuration, glass: glass)
