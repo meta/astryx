@@ -1558,6 +1558,24 @@ describe('useResizable percentage configuration (AST-010)', () => {
       expect(result.current.props._maxSizePx).toBe(399);
     });
 
+    it('follows a container swapped behind the ref with the same options in the ref form', () => {
+      const first = makeSized(398);
+      const second = makeSized(798);
+      const containerRef: {current: HTMLElement | null} = {current: first};
+      const handleRef = {current: document.createElement('div')};
+      const options = {containerRef, defaultSize: 100, minSize: '50%'} as const;
+      const {result, rerender} = renderHook(() =>
+        useResizable(handleRef, options),
+      );
+      expect(result.current.size).toBe(199);
+
+      act(() => {
+        containerRef.current = second;
+      });
+      rerender();
+      expect(result.current.size).toBe(399);
+    });
+
     it('stops observing the element it left behind', () => {
       const first = makeSized(398);
       const second = makeSized(798);
