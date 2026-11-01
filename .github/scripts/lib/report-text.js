@@ -75,15 +75,24 @@ function fitToBudget(markdown, budget) {
     kept.push(line);
     size += line.length + 1;
   }
+  // A cut inside a disclosure nested in another (one component's issues in
+  // the accessibility section) backs up to before that nested disclosure, so
+  // the note shows in the outer section rather than hidden in a component.
+  const opened = [];
+  kept.forEach((line, index) => {
+    const opens = (line.match(/<details[\s>]/g) || []).length;
+    const closes = (line.match(/<\/details>/g) || []).length;
+    for (let i = 0; i < opens; i++) opened.push(index);
+    for (let i = 0; i < closes; i++) opened.pop();
+  });
+  while (opened.length > 1) kept.length = opened.pop();
   const omitted = lines
     .slice(kept.length)
     .filter(line => line.trim() !== '').length;
   const keptText = kept.join('\n');
-  const open =
-    (keptText.match(/<details[\s>]/g) || []).length -
-    (keptText.match(/<\/details>/g) || []).length;
+  const open = opened.length;
   const tail = [
-    ...(kept.at(-1)?.startsWith('|') ? [''] : []),
+    '',
     `_${num(omitted).toLocaleString('en-US')} more line${omitted === 1 ? '' : 's'} did not fit GitHub's comment limit; the run's full report has them._`,
     '',
     ...Array.from({length: Math.max(0, open)}, () => '</details>\n'),

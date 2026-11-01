@@ -91,4 +91,21 @@ describe('fitToBudget', () => {
       (out.match(/<\/details>/g) || []).length,
     );
   });
+
+  it('backs a cut inside a nested disclosure up to before it, so the note shows in the outer section', () => {
+    const parts = Array.from(
+      {length: 30},
+      (_, i) =>
+        `<details>\n<summary>Part${i} - 1 issue(s)</summary>\n\n${'issue text '.repeat(6)}\n\n</details>\n`,
+    );
+    const markdown = `<details>\n<summary>Accessibility</summary>\n\n${parts.join('\n')}\n</details>\n`;
+    const out = fit(markdown, 1500);
+    expect(out.length).toBeLessThanOrEqual(1500);
+    // The note follows a closed component, at the outer level.
+    expect(out).toMatch(/<\/details>\n+_\d+ more lines did not fit/);
+    expect(out.trimEnd().endsWith('</details>')).toBe(true);
+    expect((out.match(/<details/g) || []).length).toBe(
+      (out.match(/<\/details>/g) || []).length,
+    );
+  });
 });
