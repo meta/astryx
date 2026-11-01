@@ -2883,6 +2883,84 @@ test.describe('animation state', () => {
     });
   });
 
+  test('a start event that finds nothing to read is named for a replay, for an exit the page removed, and once for a transition', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes blink { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .blink-long { animation: blink 300ms linear }',
+    });
+    // A run of the animation the page's frames see, recorded and finished:
+    // a later run of it on the same element is a new run.
+    const first = await watchAnimations(box);
+    await box.evaluate(el => el.classList.add('blink-long'));
+    expect((await first.started()).map(a => a.name)).toEqual(['blink']);
+    await waitForRest(box);
+    await box.evaluate(el => el.classList.remove('blink-long'));
+    // Each case sends the events an engine sends for a run that started and
+    // finished between two frames (WebKit sends them at the next frame, when
+    // the run is no longer listed), so the recorder has nothing to read.
+    const missed = async (
+      send: 'replay' | 'removed exit' | 'transition',
+    ): Promise<string> => {
+      const watch = await watchAnimations(box);
+      await box.evaluate((el, which) => {
+        if (which === 'replay') {
+          el.dispatchEvent(
+            new AnimationEvent('animationstart', {animationName: 'blink'}),
+          );
+          el.dispatchEvent(
+            new AnimationEvent('animationend', {animationName: 'blink'}),
+          );
+        } else if (which === 'removed exit') {
+          const child = document.createElement('div');
+          el.append(child);
+          child.dispatchEvent(
+            new AnimationEvent('animationstart', {
+              animationName: 'blink',
+              bubbles: true,
+            }),
+          );
+          child.dispatchEvent(
+            new AnimationEvent('animationend', {
+              animationName: 'blink',
+              bubbles: true,
+            }),
+          );
+          child.remove();
+        } else {
+          for (const type of ['transitionrun', 'transitionstart']) {
+            el.dispatchEvent(
+              new TransitionEvent(type, {propertyName: 'opacity'}),
+            );
+          }
+          el.dispatchEvent(
+            new TransitionEvent('transitionend', {propertyName: 'opacity'}),
+          );
+        }
+      }, send);
+      return watch.started({timeout: 500}).then(
+        started => `recorded ${started.map(a => a.name).join(', ')}`,
+        (error: Error) => error.message,
+      );
+    };
+    // A replay of the finished run: the earlier run does not answer for it.
+    expect(await missed('replay')).toContain(
+      "the element's blink started and finished between two of the page's frames",
+    );
+    // An exit the page removed, watched through its container.
+    expect(await missed('removed exit')).toContain(
+      "the element's blink started and finished between two of the page's frames",
+    );
+    // A transition sends two start events, and is named once.
+    expect(await missed('transition')).toContain(
+      "the element's opacity started and finished between two of the page's frames",
+    );
+  });
+
   test('a CSS animation or transition whose element the page removes at its end is dated from its start', async ({
     page,
   }) => {

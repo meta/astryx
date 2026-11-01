@@ -64,10 +64,13 @@ function animationRecorder(): void {
     // Where the run began, as the engine had it when it finished.
     finishStart: number | null;
   }[] = [];
-  // Start events that found no animation to record (see `onStart`).
+  // Start events that found no animation to record (see `onStart`), with
+  // the target's ancestors as they were: an exit the page removes at its end
+  // is still named for the container it left.
   const unread: {
     at: number;
     target: EventTarget | null;
+    ancestors: Element[];
     type: string;
     name: string;
   }[] = [];
@@ -223,10 +226,27 @@ function animationRecorder(): void {
   };
   const onStart = (event: Event) => {
     record();
-    if (!log.some(entry => isRunOf(entry, event))) {
+    // Only a live run answers: a replay of an animation that finished on the
+    // same element is a new run, and missed if nothing recorded it.
+    const live = log.some(
+      entry =>
+        entry.finishedAt == null &&
+        entry.animation.playState !== 'idle' &&
+        isRunOf(entry, event),
+    );
+    if (!live) {
+      const ancestors: Element[] = [];
+      for (
+        let node = event.target instanceof Element ? event.target : null;
+        node != null;
+        node = node.parentElement
+      ) {
+        ancestors.push(node);
+      }
       unread.push({
         at: performance.now(),
         target: event.target,
+        ancestors,
         type: event.type,
         name: cssRunName(event),
       });
@@ -1245,7 +1265,7 @@ export async function waitForAnimation(
               __harnessAnimations: {
                 unread: {
                   at: number;
-                  target: EventTarget | null;
+                  ancestors: Element[];
                   name: string;
                 }[];
                 armedAt: () => number;
@@ -1253,14 +1273,16 @@ export async function waitForAnimation(
             }
           ).__harnessAnimations;
           const after = watchedFrom ?? recorder.armedAt();
-          return recorder.unread
-            .filter(
-              u =>
-                u.at >= after &&
-                u.target instanceof Node &&
-                (u.target === element || element.contains(u.target)),
-            )
-            .map(u => u.name);
+          // Matched through the ancestors kept at the event, as the log is:
+          // an exit the page removed is still named for its container. A
+          // missed transition sends two start events; it is named once.
+          return [
+            ...new Set(
+              recorder.unread
+                .filter(u => u.at >= after && u.ancestors.includes(element))
+                .map(u => u.name),
+            ),
+          ];
         }, since ?? null)
         .catch(() => [] as string[]);
       throw new Error(
