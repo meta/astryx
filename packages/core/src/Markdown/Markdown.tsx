@@ -285,6 +285,11 @@ export interface MarkdownProps<
    * Tables and code blocks are unconstrained and can expand to the full
    * container width. Use for readable line lengths in wide layouts.
    *
+   * When omitted, prose follows the `--markdown-content-width` custom
+   * property if an enclosing surface publishes one (ChatLayout's message
+   * area does), so prose and the full-width code blocks below it share one
+   * right edge; without a published value it stays at 680px.
+   *
    * @example
    * ```
    * <Markdown contentWidth={640}>{text}</Markdown>
@@ -2152,7 +2157,13 @@ export function Markdown<
   onLinkClick,
   sources,
   citationStyle = 'label',
-  contentWidth = 680,
+  // The default resolves through the custom property so a publishing surface
+  // (ChatLayout's message area) and Markdown can see each other: prose then
+  // spans the same width as the unconstrained code blocks and tables below
+  // it. Inert at 680px when nothing publishes. Deliberately NOT
+  // `--layout-content-width` — Layout always publishes that (100cqi), and
+  // following it here would uncap prose line length in every wide Layout.
+  contentWidth = 'var(--markdown-content-width, 680px)',
   contentAlign = 'start',
   components,
   plugins,
