@@ -19,9 +19,15 @@ import {
   useScheduleViewSelectorPlugin,
 } from '@astryxdesign/lab';
 
-const storyNow = new Date();
-const focusDate = storyNow.getTime() as Instant;
-const currentWeekStart = startOfWeek(storyNow);
+// The demo week is fixed and its events are built in the Schedule's own
+// timezone, so every viewer, and CI's browser, sees the same week with its
+// events on the 7-19 grid, whatever the viewer's own timezone or today's date.
+const STORY_TIMEZONE = 'America/Los_Angeles';
+// A Wednesday, in a week with no daylight-saving change.
+const STORY_DATE = '2026-05-13';
+const focusDate = Date.parse(dateTimeISO(STORY_DATE, 12)) as Instant;
+const currentWeekStart = addDays(STORY_DATE, -3);
+const storyNow = STORY_DATE;
 
 const categories: ScheduleCategory[] = [
   {label: 'Company', color: 'blue'},
@@ -127,30 +133,46 @@ export default meta;
 
 type Story = StoryObj<typeof Schedule>;
 
-function addDays(date: Date, days: number): Date {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + days);
-  return nextDate;
+// Story dates are plain `YYYY-MM-DD` dates in STORY_TIMEZONE.
+function addDays(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days))
+    .toISOString()
+    .slice(0, 10);
 }
 
-function startOfWeek(date: Date): Date {
-  const startDate = new Date(date);
-  startDate.setHours(12, 0, 0, 0);
-  startDate.setDate(startDate.getDate() - startDate.getDay());
-  return startDate;
+function dateISO(date: string): string {
+  return date;
 }
 
-function dateISO(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+// STORY_TIMEZONE's UTC offset on a date, as `-07:00`. Read at midday, so it
+// is right for every demo hour (none sits in a daylight-saving gap).
+function offsetOn(date: string): string {
+  const name =
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: STORY_TIMEZONE,
+      timeZoneName: 'longOffset',
+    })
+      .formatToParts(Date.parse(`${date}T12:00:00Z`))
+      .find(part => part.type === 'timeZoneName')?.value ?? 'GMT';
+  const offset = name.replace('GMT', '');
+  return offset === '' ? 'Z' : offset;
 }
 
-function dateTimeISO(date: Date, hour: number, minute: number = 0): string {
-  const dateTime = new Date(date);
-  dateTime.setHours(hour, minute, 0, 0);
-  return dateTime.toISOString();
+// A wall-clock time on a story date in STORY_TIMEZONE, as an ISO instant.
+function dateTimeISO(date: string, hour: number, minute: number = 0): string {
+  const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  return `${date}T${time}:00${offsetOn(date)}`;
+}
+
+// The STORY_TIMEZONE date an instant falls on.
+function zonedDate(instant: number): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: STORY_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(instant);
 }
 
 function makeSeededRandom(seed: number): () => number {
@@ -176,7 +198,8 @@ function createAsyncEvents(start: Instant, end: Instant): CalendarEvent[] {
 
   for (let dayStart = start; dayStart < end; dayStart += 24 * 60 * 60 * 1000) {
     const eventCount = 1 + Math.floor(random() * 3);
-    const day = new Date(dayStart);
+    // Midday, so a 23- or 25-hour daylight-saving day still lands on its date.
+    const day = zonedDate(dayStart + 12 * 60 * 60 * 1000);
 
     for (let index = 0; index < eventCount; index++) {
       const startHour = 8 + Math.floor(random() * 8);
@@ -227,7 +250,7 @@ export const Monthly: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -248,7 +271,7 @@ export const Weekly: Story = {
         categories={categories}
         date={date}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -270,7 +293,7 @@ export const WeeklyFixedHeight: Story = {
           categories={categories}
           date={date}
           onChangeDate={setDate}
-          timezoneID="America/Los_Angeles"
+          timezoneID={STORY_TIMEZONE}
           style={{height: '100%'}}
         />
       </div>
@@ -291,7 +314,7 @@ export const Day: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -310,7 +333,7 @@ export const List: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -335,7 +358,7 @@ export const RightToLeftLocale: Story = {
             date={date}
             focusDate={focusDate}
             onChangeDate={setDate}
-            timezoneID="America/Los_Angeles"
+            timezoneID={STORY_TIMEZONE}
           />
         </div>
       </InternationalizationProvider>
@@ -366,7 +389,7 @@ export const AsyncLoader: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
       />
     );
   },
@@ -970,7 +993,7 @@ export const ViewSelectorPlugin: Story = {
         date={date}
         focusDate={focusDate}
         onChangeDate={setDate}
-        timezoneID="America/Los_Angeles"
+        timezoneID={STORY_TIMEZONE}
         plugins={plugins}
       />
     );
