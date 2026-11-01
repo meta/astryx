@@ -218,9 +218,13 @@ function componentRows({analysis, touched, a11yReport, visualVerdict}) {
           ? 'fail'
           : 'pass'
         : null);
+    // A verdict scoped to the touched components (#9178's run) compared only
+    // what the touched report lists; it is no result for any other row.
+    const verdictCovers =
+      visualVerdict && visualVerdict.context?.scope !== 'touched';
     const visual =
       own('visual') ??
-      (visualVerdict && visualVerdict.status !== 'skipped'
+      (verdictCovers && visualVerdict.status !== 'skipped'
         ? // A run that failed compared nothing: never a pass.
           visualVerdict.status === 'failed'
           ? 'fail'

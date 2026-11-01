@@ -201,6 +201,27 @@ describe('buildComponentTable', () => {
     expect(table).toMatch(/\| — · ✓ · — \|$/m);
   });
 
+  it('never shows a visual pass from a touched-only verdict for a row the touched check did not compare', () => {
+    const table = buildComponentTable({
+      analysis: analysis([
+        ['core/New', 1000, 1000],
+        ['lab/Sketch', 900, 900],
+      ]),
+      origin: ORIGIN,
+      touched: touchedReport([
+        {
+          key: 'core/New',
+          package: 'core',
+          name: 'New',
+          results: {visual: 'not-run', a11y: 'pass', rtl: 'pass'},
+        },
+      ]),
+      visualVerdict: {status: 'ok', changes: [], context: {scope: 'touched'}},
+    });
+    expect(table).toMatch(/^\| \[New\][^\n]* \| — · ✓ · ✓ \|$/m);
+    expect(table).not.toMatch(/^\| \[lab\/Sketch\][^\n]* \| ✓/m);
+  });
+
   it('keeps the marks of a suite run by its label on a wide change', () => {
     const wide = {wideChange: true, componentCount: 60, components: []};
     expect(
