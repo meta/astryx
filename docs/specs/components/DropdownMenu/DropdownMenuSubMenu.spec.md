@@ -108,17 +108,17 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                      | Basis                                                              |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| FR1 | The row exposes `role="menuitem"`, `aria-haspopup="menu"` (`"dialog"` with a header or footer), `aria-expanded` matching its surface, and `aria-controls` naming the surface while open. The surface is labelled by the row.                                   | `spec:AST-020`; current source and tests                           |
-| FR2 | A click, Enter, Space, or the inline-end arrow (inline-start under RTL) opens the surface; a keyboard open focuses its first row. Escape or the close arrow closes only this level and returns focus to the row. A hover opens a flyout after an intent delay. | `spec:AST-020`; `architecture:interaction-modality`; current tests |
-| FR3 | A flyout sits beside the row on the inline-end side, flips with direction, and stays within the viewport; its block size caps at the smaller of its own cap and the viewport.                                                                                  | `architecture:layer-runtime`; current source                       |
-| FR4 | A drilled-in view replaces the root's rows with a Back row named after the parent menu and then this row's children; Back, Escape, and the close arrow return to the row.                                                                                      | Current source and focused tests                                   |
-| FR5 | Selecting a leaf row inside the surface closes every level and the root menu.                                                                                                                                                                                  | Current source and tests                                           |
-| FR6 | `onOpenChange` MUST report `true` once when the surface opens and `false` once when it closes, from the action that caused the change. Implementation gap: a drilled-in view reset by the root menu closing reports no `false` (OQ1).                          | Documented promise; `architecture:react-component-runtime` INV2    |
-| FR7 | A disabled row exposes `aria-disabled="true"`, renders no `tabindex`, takes no hover focus, opens on no input, and runs no caller `onClick`.                                                                                                                   | Current source and tests                                           |
-| FR8 | With `hasSpinner` the row shows a decorative spinner in place of the caret and announces the busy start once the root menu shows.                                                                                                                              | `spec:AST-086` FR8; current source and tests                       |
-| FR9 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root after the row's own behavior; the open keys and a disabled click stop before the caller's handler.                                            | `architecture:public-component-api` INV5–INV8; current tests       |
+| ID  | Invariant                                                                                                                                                                                                                                                                                | Basis                                                              |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| FR1 | The row exposes `role="menuitem"`, `aria-haspopup="menu"` (`"dialog"` with a header or footer), `aria-expanded` matching its surface, and `aria-controls` naming the surface while open. The surface is labelled by the row.                                                             | `spec:AST-020`; current source and tests                           |
+| FR2 | A click, Enter, Space, or the inline-end arrow (inline-start under RTL) opens the surface; a keyboard open focuses its first row. Escape or the close arrow closes only this level and returns focus to the row. A hover opens a flyout after an intent delay.                           | `spec:AST-020`; `architecture:interaction-modality`; current tests |
+| FR3 | A flyout sits beside the row on the inline-end side, flips with direction, and stays within the viewport; its block size caps at the smaller of its own cap and the viewport.                                                                                                            | `architecture:layer-runtime`; current source                       |
+| FR4 | A drilled-in view replaces the root's rows with a Back row named after the parent menu and then this row's children; Back, Escape, and the close arrow return to the row.                                                                                                                | Current source and focused tests                                   |
+| FR5 | Selecting a leaf row inside the surface closes every level and the root menu.                                                                                                                                                                                                            | Current source and tests                                           |
+| FR6 | `onOpenChange` MUST report `true` once when the surface opens and `false` once when it closes, from the action that caused the change. Implementation gap: a drilled-in view reset by the root menu closing reports no `false` (OQ1).                                                    | Documented promise; `architecture:react-component-runtime` INV2    |
+| FR7 | A disabled row exposes `aria-disabled="true"`, carries `tabindex="-1"` so the parent's keyboard model reaches it (`component:DropdownMenu` FR17), takes no hover focus, opens on no input, and runs no caller `onClick`. Implementation gap: a disabled row renders no `tabindex` today. | Current source and tests                                           |
+| FR8 | With `hasSpinner` the row shows a decorative spinner in place of the caret and announces the busy start once the root menu shows.                                                                                                                                                        | `spec:AST-086` FR8; current source and tests                       |
+| FR9 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root after the row's own behavior; the open keys and a disabled click stop before the caller's handler.                                                                      | `architecture:public-component-api` INV5–INV8; current tests       |
 
 ### Allowed variation
 
@@ -160,8 +160,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   are exposed through ARIA; its caret and spinner are decorative.
 - **AR2 — Level-scoped keys.** Each level owns its own arrows, typeahead, and
   Escape; a deeper level's keys never act on its parent.
-- **AR3 — Disabled discoverability.** Whether disabled rows stay
-  keyboard-discoverable is owned by `component:DropdownMenu` (its OQ1).
+- **AR3 — Disabled discoverability.** The keyboard reaches a disabled row as
+  `component:DropdownMenu` FR17 states.
 - **AR4 — Focus visibility.** Keyboard focus paints only the menu overlay
   tint, about 1.1:1 against the menu surface in the default themes, with no
   outline, and nothing under forced colors. The shared row
@@ -183,8 +183,8 @@ No component-local visual decision is recorded.
 
 - `component:DropdownMenu` owns the root surface, the drill-in stack, the
   surface host, the `dropdown-menu`, `dropdown-menu-item`, and
-  `dropdown-menu-indicator-icon` target inventory, and disabled keyboard
-  discoverability (its OQ1).
+  `dropdown-menu-indicator-icon` target inventory, and disabled-row keyboard
+  reach (its FR17).
 - `architecture:layer-runtime` owns flyout placement, flipping, and insets.
 - `architecture:public-component-api` owns root input and handler composition.
 - `architecture:react-component-runtime` owns callback timing.
