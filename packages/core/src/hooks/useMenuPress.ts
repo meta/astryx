@@ -66,13 +66,13 @@ import {
   type MenuPressGesture,
   type MenuPressPointerType,
 } from './menuPressGesture';
+import {MENU_PRESS_MARKER} from './menuPressMarker';
 import {useLongPress, type UseLongPressHandlers} from './useLongPress';
 import {edgeAutoscroll} from '../utils/edgeAutoscroll';
 import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 
-/** Marks a menu root that carries this press model. */
-export const MENU_PRESS_MARKER = 'data-astryx-menu-press';
+export {MENU_PRESS_MARKER};
 const MENU_PRESS_ROOT_SELECTOR = `[${MENU_PRESS_MARKER}]`;
 /**
  * Carried by a menu root that another root renders beside itself rather than

@@ -328,6 +328,22 @@ they are separately named.
   required check would count as passing. Events other than a pull request (a
   push to `main`, a merge-group entry, a dispatch) are unaffected, and a fork's
   code never runs with the repository's secrets.
+- **FR19 — A pull request that changes CI states its CI impact.** A pull
+  request that changes a workflow, a composite action or a CI script carries
+  its CI impact in its description's `CI impact:` line: each changed job's
+  runner class (standard GitHub-hosted or non-standard), job-minutes per
+  pull-request update before and after, the change in runner-pool usage
+  (runner-minutes a day and average concurrent jobs) and time to green. The
+  pull-request comment measures these for CI's own workflow (`ci.yml`) from
+  its change and recent pull-request runs, without starting a job: a changed job counts as often as
+  it ran in those runs, time to green compares with runs that ran the same
+  jobs, and another changed workflow, a composite action or a CI script is
+  named as not measured.
+  A `node-tooling` pull request (FR8) gets no pull-request comment, so its
+  description's line stands alone. The comment flags a job moving onto a
+  non-standard runner, more than 10% added runner-pool usage, or more than two
+  minutes added to time to green. A flag asks the reviewer to weigh the cost;
+  it fails no check.
 
 ### Platform support
 
@@ -379,6 +395,7 @@ read change (FR14).
 | FR15     | workflow contract and reconciler tests                                                 | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, or a non-command comment starts a runner                                                                                                                                                                                                               |
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract; `ci-admission.test.mjs` | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup; a run with room, without room, past its longest wait, beside a waiting `main` check, as a draft or unlabelled fork, with opt-in labels, beside small workflows past their measured most, and with the API unreadable; each workflow's most jobs; every required context's rule | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head, a run that starts without room before its longest wait, a pull-request run that starts while `main` waits, a job admission could skip, or a peak below the jobs its run holds fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions     | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                                                                                                                                                                                                       |
+| FR19     | `ci-impact.test.mjs`, `pr-preview.test.mjs` and the maintenance template               | CI change and non-CI change; standard, non-standard and expression runners; added, removed and changed jobs; trigger change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a CI change reports no impact, a move onto a non-standard runner or a pool or time-to-green rise past its threshold goes unflagged, or the section names a price                                                                                                                                                                                                                                     |
 
 ## Decision log
 

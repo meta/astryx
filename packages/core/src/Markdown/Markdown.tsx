@@ -1592,6 +1592,7 @@ function renderBlock(
       }
       try {
         const rendered = renderer.render({node: proposal.node});
+        // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- a plugin renderer's '' is its output; only null, undefined or a boolean asks for the readable fallback
         if (rendered == null || typeof rendered === 'boolean') {
           return fallback;
         }
