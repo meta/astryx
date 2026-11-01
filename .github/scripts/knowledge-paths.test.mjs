@@ -13,6 +13,8 @@ const {
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isLegacyComponentSpecPath,
+  isPackageArchitectureRecordPath,
+  classifyPackageArchitectureRecordPath,
   isPlatformComponentSpecPath,
   locateComponentKnowledgePath,
   locatePlatformComponentSource,
@@ -128,6 +130,33 @@ describe('component knowledge paths', () => {
       'packages/core/src/Avatar/Avatar.tsx',
     ]) {
       expect(locatePlatformComponentSource(filePath)).toBeNull();
+    }
+  });
+
+  it('derives a package architecture record id from its path', () => {
+    expect(
+      classifyPackageArchitectureRecordPath(
+        'packages/native/specs/swift/accessibility.spec.md',
+      ),
+    ).toEqual({
+      packageName: 'native',
+      id: 'architecture:native-swift-accessibility',
+    });
+    expect(
+      classifyPackageArchitectureRecordPath(
+        'packages/native/specs/swift/library/tooltip.spec.md',
+      ).id,
+    ).toBe('architecture:native-swift-library-tooltip');
+    for (const filePath of [
+      'packages/native/specs/README.md',
+      'packages/native/specs/swift/library/styles.md',
+      'packages/native/specs/swift/__fixtures__/x.spec.md',
+      'packages/native/specs/swift/x.generated.spec.md',
+      'packages/native/specs/swift/Button.spec.md',
+      'packages/native/src/specs/x.spec.md',
+      'docs/specs/components/Button/Button.spec.md',
+    ]) {
+      expect(isPackageArchitectureRecordPath(filePath)).toBe(false);
     }
   });
 
