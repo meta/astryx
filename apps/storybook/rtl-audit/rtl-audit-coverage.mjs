@@ -666,6 +666,74 @@ export function gradePositionedPair(ltr, rtl, tolerance) {
   return {expectation, expected, delta, pass: delta <= tolerance};
 }
 
+/**
+ * Does a left- or right-pointing glyph render pointing up or down? `matrix` is
+ * the glyph's composed 2x2 transform (CSS `matrix(a, b, c, d)` order). A
+ * chevron rotated a quarter turn (a disclosure's expanded state) points along
+ * the block axis, which is direction-neutral (`design:bidirectionality` DR5),
+ * so its mirroring is not a D1 question even though its path reads as
+ * horizontal (`architecture:rtl-audit-evidence` INV12: applicability follows
+ * the glyph's semantic role, not its source shape).
+ */
+export function glyphRendersOnBlockAxis(dir, matrix) {
+  if ((dir !== 'left' && dir !== 'right') || !Array.isArray(matrix)) {
+    return false;
+  }
+  const sign = dir === 'right' ? 1 : -1;
+  // The tip's direction is the matrix applied to (±1, 0): its first column.
+  const dx = sign * matrix[0];
+  const dy = sign * matrix[1];
+  return Math.abs(dy) > Math.abs(dx);
+}
+
+/**
+ * The key D1's detector dedupes glyphs by: direction, path, and the axis the
+ * glyph renders on. A repeated glyph (many tree rows) is reported once, but an
+ * expanded copy (pointing down) and a collapsed copy (pointing sideways) of
+ * the same chevron stay separate, so an unjudged expanded copy cannot hide a
+ * collapsed one that fails to mirror. Runs in the page: keep it
+ * self-contained apart from glyphRendersOnBlockAxis.
+ */
+export function d1GlyphKey(dir, pathSig, matrix) {
+  const axis = glyphRendersOnBlockAxis(dir, matrix) ? 'block' : 'inline';
+  return dir + '::' + pathSig + '::' + axis;
+}
+
+/**
+ * The key D1 pairs an LTR glyph with its RTL counterpart by: the enclosing
+ * control's accessible label when it has one, else the glyph's position, plus
+ * the axis it renders on. A collapsed and an expanded chevron under one label
+ * (a tree toggle) are then judged as separate pairs, so an unjudged expanded
+ * copy cannot stand in for a collapsed copy that never mirrors.
+ */
+export function d1PairKey(glyph, index) {
+  const axis = glyphRendersOnBlockAxis(glyph.dir, glyph.matrix)
+    ? 'block'
+    : 'inline';
+  const label = glyph.aria && glyph.aria.trim();
+  return (label ? 'aria:' + label : 'idx:' + index) + '::' + axis;
+}
+
+/**
+ * Is this LTR/RTL pair one D1 leaves unjudged: a horizontal glyph that renders
+ * pointing the SAME way along the block axis in both directions (an expanded
+ * disclosure, down in both)? A glyph that points down in LTR and up in RTL
+ * changed direction, which DR5 forbids, so it stays judged.
+ */
+export function isUnchangedBlockAxisPair(ltr, rtl) {
+  if (
+    !ltr ||
+    !rtl ||
+    !glyphRendersOnBlockAxis(ltr.dir, ltr.matrix) ||
+    !glyphRendersOnBlockAxis(rtl.dir, rtl.matrix)
+  ) {
+    return false;
+  }
+  // The vertical component of each tip: positive is down in CSS.
+  const tipY = glyph => (glyph.dir === 'right' ? 1 : -1) * glyph.matrix[1];
+  return Math.sign(tipY(ltr)) === Math.sign(tipY(rtl));
+}
+
 /** Classify one stable LTR/RTL contextual-decoration pair. */
 export function classifyDirectionalDecorationPair(ltr, rtl) {
   if (!ltr || !rtl) {

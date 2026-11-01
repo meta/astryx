@@ -618,3 +618,52 @@ describe('pressed state', () => {
     expect(hasPressedArm(screen.getByRole('button'))).toBe(false);
   });
 });
+
+describe('Collapsible close focus (AR4)', () => {
+  function Example({isOpen}: {isOpen: boolean}) {
+    return (
+      <>
+        <Collapsible trigger="Details" isOpen={isOpen} onOpenChange={() => {}}>
+          <button type="button">Inside</button>
+        </Collapsible>
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+
+  it('moves focus inside the content to the trigger when it closes', () => {
+    const {rerender} = render(<Example isOpen />);
+    screen.getByRole('button', {name: 'Inside'}).focus();
+    rerender(<Example isOpen={false} />);
+    expect(screen.getByRole('button', {name: 'Details'})).toHaveFocus();
+  });
+
+  it('moves no focus that is outside the content', () => {
+    const {rerender} = render(<Example isOpen />);
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+    rerender(<Example isOpen={false} />);
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('keeps focus on the trigger when the trigger closes it', async () => {
+    const user = userEvent.setup();
+    render(
+      <Collapsible trigger="Details">
+        <button type="button">Inside</button>
+      </Collapsible>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Details'});
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveFocus();
+  });
+
+  it('moves no focus when it opens', () => {
+    const {rerender} = render(<Example isOpen={false} />);
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+    rerender(<Example isOpen />);
+    expect(elsewhere).toHaveFocus();
+  });
+});

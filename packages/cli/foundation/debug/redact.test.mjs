@@ -510,9 +510,14 @@ describe('cost on hostile input', () => {
     ['deep paths', '/a/b/c/d/e/f '.repeat(38_000)],
     ['stack frames', '    at fn (file:///opt/x/y/z.mjs:1:2)\n'.repeat(13_000)],
   ])('scrubs 500KB of %s in well under a second', (_label, input) => {
-    const started = Date.now();
+    // CPU time this process spent, not wall time: on a busy runner the other
+    // test files' processes share the CPU, and wall time then grows with
+    // their load, while backtracking that blows up grows this process's own
+    // CPU time. The Node project runs each file in its own forked process.
+    const started = process.cpuUsage();
     big(input);
-    expect(Date.now() - started).toBeLessThan(1000);
+    const {user, system} = process.cpuUsage(started);
+    expect((user + system) / 1000).toBeLessThan(1000);
   });
 });
 

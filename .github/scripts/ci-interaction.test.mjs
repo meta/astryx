@@ -49,7 +49,8 @@ describe('interaction proof routing', () => {
     expect(ungated(proofs.if)).toBe(
       "github.event_name != 'workflow_dispatch' && always() && !cancelled()",
     );
-    expect(proofs.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(proofs.needs).toEqual(['admission', 'build-storybook']);
   });
 
   it('decides its own scope first, and gates every later step on it', () => {

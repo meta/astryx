@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:CommandPaletteEmpty
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-11-01
 owners: [cixzhang]
 review_triggers: [public-api, behavior, theming, accessibility, testing]
 verified_by:
@@ -42,8 +42,8 @@ system_specs: [spec:AST-029, spec:AST-056]
 | Public contract         | `CommandPaletteEmpty` / `CommandPaletteEmptyProps`: required `children`, `BaseProps<HTMLDivElement>`, and a root `ref`.                                                                         |
 | Behavior                | One ordinary container centers caller content as supporting text. CommandPalette renders it for the no-query and no-results branches; it owns no role, state, announcement, or interaction.     |
 | End-user impact         | People who reach a palette dead end read the message, and any caller link stays ordinary reachable content rather than an option.                                                               |
-| Builder impact          | None. Caller content, host attributes, and styling inputs compose on the root.                                                                                                                  |
-| Compatibility/readiness | Observational patch contract. Runtime behavior, exports, and the target name are unchanged; authority stays `draft` until exact-head owner approval.                                            |
+| Builder impact          | None.                                                                                                                                                                                           |
+| Compatibility/readiness | Records shipped behavior; no public change. Evidence still pending for the claims listed as read from source.                                                                                   |
 | Review checks           | Reject a component-owned role or live region, option semantics around caller content, dropped root inputs, a target moved off the painted root, or content that overflows its host inline axis. |
 | Governing rules         | `architecture:public-component-api/INV1,INV5–INV8`; `architecture:component-theming-surface/INV2–INV6`; `spec:AST-056/FR3`, `AR1` for the parent's announcement; WCAG 2.2 SC 1.4.3 and 1.4.10.  |
 
@@ -61,8 +61,8 @@ Consumer syntax and examples belong in `CommandPaletteEmpty.doc.mjs`.
 
 ## Compatibility and migration
 
-- Released default preserved: yes — one centered, ordinary message container.
-- Compatibility class: observational patch; no public surface changes.
+- Released default preserved: `yes`
+- Compatibility class: records shipped behavior; no public change
 - Controlled/uncontrolled behavior: not applicable.
 - Migration decision: none.
 
@@ -97,17 +97,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                                 | Basis                                                                          | Draft review state |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------ |
-| FR1 | The component MUST render its children inside one container element that centers them on both axes with centered text, supporting type, body font family, and secondary text color. | Current source, consumer docs, and focused tests                               | verify             |
-| FR2 | CommandPalette MUST render this component with `emptyBootstrapText` when there is no query and no result, and with `emptySearchText` when a query has no result.                    | Current CommandPalette source and tests                                        | verify             |
-| FR3 | The root MUST carry no component-owned role, live region, or focus stop, so caller links and controls remain ordinary content.                                                      | WAI-ARIA 1.2 listbox owned-children rule; current source and Chromium evidence | verify             |
-| FR4 | Caller text MUST wrap inside the host's inline size, including a single unbroken token, so no message forces inline scrolling or clipping at 320 CSS px.                            | WCAG 2.2 SC 1.4.10; Chromium evidence                                          | verify             |
-| FR5 | The painted root MUST carry the `command-palette-empty` target; component styles apply before caller `xstyle`.                                                                      | `architecture:component-theming-surface/INV2–INV6`; source and focused tests   | verify             |
-| FR6 | Accepted ref, DOM/data/ARIA, class, style, events, and `xstyle` MUST reach or compose on the root.                                                                                  | `architecture:public-component-api/INV5–INV8`; focused tests                   | verify             |
+| ID  | Invariant                                                                                                                                                                           | Basis                                                                        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| FR1 | The component MUST render its children inside one container element that centers them on both axes with centered text, supporting type, body font family, and secondary text color. | Current source, consumer docs, and focused tests                             |
+| FR2 | CommandPalette MUST render this component with `emptyBootstrapText` when there is no query and no result, and with `emptySearchText` when a query has no result.                    | Current source and tests                                                     |
+| FR3 | The root MUST carry no component-owned role, live region, or focus stop, so caller links and controls remain ordinary content.                                                      | WAI-ARIA 1.2 listbox owned-children rule; current source and tests           |
+| FR4 | Caller text MUST wrap inside the host's inline size, including a single unbroken token, so no message forces inline scrolling or clipping at 320 CSS px.                            | WCAG 2.2 SC 1.4.10; current source                                           |
+| FR5 | The painted root MUST carry the `command-palette-empty` target; component styles apply before caller `xstyle`.                                                                      | `architecture:component-theming-surface/INV2–INV6`; source and focused tests |
+| FR6 | Accepted ref, DOM/data/ARIA, class, style, events, and `xstyle` MUST reach or compose on the root.                                                                                  | `architecture:public-component-api/INV5–INV8`; focused tests                 |
 
 ### Allowed variation
 
@@ -147,11 +144,12 @@ intentional decision.
 
 ## Design relationships
 
-| Anatomy or state | Design requirement                                                        | Representation authority                                          | Hierarchy role | Component contract |
-| ---------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------- | ------------------ |
-| Empty message    | Presents the dead-end message as supporting text centered in the results. | Current source tokens; no component-local visual decision settled | supporting     | FR1, FR4, FR5      |
+| Anatomy or state | Design requirement                                                        | Representation authority | Hierarchy role | Component contract |
+| ---------------- | ------------------------------------------------------------------------- | ------------------------ | -------------- | ------------------ |
+| Empty message    | Presents the dead-end message as supporting text centered in the results. | Current source tokens    | supporting     | FR1, FR4, FR5      |
 
-No component-local visual decision is settled by this draft.
+No component-local design decision is recorded. The aggregate CommandPalette
+anatomy map, owned by `component:CommandPalette`, maps the Empty part.
 
 ## Family and system relationships
 
@@ -161,23 +159,29 @@ No component-local visual decision is settled by this draft.
   evidence.
 - `spec:AST-056/FR3` and `AR1` require CommandPalette to announce the
   empty-search message it rendered; this component supplies the rendered node.
-- CommandPalette and CommandPaletteList draft records describe the parent
-  branches and empty result surface; they are observational context, not
-  authority for this contract.
-- `spec:AST-029` keeps this observational draft separate from the audit receipt.
+- `component:CommandPalette` and `component:CommandPaletteList` own the parent
+  branches and the empty result surface.
+- `spec:AST-029` owns the audit evidence inventory this record's verification
+  map follows.
 
 ## Verification map
 
-| Contract      | Verification                                                                           | Representative states                              | Mutation or failure expectation                                                                         | Audit section                        |
-| ------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| FR1, FR5–FR6  | `CommandPaletteEmpty.test.tsx`; `themingTargets.test.ts`                               | text and element children; root inputs             | A dropped input, a moved target, or lost children fails the focused assertions.                         | `audit:CommandPaletteEmpty/§2,§3,§4` |
-| FR2, FR3, AR1 | `CommandPalette.test.tsx`; `CommandPaletteList.test.tsx`; exact-head Chromium receipts | bootstrap, search, rich content, modal and inline  | Exposing a listbox, adding a role, or announcing other text than the rendered message fails assertions. | `audit:CommandPaletteEmpty/§1,§4`    |
-| FR4, AR2      | Exact-head Chromium receipts and contrast pairs                                        | long and translated text; 320 px; themes and modes | Inline overflow or clipping fails the reflow sensor; ratios are recorded per frame.                     | `audit:CommandPaletteEmpty/§5,§10`   |
-| PR1           | Source review and the presentational lint rule                                         | every state                                        | A hook or lifecycle mechanism fails the lint rule.                                                      | `audit:CommandPaletteEmpty/§7`       |
+| Contract      | Verification                                             | Representative states                                                  | Mutation or failure expectation                                                                                                                                                   | Audit section                             |
+| ------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| FR1, FR5–FR6  | `CommandPaletteEmpty.test.tsx`; `themingTargets.test.ts` | text and element children; root inputs                                 | A dropped input, a moved target, or lost children fails the focused assertions.                                                                                                   | `audit:CommandPaletteEmpty/§2,§3,§4`      |
+| FR2, FR3, AR1 | `CommandPalette.test.tsx`; `CommandPaletteList.test.tsx` | bootstrap, search, rich content, modal and inline                      | Exposing a listbox, adding a role, or announcing other text than the rendered message fails assertions.                                                                           | `audit:CommandPaletteEmpty/§1,§4`         |
+| FR4, AR2      | `CommandPaletteEmptyAudit.a11y.chromium.spec.ts`         | Narrow and wide viewports; light and dark; forced colors; rich content | A case with horizontal overflow at 320 CSS px fails the audit manifest test. Gap: the audit records message contrast without gating on it, so contrast below 4.5:1 does not fail. | `audit:CommandPaletteEmpty/accessibility` |
+| PR1           | Source review                                            | Every state                                                            | Gap: no automated check fails if CommandPaletteEmpty adds a hook, listener, or Effect.                                                                                            | `audit:CommandPaletteEmpty/behavior`      |
+
+Read from source, with no focused test yet:
+
+- FR1: centering, supporting type, body font, and secondary text color.
+- AR2: message contrast in each theme and mode.
+- PR1: no hook, listener, or lifecycle of the component's own.
 
 ## Decision log
 
-None. This draft records current facts and introduces no product decision.
+No component-local decision is recorded.
 
 ## Open questions
 
@@ -185,6 +189,5 @@ None.
 
 ## Content boundary
 
-This file does not duplicate consumer prop tables/examples, current audit scores,
-screenshot matrices, implementation steps, or system rules. The audit pull request
-owns the closed run evidence required by `spec:AST-029/FR5`.
+This file does not duplicate consumer prop tables/examples, implementation
+steps, or system rules. It links to their owners.
