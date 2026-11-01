@@ -161,10 +161,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR3 — Keyboard ownership.** DropdownMenu owns focus movement and activation;
   the row adds no key handling. Whether disabled rows stay keyboard-discoverable
   is owned by `component:DropdownMenu` (its OQ1).
-- **AR4 — Focus visibility.** Keyboard focus paints only the menu overlay
-  tint, about 1.1:1 against the menu surface in the default themes, with no
-  outline, and nothing under forced colors. The shared row
-  treatment is `component:DropdownMenuItem` OQ2.
+- **AR4 — Focus visibility.** Keyboard focus draws the shared focus ring
+  inside the row, inset by the ring's own width, in every color mode, forced
+  colors included; after pointer input the row shows only the overlay tint
+  (`architecture:interaction-modality` INV1, INV3). The shared row treatment is
+  `component:DropdownMenuItem` FR8.
 
 ## Design relationships
 
@@ -182,8 +183,8 @@ No component-local visual decision is recorded.
 - `component:DropdownMenuRadioGroup` owns value, change callback, and close policy.
 - `component:DropdownMenu` owns keyboard navigation, the press model, the
   `dropdown-menu-item` and `dropdown-menu-radio` target inventory, disabled
-  keyboard discoverability (its OQ1), and forced-colors row focus together with
-  `component:DropdownMenuItem` (its OQ2).
+  keyboard discoverability (its OQ1), and the shared row focus treatment
+  together with `component:DropdownMenuItem` (its FR8).
 - `architecture:public-component-api` owns root input and handler composition.
 - `architecture:component-theming-surface` owns target placement and state
   reflection.
@@ -200,14 +201,11 @@ No component-local visual decision is recorded.
 | FR4, AR2 | `DropdownMenuSelectable.test.tsx` "does not select, close, or call the caller click handler when disabled"; `DropdownMenu.test.tsx` "does not move focus on hover for a disabled item"                                                                                                                                                                                            | Disabled                                         | A selection, close, or caller `onClick` while disabled, or hover focus on a disabled row, fails. Evidence gap: no test asserts the absent `tabindex` or the half-opacity paint.                      | `audit:DropdownMenuRadioItem/behavior`  |
 | FR5      | `DropdownMenuSelectable.test.tsx` "composes caller root inputs without replacing the row semantics", "composes the caller pointer-move handler with menu hover focus", and "a ref reaches the menuitemradio element"                                                                                                                                                              | Ref, host attributes, class, style, pointer move | A dropped ref, attribute, class, style, or handler fails. Evidence gap: no test asserts `xstyle` on the row.                                                                                         | `audit:DropdownMenuRadioItem/api`       |
 | FR6, FR7 | `DropdownMenuSelectable.test.tsx` "renders the shared radio indicator in the menu marker"; `DropdownMenuRadioItemAudit.a11y.chromium.spec.ts`                                                                                                                                                                                                                                     | Marker in the row                                | A missing shared radio marker fails. Evidence gap: no test asserts the marker size by menu size, its fine and coarse placement, or the `dropdown-menu-radio` reflections.                            | `audit:DropdownMenuRadioItem/visual`    |
-| AR4, PR1 | Evidence gap: no test asserts the focus paint, forced-colors focus, or the absence of lifecycle resources                                                                                                                                                                                                                                                                         | —                                                | —                                                                                                                                                                                                    | `audit:DropdownMenuRadioItem/visual`    |
+| AR4, PR1 | `DropdownMenuForcedColors.test.tsx` (the row's `:focus-visible` ring and token inset); `DropdownMenuAudit.a11y.chromium.spec.ts` forced-colors frames. Evidence gap: no test asserts the absence of lifecycle resources                                                                                                                                                           | —                                                | —                                                                                                                                                                                                    | `audit:DropdownMenuRadioItem/visual`    |
 
 ## Current-state impact
 
-- **Focus visibility (AR4).** Keyboard focus on a radio row shows only an
-  overlay tint about 1.1:1 against the menu surface, and no indicator in
-  forced-colors mode; the shared row treatment is
-  `component:DropdownMenuItem` OQ2.
+No known difference between shipped behavior and this contract.
 
 ## Decision log
 

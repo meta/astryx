@@ -69,8 +69,7 @@ import {
 } from '../DropdownMenu/menuItemRoles';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
-import {useListFocus} from '../hooks/useListFocus';
-import {focusForLastInput} from '../utils/focusReturn';
+import {useInternalListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
@@ -445,15 +444,19 @@ export function ContextMenu({
   const {
     listRef,
     handleKeyDown: listNavKeyDown,
+    focusFirst,
     focusItem,
     ownsEvent,
     getItems: getMenuItems,
-  } = useListFocus<HTMLDivElement>({
+  } = useInternalListFocus<HTMLDivElement>({
     itemSelector: MENU_ITEM_SELECTOR,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap from the last row to the first and back.
     wrap: true,
     hasPaging: true,
+    // A right-click or long-press focuses the first row without the keyboard
+    // ring; the context-menu key or Shift+F10 shows it.
+    focusFollowsLastInput: true,
   });
 
   // Join the shared stack so an Escape press dismisses exactly one top-most
@@ -583,19 +586,10 @@ export function ContextMenu({
         updateOpenState(true);
       } else {
         layer.show();
-        requestAnimationFrame(() => {
-          // The first row takes the focus the last input calls for
-          // (architecture:interaction-modality INV1): after a right-click or
-          // long-press it shows no keyboard ring; after the context-menu key
-          // or Shift+F10 it does.
-          const first = getMenuItems()[0];
-          if (first != null) {
-            focusForLastInput(first);
-          }
-        });
+        requestAnimationFrame(() => focusFirst());
       }
     },
-    [layer, getMenuItems, updateOpenState, usesBottomSheet],
+    [layer, focusFirst, updateOpenState, usesBottomSheet],
   );
 
   // The box the cursor anchor's offsets are measured from: the trigger, which
