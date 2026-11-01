@@ -93,7 +93,15 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-toast', visualProps: ['type']}],
+    targets: [
+      // `themeMode` is the resolved mode of the Theme the card renders under,
+      // always written with a value ('themeMode:dark'). Key external CSS on
+      // [data-theme-mode], not the bare class: `.dark` also matches
+      // class-strategy dark-mode rules such as Tailwind's. onDark/onLight
+      // rules for `toast` compile to descendant selectors and never paint
+      // the card root; themeMode is the root's own mode hook.
+      {className: 'astryx-toast', visualProps: ['type'], states: ['themeMode']},
+    ],
     vars: [
       {
         name: '--_toast-slide-y',
@@ -152,6 +160,11 @@ export const docs = {
         guidance: true,
         description:
           "Use error type for failures that need attention but not immediate action; it persists until dismissed so the user won't miss it.",
+      },
+      {
+        guidance: true,
+        description:
+          "Give a toast action the look of the controls on the page around it through the card's themeMode state (toast: {'themeMode:dark': {...}}), not by branching on useTheme() in product code. Inside the card, light-dark() and onDark/onLight follow the surface, so when that surface is dark in both modes (the error toast; a brand's ink toast) they see one side, and themeMode is the only thing that still says which page the card is on.",
       },
       {
         guidance: false,
@@ -238,6 +251,11 @@ export const docsZh = {
           '对需要关注但不需要立即操作的错误使用 error 类型，它会持续显示直到关闭。',
       },
       {
+        guidance: true,
+        description:
+          "通过卡片的 themeMode 状态（toast: {'themeMode:dark': {...}}）让 toast 操作与页面上的控件保持同一外观，而不是在产品代码中依据 useTheme() 分支。卡片内部的 light-dark() 与 onDark/onLight 跟随表面：当表面在两种模式下都是深色（error toast、品牌的墨色 toast）时它们只看到一侧，只有 themeMode 仍能说明卡片所在的页面模式。",
+      },
+      {
         guidance: false,
         description:
           '不要对阻塞用户的严重错误使用 toast，使用 Banner 进行持久的上下文消息传递。',
@@ -276,7 +294,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'toast notification w/ auto-dismiss, stacking, dedup, smooth animations; MediaTheme inverted surface',
+    'toast notification w/ auto-dismiss, stacking, dedup, smooth animations; MediaTheme inverted surface; card reflects resolved Theme mode as themeMode state (light|dark) for app-mode theming',
   usage: {
     description:
       'Brief non-blocking notification for action confirmations and temporary info. Use where user needs feedback not decisions: saves, deletes, status changes. useToast() hook for production (safe-area positioning, responsive message wrapping, stacking, auto-dismiss, dedup via ToastViewport). Enters, exits, or swipe-dismisses toward configured edge; touch is claimed only after dominant edge-directed intent; swipe reports manual. Pen uses the direct-contact gesture; mouse drag stays off to preserve text selection and the close control remains available. Set isAutoHide false explicitly for must-remain actions/messages. Toast renders inline for previews/docs/static showcases.',
@@ -299,6 +317,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Error type for failures needing attention; persists until dismissed.',
+      },
+      {
+        guidance: true,
+        description:
+          "Style toast actions for the page around them via themeMode state (toast: {'themeMode:dark': {...}}), not useTheme() branching in product code; light-dark()/onDark inside the card follow the surface, so a surface dark in both modes (error toast, brand ink toast) sees one side and only themeMode still says which page the card is on.",
       },
       {
         guidance: false,

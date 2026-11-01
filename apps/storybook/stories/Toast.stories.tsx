@@ -23,6 +23,28 @@ import {
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {Badge} from '@astryxdesign/core/Badge';
+import {Layout, LayoutContent, LayoutPanel} from '@astryxdesign/core/Layout';
+import {NavIcon} from '@astryxdesign/core/NavIcon';
+import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
+import {Table, pixel, proportional} from '@astryxdesign/core/Table';
+import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
+import {
+  ArchiveBoxIcon,
+  ClockIcon,
+  EnvelopeIcon,
+  InboxIcon,
+  PaperAirplaneIcon,
+  StarIcon,
+  UserCircleIcon,
+} from '@heroicons/react/24/outline';
+import {
+  ArchiveBoxIcon as ArchiveBoxIconSolid,
+  ClockIcon as ClockIconSolid,
+  InboxIcon as InboxIconSolid,
+  PaperAirplaneIcon as PaperAirplaneIconSolid,
+  StarIcon as StarIconSolid,
+} from '@heroicons/react/24/solid';
 
 const styles = stylex.create({
   narrowLayoutReference: {
@@ -75,6 +97,52 @@ const styles = stylex.create({
   stackControls: {
     display: 'flex',
     flexWrap: 'wrap',
+    gap: 'var(--spacing-2)',
+  },
+  // One app page per colour mode, side by side (ThemedToastAction). The
+  // frame paints the mode's own page background and positions the page's
+  // inline toast in its bottom-end corner, where a viewport would put it.
+  appPages: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 'var(--spacing-4)',
+    padding: 'var(--spacing-4)',
+  },
+  appPageSlot: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 'var(--spacing-2)',
+    flexBasis: 680,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  appPage: {
+    position: 'relative',
+    height: 560,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--color-border)',
+    borderRadius: 'var(--radius-container)',
+    backgroundColor: 'var(--color-background-body)',
+  },
+  appPageToast: {
+    position: 'absolute',
+    insetBlockEnd: 'var(--spacing-4)',
+    insetInlineEnd: 'var(--spacing-4)',
+    inlineSize: 400,
+    maxInlineSize: 'calc(100% - 2 * var(--spacing-4))',
+  },
+  inboxHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 'var(--spacing-2)',
+  },
+  inboxActions: {
+    display: 'flex',
     gap: 'var(--spacing-2)',
   },
 });
@@ -914,6 +982,340 @@ export const ThemedToastLive: StoryObj = {
         story:
           'Same theme, real toasts. The viewport is inside `Theme`, so the ' +
           'scoped theme CSS reaches the toasts it renders.',
+      },
+    },
+  },
+};
+
+/**
+ * "Ink Mail" is a brand whose toast is ink on both pages, one step lighter on
+ * the dark page the way dark-mode elevation is drawn. Its secondary control is
+ * a soft fill on the light page and a hairline outline on the dark one: a fill
+ * on a dark page stacks a third tonal layer on page and card and reads muddy.
+ * The toast action is a secondary control, so it should wear the same clothes
+ * as the secondary buttons around it.
+ *
+ * It cannot do that from inside the card on its own. `light-dark()` and
+ * `onDark`/`onLight` follow the SURFACE, and the surface is ink on both pages,
+ * so a Button rule can only ever see the dark side: on the light page the Undo
+ * would come out outlined while every other secondary button on the page is
+ * filled. `themeMode` is the card saying which page it is on. The theme sets
+ * its own properties on `toast['themeMode:*']`, they inherit into `endContent`,
+ * and the theme's Button rule reads them ahead of its `light-dark()` fallback.
+ * Product code passes `variant="secondary"` and nothing else.
+ *
+ * The Button rule is theme-wide by construction (the override grammar has no
+ * descendant form), so outside a toast the properties are unset and the
+ * fallback is the brand's normal secondary look. The second theme leaves the
+ * toast rules out, for the story's `themeMode rule` control.
+ */
+function defineInkMailTheme(name: string, hasThemeModeRule: boolean) {
+  return defineTheme({
+    name,
+    color: {accent: ['#1F4FD8', '#8FB0FF'], neutralStyle: 'warm'},
+    tokens: {
+      '--color-background-body': ['#F3F1EA', '#111214'],
+      '--color-background-surface': ['#FFFFFF', '#1A1B1F'],
+      // Ink on both pages, lifted a step on the dark one.
+      '--color-background-inverted': ['#1B1D22', '#25282F'],
+    },
+    components: {
+      button: {
+        // The brand's secondary control: soft fill on the light page, hairline
+        // outline on the dark one. Inside a toast the card's mode rules below
+        // set the properties; everywhere else they are unset and light-dark()
+        // decides. light-dark() takes colours only, so the ring's shape stays
+        // constant and only its colour switches.
+        'variant:secondary': {
+          backgroundColor:
+            'var(--ink-secondary-bg, light-dark(rgb(27 29 34 / 0.08), transparent))',
+          boxShadow:
+            'inset 0 0 0 1px var(--ink-secondary-ring, light-dark(transparent, rgb(255 255 255 / 0.24)))',
+        },
+      },
+      ...(hasThemeModeRule
+        ? {
+            toast: {
+              // Light page: the fill, in the card's own white, no ring. Dark
+              // page: no fill, the ring. Only a toast sets these, so buttons
+              // elsewhere keep the fallback.
+              'themeMode:light': {
+                '--ink-secondary-bg': 'rgb(255 255 255 / 0.16)',
+                '--ink-secondary-ring': 'transparent',
+              },
+              'themeMode:dark': {
+                '--ink-secondary-bg': 'transparent',
+                '--ink-secondary-ring': 'rgb(255 255 255 / 0.24)',
+              },
+            },
+          }
+        : {}),
+    },
+  });
+}
+
+const inkMailTheme = defineInkMailTheme('ink-mail', true);
+const inkMailLightDarkOnlyTheme = defineInkMailTheme(
+  'ink-mail-light-dark-only',
+  false,
+);
+
+interface InboxRow extends Record<string, unknown> {
+  id: string;
+  from: string;
+  subject: string;
+  time: string;
+}
+
+const inboxRows: InboxRow[] = [
+  {
+    id: '1',
+    from: 'Priya Natarajan',
+    subject: 'Launch review: notes and next steps',
+    time: '9:42',
+  },
+  {
+    id: '2',
+    from: 'Design Systems',
+    subject: 'Toast actions on the dark page',
+    time: '9:10',
+  },
+  {
+    id: '3',
+    from: 'Marcus Webb',
+    subject: 'Re: contract renewal',
+    time: '8:05',
+  },
+  {
+    id: '4',
+    from: 'Billing',
+    subject: 'Your August invoice is ready',
+    time: 'Tue',
+  },
+  {
+    id: '5',
+    from: 'Lena Hoffmann',
+    subject: 'Offsite agenda, first draft',
+    time: 'Mon',
+  },
+  {id: '6', from: 'Support', subject: 'Ticket 4821 resolved', time: 'Mon'},
+];
+
+const inboxColumns = [
+  {key: 'from', header: 'From', width: pixel(150)},
+  {key: 'subject', header: 'Subject', width: proportional(1)},
+  {key: 'time', header: 'Time', width: pixel(96)},
+];
+
+type InkMailMode = 'light' | 'dark';
+
+// Both pages share one canvas, so each names its landmarks after its mode.
+function InkMailTopNav({mode}: {mode: InkMailMode}) {
+  return (
+    <TopNav
+      label={`Ink Mail, ${mode} app`}
+      heading={
+        <TopNavHeading
+          heading="Ink Mail"
+          logo={
+            <NavIcon icon={<EnvelopeIcon style={{width: 16, height: 16}} />} />
+          }
+        />
+      }
+      startContent={
+        <>
+          <TopNavItem label="Mail" href="#" isSelected />
+          <TopNavItem label="Contacts" href="#" />
+          <TopNavItem label="Calendar" href="#" />
+        </>
+      }
+      endContent={
+        <Button
+          label="Account"
+          variant="ghost"
+          icon={<UserCircleIcon style={{width: 16, height: 16}} />}
+          isIconOnly
+        />
+      }
+    />
+  );
+}
+
+function InkMailSideNav({mode}: {mode: InkMailMode}) {
+  return (
+    <SideNav
+      aria-label={`Mailboxes, ${mode} app`}
+      topContent={<Button label="Compose" variant="primary" width="100%" />}>
+      <SideNavSection title="Mailboxes" isHeaderHidden>
+        <SideNavItem
+          label="Inbox"
+          icon={InboxIcon}
+          selectedIcon={InboxIconSolid}
+          isSelected
+          href="#"
+          endContent={<Badge label={6} />}
+        />
+        <SideNavItem
+          label="Starred"
+          icon={StarIcon}
+          selectedIcon={StarIconSolid}
+          href="#"
+        />
+        <SideNavItem
+          label="Snoozed"
+          icon={ClockIcon}
+          selectedIcon={ClockIconSolid}
+          href="#"
+        />
+        <SideNavItem
+          label="Sent"
+          icon={PaperAirplaneIcon}
+          selectedIcon={PaperAirplaneIconSolid}
+          href="#"
+        />
+        <SideNavItem
+          label="Archive"
+          icon={ArchiveBoxIcon}
+          selectedIcon={ArchiveBoxIconSolid}
+          href="#"
+        />
+      </SideNavSection>
+    </SideNav>
+  );
+}
+
+/**
+ * One inbox page. The archive toast is an inline `Toast` in the frame's
+ * bottom-end corner rather than a fired one, so both pages show it at once
+ * (two live viewports on one canvas would be two identical "Notifications"
+ * landmarks); Archive brings it back after a dismiss. The action is a plain
+ * `variant="secondary"` Button; the theme decides how it reads on each page.
+ */
+function InkMailPage({mode, type}: {mode: InkMailMode; type: ToastType}) {
+  const [isToastShown, setIsToastShown] = useState(true);
+  const isError = type === 'error';
+  return (
+    <div {...stylex.props(styles.appPage)}>
+      <Layout
+        height="fill"
+        header={<InkMailTopNav mode={mode} />}
+        start={
+          <LayoutPanel hasDivider padding={0} width={260}>
+            <InkMailSideNav mode={mode} />
+          </LayoutPanel>
+        }
+        content={
+          <LayoutContent padding={6}>
+            <Stack direction="vertical" gap={4}>
+              <div {...stylex.props(styles.inboxHeader)}>
+                <Heading level={2}>Inbox</Heading>
+                <div {...stylex.props(styles.inboxActions)}>
+                  <Button
+                    label="Archive"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsToastShown(true)}
+                  />
+                  <Button label="Mark all read" variant="secondary" size="sm" />
+                </div>
+              </div>
+              {/* Last child of the padded content: the rows bleed to its
+                  edges, the way Table is built to sit in a frame. */}
+              <Table
+                data={inboxRows}
+                columns={inboxColumns}
+                idKey="id"
+                hasHover
+              />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+      {isToastShown && (
+        <div {...stylex.props(styles.appPageToast)}>
+          <Toast
+            type={type}
+            body={
+              isError
+                ? 'Could not archive the conversation.'
+                : 'Conversation archived.'
+            }
+            endContent={
+              <Button
+                label={isError ? 'Retry' : 'Undo'}
+                variant="secondary"
+                size="sm"
+              />
+            }
+            isAutoHide={false}
+            autoHideDuration={5000}
+            onDismiss={() => setIsToastShown(false)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ThemedToastActionArgs {
+  hasThemeModeRule: boolean;
+  type: ToastType;
+}
+
+/**
+ * The same inbox under each app mode, with the brand's ink toast in its
+ * corner. The secondary buttons on the page differ by mode, the brand's
+ * choice; the Undo in the toast follows them, and only `themeMode` lets it.
+ */
+export const ThemedToastAction: StoryObj<ThemedToastActionArgs> = {
+  args: {hasThemeModeRule: true, type: 'info'},
+  argTypes: {
+    hasThemeModeRule: {
+      name: 'themeMode rule',
+      control: 'boolean',
+      description:
+        "Keep the theme's toast['themeMode:*'] rules. Off, the Button rule's light-dark() fallback is all the action has, and inside the card that only ever resolves to the dark side.",
+    },
+    type: {
+      control: 'radio',
+      options: ['info', 'error'],
+      description:
+        'The error surface resolves to the dark side on both pages under every shipped theme; the same rule applies to it.',
+    },
+  },
+  render: function ThemedToastActionStory({hasThemeModeRule, type}) {
+    const theme = hasThemeModeRule ? inkMailTheme : inkMailLightDarkOnlyTheme;
+    return (
+      <div {...stylex.props(styles.appPages)}>
+        {(['light', 'dark'] as const).map(mode => (
+          <div key={mode} {...stylex.props(styles.appPageSlot)}>
+            <Text type="label">
+              {mode === 'light' ? 'Light app' : 'Dark app'}
+            </Text>
+            <Theme theme={theme} mode={mode}>
+              <InkMailPage mode={mode} type={type} />
+            </Theme>
+          </div>
+        ))}
+      </div>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The same inbox under each app mode, with the brand's ink toast in " +
+          'its corner. The secondary buttons on the page are a soft fill on ' +
+          "the light page and a hairline outline on the dark one, the brand's " +
+          'choice: a fill on a dark page is a third tonal layer on page and ' +
+          'card. The Undo in the toast follows them, and it can only do so ' +
+          'through `themeMode`, because the card is ink on both pages and ' +
+          '`light-dark()` inside it always resolves to the dark side. Turn ' +
+          'the **themeMode rule** control off: the Undo on the light page ' +
+          "falls back to the outline, the dark page's clothes on a light " +
+          'page, while nothing else on either page changes. Switch the type ' +
+          "to `error` for the same rule on Core's error surface, which " +
+          'resolves to the dark side on both pages under every shipped theme.',
       },
     },
   },
