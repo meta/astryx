@@ -22,6 +22,7 @@ import {
   collectConcernMatches,
   collectGlobalReviewMatches,
   discoverKnowledgeRecords,
+  discoverPlatformComponentRecords,
   consumerDocPublicNames,
   matchesPathPattern,
   parseKnowledgeDocument,
@@ -33,7 +34,9 @@ const require = createRequire(import.meta.url);
 const {componentPackage} = require('./component-packages.cjs');
 const {
   classifyComponentKnowledgePath,
+  classifyPlatformComponentSpecPath,
   locateComponentKnowledgePath,
+  locatePlatformComponentSource,
 } = require('../.github/scripts/knowledge-paths.cjs');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -51,6 +54,8 @@ const INHERITED_REFERENCE_FIELDS = [
   'system_specs',
   'references',
   'parent_component',
+  // A platform record adds to its core component's contract (INV2).
+  'platform_of',
 ];
 
 /**
@@ -133,7 +138,10 @@ function pathEntryCovers(root, entry, filePath) {
 /** Load every knowledge record in the working tree once. */
 export function loadKnowledgeIndex(root = DEFAULT_ROOT) {
   const records = [];
-  for (const absolutePath of discoverKnowledgeRecords(root)) {
+  for (const absolutePath of [
+    ...discoverKnowledgeRecords(root),
+    ...discoverPlatformComponentRecords(root),
+  ]) {
     const filePath = toPosix(path.relative(root, absolutePath));
     const content = fs.readFileSync(absolutePath, 'utf8');
     const {frontmatter} = parseKnowledgeDocument(content, filePath);
@@ -148,6 +156,7 @@ export function loadKnowledgeIndex(root = DEFAULT_ROOT) {
       frontmatter,
       classified: classifyComponentKnowledgePath(filePath),
       located: locateComponentKnowledgePath(root, filePath),
+      platform: classifyPlatformComponentSpecPath(filePath),
       pathPatterns: asList(
         parsePathApplicabilityBlock(content, filePath).config?.paths,
       ).filter(pattern => typeof pattern === 'string'),
@@ -257,6 +266,25 @@ function placementMatches(index, filePath, location) {
           record,
           via: 'placement',
           detail: `theme record for packages/themes/${theme[1]}/`,
+        });
+      }
+      continue;
+    }
+    if (record.platform) {
+      // A platform record governs its language's code for the same component
+      // root: the whole root when it is named after it, otherwise its
+      // same-stem files.
+      const {componentRoot, language, publicName} = record.platform;
+      const source = locatePlatformComponentSource(filePath);
+      if (
+        source?.language === language &&
+        source.componentRoot === componentRoot &&
+        (publicName === componentRoot || source.stem === publicName)
+      ) {
+        matches.push({
+          record,
+          via: 'placement',
+          detail: `${language} record for ${publicName} in ${componentRoot}`,
         });
       }
       continue;

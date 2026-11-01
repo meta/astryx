@@ -308,6 +308,31 @@ async function reconcileSpecOwnerGate({
     }
   }
 
+  /**
+   * Every file's blob at `ref`, from one tree read. Empty when GitHub cuts
+   * the tree short or the read fails, so each base text is then read.
+   */
+  async function readBaseBlobs(fullName, ref) {
+    const [repoOwner, repoName] = fullName.split('/');
+    try {
+      const {data} = await github.rest.git.getTree({
+        owner: repoOwner,
+        repo: repoName,
+        tree_sha: ref,
+        recursive: 'true',
+      });
+      if (data.truncated) return new Map();
+      return new Map(
+        (data.tree ?? [])
+          .filter(entry => entry.type === 'blob')
+          .map(entry => [entry.path, entry.sha]),
+      );
+    } catch (error) {
+      core.warning(`Could not read the base tree: ${error.message}`);
+      return new Map();
+    }
+  }
+
   /** A spec path's text at `ref`, or null when the path is absent there. */
   async function readSpecContent(fullName, ref, filePath) {
     const [repoOwner, repoName] = fullName.split('/');
@@ -537,30 +562,44 @@ async function reconcileSpecOwnerGate({
             classifyChanges([{filename: file.previous_filename}])
               .touchesKnowledgeRecords)),
     );
+    // A renamed record whose head blob is its old path's blob at the base has
+    // the same text at both, so its base text needs no read of its own.
+    const baseBlobs = knowledgeChanges.some(file => file.status === 'renamed')
+      ? await readBaseBlobs(after.base.repo.full_name, after.base.sha)
+      : new Map();
     const records = await Promise.all(
       knowledgeChanges.map(async file => {
         const previousPath = file.previous_filename || file.filename;
         const baseIsTextRecord = previousPath.endsWith('.md');
         const headIsTextRecord = file.filename.endsWith('.md');
+        const headContent =
+          !headIsTextRecord || file.status === 'removed'
+            ? null
+            : await readText(
+                after.head.repo.full_name,
+                after.head.sha,
+                file.filename,
+              );
+        const unchangedRename =
+          headContent != null &&
+          baseIsTextRecord &&
+          file.status === 'renamed' &&
+          file.sha != null &&
+          baseBlobs.get(previousPath) === file.sha;
         return {
           path: file.filename,
           previousPath,
           baseContent:
             !baseIsTextRecord || file.status === 'added'
               ? null
-              : await readText(
-                  after.base.repo.full_name,
-                  after.base.sha,
-                  previousPath,
-                ),
-          headContent:
-            !headIsTextRecord || file.status === 'removed'
-              ? null
-              : await readText(
-                  after.head.repo.full_name,
-                  after.head.sha,
-                  file.filename,
-                ),
+              : unchangedRename
+                ? headContent
+                : await readText(
+                    after.base.repo.full_name,
+                    after.base.sha,
+                    previousPath,
+                  ),
+          headContent,
         };
       }),
     );
