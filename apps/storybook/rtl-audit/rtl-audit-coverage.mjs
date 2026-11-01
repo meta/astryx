@@ -989,12 +989,11 @@ function componentName(component) {
  * entries and cannot be coverage gaps; the audit reports them, typed, rather
  * than dropping them silently.
  *
- * It fails closed. An identity stays a roster entry when:
+ * Public components are `sourceComponents`, package-qualified. The caller
+ * includes documented exports that directory discovery misses (Core's `Theme`
+ * and `MediaTheme`), so they stay roster entries whatever their stories are
+ * titled. It fails closed. An identity stays a roster entry when:
  * - a filter names it explicitly (an umbrella surface such as `Core/Chat`);
- * - one of its words is, or ends with, a documented public component that
- *   roster discovery does not reach (`documentedNames`, such as `Theme` and
- *   `MediaTheme`, which live outside PascalCase directories), so
- *   `core/themes-theme` and `core/themes-codetheme` stay;
  * - its package has no discovered public component at all, so a discovery
  *   failure cannot hide that package's gaps.
  */
@@ -1002,13 +1001,11 @@ export function ignoredStoryIdentities({
   sourceComponents = [],
   storyComponents = [],
   filters = [],
-  documentedNames = [],
 }) {
   const publicKeys = new Set(sourceComponents.map(c => c.toLowerCase()));
   const packagesWithPublic = new Set(
     sourceComponents.map(c => c.split('/')[0].toLowerCase()),
   );
-  const documented = new Set(documentedNames.map(name => name.toLowerCase()));
   const normalizedFilters = filters.map(filter => filter.toLowerCase());
   const named = component =>
     normalizedFilters.some(
@@ -1016,17 +1013,10 @@ export function ignoredStoryIdentities({
         component.toLowerCase() === filter ||
         componentName(component) === filter,
     );
-  // A word names a documented component when it is that name or ends with it
-  // (`codetheme` ends with `theme`), so a variant story stays a roster entry.
-  const namesDocumented = component =>
-    componentName(component)
-      .split('-')
-      .some(word => [...documented].some(name => word.endsWith(name)));
   const ignorable = component =>
     !publicKeys.has(component.toLowerCase()) &&
     packagesWithPublic.has(component.split('/')[0].toLowerCase()) &&
-    !named(component) &&
-    !namesDocumented(component);
+    !named(component);
   return Array.from(
     new Map(
       storyComponents.filter(ignorable).map(c => [c.toLowerCase(), c]),
@@ -1053,7 +1043,6 @@ export function buildAuditedComponentRoster({
   sourceComponents = [],
   storyComponents = [],
   filters = [],
-  documentedNames = [],
 }) {
   const normalizedFilters = filters.map(filter => filter.toLowerCase());
   const knownComponents = [...sourceComponents, ...storyComponents];
@@ -1070,7 +1059,6 @@ export function buildAuditedComponentRoster({
       sourceComponents,
       storyComponents,
       filters,
-      documentedNames,
     }).map(entry => entry.component.toLowerCase()),
   );
 

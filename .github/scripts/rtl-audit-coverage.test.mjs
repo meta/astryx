@@ -631,26 +631,33 @@ describe('buildAuditedComponentRoster', () => {
     ]);
   });
 
-  it('keeps a story identity that names a documented component discovery misses', () => {
+  it('keeps a documented component discovery misses, whatever its story is titled', () => {
+    // The caller passes Core's Theme and MediaTheme as package-qualified
+    // public components; a retitled or missing story cannot drop them.
     const input = {
-      sourceComponents: ['core/Button'],
+      sourceComponents: [
+        'core/Button',
+        'core/Theme',
+        'core/MediaTheme',
+        'lab/CodeEditor',
+      ],
       storyComponents: [
         'core/button',
-        'core/themes-theme',
-        'core/themes-mediatheme-auto',
-        'core/themes-codetheme',
-        'core/hooks-useclipboard',
+        'core/appearance-theming',
+        'lab/codeeditor',
+        'lab/themes-codeeditortheme',
       ],
-      documentedNames: ['Theme', 'MediaTheme'],
     };
     expect(buildAuditedComponentRoster(input)).toEqual([
       'core/button',
-      'core/themes-theme',
-      'core/themes-mediatheme-auto',
-      'core/themes-codetheme',
+      'core/Theme',
+      'core/MediaTheme',
+      'lab/codeeditor',
     ]);
+    // Core's Theme no longer keeps a Lab story identity that ends in "theme".
     expect(ignoredStoryIdentities(input)).toEqual([
-      {component: 'core/hooks-useclipboard', reason: 'no-public-component'},
+      {component: 'core/appearance-theming', reason: 'no-public-component'},
+      {component: 'lab/themes-codeeditortheme', reason: 'no-public-component'},
     ]);
   });
 

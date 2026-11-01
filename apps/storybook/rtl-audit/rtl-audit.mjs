@@ -104,7 +104,8 @@ const {
 
 // Documented, exported components that live outside PascalCase directories
 // (Core's `theme/` holds Theme and MediaTheme), which roster discovery does not
-// reach. A story identity naming one stays a roster entry (fail closed).
+// reach. They join the roster as package-qualified entries (INV5), so a story
+// retitle cannot drop them.
 function documentedComponentsOutsideDiscovery(repoRoot, pkg) {
   if (pkg.layout === 'flat') return [];
   const sourceDir = path.join(repoRoot, pkg.src);
@@ -1349,7 +1350,6 @@ async function cleanupRuntime() {
 
   const publicComponentsByPackage = {};
   const sourceComponents = [];
-  const documentedNames = [];
   for (const packageName of AUDITED_PACKAGE_NAMES) {
     try {
       const pkg = componentPackage(packageName);
@@ -1359,11 +1359,11 @@ async function cleanupRuntime() {
         : nestedPackageComponentNames(PROJECT_ROOT, pkg);
       publicComponentsByPackage[packageName] = componentNames;
       if (ACTIVE_PACKAGE_NAMES.includes(packageName)) {
-        documentedNames.push(
-          ...documentedComponentsOutsideDiscovery(PROJECT_ROOT, pkg),
-        );
         sourceComponents.push(
           ...componentNames.map(component => `${packageName}/${component}`),
+          ...documentedComponentsOutsideDiscovery(PROJECT_ROOT, pkg)
+            .filter(name => !componentNames.includes(name))
+            .map(component => `${packageName}/${component}`),
         );
       }
     } catch (error) {
@@ -1402,7 +1402,6 @@ async function cleanupRuntime() {
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
     filters: FILTER,
-    documentedNames,
   });
   if (scopedStoryRoutes.length === 0) {
     if (FILTER.length === 0 || SHARD !== null) {
@@ -1642,7 +1641,6 @@ async function cleanupRuntime() {
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
     filters: FILTER,
-    documentedNames,
   });
 
   const autoFails = autoResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
