@@ -89,9 +89,30 @@ import {
 
 const {
   componentPackage,
+  documentedComponentNames,
+  exportedComponentNames,
   flatPackageComponentNames,
   nestedPackageComponentNames,
 } = componentPackages;
+
+// Documented, exported components that live outside PascalCase directories
+// (Core's `theme/` holds Theme and MediaTheme), which roster discovery does not
+// reach. A story identity naming one stays a roster entry (fail closed).
+function documentedComponentsOutsideDiscovery(repoRoot, pkg) {
+  if (pkg.layout === 'flat') return [];
+  const sourceDir = path.join(repoRoot, pkg.src);
+  const exported = new Set(exportedComponentNames(sourceDir));
+  let entries = [];
+  try {
+    entries = fs.readdirSync(sourceDir, {withFileTypes: true});
+  } catch {
+    return [];
+  }
+  return entries
+    .filter(entry => entry.isDirectory() && !/^[A-Z]/.test(entry.name))
+    .flatMap(entry => documentedComponentNames(path.join(sourceDir, entry.name)))
+    .filter(name => exported.has(name));
+}
 
 const args = process.argv.slice(2);
 const getArg = name => {
@@ -1239,6 +1260,7 @@ async function cleanupRuntime() {
 
   const publicComponentsByPackage = {};
   const sourceComponents = [];
+  const documentedNames = [];
   for (const packageName of AUDITED_PACKAGE_NAMES) {
     try {
       const pkg = componentPackage(packageName);
@@ -1248,6 +1270,9 @@ async function cleanupRuntime() {
         : nestedPackageComponentNames(PROJECT_ROOT, pkg);
       publicComponentsByPackage[packageName] = componentNames;
       if (ACTIVE_PACKAGE_NAMES.includes(packageName)) {
+        documentedNames.push(
+          ...documentedComponentsOutsideDiscovery(PROJECT_ROOT, pkg),
+        );
         sourceComponents.push(
           ...componentNames.map(component => `${packageName}/${component}`),
         );
@@ -1269,6 +1294,7 @@ async function cleanupRuntime() {
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
     filters: FILTER,
+    documentedNames,
   });
 
   // The audit's plan: D1 uses one deterministic representative story per
@@ -1490,6 +1516,7 @@ async function cleanupRuntime() {
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
     filters: FILTER,
+    documentedNames,
   });
 
   const autoFails = autoResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');

@@ -625,6 +625,41 @@ describe('buildAuditedComponentRoster', () => {
     ]);
   });
 
+  it('keeps a story identity that names a documented component discovery misses', () => {
+    const input = {
+      sourceComponents: ['core/Button'],
+      storyComponents: [
+        'core/button',
+        'core/themes-theme',
+        'core/themes-mediatheme-auto',
+        'core/themes-codetheme',
+        'core/hooks-useclipboard',
+      ],
+      documentedNames: ['Theme', 'MediaTheme'],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/themes-theme',
+      'core/themes-mediatheme-auto',
+      'core/themes-codetheme',
+    ]);
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/hooks-useclipboard', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('ignores nothing in a package whose public roster is empty', () => {
+    const input = {
+      sourceComponents: ['core/Button'],
+      storyComponents: ['core/button', 'lab/chart-interactions'],
+    };
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'lab/chart-interactions',
+    ]);
+  });
+
   it('keeps a public component with no story as a roster entry', () => {
     expect(
       buildAuditedComponentRoster({
