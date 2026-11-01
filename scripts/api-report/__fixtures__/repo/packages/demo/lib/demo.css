@@ -1,3 +1,5 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
 /* --commented-out: 1; */
 :root {
   --demo-accent: blue;
@@ -5,4 +7,7 @@
 }
 .astryx-chip[data-astryx-theme] {
   --demo-gap: 4px;
+}
+.astryx-chip[data-astryx-private] {
+  outline: none;
 }

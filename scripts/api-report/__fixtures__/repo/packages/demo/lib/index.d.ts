@@ -1,3 +1,5 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
 export type ReactNode = string | number | null;
 export type ChipSize = 'sm' | 'md';
 export interface ChipProps {

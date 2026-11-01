@@ -6,7 +6,7 @@
  * @input  a published package after its build: the `exports` map, the built
  *         declarations each entry point's `types` names, its built
  *         stylesheets, its component docs' theming targets, and the public
- *         attribute list in `docs/architecture/public-component-api.md`
+ *         `data-astryx-*` attributes the INV23 lint rule allows
  * @output one deterministic Markdown report: a section per entry point, then
  *         the package's stylesheets, theme targets, public attributes, and the
  *         reachable members tagged internal
@@ -31,6 +31,10 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DISCOVERY = path.join(
   SCRIPT_DIR,
   '../../packages/cli/foundation/discovery',
+);
+const PRIVATE_ATTRIBUTE_RULE = path.join(
+  SCRIPT_DIR,
+  '../../internal/eslint-plugin-astryx/no-raw-private-attribute.js',
 );
 
 const CODE = /\.(m|c)?(t|j)sx?$/;
@@ -72,24 +76,6 @@ function entryFile(target) {
     if (t[k]) return entryFile(t[k]);
   }
   return null;
-}
-
-/**
- * The public `data-astryx-*` attributes the record names (INV23).
- * @param {string} repoRoot
- * @returns {string[]}
- */
-export function readPublicAttributes(repoRoot) {
-  const file = path.join(repoRoot, 'docs/architecture/public-component-api.md');
-  if (!fs.existsSync(file)) return [];
-  const text = fs.readFileSync(file, 'utf8');
-  const at = text.indexOf('The public data attributes are');
-  if (at < 0) return [];
-  const end = text.indexOf('change only under', at);
-  const list = text.slice(at, end < 0 ? undefined : end);
-  return [
-    ...new Set([...list.matchAll(/`(data-astryx-[a-z-]+)`/g)].map(m => m[1])),
-  ].sort(byName);
 }
 
 /**
@@ -586,7 +572,14 @@ export async function generateReport(opts) {
   ))
     walk(dir);
   const haystack = built.join('\n');
-  for (const a of readPublicAttributes(repoRoot)) {
+  // INV23's list, as the lint rule that enforces it holds it.
+  const {PUBLIC_ATTRIBUTES} = await import(
+    pathToFileURL(PRIVATE_ATTRIBUTE_RULE).href
+  );
+  const publicAttributes = [...PUBLIC_ATTRIBUTES]
+    .map(name => `data-astryx-${name}`)
+    .sort(byName);
+  for (const a of publicAttributes) {
     const short = a.slice('data-astryx-'.length);
     if (
       haystack.includes(a) ||

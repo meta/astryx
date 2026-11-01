@@ -1159,8 +1159,9 @@ jobs:
 
       # Advisory API changes (architecture:public-component-api INV24): each
       # published package's report from this build, compared with the reports
-      # committed at the merge base. It reads the dists built above, never
-      # fails the job, and the PR report renders api-changes.json.
+      # committed at the merge base (read with git, no API calls). It reads the
+      # dists built above and never fails the job; api-changes.json goes into
+      # the pr-analysis artifact. With no merge base there is nothing to compare.
       - name: Report API changes
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
         continue-on-error: true
@@ -1169,7 +1170,8 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
-          node scripts/api-report/cli.mjs --changes ${BASE_SHA:+--base "$BASE_SHA"}
+          [ -n "$BASE_SHA" ] || exit 0
+          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA"
 
       - name: Upload analysis artifact
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')

@@ -134,11 +134,12 @@ export function diffReports(base, head) {
 export function usageFor(pkg, row) {
   const spec = row.entry.startsWith('./') ? `${pkg}${row.entry.slice(1)}` : pkg;
   const [kind, name = row.item] = row.item.split(' ');
-  if (row.section === 'Stylesheets') return `.my-scope { ${name}: …; }`;
-  if (row.section === 'Theme targets')
+  // Package-level sections sit under their own `##` heading, held in `entry`.
+  if (row.entry === 'Stylesheets') return `.my-scope { ${name}: …; }`;
+  if (row.entry === 'Theme targets')
     return `defineTheme({components: {'${name}': {…}}})`;
-  if (row.section === 'Public attributes') return `[${name}] { … }`;
-  if (row.section === 'Reachable members tagged internal')
+  if (row.entry === 'Public attributes') return `[${name}] { … }`;
+  if (row.entry === 'Reachable members tagged internal')
     return `import {${name}} from '${pkg}'`;
   if (row.section === 'Entry point')
     return kind === 'bin'

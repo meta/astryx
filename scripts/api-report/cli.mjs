@@ -22,6 +22,8 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
+import {isStableReleasePackage} from '../release/active-release.mjs';
 import {computeChanges, renderChanges} from './changes.mjs';
 import {generateReport} from './generate.mjs';
 
@@ -30,25 +32,23 @@ const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
 );
-const PACKAGE_PARENTS = ['packages', 'packages/themes'];
 
 /**
- * Every published workspace package: not private, with an `exports` map.
+ * Every package a stable release publishes, by the release's own rule.
  * @param {string} repoRoot
  * @returns {Array<{name: string, dir: string}>}
  */
 export function publishedPackages(repoRoot) {
   const out = [];
-  for (const parent of PACKAGE_PARENTS) {
-    const abs = path.join(repoRoot, parent);
-    if (!fs.existsSync(abs)) continue;
-    for (const ent of fs.readdirSync(abs, {withFileTypes: true})) {
-      const manifest = path.join(abs, ent.name, 'package.json');
-      if (!ent.isDirectory() || !fs.existsSync(manifest)) continue;
-      const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
-      if (pkg.private || !pkg.exports) continue;
-      out.push({name: pkg.name, dir: `${parent}/${ent.name}`});
-    }
+  for (const abs of expandWorkspaceDirs(repoRoot)) {
+    const manifest = path.join(abs, 'package.json');
+    if (!fs.existsSync(manifest)) continue;
+    const pkg = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+    if (!isStableReleasePackage(pkg)) continue;
+    out.push({
+      name: pkg.name,
+      dir: path.relative(repoRoot, abs).split(path.sep).join('/'),
+    });
   }
   return out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }

@@ -17,9 +17,10 @@ import {
   diffReports,
   parseReport,
   renderChanges,
+  usageFor,
 } from './changes.mjs';
 import {publishedPackages} from './cli.mjs';
-import {generateReport, readPublicAttributes} from './generate.mjs';
+import {generateReport} from './generate.mjs';
 
 const FIXTURE_ROOT = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -86,7 +87,6 @@ describe('generateReport', () => {
     expect(report).not.toContain('secret');
     expect(report).not.toContain('--_demo-private');
     expect(report).not.toContain('--commented-out');
-    expect(report).not.toContain('data-astryx-unused');
     expect(report).not.toContain('data-astryx-private');
   });
 
@@ -108,19 +108,12 @@ describe('generateReport', () => {
     const names = fencedRows('Types').map(line => line.split(' ')[1]);
     expect(names).toEqual([...names].sort());
   });
-
-  it('reads the public attribute list from the record', () => {
-    expect(readPublicAttributes(FIXTURE_ROOT)).toEqual([
-      'data-astryx-theme',
-      'data-astryx-unused',
-    ]);
-  });
 });
 
 describe('publishedPackages', () => {
-  it('skips private packages', () => {
+  it('keeps the packages a stable release publishes', () => {
     expect(publishedPackages(FIXTURE_ROOT).map(p => p.name)).toEqual([
-      '@fixture/demo',
+      '@astryxdesign/demo',
     ]);
   });
 });
@@ -159,7 +152,7 @@ describe('API changes', () => {
     const md = renderChanges(
       computeChanges([
         {
-          pkg: '@fixture/demo',
+          pkg: '@astryxdesign/demo',
           base: report,
           head: resize(report),
           committed: report,
@@ -167,7 +160,7 @@ describe('API changes', () => {
       ]),
     );
     expect(md.split('\n')[0]).toBe(
-      '**API changes:** @fixture/demo +0 · ~1 · −0 (report stale: run `pnpm api:report`)',
+      '**API changes:** demo +0 · ~1 · −0 (report stale: run `pnpm api:report`)',
     );
     expect(md).toContain('<details><summary>1 API change (advisory)</summary>');
     expect(md).toContain('`<Chip size="sm" />`');
@@ -175,21 +168,44 @@ describe('API changes', () => {
 
   it('summarizes a package with no report at the merge base as a new report', () => {
     const [change] = computeChanges([
-      {pkg: '@fixture/demo', base: null, head: report, committed: report},
+      {pkg: '@astryxdesign/demo', base: null, head: report, committed: report},
     ]);
     expect(change).toMatchObject({
       baseline: true,
       rows: [],
       counts: {added: 0, changed: 0, removed: 0},
     });
-    expect(renderChanges([change])).toBe(
-      '**API changes:** @fixture/demo new report\n',
+    expect(renderChanges([change])).toBe('**API changes:** demo new report\n');
+  });
+
+  it('gives package-level rows a usage example of their own kind', () => {
+    const rows = [...parseReport(report).values()];
+    const usage = item =>
+      usageFor(
+        '@astryxdesign/demo',
+        rows.find(r => r.item === item),
+      );
+    expect(usage('var --demo-accent')).toBe('.my-scope { --demo-accent: …; }');
+    expect(usage('target chip')).toBe(
+      "defineTheme({components: {'chip': {…}}})",
+    );
+    expect(usage('attr data-astryx-theme')).toBe('[data-astryx-theme] { … }');
+    expect(usage('internal resetChips')).toBe(
+      "import {resetChips} from '@astryxdesign/demo'",
+    );
+    expect(usage('function chipOnly')).toBe(
+      "import {chipOnly} from '@astryxdesign/demo/chip'; chipOnly(…)",
     );
   });
 
   it('renders nothing when the API is unchanged and the committed report is current', () => {
     const changes = computeChanges([
-      {pkg: '@fixture/demo', base: report, head: report, committed: report},
+      {
+        pkg: '@astryxdesign/demo',
+        base: report,
+        head: report,
+        committed: report,
+      },
     ]);
     expect(renderChanges(changes)).toBe('');
   });
