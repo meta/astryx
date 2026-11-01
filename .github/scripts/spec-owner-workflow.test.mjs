@@ -269,7 +269,7 @@ describe('spec-only workflow contract', () => {
       .replace(/\s+/g, ' ')
       .trim();
     expect(reconcileCondition).toBe(
-      "(github.event_name != 'pull_request_review' || (github.event.pull_request.head.repo.full_name == github.repository && github.event.review.state != 'commented')) && github.event.action != 'converted_to_draft' && (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && (startsWith(github.event.comment.body, '/approve-spec') || startsWith(github.event.comment.body, '/revoke-spec')))) && (github.event_name != 'workflow_dispatch' || github.event.inputs.pr != '')",
+      "(github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository) && (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && (startsWith(github.event.comment.body, '/approve-spec') || startsWith(github.event.comment.body, '/revoke-spec')))) && (github.event_name != 'workflow_dispatch' || github.event.inputs.pr != '')",
     );
     expect(workflow).toContain('pull_request_review:');
     expect(workflow).toContain('issue_comment:');
