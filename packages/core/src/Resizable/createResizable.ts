@@ -11,15 +11,17 @@
  *   a window-splitter handle, with no React (spec:AST-107 FR6;
  *   `architecture:public-component-api` INV22); and readInitialResizableState,
  *   the state a region starts in, for the hook's first render
- * @position The Resizable family's factory, internal to the package; its
- *   input is resizeGesture.ts. Both forms of useResizable are its React
- *   wrapper, and ResizeHandle drives the same input through it: over the
- *   region its `resizable` prop describes, or by rendering the factory bound
- *   to its element. Importing it does no DOM work, so it is safe on the server
+ * @position Public factory of the Resizable family; its input is
+ *   resizeGesture.ts. Both forms of useResizable are its React wrapper, and
+ *   ResizeHandle drives the same input through it: over the region its
+ *   `resizable` prop describes, or by rendering the factory bound to its
+ *   element. Importing it does no DOM work, so it is safe on the server
  *
  * The factory never sizes the panel: it reports the size, through
  * `onSizeChange` for an interaction and `subscribe` for every change, and the
  * caller applies it, as a React caller renders it.
+ *
+ * SYNC: When modified, update /packages/core/src/Resizable/createResizable.doc.mjs
  */
 
 import enCatalog from '../i18n/generated-locales/en.generated';
@@ -57,8 +59,10 @@ import type {ResizableSize} from './utils';
 
 /**
  * The catalog's messages for a plain handle: its name when no other is given,
- * and what it announces while collapsed. The bare factory uses the shipped
- * English messages; useResizable gives the provider's translation instead.
+ * and what it announces while collapsed. The bare factory, used outside a
+ * provider, resolves them from the shipped English catalog
+ * (`architecture:internationalization` INV3); useResizable gives the
+ * provider's translation instead.
  */
 const LABEL_KEY = '@astryx.resizable.handle.label';
 const COLLAPSED_LABEL_KEY = '@astryx.resizable.collapsed';
@@ -119,8 +123,9 @@ export interface CreateResizableOptions {
   isDisabled?: boolean;
   /**
    * A plain element's accessible name, when it has none of its own. Without
-   * it, useResizable gives the message catalog's translation, and the bare
-   * factory the catalog's English message. A ResizeHandle takes its own
+   * it, useResizable gives the provider's translation of the catalog message,
+   * and the bare factory, used outside a provider, the shipped English one
+   * (`architecture:internationalization` INV3). A ResizeHandle takes its own
    * `label` prop.
    * @default 'Resize handle'
    */
@@ -365,7 +370,10 @@ const MANAGED_ATTRIBUTES = [
  * region resizes along the inline axis, and under right-to-left the drag
  * follows the pointer. `destroy` takes all of it away. With a null handle the
  * region has no handle yet: it still answers collapse, expand, resize and
- * subscribe, and touches no element.
+ * subscribe, and touches no element. Outside a provider, its name and its
+ * collapsed text are the shipped English catalog's messages, as for any
+ * Astryx string (`architecture:internationalization` INV3); `label` names it
+ * in another language.
  *
  * @example
  * ```
