@@ -6,7 +6,7 @@
  *   under .github/actions
  * @output Fails when a step's bash `run:` script does not parse
  * @position Contract test for the repository's GitHub Actions scripts
- *   (spec:AST-030 FR12)
+ *   (spec:AST-030 FR11)
  *
  * A script that does not parse fails its step on every run that reaches it,
  * whatever the pull request changes. A common cause is an apostrophe in a
