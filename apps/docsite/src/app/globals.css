@@ -15,18 +15,6 @@
    reset, astryx-base, astryx-theme so product styles always win. */
 @stylex;
 
-/* Disable overscroll bounce so the home hero's still-fixed (>=1024px) layers
-   can't show through past the top/bottom of the page. Below 1024px the hero
-   no longer pins anything past the fold (see HeroThemeReel's backdropGlow),
-   so this rule only needs to apply at desktop widths — leaving it unscoped
-   also silently disabled pull-to-refresh on every route, everywhere on
-   mobile, which is not what it was written for (#5392). */
-@media (min-width: 1024px) {
-  html {
-    overscroll-behavior-y: none;
-  }
-}
-
 /* Marketing-only custom properties for the docsite home page. These are
    NOT Astryx theming tokens — they're docsite-specific values that back the
    landing page's bento feature cards + section rhythm — so they live here
