@@ -7,6 +7,7 @@
 const {
   isComponentSpecRecordPath,
   isLegacyComponentSpecPath,
+  isPackageArchitectureRecordPath,
   isPlatformComponentSpecPath,
 } = require('./knowledge-paths.cjs');
 
@@ -143,6 +144,8 @@ function isKnowledgeRecordPath(filePath) {
     isSpecRecordPath(filePath) ||
     // Not a record and never spec-only, but the owner gate must still see it.
     isLegacyComponentSpecPath(filePath) ||
+    // A package's architecture record, owner-gated like docs/architecture/.
+    isPackageArchitectureRecordPath(filePath) ||
     KNOWLEDGE_RECORD_PATTERNS.some(pattern => pattern.test(filePath))
   );
 }

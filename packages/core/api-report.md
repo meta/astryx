@@ -764,7 +764,7 @@ component ComplexSelector(props: ComplexSelectorProps)
   prop size?: ComplexSelectorSize
   prop startIcon?: ReactNode | IconType
   prop status?: ComplexSelectorStatus
-  prop statusVariant?: FieldStatusVariant = 'attached' for input selectors; 'detached' for secondary and ghost selectors
+  prop statusVariant?: FieldStatusPlacement = 'attached' for input selectors; 'detached' for secondary and ghost selectors
   prop triggerLabel?: ReactNode
   prop value: Value
   prop variant?: ComplexSelectorVariant
@@ -889,7 +889,7 @@ component DateInput(props: DateInputProps)
   prop ref?: React.Ref<HTMLInputElement>
   prop size?: DateInputSize = 'md'
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop value?: ISODateString
   prop weekStartsOn?: DayOfWeek | DayOfWeekName = 0
   prop width?: SizeValue
@@ -924,7 +924,7 @@ component DateRangeInput(props: DateRangeInputProps)
   prop ref?: React.Ref<HTMLButtonElement>
   prop size?: DateRangeInputSize = 'md'
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop value: DateRange | null
   prop weekStartsOn?: DayOfWeek | DayOfWeekName = 0
   prop width?: SizeValue
@@ -1145,7 +1145,7 @@ component Field(props: FieldProps)
   prop labelTooltip?: string
   prop ref?: React.Ref<HTMLDivElement>
   prop status?: FieldStatusInput
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1165,11 +1165,11 @@ component FieldLabel(props: FieldLabelProps)
   prop ref?: React.Ref<HTMLLabelElement>
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
-component FieldStatus(props: FieldStatusProps)
+component FieldStatus @deprecated
   prop message: string
   prop ref?: React.Ref<HTMLDivElement>
   prop type: InputStatusType
-  prop variant?: FieldStatusVariant = 'attached'
+  prop variant: FieldStatusVariant = 'attached'
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component FileInput(props: FileInputProps)
@@ -1198,7 +1198,7 @@ component FileInput(props: FileInputProps)
   prop placeholder?: string = "Choose file" or "Choose files"
   prop ref?: React.Ref<HTMLInputElement>
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop value: File | File[] | null
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1210,13 +1210,13 @@ component FormLayout(props: FormLayoutProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Grid(props: GridProps)
-  prop align?: GridAlignment = 'stretch'
+  prop align?: GridAlignment
   prop children?: ReactNode
   prop columnGap?: SpacingStep
   prop columns?: GridColumns
   prop gap?: SpacingStep
   prop height?: SizeValue
-  prop justify?: GridAlignment = 'stretch'
+  prop justify?: GridAlignment
   prop maxWidth?: SizeValue
   prop minHeight?: SizeValue
   prop ref?: React.Ref<HTMLDivElement>
@@ -1641,7 +1641,7 @@ component MultiSelector(props: MultiSelectorProps)
   prop size?: MultiSelectorSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: MultiSelectorStatus
-  prop statusVariant?: FieldStatusVariant = 'attached' for input selectors; 'detached' for secondary and ghost selectors
+  prop statusVariant?: FieldStatusPlacement = 'attached' for input selectors; 'detached' for secondary and ghost selectors
   prop triggerDisplay?: 'count' | 'labels' | 'badges' = 'count'
   prop value: string[]
   prop variant?: MultiSelectorVariant = 'input'
@@ -1706,7 +1706,7 @@ component NumberInput(props: NumberInputProps)
   prop size?: NumberInputSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop step?: number | null = 1
   prop units?: string | null
   prop value: number | null | undefined
@@ -1823,7 +1823,7 @@ component PowerSearch(props: PowerSearchProps)
   prop size?: PowerSearchSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop timezoneID?: string
   prop tokenOverflowBehavior?: TokenizerOverflowBehavior = 'none'
   prop xstyle?: StyleXStyles
@@ -2038,7 +2038,7 @@ component Selector(props: SelectorProps)
   prop size?: SelectorSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: SelectorStatus
-  prop statusVariant?: FieldStatusVariant = 'attached' for input selectors; 'detached' for secondary/ghost selectors
+  prop statusVariant?: FieldStatusPlacement = 'attached' for input selectors; 'detached' for secondary/ghost selectors
   prop value?: string
   prop variant?: SelectorVariant = 'input'
   prop width?: SizeValue
@@ -2419,7 +2419,7 @@ component TextArea(props: TextAreaProps)
   prop size?: TextAreaSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: TextAreaStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop value: string
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -2453,7 +2453,7 @@ component TextInput(props: TextInputProps)
   prop size?: TextInputSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop type?: TextInputType = 'text'
   prop value: string
   prop width?: SizeValue
@@ -2506,7 +2506,7 @@ component TimeInput(props: TimeInputProps)
   prop ref?: React.Ref<HTMLInputElement>
   prop size?: TimeInputSize = 'md'
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop value?: ISOTimeString
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -2631,7 +2631,7 @@ component Tokenizer(props: TokenizerProps)
   prop size?: TokenizerSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop tokenOverflowBehavior?: TokenizerOverflowBehavior = 'none'
   prop value: T[]
   prop width?: SizeValue
@@ -2788,7 +2788,7 @@ component Typeahead(props: TypeaheadProps)
   prop size?: TypeaheadSize = 'md'
   prop startIcon?: ReactNode | IconType
   prop status?: InputStatus
-  prop statusVariant?: FieldStatusVariant = 'attached'
+  prop statusVariant?: FieldStatusPlacement = 'attached'
   prop value: T | null
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -4257,13 +4257,19 @@ interface FieldStatusInput
   message?: string
   messageID?: string
   type: FieldStatusType
-interface FieldStatusProps extends BaseProps<HTMLDivElement> (props of FieldStatus)
+interface FieldStatusProps extends BaseProps<HTMLDivElement>
+  message: string
+  ref?: React.Ref<HTMLDivElement>
+  type: InputStatusType
+  variant?: FieldStatusVariant = 'attached'
+  xstyle?: StyleXStyles
+  inherits AriaAttributes, DOMAttributes, HTMLAttributes
 type FieldStatusType = 'warning' | 'error' | 'success'
 type FieldStatusVariant = keyof FieldStatusVariantMap
 interface FieldStatusVariantMap
   attached: true
   detached: true
-  tooltip: true
+  tooltip: true @deprecated
 interface FileInputProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue' | 'value'> (props of FileInput)
 interface FileInputStatus
   message?: string
@@ -5049,10 +5055,12 @@ interface ScrollableAreaState
   inline: ScrollAxisState
 type ScrollableAreaStickyContainment = ScrollStickyContainment
 type ScrollableElementProps<E extends HTMLElement> = BaseProps<E> & RefAttributes<E>
+interface SearchContext<T extends SearchableItem = SearchableItem>
+  update: (items: T[]) => void
 interface SearchSource<T extends SearchableItem = SearchableItem>
   bootstrap: () => Promise<T[]> | T[]
   cancel?: () => void
-  search: (query: string) => Promise<T[]> | T[]
+  search: (query: string, context?: SearchContext<T>) => Promise<T[]> | T[]
 interface SearchableItem<TAuxData = unknown>
   action?: ReactNode
   auxiliaryData?: TAuxData
@@ -5866,7 +5874,7 @@ interface UseInputStatusIconOptions
   isInGroup?: boolean
   size?: IconSize = 'md'
   status?: InputStatus
-  statusVariant?: FieldStatusVariant
+  statusVariant?: FieldStatusPlacement
 interface UseInputStatusIconReturn
   describedBy: string | undefined
   statusIcon: ReactNode
@@ -8925,6 +8933,7 @@ TreeListVariantMap (.)
 BaseTypeahead (.)
 BaseTypeaheadProps (.)
 CreateStaticSourceOptions (.)
+SearchContext (.)
 SearchSource (.)
 SearchableItem (.)
 Typeahead (.)

@@ -38,7 +38,9 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {innermostInteractive} from '../hooks/useClickableContainer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {useTranslator} from '../i18n';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
@@ -404,6 +406,7 @@ export function Token({
         <LinkComponent
           ref={ref as React.Ref<HTMLAnchorElement>}
           href={href as string}
+          onClick={onClick}
           {...pressable}
           {...mergeProps(
             themeProps('token', {
@@ -444,6 +447,7 @@ export function Token({
         ref={ref}
         href={href as string}
         isDisabled={isDisabled}
+        onLinkClick={onClick}
         LinkComponent={LinkComponent}
         icon={icon}
         endContent={endContent}
@@ -487,7 +491,12 @@ export function Token({
   if (effectiveOnClick != null) {
     const handleContainerClick = (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (target.closest('button, a')) {
+      if (
+        target.closest('button, a') ||
+        // A press inside an open Tooltip or HoverCard belongs to it
+        // (component:Tooltip FR11, component:HoverCard FR11).
+        innermostInteractive(target, e.currentTarget, isLayerSurface) != null
+      ) {
         return;
       }
       effectiveOnClick(e);

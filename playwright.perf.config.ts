@@ -4,7 +4,7 @@
  * @file playwright.perf.config.ts
  * @input Uses @playwright/test; reads the built Sandbox in apps/sandbox/out
  * @output The perf scenes, measured in desktop Chromium
- * @position Run after
+ * @position Run nightly by .github/workflows/perf-nightly.yml, after
  *   `pnpm build && pnpm -F @astryxdesign/sandbox build`. Separate from
  *   playwright.config.ts (accessibility contracts) and
  *   playwright.interaction.config.ts (touch and animation proofs): a perf

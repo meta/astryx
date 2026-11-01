@@ -1,0 +1,11 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Configuration for actionlint, which the Lint workflow runs when a pull
+# request changes a workflow or composite action (spec:AST-030 FR11).
+self-hosted-runner:
+  # Larger-runner labels this repository's paid pools use; actionlint cannot
+  # know them, so each is named here. A label a workflow uses that is neither
+  # GitHub-hosted nor listed fails (ci-actionlint.test.mjs).
+  labels:
+    - 2-core-ubuntu-arm
+    - 4-core-ubuntu

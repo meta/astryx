@@ -32,7 +32,7 @@ import {
   durationVars,
   easeVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboard} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {Icon} from '../Icon';
@@ -1159,7 +1159,11 @@ export function CodeBlock({
             stylex.props(styles.headerTitle),
           )}>
           {canCollapse && (
-            <span {...stylex.props(styles.collapseChevron)}>
+            // The collapsed chevron points toward the inline end, so it mirrors
+            // in RTL (design:bidirectionality DR4). The mirror sits on this box
+            // so the glyph's own rotation still eases: rotated down when
+            // expanded, a mirrored glyph still points down.
+            <span {...stylex.props(styles.collapseChevron, rtlStyles.mirror)}>
               <Icon
                 icon="chevronRight"
                 size="xsm"

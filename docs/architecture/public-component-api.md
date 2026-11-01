@@ -104,10 +104,25 @@ guidance owns the process used to propose and test APIs.
   entry point or component subpath.
 - **INV2 — Names carry the same meaning.** Components, hooks, booleans,
   callbacks, Actions, directions, refs, and native HTML pass-throughs follow the
-  shared naming grammar. Component-specific vocabulary stays local.
+  shared naming grammar. Component-specific vocabulary stays local. A prop that
+  chooses how a component responds to input is named `<thing>Behavior` and takes
+  a closed union of behavior names, and its name holds no input word (press,
+  touch, tap, hover, mouse, click) when the values can name the behavior.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
-  a composed child.
+  a composed child. One interaction behavior is one prop, never parallel touch,
+  mouse, or focus props: when the behavior differs by device, that prop offers
+  an adaptive value that resolves per device beside explicit fixed values, named
+  `'adaptive'` when it has one device resolution and `'adaptive-<target>'` when
+  it has several, as `presentation` does (`spec:AST-043/DEC-1`,
+  `component:DropdownMenuSubMenu`); a new behavior prop defaults to the shipped
+  behavior, which is the adaptive value when the shipped behavior already
+  differs by device, and an existing prop's default moves only under INV16 and
+  INV9.
+  Tooltip and HoverCard `triggerBehavior` (`'adaptive'`, `'hover'`, `'toggle'`)
+  follow this. An `is…` or `has…` boolean names only a true on/off that has no
+  third state, and `presentation` names which surface appears and, under INV16,
+  the input mode of an open surface.
 - **INV4 — New props express caller-owned intent.** New public props follow
   `spec:AST-002/DEC-1`. A component keeps a decision internal when it can derive
   the correct result from state, content, layout, context, or platform behavior.
@@ -258,11 +273,11 @@ guidance owns the process used to propose and test APIs.
   appears (INV12); Core's `./internal/*` subpaths and unpublished packages,
   including Lab, do not. A member inside a canonical experimental boundary
   appears marked experimental (`spec:AST-017` FR21). The pull-request report
-  lists the API changes between the merge base's report and one generated from
-  the head's build: added, changed, and removed rows, each with its signature
-  and a usage example, and flags a committed report that differs from the head's
-  build as stale. The report and its changes are evidence: they fail no check
-  and decide no acceptance (INV13).
+  lists the API changes between the reports built from the merge base and from
+  the head: added, changed, and removed rows, each with its signature and a
+  usage example, and flags a committed report that differs from the head's
+  build as stale, in one line. The report and its changes are evidence: they
+  fail no check and decide no acceptance (INV13).
 - **INV25 — Undeclared public API goes to a human.** Review compares each added
   or changed row of a pull request's API changes with current records. A row
   that a record current at the merge base, or a record change in the same pull
@@ -350,7 +365,7 @@ copy the component matrix.
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV2                    | Naming and logical-direction lint/tests                                                                                  | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
-| INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice                                                                                                                                                                                                                                                                                                                                                                                                             |
+| INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                                                              | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                                                          | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | INV11                   | Public-API admission review plus owning theming/component tests                                                          | A public semantic custom property exposes derivable or unsupported implementation detail                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -365,12 +380,29 @@ copy the component matrix.
 | INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor                                                                                                                                                                                                                                                                                                                                                                                              |
 | INV22                   | Public-API review of each public gesture, press, drag, or motion hook against its `create…` factory                      | A public interaction hook with no public factory taking the same options and returning `destroy()`, outside the listed exemptions                                                                                                                                                                                                                                                                                                                                                       |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
-| INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged; the check fails a pull request                                                                                                                                                                                                       |
+| INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged, or its rows are listed as the pull request's API changes; the check fails a pull request                                                                                                                                             |
 | INV25                   | Public-API review routing against the pull request's API changes                                                         | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
 | Consumer-doc projection | `docPropReferences.test.ts` and `docPropLiterals.test.ts`                                                                | Docs name a nonexistent prop or omit public literal choices                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Known verification gaps:
 
+- INV2, INV3: shipped props that predate the behavior-prop rule keep their
+  names until a minor renames them under INV9. This list is a partial
+  inventory; known deviations include Tooltip and HoverCard `focusTrigger`,
+  `touchTrigger`, and `hasHoverIndication`, and Text and Heading
+  `hasTruncateTooltip`, the last two taking more than two states; Dialog and
+  AlertDialog `isInline`; CheckboxListItem `isChecked`; `useTableTreeData`
+  `isAllExpanded`; hook forms such as `usePopover` `hasLightDismiss`; Tooltip, HoverCard, and Popover `isEnabled`; Overlay `showOn`;
+  Thumbnail `showRemoveOn`; Popover `hasLightDismiss`, `hasEscapeDismiss`, and
+  `isModal`; Dialog, Drawer, and BottomSheet `purpose`; Banner `isDismissable`;
+  Drawer, BottomSheet, and BottomSheetSwitcher `hasScrim`; CommandPalette
+  `isInline`; Carousel `hasLoop` and `useListFocus` `wrap`; NumberInput
+  `isWheelEnabled`; Outline `hasScrollOnClick`; `useTableRowExpansion` and
+  `useTableTreeData` `hasRowClickExpansion`; `useTableSortable`
+  `isMultiSortEnabled` and `allowUnsortedState`; Banner, SideNav, SideNavItem,
+  and `useResizable` `collapsible` and CodeBlock `isCollapsible`; Calendar
+  `mode` and FileInput `isMultiple`; FileInput `mode`; Tokenizer and
+  PowerSearch `tokenOverflowBehavior`; OverflowList `behavior`.
 - INV22: known gaps include `useLongPress`, `useMenuPress`,
   `usePressFeedback`, `useClickableContainer`, `useInputContainer`,
   `useOverlay`, `useCombobox`, `useMultiCombobox`, `useResizable`,
@@ -382,11 +414,12 @@ Known verification gaps:
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
-- INV24: `pnpm api:report` and the committed reports do not exist yet, so
-  reviews build the reachable public inventory explicitly. The reports cover
-  declarations, CSS custom properties, theme targets, and public attributes;
-  context-member behavior, undeclared defaults, CLI schemas, and observable
-  behavior for both the branch and synthetic merge still need explicit review.
+- INV24: the reports cover declarations, CSS custom properties, theme targets,
+  and public attributes; context-member behavior, undeclared defaults, CLI
+  schemas, and observable behavior for both the branch and synthetic merge
+  still need explicit review. When no build of the merge base is kept, the
+  API changes compare with the merge base's committed reports, marked as
+  such, and list the rows a stale committed report carries.
 - INV18: shipped content slots that their anatomy does not name yet include
   PowerSearch's `startIcon` and `endContent`, SideNav's `topContent`,
   `footer`, and `footerIcons`, Tokenizer's `startIcon`, DropdownMenu's

@@ -104,7 +104,9 @@ describe('CI baseline maintenance routing', () => {
   it('does not run non-maintenance CI jobs for capture', () => {
     for (const [name, job] of Object.entries(workflow.jobs)) {
       // admission admits every run, a capture's included (ci-admission.test.mjs).
-      if (['maintenance-request', 'pr-visual', 'admission'].includes(name))
+      if (
+        ['maintenance-request', 'pr-visual', 'room', 'admission'].includes(name)
+      )
         continue;
       expect(
         runs(job, {operation: 'capture', needs: dependencies(job)}),
@@ -156,7 +158,7 @@ describe('CI baseline maintenance routing', () => {
   it('isolates dispatch concurrency from PRs and does not cancel queued maintenance', () => {
     expect(workflow.concurrency.group).toContain('|| github.run_id');
     expect(workflow.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
   });
 });

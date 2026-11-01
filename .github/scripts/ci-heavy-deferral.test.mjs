@@ -234,11 +234,24 @@ describe('a deferred push', () => {
     for (const id of REQUIRED) {
       // The job starts even though the jobs it joins skipped...
       expect(starts(id, github, {others: 'skipped'}), id).toBe(true);
-      // ...and its deferral step, which exits 1, runs first after the fork
-      // gate, so the context fails before any join could pass.
+      // ...and its deferral step, which exits 1, runs right after the fork
+      // gate and the CI-is-full stop (and, in `test`, the PR report's
+      // record), so the context fails before any join could pass.
       const steps = ci.jobs[id].steps;
       const step = deferralStep(id);
-      expect(steps.indexOf(step), id).toBe(1);
+      const before = steps.slice(0, steps.indexOf(step)).map(item => item.name);
+      expect(before.slice(0, 2), id).toEqual([
+        'Require a branch in this repository or the ci:run label',
+        'Stop when CI is full',
+      ]);
+      expect(before.slice(2), id).toEqual(
+        id === 'test'
+          ? [
+              'Record the deferral for the PR report',
+              'Upload the deferral for the PR report',
+            ]
+          : [],
+      );
       expect(step.if).toBe(HEAVY_DEFERRED);
       expect(
         evaluate(step.if, {github, needs: {'heavy-ci': heavyCi(github)}}),
@@ -295,14 +308,133 @@ describe('a deferred push', () => {
             ? fs.readFileSync(stepSummary, 'utf8')
             : '',
         ).toBe(summary ? `${summary}.\n` : '');
-        expect(fs.existsSync(path.join(dir, 'heavy-ci-deferred.json'))).toBe(
-          deferred === 'true',
-        );
       } finally {
         fs.rmSync(dir, {recursive: true, force: true});
       }
     },
   );
+});
+
+describe("heavy-ci's skip on every other run", () => {
+  // Actions' implicit success() needs every ancestor, not only the direct
+  // needs, to have succeeded; heavy-ci skips on every run but an agent push,
+  // so any job below it without its own status check would skip too.
+  const needsOf = id => [ci.jobs[id].needs ?? []].flat();
+  const ancestors = (id, seen = new Set()) => {
+    for (const need of needsOf(id))
+      if (!seen.has(need)) {
+        seen.add(need);
+        ancestors(need, seen);
+      }
+    return seen;
+  };
+  const below = Object.keys(ci.jobs).filter(id =>
+    ancestors(id).has('heavy-ci'),
+  );
+
+  it('gives every job below it a status check', () => {
+    expect(below.length).toBeGreaterThan(HEAVY.length);
+    for (const id of below)
+      expect(String(ci.jobs[id].if), id).toMatch(
+        /\b(always|cancelled|success|failure)\(\)/,
+      );
+  });
+
+  /** Every job's start as Actions decides it, ancestors included. */
+  function plan(github, inputs = {}) {
+    const results = {};
+    const order = [];
+    const visit = id => {
+      if (order.includes(id)) return;
+      for (const need of needsOf(id)) visit(need);
+      order.push(id);
+    };
+    Object.keys(ci.jobs).forEach(visit);
+    for (const id of order) {
+      const job = ci.jobs[id];
+      const needs = Object.fromEntries(
+        needsOf(id).map(need => [need, results[need]]),
+      );
+      const all = [...ancestors(id)].map(need => results[need]);
+      const condition = String(job.if ?? 'true')
+        .replace(/^\$\{\{\s*|\s*\}\}$/g, '')
+        .replace(/\.labels\.\*\.name/g, '.labels.map(l => l.name)')
+        .replace(/needs\.([a-z][a-z0-9-]*)/g, 'needs["$1"]');
+      const hasStatus = /\b(always|cancelled|failure|success)\(\)/.test(
+        condition,
+      );
+      const ok = all.every(item => item.result === 'success');
+      const runs =
+        (hasStatus || ok) &&
+        Boolean(
+          Function(
+            'github',
+            'needs',
+            'inputs',
+            'always',
+            'cancelled',
+            'success',
+            'failure',
+            'startsWith',
+            'contains',
+            'fromJSON',
+            `return (${condition});`,
+          )(
+            github,
+            needs,
+            inputs,
+            () => true,
+            () => false,
+            () => ok,
+            () => !ok,
+            (value, prefix) => String(value ?? '').startsWith(prefix),
+            (list, item) => list.includes(item),
+            JSON.parse,
+          ),
+        );
+      results[id] = {
+        result: runs ? 'success' : 'skipped',
+        outputs:
+          id === 'run-labels'
+            ? {a11y: 'true', rtl: 'true', visual: 'true'}
+            : id === 'room'
+              ? {full: 'false'}
+              : {},
+      };
+    }
+    return results;
+  }
+
+  it("runs a release-check's every browser owner", () => {
+    const results = plan(
+      {event_name: 'workflow_dispatch', repository: 'meta/astryx', event: {}},
+      {operation: 'release-check', 'release-branch': 'main'},
+    );
+    expect(results['heavy-ci'].result).toBe('skipped');
+    for (const id of [
+      'build-storybook',
+      'pr-a11y-shard',
+      'a11y-contracts-shard',
+      'pr-a11y-guards',
+      'pr-a11y-specs',
+      'pr-rtl-shard',
+      'pr-a11y-audit',
+      'release-check',
+    ])
+      expect(results[id].result, id).toBe('success');
+  });
+
+  it('runs the suites an opt-in label asks for on a pull request', () => {
+    const github = pushEvent({login: 'someone', action: 'labeled'});
+    github.event.pull_request.labels = [
+      {name: 'ci:run-a11y'},
+      {name: 'ci:run-rtl'},
+    ];
+    const results = plan(github);
+    expect(results['heavy-ci'].result).toBe('skipped');
+    for (const id of ['pr-a11y-guards', 'pr-a11y-specs', 'pr-rtl-shard'])
+      expect(results[id].result, id).toBe('success');
+  });
 });
 
 describe('the PR report on a deferred push', () => {
@@ -323,12 +455,52 @@ describe('the PR report on a deferred push', () => {
       "steps.identity.outputs.source_conclusion == 'failure'",
     );
     expect(download['continue-on-error']).toBe(true);
-    const upload = ci.jobs['heavy-ci'].steps.find(step =>
+    // `test` records it: a failed-jobs re-run repeats `test` (it failed) and
+    // keeps heavy-ci's output, so that attempt has its own record; a full
+    // re-run is a later attempt, which never defers.
+    const steps = ci.jobs.test.steps;
+    const record = steps.find(
+      step => step.name === 'Record the deferral for the PR report',
+    );
+    const upload = steps.find(step =>
       step.uses?.startsWith('actions/upload-artifact'),
     );
+    expect(record.if).toBe(HEAVY_DEFERRED);
+    expect(upload.if).toBe(HEAVY_DEFERRED);
     expect(upload.with.name).toBe(
       'heavy-ci-deferred-${{ github.run_attempt }}',
     );
+    expect(
+      ci.jobs['heavy-ci'].steps.some(step =>
+        step.uses?.startsWith('actions/upload-artifact'),
+      ),
+    ).toBe(false);
+  });
+
+  it('writes the record the report reads', () => {
+    const record = ci.jobs.test.steps.find(
+      step => step.name === 'Record the deferral for the PR report',
+    );
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'heavy-ci-'));
+    try {
+      const result = spawnSync(
+        'bash',
+        ['-e', '-c', record.run.replaceAll(/\$\{\{[^}]*\}\}/g, 'abc')],
+        {
+          cwd: dir,
+          encoding: 'utf8',
+          env: {...process.env, GITHUB_RUN_ID: '7', GITHUB_RUN_ATTEMPT: '2'},
+        },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      expect(
+        JSON.parse(
+          fs.readFileSync(path.join(dir, 'heavy-ci-deferred.json'), 'utf8'),
+        ),
+      ).toEqual({headSha: 'abc', runId: '7', runAttempt: '2'});
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it('says the heavy CI was deferred', () => {

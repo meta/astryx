@@ -223,7 +223,7 @@ describe('spec-only workflow contract', () => {
   it('fails closed when file APIs are truncated or scope classification fails', () => {
     const ci = read('.github/workflows/ci.yml');
     expect(ci).toContain(
-      `if: ${gated("${{ !cancelled() && github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') }}", PR_REPORT_GATE)}`,
+      `if: ${gated("${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() }}", PR_REPORT_GATE)}`,
     );
     const action = read('.github/actions/test-scope/action.yml');
     expect(action).toContain(
