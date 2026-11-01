@@ -693,10 +693,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     onLoadingChangeRef.current?.(next);
   }, []);
 
-  // Track active pointer to defer popover.show() past click events.
-  // With popover="auto", showing the popover between pointerdown and
-  // pointerup/click causes the browser's light-dismiss to immediately
-  // close it (the click is seen as "outside" the newly-opened popover).
+  // Track active pointer to defer popover.show() past click events, so a
+  // list that opens during a press starts its outside-press watch after that
+  // press ends and never judges it.
   const pointerActiveRef = useRef(false);
 
   // Whether the input was ALREADY the active element the moment the current
@@ -836,9 +835,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     role: 'none',
   });
 
-  // Show the layer, deferring past the active click if a pointer is down.
-  // Without this, popover="auto" light-dismiss immediately closes the
-  // dropdown when it opens between pointerdown and pointerup/click.
+  // Show the layer, deferring past the active click if a pointer is down
+  // (see pointerActiveRef).
   // Read at show time, so a search or bootstrap that settles after the field
   // became disabled does not open the list (spec:AST-085 FR2).
   const isDisabledRef = useRef(isDisabled);
@@ -1307,10 +1305,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   // Handle blur — close the dropdown when focus leaves the input for an
   // element that is neither inside the field wrapper (anchor) nor inside the
-  // dropdown popover. The native popover="auto" light-dismiss only fires on
-  // outside pointer clicks and Escape; it does not close when focus moves away
-  // via the keyboard (Tab) or programmatically, which would otherwise leave an
-  // orphaned open menu. Clicking a result moves focus onto the option (it is
+  // dropdown popover. The outside-press watch only answers pointer presses
+  // and Escape stays on the layer stack; neither closes the list when focus
+  // moves away via the keyboard (Tab) or programmatically, which would
+  // otherwise leave an orphaned open menu. Clicking a result moves focus onto the option (it is
   // tabIndex={-1}, so it lives inside the popover) and selection re-focuses the
   // input, so this only closes on a genuine focus-out of the whole field.
   const handleBlur = useCallback(
