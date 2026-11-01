@@ -458,6 +458,47 @@ const styles = stylex.create({
     top: 0,
     zIndex: 1,
   },
+  // The device's safe area (zero unless the page opts into the full screen
+  // with `viewport-fit=cover`): the header's background reaches up under the
+  // status bar and out to the screen's sides, as a UIKit bar does, while its
+  // items stay inside the safe area. The insets are the device's physical
+  // sides, so the inline sides swap them in a right-to-left context.
+  headerSafeArea: {
+    paddingBlockStart: 'env(safe-area-inset-top, 0px)',
+    paddingInlineStart: {
+      default: 'env(safe-area-inset-left, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-right, 0px)',
+    },
+    paddingInlineEnd: {
+      default: 'env(safe-area-inset-right, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-left, 0px)',
+    },
+  },
+  // The sidenav-only phone top bar under a banner: the banner's header
+  // wrapper above it already pads the top inset, so this one takes the
+  // sides only.
+  headerSafeAreaSides: {
+    paddingInlineStart: {
+      default: 'env(safe-area-inset-left, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-right, 0px)',
+    },
+    paddingInlineEnd: {
+      default: 'env(safe-area-inset-right, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-left, 0px)',
+    },
+  },
+  // The main content ends clear of the home indicator: main's block-end
+  // padding grows by the bottom safe-area inset, in the page or in main's own
+  // scroller, as UIKit adds that inset to a scroll view. Main is border-box,
+  // so a child that fills it ends above the inset instead of overflowing.
+  // Flush: no content padding. Padded: LayoutContent's own block-end padding
+  // (its no-footer value) plus the inset.
+  mainSafeAreaEndFlush: {
+    paddingBlockEnd: 'env(safe-area-inset-bottom, 0px)',
+  },
+  mainSafeAreaEndPadded: {
+    paddingBlockEnd: `calc(var(--layout-padding-own-outer-y, var(--layout-padding-outer-y, ${spacingVars['--spacing-4']})) + env(safe-area-inset-bottom, 0px))`,
+  },
   // Sticky sideNav for auto height mode — sticks within the wrapper.
   // This div replaces the panel as the direct flex child of the middle
   // (horizontal) container, so it needs the same flex properties that
@@ -878,7 +919,11 @@ export function AppShell({
       role="banner"
       {...mergeProps(
         themeProps('app-shell-header', {variant}),
-        stylex.props(headerAreaStyle, isAuto && styles.headerSticky),
+        stylex.props(
+          headerAreaStyle,
+          isAuto && styles.headerSticky,
+          styles.headerSafeArea,
+        ),
       )}>
       {headerInner}
     </div>
@@ -1171,6 +1216,9 @@ export function AppShell({
         drawsMainFocusRing
           ? [focusOutlineStyles.focusVisible, styles.mainScrollRegionInset]
           : styles.mainFocusTarget,
+        contentPadding == null || contentPadding === 0
+          ? styles.mainSafeAreaEndFlush
+          : styles.mainSafeAreaEndPadded,
       ]}>
       {children}
     </LayoutContent>
@@ -1217,7 +1265,14 @@ export function AppShell({
         role={headerContent == null ? 'banner' : undefined}
         {...mergeProps(
           themeProps('app-shell-header', {variant}),
-          stylex.props(headerAreaStyle, isAuto && styles.headerSticky),
+          stylex.props(
+            headerAreaStyle,
+            isAuto && styles.headerSticky,
+            // Under a banner, the banner's wrapper already pads the top inset.
+            headerContent == null
+              ? styles.headerSafeArea
+              : styles.headerSafeAreaSides,
+          ),
         )}>
         <LayoutHeader padding={0} hasDivider={navHasDividers}>
           <div

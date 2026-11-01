@@ -16,9 +16,12 @@ import {clampInlineSize, isIntrinsicInlineSize} from './clampInlineSize';
 const EDGES = ['block-start', 'block-end', 'inline-start', 'inline-end'];
 
 // Surfaces that keep the same gutter by convention but are not anchor-mode
-// layers (spec:AST-059 non-goals), plus the module itself.
+// layers (spec:AST-059 non-goals), plus the module itself. AppShell reads the
+// device's insets for the page shell itself (its header and the end of its
+// content), not as a layer gutter.
 const GUTTER_OWNERS = new Set([
   'Layer/layerViewportInset.stylex.ts',
+  'AppShell/AppShell.tsx',
   'Dialog/Dialog.tsx',
   'Toast/ToastViewport.tsx',
   'BottomSheet/BottomSheetPanel.tsx',
