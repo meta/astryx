@@ -162,7 +162,7 @@ export const neutralTheme = defineTheme({
       withAlpha(neutral.light[0], '14'),
       withAlpha(neutral.dark[100], '1A'),
     ],
-    '--color-border-emphasized': [neutral.light[85], neutral.dark[35]],
+    '--color-border-emphasized': [neutral.light[60], neutral.dark[50]],
 
     // Effects
     '--color-skeleton': [neutral.light[95], neutral.dark[35]],

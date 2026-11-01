@@ -149,10 +149,10 @@ describe('Neutral selected palette ref generation', () => {
     }
   });
 
-  it('projects exactly the 95 stops used by Neutral into both committed copies', () => {
+  it('projects exactly the 96 stops used by Neutral into both committed copies', () => {
     const result = generateNeutralPaletteRefs({root: ROOT, check: true});
     expect(result.problems).toEqual([]);
-    expect(countSelectedRefs(result.selected)).toBe(95);
+    expect(countSelectedRefs(result.selected)).toBe(96);
     for (const output of result.outputs) {
       expect(fs.readFileSync(output, 'utf-8')).toBe(result.content);
     }
