@@ -464,6 +464,25 @@ const API_CHANGE_MARK = {added: '+', changed: '~', removed: '−'};
  * is rendered as literal text. Nothing when no package has a change or a
  * report to refresh.
  */
+/**
+ * One table cell of literal text as a code span: no link (GitHub autolinks a
+ * bare URL in plain text), no markup, no HTML. A pipe is escaped so the cell
+ * stays one cell; the fence is longer than any backtick run inside.
+ */
+function codeCell(value) {
+  const text = String(value ?? '')
+    .replace(/\s*[\r\n]+\s*/g, ' ')
+    .replace(/\|/g, '\\|');
+  if (text.trim() === '') return '';
+  const longest = Math.max(
+    0,
+    ...(text.match(/`+/g) || []).map(run => run.length),
+  );
+  const fence = '`'.repeat(longest + 1);
+  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+  return `${fence}${pad}${text}${pad}${fence}`;
+}
+
 function apiChangesLine(report) {
   if (!report || !Array.isArray(report.packages)) return '';
   const short = name =>
@@ -473,8 +492,9 @@ function apiChangesLine(report) {
   for (const entry of report.packages) {
     const entryRows = Array.isArray(entry.rows) ? entry.rows : [];
     // The merge base has no committed report for this package: nothing to
-    // compare, so its report is new.
-    if (entry.baseline === true) {
+    // compare, so its report is new (unless the head commits none either,
+    // which the prompt below covers).
+    if (entry.baseline === true && entry.missing !== true) {
       segments.push(
         `${short(entry.pkg)} new report${entry.stale === true ? ' (stale: run `pnpm api:report`)' : ''}`,
       );
@@ -514,9 +534,9 @@ function apiChangesLine(report) {
       );
       const declaration =
         kind === 'changed' && row.before != null
-          ? `${inline(row.before)} → ${inline(row.line)}`
-          : inline(row.line);
-      return `| ${short(row.pkg)} | ${kind} | ${item.map(inline).join(' · ')} | ${declaration} |`;
+          ? `${codeCell(row.before)} → ${codeCell(row.line)}`
+          : codeCell(row.line);
+      return `| ${short(row.pkg)} | ${kind} | ${item.map(codeCell).join(' · ')} | ${declaration} |`;
     };
     out += `<details>\n<summary>${num(rows.length)} API change${rows.length === 1 ? '' : 's'}</summary>\n\n| Package | Change | Item | Declaration |\n|---|---|---|---|\n${shown.map(line).join('\n')}\n\n${
       rows.length > shown.length

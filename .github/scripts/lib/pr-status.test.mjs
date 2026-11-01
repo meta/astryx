@@ -409,27 +409,39 @@ describe('apiChangesLine', () => {
       /^\*\*API changes:\*\* core \+1 · ~1 · −1 \(report stale: run `pnpm api:report`\); richtext no changes \(report not committed: run `pnpm api:report`\)\n\n<details>\n<summary>3 API changes<\/summary>/,
     );
     expect(out).toContain(
-      '| core | added | component AppShell · density | component AppShell line |',
+      '| core | added | `component AppShell` · `density` | `component AppShell line` |',
     );
     expect(out).toContain(
-      "| core | changed | component Button · size | size = 'md' → size = 'sm' |",
+      "| core | changed | `component Button` · `size` | `size = 'md'` → `size = 'sm'` |",
     );
     expect(out).not.toContain('lab');
   });
 
-  it('renders every string from the file as literal text', () => {
+  it('renders every string from the file as a code span: no HTML, markup or link', () => {
     const out = apiChangesLine({
       packages: [
         pkg('core', [
           row('added', '<img src=x onerror=alert(1)>', {
-            line: 'a | b [link](https://evil.example)',
+            line: 'a | b [link](https://evil.example) www.evil.example `tick`',
           }),
         ]),
       ],
     });
-    expect(out).toContain('&lt;img src=x onerror=alert(1)&gt;');
-    expect(out).toContain('a \\| b \\[link\\](https://evil.example)');
-    expect(out).not.toContain('<img');
+    expect(out).toContain('`<img src=x onerror=alert(1)>`');
+    expect(out).toContain(
+      '`` a \\| b [link](https://evil.example) www.evil.example `tick` ``',
+    );
+    // Every item and declaration cell is a code span, so nothing autolinks.
+    const cells = out
+      .split('\n')
+      .filter(line => line.startsWith('| core |'))
+      .flatMap(line =>
+        line
+          .split(/(?<!\\)\|/)
+          .slice(3, 5)
+          .map(cell => cell.trim()),
+      );
+    expect(cells.every(cell => /^`+[\s\S]*`+$/.test(cell))).toBe(true);
   });
 
   it('says a package whose merge base has no report has a new report', () => {
@@ -443,6 +455,17 @@ describe('apiChangesLine', () => {
       }),
     ).toBe(
       '**API changes:** core new report (stale: run `pnpm api:report`); lab new report\n\n',
+    );
+  });
+
+  it('prompts for a report that neither the merge base nor the head commits', () => {
+    expect(
+      apiChangesLine({
+        version: 1,
+        packages: [pkg('core', [], {baseline: true, missing: true})],
+      }),
+    ).toBe(
+      '**API changes:** core no changes (report not committed: run `pnpm api:report`)\n\n',
     );
   });
 
