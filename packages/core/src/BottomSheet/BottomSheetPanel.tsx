@@ -200,6 +200,11 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
     willChange: 'transform, opacity',
   },
+  // A sheet present on page load opens where it rests (spec:AST-013 FR13):
+  // the collapse reduced motion uses, so the transition still ends.
+  sheetSettled: {
+    transitionDuration: '0.01s',
+  },
   /**
    * The exit is its own motion, not the entrance played backwards.
    *
@@ -358,6 +363,11 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the visual sheet panel. */
   ref?: React.Ref<HTMLDivElement>;
   state: BottomSheetPanelState;
+  /**
+   * Whether the sheet was open on page load: it then opens where it rests,
+   * with no entry motion (spec:AST-013 FR13).
+   */
+  isEntrySettled?: boolean;
   /**
    * The host's controlled open state — false as soon as the host has taken
    * a close, true while it is open or has refused one — distinct from
@@ -521,6 +531,7 @@ export function BottomSheetPanel({
   style,
   tabIndex,
   xstyle,
+  isEntrySettled = false,
   isSwipeDismissAllowed = true,
   isPageScrollLocked = false,
   onDismiss,
@@ -862,6 +873,7 @@ export function BottomSheetPanel({
           isClosing && isCrossFade && styles.sheetClosingCrossFade,
           isFading && styles.sheetFading,
           isInactive && styles.sheetInactive,
+          isEntrySettled && styles.sheetSettled,
           xstyle,
         ),
         className,

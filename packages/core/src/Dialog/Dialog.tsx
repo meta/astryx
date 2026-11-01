@@ -39,6 +39,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
@@ -226,6 +227,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         'none',
     },
+  },
+  // A dialog present on page load opens where it rests (spec:AST-013 FR13).
+  openSettled: {
+    animationName: 'none',
   },
   // Backdrop using ::backdrop pseudo-element
   backdrop: {
@@ -487,6 +492,14 @@ export function Dialog({
   // renders as it is.
   const isHydrating = useIsHydrating();
   const isOpen = isOpenProp && (isInline || !isHydrating);
+  // A dialog open on the server was present on page load, so it opens settled,
+  // with no entry motion; its later opens animate as usual (spec:AST-013 FR13).
+  const [opensSettled, setOpensSettled] = useState(
+    () => isHydrating && isOpenProp && !isInline,
+  );
+  if (opensSettled && !isOpenProp) {
+    setOpensSettled(false);
+  }
   // When no explicit padding prop, use theme default (--astryx-dialog-padding)
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;
@@ -834,6 +847,7 @@ export function Dialog({
             })(),
           isFullscreen && styles.fullscreen,
           isFullscreen && isOpen && styles.fullscreenOpen,
+          opensSettled && isOpen && styles.openSettled,
           xstyle,
         ),
         className,

@@ -12,7 +12,7 @@
 
 import {act} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {hydrateRoot} from 'react-dom/client';
+import {createRoot, hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {Dialog} from './Dialog';
 
@@ -77,6 +77,36 @@ describe('Dialog: open on the server (FR8)', () => {
     expect(dialog?.className).not.toBe(serverDialog(false).className);
     expect(recoverableErrors).toEqual([]);
     expect(logged).not.toHaveBeenCalled();
+    await act(async () => root.unmount());
+  });
+
+  it('opens settled after hydration, without its entry animation, and animates a later open (spec:AST-013 FR13)', async () => {
+    const entryMotion = (dialog: HTMLDialogElement) =>
+      getComputedStyle(dialog).animationName;
+    // A client-opened Dialog plays its entry animation.
+    const client = document.createElement('div');
+    document.body.appendChild(client);
+    const clientRoot = createRoot(client);
+    await act(async () => clientRoot.render(tree(true)));
+    const clientMotion = entryMotion(client.querySelector('dialog')!);
+    expect(clientMotion).not.toBe('none');
+    await act(async () => clientRoot.unmount());
+
+    // One open on the server opens where it rests once hydrated.
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(tree(true));
+    document.body.appendChild(container);
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, tree(true));
+    });
+    const dialog = container.querySelector('dialog')!;
+    expect(entryMotion(dialog)).toBe('none');
+
+    // Closed and opened again, it animates as a client open does.
+    await act(async () => root.render(tree(false)));
+    await act(async () => root.render(tree(true)));
+    expect(entryMotion(container.querySelector('dialog')!)).toBe(clientMotion);
     await act(async () => root.unmount());
   });
 });

@@ -1601,6 +1601,13 @@ describe('BottomSheetSwitcher', () => {
       expect(withId[0]).toHaveAttribute('aria-label', 'Confirm');
       expect(withId[0]).toHaveAttribute('data-testid', 'checkout-flow');
       expect(withId[0]).toHaveAttribute('aria-modal', 'true');
+      // Present on page load, the active sheet opens where it rests
+      // (spec:AST-013 FR13).
+      expect(
+        getComputedStyle(
+          withId[0].querySelector('.astryx-bottom-sheet') as HTMLElement,
+        ).transitionDuration,
+      ).toBe('.01s');
       // The open flow holds the sheet stack and the page's scroll lock; leave
       // nothing behind for the next test.
       act(() => root.unmount());

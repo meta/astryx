@@ -204,6 +204,14 @@ const styles = stylex.create({
       },
     },
   },
+  // A drawer present on page load opens where it rests (spec:AST-013 FR13):
+  // the collapse reduced motion uses, so the transition still ends.
+  openSettled: {
+    transitionDuration: '0.01s',
+    '::backdrop': {
+      transitionDuration: '0.01s',
+    },
+  },
   // Scrim via the browser's ::backdrop pseudo-element (top layer).
   scrim: {
     '::backdrop': {
@@ -451,6 +459,15 @@ export function Drawer({
   // does not have (FR17).
   const isHydrating = useIsHydrating();
   const isOpen = isOpenProp && !isHydrating;
+  // A drawer open on the server was present on page load, so it opens settled,
+  // with no slide-in; its later opens and closes animate as usual
+  // (spec:AST-013 FR13).
+  const [opensSettled, setOpensSettled] = useState(
+    () => isHydrating && isOpenProp,
+  );
+  if (opensSettled && !isOpenProp) {
+    setOpensSettled(false);
+  }
   const dialogRef = useRef<HTMLDialogElement>(null);
   const {containerRef: focusTrapRef} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen && hasScrim,
@@ -574,6 +591,7 @@ export function Drawer({
           isOpen && sideOpenStyle,
           hasScrim && styles.scrim,
           hasScrim && isOpen && styles.scrimOpen,
+          opensSettled && isOpen && styles.openSettled,
           xstyle,
         ),
         className,

@@ -50,6 +50,12 @@ export type BottomSheetSwitcherDialogProps = Omit<
 
 export interface BottomSheetSwitcherContextValue {
   activeSheet: string | null;
+  /**
+   * The sheet that was active on page load, until the active sheet first
+   * changes: it opens where it rests, with no entry motion
+   * (spec:AST-013 FR13).
+   */
+  settledSheet: string | null;
   hasScrim: boolean;
   onActiveSheetChange: (sheetId: string | null) => void;
   getSheetPhase: (sheetId: string) => BottomSheetSwitcherPhase;
