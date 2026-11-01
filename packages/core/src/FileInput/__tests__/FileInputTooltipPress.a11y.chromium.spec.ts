@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope ^(packages/core/src/FileInput/|packages/core/src/Tooltip/|apps/storybook/stories/FileInput)
 
 /**
  * @file FileInputTooltipPress.a11y.chromium.spec.ts
