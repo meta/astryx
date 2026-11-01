@@ -239,6 +239,27 @@ export const InlineFlow: Story = {
           </Link>
         </Text>
       </div>
+      <div data-inline-flow="nested-img-child">
+        <Text display="block">
+          <Link href="/brand">
+            <span>
+              <img
+                alt="Brand mark"
+                width={48}
+                height={24}
+                src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24'%3E%3Crect width='48' height='24' fill='%23888'/%3E%3C/svg%3E"
+              />
+            </span>
+          </Link>
+        </Text>
+      </div>
+      <div
+        data-inline-flow="external-flex-row"
+        style={{display: 'flex', alignItems: 'center', lineHeight: '32px'}}>
+        <Link href="https://example.com/guide" isExternalLink>
+          Community guide
+        </Link>
+      </div>
       <div data-inline-flow="span-stack-child">
         <Text display="block">
           <Link href="/work-items" color="secondary">

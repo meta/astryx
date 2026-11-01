@@ -63,7 +63,8 @@ const styles = stylex.create({
   // to the inherited line height). Inside a Text, content with a block-level
   // element keeps the flex box too, because an inline element paints no focus
   // outline around a block child (AR5): a block HTML element, a replaced
-  // element (img, svg, picture, video, canvas), a Stack rendered as any
+  // element at any depth in the label (img, svg, picture, video, canvas,
+  // iframe, embed, object, audio), a Stack rendered as any
   // element, or a block Text, Link's own label included when its `maxLines`
   // or `display` makes it one. Decided in CSS, not by reading children; a
   // caller element made block by its own styling is not detected (FR6
@@ -73,7 +74,7 @@ const styles = stylex.create({
       default: 'inline-flex',
       [stylex.when.ancestor(':is(*)', textScopeMarker)]: {
         default: 'inline',
-        ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr, .astryx-stack), > :first-child > :is(img, svg, picture, video, canvas))':
+        ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr, .astryx-stack), > :first-child :is(img, svg, picture, video, canvas, iframe, embed, object, audio))':
           'inline-flex',
         [stylex.when.descendant(':is(*)', textBlockMarker)]: 'inline-flex',
       },
@@ -103,6 +104,12 @@ const styles = stylex.create({
   truncating: {
     maxWidth: '100%',
     minWidth: 0,
+  },
+  // The word joiner before the external icon carries no line height, so as a
+  // flex item (outside a Text) it does not grow the root to the inherited
+  // line height.
+  wordJoiner: {
+    lineHeight: 0,
   },
   // The external icon's space from the text, in either root display.
   externalIcon: {
@@ -381,7 +388,9 @@ export function Link({
         <>
           {/* A word joiner keeps the icon on the link's last line; hidden so
               it stays out of the accessible name. */}
-          <span aria-hidden="true">{'\u2060'}</span>
+          <span aria-hidden="true" {...stylex.props(styles.wordJoiner)}>
+            {'\u2060'}
+          </span>
           <Icon
             icon="externalLink"
             size="xsm"

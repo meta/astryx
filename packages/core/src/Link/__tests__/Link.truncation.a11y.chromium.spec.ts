@@ -133,6 +133,7 @@ for (const slot of [
   'clamped-text-child',
   'block-text-child',
   'img-child',
+  'nested-img-child',
   'span-stack-child',
 ] as const) {
   test(`keyboard focus paints the outline around a Link with a ${slot}`, async ({
@@ -209,3 +210,16 @@ for (const story of ['core-sidenav--suite-header', 'lab-comments--panel']) {
     expect(grown).toEqual([]);
   });
 }
+
+test('an external Link in a flex row with a tall line height is as tall as its label', async ({
+  page,
+}) => {
+  await page.goto(`${storybook.origin}/${INLINE_FLOW}`);
+  const link = page.locator('[data-inline-flow="external-flex-row"] a');
+  await expect(link).toBeVisible();
+  const measured = await link.evaluate(el => ({
+    link: el.getBoundingClientRect().height,
+    label: (el.firstElementChild as HTMLElement).getBoundingClientRect().height,
+  }));
+  expect(measured.link).toBeLessThanOrEqual(measured.label + 0.5);
+});
