@@ -57,6 +57,7 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   applyLayoutChangeTransition,
@@ -458,30 +459,27 @@ export function Collapsible({
 
   // Focus inside the content when it closes would be lost to the page once
   // the content hides. It moves to the trigger that closes it (AR4); focus
-  // anywhere else is not moved. Noted in the commit before the DOM changes,
-  // moved from this layout effect once the close has committed.
+  // anywhere else is not moved. The shared sequence notes it in the commit
+  // before the DOM changes and moves it once the close has committed.
   // The trigger's own document's last input decides the moved focus's ring.
   const {ref: modalityRef} = useInteractionModalityTracking();
   const mergedTriggerRef = useMergedRefs(triggerRef, modalityRef);
-  const closingFocusRef = useRef<FocusWithin | null>(null);
+  const noteClosingFocus = useFocusLeavingChange(
+    isOpen,
+    (wasOpen: boolean) =>
+      wasOpen ? noteFocusWithin(contentRef.current) : null,
+    (focus: FocusWithin) =>
+      moveFocusLeftBehind(focus, triggerRef.current, contentRef.current),
+  );
   const beforeOpenChange = useCallback(
     (wasOpen: boolean) => {
-      closingFocusRef.current = wasOpen
-        ? noteFocusWithin(contentRef.current)
-        : null;
+      noteClosingFocus(wasOpen);
       if (animatedLayout != null) {
         measureChange();
       }
     },
-    [animatedLayout, measureChange],
+    [animatedLayout, measureChange, noteClosingFocus],
   );
-  useLayoutEffect(() => {
-    const focus = closingFocusRef.current;
-    closingFocusRef.current = null;
-    if (!isOpen) {
-      moveFocusLeftBehind(focus, triggerRef.current, contentRef.current);
-    }
-  }, [isOpen]);
   // Activation is blocked by this guard rather than the native `disabled`
   // attribute, so the trigger keeps `aria-disabled` semantics and stays
   // discoverable. A native `disabled` button would silently swallow events
