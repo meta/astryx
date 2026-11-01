@@ -52,6 +52,7 @@ import {
   holdLayoutSwap,
   landLayoutGlide,
   layoutMotionFor,
+  layoutStartFor,
   playLayoutFrames,
   playLayoutSwap,
   reportLayoutChange,
@@ -946,9 +947,11 @@ export function AppShell({
         let entering = 0;
         const last = lastSwapRef.current;
         if (last != null && motion.kind === 'spring') {
-          const elapsed =
+          const elapsed = Math.max(
+            0,
             Number(main.ownerDocument.timeline?.currentTime ?? 0) -
-            last.startedAt;
+              last.startedAt,
+          );
           if (elapsed < motion.progress.durationMs) {
             const p = 1 - motion.progress.remaining(elapsed);
             held = last.entering + (1 - last.entering) * p;
@@ -1008,7 +1011,7 @@ export function AppShell({
         }
         const {held, entering} = pending;
         lastSwapRef.current = {
-          startedAt: Number(main.ownerDocument.timeline?.currentTime ?? 0),
+          startedAt: layoutStartFor(main.ownerDocument),
           held,
           entering,
         };

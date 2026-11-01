@@ -42,6 +42,10 @@ beforeEach(() => {
     configurable: true,
     value: {currentTime: 500},
   });
+  // The page's clock reads the timeline's frame time: no block since it.
+  vi.spyOn(performance, 'now').mockImplementation(
+    () => (document.timeline as {currentTime: number}).currentTime,
+  );
   Element.prototype.animate = function (
     this: Element,
     keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
@@ -152,6 +156,38 @@ describe('the in-place swap (spec:AST-105 FR8)', () => {
     played[0].finish?.();
     expect(copy.isConnected).toBe(false);
     expect(typeof end).toBe('function');
+  });
+
+  it('starts every part of one swap together however long making them takes, with no block between two of them', () => {
+    const {handle, content, host} = setup();
+    const swap = holdLayoutSwap(handle, content);
+    const parts = [0, 1, 2, 3].map(() => {
+      const part = document.createElement('span');
+      host.appendChild(part);
+      return part;
+    });
+    // A slow page: each part takes 15 ms to make, 75 ms in all, while the
+    // timeline still reads the frame before them.
+    let page = 500;
+    vi.spyOn(performance, 'now').mockImplementation(() => page);
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      page += 15;
+      return animation;
+    };
+    playLayoutSwap(swap!, {
+      host,
+      copy: travel,
+      incoming: parts.map(element => ({element, frames: p => ({opacity: p})})),
+    });
+    expect(played.length).toBe(5);
+    expect(new Set(played.map(entry => entry.startTime))).toEqual(
+      new Set([500]),
+    );
   });
 
   it("fades the copy's text on its own curve when asked", () => {

@@ -180,6 +180,7 @@
  */
 
 import {cubicBezier} from './bezier';
+import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {resolveMotion} from './resolveMotion';
 import {
@@ -645,13 +646,6 @@ const SAMPLE_GRID_MS = 1000 / 30;
 
 /** A curve that has not settled by then (an undamped spring) snaps. */
 const MAX_DURATION_MS = 30_000;
-
-/**
- * How long a task must run on past its first call from rest before that
- * counts as a block (WebKit; startAfterBlock): two frames at 60 Hz.
- */
-// Browser start times are frame times and a task's end a live clock, so only a block longer than a frame plus the task's own length can be told apart from that quantization.
-const LATE_START_MS = 34;
 
 /**
  * The task calls from rest are made in, shared by every call made in it

@@ -77,6 +77,10 @@ beforeEach(() => {
     configurable: true,
     value: {currentTime: 1000},
   });
+  // The page's clock reads the timeline's frame time: no block since it.
+  vi.spyOn(performance, 'now').mockImplementation(
+    () => (document.timeline as {currentTime: number}).currentTime,
+  );
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
     function (this: HTMLElement) {
       const width = railWidth();
