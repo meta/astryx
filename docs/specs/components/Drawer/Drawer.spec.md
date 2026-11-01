@@ -93,10 +93,13 @@ Consumer migration instructions belong in consumer docs and release notes.
   motion the slide and the scrim transition still run for 0.01 s. For a fine
   pointer, `design:reduced-motion` DR1 forbids the travel and DR3 allows no
   animated property; a touch user gets no opacity fade, which DR2 calls for.
-- **A tap during the entrance is not held.** Under a finger, a scrim tap that
-  lands while the drawer is still entering closes an `info` drawer, and a tap
-  or drag reaches the panel. `spec:AST-094` FR35 holds pointer input until the
-  entrance finishes.
+- **A finger is held during the entrance only on a touch screen.** Under a
+  coarse primary pointer, a tap or a drag that lands while the drawer is still
+  entering reaches nothing, and around a non-modal drawer only one on the panel
+  is held. Where the primary pointer is fine and the screen also takes touch
+  (a touchscreen laptop), a finger's scrim tap during the entrance closes an
+  `info` drawer, and a tap or drag reaches the panel. `spec:AST-094` FR35
+  holds pointer input until the entrance finishes.
 - **A consumer `onCancel` never runs.** Drawer sets its own `onCancel` after
   the caller's props, so a caller's `onCancel` is dropped.
   `architecture:public-component-api` INV5 has accepted event inputs reach the

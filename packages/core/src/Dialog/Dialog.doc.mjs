@@ -69,7 +69,7 @@ export const docs = {
     ],
   },
   description:
-    'Modal dialog using the native <dialog> element. Modal and inline content starts with theme body text defaults. Ancestor surface/group membership ends as a whole, including group-owned state. Explicit props and unrelated contexts remain unchanged. Place intentional groups and complete required providers inside the dialog. With reduced motion the dialog never slides or scales in: on a touch screen it fades in, in 200 ms or less, and with a mouse it appears at once.',
+    'Modal dialog using the native <dialog> element. Modal and inline content starts with theme body text defaults. Ancestor surface/group membership ends as a whole, including group-owned state. Explicit props and unrelated contexts remain unchanged. Place intentional groups and complete required providers inside the dialog. With reduced motion the dialog never slides or scales in: on a touch screen it fades in, in 200 ms or less, and with a mouse it appears at once. On a touch screen, a tap or a drag that lands while the dialog is still entering reaches nothing, and the dialog finishes entering; keys and assistive technology stay live, and a mouse or a trackpad still clicks.',
   props: [
     {
       name: 'isOpen',

@@ -28,6 +28,7 @@ import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
 import {gestureHosts} from '../hostRegistry';
 import {holdPageScroll, type PageScrollDecision} from '../pageHold';
+import {holdInput} from '../../Layer/inputHold';
 import {ManualClock, RecordingConsumer} from './harness';
 import {TOUCH_QUERY} from '../../utils/touchQueries';
 import {registerPresentedOffset} from '../../motion/presentation';
@@ -3528,6 +3529,26 @@ describe('touch gates and a second finger', () => {
     const tap = new TapGestureRecognizer({name: 'tap'});
     detachers.push(host.attach(button, tap));
     const release = host.addTouchGate(target => layer.contains(target));
+    const finger = {id: 1, x: 5, y: 5};
+    touch('touchstart', button, [finger], [finger], 0);
+    expect(tap.numberOfTouches).toBe(0);
+    touch('touchend', button, [finger], [], 40);
+    release();
+    touch('touchstart', button, [finger], [finger], 100);
+    expect(tap.numberOfTouches).toBe(1);
+    touch('touchend', button, [finger], [], 140);
+  });
+
+  it("holds a held layer's targets away from every participant with no gate: the host asks the input hold", () => {
+    const {layer, button} = mount(
+      '<div id="layer"><div id="button"></div></div>',
+    );
+    const tap = new TapGestureRecognizer({name: 'tap'});
+    detachers.push(host.attach(button, tap));
+    const release = holdInput(layer, {
+      until: new Promise(() => {}),
+      scope: 'viewport',
+    });
     const finger = {id: 1, x: 5, y: 5};
     touch('touchstart', button, [finger], [finger], 0);
     expect(tap.numberOfTouches).toBe(0);
