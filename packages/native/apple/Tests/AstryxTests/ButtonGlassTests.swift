@@ -79,10 +79,10 @@ private func surface(
   let accent = Theme.default.light.color.accent
   let barItem = Pixels(barStyled(surface: .glass(.barItem), background: accent))
   let token = Pixels(barStyled(surface: .token, background: accent))
-  // Above the label, inside the Button's height: the bar item draws
-  // nothing there, the token look its fill.
+  // The bar item draws nothing above its label; the token look fills its
+  // padding beside the label (it sits centered in its 44-point tap frame).
   #expect(barItem.at(barItem.width / 2, 1)[3] == 0)
-  #expect(close(token.at(token.width / 2, 1), rgba(accent)))
+  #expect(close(token.at(8, token.height / 2), rgba(accent)))
   #expect(barItem.width < token.width)
 }
 
