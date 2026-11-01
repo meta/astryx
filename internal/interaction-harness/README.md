@@ -7,6 +7,9 @@ unpublished.** Specs live next to their component as
 [`playwright.interaction.config.ts`](../../playwright.interaction.config.ts) on
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
+An accessibility spec (`*.a11y.browser.spec.ts`, under
+[`playwright.config.ts`](../../playwright.config.ts)) may use the animation
+holds and the timer gate too, to check a state an animation passes through.
 
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
