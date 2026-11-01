@@ -57,6 +57,7 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   applyLayoutChangeTransition,
   holdLayoutExit,
@@ -459,7 +460,9 @@ export function Collapsible({
   // the content hides. It moves to the trigger that closes it (AR4); focus
   // anywhere else is not moved. Noted in the commit before the DOM changes,
   // moved from this layout effect once the close has committed.
-  useInteractionModalityTracking();
+  // The trigger's own document's last input decides the moved focus's ring.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const mergedTriggerRef = useMergedRefs(triggerRef, modalityRef);
   const closingFocusRef = useRef<FocusWithin | null>(null);
   const beforeOpenChange = useCallback(
     (wasOpen: boolean) => {
@@ -543,7 +546,7 @@ export function Collapsible({
       )}
       {...props}>
       <button
-        ref={triggerRef}
+        ref={mergedTriggerRef}
         type="button"
         onClick={handleToggle}
         aria-disabled={isDisabled || undefined}
