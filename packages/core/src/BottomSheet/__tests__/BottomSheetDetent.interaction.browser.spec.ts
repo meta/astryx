@@ -66,6 +66,8 @@ import {
   withStorybook,
   waitForAnimation,
   waitForRest,
+  webInputDriver,
+  WHEEL_SKIP,
   writeEvidence,
   type CastFrame,
   type InputRecord,
@@ -1458,3 +1460,215 @@ for (const idiom of ['ios', 'android'] as const) {
     expect(await sheetTop(sheet)).toBeCloseTo(halfTop, 0);
   });
 }
+
+// A sheet a swipe never dismisses (a form or required sheet) stretches on
+// the record's rubber band below its rest, for a finger as for a trackpad
+// (spec:AST-094 FR3, FR43).
+test('a finger dragged 120 px down a form sheet stretches on the rubber band below its rest, and springs back', async ({
+  page,
+}) => {
+  await emulateIosWebKit(page);
+  await openStory(page, storybook(), 'core-bottomsheet--form-purpose');
+  const driver = await touchDriver(page);
+  const trigger = page.getByRole('button', {name: 'Edit profile'});
+  const box = await trigger.boundingBox();
+  if (box == null) {
+    throw new Error('no trigger');
+  }
+  await driver.tap({x: box.x + box.width / 2, y: box.y + box.height / 2});
+  const dialog = page.getByRole('dialog', {name: 'Edit profile'});
+  const sheet = dialog.locator('.astryx-bottom-sheet').first();
+  await expect(sheet).toBeVisible();
+  await waitForRest(sheet);
+  const rect = await sheet.boundingBox();
+  if (rect == null) {
+    throw new Error('no sheet');
+  }
+  // On screen and painted: a real box.
+  expect(rect.width).toBeGreaterThan(0);
+  expect(rect.height).toBeGreaterThan(100);
+  const rest = await sheetTop(sheet);
+  const handle = {x: rect.x + rect.width / 2, y: rect.y + 12};
+  let held = rest;
+  await driver.play(
+    drag(
+      handle,
+      {x: handle.x, y: handle.y + 120},
+      {durationMs: 600, hz: 60, restMs: 100},
+    ),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove') {
+          held = await sheetTop(sheet);
+        }
+      },
+    },
+  );
+  // The drag moved it, then by the band over the sheet's height: 110 px past
+  // the pan's 10 px start, about half of it (1:1, 110 px, before).
+  const pulled = held - rest;
+  expect(pulled).toBeGreaterThan(10);
+  const band = (1 - 1 / ((110 * 0.55) / rect.height + 1)) * rect.height;
+  expect(Math.abs(pulled - band)).toBeLessThan(3);
+  // Let go, it springs back to rest and stays open.
+  await waitForRest(sheet);
+  expect(Math.abs((await sheetTop(sheet)) - rest)).toBeLessThan(1);
+  await expect(dialog).toBeVisible();
+});
+
+// On the web the sheet's pans also take a trackpad's scroll: the handle's at
+// once, the body's once the content under the pointer is at its edge. A mouse
+// wheel's notches never move the sheet (spec:AST-094 FR43).
+
+/**
+ * Trackpad cases run in WebKit only. The gesture host tells a trackpad from a
+ * mouse wheel by the legacy `wheelDelta` a trackpad's wheel carries, three
+ * times its delta, and no Chromium driver path sends a trusted wheel like
+ * that: CDP's mouseWheel (`page.mouse.wheel`) sends one notch per event
+ * (wheelDelta ±120 whatever its delta), synthesizeScrollGesture about 0.2×
+ * the delta, emulateTouchFromMouseEvent none. WebKit's driver sends 3×.
+ */
+const TRACKPAD_SKIP =
+  "Chromium's drivers send no trackpad wheel (legacy wheelDelta three times its delta): mouseWheel sends a notch (±120), synthesizeScrollGesture about 0.2×, emulateTouchFromMouseEvent none; WebKit's driver sends 3×";
+
+async function openWithMouse(page: Page): Promise<Locator> {
+  await openStory(page, storybook(), 'core-bottomsheet--snap-points');
+  await page.getByRole('button', {name: 'Open nearby places'}).click();
+  const sheet = page
+    .getByRole('dialog', {name: 'Nearby places'})
+    .locator('.astryx-bottom-sheet')
+    .first();
+  await expect(sheet).toBeVisible();
+  await waitForRest(sheet);
+  return sheet;
+}
+
+/** Whether the sheet's top rests on a detent: the tall one, or the half-viewport one (snapPoints={[0.5]}). */
+async function restsOnDetent(
+  page: Page,
+  sheet: Locator,
+  tallTop: number,
+): Promise<boolean> {
+  const viewport = page.viewportSize();
+  if (viewport == null) {
+    throw new Error('no viewport');
+  }
+  const rest = await sheetTop(sheet);
+  return (
+    Math.min(Math.abs(rest - tallTop), Math.abs(rest - viewport.height * 0.5)) <
+    1
+  );
+}
+
+test.describe('a trackpad on the web (spec:AST-094 FR43, DEC-24)', () => {
+  // A desktop window: a page has a trackpad's wheels only outside a phone's
+  // emulation.
+  test.use({hasTouch: false, isMobile: false});
+  // Engine limit under load: in a container capped at 3 CPUs with 16 workers,
+  // WebKit delivers these scripted wheels 2.0 to 3.7 s apart (32 to 58 ms with
+  // 1 worker), so each wheel is a gesture of its own and none moves the sheet.
+  // The CI profile (4 CPUs, 1 worker) and 3 CPUs with 1 worker pass.
+
+  test('a trackpad scrolling up at the content top pulls the sheet down, and once the scrolling stops the sheet rests on a detent', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'chromium', TRACKPAD_SKIP);
+    const driver = await webInputDriver(page);
+    expect(driver.wheels).toBe(true);
+    const sheet = await openWithMouse(page);
+    const rect = await sheet.boundingBox();
+    if (rect == null) {
+      throw new Error('no sheet');
+    }
+    expect(rect.height).toBeGreaterThan(100);
+    const top = rect.y;
+    const overBody = {x: rect.x + rect.width / 2, y: rect.y + 160};
+    for (let step = 0; step < 6; step += 1) {
+      await driver.wheel({...overBody, dy: -15});
+    }
+    expect(await sheetTop(sheet)).toBeGreaterThan(top + 20);
+    // With no momentum after it, the pull ends 180 ms after its last wheel;
+    // the release runs from there.
+    await page.waitForTimeout(300);
+    await waitForRest(sheet);
+    expect(await restsOnDetent(page, sheet, top)).toBe(true);
+  });
+
+  test('a trackpad scrolling up over the handle pulls the sheet too, and it rests on a detent', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'chromium', TRACKPAD_SKIP);
+    const driver = await webInputDriver(page);
+    expect(driver.wheels).toBe(true);
+    const sheet = await openWithMouse(page);
+    const rect = await sheet.boundingBox();
+    if (rect == null) {
+      throw new Error('no sheet');
+    }
+    expect(rect.height).toBeGreaterThan(100);
+    const top = rect.y;
+    const overHandle = {x: rect.x + rect.width / 2, y: rect.y + 12};
+    for (let step = 0; step < 6; step += 1) {
+      await driver.wheel({...overHandle, dy: -15});
+    }
+    expect(await sheetTop(sheet)).toBeGreaterThan(top + 20);
+    await page.waitForTimeout(300);
+    await waitForRest(sheet);
+    expect(await restsOnDetent(page, sheet, top)).toBe(true);
+  });
+});
+
+test.describe('a mouse wheel on the web (spec:AST-094 FR43, DEC-24)', () => {
+  test("a mouse wheel's notches scroll the content and never move the sheet: at the content top they stay with the page", async ({
+    page,
+  }) => {
+    const driver = await webInputDriver(page);
+    test.skip(!driver.wheels, WHEEL_SKIP);
+    const sheet = await openWithMouse(page);
+    const rect = await sheet.boundingBox();
+    if (rect == null) {
+      throw new Error('no sheet');
+    }
+    const top = rect.y;
+    const overBody = {x: rect.x + rect.width / 2, y: rect.y + 160};
+    // The sheet's scrolling content.
+    const contentScrollTop = async () =>
+      sheet.evaluate(el => {
+        for (const node of el.querySelectorAll<HTMLElement>('*')) {
+          if (
+            /auto|scroll/.test(getComputedStyle(node).overflowY) &&
+            node.scrollHeight > node.clientHeight
+          ) {
+            return node.scrollTop;
+          }
+        }
+        return null;
+      });
+    expect(await contentScrollTop()).toBe(0);
+    // Whole 100 px steps on one axis: a mouse wheel's notches. Two down
+    // reach the content and scroll it.
+    await driver.wheel({...overBody, dy: 100});
+    await driver.wheel({...overBody, dy: 100});
+    await expect.poll(contentScrollTop).toBeGreaterThan(0);
+    // Back to the top, and past that gesture's 100 ms end, so the next
+    // notches start a gesture with the content at its top.
+    for (let step = 0; step < 3; step += 1) {
+      await driver.wheel({...overBody, dy: -100});
+    }
+    await expect.poll(contentScrollTop).toBe(0);
+    await page.waitForTimeout(200);
+    // Three quick notches up at the content top: the sheet stays where it
+    // is, then and once their gesture's 100 ms end has passed.
+    for (let step = 0; step < 3; step += 1) {
+      await driver.wheel({...overBody, dy: -100});
+    }
+    expect(Math.abs((await sheetTop(sheet)) - top)).toBeLessThan(1);
+    await page.waitForTimeout(200);
+    expect(Math.abs((await sheetTop(sheet)) - top)).toBeLessThan(1);
+    await expect(
+      page.getByRole('dialog', {name: 'Nearby places'}),
+    ).toBeVisible();
+  });
+});

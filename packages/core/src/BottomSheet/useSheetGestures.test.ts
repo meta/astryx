@@ -1618,6 +1618,450 @@ describe('useSheetGestures', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
+  describe('wheel and trackpad scrolling on the body (spec:AST-094 FR43, DEC-24)', () => {
+    // The sheet's pans take a trackpad's scroll, as a contact moving with the
+    // content, once every scroller under the pointer is at its edge that way.
+    // The scroll ends where the fingers lift (the start of momentum, which
+    // never moves the sheet), releasing at the fingers' speed, or 180 ms after
+    // its last wheel when the fingers stop first. A mouse wheel's notches never
+    // move the sheet: they stay with the page, uncancelled. A trackpad's wheel
+    // carries a legacy delta three times its delta, as Chromium and WebKit
+    // send it; a wheel without one reads as a mouse wheel.
+    function wheelOn(
+      target: EventTarget,
+      dy: number,
+      time: number,
+      {
+        mode = WheelEvent.DOM_DELTA_PIXEL,
+        trackpad = false,
+      }: {mode?: number; trackpad?: boolean} = {},
+    ): WheelEvent {
+      const event = new WheelEvent('wheel', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: 50,
+        clientY: 300,
+        deltaY: dy,
+        deltaMode: mode,
+      });
+      Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
+      if (trackpad) {
+        Object.defineProperty(event, 'wheelDeltaX', {value: 0});
+        Object.defineProperty(event, 'wheelDeltaY', {value: -3 * dy});
+      }
+      act(() => {
+        target.dispatchEvent(event);
+      });
+      return event;
+    }
+    /**
+     * A trackpad's fingers scrolling `dy` px every 16 ms, `count` times from
+     * `t0`. Returns when the next event would come.
+     */
+    function trackpadScroll(
+      target: EventTarget,
+      {
+        t0 = 0,
+        count = 8,
+        dy = -12,
+      }: {t0?: number; count?: number; dy?: number} = {},
+    ): number {
+      for (let i = 0; i < count; i += 1) {
+        wheelOn(target, dy, t0 + i * 16, {trackpad: true});
+      }
+      return t0 + count * 16;
+    }
+    /** The momentum after the fingers lift: each delta 0.9 of the one before. */
+    function momentum(
+      target: EventTarget,
+      {t0, from = -12, count = 8}: {t0: number; from?: number; count?: number},
+    ): void {
+      let dy = from;
+      for (let i = 0; i < count; i += 1) {
+        dy *= 0.9;
+        wheelOn(target, dy, t0 + i * 16, {trackpad: true});
+      }
+    }
+    function topScroller(): HTMLElement {
+      return makeScroller({scrollTop: 0, clientHeight: 200, scrollHeight: 800});
+    }
+
+    it('a trackpad scrolling up at the content top pulls the sheet down; where the fingers lift it lets go at their speed, and the momentum after never moves it (spec:AST-094 FR36)', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const body = topScroller();
+      attach(hook, sheetOf(body));
+      const next = trackpadScroll(body);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+      // The momentum's fourth shrinking delta reads as the lift: the pull lets
+      // go there, at the fingers' 750 px/s.
+      momentum(body, {t0: next});
+      expect(hook.result.current.isDragging).toBe(false);
+      // The release decides as a drag's does: 750 px/s projects onto the
+      // 200 px detent.
+      land();
+      expect(hook.result.current.settledOffset).toBe(200);
+    });
+
+    it('a trackpad pull whose fingers stop before they lift lets go at rest, 180 ms after its last wheel: where the pull is decides', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const body = topScroller();
+      attach(hook, sheetOf(body));
+      trackpadScroll(body);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+      act(() => {
+        vi.advanceTimersByTime(150);
+      });
+      expect(hook.result.current.isDragging).toBe(true);
+      act(() => {
+        vi.advanceTimersByTime(50);
+      });
+      expect(hook.result.current.isDragging).toBe(false);
+      // About 86 px of pull, released still: the tallest detent is nearest.
+      land();
+      expect(hook.result.current.settledOffset).toBe(0);
+    });
+
+    it("a mouse wheel's notches at the content top leave the sheet where it is: the page keeps them, and a trackpad still pulls it", () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const body = topScroller();
+      attach(hook, sheetOf(body));
+      // Line-mode notches (Firefox's) and pixel notches without a trackpad's
+      // legacy delta: no pan of the sheet takes them, so none is cancelled and
+      // the sheet stays at rest.
+      const notches = [
+        ...Array.from({length: 4}, (_, i) =>
+          wheelOn(body, -3, i * 16, {mode: WheelEvent.DOM_DELTA_LINE}),
+        ),
+        ...Array.from({length: 4}, (_, i) => wheelOn(body, -100, 300 + i * 16)),
+      ];
+      expect(notches.some(event => event.defaultPrevented)).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(liveOffset(hook)).toBe(0);
+      // The same sheet takes a trackpad's scroll: its pans are live.
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      trackpadScroll(body, {t0: 800});
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+    });
+
+    it("a mouse wheel's whole ticks and an accelerated mouse's deltas leave the sheet where it is: neither carries a trackpad's signature (spec:AST-094 FR43)", () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const body = topScroller();
+      attach(hook, sheetOf(body));
+      const tick = (dy: number, time: number) => {
+        // A whole tick: a legacy delta that is a multiple of 120 over a delta
+        // that is a multiple of 40 px, three times over.
+        const event = new WheelEvent('wheel', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          clientX: 50,
+          clientY: 300,
+          deltaY: dy,
+        });
+        Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
+        Object.defineProperty(event, 'wheelDeltaX', {value: 0});
+        Object.defineProperty(event, 'wheelDeltaY', {value: -3 * dy});
+        act(() => {
+          body.dispatchEvent(event);
+        });
+        return event;
+      };
+      const ticks = [0, 16, 32].map(time => tick(-40, time));
+      // An accelerated mouse: a trackpad's 3× legacy delta, but a fractional
+      // part under 0.01 px.
+      const accelerated = [400, 416, 432, 448].map(time => tick(-12.004, time));
+      expect(
+        [...ticks, ...accelerated].some(event => event.defaultPrevented),
+      ).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(liveOffset(hook)).toBe(0);
+      // A trackpad's scroll still pulls it.
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      trackpadScroll(body, {t0: 900});
+      expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('an info sheet: a trackpad flick closes it, and a slow pull that stops springs back (spec:AST-094 FR36, FR43)', () => {
+      // A single-height sheet a swipe may close: offsets [0], gone at 400.
+      const flick = setup();
+      const flickBody = topScroller();
+      attach(flick.hook, sheetOf(flickBody));
+      // 20 px every 16 ms (1250 px/s), then the momentum: the fingers lift
+      // at their speed, a flick.
+      const next = trackpadScroll(flickBody, {count: 6, dy: -20});
+      expect(flick.hook.result.current.isDragging).toBe(true);
+      momentum(flickBody, {t0: next, from: -20});
+      expect(flick.hook.result.current.isDragging).toBe(false);
+      land();
+      expect(flick.onDismiss).toHaveBeenCalledTimes(1);
+      flick.hook.unmount();
+      // A slow pull, 3 px every 16 ms, whose fingers stop: released still,
+      // well short of its close distance.
+      const slow = setup();
+      const slowBody = topScroller();
+      attach(slow.hook, sheetOf(slowBody));
+      trackpadScroll(slowBody, {t0: 5000, count: 16, dy: -3});
+      expect(slow.hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(slow.hook)).toBeGreaterThan(0);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      land();
+      expect(slow.onDismiss).not.toHaveBeenCalled();
+      expect(slow.hook.result.current.settledOffset).toBe(0);
+    });
+
+    it("a mouse wheel's quick notches never move the sheet, so they neither fling nor dismiss it", () => {
+      // Sheet 400 with a 120 px stop: offsets [0, 280], gone at 400.
+      const {hook, onDismiss} = setup({snapHeights: () => [120]});
+      const body = topScroller();
+      attach(hook, sheetOf(body));
+      // Three 100 px notches 16 ms apart: enough to throw the sheet away if
+      // the sheet took them. It doesn't; the page keeps them.
+      const notches = [0, 16, 32].map(t => wheelOn(body, -100, t));
+      expect(notches.some(event => event.defaultPrevented)).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      land();
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(0);
+      // The same sheet takes a trackpad's scroll: its pans are live.
+      trackpadScroll(body, {t0: 2600});
+      expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it("a mouse wheel's notches over the handle leave the sheet where it is too", () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      attach(hook, t);
+      const notches = [0, 16, 32].map(time => wheelOn(handleOf(t), -100, time));
+      expect(notches.some(event => event.defaultPrevented)).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(liveOffset(hook)).toBe(0);
+      // A trackpad over the handle still pulls it.
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      trackpadScroll(handleOf(t), {t0: 400});
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+    });
+
+    it("a trackpad's pull on a sheet a swipe never dismisses stretches on the same band as a finger's: the same travel, the same stretch", () => {
+      // The record's band over the sheet's 400 px height (spec:AST-094 FR3).
+      const band = (x: number) =>
+        (1 - 1 / ((x * 0.55) / SHEET_HEIGHT + 1)) * SHEET_HEIGHT;
+      // The same trackpad pull on two single-height sheets: one a swipe
+      // dismisses (1:1 below its rest, so its offset is the pull's travel)
+      // and one it never does.
+      const pull = (canDismiss: boolean, at: number) => {
+        const {hook} = setup({canDismiss});
+        const body = topScroller();
+        attach(hook, sheetOf(body));
+        trackpadScroll(body, {t0: at});
+        const result = {
+          isDragging: hook.result.current.isDragging,
+          offset: liveOffset(hook),
+        };
+        act(() => {
+          vi.advanceTimersByTime(250);
+        });
+        land();
+        hook.unmount();
+        return result;
+      };
+      const free = pull(true, 0);
+      const held = pull(false, 4000);
+      // Both pulls took their sheet (presence first).
+      expect(free.isDragging).toBe(true);
+      expect(held.isDragging).toBe(true);
+      expect(free.offset).toBeGreaterThan(20);
+      expect(held.offset).toBeCloseTo(band(free.offset), 6);
+    });
+
+    it('a trackpad pulling 30 to 240 px stretches a sheet a swipe never dismisses on the band, travel for travel (spec:AST-094 FR3, FR43)', () => {
+      const band = (x: number) =>
+        (1 - 1 / ((x * 0.55) / SHEET_HEIGHT + 1)) * SHEET_HEIGHT;
+      let at = 0;
+      for (const scrolled of [30, 60, 120, 240]) {
+        // A sheet a swipe dismisses tracks the trackpad 1:1 below its rest:
+        // its offset is the pull's travel past the pan's start.
+        const measure = (canDismiss: boolean) => {
+          const {hook} = setup({canDismiss});
+          const body = topScroller();
+          attach(hook, sheetOf(body));
+          trackpadScroll(body, {t0: at, count: scrolled / 6, dy: -6});
+          at += 4000;
+          const offset = liveOffset(hook);
+          const isDragging = hook.result.current.isDragging;
+          act(() => {
+            vi.advanceTimersByTime(250);
+          });
+          land();
+          hook.unmount();
+          return {offset, isDragging};
+        };
+        const free = measure(true);
+        const held = measure(false);
+        expect(free.isDragging).toBe(true);
+        expect(held.isDragging).toBe(true);
+        expect(free.offset).toBeGreaterThan(0);
+        expect(held.offset).toBeCloseTo(band(free.offset), 6);
+      }
+    });
+
+    it('a trackpad pull carries the sheet at most its height below its base: off screen, never past it', () => {
+      const {hook} = setup();
+      const body = topScroller();
+      attach(hook, sheetOf(body));
+      const next = trackpadScroll(body);
+      // The pull took the sheet (presence first).
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+      // 60 more 12 px scrolls: far more travel than the sheet's height.
+      trackpadScroll(body, {t0: next, count: 60});
+      expect(liveOffset(hook)).toBe(SHEET_HEIGHT);
+    });
+
+    it('leaves the scrolling to content that can still scroll that way', () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const body = makeScroller({
+        scrollTop: 300,
+        clientHeight: 200,
+        scrollHeight: 800,
+      });
+      attach(hook, sheetOf(body));
+      const scrolls = Array.from({length: 8}, (_, i) =>
+        wheelOn(body, -12, i * 16, {trackpad: true}),
+      );
+      expect(scrolls.some(event => event.defaultPrevented)).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+
+    it("a trackpad scrolling up over the handle pulls the sheet too: every pan of the sheet takes a trackpad's scroll", () => {
+      const {hook} = setup({snapHeights: () => [200]});
+      const t = makeTarget();
+      attach(hook, t);
+      trackpadScroll(handleOf(t));
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(hook.result.current.isDragging).toBe(false);
+    });
+  });
+
+  describe("the rubber band below rest on a sheet a swipe never dismisses, a finger's and a trackpad's alike (spec:AST-094 FR3, FR43)", () => {
+    // A sheet a swipe never dismisses (canDismiss false: a form or required
+    // sheet) stretches on the record's band below its shortest detent, the
+    // same for a finger and a trackpad; a mouse keeps its 1:1 tracking
+    // (spec:AST-017 FR59). A sheet a swipe dismisses keeps tracking a finger
+    // 1:1 into the dismiss zone.
+    const band = (x: number) =>
+      (1 - 1 / ((x * 0.55) / SHEET_HEIGHT + 1)) * SHEET_HEIGHT;
+
+    it("a finger dragged 120 px down a sheet a swipe never dismisses stretches on the band below its rest: 110 px past the pan's start moves it band(110), not 110", () => {
+      asFinger();
+      const {hook, onDismiss} = setup({canDismiss: false});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 40, 50, t);
+      // The drag took the sheet (presence first).
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+      // 110 px past the pan's 10 px start: about 53 px for this 400 px sheet
+      // (54 px for a 500 px one).
+      move(hook, 110, 100, t);
+      expect(liveOffset(hook)).toBeCloseTo(band(110), 6);
+      // Let go, it springs back to rest.
+      up(hook, 110, 150, t);
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(0);
+    });
+
+    it('between detents it still tracks a finger 1:1; only past the shortest detent does it stretch', () => {
+      asFinger();
+      const {hook} = setup({canDismiss: false, snapHeights: () => [200]});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 100, 50, t);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBe(100);
+      // 100 px past the 200 px detent, the sheet's lowest rest.
+      move(hook, 300, 100, t);
+      expect(liveOffset(hook)).toBeCloseTo(200 + band(100), 6);
+    });
+
+    it('a mouse drag keeps the pointer presentation: 1:1 below its rest, as before, and it springs back (spec:AST-017 FR59)', () => {
+      asMouse();
+      const {hook, onDismiss} = setup({canDismiss: false});
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 40, 50, t);
+      expect(hook.result.current.isDragging).toBe(true);
+      expect(liveOffset(hook)).toBeGreaterThan(0);
+      move(hook, 110, 100, t);
+      expect(liveOffset(hook)).toBe(110);
+      up(hook, 110, 900, t);
+      expect(onDismiss).not.toHaveBeenCalled();
+      expect(hook.result.current.settledOffset).toBe(0);
+    });
+
+    it("a pen keeps its tracking too, 1:1 below rest, whatever the primary pointer: the band is a finger's and a trackpad's (spec:AST-094 FR43, spec:AST-017 FR59)", () => {
+      const penDrag = () => {
+        const {hook} = setup({canDismiss: false});
+        const t = makeTarget();
+        attach(hook, t);
+        act(() => {
+          // Landed one pan threshold behind the first move, as every
+          // pointer's pan begins past it.
+          mouseEvent('pointerdown', handleOf(t), -PAN_THRESHOLD, 0, 0, 'pen');
+          mouseEvent('pointermove', handleOf(t), 40, 50, 0, 'pen');
+          mouseEvent('pointermove', handleOf(t), 110, 100, 0, 'pen');
+        });
+        const result = {
+          isDragging: hook.result.current.isDragging,
+          offset: liveOffset(hook),
+        };
+        act(() => {
+          mouseEvent('pointerup', handleOf(t), 110, 900, 0, 'pen');
+        });
+        land();
+        hook.unmount();
+        return result;
+      };
+      const fine = penDrag();
+      expect(fine.isDragging).toBe(true);
+      expect(fine.offset).toBe(110);
+      stubCoarsePointer();
+      const coarse = penDrag();
+      expect(coarse.isDragging).toBe(true);
+      expect(coarse.offset).toBe(110);
+    });
+
+    it('a sheet a swipe dismisses still tracks a finger 1:1 into the dismiss zone', () => {
+      asFinger();
+      const {hook} = setup();
+      const t = makeTarget();
+      down(hook, 0, 0, t);
+      move(hook, 40, 50, t);
+      expect(hook.result.current.isDragging).toBe(true);
+      move(hook, 110, 100, t);
+      expect(liveOffset(hook)).toBe(110);
+    });
+  });
+
   describe('body overscroll', () => {
     // A mouse on the scrolling body, through the body's pans (spec:AST-094
     // FR19): a pull down where nothing under the pointer can scroll up, or up

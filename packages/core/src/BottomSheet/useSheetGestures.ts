@@ -1656,17 +1656,40 @@ export function useSheetGestures({
       }
       const {offsets, peekOffset} = resolveDetents(state.height);
 
-      const raw = state.baseOffset + translation;
-      // Under UIKit's presentation (a finger or a pen where the primary
-      // pointer is coarse, the same answer as the release's): 1:1 between
-      // detents and into the dismiss zone, as UIKit's sheet tracks (the
-      // release, not the drag, picks the detent), and past fully open the
-      // record's rubber band (spec:AST-094 FR3). Otherwise the pointer
+      // A trackpad's pull carries the sheet at most its height below its
+      // base: off screen, never past it (spec:AST-094 FR43, DEC-24).
+      const isScroll = state.pan?.trackedTouches[0]?.scrollType != null;
+      const raw = isScroll
+        ? Math.min(
+            state.baseOffset + translation,
+            state.baseOffset + state.height,
+          )
+        : state.baseOffset + translation;
+      // A sheet a swipe never dismisses (a form or required sheet) stretches
+      // on the record's band below its lowest rest, for a finger and a
+      // trackpad alike (the same travel, the same stretch; spec:AST-094 FR3,
+      // FR43).
+      // Otherwise, under UIKit's presentation (a finger or a pen where the
+      // primary pointer is coarse, the same answer as the release's): 1:1
+      // between detents and into the dismiss zone, as UIKit's sheet tracks
+      // (the release, not the drag, picks the detent), and past fully open
+      // the record's rubber band (spec:AST-094 FR3). Otherwise the pointer
       // presentation's tracking (FR13, spec:AST-017 FR59).
+      const restOffset = offsets[offsets.length - 1];
+      // The band is a finger's and a trackpad's only (spec:AST-094 FR43): a
+      // mouse and a pen keep their tracking (spec:AST-017 FR59).
+      const bandsBelowRest = isScroll || state.pointerType === 'touch';
       const next =
-        releaseMotionRef.current.kind === 'uikit'
-          ? fingerDragOffset(raw, state.height)
-          : pointerDragOffset(raw, offsets);
+        bandsBelowRest && !canDismissRef.current && raw > restOffset
+          ? restOffset +
+            rubberBand(
+              raw - restOffset,
+              state.height,
+              sheetTable.rubberBand.coefficient,
+            )
+          : releaseMotionRef.current.kind === 'uikit'
+            ? fingerDragOffset(raw, state.height)
+            : pointerDragOffset(raw, offsets);
       // Dragging above the base restores the full layout height below the
       // viewport; otherwise keep whatever layout the base detent settled with
       // (0 at a peek, so a peek drag stays transform-only).
@@ -1802,8 +1825,8 @@ export function useSheetGestures({
       ) {
         return false;
       }
-      // The recognizers serve every pointer: a mouse, a pen and a finger
-      // (spec:AST-094 FR19, FR43).
+      // The recognizers serve every pointer, a mouse, a pen and a finger,
+      // and a trackpad's scroll (spec:AST-094 FR19, FR43).
       pointerKinds.set(recognizer, touch.pointerType);
       touchTargets.set(
         recognizer,
@@ -1890,14 +1913,17 @@ export function useSheetGestures({
     ],
   );
 
-  // The handle: a vertical pan, for every pointer (spec:AST-094 FR19). A
-  // control's drag, so text selection and the touch callout are off under the
-  // finger.
+  // The handle: a vertical pan, for every pointer (spec:AST-094 FR19) and for
+  // a trackpad's scroll (FR43). A control's drag, so text selection and the
+  // touch callout are off under the finger.
   const handleElRef = useRef<HTMLElement | null>(null);
   useGestureRecognizer(
     handleElRef,
     () =>
       new PanGestureRecognizer({
+        // A trackpad's scroll pulls the sheet; a mouse wheel's notches stay
+        // with the page and never move it (spec:AST-094 FR43, DEC-24).
+        allowedScrollTypes: ['continuous'],
         name: 'BottomSheet.handle',
         direction: 'vertical',
         maximumNumberOfTouches: 1,
@@ -1913,6 +1939,9 @@ export function useSheetGestures({
     bodyNodeRef,
     () =>
       new PanGestureRecognizer({
+        // A trackpad's scroll pulls the sheet; a mouse wheel's notches stay
+        // with the page and never move it (spec:AST-094 FR43, DEC-24).
+        allowedScrollTypes: ['continuous'],
         name: 'BottomSheet.bodyDown',
         direction: 'down',
         maximumNumberOfTouches: 1,
@@ -1931,6 +1960,9 @@ export function useSheetGestures({
     bodyNodeRef,
     () =>
       new PanGestureRecognizer({
+        // A trackpad's scroll pulls the sheet; a mouse wheel's notches stay
+        // with the page and never move it (spec:AST-094 FR43, DEC-24).
+        allowedScrollTypes: ['continuous'],
         name: 'BottomSheet.bodyUp',
         direction: 'up',
         maximumNumberOfTouches: 1,

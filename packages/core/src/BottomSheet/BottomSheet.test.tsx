@@ -1307,6 +1307,67 @@ describe('BottomSheet', () => {
       expect(outerPanel.style.transform).toBe('');
     });
 
+    it.each(['form', 'required'] as const)(
+      "a %s sheet a finger pulls 30 to 240 px below its rest stretches on FR3's rubber band, and springs back (spec:AST-094 FR3, FR43)",
+      async purpose => {
+        // A finger: a coarse primary pointer (and no reduced motion).
+        vi.stubGlobal(
+          'matchMedia',
+          vi.fn((query: string) => ({
+            matches:
+              query.includes('pointer: coarse') &&
+              !query.includes('prefers-reduced-motion'),
+            media: query,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+          })),
+        );
+        const onOpenChange = vi.fn();
+        render(
+          <BottomSheet
+            isOpen
+            purpose={purpose}
+            onOpenChange={onOpenChange}
+            label="Edit profile">
+            Content
+          </BottomSheet>,
+        );
+        measureTallSheet();
+        // The record's band over the sheet's 784 px height.
+        const height = 784;
+        const band = (x: number) =>
+          (1 - 1 / ((x * 0.55) / height + 1)) * height;
+        let time = 0;
+        for (const travel of [30, 60, 120, 240]) {
+          fireTimedPointer(getHandle(), 'pointerdown', {time, y: 0});
+          fireTimedPointer(getHandle(), 'pointermove', {
+            time: time + 100,
+            y: travel / 2,
+          });
+          fireTimedPointer(getHandle(), 'pointermove', {
+            time: time + 200,
+            y: travel,
+          });
+          // The drag moved the sheet, on the band: less than the finger did.
+          const pulled = translationOf(getSheet());
+          expect(pulled).toBeGreaterThan(0);
+          expect(pulled).toBeCloseTo(band(travel), 3);
+          expect(pulled).toBeLessThan(travel);
+          // Let go still: it springs back to rest, and stays open.
+          fireTimedPointer(getHandle(), 'pointerup', {
+            time: time + 700,
+            y: travel,
+          });
+          await landSpring();
+          expect(translationOf(getSheet())).toBeCloseTo(0, 3);
+          time += 5000;
+        }
+        expect(onOpenChange).not.toHaveBeenCalled();
+      },
+    );
+
     it('requests close when dragged past the dismiss threshold', () => {
       const onOpenChange = vi.fn();
       render(
