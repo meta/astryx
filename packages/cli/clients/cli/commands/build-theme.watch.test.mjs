@@ -14,7 +14,15 @@
  * self-sufficient regardless of CI job ordering.
  */
 
-import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from 'vitest';
 import {execFileSync, spawn} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -265,6 +273,11 @@ describe('theme build --watch', () => {
       [CLI_BIN, 'theme', 'build', 'w1.mjs', 'w2.mjs', '--watch'],
       {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
     );
+    // Vitest runs this even when the test times out mid-wait, which skips the
+    // `finally` below, so the watcher never outlives the test.
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
     let stdout = '';
     child.stdout.on('data', d => (stdout += d.toString()));
     child.stderr.on('data', d => (stdout += d.toString()));
@@ -274,7 +287,7 @@ describe('theme build --watch', () => {
       // finished, and those builds run one after another, each in its own
       // child process. Wait for that line instead of polling for the files
       // under the 8 s deadline: on a loaded runner two builds can outlast it.
-      // The test's own time limit still bounds the wait.
+      // If the line never comes, the test fails at its own time limit.
       await new Promise((resolve, reject) => {
         const check = () => {
           if (/Watching w1\.mjs, w2\.mjs/.test(stdout)) {
