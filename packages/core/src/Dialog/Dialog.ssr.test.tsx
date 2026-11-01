@@ -88,7 +88,9 @@ describe('Dialog: open on the server (FR8)', () => {
     document.body.appendChild(client);
     const clientRoot = createRoot(client);
     await act(async () => clientRoot.render(tree(true)));
-    const clientMotion = entryMotion(client.querySelector('dialog')!);
+    const clientMotion = entryMotion(
+      client.querySelector('dialog') as HTMLDialogElement,
+    );
     expect(clientMotion).not.toBe('none');
     await act(async () => clientRoot.unmount());
 
@@ -100,13 +102,15 @@ describe('Dialog: open on the server (FR8)', () => {
     await act(async () => {
       root = hydrateRoot(container, tree(true));
     });
-    const dialog = container.querySelector('dialog')!;
+    const dialog = container.querySelector('dialog') as HTMLDialogElement;
     expect(entryMotion(dialog)).toBe('none');
 
     // Closed and opened again, it animates as a client open does.
     await act(async () => root.render(tree(false)));
     await act(async () => root.render(tree(true)));
-    expect(entryMotion(container.querySelector('dialog')!)).toBe(clientMotion);
+    expect(
+      entryMotion(container.querySelector('dialog') as HTMLDialogElement),
+    ).toBe(clientMotion);
     await act(async () => root.unmount());
   });
 });

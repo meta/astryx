@@ -88,6 +88,7 @@ import {
   type SyntheticEvent,
 } from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
@@ -347,13 +348,9 @@ export function BottomSheetSwitcher({
   const activeSheet = isHostOpen && !isHydrating ? activeSheetProp : null;
   // The step active on the server was present on page load, so it opens
   // settled, with no entry motion; the first change of step animates as
-  // usual (spec:AST-013 FR13).
-  const [settledSheet, setSettledSheet] = useState(() =>
-    isHydrating && isHostOpen ? activeSheetProp : null,
-  );
-  if (settledSheet != null && activeSheetProp !== settledSheet) {
-    setSettledSheet(null);
-  }
+  // usual (spec:AST-013 FR13). It latches on the flow's own request: a host
+  // sheet hydrating reads as closed to a flow inside it.
+  const settledSheet = useSettledOpen(activeSheetProp, activeSheet, null);
   // Every sheet host applies the switcher's dialog surface to its own dialog.
   const dialogProps = useShallowStable<BottomSheetSwitcherDialogProps>({
     ...restDialogProps,

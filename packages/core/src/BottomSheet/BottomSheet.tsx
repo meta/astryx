@@ -88,6 +88,7 @@ import {
   type ReactNode,
 } from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
@@ -439,14 +440,9 @@ function StandaloneBottomSheet({
   const isOpen = isOpenProp && isHostOpen && !isHydrating;
   // A sheet open on the server was present on page load, so it opens settled,
   // with no rise or fade-in; its later opens and closes animate as usual
-  // (spec:AST-013 FR13).
-  const [opensSettled, setOpensSettled] = useState(
-    () => isHydrating && isOpenProp && isHostOpen,
-  );
-  if (opensSettled && !isOpenProp) {
-    setOpensSettled(false);
-  }
-  const isEntrySettled = opensSettled && isOpen;
+  // (spec:AST-013 FR13). It latches on its own request, not its host's state:
+  // a host sheet hydrating reads as closed to the sheets inside it.
+  const isEntrySettled = useSettledOpen(isOpenProp, isOpen, false) && isOpen;
   // Presentation outlives the controlled prop: a closing sheet stays mounted
   // and in its native host through its exit, and only its motion completion
   // (or a replace finishing) clears it. The open flip is derived during

@@ -61,6 +61,7 @@
 
 import {useCallback, useRef, useState, type ReactNode} from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -462,12 +463,7 @@ export function Drawer({
   // A drawer open on the server was present on page load, so it opens settled,
   // with no slide-in; its later opens and closes animate as usual
   // (spec:AST-013 FR13).
-  const [opensSettled, setOpensSettled] = useState(
-    () => isHydrating && isOpenProp,
-  );
-  if (opensSettled && !isOpenProp) {
-    setOpensSettled(false);
-  }
+  const opensSettled = useSettledOpen(isOpenProp, isOpen, false) && isOpen;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const {containerRef: focusTrapRef} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen && hasScrim,
@@ -591,7 +587,7 @@ export function Drawer({
           isOpen && sideOpenStyle,
           hasScrim && styles.scrim,
           hasScrim && isOpen && styles.scrimOpen,
-          opensSettled && isOpen && styles.openSettled,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,

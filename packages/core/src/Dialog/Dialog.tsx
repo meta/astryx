@@ -39,10 +39,10 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
-  useState,
   type ReactNode,
 } from 'react';
 import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {useScrollLock} from '../hooks/useScrollLock';
@@ -494,12 +494,8 @@ export function Dialog({
   const isOpen = isOpenProp && (isInline || !isHydrating);
   // A dialog open on the server was present on page load, so it opens settled,
   // with no entry motion; its later opens animate as usual (spec:AST-013 FR13).
-  const [opensSettled, setOpensSettled] = useState(
-    () => isHydrating && isOpenProp && !isInline,
-  );
-  if (opensSettled && !isOpenProp) {
-    setOpensSettled(false);
-  }
+  const opensSettled =
+    useSettledOpen(isOpenProp && !isInline, isOpen, false) && isOpen;
   // When no explicit padding prop, use theme default (--astryx-dialog-padding)
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;
@@ -847,7 +843,7 @@ export function Dialog({
             })(),
           isFullscreen && styles.fullscreen,
           isFullscreen && isOpen && styles.fullscreenOpen,
-          opensSettled && isOpen && styles.openSettled,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,
