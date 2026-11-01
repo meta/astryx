@@ -213,7 +213,7 @@ describe('a11y contract shards', () => {
     ]);
   });
 
-  it('balances the recorded suite far below its longest file', () => {
+  it('balances the recorded suite within 30% of its floor', () => {
     const recordedSuite = JSON.parse(
       fs.readFileSync(
         path.join(ROOT, '.github/a11y-contract-durations.json'),
@@ -224,11 +224,21 @@ describe('a11y contract shards', () => {
       const [file, ...titles] = key.split(' › ');
       return {file, titles, line: index, column: 0};
     });
-    const longestFile = Math.max(...Object.values(recordedSuite.seconds));
     const legs = partitionTests(suite, 6, recordedSuite);
     expect(selectedOnce(suite, legs)).toBe(true);
-    expect(Math.max(...legs.map(leg => unitsWall(leg)))).toBeLessThan(
-      longestFile,
+    // No leg can finish sooner than an even share of the suite over six legs
+    // of four workers, nor sooner than the largest piece the split keeps
+    // whole (a file it cannot cut, or one part of a cut file).
+    const total = Object.values(recordedSuite.tests).reduce(
+      (sum, value) => sum + value,
+      0,
+    );
+    const floor = Math.max(
+      total / (6 * 4),
+      ...legs.flat().map(unit => unit.seconds),
+    );
+    expect(Math.max(...legs.map(leg => unitsWall(leg)))).toBeLessThanOrEqual(
+      floor * 1.3,
     );
   });
 
