@@ -69,6 +69,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - caller-provided chevron, cue, icon, or render-function escape hatches;
 - TreeList, Table, or another component's disclosure indicator;
 - generic icon resolution or artwork customization;
+- sibling open-value coordination, group state, and the divided group wrapper
+  — owned by `component:CollapsibleGroup`;
 - a shared responsive or directional API; or
 - new content-reveal motion behavior. Existing behavior outside this decision stays
   unchanged until its own current authority changes it.

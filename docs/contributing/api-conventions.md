@@ -30,8 +30,8 @@ consumer syntax and reference material. The component spec owns local semantic
 API meaning and guarantees, including public hooks or utilities it explicitly
 co-owns.
 
-The wiki gives broader background: [API Conventions](https://github.com/facebook/astryx/wiki/API-Conventions)
-and [API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration).
+The wiki gives broader background: [API Conventions](https://github.com/meta/astryx/wiki/API-Conventions)
+and [API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration).
 Do not copy detailed decisions from those pages into a proposal. Link the current
 owner instead.
 
@@ -401,7 +401,7 @@ Before requesting review:
   and representative integration coverage in the same pull request.
 
 If two or three viable shapes remain after applying current conventions, use the
-[API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration)
+[API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration)
 process. Compare realistic consumer code across the relevant cases and put the
 evidence in the pull request. Ask the owner to decide. A maintainer or review
 agent records the final ruling in the owning spec. Keep the research procedure

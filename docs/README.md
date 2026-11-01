@@ -54,16 +54,9 @@ Every knowledge record declares `authority: draft | current | archived`.
   accept current `.github/DESIGNOWNERS` members. Legacy v1 `owners` metadata is
   descriptive and does not grant approval rights.
 - Pull requests that create, change, or archive a `current` record wait on the
-  `spec-owner-approval` status for their exact current head. Draft-only records
-  pass that status after validation without an owner review.
-- Any ENGOWNER can approve another author's current-record PR through GitHub
-  review. A DESIGNOWNER may do the same for current design or theme records and
-  normative design assets. When an eligible approver is also the PR author, they
-  comment `/approve-spec <full-head-sha>`. Any new commit invalidates that
-  approval.
-- A configured review app may relay an eligible owner's exact-head decision;
-  the gate counts it as that owner's command. `.github/REVIEW_GATE.md`
-  describes the relay.
+  review gate, `review-required`, until an owner approves their content with
+  `/approve-spec <full-sha>` or a review (`architecture:knowledge-contracts`
+  DEC-14). Draft-only records need no owner approval.
 - Only `current` documents guide implementation and review.
 - A specification describes durable ideal behavior independently of any one pull
   request. Pull requests and issues may appear only as clearly non-authoritative
@@ -138,7 +131,11 @@ inherit. Only visible records are followed, so a draft never adds a link unless
 decision (`spec:AST-NNN/FR3`) lists that claim, not the whole record. The specs that
 decided a linked record are listed separately, as are the global claims the
 matched component and module triggers route (the same selection as
-`review-global-baselines.mjs`). A path with no linked record is reported as
+`review-global-baselines.mjs`). With `--diff origin/main` (or
+`--diff <base>..<head>`) it reads the change, lists its files when none are
+named, and puts first the claims whose owning record's `concerns` the added
+lines match. The default view lists the claims and the linked record ids; `--records`
+shows how each record links. A path with no linked record is reported as
 such. Records are read from the working tree, so on a pull-request branch the
 result includes that branch's proposed records and is not review authority.
 `pnpm specs:for --unrouted` lists tracked files with no governing record;

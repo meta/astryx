@@ -28,7 +28,7 @@ references:
 `parseOutlineFromMarkdown` and `useOutlineFromMarkdown` derive same-document
 heading navigation from the same Markdown parse configuration, ordered immutable
 transforms, text projection, and collision allocator used by the rendered document.
-This focused module owns that utility behavior without deciding the draft Outline
+This focused module owns that utility behavior without deciding the Outline
 component's anatomy or theming.
 
 ## Compatibility and migration
@@ -108,8 +108,7 @@ No visual representation is owned by this parser utility.
 - `module:Markdown/headingLinks` owns its optional projection; this module consumes
   it while retaining root-only Outline selection.
 - `spec:AST-036` owns the canonical plugin protocol and cross-surface parity.
-- Draft `component:Outline` owns presentation only after its separate anatomy and
-  theming decisions become current.
+- `component:Outline` owns presentation, anatomy, and theming.
 
 ## Verification map
 
@@ -148,4 +147,4 @@ None.
 ## Content boundary
 
 This file does not duplicate plugin protocol details, Markdown parser mechanics,
-consumer examples, or the draft Outline component's anatomy and theming contract.
+consumer examples, or the Outline component's anatomy and theming contract.

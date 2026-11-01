@@ -76,7 +76,7 @@ const DIALOG_FR1: AstryxRecord = {
   clause: 'FR1',
   requirement:
     'A native Dialog MUST become visibly modal before Dialog applies its component-owned initial-focus request.',
-  url: 'https://github.com/facebook/astryx/blob/029368bde880cb25a7912523510419285d803a90/packages/core/src/Dialog/Dialog.spec.md',
+  url: 'https://github.com/meta/astryx/blob/029368bde880cb25a7912523510419285d803a90/packages/core/src/Dialog/Dialog.spec.md',
 };
 const DIALOG_FR2: AstryxRecord = {
   standard: 'astryx',
@@ -109,7 +109,7 @@ const LAYER_NATIVE_MODAL: AstryxRecord = {
   clause: 'Browser hosts and corrective portals',
   requirement:
     'dialog.showModal() provides a native modal boundary, backdrop, inert outside content, and platform close requests.',
-  url: 'https://github.com/facebook/astryx/blob/029368bde880cb25a7912523510419285d803a90/docs/architecture/layer-runtime.md',
+  url: 'https://github.com/meta/astryx/blob/029368bde880cb25a7912523510419285d803a90/docs/architecture/layer-runtime.md',
 };
 
 const ALWAYS = {

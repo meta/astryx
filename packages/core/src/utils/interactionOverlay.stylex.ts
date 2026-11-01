@@ -116,8 +116,14 @@ export const pressConsts = stylex.defineConsts({
   releaseMs: 200,
 });
 
-/** The release's clock as CSS. */
-const PRESS_RELEASE_DURATION = `${pressConsts.releaseMs}ms`;
+/**
+ * The release's clock as CSS, scaled by the theme's `--_astryx-motion-tempo`
+ * (`spec:AST-108` FR4, `component:Button` FR15) up to 1.5, its maximum. The
+ * controller's timer reads the same property.
+ */
+const PRESS_RELEASE_DURATION = `calc(${pressConsts.releaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
+/** The same clock under Reduce Motion: a tempo may shorten it, never lengthen it. */
+const PRESS_RELEASE_DURATION_REDUCED = `min(${pressConsts.releaseMs}ms, calc(${pressConsts.releaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
 
 const ENABLED = ':where(:not(:disabled,[aria-disabled="true"]))';
 const HOVER_HOVER = '@media (hover: hover)';
@@ -205,7 +211,10 @@ const pressReleaseAnimation = {
   },
   animationDuration: {
     default: null,
-    '[data-astryx-press="fading"]': PRESS_RELEASE_DURATION,
+    '[data-astryx-press="fading"]': {
+      default: PRESS_RELEASE_DURATION,
+      '@media (prefers-reduced-motion: reduce)': PRESS_RELEASE_DURATION_REDUCED,
+    },
   },
   animationTimingFunction: {
     default: null,

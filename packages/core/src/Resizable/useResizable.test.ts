@@ -158,14 +158,70 @@ describe('useResizable persistence', () => {
     act(() => result.current.resize(300));
     act(() => result.current.props._onResizeStart());
     act(() => result.current.props._onResizeMove(-270));
-
     expect(result.current.isCollapsed).toBe(true);
-    expect(readStored()).toEqual({size: 300, isCollapsed: true});
 
     // A continued drag below the threshold must not clobber the saved width.
     act(() => result.current.props._onResizeMove(-275));
+    act(() => result.current.props._onResizeEnd());
+    expect(readStored()).toEqual({size: 300, isCollapsed: true});
+
     act(() => result.current.expand());
     expect(result.current.size).toBe(300);
+  });
+
+  it.each([
+    ['_onResizeEnd', (p: ResizableProps) => p._onResizeEnd()],
+    ['_onResizeCancel', (p: ResizableProps) => p._onResizeCancel?.()],
+  ])(
+    'writes the size a drag reached once, after %s releases it',
+    (_name, finish) => {
+      const {result} = renderHook(() => useResizable(BASE_CONFIG));
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      try {
+        act(() => result.current.props._onResizeStart());
+        act(() => result.current.props._onResizeMove(20));
+        act(() => result.current.props._onResizeMove(40));
+        expect(result.current.size).toBe(300);
+        expect(setItem).not.toHaveBeenCalled();
+
+        act(() => finish(result.current.props));
+        expect(setItem.mock.calls).toEqual([
+          [KEY, JSON.stringify({size: 300, isCollapsed: false})],
+        ]);
+      } finally {
+        setItem.mockRestore();
+      }
+    },
+  );
+
+  it('writes the final size once when the release comes before the last move renders', () => {
+    const {result} = renderHook(() => useResizable(BASE_CONFIG));
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      act(() => result.current.props._onResizeStart());
+      act(() => result.current.props._onResizeMove(20));
+      expect(result.current.size).toBe(280);
+
+      // One batch: the last move has not rendered when the release lands.
+      act(() => {
+        result.current.props._onResizeMove(40);
+        result.current.props._onResizeEnd();
+      });
+      expect(result.current.size).toBe(300);
+      expect(setItem.mock.calls).toEqual([
+        [KEY, JSON.stringify({size: 300, isCollapsed: false})],
+      ]);
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
+  it('keeps the size a region was dragged to when it unmounts mid-drag', () => {
+    const {result, unmount} = renderHook(() => useResizable(BASE_CONFIG));
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(40));
+    unmount();
+    expect(readStored()).toEqual({size: 300, isCollapsed: false});
   });
 
   it('does not touch storage without an autoSaveId', () => {
@@ -1604,6 +1660,44 @@ describe('useResizable percentage configuration (AST-010)', () => {
       expect(result.current.props._maxSizePx).toBe(100);
       expect(result.current.size).toBe(100);
     });
+
+    it('writes only the re-clamped size when the container shrank mid-drag', () => {
+      const key = 'astryx-resizable:pct-release';
+      content = 600;
+      const containerRef = makeContainer();
+      const {result} = renderHook(() =>
+        useResizable({
+          containerRef,
+          defaultSize: 200,
+          maxSize: '50%',
+          autoSaveId: 'pct-release',
+        }),
+      );
+      expect(result.current.props._maxSizePx).toBe(300);
+      const setItem = vi.spyOn(Storage.prototype, 'setItem');
+      const writes = () => setItem.mock.calls.filter(([k]) => k === key);
+      try {
+        act(() => result.current.props._onResizeStart());
+        act(() => result.current.props._onResizeMove(80));
+        expect(result.current.size).toBe(280);
+        // The bound holds at 300 until the release, which re-clamps to 200.
+        act(() => {
+          content = 400;
+          StubResizeObserver.resizeAll();
+        });
+        expect(result.current.size).toBe(280);
+        expect(writes()).toHaveLength(0);
+
+        act(() => result.current.props._onResizeEnd());
+        expect(result.current.size).toBe(200);
+        expect(writes()).toEqual([
+          [key, JSON.stringify({size: 200, isCollapsed: false})],
+        ]);
+      } finally {
+        setItem.mockRestore();
+        localStorage.removeItem(key);
+      }
+    });
   });
 });
 
@@ -1678,5 +1772,48 @@ describe('ResizableProps source compatibility (AST-010 API5)', () => {
     };
     expect(prePr._direction).toBeUndefined();
     expect(prePr._onResizeCancel).toBeUndefined();
+  });
+});
+
+describe('useResizable window reads after a commit', () => {
+  // React re-reads a useSyncExternalStore snapshot after the commit whenever
+  // getSnapshot is a new function, and a window size read after the DOM has
+  // changed forces a layout of the whole page. A re-render with unchanged
+  // inputs reads the window during render only.
+  function readsAfterCommit(direction: 'horizontal' | 'vertical') {
+    const reads = {count: 0};
+    const width = vi.spyOn(window, 'innerWidth', 'get');
+    const height = vi.spyOn(window, 'innerHeight', 'get');
+    width.mockImplementation(() => {
+      reads.count += 1;
+      return 1024;
+    });
+    height.mockImplementation(() => {
+      reads.count += 1;
+      return 768;
+    });
+    function Region({tick}: {tick: number}) {
+      useResizable({defaultSize: 240, direction});
+      // Runs in the commit, before passive effects: every read counted
+      // after it happened after the DOM changed.
+      useLayoutEffect(() => {
+        reads.count = 0;
+      });
+      return createElement('div', {'data-tick': tick});
+    }
+    const {rerender} = render(createElement(Region, {tick: 0}));
+    act(() => rerender(createElement(Region, {tick: 1})));
+    const count = reads.count;
+    width.mockRestore();
+    height.mockRestore();
+    return count;
+  }
+
+  it('reads the window width again only during render, not after the commit', () => {
+    expect(readsAfterCommit('horizontal')).toBe(0);
+  });
+
+  it('reads the window height again only during render, not after the commit', () => {
+    expect(readsAfterCommit('vertical')).toBe(0);
   });
 });

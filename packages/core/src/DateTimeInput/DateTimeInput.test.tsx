@@ -239,6 +239,26 @@ describe('DateTimeInput', () => {
     expect(screen.getByDisplayValue('2:30 PM')).toBeInTheDocument();
   });
 
+  it("follows the provider locale's hour cycle when hourFormat is unset", () => {
+    const renderIn = (locale: string) => (
+      <InternationalizationProvider locale={locale}>
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T14:30' as ISODateTimeString}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>
+    );
+    const {rerender} = render(renderIn('en-US'));
+    expect(screen.getByDisplayValue('2:30 PM')).toBeInTheDocument();
+
+    rerender(renderIn('de-DE'));
+    expect(screen.getByDisplayValue('14:30')).toBeInTheDocument();
+
+    rerender(renderIn('ko-KR'));
+    expect(screen.getByDisplayValue('오후 2:30')).toBeInTheDocument();
+  });
+
   it('displays formatted time in 24h format', () => {
     render(
       <DateTimeInput
@@ -2290,6 +2310,67 @@ describe('DateTimeInput', () => {
 
       fireEvent.click(timeInput);
       expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+
+  describe('calendar while the popover is closed', () => {
+    const calendarGrid = () => document.querySelector('[role="grid"]');
+
+    it('renders no calendar until the popover opens, and none after it closes', () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-01-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      const toggle = getButton('Open calendar');
+      expect(calendarGrid()).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).not.toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).toBeNull();
+    });
+
+    it('opens on the month of a date typed while closed', () => {
+      function Controlled() {
+        const [value, setValue] = useState<ISODateTimeString | undefined>(
+          '2026-01-15T10:00' as ISODateTimeString,
+        );
+        return (
+          <DateTimeInput label="Meeting" value={value} onChange={setValue} />
+        );
+      }
+      render(<Controlled />);
+      const dateInput = screen.getAllByRole('combobox')[0];
+
+      fireEvent.change(dateInput, {target: {value: 'March 5, 2027'}});
+      fireEvent.keyDown(dateInput, {key: 'ArrowDown'});
+
+      expect(calendarGrid()).toHaveAccessibleName('March 2027');
+    });
+
+    it('moves focus into the calendar on each open from the toggle', async () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-01-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      const toggle = getButton('Open calendar');
+
+      for (let i = 0; i < 2; i++) {
+        fireEvent.click(toggle);
+        // The first calendar control takes focus, not the dialog surface.
+        await waitFor(() => {
+          expect(getButton('Previous month')).toHaveFocus();
+        });
+        fireEvent.click(toggle);
+        expect(calendarGrid()).toBeNull();
+      }
     });
   });
 

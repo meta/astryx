@@ -12,12 +12,11 @@ const {
   parseKind,
   parseOwnerFile,
 } = require('./knowledge-frontmatter.cjs');
+const crypto = require('node:crypto');
+const {SPEC_MIRROR_PREFIX} = require('./review-signal-decision.cjs');
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const GATE_STATUS_CONTEXT = 'spec-owner-approval';
-const READY_STATUS_PREFIX = 'spec-owner-ready/';
-const DECISION_STATUS_PREFIX = 'spec-owner-decision/';
-const DECISION_DISPATCH_TYPE = 'spec-owner-decision';
 const TRUSTED_STATUS_CREATOR = 'github-actions[bot]';
 
 // The workflow trigger filters comments with GitHub's `startsWith` against the
@@ -35,20 +34,17 @@ function isDispatchableOwnerCommand(body) {
 
 function parseOwnerCommand(body, headSha) {
   if (!isDispatchableOwnerCommand(body)) return null;
-  // The command prefix must match the trigger exactly, but a commit SHA is
-  // case-insensitive everywhere else in git and GitHub. Accept either casing
-  // rather than silently ignoring a copy-pasted uppercase head.
-  const match = body
-    .trim()
-    .match(/^\/(approve|revoke)-spec\s+([0-9a-fA-F]{40})$/);
-  if (!match || headSha.toLowerCase() !== match[2].toLowerCase()) return null;
-  return match[1] === 'approve';
+  // A commit SHA is case-insensitive everywhere else in git and GitHub, so a
+  // copy-pasted uppercase head still names it.
+  const target = parseOwnerCommandTarget(body);
+  if (!target?.sha || target.sha !== headSha.toLowerCase()) return null;
+  return target.approved;
 }
 
 /**
  * Recognize that a comment was meant as an owner command, whatever it names.
- * Only the exact-head form in `parseOwnerCommand` decides the gate; this looser
- * shape exists so a near-miss command is answered instead of ignored.
+ * Only a well-formed command decides the gate; this looser shape exists so a
+ * near-miss command is explained in the gate's details instead of ignored.
  */
 function parseOwnerCommandIntent(body) {
   if (!isDispatchableOwnerCommand(body)) return null;
@@ -64,115 +60,17 @@ function parseOwnerCommandIntent(body) {
  * null when it does. The reasons are the two silent failures owners hit: a
  * command that names no full head SHA, and one that names a superseded commit.
  */
-function describeOwnerCommandProblem(intent, headSha) {
+function describeOwnerCommandProblem(intent) {
   if (!intent) return null;
   if (!intent.argument) {
-    return 'it did not name a commit';
+    return intent.verb === 'approve'
+      ? 'it did not name a commit; post /approve-spec with the full head SHA'
+      : null;
   }
   if (!/^[0-9a-f]{40}$/i.test(intent.argument)) {
     return 'it did not name exactly one full 40-character commit SHA';
   }
-  if (intent.argument.toLowerCase() !== headSha.toLowerCase()) {
-    return `it named ${intent.argument.slice(0, 7)}, which is not the current head`;
-  }
   return null;
-}
-
-const GITHUB_LOGIN = /^[a-z0-9](?:[a-z0-9]|-(?=[a-z0-9])){0,38}$/i;
-const REQUEST_KEY = /^[A-Za-z0-9._:-]{1,64}$/;
-
-/**
- * Read a decision a review app relays for an owner. The app authenticates the
- * owner; the gate trusts only the configured app identity and a payload whose
- * every field has exactly the expected shape. Returns `{decision}` or
- * `{problem}`; a problem never decides anything.
- */
-function parseOwnerDecisionDispatch(payload, {appLogin}) {
-  if (payload?.action !== DECISION_DISPATCH_TYPE) {
-    return {problem: 'it is not an owner-decision dispatch'};
-  }
-  const expected = typeof appLogin === 'string' ? appLogin.trim() : '';
-  if (!expected) {
-    return {problem: 'no review app is configured to relay owner decisions'};
-  }
-  const sender = payload.sender;
-  if (
-    sender?.type !== 'Bot' ||
-    typeof sender.login !== 'string' ||
-    sender.login.toLowerCase() !== expected.toLowerCase()
-  ) {
-    return {problem: 'it was not sent by the configured review app'};
-  }
-  const body = payload.client_payload ?? {};
-  const pr = body.pr;
-  if (!Number.isSafeInteger(pr) || pr <= 0) {
-    return {problem: 'it did not name a pull request number'};
-  }
-  if (
-    typeof body.headSha !== 'string' ||
-    !/^[0-9a-f]{40}$/i.test(body.headSha)
-  ) {
-    return {problem: 'it did not name one full 40-character head SHA'};
-  }
-  if (
-    typeof body.ownerLogin !== 'string' ||
-    !GITHUB_LOGIN.test(body.ownerLogin)
-  ) {
-    return {problem: 'it did not name a GitHub login'};
-  }
-  if (body.decision !== 'approve' && body.decision !== 'revoke') {
-    return {problem: 'its decision was neither approve nor revoke'};
-  }
-  if (
-    typeof body.requestKey !== 'string' ||
-    !REQUEST_KEY.test(body.requestKey)
-  ) {
-    return {problem: 'it did not carry a valid request key'};
-  }
-  return {
-    decision: {
-      pr,
-      headSha: body.headSha.toLowerCase(),
-      owner: body.ownerLogin.toLowerCase(),
-      approved: body.decision === 'approve',
-      requestKey: body.requestKey,
-    },
-  };
-}
-
-function decisionStatusDescription({approved, at, requestKey}) {
-  return `Owner ${approved ? 'approved' : 'revoked'} at ${at}. Request ${requestKey}.`;
-}
-
-/**
- * Read relayed owner decisions back from the trusted statuses this workflow
- * published on the head. A status names its owner in the context and its
- * verdict and time in the description; only a handle still in `owners` counts.
- */
-function parseDecisionStatuses(statuses, {repository, headSha, owners}) {
-  const allowed = new Set((owners ?? []).map(owner => owner.toLowerCase()));
-  const decisions = [];
-  for (const status of statuses) {
-    if (
-      !['success', 'failure'].includes(status.state) ||
-      !status.context?.startsWith(DECISION_STATUS_PREFIX) ||
-      !isTrustedWorkflowStatus(status, repository)
-    ) {
-      continue;
-    }
-    const owner = status.context
-      .slice(DECISION_STATUS_PREFIX.length)
-      .toLowerCase();
-    if (!GITHUB_LOGIN.test(owner) || !allowed.has(owner)) continue;
-    const match = status.description?.match(
-      /^Owner (approved|revoked) at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)\. Request [A-Za-z0-9._:-]{1,64}\.$/,
-    );
-    if (!match || Number.isNaN(Date.parse(match[2]))) continue;
-    const approved = match[1] === 'approved';
-    if (approved !== (status.state === 'success')) continue;
-    decisions.push({approved, at: match[2], headSha, owner, source: 'command'});
-  }
-  return decisions;
 }
 
 function candidateTime(candidate) {
@@ -182,7 +80,7 @@ function candidateTime(candidate) {
 
 function candidatePriority(candidate) {
   if (candidate.approved === false || candidate.approved === null) return 2;
-  return candidate.source === 'ready' ? 0 : 1;
+  return 1;
 }
 
 function latestDismissalAt(review, dismissalEvents) {
@@ -203,11 +101,13 @@ function latestDismissalAt(review, dismissalEvents) {
 function resolveOwnerDecision({
   reviews,
   comments,
-  readyAttestations = [],
-  relayedDecisions = [],
   dismissalEvents = [],
   owners,
   headSha,
+  // Spec approvals bind content (DEC-14): a review or a command counts when
+  // the commit it names carries the current spec content. A `/revoke-spec`
+  // without a commit withdraws whatever that owner approved.
+  approvesCurrentContent = sha => sha === headSha,
 }) {
   const allowed = new Set(owners.map(owner => owner.toLowerCase()));
   const latestByOwner = new Map();
@@ -227,28 +127,17 @@ function resolveOwnerDecision({
     }
   }
 
-  for (const attestation of readyAttestations) {
-    if (attestation.headSha !== headSha) continue;
-    consider(attestation.owner, {
-      approved: true,
-      at: attestation.at,
-      source: 'ready',
-    });
-  }
-
-  // A relayed decision is the same owner act as an exact-head command.
-  for (const decision of relayedDecisions) {
-    if (decision.headSha !== headSha) continue;
-    consider(decision.owner, {
-      approved: decision.approved,
-      at: decision.at,
-      source: 'command',
-    });
-  }
-
   for (const review of reviews) {
     const login = review.user?.login?.toLowerCase();
-    if (!login || review.commit_id !== headSha) continue;
+    // An approval counts only for the current spec content (DEC-14). A
+    // request for changes on it holds the gate; one on other content, or a
+    // dismissal, withdraws only that owner's approval.
+    if (
+      !login ||
+      (review.state === 'APPROVED' && !approvesCurrentContent(review.commit_id))
+    ) {
+      continue;
+    }
     if (
       !['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state)
     ) {
@@ -262,7 +151,8 @@ function resolveOwnerDecision({
       approved:
         review.state === 'APPROVED'
           ? true
-          : review.state === 'CHANGES_REQUESTED'
+          : review.state === 'CHANGES_REQUESTED' &&
+              approvesCurrentContent(review.commit_id)
             ? false
             : null,
       at:
@@ -277,10 +167,13 @@ function resolveOwnerDecision({
   for (const comment of comments) {
     const login = comment.user?.login?.toLowerCase();
     if (!login) continue;
-    const approved = parseOwnerCommand(comment.body ?? '', headSha);
-    if (approved == null) continue;
+    if (!isDispatchableOwnerCommand(comment.body)) continue;
+    const target = parseOwnerCommandTarget(comment.body);
+    if (target == null) continue;
+    if (target.approved && !approvesCurrentContent(target.sha)) continue;
+    // `/revoke-spec` withdraws that owner's approval (DEC-14).
     consider(login, {
-      approved,
+      approved: target.approved || null,
       at: comment.created_at,
       source: 'command',
     });
@@ -323,40 +216,6 @@ function isTrustedWorkflowStatus(status, repository) {
     status.creator?.login === TRUSTED_STATUS_CREATOR &&
     parseCanonicalRunId(status.target_url, repository) !== null
   );
-}
-
-function parseReadyAttestations(statuses, {repository, headSha, owners}) {
-  // A ready marker is only design-group evidence, and only from a handle that
-  // is a design owner *now*. Markers published before that rule existed, or
-  // by someone since removed from .github/DESIGNOWNERS, are historical noise
-  // and must not authorize anything.
-  const allowed = new Set((owners ?? []).map(owner => owner.toLowerCase()));
-  const attestations = [];
-  for (const status of statuses) {
-    if (
-      status.state !== 'success' ||
-      !status.context?.startsWith(READY_STATUS_PREFIX) ||
-      !isTrustedWorkflowStatus(status, repository)
-    ) {
-      continue;
-    }
-    const owner = status.context
-      .slice(READY_STATUS_PREFIX.length)
-      .toLowerCase();
-    if (!/^[a-z0-9-]+$/.test(owner) || !allowed.has(owner)) continue;
-    const match = status.description?.match(
-      /^Owner ready at (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)\.$/,
-    );
-    if (!match || Number.isNaN(Date.parse(match[1]))) continue;
-    attestations.push({
-      approved: true,
-      at: match[1],
-      headSha,
-      owner,
-      source: 'ready',
-    });
-  }
-  return attestations;
 }
 
 function newestGateRun(statuses, repository) {
@@ -433,26 +292,114 @@ function requiresOwnerApproval(records, options = {}) {
   return groups.spec || groups.design || groups.theme;
 }
 
+// --- Spec content an approval binds, and the gate's text (DEC-14). ---
+
+// Recording an approval writes these values, so they never take part in the
+// content an approval binds (DEC-14).
+const BOOKKEEPING_KEYS = new Set(['authority', 'approved_by', 'approved_at']);
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * A Markdown record's text without the front-matter values that approval
+ * bookkeeping rewrites. Everything else, body and other keys, stays.
+ */
+function normalizeRecordText(text) {
+  const normalized = text.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n')) return normalized;
+  const end = normalized.indexOf('\n---', 4);
+  if (end === -1) return normalized;
+  const frontMatter = normalized
+    .slice(4, end)
+    .split('\n')
+    .filter(line => {
+      const key = line.match(/^([A-Za-z_][\w-]*)\s*:/)?.[1];
+      return key == null || !BOOKKEEPING_KEYS.has(key);
+    })
+    .join('\n');
+  return `---\n${frontMatter}${normalized.slice(end)}`;
+}
+
+/**
+ * One fingerprint over every changed spec path. Each entry is
+ * `{path, content}`, where `content` is the text at the head (`null` when the
+ * path is absent there). Markdown is normalized; other files hash as read.
+ */
+function fingerprintSpecContent(entries) {
+  const files = {};
+  for (const {path, content} of entries) {
+    files[path] =
+      content == null
+        ? 'absent'
+        : sha256(path.endsWith('.md') ? normalizeRecordText(content) : content);
+  }
+  const fingerprint = sha256(
+    Object.keys(files)
+      .sort()
+      .map(filePath => `${filePath}\0${files[filePath]}\n`)
+      .join(''),
+  );
+  return {fingerprint, files};
+}
+
+/**
+ * Read an owner command. `/approve-spec <sha>` approves the spec content at
+ * that commit; the SHA says which content the owner reviewed. `/revoke-spec`
+ * withdraws the owner's approval, with or without a commit.
+ */
+function parseOwnerCommandTarget(body) {
+  if (typeof body !== 'string') return null;
+  const match = body
+    .trim()
+    .match(/^\/(approve|revoke)-spec(?:\s+([0-9a-fA-F]{40}))?$/);
+  if (!match) return null;
+  if (match[1] === 'approve' && !match[2]) return null;
+  return {
+    approved: match[1] === 'approve',
+    sha: match[2] ? match[2].toLowerCase() : null,
+  };
+}
+
+function approvedDescription(owners) {
+  const names = owners.map(name => `@${name}`).join(', ');
+  return `✅ Spec approved by ${names || 'an owner'}`;
+}
+
+/**
+ * The `spec-owner-approval` description. That context only mirrors the spec
+ * half of `review-required` until branch protection stops requiring it; the
+ * review gate reads the state from this text.
+ */
+function mirrorDescription({state, missing, approvers = []}) {
+  if (state === 'success') {
+    return approvers.length
+      ? `${SPEC_MIRROR_PREFIX}ok (${approvers.map(name => `@${name}`).join(', ')})`
+      : `${SPEC_MIRROR_PREFIX}ok`;
+  }
+  if (missing?.heldBy)
+    return `${SPEC_MIRROR_PREFIX}waiting (changes @${missing.heldBy})`;
+  return `${SPEC_MIRROR_PREFIX}waiting (${missing?.spec ? 'eng' : 'design'})`;
+}
+
 module.exports = {
-  DECISION_DISPATCH_TYPE,
-  DECISION_STATUS_PREFIX,
   GATE_STATUS_CONTEXT,
   OWNER_COMMAND_PREFIXES,
-  READY_STATUS_PREFIX,
+  approvedDescription,
   canonicalRunUrl,
-  decisionStatusDescription,
   describeOwnerCommandProblem,
+  fingerprintSpecContent,
   isDispatchableOwnerCommand,
+  mirrorDescription,
   newestGateRun,
   parseAuthority,
   parseCanonicalRunId,
-  parseDecisionStatuses,
   parseKind,
   parseOwnerCommand,
   parseOwnerCommandIntent,
-  parseOwnerDecisionDispatch,
+  parseOwnerCommandTarget,
   parseOwnerFile,
-  parseReadyAttestations,
   requiredApprovalGroups,
   requiresOwnerApproval,
   resolveOwnerDecision,

@@ -80,7 +80,7 @@ An earlier draft proposed collecting these props into one object-valued
 deprecations across seven components, four of them a required prop, to solve
 a tidiness problem rather than one a person using an Astryx product meets.
 
-The trigger is [#6829](https://github.com/facebook/astryx/pull/6829), which
+The trigger is [#6829](https://github.com/meta/astryx/pull/6829), which
 proposes `hasCreate` + `onCreate` on `MultiSelector` — a sixth and seventh
 search-adjacent prop on a component that already carries three, under a name
 `Tokenizer` already ships with a different contract. That pull request is
@@ -345,7 +345,7 @@ describes, so `Tokenizer` already conforms and changes nothing.
   `component:CommandPalette` cite this record instead of each recording a
   private copy. `component:MultiSelector` is `authority: draft` and is drafting
   exactly such a copy; that claim is withdrawn in favour of FR5 and FR6 here.
-- [#6829](https://github.com/facebook/astryx/pull/6829) is blocked on this
+- [#6829](https://github.com/meta/astryx/pull/6829) is blocked on this
   ruling. Its `hasCreate` + `onCreate` pair is rejected by FR5, which admits
   the same user need as `hasCreate` alone, reported through the component's
   existing `onChange` with a descriptor naming the creation — the shape

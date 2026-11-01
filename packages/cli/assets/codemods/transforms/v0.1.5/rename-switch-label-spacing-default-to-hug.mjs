@@ -2,7 +2,7 @@
 
 /**
  * @file Codemod: Rename Switch labelSpacing "default" to "hug"
- * @see https://github.com/facebook/astryx/issues/2889
+ * @see https://github.com/meta/astryx/issues/2889
  *
  * The `labelSpacing="default"` value is renamed to `labelSpacing="hug"` so
  * the name describes the behavior (label and switch hug each other), matching

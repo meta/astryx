@@ -12,7 +12,10 @@
  *
  * The checks are the record's Verification rows: the animations the browser
  * runs on the dialog as it opens, read when each starts (`animationstart`),
- * so a short cross-fade is caught however late the test looks.
+ * so a short cross-fade is caught however late the test looks. When a loaded
+ * machine runs the listener after a short fade has already finished, the
+ * fade is read from its `@keyframes` rule and the computed animation
+ * longhands instead of the live Animation.
  */
 
 import {expect, test, type Page} from '@playwright/test';
@@ -81,6 +84,55 @@ async function openDialog(
   await page.evaluate(() => {
     const seen: Entrance['animations'] = [];
     (window as unknown as {__entrance: typeof seen}).__entrance = seen;
+
+    /** Reads the animation an `animationstart` names without a live Animation. */
+    function entranceFromEvent(
+      {animationName}: AnimationEvent,
+      target: Element,
+    ): Entrance['animations'][number] {
+      const style = getComputedStyle(target);
+      const names = style.animationName.split(',').map(name => name.trim());
+      const index = Math.max(0, names.indexOf(animationName));
+      // Computed animation longhands repeat their list to match the names.
+      const at = (list: string) => {
+        const values = list.split(',');
+        return (values[index % values.length] ?? '').trim();
+      };
+      const toMs = (time: string) =>
+        time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000;
+      const properties = new Set<string>();
+      const visit = (rules: CSSRuleList) => {
+        for (const rule of Array.from(rules)) {
+          if (rule instanceof CSSKeyframesRule) {
+            if (rule.name !== animationName) {
+              continue;
+            }
+            for (const frame of Array.from(rule.cssRules)) {
+              const declarations = (frame as CSSKeyframeRule).style;
+              for (let i = 0; i < declarations.length; i++) {
+                // getKeyframes() names properties in camelCase; match it.
+                properties.add(
+                  declarations[i].replace(/-([a-z])/g, (_, letter: string) =>
+                    letter.toUpperCase(),
+                  ),
+                );
+              }
+            }
+          } else if ('cssRules' in rule) {
+            visit((rule as CSSGroupingRule).cssRules);
+          }
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        visit(sheet.cssRules);
+      }
+      return {
+        properties: [...properties].sort(),
+        durationMs: toMs(at(style.animationDuration)),
+        delayMs: toMs(at(style.animationDelay)),
+      };
+    }
+
     document.addEventListener(
       'animationstart',
       event => {
@@ -88,7 +140,16 @@ async function openDialog(
         if (target.tagName !== 'DIALOG') {
           return;
         }
-        for (const animation of target.getAnimations()) {
+        const live = target.getAnimations();
+        if (live.length === 0) {
+          // On a busy machine a short entrance can finish before this
+          // listener runs, and a finished animation is gone from
+          // getAnimations(). The event still names it, so read it from its
+          // @keyframes rule and the dialog's computed animation longhands.
+          seen.push(entranceFromEvent(event, target));
+          return;
+        }
+        for (const animation of live) {
           const effect = animation.effect as KeyframeEffect;
           const timing = effect.getComputedTiming();
           const properties = new Set<string>();

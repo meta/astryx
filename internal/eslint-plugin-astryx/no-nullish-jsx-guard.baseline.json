@@ -1,0 +1,4 @@
+{
+  "packages/richtext/src/RichTextEditor.tsx": ["maxLength", "toolbar"],
+  "packages/richtext/src/RichTextEditorToolbar.tsx": ["endContent"]
+}

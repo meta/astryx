@@ -110,7 +110,8 @@ during the motion; `velocity(in:)` is 0.2 × the newest event's
 instantaneous velocity + 0.8 × the previous one's (it reproduces every value
 UIKit reported on six recorded streams), does not decay through a rest and
 ignores the lift: the table keeps that one filter and no least-squares
-estimator (`spec:AST-100` FR2); a sheet over a scrolled list leaves the whole
+estimator (`spec:AST-100` FR2; M-G14 is the scroll-view release blend still to
+confirm, and M-G16 is Astryx’s stillness reset, not a UIKit value); a sheet over a scrolled list leaves the whole
 drag to the list (no mid-gesture handoff), so the table carries no handoff
 slop (`spec:AST-094` FR14).
 

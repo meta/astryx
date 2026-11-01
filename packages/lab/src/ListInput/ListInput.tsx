@@ -6,7 +6,7 @@
  * @file ListInput.tsx
  * @input React, StyleX, Astryx field/list/button/icon/layer/empty-state primitives, the container-reveal hook, compact size context, browser scroll geometry, programmatic theme tokens, and shared Lab reorder styles
  * @output Exports ListInput and its controlled data, column, renderer, and change types
- * @position Lab experiment (RFC facebook/astryx#4531) for editing compact repeated records
+ * @position Lab experiment (RFC meta/astryx#4531) for editing compact repeated records
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/ListInput/ListInput.doc.mjs

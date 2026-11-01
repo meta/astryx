@@ -1,0 +1,123 @@
+<!-- Copyright (c) Meta Platforms, Inc. and affiliates. -->
+
+<!doctype html>
+<meta
+  name="viewport"
+  content="width=device-width,initial-scale=1,user-scalable=no" />
+<title>Pointer streams capture</title>
+<style>
+  html,
+  body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+  #pad {
+    position: fixed;
+    inset: 0;
+    touch-action: none;
+    background: #f4f4f8;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  #status {
+    position: fixed;
+    left: 8px;
+    bottom: 8px;
+    font: 12px system-ui;
+    color: #555;
+    pointer-events: none;
+  }
+</style>
+<div id="pad"></div>
+<div id="status">ready</div>
+<script>
+  // Records one contact's pointer and touch events as the page receives them: per pointermove its
+  // getCoalescedEvents() list ([t, x, y] each) and getPredictedEvents() count; times are ms after the
+  // pointerdown's timeStamp (performance.now clock), positions CSS px from the pointerdown. Listeners are on
+  // window, capture and passive; the pad has touch-action: none, so the browser never takes the contact.
+  // ?post=probe posts the record to /__probe and ?post=beacon to /beacon, for a local server that collects them;
+  // window.__streams keeps every record either way.
+  (() => {
+    const params = new URLSearchParams(location.search);
+    const run = params.get('run') || 'r';
+    const post = params.get('post') || 'none';
+    const status = document.getElementById('status');
+    const eventTime = e =>
+      e.timeStamp > 1e12 && performance.timeOrigin > 0
+        ? e.timeStamp - performance.timeOrigin
+        : e.timeStamp;
+    const r3 = v => Math.round(v * 1000) / 1000;
+    window.__streams = [];
+    let rec = null;
+    let sent = true;
+    const rel = (t, x, y) => [r3(t - rec.t0), r3(x - rec.x0), r3(y - rec.y0)];
+    const send = () => {
+      if (sent) return;
+      sent = true;
+      window.__streams.push(rec);
+      status.textContent = `recorded ${rec.events.length} events`;
+      const body = JSON.stringify({kind: 'streams', ...rec});
+      if (post === 'probe')
+        fetch('/__probe', {method: 'POST', body}).catch(() => {});
+      if (post === 'beacon')
+        fetch('/beacon', {method: 'POST', body}).catch(() => {});
+    };
+    const on = (type, fn) =>
+      addEventListener(type, fn, {capture: true, passive: true});
+    on('pointerdown', e => {
+      if (!sent) return;
+      sent = false;
+      rec = {
+        run,
+        pointerType: e.pointerType,
+        ua: navigator.userAgent,
+        dpr: devicePixelRatio,
+        coarse: matchMedia('(pointer: coarse)').matches,
+        viewport: [innerWidth, innerHeight],
+        screen: [screen.width, screen.height],
+        t0: eventTime(e),
+        x0: e.clientX,
+        y0: e.clientY,
+        events: [],
+      };
+      rec.events.push(['pointerdown', 0, 0, 0]);
+    });
+    on('pointermove', e => {
+      if (sent || rec.done || e.pointerType !== rec.pointerType) return;
+      const coalesced =
+        typeof e.getCoalescedEvents === 'function'
+          ? e
+              .getCoalescedEvents()
+              .map(c => rel(eventTime(c), c.clientX, c.clientY))
+          : null;
+      const predicted =
+        typeof e.getPredictedEvents === 'function'
+          ? e.getPredictedEvents().length
+          : null;
+      rec.events.push([
+        'pointermove',
+        ...rel(eventTime(e), e.clientX, e.clientY),
+        coalesced,
+        predicted,
+      ]);
+    });
+    for (const type of ['pointerup', 'pointercancel']) {
+      on(type, e => {
+        if (sent || rec.done) return;
+        rec.events.push([type, ...rel(eventTime(e), e.clientX, e.clientY)]);
+        rec.done = true;
+        setTimeout(send, 200);
+      });
+    }
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
+      on(type, e => {
+        if (sent) return;
+        const t = e.changedTouches[0];
+        if (t)
+          rec.events.push([type, ...rel(eventTime(e), t.clientX, t.clientY)]);
+      });
+    }
+  })();
+</script>

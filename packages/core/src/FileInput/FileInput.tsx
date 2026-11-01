@@ -37,12 +37,7 @@ import {
   durationVars,
   easeVars,
 } from '../theme/tokens.stylex';
-import {
-  Field,
-  InputClearButton,
-  type InputStatus,
-  type FieldStatusVariant,
-} from '../Field';
+import {Field, InputClearButton, type InputStatus} from '../Field';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -68,6 +63,9 @@ import {useTranslator} from '../i18n';
 import type {TranslatorFn} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useListFormatter} from '../i18n/useListFormatter';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 function formatFileSize(bytes: number, t: TranslatorFn): string {
   if (bytes < 1024) {
     return t('@astryx.fileInput.fileSize.bytes', {size: bytes});
@@ -236,6 +234,10 @@ const styles = stylex.create({
       ':focus-within': colorVars['--color-accent'],
     },
   },
+  busy: {
+    cursor: 'default',
+    boxShadow: 'none',
+  },
   hiddenInput: {
     position: 'absolute',
     width: 1,
@@ -311,6 +313,9 @@ export interface FileInputProps extends Omit<
   FieldInputBaseProps,
   'onChange' | 'defaultValue' | 'value'
 > {
+  /**
+   * Ref to the native file input.
+   */
   ref?: React.Ref<HTMLInputElement>;
   /**
    * Accessible label for the file input.
@@ -401,7 +406,7 @@ export interface FileInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Description text displayed below the label.
    */
@@ -491,9 +496,14 @@ export function FileInput({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const formatList = useListFormatter();
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  const isSelectionDisabled = isDisabled || isBusy;
+  if (isDragOver && isSelectionDisabled) {
+    setIsDragOver(false);
+  }
   // A pick is one user action, already announced as "file selected"; a busy
   // period it starts (changeAction, or a caller setting isLoading from
   // onChange) adds no second message (spec:AST-086 FR6). The mark lasts until
@@ -544,7 +554,9 @@ export function FileInput({
   // at a visually hidden "Required" span — mirroring the Field label's visible
   // indicator (where isOptional takes precedence) and the pattern Slider uses
   // for its thumbs.
-  const conveysRequired = isRequired && !isOptional;
+  // A surrounding FormLayout's defaultOptionality="required" makes an unmarked
+  // field required too (FormLayout FR5).
+  const conveysRequired = useResolvedRequired({isRequired, isOptional});
 
   const ariaDescribedBy =
     [
@@ -559,6 +571,33 @@ export function FileInput({
       .filter(Boolean)
       .join(' ') || undefined;
 
+  // The native input keeps taking the caller's base props (the shared FR10
+  // contract), but it is `aria-hidden` and never focused, so a caller's
+  // `aria-*` props are also set on the trigger, the field's focusable control,
+  // where assistive tech reads them. The ones the trigger composes itself are
+  // not copied, and a caller's description is joined to its own, first.
+  const {
+    'aria-describedby': callerDescribedBy,
+    'aria-label': _callerLabel,
+    'aria-labelledby': _callerLabelledBy,
+    'aria-hidden': _callerHidden,
+    'aria-disabled': _callerDisabled,
+    'aria-busy': _callerBusy,
+    'aria-invalid': _callerInvalid,
+    ...otherRest
+  } = rest as typeof rest & Record<string, unknown>;
+  const triggerAriaProps: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(otherRest)) {
+    // Booleans and numbers are valid ARIA values too: React serializes them.
+    if (key.startsWith('aria-') && value != null) {
+      triggerAriaProps[key] = value;
+    }
+  }
+  const triggerDescribedBy =
+    [callerDescribedBy, ariaDescribedBy]
+      .filter(Boolean)
+      .join(' ') || undefined;
+
   const defaultPlaceholder = isMultiple
     ? t('@astryx.fileInput.placeholderMultiple')
     : t('@astryx.fileInput.placeholder');
@@ -566,7 +605,7 @@ export function FileInput({
 
   const handleFiles = useCallback(
     (fileList: File[]) => {
-      if (isDisabled) {
+      if (isSelectionDisabled) {
         return;
       }
 
@@ -580,7 +619,9 @@ export function FileInput({
       );
 
       if (errors.length > 0) {
-        setValidationError(errors[0]);
+        // Every rejected file is identified, in one status message
+        // (WCAG 3.3.1), joined as a list in the active locale.
+        setValidationError(formatList(errors));
       } else {
         setValidationError(null);
       }
@@ -615,7 +656,7 @@ export function FileInput({
     },
     [
       accept,
-      isDisabled,
+      isSelectionDisabled,
       isMultiple,
       maxFiles,
       maxSize,
@@ -625,6 +666,7 @@ export function FileInput({
       setOptimisticValue,
       announce,
       t,
+      formatList,
     ],
   );
 
@@ -670,22 +712,24 @@ export function FileInput({
   );
 
   const handleClick = useCallback(() => {
-    if (!isDisabled) {
+    if (!isSelectionDisabled) {
       inputRef.current?.click();
     }
-  }, [isDisabled]);
+  }, [isSelectionDisabled]);
 
   // Explicit keyboard activation so Enter/Space open the picker even where a
-  // synthetic keydown does not raise a native click. The isDisabled guard
-  // blocks activation while focusable-disabled.
+  // synthetic keydown does not raise a native click. Disabled and busy triggers
+  // also cancel the default activation while remaining focusable.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if ((e.key === 'Enter' || e.key === ' ') && !isDisabled) {
+      if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        inputRef.current?.click();
+        if (!isSelectionDisabled) {
+          inputRef.current?.click();
+        }
       }
     },
-    [isDisabled],
+    [isSelectionDisabled],
   );
 
   // Make the surface clickable without giving it an interactive role. Clicks on
@@ -695,29 +739,29 @@ export function FileInput({
     useClickableContainer({
       containerRef,
       onClick: handleClick,
-      disabled: isDisabled,
+      disabled: isSelectionDisabled,
     });
 
   const handleDragEnter = useCallback(
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isDisabled && mode === 'dropzone') {
+      if (!isSelectionDisabled && mode === 'dropzone') {
         setIsDragOver(true);
       }
     },
-    [isDisabled, mode],
+    [isSelectionDisabled, mode],
   );
 
   const handleDragOver = useCallback(
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isDisabled && mode === 'dropzone') {
+      if (!isSelectionDisabled && mode === 'dropzone') {
         setIsDragOver(true);
       }
     },
-    [isDisabled, mode],
+    [isSelectionDisabled, mode],
   );
 
   const handleDragLeave = useCallback((e: DragEvent) => {
@@ -740,7 +784,7 @@ export function FileInput({
       e.preventDefault();
       e.stopPropagation();
       setIsDragOver(false);
-      if (isDisabled || mode !== 'dropzone') {
+      if (isSelectionDisabled || mode !== 'dropzone') {
         return;
       }
       const fileList = Array.from(e.dataTransfer.files);
@@ -748,7 +792,7 @@ export function FileInput({
         handleFiles(fileList);
       }
     },
-    [isDisabled, mode, handleFiles],
+    [isSelectionDisabled, mode, handleFiles],
   );
 
   const hasFiles =
@@ -760,15 +804,30 @@ export function FileInput({
       : (optimisticValue?.name ?? '')
     : null;
 
+  // The tooltip placement renders no message box: its focusable status button
+  // is the only place the message lives, and the trigger's aria-describedby
+  // points at that button's tooltip. Every content branch that can show a
+  // status keeps it, so the message stays reachable in dropzone mode and while
+  // busy (family:input-fields FR8).
+  const tooltipStatus = statusTooltipDescribedBy != null ? statusIcon : null;
+
   const renderDropzoneContent = () => {
     if (isBusy) {
-      return <Spinner size="md" aria-hidden="true" />;
+      return (
+        <>
+          <Spinner size="md" aria-hidden="true" />
+          {tooltipStatus}
+        </>
+      );
     }
     if (hasFiles) {
       return (
-        <div {...stylex.props(styles.fileNameText, styles.fileNameDropzone)}>
-          {fileNames}
-        </div>
+        <>
+          <div {...stylex.props(styles.fileNameText, styles.fileNameDropzone)}>
+            {fileNames}
+          </div>
+          {tooltipStatus}
+        </>
       );
     }
     return (
@@ -782,6 +841,7 @@ export function FileInput({
         <span {...stylex.props(styles.placeholderText)}>
           {isDragOver ? t('@astryx.fileInput.dropHint') : displayPlaceholder}
         </span>
+        {tooltipStatus}
       </>
     );
   };
@@ -794,6 +854,7 @@ export function FileInput({
             {fileNames ?? displayPlaceholder}
           </span>
           <Spinner size="sm" aria-hidden="true" />
+          {tooltipStatus}
         </>
       );
     }
@@ -861,17 +922,21 @@ export function FileInput({
           // keyboard focus. Handlers are gated internally by isEnabled.
           disabledMessageTooltip.ref(el);
         }}
-        onClick={!isDisabled ? onContainerClick : undefined}
-        onMouseUp={!isDisabled ? onContainerMouseUp : undefined}
+        onClick={!isSelectionDisabled ? onContainerClick : undefined}
+        onMouseUp={!isSelectionDisabled ? onContainerMouseUp : undefined}
         {...dragDropProps}
         {...mergeProps(
           themeProps('file-input', {mode, status: status?.type ?? null}),
           stylex.props(
             isDropzone ? styles.dropzone : styles.compact,
-            isDropzone && !isDisabled && styles.dropzoneHover,
-            isDropzone && isDragOver && styles.dropzoneActive,
+            isDropzone && !isSelectionDisabled && styles.dropzoneHover,
+            isDropzone &&
+              !isSelectionDisabled &&
+              isDragOver &&
+              styles.dropzoneActive,
             isDropzone && isDisabled && styles.dropzoneDisabled,
             !isDropzone && isDisabled && styles.compactDisabled,
+            isBusy && styles.busy,
             status && statusBorderStyles[status.type],
             controlXstyle,
           ),
@@ -891,7 +956,7 @@ export function FileInput({
             type="button"
             // A disabled trigger keeps its Tab stop (spec:AST-085 FR1).
             tabIndex={0}
-            aria-disabled={isDisabled ? 'true' : undefined}
+            aria-disabled={isSelectionDisabled ? 'true' : undefined}
             onClick={handleClick}
             onKeyDown={handleKeyDown}
             // aria-label suppresses child content from the accessible name, so
@@ -904,8 +969,9 @@ export function FileInput({
                 : label
             }
             aria-busy={isBusy || undefined}
-            aria-describedby={ariaDescribedBy}
             aria-invalid={status?.type === 'error' ? 'true' : undefined}
+            {...triggerAriaProps}
+            aria-describedby={triggerDescribedBy}
           />
         </VisuallyHidden>
         <input
@@ -919,8 +985,10 @@ export function FileInput({
           // submitted and `required` does not block submission (FR3).
           form={isDisabled ? '' : undefined}
           // A label or description click activates this input directly; cancel
-          // it so a disabled input never opens the picker (FR2).
-          onClick={isDisabled ? event => event.preventDefault() : rest.onClick}
+          // it so a disabled or busy input never opens the picker (FR2).
+          onClick={
+            isSelectionDisabled ? event => event.preventDefault() : rest.onClick
+          }
           onChange={handleInputChange}
           // The visually-hidden native input is never focused (tabIndex={-1});
           // its describedby/required/invalid live on the trigger button.

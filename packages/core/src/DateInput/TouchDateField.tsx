@@ -772,7 +772,7 @@ export function TouchDateField({
 
   const fireChange = useCallback(
     (newValue: ISODateString | undefined) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange?.(newValue);
@@ -783,7 +783,13 @@ export function TouchDateField({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   const openSheet = useCallback(() => {
@@ -841,6 +847,11 @@ export function TouchDateField({
    * value is still cleared either way — that half never depends on the range.
    */
   const handleResetInSheet = useCallback(() => {
+    // Disabled: reject the entire reset without closing or moving focus.
+    // Busy-only fields keep month navigation; fireChange blocks the clear.
+    if (isDisabled) {
+      return;
+    }
     fireChange(undefined);
     const currentMonth = monthIndexOf(today);
     if (currentMonth < minMonthIndex || currentMonth > maxMonthIndex) {
@@ -851,7 +862,7 @@ export function TouchDateField({
     }
     setMonthIndex(currentMonth);
     scrollerHandleRef.current?.scrollToMonth(currentMonth, 'smooth');
-  }, [fireChange, today, monthIndex, minMonthIndex, maxMonthIndex]);
+  }, [isDisabled, fireChange, today, monthIndex, minMonthIndex, maxMonthIndex]);
 
   // Selection commits on the tap and leaves the sheet up, so a mistake can be
   // corrected in place and a nearby date reconsidered without reopening.

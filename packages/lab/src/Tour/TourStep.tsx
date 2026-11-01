@@ -6,7 +6,7 @@
  * @file TourStep.tsx
  * @input Uses React, Popover/Button/Text/Heading/Stack from @astryxdesign/core, TourContext
  * @output Exports TourStep component and TourStepProps
- * @position Lab experiment (facebook/astryx#4239); a single spotlight step in a Tour
+ * @position Lab experiment (meta/astryx#4239); a single spotlight step in a Tour
  *
  * A TourStep highlights a target element and renders a callout anchored to it,
  * with a heading, body, optional step progress ("2 of 5"), and back / next /
