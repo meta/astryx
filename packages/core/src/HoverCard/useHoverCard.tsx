@@ -114,7 +114,9 @@ export interface HoverCardOptions {
    * - `auto`: tap opens the card, unless the trigger performs an action of its
    *   own (a button, a link, a form control) — that tap belongs to the control
    * - `tap`: tap always opens the card, even on a trigger that acts.
-   *   Ignored under `pressTrigger="toggle"`
+   *   Deprecated (DEP-0016): pass `pressTrigger="toggle"` on a button trigger
+   *   instead; `astryx upgrade` rewrites icon and span triggers and lists the
+   *   rest. Ignored under `pressTrigger="toggle"`
    * - `none`: touch never opens the card
    *
    * @default 'auto'
@@ -297,6 +299,17 @@ function isFocusable(element: HTMLElement): boolean {
  * {hoverCard.renderHoverCard(<ProfileCard user={user} />)}
  * ```
  */
+export function useHoverCard(
+  options?: HoverCardOptions & {touchTrigger?: 'auto' | 'none'},
+): HoverCardReturn;
+/**
+ * @deprecated `touchTrigger="tap"` is deprecated (DEP-0016): pass `pressTrigger="toggle"` on a button trigger instead; `astryx upgrade` rewrites icon and span triggers and lists the rest.
+ */
+export function useHoverCard(
+  options: HoverCardOptions & {touchTrigger: 'tap'},
+): HoverCardReturn;
+/** Any `HoverCardOptions`, such as options a wrapper forwards. */
+export function useHoverCard(options?: HoverCardOptions): HoverCardReturn;
 export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const {
     placement = 'above',

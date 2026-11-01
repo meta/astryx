@@ -7,4 +7,14 @@
  * this file into the resolved version folder.
  */
 
-export default [];
+import migrateTouchTriggerTapToPressTrigger, {
+  meta as migrateTouchTriggerTapToPressTriggerMeta,
+} from './migrate-touch-trigger-tap-to-press-trigger.mjs';
+
+export default [
+  {
+    name: 'migrate-touch-trigger-tap-to-press-trigger',
+    transform: migrateTouchTriggerTapToPressTrigger,
+    meta: migrateTouchTriggerTapToPressTriggerMeta,
+  },
+];
