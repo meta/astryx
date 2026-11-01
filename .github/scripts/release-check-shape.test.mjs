@@ -313,6 +313,20 @@ describe('release re-check trigger', () => {
     expect(calls.dispatches).toEqual([]);
   });
 
+  it("refuses to re-run an older commit's re-check, which would cancel the tip's checks", async () => {
+    await expect(
+      trigger({
+        failedOnly: true,
+        tip: 'b'.repeat(40),
+        runs: {
+          'ci.yml': [run(7, 'failure')],
+          'deploy.yml': [run(8, 'failure')],
+        },
+      }),
+    ).rejects.toThrow("re-check main's tip");
+    expect(lastCalls.reruns).toEqual([]);
+  });
+
   it('finds both re-check runs before it re-runs either', async () => {
     // The Main re-check is missing: nothing is re-run, ci.yml's failure included.
     await expect(

@@ -9,6 +9,9 @@
 # - the Main workflow's full unit run on main's tip, which takes the
 #   validation group the same way.
 #
+# Both kinds are for main's tip only: a re-check cancels what runs in main's
+# lanes, so an older commit's re-check would cancel the tip's checks.
+#
 # With `failed-only`, it re-runs just the failed or cancelled jobs of this
 # commit's latest re-check runs, found by their "Mark a release re-check" step,
 # so an hourly check of the same commit is never mistaken for one. It finds both
@@ -67,6 +70,15 @@ jobs:
               throw new Error(`sha must be a full 40-character commit SHA, got "${sha}".`);
             }
 
+            // A re-check takes main's lanes, cancelling what runs there, so it
+            // is only for main's tip: a release-check binds the tip when it
+            // starts (ci.yml's main authority), and re-running an older
+            // commit's failed jobs would cancel the newer tip's checks.
+            const {data: main} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+            if (main.commit.sha !== sha) {
+              throw new Error(`main is at ${main.commit.sha}, not ${sha}; re-check main's tip.`);
+            }
+
             if (failedOnly) {
               const MARK = 'Mark a release re-check';
               const runs = [];
@@ -105,12 +117,6 @@ jobs:
               return;
             }
 
-            // A release-check binds main's tip when it starts (ci.yml's main
-            // authority), so a re-check names that tip.
-            const {data: main} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
-            if (main.commit.sha !== sha) {
-              throw new Error(`main is at ${main.commit.sha}, not ${sha}; re-check main's tip.`);
-            }
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'ci.yml', ref: 'main',
               inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': sha, recheck: 'true'},
