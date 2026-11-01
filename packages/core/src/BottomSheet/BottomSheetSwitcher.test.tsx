@@ -27,6 +27,10 @@ import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetSwitcher} from './BottomSheetSwitcher';
+import {
+  isScrollLockActive,
+  subscribeScrollLock,
+} from '../hooks/rootScrollStyles';
 
 // jsdom implements no <dialog> presentation. The stubs record which open
 // dialogs are modal, standing in for the `:modal` pseudo-class jsdom cannot
@@ -346,11 +350,18 @@ function openDialogs(): HTMLDialogElement[] {
 
 /**
  * Whether the shared page-scroll lock (useScrollLock, as Dialog uses) is
- * engaged: it pins <body>. The browser spec measures the lock's effect on
- * scrolling; this reads its pin.
+ * engaged. The browser spec measures the lock's effect on scrolling; this
+ * reads its state.
  */
 function isScrollLockEngaged(): boolean {
-  return document.body.style.position === 'fixed';
+  return isScrollLockActive();
+}
+
+/** Records every change of the shared lock's state until `stop` runs. */
+function recordScrollLock(): {changes: boolean[]; stop: () => void} {
+  const changes: boolean[] = [];
+  const stop = subscribeScrollLock(() => changes.push(isScrollLockActive()));
+  return {changes, stop};
 }
 
 /** A two-step flow whose second step opens a Core Dialog above itself. */
@@ -1335,18 +1346,15 @@ describe('BottomSheetSwitcher', () => {
     });
 
     it('holds one page scroll lock for the whole flow: engaged continuously through a handoff, released once after the exit', () => {
-      // The shared lock restores the saved offset with window.scrollTo on its
-      // last release, so the call count is the release count: a flow that
-      // released and re-acquired between steps would scroll the page back
-      // mid-handoff.
-      vi.spyOn(window, 'scrollY', 'get').mockReturnValue(300);
+      // Every change of the shared lock is recorded: a flow that released and
+      // re-acquired between steps would add a pair of changes mid-handoff.
+      const lock = recordScrollLock();
       render(<Flow />);
       expect(isScrollLockEngaged()).toBe(false);
 
       fireEvent.click(screen.getByRole('button', {name: 'Start flow'}));
       expect(isScrollLockEngaged()).toBe(true);
-      expect(document.body.style.top).toBe('-300px');
-      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(lock.changes).toEqual([true]);
 
       fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
       // Two modal sheet dialogs are open: still the one lock.
@@ -1372,40 +1380,39 @@ describe('BottomSheetSwitcher', () => {
       expect(window.scrollTo).not.toHaveBeenCalled();
       finishSheetTransition(getSheetLayer('details-sheet'), 'transform');
       expect(isScrollLockEngaged()).toBe(false);
-      expect(document.body.style.top).toBe('');
-      expect(window.scrollTo).toHaveBeenCalledTimes(1);
-      expect(window.scrollTo).toHaveBeenCalledWith(0, 300);
+      expect(lock.changes).toEqual([true, false]);
+      // The lock never moves the page.
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      lock.stop();
     });
 
     it('keeps the lock through a StrictMode replay of a flow mounted open, and releases it when the flow unmounts while presented', () => {
-      vi.spyOn(window, 'scrollY', 'get').mockReturnValue(120);
+      const lock = recordScrollLock();
       const mounted = render(
         <StrictMode>
           <HostFlow initialSheet="details" />
         </StrictMode>,
       );
       // StrictMode runs the lock's effect, its cleanup, and the effect again
-      // in one commit: the pin must stand afterwards, and the one real
-      // release has not happened.
+      // in one commit: the lock must stand afterwards.
       expect(isScrollLockEngaged()).toBe(true);
-      expect(document.body.style.top).toBe('-120px');
-      expect(window.scrollTo).toHaveBeenCalledTimes(1);
-      vi.mocked(window.scrollTo).mockClear();
+      expect(lock.changes).toEqual([true, false, true]);
 
       fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
       expect(openDialogs()).toHaveLength(2);
       expect(isScrollLockEngaged()).toBe(true);
-      expect(window.scrollTo).not.toHaveBeenCalled();
+      expect(lock.changes).toEqual([true, false, true]);
 
       // Unmounted while presented, two dialogs open: one release.
       mounted.unmount();
       expect(isScrollLockEngaged()).toBe(false);
-      expect(document.body.style.top).toBe('');
-      expect(window.scrollTo).toHaveBeenCalledTimes(1);
-      expect(window.scrollTo).toHaveBeenCalledWith(0, 120);
+      expect(lock.changes).toEqual([true, false, true, false]);
+      expect(window.scrollTo).not.toHaveBeenCalled();
+      lock.stop();
     });
 
     it('keeps the lock engaged under a Core Dialog opened from a step, and the Dialog paints above the step', () => {
+      const lock = recordScrollLock();
       render(<DialogInStepFlow />);
       fireEvent.click(screen.getByRole('button', {name: 'Start flow'}));
       fireEvent.click(screen.getByRole('button', {name: 'Continue'}));
@@ -1438,7 +1445,9 @@ describe('BottomSheetSwitcher', () => {
       fireEvent.click(screen.getByRole('button', {name: 'Done'}));
       finishSheetTransition(getSheetLayer('confirm-sheet'), 'transform');
       expect(isScrollLockEngaged()).toBe(false);
-      expect(window.scrollTo).toHaveBeenCalledTimes(1);
+      // One engagement for the whole flow, Dialog included.
+      expect(lock.changes).toEqual([true, false]);
+      lock.stop();
     });
 
     it("resolves the switcher ref to the host sheet's dialog and never to null while a sheet is mounted, from the first commit on", () => {

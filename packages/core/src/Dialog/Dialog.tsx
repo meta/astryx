@@ -5,7 +5,7 @@
 /**
  * @file Dialog.tsx
  * @input Uses React, DialogHTMLAttributes, ReactNode, container (Layout), DialogContext, layerTextReset,
- *   layerStructureReset, modalOutlet, interactionModality, chainEventHandlers
+ *   layerStructureReset, modalOutlet, interactionModality, chainEventHandlers, holdEntranceInput
  * @output Exports Dialog component, DialogProps, DialogVariant, DialogPurpose types
  * @position Core implementation; consumed by index.ts, tested by Dialog.test.tsx
  *
@@ -20,6 +20,11 @@
  * (docs/design/reduced-motion.md): on a touch screen the dialog fades in
  * where it lands, in 200 ms or less; with a mouse it appears at once.
  *
+ * Under a finger, on a touch screen, a tap or a drag that lands while the
+ * dialog is still entering reaches nothing, and the dialog finishes entering
+ * and stays open (spec:AST-094 FR35, through the Layer module's input hold).
+ * Keys and assistive technology stay live, and a mouse is unchanged.
+ *
  * Initial focus and the focus returned on close follow the last input
  * (docs/architecture/interaction-modality.md INV1): the shared focus indicator
  * is hidden after a pointer press and shown after a key press.
@@ -27,6 +32,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Dialog/Dialog.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/Dialog/Dialog.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Dialog/__tests__/DialogTouchEntrance.interaction.browser.spec.ts (the touch entrance hold)
  * - /packages/core/src/Dialog/index.ts (exports if types change)
  * - /apps/storybook/stories/Dialog.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/Dialog/ (showcase blocks)
@@ -48,6 +54,7 @@ import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {
@@ -602,6 +609,11 @@ export function Dialog({
           focusForLastInput(autofocusTarget);
         }
       }
+      // Under a finger a tap or a drag that lands while the dialog is still
+      // entering reaches nothing; keys and assistive technology stay live
+      // (spec:AST-094 FR35). Released when the entrance ends, or by this
+      // effect's cleanup on a close or unmount.
+      return holdEntranceInput(dialog) ?? undefined;
     } else {
       if (dialog.open) {
         dialog.close();

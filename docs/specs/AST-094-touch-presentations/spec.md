@@ -197,7 +197,7 @@ a measured, sourced difference exists.
   activation stays the browser's click, except that an action a
   `family:action-groups` member tracks activates at the lift (FR26), and a toggle
   under `spec:AST-020` FR9's slide-off exception (Switch, Checkbox,
-  CheckboxListItem) may also complete on a lift after the finger slid off.
+  CheckboxListItem) may also complete on a lift after the finger slid off. Where the engine hit-tests an element a compositor animation moves at the motion's start (iOS WebKit), a touch on moving content goes to what was drawn under the finger at touch-down, and a tap there (no recognizer claimed it, the browser did not take it, and it stayed within 45 pt) MUST activate it: the browser's own click for that touch is cancelled or swallowed, and that element receives one click, an editable focused first.
   Under a fine pointer a control uses a third profile with no delay: its
   press paint starts at once on `pointerdown`, through the same press
   controller and release fade as a finger's, in place of CSS `:active`; the
@@ -312,7 +312,7 @@ a measured, sourced difference exists.
   recognizer that must claim mid-gesture registers that blocking listener; an
   element whose recognizers decide only at the lift keeps its `touchmove`
   listener passive, and its `touchend` listener stays cancelable so the
-  gesture can cancel the click (FR21). Known limit: a native scroll that starts on an element with a
+  gesture can cancel the click (FR21). While an element that holds, or sits inside, an element with a recognizer that claims moving touches moves on the compositor (iOS WebKit), the document MAY carry a non-passive `touchmove` listener; it cancels only the moves of a touch a recognizer owns under this rule and comes off when the motion ends. While it is on, a native scroll that starts anywhere on the page waits for a free main thread. Known limit: a native scroll that starts on an element with a
   blocking listener waits for a free main thread in iOS Safari and Chromium.
   That is never worse than UIKit, whose scrolling stops on a busy main thread,
   and a passive listener, or one added at `touchstart`, would hand diagonal
@@ -681,7 +681,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
   `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
   Non-modal state) do not hold the page: the page behind them stays live, and
-  only the sheet itself holds a tap or a drag while it enters.
+  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer
+  and MobileNav hold an entrance only under a coarse primary pointer: where
+  the primary pointer is fine and the screen also takes touch (a touchscreen
+  laptop), a finger's tap or drag during the entrance is not held.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.

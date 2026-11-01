@@ -216,6 +216,9 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/utils/touchPresentation.ts',
       'packages/core/src/utils/primaryClick.ts',
       'packages/core/src/utils/isApplePlatform.ts',
+      // The gesture host asks the Layer module's input hold about each touch,
+      // so the gesture specs' fixture bundles it.
+      'packages/core/src/Layer/inputHold.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
@@ -242,7 +245,7 @@ describe('WebKit interaction proof routing', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
-      'packages/core/src/utils/clickGuard.ts',
+      'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
       'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',
