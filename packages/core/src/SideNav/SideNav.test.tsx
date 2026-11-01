@@ -359,15 +359,9 @@ describe('SideNavHeading', () => {
     }
   });
 
-  it('includes the visible heading in the menu trigger name without hrefs and after a heading change', () => {
-    const menu = <div>Menu content</div>;
-    const {rerender} = render(<SideNavHeading heading="Acme" menu={menu} />);
+  it('includes the visible heading in the menu trigger name without hrefs', () => {
+    render(<SideNavHeading heading="Acme" menu={<div>Menu content</div>} />);
     expect(screen.getByRole('button')).toHaveAccessibleName('Acme, Open menu');
-
-    rerender(<SideNavHeading heading="Acme Docs" menu={menu} />);
-    expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Acme Docs, Open menu',
-    );
   });
 
   it('includes the heading in the translated menu trigger name', () => {

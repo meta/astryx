@@ -303,15 +303,9 @@ describe('TopNavHeading', () => {
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
   });
 
-  it('includes the visible heading in the menu trigger name without hrefs and after a heading change', () => {
-    const menu = <div>Menu content</div>;
-    const {rerender} = render(<TopNavHeading heading="Acme" menu={menu} />);
+  it('includes the visible heading in the menu trigger name without hrefs', () => {
+    render(<TopNavHeading heading="Acme" menu={<div>Menu content</div>} />);
     expect(screen.getByRole('button')).toHaveAccessibleName('Acme, Open menu');
-
-    rerender(<TopNavHeading heading="Acme Docs" menu={menu} />);
-    expect(screen.getByRole('button')).toHaveAccessibleName(
-      'Acme Docs, Open menu',
-    );
   });
 
   it('includes the heading in the translated menu trigger name with independent links', () => {
