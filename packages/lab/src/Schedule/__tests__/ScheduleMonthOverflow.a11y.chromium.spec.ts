@@ -17,7 +17,6 @@
  */
 
 import {expect, test, type Page} from '@playwright/test';
-import {pinStoryClock} from './pinStoryClock';
 import pixelmatch from 'pixelmatch';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
@@ -29,8 +28,6 @@ import {
   WIDE,
   type Evidence,
 } from './timeGridProbe';
-
-pinStoryClock(test);
 
 const STORY = 'lab-schedule--month-overflow';
 // Narrower than the month grid's 784px minimum plus the story's padding, so
