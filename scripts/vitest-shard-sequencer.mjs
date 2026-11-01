@@ -31,6 +31,8 @@ import {costOf, slowestFirst, splitByDuration} from './lib/duration-split.mjs';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
 const PROJECT = 'node';
+// Seconds of import and transform per Node test file, as the legs report.
+export const PER_FILE_SECONDS = 0.4;
 
 /**
  * Splits files into `count` legs by recorded seconds.
@@ -40,7 +42,11 @@ const PROJECT = 'node';
  * @returns {string[][]} each leg's files, sorted; together exactly `files`
  */
 export function partitionByDuration(files, count, seconds) {
-  return splitByDuration(files, count, costOf(files, seconds));
+  const cost = costOf(files, seconds);
+  // Every file also costs its import and transform, which its recorded time
+  // leaves out; without it the hundreds of files recorded at 0 s would all go
+  // to one leg.
+  return splitByDuration(files, count, file => cost(file) + PER_FILE_SECONDS);
 }
 
 /** Recorded seconds per file, or none when the file cannot be read. */

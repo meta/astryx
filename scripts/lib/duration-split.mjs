@@ -5,12 +5,18 @@
  * @input Items (file paths), recorded seconds per item, a leg count.
  * @output Each item's cost, legs that together hold every item exactly once,
  *   and slowest-first order.
- * @position Shared by the Node leg sequencer (scripts/vitest-shard-sequencer.mjs)
- *   and the accessibility contract legs (.github/scripts/a11y-contract-shard.mjs)
- *   so both treat a recorded time, a missing one and a lost or repeated item
- *   the same way. The numbers only steer balance; which items run never
- *   depends on them.
+ * @position The Node leg sequencer (scripts/vitest-shard-sequencer.mjs) splits
+ *   by it; the accessibility contract legs (.github/scripts/a11y-contract-shard.mjs),
+ *   which split single tests, share its median for a test with no recorded
+ *   time. The numbers only steer balance; which items run never depends on
+ *   them.
  */
+
+/** The median of recorded times, or 1 when there are none. */
+export function medianOf(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted.length > 0 ? sorted[Math.floor(sorted.length / 2)] : 1;
+}
 
 /**
  * Seconds per item: its recorded time, a recorded 0 included, or the median of
@@ -22,11 +28,7 @@
 export function costOf(items, seconds) {
   const has = item =>
     Object.hasOwn(seconds, item) && Number.isFinite(seconds[item]);
-  const known = items
-    .filter(has)
-    .map(item => seconds[item])
-    .sort((a, b) => a - b);
-  const median = known.length > 0 ? known[Math.floor(known.length / 2)] : 1;
+  const median = medianOf(items.filter(has).map(item => seconds[item]));
   return item => (has(item) ? seconds[item] : median);
 }
 

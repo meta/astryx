@@ -16,6 +16,7 @@ import path from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
+import {matrixFor} from './ci-matrix.mjs';
 import {PR_CI_GATE} from './ci-pr-gate.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -37,16 +38,7 @@ function legs(job, event = 'workflow_dispatch') {
   const matrix = job.strategy?.matrix;
   if (matrix == null) return 1;
   return Object.values(matrix)
-    .map(value => {
-      if (Array.isArray(value)) return value;
-      // A release-check's wider legs (spec:AST-030): one branch per event.
-      const split =
-        /fromJSON\(github\.event_name == 'workflow_dispatch' && '([^']*)' \|\| '([^']*)'\)/.exec(
-          String(value),
-        );
-      if (!split) return [value];
-      return JSON.parse(event === 'workflow_dispatch' ? split[1] : split[2]);
-    })
+    .map(value => matrixFor(value, event))
     .reduce((product, list) => product * list.length, 1);
 }
 

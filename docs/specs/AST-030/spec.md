@@ -237,18 +237,18 @@ they are separately named.
   dispatched in the last 55 minutes (DEC-11). A check replaced while waiting,
   which never ran, does not count. A check covers every merge up to its commit,
   so every merge is covered by the next one. The dispatched checks share one
-  concurrency group that never cancels a running check: at most one runs and
-  one waits. A push whose commit `main` has already moved past leaves its check
-  to the newer push. That release-check run is main's result, and a failure is
-  fixed forward by an atomic pull request. Main's own fast
-  checks still run for every push. Release checks MUST NOT capture
-  baseline candidates, publish baselines, or use a separate daily workflow or
-  retroactive acceptance status.
-  Deployment, accessibility, RTL, and vibe evidence MAY retain their workflows
-  and artifacts when they do not duplicate visual regression. A new or existing
-  surface, component, package, theme family, or visual suite MUST join the
-  canonical workflow. A repository guard MUST reject independent visual owners
-  while preserving legitimate non-visual artifact use.
+  concurrency group that cancels a running check only for a release re-check
+  (FR23): at most one runs and one waits. A push whose commit `main` has already
+  moved past leaves its check to the newer push. That release-check run is
+  main's result, and a failure is fixed forward by an atomic pull request.
+  Main's own fast checks still run for every push. Release checks MUST NOT
+  capture baseline candidates, publish baselines, or use a separate daily
+  workflow or retroactive acceptance status. Deployment, accessibility, RTL, and
+  vibe evidence MAY retain their workflows and artifacts when they do not
+  duplicate visual regression. A new or existing surface, component, package,
+  theme family, or visual suite MUST join the canonical workflow. A repository
+  guard MUST reject independent visual owners while preserving legitimate
+  non-visual artifact use.
 - **FR13 — Broad CI on a pull request runs what the change reaches.** On a
   `pull_request` event whose trusted classification finds no shared
   infrastructure, broad CI keeps every required context and every owner FR12
@@ -389,6 +389,21 @@ they are separately named.
   re-check validates `main`'s tip in full itself. Pull-request legs keep their
   shape.
 
+- **FR23 — A release-check finishes in minutes, and the release owner can
+  re-check `main`'s tip at once.** A release-check runs its browser owners in
+  legs that all start together: six accessibility-audit legs, six contract
+  legs, eight visual-scout legs and six Core RTL legs, beside the other RTL
+  packages. A contract spec file longer than one leg's share is cut into
+  consecutive runs of its tests in different legs, and every listed test runs
+  in exactly one leg. Pull requests keep their narrower legs, and every leg
+  stays inside the fifteen-minute job budget (DEC-17). An admin or maintainer
+  dispatches the release re-check workflow with `main`'s tip. It starts the
+  release-check and the Main workflow's full unit run on that commit, and each
+  takes its lane at once, cancelling the check running there (DEC-18). With
+  `failed-only`, the workflow re-runs only the failed jobs of that commit's
+  latest re-check runs. A run whose re-run passes is a full passing check of
+  that commit. A fix is a new commit and gets a full re-check.
+
 ### Platform support
 
 - Supported feature/engine floor: GitHub pull-request and merge-group workflows
@@ -441,6 +456,7 @@ read change (FR14).
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions                                                                 | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                                                                                                                                                                                                       |
 | FR19     | `ci-impact.test.mjs`, `pr-preview.test.mjs` and the maintenance template                                                                           | CI change and non-CI change; standard, non-standard and expression runners; added, removed and changed jobs; trigger change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a CI change reports no impact, a move onto a non-standard runner or a pool or time-to-green rise past its threshold goes unflagged, or the section names a price                                                                                                                                                                                                                                     |
 | FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver; `vitest-shard-sequencer.test.mjs` over the recorded Node times | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces; four and six Node legs over the recorded suite, a file with no recorded time, a project other than `node`                                                                                                                                                                                                                                  | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip, or two of the slowest Node files in one leg, a file run by no leg or by two, or a split that depends on collection order fails     |
+| FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract                                             | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                              | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                      |
 
 ## Decision log
 
@@ -552,7 +568,8 @@ retroactive status as release evidence.
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
 **Superseded in part by:** `spec:AST-030/DEC-11` (main is checked about hourly,
-not on every push)
+not on every push); `spec:AST-030/DEC-18` (a release re-check cancels the check
+running in main's lane)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
@@ -706,6 +723,23 @@ stalled the pull-request queue); starting `main`'s checks at once (a burst would
 pass ninety); a check in every job (it spent the shared API budget); admitting
 the small workflows too (one or two slim jobs a run do not repay two API calls
 each).
+
+### DEC-18 — A release re-check takes main's lanes
+
+**Reference:** `spec:AST-030/DEC-18`
+**Decider:** `cixzhang`, `2026-10-31`
+
+`main` holds one full release-check and one full unit run at a time. A release
+re-check uses the same lanes and cancels whatever is running there instead of
+waiting behind it. It checks `main`'s tip in full, so the cancelled run's
+commits stay covered, and the release owner waits only for the re-check itself.
+Re-running only failed jobs is allowed at the same commit, because that run's
+passing jobs already checked it. This narrows DEC-7's never-cancel rule to every
+check other than a release re-check.
+
+Rejected: a separate lane for re-checks (`main` would run two full checks at
+once and need room for both); re-running only failed legs after a fix (a fix can
+break a leg that passed before).
 
 ## Open questions
 

@@ -56,6 +56,23 @@ describe('duration-balanced Node legs', () => {
     },
   );
 
+  it.each([4, 6])(
+    'spreads the files recorded at 0 s over all %i legs, not into one',
+    count => {
+      const legs = partitionByDuration(files, count, recorded);
+      const zero = file => recorded[file] === 0;
+      const zeros = files.filter(zero).length;
+      expect(zeros).toBeGreaterThan(100);
+      const mean = files.length / count;
+      for (const leg of legs) {
+        expect(leg.length).toBeLessThanOrEqual(mean * 1.15);
+        expect(leg.filter(zero).length).toBeLessThanOrEqual(
+          (zeros / count) * 1.5,
+        );
+      }
+    },
+  );
+
   it('counts a file with no recorded time as the median', () => {
     const seconds = {'a.test.mjs': 10, 'b.test.mjs': 6, 'c.test.mjs': 1};
     const legs = partitionByDuration(

@@ -7,6 +7,7 @@ import {describe, expect, it} from 'vitest';
 import {
   assertEachOnce,
   costOf,
+  medianOf,
   slowestFirst,
   splitByDuration,
 } from './duration-split.mjs';
@@ -58,18 +59,20 @@ describe('splitting test files by recorded time', () => {
     expect(() => assertEachOnce(['a', 'b'], [['b'], ['a']])).not.toThrow();
   });
 
-  it('is the one split both the Node legs and the contract legs use', () => {
+  it('gives the Node legs their split and the contract legs their median', () => {
+    expect(medianOf([5, 1, 3])).toBe(3);
+    expect(medianOf([])).toBe(1);
+    const read = file => fs.readFileSync(path.join(ROOT, file), 'utf8');
+    expect(read('scripts/vitest-shard-sequencer.mjs')).toMatch(
+      /import \{[^}]*splitByDuration[^}]*\} from '\.\/lib\/duration-split\.mjs'/,
+    );
+    expect(read('.github/scripts/a11y-contract-shard.mjs')).toMatch(
+      /import \{medianOf\} from '\.\.\/\.\.\/scripts\/lib\/duration-split\.mjs'/,
+    );
     for (const file of [
       'scripts/vitest-shard-sequencer.mjs',
       '.github/scripts/a11y-contract-shard.mjs',
-    ]) {
-      const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
-      expect(source, file).toMatch(
-        /from '(\.\.\/)*(\.\/)?(scripts\/)?lib\/duration-split\.mjs'/,
-      );
-      expect(source, file).not.toMatch(
-        /known\[Math\.floor\(known\.length \/ 2\)\]/,
-      );
-    }
+    ])
+      expect(read(file), file).not.toMatch(/known\[Math\.floor/);
   });
 });
