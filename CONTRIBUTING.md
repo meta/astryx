@@ -534,7 +534,9 @@ any other value:
 
 These routes apply when a pull request runs the accessibility owner, which it
 does only with the `ci:run-a11y` label; `main` and release checks run every
-spec. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
+spec. Without the label, the touched-components check still runs up to four
+spec files the pull request adds or modifies, by these same routes, so a
+changed `audit` or `release-only` spec waits. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
 from your branch would run (component tokens need CI's `analysis.json`; without
 it the runner says so and leaves those specs out). A spec writes its receipts under
 `test-results/<name>/` or, for a component audit, a top-level
