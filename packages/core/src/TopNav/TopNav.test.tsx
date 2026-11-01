@@ -9,6 +9,7 @@
  * SYNC: When TopNav components change, update tests to match new behavior
  */
 
+import {createRef, useState, type MouseEventHandler} from 'react';
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen, act} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
@@ -517,6 +518,349 @@ describe('TopNavItem', () => {
     render(<TopNavItem label="Home" href="/" />);
     const link = screen.getByRole('link', {name: 'Home'});
     expect(link).toHaveAttribute('href', '/');
+  });
+
+  it('preserves the custom link-renderer path for an explicit empty href', () => {
+    render(
+      <TopNavItem
+        label="Current page"
+        href=""
+        onClick={vi.fn()}
+        as={CustomLink}
+      />,
+    );
+    expect(screen.getByText('Current page')).toHaveAttribute(
+      'data-custom-link',
+    );
+  });
+
+  it('makes an onClick-only bar item a keyboard button without changing its anchor host', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onSubmit = vi.fn(event => {
+      event.preventDefault();
+    });
+    render(
+      <form onSubmit={onSubmit}>
+        <TopNavItem label="Feedback" onClick={onClick} />
+      </form>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(action.tagName).toBe('A');
+    expect(action).toHaveAttribute('role', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+    await user.click(action);
+    expect(onClick).toHaveBeenCalledTimes(3);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('makes an onClick-only drawer item keyboard operable', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavItem label="Feedback" onClick={onClick} />
+      </TopNavRenderContext>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(action.tagName).toBe('A');
+    expect(action).toHaveAttribute('role', 'button');
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps bar action defaults when optional DOM props are undefined', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavItem
+        label="Feedback"
+        onClick={onClick}
+        role={undefined}
+        tabIndex={undefined}
+      />,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('keeps drawer action defaults when optional DOM props are undefined', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavItem
+          label="Feedback"
+          onClick={onClick}
+          role={undefined}
+          tabIndex={undefined}
+        />
+      </TopNavRenderContext>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    await user.keyboard(' ');
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('forwards action refs and DOM props through the existing custom link renderer', () => {
+    const ref = createRef<HTMLAnchorElement>();
+    const onMouseEnter = vi.fn();
+    const customLink = vi.fn(CustomLink);
+    render(
+      <LinkProvider component={customLink}>
+        <TopNavItem
+          label="Feedback"
+          onClick={vi.fn()}
+          as={customLink}
+          ref={ref}
+          id="feedback"
+          tabIndex={-1}
+          data-source="navigation"
+          className="consumer-action"
+          style={{marginInlineStart: 4}}
+          onMouseEnter={onMouseEnter}
+        />
+      </LinkProvider>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(ref.current).toBe(action);
+    expect(action).toHaveAttribute('id', 'feedback');
+    expect(action).toHaveAttribute('tabindex', '-1');
+    expect(action).toHaveAttribute('data-source', 'navigation');
+    expect(action).toHaveClass('consumer-action');
+    expect(action.style.marginInlineStart).toBe('4px');
+    fireEvent.mouseEnter(action);
+    expect(onMouseEnter).toHaveBeenCalledOnce();
+    expect(action).toHaveAttribute('data-custom-link');
+    expect(customLink).toHaveBeenCalled();
+  });
+
+  it('activates an action on Enter down and Space release, without repeated Space activation', () => {
+    const onClick = vi.fn();
+    render(<TopNavItem label="Feedback" onClick={onClick} />);
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    expect(fireEvent.keyDown(action, {key: 'Enter'})).toBe(false);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    fireEvent.keyUp(action, {key: 'Enter'});
+    expect(fireEvent.keyDown(action, {key: ' '})).toBe(false);
+    expect(fireEvent.keyDown(action, {key: ' ', repeat: true})).toBe(false);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(fireEvent.keyUp(action, {key: ' '})).toBe(false);
+    expect(onClick).toHaveBeenCalledTimes(2);
+    fireEvent.keyUp(action, {key: ' '});
+    expect(onClick).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets a caller keydown handler cancel Enter and Space activation', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn(event => {
+      event.preventDefault();
+    });
+    render(
+      <TopNavItem label="Feedback" onClick={onClick} onKeyDown={onKeyDown} />,
+    );
+    await user.tab();
+    await user.keyboard('{Enter} ');
+    expect(onKeyDown).toHaveBeenCalledTimes(2);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('lets a caller keyup handler cancel Space activation', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyUp = vi.fn(event => {
+      event.preventDefault();
+    });
+    render(<TopNavItem label="Feedback" onClick={onClick} onKeyUp={onKeyUp} />);
+    await user.tab();
+    await user.keyboard(' ');
+    expect(
+      onKeyUp.mock.calls.filter(([event]) => event.key === ' '),
+    ).toHaveLength(1);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending Space action when focus leaves and forwards blur', () => {
+    const onClick = vi.fn();
+    const onBlur = vi.fn();
+    render(<TopNavItem label="Feedback" onClick={onClick} onBlur={onBlur} />);
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    fireEvent.keyDown(action, {key: ' '});
+    fireEvent.blur(action);
+    fireEvent.keyUp(action, {key: ' '});
+    expect(onBlur).toHaveBeenCalledOnce();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending Space action across a disabled transition', () => {
+    const onClick = vi.fn();
+    const {rerender} = render(
+      <TopNavItem label="Feedback" onClick={onClick} />,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    fireEvent.keyDown(action, {key: ' '});
+    rerender(<TopNavItem label="Feedback" onClick={onClick} isDisabled />);
+    rerender(<TopNavItem label="Feedback" onClick={onClick} />);
+    fireEvent.keyUp(action, {key: ' '});
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('does not carry a pending Space action to a replacement custom-link node', () => {
+    function ReplacingLink(props: React.ComponentPropsWithRef<'a'>) {
+      const [version, setVersion] = useState(0);
+      return (
+        <a
+          key={version}
+          {...props}
+          onDoubleClick={() => setVersion(value => value + 1)}
+        />
+      );
+    }
+    const onClick = vi.fn();
+    render(
+      <TopNavItem label="Feedback" onClick={onClick} as={ReplacingLink} />,
+    );
+    const previous = screen.getByRole('button', {name: 'Feedback'});
+    fireEvent.keyDown(previous, {key: ' '});
+    fireEvent.doubleClick(previous);
+    const current = screen.getByRole('button', {name: 'Feedback'});
+    expect(current).not.toBe(previous);
+    expect(previous).not.toBeInTheDocument();
+    fireEvent.keyUp(current, {key: ' '});
+    expect(onClick).not.toHaveBeenCalled();
+    fireEvent.keyDown(current, {key: ' '});
+    fireEvent.keyUp(current, {key: ' '});
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the custom action host focused and inert when disabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const {rerender} = render(
+      <TopNavItem label="Feedback" onClick={onClick} as={CustomLink} />,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    rerender(
+      <TopNavItem
+        label="Feedback"
+        onClick={onClick}
+        as={CustomLink}
+        isDisabled
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Feedback'})).toBe(action);
+    expect(action).toHaveAttribute('data-custom-link');
+    expect(action).toHaveFocus();
+    await user.keyboard('{Enter} ');
+    expect(fireEvent.click(action)).toBe(false);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('continues accepting anchor refs and anchor-typed handlers for links', () => {
+    const ref = createRef<HTMLAnchorElement>();
+    const onClick: MouseEventHandler<HTMLAnchorElement> = event => {
+      event.preventDefault();
+      expect(event.currentTarget.getAttribute('href')).toBe('/feedback');
+    };
+    render(
+      <TopNavItem
+        label="Feedback"
+        href="/feedback"
+        ref={ref}
+        onClick={onClick}
+      />,
+    );
+    const link = screen.getByRole('link', {name: 'Feedback'});
+    expect(ref.current).toBe(link);
+    fireEvent.click(link);
+  });
+
+  it('preserves inferred anchor-specific click targets and callback refs', () => {
+    const onClick = vi.fn();
+    const onRef = vi.fn();
+    render(
+      <TopNavItem
+        label="Feedback"
+        href="/feedback"
+        onClick={event => {
+          event.preventDefault();
+          onClick(event.currentTarget.href);
+        }}
+        ref={node => {
+          if (node) {
+            onRef(node.href);
+          }
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Feedback'}));
+    expect(onClick).toHaveBeenCalledOnce();
+    expect(onClick).toHaveBeenCalledWith(expect.stringMatching(/\/feedback$/));
+    expect(onRef).toHaveBeenCalledWith(expect.stringMatching(/\/feedback$/));
+  });
+
+  it('keeps a focused action mounted and inert when disabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onKeyDown = vi.fn();
+    const {rerender} = render(
+      <TopNavItem label="Feedback" onClick={onClick} onKeyDown={onKeyDown} />,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    rerender(
+      <TopNavItem
+        label="Feedback"
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        isDisabled
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Feedback'})).toBe(action);
+    expect(action).toHaveFocus();
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).not.toHaveAttribute('disabled');
+    await user.keyboard('{Enter} ');
+    expect(fireEvent.click(action)).toBe(false);
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    expect(onKeyDown).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an initially disabled drawer action in its tab order without activating', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavItem label="Feedback" onClick={onClick} isDisabled />
+      </TopNavRenderContext>,
+    );
+    const action = screen.getByRole('button', {name: 'Feedback'});
+    await user.tab();
+    expect(action).toHaveFocus();
+    expect(action).toHaveAttribute('aria-disabled', 'true');
+    expect(action).not.toHaveAttribute('disabled');
+    await user.keyboard('{Enter} ');
+    expect(fireEvent.click(action)).toBe(false);
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('renders children instead of label when provided', () => {

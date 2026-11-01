@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {useEffect, useRef, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -38,6 +38,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 
 /**
  * NavItem styles with hover/selected states
@@ -122,8 +123,9 @@ export interface TopNavItemProps extends BaseProps<HTMLAnchorElement> {
   isSelected?: boolean;
   /**
    * Whether the nav item is disabled.
-   * A disabled item renders as a plain anchor without an href (and without
+   * A disabled link renders as a plain anchor without an href (and without
    * target), so it cannot navigate and is removed from the tab order.
+   * A disabled action remains a focusable, non-operable button.
    * @default false
    */
   isDisabled?: boolean;
@@ -201,14 +203,75 @@ export function TopNavItem({
   const renderMode = useTopNavRenderMode();
   const {closeMobileNav} = useAppShellMobile();
 
-  // A disabled item renders as a plain <a> with no href: an href-less anchor
+  // A disabled link renders as a plain <a> with no href: an href-less anchor
   // is not focusable and exposes no link affordance, so programmatic focus +
   // Enter, AT activation commands, and middle-click cannot navigate or fire
   // the consumer onClick. The router LinkComponent is deliberately skipped —
   // a disabled item performs no navigation, and custom router links may
   // require a live href. target is omitted with the href. (Mirrors the
   // disabled paths of Link and SideNavItem.)
-  const Root = isDisabled ? 'a' : LinkComponent;
+  const isAction = href == null && onClick != null;
+  const Root = isDisabled && !isAction ? 'a' : LinkComponent;
+  const spacePressedRef = useRef<HTMLAnchorElement | null>(null);
+  // Cancel the browser's in-flight Space press when availability or the
+  // renderer changes, and release its target when this owner unmounts.
+  useEffect(() => {
+    spacePressedRef.current = null;
+    return () => {
+      spacePressedRef.current = null;
+    };
+  }, [isAction, isDisabled, Root]);
+
+  // Keep the public anchor host/ref contract; add the keyboard behavior that
+  // role="button" alone does not provide. Space activates on release.
+  const actionKeyboardProps = isAction
+    ? {
+        role: props.role ?? 'button',
+        tabIndex: props.tabIndex ?? 0,
+        onKeyDown: (event: React.KeyboardEvent<HTMLAnchorElement>) => {
+          props.onKeyDown?.(event);
+          if (event.defaultPrevented || event.target !== event.currentTarget) {
+            return;
+          }
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            event.currentTarget.click();
+          } else if (event.key === ' ') {
+            event.preventDefault();
+            spacePressedRef.current = event.currentTarget;
+          }
+        },
+        onKeyUp: (event: React.KeyboardEvent<HTMLAnchorElement>) => {
+          const activate =
+            event.key === ' ' &&
+            spacePressedRef.current === event.currentTarget;
+          if (event.key === ' ') {
+            spacePressedRef.current = null;
+          }
+          props.onKeyUp?.(event);
+          if (
+            activate &&
+            !isDisabled &&
+            !event.defaultPrevented &&
+            event.target === event.currentTarget
+          ) {
+            event.preventDefault();
+            event.currentTarget.click();
+          }
+        },
+        onBlur: (event: React.FocusEvent<HTMLAnchorElement>) => {
+          spacePressedRef.current = null;
+          props.onBlur?.(event);
+        },
+      }
+    : undefined;
+  const disabledActionProps =
+    isAction && isDisabled
+      ? {
+          ...disabledInteractionProps(props.onKeyDown),
+          'aria-disabled': true as const,
+        }
+      : undefined;
 
   // =========================================================================
   // Drawer mode — render as a SideNavItem-style vertical list element
@@ -251,7 +314,9 @@ export function TopNavItem({
           style,
         )}
         {...props}
-        onClick={handleDrawerClick}>
+        onClick={handleDrawerClick}
+        {...actionKeyboardProps}
+        {...disabledActionProps}>
         {icon}
         {!isIconOnly && (children ?? label)}
       </Root>
@@ -288,7 +353,9 @@ export function TopNavItem({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      {...actionKeyboardProps}
+      {...disabledActionProps}>
       {icon}
       {!isIconOnly && (children ?? label)}
     </Root>
