@@ -558,6 +558,33 @@ describe('useTooltip — focusTrigger="auto" decides when focus arrives', () => 
     expect(onShow).not.toHaveBeenCalled();
   });
 
+  it('hides when focus that counted leaves, even after the trigger left the tab order', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableContainer() {
+      const tooltip = useTooltip({onShow, onHide, delay: 0});
+      return (
+        <div>
+          <div ref={tooltip.ref} tabIndex={0} data-testid="container">
+            <button type="button">Inside</button>
+          </div>
+          {tooltip.renderTooltip('About the group')}
+        </div>
+      );
+    }
+    render(<FocusableContainer />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    asKeyboardFocus(inside);
+    fireEvent.focusIn(inside);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    // A roving hook resets the container's tab stop before moving focus on.
+    screen.getByTestId('container').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    tick(100);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
   it('does not hide a hover-opened tooltip when focus leaves a child of a non-focusable trigger', () => {
     const onHide = vi.fn();
     render(<WrapperTrigger onHide={onHide} />);

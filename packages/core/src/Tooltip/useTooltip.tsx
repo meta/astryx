@@ -444,9 +444,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     [focusTrigger],
   );
 
+  // Whether the trigger's current focus counted when it arrived, so its blur
+  // hides the tooltip even if the trigger has since left the tab order.
+  const focusCountedRef = useRef(false);
+
   const handleFocusIn = useCallback(
     (e: Event) => {
-      if (!isEnabled || !isFocusForTrigger(e)) {
+      focusCountedRef.current = isFocusForTrigger(e);
+      if (!isEnabled || !focusCountedRef.current) {
         return;
       }
       // A tap focuses the trigger it activates, and `:focus-visible` does not
@@ -477,9 +482,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const handleFocusOut = useCallback(
     (e: Event) => {
-      if (!isFocusForTrigger(e)) {
+      if (!focusCountedRef.current && !isFocusForTrigger(e)) {
         return;
       }
+      focusCountedRef.current = false;
       scheduleHide();
     },
     [isFocusForTrigger, scheduleHide],

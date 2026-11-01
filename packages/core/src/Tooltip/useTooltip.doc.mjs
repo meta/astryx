@@ -49,7 +49,7 @@ export const docsDense = {
     alignment: 'alignment along placement axis. logical: start/end follow the popover\'s inherited direction (RTL mirrors).',
     delay: 'show delay in ms.',
     hideDelay: 'hide delay after mouse/focus leave in ms.',
-    focusTrigger: 'when focus opens tooltip; auto = naturally focusable elements only.',
+    focusTrigger: 'when focus opens tooltip; auto = focus on the trigger, or inside a trigger focusable when focus arrives.',
     touchTrigger: 'tap behavior with no hover; auto = tap unless trigger acts, tap = always, none = never.',
     isEnabled: 'whether hover/focus triggers are enabled.',
     isOpen: 'controlled open state: true force-show, false force-hide, undefined unmanaged.',
