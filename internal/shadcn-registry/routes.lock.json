@@ -3745,6 +3745,11 @@
       "aliases": []
     },
     {
+      "name": "hook-create-resizable",
+      "path": "hooks/create-resizable",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
       "aliases": []

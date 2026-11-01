@@ -2904,6 +2904,7 @@ hook usePopover: (options?: UsePopoverOptions) => UsePopoverReturn
 hook usePowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 hook usePressFeedback: () => typeof pressableProps
 hook useResizable
+  overload (handleRef: RefObject<HTMLElement | null>, options?: CreateResizableOptions) => UseResizableResult
   overload <const Config extends UseResizableSingleConfig>(config: SingleResizableArgument<Config>) => ResizableRegion
   overload <const Config extends UseResizableMultiConfig>(config: MultiResizableArgument<Config>) => Record<string, ResizableRegion>
 hook useScrollLock: (isLocked: boolean) => void
@@ -2964,6 +2965,7 @@ function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
+function createResizable: (handle: HTMLElement | null, options?: CreateResizableOptions) => ResizableController
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
@@ -4039,6 +4041,23 @@ interface ContextRenderProps
 type CoreIndicatorName = 'check' | 'checkbox' | 'radio'
 type CoreTokenName = keyof typeof colorDefaults | keyof typeof spacingDefaults | keyof typeof sizeDefaults | keyof typeof borderDefaults | keyof typeof focusDefaults | keyof typeof  … #4209c9b3
 type CreateCodeLanguageOptions = CodeLanguageMeta & { tokenize: CodeLanguageTokenize }
+interface CreateResizableOptions
+  autoSaveId?: string
+  collapsedSize?: number = 40
+  collapsible?: boolean = false
+  containerRef?: { readonly current: HTMLElement | null }
+  defaultIsCollapsed?: boolean
+  defaultSize?: ResizableSize | SizeValue = 250
+  direction?: ResizableDirection = 'horizontal'
+  isCollapsed?: boolean
+  isDisabled?: boolean = false
+  isReversed?: boolean = false
+  label?: string = 'Resize handle'
+  maxSize?: ResizableSize
+  minSize?: ResizableSize = 50
+  onCollapseChange?: (isCollapsed: boolean) => void
+  onSizeChange?: (size: number) => void
+  snaps?: number[]
 interface CreateStaticSourceOptions<T extends SearchableItem = SearchableItem>
   keywords?: (item: T) => string[]
 interface CustomOperatorValue
@@ -4999,6 +5018,15 @@ interface ResizableConfig
   minWidth?: number = 180
   onCollapseChange?: (isCollapsed: boolean) => void
   onWidthChange?: (width: number) => void
+interface ResizableController
+  collapse: () => void
+  destroy: () => void
+  expand: () => void
+  isCollapsed: boolean
+  resize: (size: number) => void
+  size: number
+  subscribe: (listener: () => void) => () => void
+  update: (options: CreateResizableOptions) => void
 type ResizablePercentSize = { type: 'percent'; value: number } & ({ min: PixelWidth; max?: never } | { min?: never; max: PixelWidth })
 interface ResizableProps
   _collapsedSize: number
@@ -6017,6 +6045,12 @@ interface UseResizableMultiConfig
   containerRef?: RefObject<HTMLElement | null>
   direction?: ResizableDirection = 'horizontal'
   regions: Record<string, ResizableRegionConfig>
+interface UseResizableResult
+  collapse: () => void
+  expand: () => void
+  isCollapsed: boolean
+  resize: (size: number) => void
+  size: number
 type UseResizableSingleConfig = ResizableRegionConfig & UseResizableSingleOptions
 interface UseScrollableAreaOptions
   axis: ScrollAxis
@@ -8247,7 +8281,9 @@ RadioListSize (.)
 ### Also exported from an earlier entry point
 
 ```text
+CreateResizableOptions (.)
 ResizableConfig (.)
+ResizableController (.)
 ResizablePercentSize (.)
 ResizableProps (.)
 ResizableRegion (.)
@@ -8256,7 +8292,9 @@ ResizableSize (.)
 ResizeHandle (.)
 ResizeHandleProps (.)
 UseResizableMultiConfig (.)
+UseResizableResult (.)
 UseResizableSingleConfig (.)
+createResizable (.)
 percent (.)
 useResizable (.)
 ```
