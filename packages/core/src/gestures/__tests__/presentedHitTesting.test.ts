@@ -12,7 +12,8 @@
  *   longer drawn reaches what is drawn there; press bounds follow the drawn
  *   box, a control slotted into a moving shadow-tree panel's included; a
  *   claiming recognizer across a shadow boundary from the moving element
- *   keeps the document's blocking touchmove; nothing changes with the gate
+ *   keeps the window's touchmove blocking, through the shared input stream;
+ *   nothing changes with the gate
  *   off or nothing moving
  * @position Unit tests of the presented hit testing in
  *   packages/core/src/gestures/GestureHost.ts
@@ -370,21 +371,21 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     ).toMatchObject({top: 310, bottom: 350});
   });
 
-  it("keeps a blocking touchmove on the document only while an element a claiming recognizer lives in is moving: Safari honours one only when registered before the touch, on the engine's own target (spec:AST-094 FR19)", () => {
+  it("keeps the window's touchmove blocking, through the shared input stream, only while an element a claiming recognizer lives in is moving: Safari honours a blocking one only when registered before the touch, and the window's capture phase sees every touch whatever the engine targets (spec:AST-094 FR19)", () => {
     document.body.innerHTML =
       '<div id="moving"><div id="body"></div></div><div id="still"></div>';
     const moving = document.getElementById('moving') as HTMLElement;
     const body = document.getElementById('body') as HTMLElement;
     const still = document.getElementById('still') as HTMLElement;
-    const add = vi.spyOn(document, 'addEventListener');
-    const remove = vi.spyOn(document, 'removeEventListener');
-    const blocking = (calls: unknown[][]) =>
-      calls.filter(
-        ([type, , options]) =>
-          type === 'touchmove' &&
-          typeof options === 'object' &&
-          options != null &&
-          (options as AddEventListenerOptions).passive === false,
+    const onWindow = vi.spyOn(window, 'addEventListener');
+    const onDocument = vi.spyOn(document, 'addEventListener');
+    const touchmoves = () =>
+      onWindow.mock.calls
+        .filter(([type]) => type === 'touchmove')
+        .map(([, , options]) => options as AddEventListenerOptions);
+    const blocking = () =>
+      touchmoves().filter(
+        options => options.capture === true && options.passive === false,
       ).length;
     const gestures = new GestureHost(document, {
       clock,
@@ -394,25 +395,29 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
       gestures.attach(body, new PanGestureRecognizer({direction: 'down'})),
       gestures.attach(still, new TapGestureRecognizer()),
     );
-    expect(blocking(add.mock.calls)).toBe(0);
+    expect(blocking()).toBe(0);
     // A tap target moving claims nothing while the finger moves: no listener.
     const stopStill = registerPresentedOffset(still, {
       offset: () => ({x: 0, y: 30}),
       resolve: () => {},
     });
-    expect(blocking(add.mock.calls)).toBe(0);
+    expect(blocking()).toBe(0);
     stopStill();
-    // The sheet the pan lives in moves: the document blocks until it stops.
+    // The sheet the pan lives in moves: the window's capturing touchmove
+    // turns non-passive until it stops, then passive again.
     const stop = registerPresentedOffset(moving, {
       offset: () => ({x: 0, y: 40}),
       resolve: () => {},
     });
-    expect(blocking(add.mock.calls)).toBe(1);
+    expect(blocking()).toBe(1);
     stop();
+    expect(blocking()).toBe(1);
+    expect(touchmoves().at(-1)?.passive).toBe(true);
+    // The one input stream carries it: the document gets no touchmove
+    // listener of its own (architecture:react-component-runtime INV13).
     expect(
-      remove.mock.calls.filter(([type]) => type === 'touchmove').length,
-    ).toBeGreaterThan(0);
-    expect(blocking(add.mock.calls)).toBe(1);
+      onDocument.mock.calls.filter(([type]) => type === 'touchmove'),
+    ).toEqual([]);
   });
 
   it("gives a control slotted into a moving shadow-tree panel the panel's drawn press bounds: the walk follows the flat tree through the slot", () => {
@@ -444,7 +449,7 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     }
   });
 
-  it('keeps the blocking touchmove for a claiming recognizer across a shadow boundary from the moving element, inside its shadow tree or around it', () => {
+  it("keeps the window's touchmove blocking for a claiming recognizer across a shadow boundary from the moving element, inside its shadow tree or around it", () => {
     document.body.innerHTML =
       '<div id="sheet"><div id="sheet-host"></div></div><div id="pager"></div>';
     const sheet = document.getElementById('sheet') as HTMLElement;
@@ -456,13 +461,14 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     // A moving page inside an open shadow root of the pan's element.
     const page = document.createElement('div');
     pager.attachShadow({mode: 'open'}).append(page);
-    const add = vi.spyOn(document, 'addEventListener');
+    const onWindow = vi.spyOn(window, 'addEventListener');
+    const onDocument = vi.spyOn(document, 'addEventListener');
     const blocking = () =>
-      add.mock.calls.filter(
+      onWindow.mock.calls.filter(
         ([type, , options]) =>
           type === 'touchmove' &&
           typeof options === 'object' &&
-          options != null &&
+          options.capture === true &&
           options.passive === false,
       ).length;
     const gestures = new GestureHost(document, {
@@ -486,6 +492,9 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     });
     expect(blocking()).toBe(2);
     stopPage();
+    expect(
+      onDocument.mock.calls.filter(([type]) => type === 'touchmove'),
+    ).toEqual([]);
   });
 
   it('changes nothing with the gate off or nothing moving', () => {

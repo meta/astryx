@@ -409,7 +409,7 @@ export class GestureHost {
   /** Stops following the animator's moving elements (iOS WebKit only). */
   private stopWatchingMovers: (() => void) | null = null;
   /** Whether the document carries the blocking touchmove for a mover. */
-  private isBlockingForMovers = false;
+  private stopBlockingForMovers: (() => void) | null = null;
   /** Elements whose caller touch-action waits for a read after paint. */
   private readonly pendingCallerReads = new Set<HTMLElement>();
   private isCallerReadScheduled = false;
@@ -1319,9 +1319,13 @@ export class GestureHost {
    * on an element a compositor animation moves lands, for the engine, on
    * whatever sits under the motion's start (see presentedTarget). So while an
    * element a recognizer that claims moving touches lives in (or around) is
-   * moving, the document carries the blocking listener (`spec:AST-094`
-   * FR19), and it comes off when the motion ends: only then does a scroll
-   * starting anywhere wait on the main thread.
+   * moving, the blocking listener subscribes to the window's capturing
+   * `touchmove` through the shared input stream with `{cancels: true}`,
+   * which sees every touch on the page whatever the engine targets and makes
+   * that one listener non-passive (`spec:AST-094` FR19;
+   * architecture:react-component-runtime INV13). It leaves when the motion
+   * ends: only while it is subscribed does a scroll starting anywhere wait on
+   * the main thread.
    */
   private syncMoverBlocking(): void {
     const isWatching = this.isInstalled && this.hitTestsLayout();
@@ -1338,16 +1342,20 @@ export class GestureHost {
       presentedElements().some(mover =>
         this.hasClaimingRecognizerAround(mover),
       );
-    if (needed === this.isBlockingForMovers) {
+    if (needed === (this.stopBlockingForMovers != null)) {
       return;
     }
-    this.isBlockingForMovers = needed;
-    if (needed) {
-      this.doc.addEventListener('touchmove', this.onBlockingTouchMove, {
-        passive: false,
-      });
-    } else {
-      this.doc.removeEventListener('touchmove', this.onBlockingTouchMove);
+    const view = this.doc.defaultView;
+    if (needed && view != null) {
+      this.stopBlockingForMovers = subscribeInput(
+        view,
+        'touchmove',
+        this.onBlockingTouchMove,
+        {cancels: true},
+      );
+    } else if (!needed) {
+      this.stopBlockingForMovers?.();
+      this.stopBlockingForMovers = null;
     }
   }
 
