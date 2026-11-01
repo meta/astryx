@@ -254,6 +254,7 @@ export function ChatMessageList({
   }, [layoutContext]);
 
   const hasChildren =
+    // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatMessageList FR4 shows the empty state only for nullish, false or an empty top-level array children
     children != null &&
     children !== false &&
     !(Array.isArray(children) && children.length === 0);

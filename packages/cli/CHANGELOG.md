@@ -1,5 +1,93 @@
 # @xds/cli
 
+# 0.7.5
+
+#### Experimental APIs
+
+- New command `astryx experimental render <page>` turns a page built with your installed Astryx components into one self-contained HTML file. The file needs no network and no scripts, follows light and dark mode, and carries the page's source; `astryx experimental render --reverse <file.html>` writes that source back. Warnings point out anything that may not look as intended. Experimental commands may change or be removed in any patch release. Guide: `astryx docs cli/experimental/render-pages`.
+- Building an icon-set package from an icon library takes fewer steps and fewer guesses. Only the experimental icon commands, the icon-set guide, and `astryx template` in a project that sets `experimental.iconSet` change; without that opt-in, stable commands behave as before, and only the `experimental` group's summary in `astryx help` and `astryx manifest` now mentions icon sets.
+  - **`experimental icon new-set`.** `--from` maps a definition only when an icon has its exact name and lists those for review; likely matches come back as at most three suggestions each, never written. It saves the library and version, copies the library's license notices, keeps your `--exclude` list across refreshes, and its receipt names the package entry, peer dependencies, and `typecheck` script to add. `--variants`, `--default-variant`, `--display-name`, and `--description` fill in the set. A refresh changes only the icons that library supplies, keeps each icon's export name, and lists renamed icons. A 1,600-icon library is read in about two seconds.
+  - **`experimental icon add` and `map`.** `add --variant <name> --from <module> --all` adds a variant for every icon at once, and `map --pairs a=b,c=d` writes many entries in one checked step.
+  - Icon commands now refuse options that conflict instead of silently ignoring one (`ERR_INVALID_OPTION`), leave every file as it was when they fail partway (`ERR_WRITE_FAILED`), and report a missing or withdrawn set the same way everywhere (`ERR_NOT_FOUND`).
+  - `experimental icon --set <set> --all-icons` lists every icon in a set, and `--definitions` lists every Astryx icon definition.
+  - Templates drop a mapped icon library's sizing props (`size`, `strokeWidth`, `absoluteStrokeWidth`) and keep comments on rewritten imports.
+  - Thirteen new icon definitions: `rotate`, `flipHorizontal`, `flipVertical`, `alignStart`, `alignCenter`, `alignEnd`, `panelLeft`, `panelRight`, `gitBranch`, `gitFork`, `scale`, `cpu`, and `textCase`. Definitions gain common glyph names as search words; seven optional definitions lose a word that named a different thing: `star` (`bookmark`), `database` (`table`), `raiseHand` (`stop`), `redo` (`forward`), `activity` (`monitor`), `archive` (`store`), `mobile` (`device`).
+  - `integration check` suggests icons by the same rule, describes each optional definition, and its version-drift warning gives the refresh command.
+
+#### New Features
+
+- Status colors are readable everywhere they appear, and Info is a status of its own. Each status (info, success, warning, error) now has a strong fill (`--color-<status>`) with content on it (`--color-on-<status>`, at least 4.5:1), a pale fill (`--color-<status>-muted`) with its content (`--color-on-<status>-muted`), and readable text for the page and cards (`--color-text-<status>`). Status icons (`--color-icon-<status>`) and borders (`--color-border-<status>`) default to the readable text color. The Info roles (`--color-info`, `--color-on-info`, `--color-info-muted`, …) are new and no longer borrow your accent color.
+
+  `--color-success`, `--color-warning`, and `--color-error` and `bg-<status>` keep their meaning as the strong fills. In Tailwind, `bg-info`, `bg-info-muted`, `text-on-<status>`, `text-on-<status>-muted`, and `text-status-<status>` are new; `text-`, `decoration-`, `placeholder-`, and `caret-<status>` now use the readable text shade, and `border-`, `divide-`, `outline-`, and `ring-<status>` use the border shade, while `bg-`, `accent-`, `fill-`, `stroke-<status>`, shadows, and gradients keep the strong fill. For example, Core's light `text-warning` is now `#753F07` instead of `#E9AF08`. To keep the fill color on text, write `text-[var(--color-warning)]`.
+
+  What changes on screen:
+
+  - Core's dark Error content (`--color-on-error`) is now `#0A1317` instead of white, so text on dark-mode error fills reaches 4.5:1. Core's Info Badge uses `#0064E0` instead of the accent (`#2694FE` in dark mode).
+  - Status icons (Icon `color="info|success|warning|error"`), Stepper status glyphs, and Chat tool-call status icons use the readable shades. Core's light success icon is now `#09441F` instead of `#0D8626`.
+  - Input and FileInput status borders use the border shades. Core's light warning border is now `#753F07` instead of `#E9AF08`, and Butter's light success and warning input borders reach 3:1.
+  - Banner draws its title, description, icon, and controls in the on-muted colors, and fills Info with `--color-info-muted`.
+  - Status fills keep a visible edge in forced-colors mode.
+  - Content on Chocolate and Matcha success and error fills, and on Stone success, warning, and error fills, now reaches 4.5:1.
+  - Every first-party theme sets a blue Info. Chocolate and Matcha Info Badges move from the accent to that blue; Butter keeps its own Info Badge colors.
+  - Neutral's `--color-success`, `--color-warning`, and `--color-error` are now the fills its Badges already showed, and its `--color-info` is `#0074E2` (`#6D9CFE` in dark mode). Its Badges, StatusDots, progress fills, and Stepper badges look the same; its accent ProgressBar, StatusDot, and Stepper now use Neutral's accent instead of blue.
+  - Neutral no longer defines its undocumented local status tokens. Use the standard roles instead: `--astryx-theme-neutral-color-status-fill-success`, `-status-fill-warning`, and `-status-fill-error` → `--color-success`, `--color-warning`, `--color-error`; `-status-muted-accent` → `--color-info-muted`; `-on-tint-neutral` → `--color-neutral`; the `-on-tint-overlay-*` and `-destructive-overlay-*` tokens → `--color-overlay-hover` and `--color-overlay-pressed`. `--astryx-theme-neutral-color-status-fill-accent` keeps its value but is deprecated.
+
+  Custom themes get the content and text roles they don't set: they are derived from the theme's status fills. To keep a component's previous color, set the matching role, for example `--color-icon-success` to your old `--color-success`.
+
+- CodeBlock's `tokenizer` prop is deprecated in favor of a custom language: pass `language={createCodeLanguage({name, identifiers, tokenize})}` with the same function. The prop still works. `astryx upgrade` rewrites it when the block has a fixed `language`, and leaves a TODO comment where it can't safely rewrite it.
+- `Icon` takes an optional `variant` to ask the active theme for alternate artwork, for example `<Icon icon="info" variant="filled" />`. The theme's icon receives the variant only when the theme lists it in `iconVariants`; otherwise it draws its normal artwork. Icons you pass as components never receive `variant`, and it is never written to the page. Icons without `variant` render as before.
+- A theme icon can now pick its artwork by size: an entry in `defineTheme({icons})` or `registerIcons()` can be a function of `{size, variant}`, and `Icon` calls it with the size it renders at. Returning `null` draws no icon. `getIcon`, `getExtendedIcon`, `getIconRegistry`, `useIcon`, and a theme's `icons` field still return nodes, reading a function at `{size: 'md'}`. Existing icon entries are unchanged.
+- A theme can list the icon variants it supports, such as `filled`, with `defineTheme({iconVariants})`, and read them back from `theme.iconVariants`. Child themes inherit the list unless they set their own. `@astryxdesign/core/Icon` exports `IconVariantMap` and `IconVariant` for typing variants. Themes without `iconVariants` are unchanged.
+- `astryx theme build` keeps function icons and icon variant lists, so a built theme draws each icon at the same size and variant as the live theme, including icons inherited from another theme. A theme that lists `iconVariants` gets matching types in `<theme>.variants.d.ts`. Themes without these features build exactly as before.
+- Themes can set the real size of each Icon size: `width` and `height` in `px` or `rem` on `components.icon['size:sm']` (or `xsm`, `md`, `lg`) now resize the glyph itself, for named icons and SVG components, in live and built themes. Before, they sized only the box around the icon. Sizes a theme does not style still render at 12, 16, 20, or 24px at a 16px root. `astryx docs theme` gains an Icon sizes section.
+- New `--ease-exit` motion token for things leaving the screen, beside `--ease-standard` for things arriving. BottomSheet already closes on it, so nothing looks different, but a theme can now tune the exit. `astryx docs motion` and the theme template list it.
+- `astryx upgrade` finishes instead of failing when it finds code it can't migrate safely: each spot is listed in `declinedCandidates` with its file, line, and a reason starting `manual migration needed (<codemod>):`, and the run exits 0. Generated files that need rebuilding, such as stale theme CSS, are listed in a new `regenerate` field with their rebuild command until they are rebuilt; a `hooks.postCodemod` that rebuilds them clears the entry. Protected generated files still stop the run as before, now with the rebuild command listed.
+- The two Bottom Sheet flow templates (`BottomSheetSwitcherShowcase`, `BottomSheetSwitcherReviewFlow`) now show the standalone-step pattern that replaces `BottomSheetSwitcher`, and are also listed under `BottomSheet`. Template names and ids are unchanged.
+
+#### Fixes
+
+- Projects that compile StyleX with `@stylexjs/unplugin` (the standard Vite setup) are detected as StyleX projects.
+- The `Tokenizer` showcase template's search returns matching tags again, so the live example on the Tokenizer docs page works.
+- `astryx integration verify` no longer fails with "npm pack failed" when another `npm` wrapper comes first on your PATH.
+- `astryx upgrade` skips vendored, generated, or ignored files it can't parse, lists them in `declinedCandidates`, and finishes the rest of the upgrade.
+- `astryx upgrade` no longer spends minutes reading symlinked `node_modules` folders or package stores.
+- `astryx upgrade --from` a version before 0.7.0 no longer fails on `var(--color-data-*)` without a fallback. Source builds that read raw data colors should import `dataVars` from `@astryxdesign/core/theme/dataTokens.stylex`.
+- Tools that call the CLI API repeatedly, such as a docs site search, now see doc edits without restarting.
+- Component families list the same members whether or not the package has been built, so Lab's `TourStep` now appears in the official package list.
+- `astryx upgrade` handles an `astryx.config` written as `const config = {...}; export default config;`.
+- `astryx component <name>` suggests the right component when you type a wrapped or prefixed name.
+- When `astryx component`, `astryx template`, or `astryx docs` finds nothing, its suggestions stop where the matches get weak instead of listing unrelated entries.
+- `astryx upgrade` to 0.7 no longer turns your own MetadataList class into a `data-columns` selector that never matches.
+- `astryx discover` lists the experimental MobilePowerSearch component from `@astryxdesign/lab`.
+- `astryx theme build` reports a theme file that fails to load instead of guessing the theme from its text.
+- `astryx theme build` fails with a clear error when your project's `@astryxdesign/core` can't load, instead of silently building with the CLI's own copy.
+- `astryx upgrade` to 0.7 leaves other libraries' theme objects alone.
+- A failed `astryx upgrade` now lists the files it already changed: its `--json` error includes a `receipt` with `modifiedFiles`, `errors`, `protectedFiles`, `complete: false`, and `errorCode`. The error code and exit code are unchanged.
+
+#### Documentation
+
+- The Tokenizer templates size their field to fit phone screens.
+- The CodeBlock snippet example shows one-line commands with Copy beside them.
+- Package links now point to the project's GitHub home, `meta/astryx`.
+- TabList's description no longer promises a built-in "more" menu (a narrow tab strip scrolls), and the library page template describes `MobileNav` as the slide-out drawer it is.
+- The theme guide and generated theme files explain that an extending theme's `motion` settings inherit field by field.
+- The disabled Thumbnail template now describes its buttons correctly: they stay focusable and are announced as disabled.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @ejhammond
+- @imdreamrunner
+- @josephfarina
+- @kentonquatman
+- @nbozidarevic
+- @rubyycheung
+- @vjeux
+
+---
+
 # 0.7.4
 
 #### Experimental APIs

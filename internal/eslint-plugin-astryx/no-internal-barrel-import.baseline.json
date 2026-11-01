@@ -1,0 +1,721 @@
+{
+  "packages/core/src/AppShell/AppShell.tsx": ["../i18n", "../utils"],
+  "packages/core/src/AspectRatio/AspectRatio.tsx": ["../utils"],
+  "packages/core/src/Avatar/Avatar.tsx": ["../i18n", "../utils"],
+  "packages/core/src/Avatar/AvatarStatusDot.tsx": ["../utils"],
+  "packages/core/src/AvatarGroup/AvatarGroup.tsx": [
+    "../Avatar",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/AvatarGroup/AvatarGroupOverflow.tsx": [
+    "../Avatar",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Badge/Badge.tsx": ["../utils"],
+  "packages/core/src/Banner/Banner.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Blockquote/Blockquote.tsx": ["../utils"],
+  "packages/core/src/BottomSheet/BottomSheetSwitcher.tsx": ["../utils"],
+  "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": ["../Icon", "../utils"],
+  "packages/core/src/Breadcrumbs/Breadcrumbs.tsx": ["../i18n", "../utils"],
+  "packages/core/src/ButtonGroup/ButtonGroup.tsx": ["../utils"],
+  "packages/core/src/Calendar/Calendar.tsx": [
+    "../Button",
+    "../Icon",
+    "../VisuallyHidden",
+    "../hooks",
+    "../i18n",
+    "../utils",
+    "./hooks"
+  ],
+  "packages/core/src/Calendar/hooks/useCalendarDays.ts": ["../../i18n"],
+  "packages/core/src/Calendar/hooks/useCalendarNavigation.ts": ["../../i18n"],
+  "packages/core/src/Card/Card.tsx": ["../utils"],
+  "packages/core/src/Carousel/Carousel.tsx": [
+    "../Button",
+    "../Icon",
+    "../Layer",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Center/Center.tsx": ["../utils"],
+  "packages/core/src/Chat/ChatComposer.tsx": ["../Icon", "../i18n", "../utils"],
+  "packages/core/src/Chat/ChatComposerDrawer.tsx": [
+    "../Badge",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/ChatComposerInput.tsx": [
+    "../Badge",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/ChatDictationButton.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/ChatLayout.tsx": ["../i18n", "../utils"],
+  "packages/core/src/Chat/ChatLayoutScrollButton.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/ChatMessage.tsx": ["../i18n", "../utils"],
+  "packages/core/src/Chat/ChatMessageBubble.tsx": ["../utils"],
+  "packages/core/src/Chat/ChatMessageList.tsx": [
+    "../Spinner",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/ChatMessageMetadata.tsx": [
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/ChatPastedTextToken.tsx": [
+    "../Badge",
+    "../Button",
+    "../HoverCard",
+    "../i18n"
+  ],
+  "packages/core/src/Chat/ChatSendButton.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/ChatSystemMessage.tsx": ["../Divider", "../utils"],
+  "packages/core/src/Chat/ChatTokenizedText.tsx": ["../Badge", "../utils"],
+  "packages/core/src/Chat/ChatToolCalls.tsx": [
+    "../Badge",
+    "../Icon",
+    "../Spinner",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Chat/useSpeechRecognition.ts": ["../i18n"],
+  "packages/core/src/Chat/useTriggerMenu.tsx": ["../i18n", "../utils"],
+  "packages/core/src/CheckboxList/CheckboxList.tsx": ["../Tooltip", "../utils"],
+  "packages/core/src/CheckboxList/CheckboxListItem.tsx": ["../i18n"],
+  "packages/core/src/Citation/Citation.tsx": ["../Icon", "../i18n", "../utils"],
+  "packages/core/src/ClickableCard/ClickableCard.tsx": ["../utils"],
+  "packages/core/src/Code/Code.tsx": ["../utils"],
+  "packages/core/src/CodeBlock/CodeBlock.tsx": [
+    "../Icon",
+    "../IconButton",
+    "../i18n",
+    "../theme/syntax",
+    "../utils"
+  ],
+  "packages/core/src/CodeBlock/highlightStyles.ts": ["../theme"],
+  "packages/core/src/Collapsible/Collapsible.tsx": ["../Icon", "../utils"],
+  "packages/core/src/Collapsible/CollapsibleGroup.tsx": ["../utils"],
+  "packages/core/src/CommandPalette/CommandPalette.tsx": [
+    "../Dialog",
+    "../Layout",
+    "../Selector",
+    "../i18n"
+  ],
+  "packages/core/src/CommandPalette/CommandPaletteEmpty.tsx": ["../utils"],
+  "packages/core/src/CommandPalette/CommandPaletteFooter.tsx": [
+    "../Kbd",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/CommandPalette/CommandPaletteGroup.tsx": ["../utils"],
+  "packages/core/src/CommandPalette/CommandPaletteInput.tsx": [
+    "../Icon",
+    "../Spinner",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/CommandPalette/CommandPaletteItem.tsx": ["../utils"],
+  "packages/core/src/CommandPalette/CommandPaletteList.tsx": [
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/ComplexSelector/ComplexSelector.tsx": [
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/ContextMenu/ContextMenu.tsx": [
+    "../Button",
+    "../Heading",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateInput/DateInput.tsx": [
+    "../Calendar",
+    "../Calendar/hooks",
+    "../Field",
+    "../Icon",
+    "../Popover",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateInput/MonthScroller.tsx": [
+    "../Calendar",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateInput/MonthYearWheels.tsx": ["../i18n", "../utils"],
+  "packages/core/src/DateInput/NativeDateField.tsx": [
+    "../Calendar",
+    "../Field",
+    "../Icon",
+    "../InputGroup",
+    "../SizeContext",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../hooks",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateInput/TouchDateField.tsx": [
+    "../BottomSheet",
+    "../Button",
+    "../Calendar",
+    "../Field",
+    "../Icon",
+    "../IconButton",
+    "../InputGroup",
+    "../SizeContext",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../hooks",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateInput/Wheel.tsx": ["../utils"],
+  "packages/core/src/DateRangeInput/DateRangeInput.tsx": [
+    "../Calendar",
+    "../Calendar/hooks",
+    "../Field",
+    "../Icon",
+    "../Popover",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateTimeInput/DateTimeInput.tsx": [
+    "../Calendar",
+    "../Calendar/hooks",
+    "../Field",
+    "../Icon",
+    "../Popover",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateTimeInput/NativeDateSegment.tsx": [
+    "../Icon",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateTimeInput/NativeTimeSegment.tsx": [
+    "../Icon",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DateTimeInput/TouchDateTimeField.tsx": [
+    "../BottomSheet",
+    "../Button",
+    "../Calendar",
+    "../Field",
+    "../Icon",
+    "../IconButton",
+    "../SegmentedControl",
+    "../Spinner",
+    "../Tooltip",
+    "../hooks",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Drawer/Drawer.tsx": [
+    "../Layer",
+    "../Layout",
+    "../hooks",
+    "../utils"
+  ],
+  "packages/core/src/Drawer/DrawerHeader.tsx": [
+    "../Button",
+    "../Heading",
+    "../Icon",
+    "../Layout",
+    "../Text",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenu.tsx": [
+    "../Button",
+    "../Heading",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenuCheckboxItem.tsx": [
+    "../Icon",
+    "../Indicator",
+    "../Item",
+    "../utils"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenuDivider.tsx": ["../Divider"],
+  "packages/core/src/DropdownMenu/DropdownMenuGroup.tsx": ["../utils"],
+  "packages/core/src/DropdownMenu/DropdownMenuItem.tsx": [
+    "../Icon",
+    "../Item",
+    "../utils"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenuRadioGroup.tsx": ["../utils"],
+  "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": [
+    "../Icon",
+    "../Indicator",
+    "../Item",
+    "../utils"
+  ],
+  "packages/core/src/DropdownMenu/DropdownMenuSubMenu.tsx": [
+    "../Icon",
+    "../Item",
+    "../Spinner",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/DropdownMenu/renderDropdownItems.tsx": ["../utils"],
+  "packages/core/src/Field/Field.tsx": ["../VisuallyHidden", "../utils"],
+  "packages/core/src/FileInput/FileInput.tsx": [
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/FormLayout/FormLayout.tsx": ["../utils"],
+  "packages/core/src/Grid/Grid.tsx": ["../utils"],
+  "packages/core/src/Grid/GridSpan.tsx": ["../utils"],
+  "packages/core/src/InputGroup/InputGroup.tsx": ["../Field", "../utils"],
+  "packages/core/src/InputGroup/InputGroupText.tsx": ["../utils"],
+  "packages/core/src/Kbd/Kbd.tsx": ["../i18n", "../utils"],
+  "packages/core/src/Layout/LayoutPanel.tsx": ["../utils"],
+  "packages/core/src/Lightbox/Lightbox.tsx": [
+    "../Icon",
+    "../IconButton",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Link/Link.tsx": [
+    "../Icon",
+    "../Text",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Markdown/Markdown.fr23.bench.ts": ["./plugins"],
+  "packages/core/src/Markdown/Markdown.tsx": [
+    "../CodeBlock",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Markdown/plugins/HeadingLinksRenderer.tsx": [
+    "../../Icon",
+    "../../i18n",
+    "../../utils"
+  ],
+  "packages/core/src/MetadataList/MetadataList.tsx": ["../i18n", "../utils"],
+  "packages/core/src/MetadataList/MetadataListItem.tsx": ["../utils"],
+  "packages/core/src/MobileNav/MobileNav.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/MobileNav/MobileNavToggle.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/MoreMenu/MoreMenu.tsx": ["../Icon", "../i18n"],
+  "packages/core/src/MultiSelector/MultiSelector.tsx": [
+    "../Badge",
+    "../CheckboxInput",
+    "../Divider",
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/NavIcon/NavIcon.tsx": ["../utils"],
+  "packages/core/src/NavMenu/NavHeadingMenu.tsx": ["../utils"],
+  "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": [
+    "../Icon",
+    "../Text",
+    "../utils"
+  ],
+  "packages/core/src/NumberInput/NumberInput.tsx": [
+    "../Field",
+    "../Icon",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Outline/Outline.tsx": ["../i18n", "../utils"],
+  "packages/core/src/OverflowList/OverflowList.tsx": ["../utils"],
+  "packages/core/src/Overlay/Overlay.tsx": ["../utils"],
+  "packages/core/src/Overlay/OverlayScrim.tsx": ["../utils"],
+  "packages/core/src/Pagination/Pagination.tsx": [
+    "../Button",
+    "../Icon",
+    "../NumberInput",
+    "../Selector",
+    "../Text",
+    "../utils"
+  ],
+  "packages/core/src/Popover/Popover.tsx": ["../Button", "../i18n"],
+  "packages/core/src/Popover/usePopover.tsx": [
+    "../Button",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/PowerSearch/PowerSearch.tsx": [
+    "../Avatar",
+    "../Icon",
+    "../Token",
+    "../Tokenizer",
+    "../i18n"
+  ],
+  "packages/core/src/PowerSearch/PowerSearchEditPopover.tsx": [
+    "../Button",
+    "../Icon",
+    "../Selector",
+    "../Stack",
+    "../TreeList",
+    "../i18n"
+  ],
+  "packages/core/src/PowerSearch/PowerSearchToken.tsx": ["../Token", "../i18n"],
+  "packages/core/src/PowerSearch/PowerSearchValueEditor.tsx": [
+    "../DateInput",
+    "../DateRangeInput",
+    "../NumberInput",
+    "../Selector",
+    "../TextInput",
+    "../TimeInput",
+    "../Tokenizer",
+    "../Typeahead",
+    "../i18n"
+  ],
+  "packages/core/src/PowerSearch/usePowerSearchSource.ts": [
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/ProgressBar/ProgressBar.tsx": [
+    "../VisuallyHidden",
+    "../utils"
+  ],
+  "packages/core/src/RadioList/RadioList.tsx": ["../Tooltip", "../utils"],
+  "packages/core/src/RadioList/RadioListItem.tsx": [
+    "../Indicator",
+    "../Item",
+    "../utils"
+  ],
+  "packages/core/src/Resizable/ResizeHandle.tsx": ["../i18n", "../utils"],
+  "packages/core/src/Section/Section.tsx": ["../utils"],
+  "packages/core/src/SegmentedControl/SegmentedControl.tsx": [
+    "../Tooltip",
+    "../utils"
+  ],
+  "packages/core/src/SegmentedControl/SegmentedControlItem.tsx": ["../utils"],
+  "packages/core/src/SelectableCard/SelectableCard.tsx": ["../utils"],
+  "packages/core/src/Selector/Selector.tsx": [
+    "../Divider",
+    "../Field",
+    "../Icon",
+    "../Indicator",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Selector/SelectorBottomSheet.tsx": [
+    "../Heading",
+    "../Section"
+  ],
+  "packages/core/src/Selector/SelectorOption.tsx": [
+    "../Icon",
+    "../Item",
+    "../utils"
+  ],
+  "packages/core/src/SideNav/SideNav.tsx": ["../i18n", "../utils"],
+  "packages/core/src/SideNav/SideNavCollapseButton.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/SideNav/SideNavHeading.tsx": [
+    "../Icon",
+    "../Link",
+    "../Tooltip",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/SideNav/SideNavItem.tsx": [
+    "../Icon",
+    "../Tooltip",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/SideNav/SideNavSection.tsx": [
+    "../VisuallyHidden",
+    "../utils"
+  ],
+  "packages/core/src/Skeleton/Skeleton.tsx": ["../utils"],
+  "packages/core/src/Slider/Slider.tsx": [
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/StatusDot/StatusDot.tsx": ["../utils"],
+  "packages/core/src/Stepper/Step.tsx": [
+    "../Icon",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Stepper/Stepper.tsx": [
+    "../Icon",
+    "../IconButton",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Switch/Switch.tsx": [
+    "../Spinner",
+    "../Tooltip",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/TabList/Tab.tsx": ["../utils"],
+  "packages/core/src/TabList/TabList.tsx": ["../Icon", "../i18n", "../utils"],
+  "packages/core/src/TabList/TabMenu.tsx": ["../Icon", "../utils"],
+  "packages/core/src/Table/BaseTable.tsx": [
+    "../EmptyState",
+    "../Text",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Table/Table.tsx": ["../i18n", "../utils"],
+  "packages/core/src/Table/TableBody.tsx": ["../utils"],
+  "packages/core/src/Table/TableCell.tsx": ["../utils"],
+  "packages/core/src/Table/TableFooter.tsx": ["../utils"],
+  "packages/core/src/Table/TableHeader.tsx": ["../utils"],
+  "packages/core/src/Table/TableHeaderCell.tsx": ["../utils"],
+  "packages/core/src/Table/TableRow.tsx": ["../utils"],
+  "packages/core/src/Table/TableSelectionToolbar.tsx": [
+    "../Button",
+    "../Toolbar",
+    "../i18n"
+  ],
+  "packages/core/src/Table/plugins/columnResize/useTableColumnResize.tsx": [
+    "../../../i18n"
+  ],
+  "packages/core/src/Table/plugins/filtering/useTableFiltering.tsx": [
+    "../../../Button",
+    "../../../DateInput",
+    "../../../Icon",
+    "../../../MultiSelector",
+    "../../../NumberInput",
+    "../../../Popover",
+    "../../../Selector",
+    "../../../TextInput",
+    "../../../TimeInput",
+    "../../../Tokenizer",
+    "../../../i18n"
+  ],
+  "packages/core/src/Table/plugins/groupedRows/useTableGroupedRows.tsx": [
+    "../../../Icon",
+    "../../../i18n"
+  ],
+  "packages/core/src/Table/plugins/pagination/useTablePagination.tsx": [
+    "../../../Pagination",
+    "../../../i18n"
+  ],
+  "packages/core/src/Table/plugins/rowExpansion/useTableRowExpansion.tsx": [
+    "../../../Icon",
+    "../../../VisuallyHidden",
+    "../../../i18n",
+    "../../../utils"
+  ],
+  "packages/core/src/Table/plugins/rowStatus/useTableRowStatus.tsx": [
+    "../../../Icon",
+    "../../../Tooltip",
+    "../../../VisuallyHidden",
+    "../../../i18n"
+  ],
+  "packages/core/src/Table/plugins/selection/useTableSelection.tsx": [
+    "../../../CheckboxInput",
+    "../../../i18n",
+    "../../../utils"
+  ],
+  "packages/core/src/Table/plugins/sortable/useTableSortable.tsx": [
+    "../../../Icon",
+    "../../../i18n"
+  ],
+  "packages/core/src/Table/plugins/tree/useTableTreeData.tsx": [
+    "../../../Icon",
+    "../../../i18n",
+    "../../../utils"
+  ],
+  "packages/core/src/Table/tableContextMenu.tsx": ["../ContextMenu", "../Icon"],
+  "packages/core/src/TextArea/TextArea.tsx": [
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../Tooltip",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/TextInput/TextInput.tsx": [
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Thumbnail/Thumbnail.tsx": [
+    "../Button",
+    "../Icon",
+    "../Skeleton",
+    "../Spinner",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/TimeInput/TimeInput.tsx": [
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/TimeInput/TouchTimeField.tsx": [
+    "../BottomSheet",
+    "../Button",
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../Tooltip",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Timer/Timer.tsx": ["../Text", "../utils"],
+  "packages/core/src/Timestamp/Timestamp.tsx": [
+    "../Text",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Toast/Toast.tsx": [
+    "../Button",
+    "../Icon",
+    "../i18n",
+    "../theme",
+    "../utils"
+  ],
+  "packages/core/src/Toast/ToastViewport.tsx": ["../i18n", "../utils"],
+  "packages/core/src/ToggleButton/ToggleButton.tsx": ["../Button"],
+  "packages/core/src/ToggleButton/ToggleButtonGroup.tsx": ["../utils"],
+  "packages/core/src/Token/Token.tsx": ["../Icon", "../i18n", "../utils"],
+  "packages/core/src/Token/TokenLink.tsx": ["../utils"],
+  "packages/core/src/Tokenizer/Tokenizer.tsx": [
+    "../Field",
+    "../Icon",
+    "../OverflowList",
+    "../Spinner",
+    "../Token",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Toolbar/Toolbar.tsx": ["../utils"],
+  "packages/core/src/TopNav/TopNav.tsx": ["../i18n", "../utils"],
+  "packages/core/src/TopNav/TopNavHeading.tsx": [
+    "../Icon",
+    "../Link",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/TopNav/TopNavItem.tsx": ["../utils"],
+  "packages/core/src/TopNav/TopNavMegaMenu.tsx": ["../Icon", "../utils"],
+  "packages/core/src/TopNav/TopNavMegaMenuFeaturedCard.tsx": ["../utils"],
+  "packages/core/src/TopNav/TopNavMegaMenuItem.tsx": ["../utils"],
+  "packages/core/src/TopNav/TopNavMenu.tsx": ["../Icon", "../utils"],
+  "packages/core/src/TreeList/TreeList.tsx": ["../utils"],
+  "packages/core/src/TreeList/TreeListBranches.tsx": ["../utils"],
+  "packages/core/src/TreeList/TreeListItem.tsx": [
+    "../Icon",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Typeahead/BaseTypeahead.tsx": [
+    "../Icon",
+    "../Spinner",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Typeahead/Typeahead.tsx": [
+    "../Field",
+    "../Icon",
+    "../Spinner",
+    "../Token",
+    "../Tooltip",
+    "../VisuallyHidden",
+    "../i18n",
+    "../utils"
+  ],
+  "packages/core/src/Typeahead/TypeaheadItem.tsx": ["../utils"],
+  "packages/core/src/hooks/useInputStatusIcon.tsx": [
+    "../Icon",
+    "../Tooltip",
+    "../i18n"
+  ],
+  "packages/core/src/hooks/useKeyboardHint.tsx": ["../Kbd", "../i18n"],
+  "packages/lab/src/Comments/CommentComposer.tsx": ["../EmojiPicker"],
+  "packages/lab/src/Schedule/Schedule.tsx": ["./plugins"]
+}

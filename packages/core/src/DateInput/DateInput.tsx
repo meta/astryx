@@ -41,7 +41,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -215,6 +214,7 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale, useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 export interface DateInputProps extends Omit<
   FieldInputBaseProps<HTMLInputElement>,
   'onChange' | 'defaultValue'
@@ -344,7 +344,7 @@ export interface DateInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -680,7 +680,7 @@ function PointerDateField({
   // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
     (newValue: ISODateString | undefined) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange?.(newValue);
@@ -691,7 +691,13 @@ function PointerDateField({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Handle clear button click
@@ -714,11 +720,16 @@ function PointerDateField({
   // Handle date selection from calendar
   const handleDateSelect = useCallback(
     (selectedDate: ISODateString) => {
+      // An already-open calendar can outlive an enabled owner. Reject the
+      // whole selection, including dismissal, so its focused day stays put.
+      if (isDisabled) {
+        return;
+      }
       fireChange(selectedDate);
       setPendingInput(null);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   // Handle input text change - update immediately if valid and allowed
@@ -948,17 +959,21 @@ function PointerDateField({
       {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       {popover.render(
-        <Calendar
-          handleRef={calendarRef}
-          mode="single"
-          value={optimisticValue ?? null}
-          onChange={handleDateSelect}
-          min={min}
-          max={max}
-          dateConstraints={dateConstraints}
-          numberOfMonths={numberOfMonths}
-          weekStartsOn={weekStartsOn}
-        />,
+        // The layer renders its children open or closed, so mount the
+        // calendar only while it is open; it opens on the current value.
+        !popover.isOpen ? null : (
+          <Calendar
+            handleRef={calendarRef}
+            mode="single"
+            value={optimisticValue ?? null}
+            onChange={handleDateSelect}
+            min={min}
+            max={max}
+            dateConstraints={dateConstraints}
+            numberOfMonths={numberOfMonths}
+            weekStartsOn={weekStartsOn}
+          />
+        ),
         {placement: 'below', alignment: 'start'},
       )}
       {showsDisabledMessage &&

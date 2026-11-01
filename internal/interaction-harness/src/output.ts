@@ -52,8 +52,13 @@ export async function writeEvidence(
     fs.writeFileSync(file, contents);
     written[name] = file;
     if (testInfo != null) {
+      // By body, not path: Playwright copies a path attachment into the
+      // test's output folder with file calls inside the test, and on a loaded
+      // runner that copy has waited past the test's whole budget. A body goes
+      // to the reporter, which stores it outside the test's time; the file
+      // above stays for local paths.
       await testInfo.attach(`${group}/${safeName(name)}`, {
-        path: file,
+        body: contents,
         contentType: name.endsWith('.png')
           ? 'image/png'
           : name.endsWith('.json')

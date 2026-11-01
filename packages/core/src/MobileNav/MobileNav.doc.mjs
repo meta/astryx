@@ -133,7 +133,7 @@ export const docs = {
       name: 'MobileNavToggle',
       displayName: 'Mobile Nav Toggle',
       description:
-        'Hamburger button that opens/closes the mobile nav drawer. Reads open state from AppShell context automatically: does NOT accept isOpen or onOpenChange props. Renders nothing above the mobile breakpoint.',
+        'Hamburger button that opens/closes the mobile nav drawer. Reads open state from AppShell context automatically: does NOT accept isOpen or onOpenChange props. Renders nothing above the mobile breakpoint. Host attributes and DOM handlers (id, data-*, aria-*) reach the button; its aria-expanded and aria-controls stay component-owned, and a caller onClick runs after the toggle.',
       // The toggle renders null unless AppShell mobile context reports an
       // enabled mobile viewport — the default context outside AppShell never
       // does, so the Properties preview was an empty stage. appShellMobile
@@ -305,7 +305,7 @@ export const docsDense = {
     {
       name: 'MobileNavToggle',
       description:
-        'Hamburger button that opens/closes mobile nav drawer. Reads open state from AppShell context automatically. Renders nothing above mobile breakpoint.',
+        'Hamburger button that opens/closes mobile nav drawer. Reads open state from AppShell context automatically. Renders nothing above mobile breakpoint. Host attributes and handlers reach the button; aria-expanded/aria-controls stay owned.',
     },
   ],
   propDescriptions: {

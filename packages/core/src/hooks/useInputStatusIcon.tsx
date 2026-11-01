@@ -36,13 +36,13 @@ import {useCallback, useEffect, useState} from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Icon, type IconName, type IconSize} from '../Icon';
-import type {FieldStatusVariant} from '../FieldStatus/FieldStatus';
 import type {InputStatus, InputStatusType} from '../Field/types';
 import {useTooltip} from '../Tooltip';
 import {useTranslator} from '../i18n';
 import {radiusVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 
 /**
  * Maps each status type to its glyph. Shared so every input shows the same icon
@@ -104,7 +104,7 @@ export interface UseInputStatusIconOptions {
   /** The input's status, or undefined when there is none. */
   status?: InputStatus;
   /** How the status is presented relative to the input. */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Whether the input is inside an InputGroup (which owns status rendering). */
   isInGroup?: boolean;
   /** Size of the on-field icon. @default 'md' */

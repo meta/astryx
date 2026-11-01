@@ -207,7 +207,7 @@ export interface MobilePowerSearchProps extends Omit<
   /** Validation status. */
   status?: InputStatus;
   /** How the status message is placed. @default 'attached' */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusVariant | 'tooltip';
   /** Max display length for token values. @default 40 */
   maxTokenLength?: number;
   /** Max suggestions in string and entity value typeaheads. @default 10 */

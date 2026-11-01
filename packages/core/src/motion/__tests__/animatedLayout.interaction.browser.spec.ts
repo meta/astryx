@@ -286,28 +286,43 @@ test.describe('spec:AST-105 Coverage', () => {
     const t2Before = await page.evaluate(
       () => document.querySelector('#t2')?.getBoundingClientRect().top ?? 0,
     );
-    await change(page, {
-      changed: '#chip',
-      mutate: `document.querySelector('#chip').style.width = '120px'`,
+    // Read in the change's own task, before any frame. A read a round trip
+    // later lands after however many frames the browser drew meanwhile: under
+    // load WebKit's first frame after the change comes 44-101 ms later, by
+    // which time the glide is that far along its curve, and a round trip can
+    // outlast the whole glide.
+    const wrap = await page.evaluate(async () => {
+      await window.change({
+        changed: '#chip',
+        mutate: `document.querySelector('#chip').style.width = '120px'`,
+      });
+      return {
+        top: document.querySelector('#t2')?.getBoundingClientRect().top ?? 0,
+        motion: window.motionOf('#t2'),
+      };
     });
-    const t2After = await page.evaluate(
-      () => document.querySelector('#t2')?.getBoundingClientRect().top ?? 0,
-    );
-    const [wrapped] = await page.evaluate(() => window.motionOf('#t2'));
+    const [wrapped] = wrap.motion;
     expect(wrapped).toBeDefined();
     // It wrapped: its layout moved down a line, and it starts where it was.
     expect(startOffset(wrapped.first).y).toBeLessThan(-20);
-    // A round trip after the change: it has barely left its old place.
-    expect(Math.abs(t2After - t2Before)).toBeLessThan(4);
+    // In the commit's own task, before anything paints, it is still where it
+    // was.
+    expect(Math.abs(wrap.top - t2Before)).toBeLessThan(0.5);
     await settle(page);
     // An item grows taller: its row-direction neighbor keeps its rectangle and
     // stays; the content after the row glides.
-    await change(page, {
-      changed: '#tall',
-      mutate: `document.querySelector('#tall').style.height = '110px'`,
+    const taller = await page.evaluate(async () => {
+      await window.change({
+        changed: '#tall',
+        mutate: `document.querySelector('#tall').style.height = '110px'`,
+      });
+      return {
+        neighbor: window.motionOf('#neighbor'),
+        below: window.motionOf('#below'),
+      };
     });
-    expect(await page.evaluate(() => window.motionOf('#neighbor'))).toEqual([]);
-    const [below] = await page.evaluate(() => window.motionOf('#below'));
+    expect(taller.neighbor).toEqual([]);
+    const [below] = taller.below;
     expect(startOffset(below.first).y).toBeCloseTo(-80, 0);
   });
 

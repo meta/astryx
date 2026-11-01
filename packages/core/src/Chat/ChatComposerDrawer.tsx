@@ -15,7 +15,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/ChatComposerDrawer.test.tsx
  * - /packages/core/src/Chat/ChatComposerDrawer.doc.mjs
- * - /packages/core/src/Chat/ChatComposerDrawer.spec.md
+ * - /docs/specs/components/Chat/ChatComposerDrawer.spec.md
  * - /apps/storybook/stories/ChatComposerDrawer.stories.tsx
  * - /packages/core/src/Chat/index.ts (exports)
  * - /packages/cli/assets/templates/blocks/components/ChatComposerDrawer/ (block examples)

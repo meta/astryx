@@ -9,7 +9,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from 'vitest';
 
 import {
   auditArgs,
@@ -205,7 +213,7 @@ describe('selectSpecs', () => {
   });
 
   it('runs no spec for a changed knowledge record alone', () => {
-    const record = 'packages/core/src/Chat/ChatLayout.spec.md';
+    const record = 'docs/specs/components/Chat/ChatLayout.spec.md';
     expect(pr(all, {changedPaths: [record]})).toEqual([always.file]);
     const pattern = spec(
       'internal/a11y-spec/src/patterns/accordion.chromium.spec.ts',
@@ -213,7 +221,7 @@ describe('selectSpecs', () => {
     );
     expect(
       pr([pattern], {
-        changedPaths: ['packages/core/src/Collapsible/Collapsible.spec.md'],
+        changedPaths: ['docs/specs/components/Collapsible/Collapsible.spec.md'],
       }),
     ).toEqual([]);
     // Code beside the record still selects the spec.
@@ -416,30 +424,47 @@ describe('changedSinceMergeBase', () => {
     );
   };
 
-  it("lists the branch's own changes and never makes a full clone shallow", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-pr-a11y-'));
-    const cwd = process.cwd();
-    try {
-      const origin = path.join(dir, 'origin');
-      fs.mkdirSync(origin);
-      git(origin, 'init', '-q', '-b', 'main');
-      for (const n of ['1', '2', '3']) commit(origin, 'base.txt', n);
-      const clone = path.join(dir, 'clone');
-      git(dir, 'clone', '-q', origin, clone);
-      git(clone, 'checkout', '-qb', 'feature');
-      commit(clone, 'feature.txt', 'f');
-      git(clone, 'push', '-q', 'origin', 'feature');
-      commit(origin, 'later.txt', 'l');
-      process.chdir(clone);
-      expect(changedSinceMergeBase('main')).toEqual(['feature.txt']);
-      expect(changedSinceMergeBase('origin/main')).toEqual(['feature.txt']);
-      expect(git(clone, 'rev-parse', '--is-shallow-repository')).toBe('false');
-      expect(changedSinceMergeBase('no-such-ref')).toBeNull();
-      expect(changedSinceMergeBase(undefined)).toBeNull();
-    } finally {
-      process.chdir(cwd);
-      fs.rmSync(dir, {recursive: true, force: true});
-    }
+  // An origin whose main has three commits, and a full clone whose feature
+  // branch adds one file; main then moves on. Built once: each lookup below
+  // gets its own test budget, since every git call is a process of its own.
+  const cwd = process.cwd();
+  let dir = '';
+  let clone = '';
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-pr-a11y-'));
+    const origin = path.join(dir, 'origin');
+    fs.mkdirSync(origin);
+    git(origin, 'init', '-q', '-b', 'main');
+    for (const n of ['1', '2', '3']) commit(origin, 'base.txt', n);
+    clone = path.join(dir, 'clone');
+    git(dir, 'clone', '-q', origin, clone);
+    git(clone, 'checkout', '-qb', 'feature');
+    commit(clone, 'feature.txt', 'f');
+    git(clone, 'push', '-q', 'origin', 'feature');
+    commit(origin, 'later.txt', 'l');
+  });
+  afterAll(() => {
+    fs.rmSync(dir, {recursive: true, force: true});
+  });
+  beforeEach(() => {
+    process.chdir(clone);
+  });
+  afterEach(() => {
+    process.chdir(cwd);
+  });
+
+  it("lists the branch's own changes against a local base", () => {
+    expect(changedSinceMergeBase('main')).toEqual(['feature.txt']);
+  });
+
+  it('lists them against the remote base, and never makes a full clone shallow', () => {
+    expect(changedSinceMergeBase('origin/main')).toEqual(['feature.txt']);
+    expect(git(clone, 'rev-parse', '--is-shallow-repository')).toBe('false');
+  });
+
+  it('lists nothing for a base it cannot find, or no base', () => {
+    expect(changedSinceMergeBase('no-such-ref')).toBeNull();
+    expect(changedSinceMergeBase(undefined)).toBeNull();
   });
 });
 
@@ -506,7 +531,7 @@ describe('isKnowledgeRecord', () => {
   });
 
   it('treats a component record as a record and its fixtures as not', () => {
-    expect(isKnowledgeRecord('packages/core/src/Chat/ChatLayout.spec.md')).toBe(
+    expect(isKnowledgeRecord('docs/specs/components/Chat/ChatLayout.spec.md')).toBe(
       true,
     );
     expect(

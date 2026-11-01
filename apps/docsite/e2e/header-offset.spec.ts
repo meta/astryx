@@ -28,9 +28,7 @@ test('the canary banner does not leave the hero and nav backdrop behind it', asy
   await page.setViewportSize({width: 1440, height: 900});
   await page.goto('/');
 
-  const banner = page
-    .getByRole('alert')
-    .filter({hasText: "You're viewing unreleased docs"});
+  const banner = page.getByRole('region', {name: 'Documentation notice'});
   test.skip((await banner.count()) === 0, 'Only canary builds show the banner');
 
   const header = page.locator('.astryx-app-shell-header').first();

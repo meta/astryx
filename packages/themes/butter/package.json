@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/theme-butter",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "displayName": "Butter Theme",
   "private": false,
   "description": "Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.",
@@ -52,20 +52,34 @@
     "src",
     "palette.config.json",
     "fonts.css",
-    "fonts.css.d.ts"
+    "fonts.css.d.ts",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-butter-palette-refs.mjs --check && astryx theme build src/butterTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.18.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.5",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.5"
+    "@astryxdesign/cli": "0.7.6"
   },
   "module": "./dist/source.mjs"
 }

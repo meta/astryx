@@ -3,11 +3,14 @@
 /**
  * @file useToast.test.tsx
  * @input Uses vitest, @testing-library/react, useToast/ToastViewport/Theme
- * @output Unit tests for the fallback viewport's theme mode resolution
+ * @output Unit tests for the fallback viewport: its theme mode resolution,
+ *   and the Theme nesting its root provides (a <Theme> inside toast content
+ *   scopes its own subtree and never rewrites <html>)
  * @position Testing; validates useToast.tsx's attribute mirroring onto the
- *   fallback container, plus useTheme.ts's <html data-theme> fallback (which
- *   is what actually resolves Toast's JS-computed mode; see useTheme.test.tsx
- *   for direct coverage of that half)
+ *   fallback container and the ThemeNestingContext its root renders under,
+ *   plus useTheme.ts's <html data-theme> fallback (which is what actually
+ *   resolves Toast's JS-computed mode; see useTheme.test.tsx for direct
+ *   coverage of that half)
  *
  * SYNC: When useToast.tsx's fallback container setup changes, update these tests
  *
@@ -104,6 +107,65 @@ describe('useToast fallback viewport theme mode', () => {
     await dismissAllFallbackToasts();
   });
 
+  it('keeps a Theme inside fallback toast content nested: it never rewrites <html>', async () => {
+    // The fallback root is a separate React root, so a brand Theme in toast
+    // content sees no Theme ancestor. It must not act as the app's root
+    // Theme: <html data-theme> / data-astryx-theme stay the app's, while
+    // the brand Theme still scopes its own subtree.
+    const brand = defineTheme({name: 'fallback-brand', tokens: {}});
+    function BrandedToastButton() {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            toast({
+              body: 'branded',
+              isAutoHide: false,
+              endContent: (
+                <Theme theme={brand} mode="dark">
+                  <span>brand</span>
+                </Theme>
+              ),
+            })
+          }>
+          Trigger branded
+        </button>
+      );
+    }
+
+    render(
+      <Theme theme={testTheme} mode="light">
+        <BrandedToastButton />
+      </Theme>,
+    );
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    });
+    // Whichever test clicks first in this file finds the fallback proxy still
+    // pending: addToast queues the entry and kicks off the ctxReady.then(...)
+    // microtask that later delivers it to the real context. Awaiting an async
+    // act() flushes that chain instead of letting it resolve outside any act
+    // scope.
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger branded'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('brand')).toBeInTheDocument();
+    });
+    await act(async () => {});
+
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    expect(document.documentElement).toHaveAttribute(
+      'data-astryx-theme',
+      'test',
+    );
+    const brandScope = document.querySelector(
+      '[data-astryx-toast-fallback] [data-astryx-theme="fallback-brand"]',
+    );
+    expect(brandScope).toHaveAttribute('data-theme', 'dark');
+  });
+
   it('resolves the app mode (light) instead of OS preference (dark) with no LayerProvider', async () => {
     mockMatchMedia(true); // OS prefers dark
 
@@ -113,11 +175,8 @@ describe('useToast fallback viewport theme mode', () => {
       </Theme>,
     );
 
-    // This is the very first click in the whole file, so it's the one that
-    // finds the fallback proxy still pending: addToast queues the entry and
-    // kicks off the ctxReady.then(...) microtask that later delivers it to
-    // the real context. Awaiting an async act() here flushes that chain
-    // instead of letting it resolve outside any act scope.
+    // Async act for the same reason as the first test above: under .only, -t
+    // or a shuffled order this can be the click that finds the proxy pending.
     await act(async () => {
       fireEvent.click(screen.getByText('Trigger'));
     });

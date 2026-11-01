@@ -160,7 +160,11 @@ test.describe('playground preview isolation', () => {
     await page.route(
       /\/_next\/static\/chunks\/main-app-[^/]+\.js/,
       async route => {
-        const response = await route.fetch();
+        // A new connection, so a kept-alive socket that `next start` closes
+        // for idleness cannot reset this fetch.
+        const response = await route.fetch({
+          headers: {...route.request().headers(), connection: 'close'},
+        });
         const body = await response.text();
         const runtimeStart = body.indexOf('(self.webpackChunk_N_E=');
         expect(runtimeStart).toBeGreaterThan(0);

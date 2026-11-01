@@ -515,6 +515,10 @@ export function TabList({
     revealSelectedTabRef.current = revealSelectedTab;
   }, [revealSelectedTab]);
 
+  // The tab whose focus revealed it (see `handleRootFocus`), while it keeps
+  // focus.
+  const focusRevealedValueRef = useRef<string | null>(null);
+
   // The tab you are on has to be visible. Selection can move without focus —
   // on mount, or when the host sets `value` itself — and neither scrolls the
   // strip the way clicking or arrowing to a tab does. The check is what makes
@@ -525,6 +529,14 @@ export function TabList({
       return;
     }
     revealedValueRef.current = value;
+    if (value != null && focusRevealedValueRef.current === value) {
+      // A press or an arrow focused this tab first, and focusing it revealed
+      // it. Measuring now would force the new selection's style and layout
+      // inside the press, before it can paint. The next frame lays them out
+      // anyway, so finish there: the selected weight can still widen the tab.
+      const frame = requestAnimationFrame(() => revealSelectedTabRef.current());
+      return () => cancelAnimationFrame(frame);
+    }
     revealSelectedTabRef.current();
   }, [value]);
 
@@ -595,7 +607,9 @@ export function TabList({
       // The browser scrolls a focused element into view only when it is
       // entirely outside the scrollport, so arrowing onto a half-visible stop
       // leaves it cut off under the fade. Finish the job it started.
-      revealStop(e.target.closest(TAB_STOP_SELECTOR));
+      const stop = e.target.closest<HTMLElement>(TAB_STOP_SELECTOR);
+      revealStop(stop);
+      focusRevealedValueRef.current = stop?.dataset.tabValue ?? null;
     },
     [onFocusProp, onHintFocus, handleFocus, revealStop],
   );
@@ -603,6 +617,7 @@ export function TabList({
   const handleRootBlur = useCallback(
     (e: React.FocusEvent<HTMLElement>) => {
       onBlurProp?.(e);
+      focusRevealedValueRef.current = null;
       if (e.defaultPrevented) {
         return;
       }

@@ -861,6 +861,26 @@ describe('TreeList', () => {
       });
     });
 
+    it("keeps focus on an item's inner link when the item becomes disabled (spec:AST-085 FR4)", () => {
+      const tree = (isDisabled: boolean) => [
+        {
+          id: 'docs',
+          label: 'Docs',
+          isExpanded: true,
+          children: [
+            {id: 'report', label: 'Report', href: '/report', isDisabled},
+          ],
+        },
+      ];
+      const {rerender} = render(<TreeList items={tree(false)} />);
+      // A pointer click leaves focus on the inner link.
+      screen.getByRole('link', {name: 'Report', hidden: true}).focus();
+      rerender(<TreeList items={tree(true)} />);
+      const disabled = screen.getByRole('link', {name: 'Report', hidden: true});
+      expect(disabled).not.toHaveAttribute('href');
+      expect(disabled).toHaveFocus();
+    });
+
     it('does not follow a disabled link row', () => {
       const items = [
         {
@@ -879,6 +899,12 @@ describe('TreeList', () => {
       const row = link.closest<HTMLElement>('.astryx-tree-list-item')!;
       fireEvent.click(row.firstElementChild!);
       expect(onLinkClick).not.toHaveBeenCalled();
+      // No destination, so a screen reader's click or a link menu cannot
+      // navigate either (spec:AST-085 FR2).
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+      for (const attribute of ['href', 'target']) {
+        expect(link).not.toHaveAttribute(attribute);
+      }
     });
 
     describe('row clicks outside the label (FR7)', () => {
@@ -1707,5 +1733,66 @@ describe('TreeList', () => {
     expect(document.activeElement).toBe(headerButton);
     const items = screen.getAllByRole('treeitem');
     expect(items[0]).toHaveAttribute('tabindex', '0');
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('TreeList empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])(
+    'a header of %s names nothing; the tree keeps its own label',
+    (_name, header) => {
+      render(
+        <TreeList
+          items={simpleItems}
+          header={header as ReactNode}
+          aria-label="Files"
+        />,
+      );
+      const tree = screen.getByRole('tree');
+      expect(tree).not.toHaveAttribute('aria-labelledby');
+      expect(tree).toHaveAccessibleName('Files');
+    },
+  );
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    const {container: withSlots} = render(
+      <TreeList
+        items={[
+          {
+            id: 'a',
+            label: 'Item A',
+            startContent: value as ReactNode,
+            endContent: value as ReactNode,
+          },
+        ]}
+      />,
+    );
+    const {container: without} = render(
+      <TreeList items={[{id: 'a', label: 'Item A'}]} />,
+    );
+    expect(html(withSlots)).toBe(html(without));
+  });
+
+  it('renders 0 as a header and in the start and end slots, as React does', () => {
+    render(
+      <TreeList
+        header={0}
+        items={[{id: 'a', label: 'Item A', startContent: 0, endContent: 0}]}
+      />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
+    expect(screen.getByRole('tree')).toHaveAttribute('aria-labelledby');
   });
 });

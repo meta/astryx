@@ -386,9 +386,9 @@ Two repo-side rules worth restating here:
   one is a review reject.
 - CI is the enforcement layer, not a replacement for the checklist: the
   `pr-a11y` job in `ci.yml` runs an axe audit after merges to `main` and
-  before each release (and on a pull request labelled `ci:heavy-lanes`), a
-  weekly workflow scans the full component surface, and the
-  `useAnnounce` lint rule rejects hand-wired `aria-live` regions. axe only
+  before each release (and on a pull request labelled `ci:run-a11y`), at
+  full scope across the component surface, and the `useAnnounce` lint rule
+  rejects hand-wired `aria-live` regions. axe only
   catches static, DOM-level issues — keyboard behavior, focus management, and
   announcement timing are exactly what the checklist and the component's unit
   tests cover.
@@ -533,7 +533,7 @@ any other value:
 ```
 
 These routes apply when a pull request runs the accessibility owner, which it
-does only with the `ci:heavy-lanes` label; `main` and release checks run every
+does only with the `ci:run-a11y` label; `main` and release checks run every
 spec. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
 from your branch would run (component tokens need CI's `analysis.json`; without
 it the runner says so and leaves those specs out). A spec writes its receipts under
@@ -548,7 +548,7 @@ component set, or has no audit spec has an entry in
 ### Accessibility audits
 
 Merges to `main` (checked at the newest commit of a burst), every release
-check, and a PR labelled `ci:heavy-lanes`
+check, and a PR labelled `ci:run-a11y`
 that touches components run an axe-core audit (the `pr-a11y` CI job); on a PR
 it covers the Storybook stories of the changed components. The job **fails** when it
 finds a violation that is not listed in the checked-in baseline,
@@ -617,7 +617,7 @@ the changed components like `pr-a11y`. It is soft-gated — findings show in the
 summary but don't block. Repro locally with `pnpm rtl:audit -- --filter Avatar`
 (the `--` matters: `pnpm -F` is itself `--filter`). The report classifies every
 scoped component as **measured**, **verified N-A**, or a **coverage gap**; an
-unexplained all-N-A result is not a clean RTL result. The weekly unfiltered run
+unexplained all-N-A result is not a clean RTL result. The release-check's unfiltered run
 applies the same contract to the full existing roster, while a labelled PR
 applies it to new and changed components. See `apps/storybook/rtl-audit/README.md`.
 
@@ -666,9 +666,9 @@ Chromium and fails on any other cursor.
 
 The docsite playground runs user-authored code in a sandboxed iframe with an
 opaque origin, tied to the page only by a nonce-attested MessagePort handshake
-(`apps/docsite/src/app/playground/previewChannel.ts`). The `docsite-browser`
-job feeds the existing required `docsite-test` check and proves that boundary
-in Chromium against a production build: a reloaded
+(`apps/docsite/src/app/playground/previewChannel.ts`). The required
+`docsite-test` check's browser-contract step proves that boundary in
+Chromium against a production build: a reloaded
 preview document recovers with the current code and theme, and a document that
 previewed code navigated the frame to receives nothing. The sandbox only exists
 in production builds (`next dev` cannot serve its assets to an opaque origin),
@@ -924,17 +924,31 @@ Storybook story for anything you added or altered.
   push, or when the maintainer closes and reopens the pull request; CI then
   runs on each push while the label stays. Until then the required checks fail
   with "Waiting for a maintainer's ci:run label".
-- **`ci:heavy-lanes` opts a pull request into the visual, accessibility and
-  RTL suites**, which otherwise run on `main` after it merges. A maintainer
-  applies it when a change needs that evidence before merging; like `ci:run`,
-  it takes effect on the next push or a close and reopen.
+- **`ci:run-visual`, `ci:run-a11y` and `ci:run-rtl` each opt a pull request
+  into one heavy suite** (visual regression, accessibility, RTL), which
+  otherwise runs on `main` after the pull request merges. Someone with write
+  access applies the label for the evidence a change needs before merging; a
+  label applied without write access runs nothing. Like `ci:run`, a label
+  takes effect on the next push or a close and reopen, and removing it stops
+  that suite from the next run. When the accessibility audit did not run, the
+  pull-request comment names `ci:run-a11y`.
+- **A pull request that changes CI states its CI impact.** When it changes a
+  workflow, a composite action or a CI script, its description carries a
+  `CI impact:` line: each changed job's runner class (standard or
+  non-standard), job-minutes per update and runner-pool usage before and
+  after, and time to green. The pull-request comment's CI impact section
+  measures these for `ci.yml` from recent runs, names other changed workflows,
+  composite actions and CI scripts as not measured, and flags a job moving onto
+  a non-standard runner, more than 10% added runner-pool usage, or more than two minutes
+  added to time to green.
 - **Pull requests from a branch in this repository run CI without the label**,
   since pushing a branch here needs write access. Maintainers who work from a
   fork either push their branches here or apply `ci:run` themselves.
 - **Heavy browser suites are shared per author.** They run for an author's
-  three oldest open pull requests, up to twelve such runs a day. A pull request
-  past either limit shows a failing check that says why, and runs in full at
-  its pre-merge re-run.
+  fifteen oldest open pull requests, up to a hundred such runs a day. A pull
+  request past either limit shows a failing check that says why, and runs in
+  full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
+  are not limited.
 
 ## Code Style
 
