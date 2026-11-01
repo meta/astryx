@@ -23,6 +23,7 @@ import {
   auditArgs,
   auditedComponents,
   auditPlan,
+  CHANGED_SPEC_BUDGET_MS,
   CHANGED_SPEC_LIMIT,
   changedOnly,
   changedSinceMergeBase,
@@ -102,6 +103,19 @@ describe('changedOnly (the default check runs changed specs)', () => {
 
   it('leaves a changed release-only spec to the release check', () => {
     expect(run([RELEASE])).toEqual([]);
+  });
+
+  it('stops the changed-only run at eight minutes, inside the job budget', () => {
+    expect(CHANGED_SPEC_LIMIT).toBe(4);
+    expect(CHANGED_SPEC_BUDGET_MS).toBe(8 * 60 * 1000);
+    const runner = fs.readFileSync(
+      path.join(root, '.github/scripts/a11y-pr-contracts.mjs'),
+      'utf8',
+    );
+    // Only the changed-only run carries the global timeout.
+    expect(runner).toMatch(
+      /changedOnlyFile != null\s*\?\s*\['--global-timeout', String\(CHANGED_SPEC_BUDGET_MS\)\]\s*:\s*\[\]/,
+    );
   });
 
   it('leaves a changed audit spec to its own component-audit pull request', () => {

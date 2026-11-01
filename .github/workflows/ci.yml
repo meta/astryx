@@ -3144,9 +3144,10 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
-      # A browser accessibility spec the change adds or modifies runs here by
-      # itself (spec:AST-030 FR12), so it never first runs on main's release
-      # check. No such file, no work.
+      # A scoped or always browser accessibility spec the change adds or
+      # modifies runs here by itself (spec:AST-030 FR12), so it is checked on
+      # its own pull request; audit and release-only specs still wait. No such
+      # file, no work.
       - name: Find the changed browser accessibility specs
         id: specs
         env:

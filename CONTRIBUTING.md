@@ -938,10 +938,10 @@ Storybook story for anything you added or altered.
   runner. It also runs up to four browser accessibility spec files the change
   adds or modifies, by themselves, so a new spec is checked on its own pull
   request (an `audit` or `release-only` spec still waits for its audit pull
-  request or the release check). It skips a wide change, one that touches
-  more than five components or changes shared styles (themes, tokens, shared
-  `.stylex.ts` files); add the `ci:run-*` labels for those. It is advisory: no required check waits for
-  it.
+  request or the release check), wide changes included. Its component audits
+  skip a wide change, one that touches more than five components or changes
+  shared styles (themes, tokens, shared `.stylex.ts` files); add the
+  `ci:run-*` labels for those. It is advisory: no required check waits for it.
 - **A pull request that changes CI states its CI impact.** When it changes a
   workflow, a composite action or a CI script, its description carries a
   `CI impact:` line: each changed job's runner class (standard or

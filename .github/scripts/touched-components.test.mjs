@@ -600,6 +600,8 @@ describe('pr-touched-components routing', () => {
     );
     // A failing spec turns the job red: no continue-on-error.
     expect(runSpecs['continue-on-error']).toBeUndefined();
+    // Bounded inside the job's 15 minutes, past the runner's own 8-minute stop.
+    expect(runSpecs['timeout-minutes']).toBe(9);
     // Setup, Storybook and Playwright run for a spec-only change too.
     for (const name of [
       'Setup Node and pnpm',
