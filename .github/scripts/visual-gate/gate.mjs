@@ -82,6 +82,9 @@ const captureIdentity = () => ({
   runId: process.env.ASTRYX_VISUAL_RUN_ID ?? process.env.GITHUB_RUN_ID ?? null,
   runAttempt:
     process.env.ASTRYX_VISUAL_RUN_ATTEMPT ?? process.env.GITHUB_RUN_ATTEMPT ?? null,
+  // pr-visual's default touched check (spec:AST-030 FR12) says so, so the
+  // pull-request comment can name the label for the full suite.
+  ...(process.env.ASTRYX_VISUAL_SCOPE === 'touched' ? {scope: 'touched'} : {}),
 });
 
 const config = loadConfig(REPO_ROOT);
