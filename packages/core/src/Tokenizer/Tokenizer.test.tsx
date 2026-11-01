@@ -406,7 +406,11 @@ describe('Tokenizer', () => {
         isDisabled
       />,
     );
-    expect(screen.getByRole('combobox')).toBeDisabled();
+    // The input keeps its tab stop (spec:AST-085 FR1).
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     // Remove button should not be present when disabled
     expect(
       screen.queryByRole('button', {name: 'Remove Alice'}),
@@ -1390,17 +1394,30 @@ describe('Tokenizer', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('keeps the input natively disabled when disabled without a reason', () => {
+    it("keeps the input's tab stop when disabled without a reason", async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
       render(
-        <Tokenizer
-          label="Members"
-          searchSource={userSource}
-          value={[]}
-          onChange={() => {}}
-          isDisabled
-        />,
+        <>
+          <button type="button">Before</button>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[]}
+            onChange={onChange}
+            isDisabled
+          />
+        </>,
       );
-      expect(screen.getByRole('combobox')).toBeDisabled();
+      const input = screen.getByRole('combobox');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      expect(input).toHaveFocus();
+      await user.keyboard('Ali{Enter}');
+      expect(input).toHaveValue('');
+      expect(onChange).not.toHaveBeenCalled();
     });
   });
   describe('announcements', () => {
