@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/Layer/LayerProvider.test.tsx,
     apps/storybook/stories/Layer.stories.tsx,
+    apps/storybook/rtl-audit/verified-not-applicable.json,
   ]
 modules: []
 families: []
@@ -125,9 +126,10 @@ No component-local concept beyond the consumer props.
 
 ## Verification map
 
-| Contract | Verification             | Representative states                        | Mutation or failure expectation                                                   | Audit section                  |
-| -------- | ------------------------ | -------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
-| FR1–FR3  | `LayerProvider.test.tsx` | Default, declared inset, nested, toast inset | A default-provider difference, or an inset that does not reach its layers, fails. | `audit:LayerProvider/behavior` |
+| Contract     | Verification                                                                       | Representative states                        | Mutation or failure expectation                                                                                                                                                                                                                 | Audit section                  |
+| ------------ | ---------------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| FR1–FR3      | `LayerProvider.test.tsx`                                                           | Default, declared inset, nested, toast inset | A default-provider difference, or an inset that does not reach its layers, fails.                                                                                                                                                               | `audit:LayerProvider/behavior` |
+| RTL relation | Verified-N/A declaration (`apps/storybook/rtl-audit/verified-not-applicable.json`) | Every state                                  | A direction-sensitive glyph, inline spacing, position, or order that the audit detects on LayerProvider reports the declaration stale; its logical toast position and inset are resolved, and verified, in the layer runtime and ToastViewport. | `audit:LayerProvider/i18n-rtl` |
 
 Read from source, with no focused test yet:
 
