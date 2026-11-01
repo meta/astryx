@@ -1235,34 +1235,42 @@ describe('AppShell main keyboard access', () => {
   });
 
   // Main's ref owns both: React detaches it on unmount, and the detach
-  // releases the overflow observation and the keyboard delegation.
+  // releases the overflow observation and the keyboard delegation. Each
+  // listener is matched by its exact handler, so another owner's cleanup
+  // (the focus-ring Effect listens for the same event types) cannot stand in.
   it('releases the overflow observation and the keyboard delegation on unmount', () => {
+    const windowAdd = vi.spyOn(window, 'addEventListener');
     const {unmount} = render(
       <AppShell topNav={<div>Nav</div>}>
         <p>Long content</p>
       </AppShell>,
     );
+    const overflowListeners = windowAdd.mock.calls.filter(
+      ([type]) => type === 'resize',
+    );
+    expect(overflowListeners.length).toBeGreaterThan(0);
+
     const main = screen.getByRole('main');
+    const documentAdd = vi.spyOn(document, 'addEventListener');
     setMainGeometry(main, 1200);
     remeasure();
-    // Main is a scroll region, so the delegation is attached.
+    // Main became a scroll region, so the delegation attached its listeners.
     expect(main).toHaveAttribute('tabindex', '0');
+    const delegationListeners = [...documentAdd.mock.calls];
+    expect(delegationListeners.map(([type]) => type)).toEqual(
+      expect.arrayContaining(['keydown', 'keyup', 'pointerdown', 'focusin']),
+    );
 
     const documentRemove = vi.spyOn(document, 'removeEventListener');
     const windowRemove = vi.spyOn(window, 'removeEventListener');
     unmount();
 
-    expect(documentRemove).toHaveBeenCalledWith(
-      'keydown',
-      expect.any(Function),
-      true,
-    );
-    expect(documentRemove).toHaveBeenCalledWith(
-      'focusin',
-      expect.any(Function),
-      true,
-    );
-    expect(windowRemove).toHaveBeenCalledWith('resize', expect.any(Function));
+    for (const [type, listener, options] of delegationListeners) {
+      expect(documentRemove).toHaveBeenCalledWith(type, listener, options);
+    }
+    for (const [type, listener] of overflowListeners) {
+      expect(windowRemove).toHaveBeenCalledWith(type, listener);
+    }
   });
 
   it('observes main only with fill, where it can become a keyboard stop', () => {
