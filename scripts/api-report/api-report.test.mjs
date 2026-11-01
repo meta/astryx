@@ -171,7 +171,7 @@ describe('API changes', () => {
       ]),
     );
     expect(md.split('\n')[0]).toBe(
-      '**API changes:** demo +0 · ~1 · −0 (report stale: run `pnpm api:report`)',
+      '**API changes:** `demo` +0 · ~1 · −0 (report stale: run `pnpm api:report`)',
     );
     expect(md).toContain('<details><summary>1 API change (advisory)</summary>');
     expect(md).toContain('`<Chip size="sm" />`');
@@ -186,7 +186,9 @@ describe('API changes', () => {
       rows: [],
       counts: {added: 0, changed: 0, removed: 0},
     });
-    expect(renderChanges([change])).toBe('**API changes:** demo new report\n');
+    expect(renderChanges([change])).toBe(
+      '**API changes:** `demo` new report\n',
+    );
   });
 
   it('gives package-level rows a usage example of their own kind', () => {

@@ -613,6 +613,7 @@ export async function reconcilePrComment({
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
   packageSizePath = 'pr-analysis/package-size.json',
+  apiChangesPath = 'pr-analysis/api-changes.json',
   visualFrames = null,
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
@@ -704,6 +705,10 @@ export async function reconcilePrComment({
         core,
       })
         ? ['--package-size', packageSizePath]
+        : []),
+      // Part of the analysis artifact, which pr-meta.json ties to this head.
+      ...(fs.existsSync(apiChangesPath)
+        ? ['--api-changes', apiChangesPath]
         : []),
       // No report means the audit did not run (it runs on main and release
       // checks, or with the ci:run-a11y label); the comment says so.

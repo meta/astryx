@@ -3,7 +3,7 @@
 
 /**
  * @description Generates the PR comment from the run's analysis results
- * @input --analysis <file> --base-stats <file> --package-size <file> --a11y <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --touched <file> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --package-size <file> --api-changes <file> --a11y <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --touched <file> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout, compact by design: this
  *   head's preview first, the modified components (preview links, size, lines
  *   of code, a mark per browser suite that ran; three rows visible, the rest
@@ -69,6 +69,8 @@ const touched = readOptionalJson('touched');
 const packageSize = readOptionalJson('package-size');
 // The visual frames publish-frames.mjs put on this PR's assets branch.
 const visualFrames = readOptionalJson('visual-frames');
+// The API report step's changes for this head, when it ran.
+const apiChanges = readOptionalJson('api-changes');
 const visualVerdict = readOptionalJson('visual');
 let a11yReport = null;
 try {
@@ -130,6 +132,7 @@ const report = buildCompactReport({
   visualVerdict,
   packageSize,
   visualFrames,
+  apiChanges,
 });
 const footerLinksStr = runUrl
   ? ` | ${extLink('View full report', runUrl)}`
