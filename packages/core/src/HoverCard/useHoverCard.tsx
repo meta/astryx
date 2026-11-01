@@ -31,7 +31,7 @@ import {
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
-import {markLayerSurfacePress} from '../Layer/layerSurfacePress';
+import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {
   colorVars,
@@ -668,12 +668,12 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
       return renderLayer(
         <div
+          // FR11: a press inside the card acts only within the card. A
+          // registered surface counts as something else in the shared
+          // interactive-ancestor walk, so a clickable container around the
+          // trigger leaves it alone; document listeners still see it.
+          ref={registerLayerSurface}
           {...stylex.props(styles.content)}
-          // FR11: a press inside the card acts only within the card. The mark
-          // tells a clickable container around the trigger to leave its click
-          // or middle-button mouseup alone; document listeners still see it.
-          onClick={markLayerSurfacePress}
-          onMouseUp={markLayerSurfacePress}
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside
             // register as "hovering content" would block every later hide.

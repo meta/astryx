@@ -31,7 +31,7 @@ import {
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
-import {markLayerSurfacePress} from '../Layer/layerSurfacePress';
+import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -639,14 +639,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
       return renderLayer(
         // FR11: React bubbles a press on the surface to the trigger's
-        // ancestors, portaled or not. Marking it lets a clickable container
-        // around the trigger leave it alone (its click, or the mouseup a
-        // middle-button press opens a link with) while document listeners
-        // still see it.
-        <div
-          {...stylex.props(styles.content)}
-          onClick={markLayerSurfacePress}
-          onMouseUp={markLayerSurfacePress}>
+        // ancestors, portaled or not. A registered surface counts as
+        // something else in the shared interactive-ancestor walk, so a
+        // clickable container around the trigger leaves the press alone while
+        // document listeners still see it.
+        <div ref={registerLayerSurface} {...stylex.props(styles.content)}>
           {children}
         </div>,
         renderProps,

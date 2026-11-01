@@ -2,26 +2,43 @@
 
 /**
  * @file layerSurfacePress.ts
- * @input A click or mouseup that starts inside an open Tooltip or HoverCard
- *   surface.
- * @output A mark on that native event, which a clickable container reads to
- *   leave the press alone.
+ * @input The content element of an open Tooltip or HoverCard surface.
+ * @output A registry of those elements, so the shared "does this press belong
+ *   to something else" walk (hasInteractiveAncestor) treats a press inside one
+ *   as not the container's.
  * @position component:Tooltip FR11 and component:HoverCard FR11. The surfaces
- *   mark; useClickableContainer reads. The event still propagates, so document
- *   and window listeners (a Typeahead's outside-press handling, analytics)
- *   see it as before. Not exported from the package.
+ *   register their content element; every clickable container that asks
+ *   hasInteractiveAncestor (useClickableContainer, TreeListItem, Table row
+ *   plugins) or isInLayerSurface (Item) leaves the press alone. The event
+ *   keeps propagating, so document and window listeners still see it. Not
+ *   exported from the package.
  */
 
-import type {SyntheticEvent} from 'react';
+const surfaces = new WeakSet<Element>();
 
-const surfacePresses = new WeakSet<Event>();
-
-/** Marks a press that started inside an open layer surface. */
-export function markLayerSurfacePress(event: SyntheticEvent): void {
-  surfacePresses.add(event.nativeEvent);
+/** Ref callback for a layer surface's content element. */
+export function registerLayerSurface(element: Element | null): void {
+  if (element != null) {
+    surfaces.add(element);
+  }
 }
 
-/** Whether a press started inside an open layer surface. */
-export function isLayerSurfacePress(event: SyntheticEvent): boolean {
-  return surfacePresses.has(event.nativeEvent);
+/** Whether this element is a registered layer surface. */
+export function isLayerSurface(element: Element): boolean {
+  return surfaces.has(element);
+}
+
+/**
+ * Whether `element` sits inside a layer surface, walking up to (not including)
+ * `root` or the document body.
+ */
+export function isInLayerSurface(element: Element, root: Element): boolean {
+  let current: Element | null = element;
+  while (current != null && current !== root && current !== document.body) {
+    if (surfaces.has(current)) {
+      return true;
+    }
+    current = current.parentElement;
+  }
+  return false;
 }

@@ -48,6 +48,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
+import {isInLayerSurface} from '../Layer/layerSurfacePress';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
@@ -764,7 +765,12 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
+    if (
+      target.closest('button, a, input, select, textarea') ||
+      // A press inside an open Tooltip or HoverCard belongs to it
+      // (component:Tooltip FR11, component:HoverCard FR11).
+      isInLayerSurface(target, e.currentTarget)
+    ) {
       return;
     }
     onClick?.(e);

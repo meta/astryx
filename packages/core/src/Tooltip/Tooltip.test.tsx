@@ -28,6 +28,7 @@ import {
 import {useRef} from 'react';
 import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
+import {Item} from '../Item/Item';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
@@ -836,6 +837,25 @@ describe('Tooltip surface press', () => {
     // Positive control: a click on the card's own content still activates it.
     fireEvent.click(screen.getByText('Card body'));
     expect(onCardClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text from running an Item row', () => {
+    const onRowClick = vi.fn();
+    render(
+      <Item
+        label="Row"
+        onClick={onRowClick}
+        endContent={
+          <Tooltip content="Tooltip text" isOpen>
+            <span tabIndex={0}>Info</span>
+          </Tooltip>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onRowClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Row'));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a middle-button press on the tooltip text from opening a card link', () => {
