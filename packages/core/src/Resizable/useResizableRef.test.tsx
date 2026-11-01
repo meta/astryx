@@ -104,12 +104,14 @@ describe('useResizable(ref, options) only delegates to createResizable (spec:AST
     const view = render(<Split options={first} onRegion={() => {}} />);
     expect(created).toHaveLength(1);
     expect(created[0].element).toBe(view.getByTestId('handle'));
-    expect(created[0].options).toBe(first);
+    expect(created[0].options).toMatchObject(first);
 
     const second: CreateResizableOptions = {defaultSize: 200, minSize: 150};
     view.rerender(<Split options={second} onRegion={() => {}} />);
     expect(created).toHaveLength(1);
-    expect(fake.update).toHaveBeenLastCalledWith(second);
+    expect(fake.update).toHaveBeenLastCalledWith(
+      expect.objectContaining(second),
+    );
 
     view.unmount();
     expect(fake.destroy).toHaveBeenCalledTimes(1);
