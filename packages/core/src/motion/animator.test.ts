@@ -469,7 +469,7 @@ describe('animate: keyframes on the compositor', () => {
     );
   });
 
-  it('looks for its end again on the next frame when the engine dates animations per frame (WebKit), not in a spin', async () => {
+  it('looks for its end again on the next frame when the engine dates animations per frame, not in a spin, and retires in that frame', async () => {
     // WebKit moves an animation's currentTime once per frame. A retire that
     // looks within a frame reads the frame's time, a fraction of a ms short of
     // the end, and a timer set to that fraction fires again before anything
@@ -502,12 +502,49 @@ describe('animate: keyframes on the compositor', () => {
       await vi.advanceTimersByTimeAsync(1);
     }
     expect(timers.mock.calls.length).toBeLessThanOrEqual(2);
-    // The next frame: the engine's time passes the end, and it retires.
+    // The next frame: the engine's time passes the end, and it retires in
+    // that frame, before it paints, with no timer run in between.
     frameTime = start + curve + 16;
     clock += 1;
-    await vi.advanceTimersByTimeAsync(17);
+    await commitFrame(clock);
     expect(animation.cancelled).toBe(true);
+    await vi.advanceTimersByTimeAsync(17);
     await expect(handle.finished).resolves.toBe(true);
+  });
+
+  it('keeps looking while the frame it looked in was dated short of the end, and retires in the frame that reaches it, before a late end timer runs', async () => {
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.settle});
+    const [animation] = live('translate');
+    await commitFrame(clock);
+    const start = animation.startTime as number;
+    const curve = Number(animation.options.duration) - END_HOLD_MS;
+    const end = start + curve;
+    // The engine dates each animation per frame, at `frameTime`.
+    let frameTime = start;
+    Object.defineProperty(animation, 'currentTime', {
+      configurable: true,
+      get: () => frameTime - start,
+    });
+    Object.defineProperty(animation, 'effect', {
+      configurable: true,
+      value: {getTiming: () => ({duration: animation.options.duration})},
+    });
+    // Inside the last frame before the end: the timer that starts the frame
+    // looks has run, the end timer has not.
+    const toLook = end - 16 - clock;
+    clock += toLook;
+    await vi.advanceTimersByTimeAsync(toLook);
+    // The frame the look runs in is dated 20 ms short of the end, before
+    // that timer was due.
+    frameTime = end - 20;
+    await commitFrame(clock);
+    expect(animation.cancelled).toBe(false);
+    // The next frame reaches the end while the end timer, late, has still
+    // not run: the frame retires it before it paints.
+    frameTime = end + 1;
+    await commitFrame(clock);
+    expect(animation.cancelled).toBe(true);
   });
 
   it('never retires an animation a sampler has paused', async () => {
