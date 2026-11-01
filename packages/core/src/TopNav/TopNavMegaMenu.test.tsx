@@ -1162,8 +1162,9 @@ describe('TopNavMegaMenu empty slots', () => {
   ])('renders no featured wrapper in the drawer for %s', (_name, featured) => {
     const section = (element: HTMLElement) => {
       const trigger = within(element).getByRole('button', {name: 'Products'});
-      return document
-        .getElementById(trigger.getAttribute('aria-controls') ?? '')!
+      // Both renders share an id, so look the group up inside this render.
+      return element
+        .querySelector(`[id="${trigger.getAttribute('aria-controls')}"]`)!
         .innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
     };
     const {container: withFeatured} = render(
