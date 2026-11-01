@@ -165,7 +165,7 @@ describe('Tokenizer minQueryLength', () => {
   });
 });
 
-// component:Tokenizer FR25: a press in the field keeps the list open.
+// component:BaseTypeahead FR12 through Tokenizer: a press in the field keeps the list open.
 describe('Tokenizer press inside and outside', () => {
   it('keeps the list open on a press in its input and closes it on a press elsewhere', async () => {
     render(
@@ -188,9 +188,11 @@ describe('Tokenizer press inside and outside', () => {
     });
 
     fireEvent.pointerDown(input);
+    fireEvent.pointerUp(input);
     expect(input).toHaveAttribute('aria-expanded', 'true');
 
     fireEvent.pointerDown(screen.getByText('Elsewhere'));
+    fireEvent.pointerUp(screen.getByText('Elsewhere'));
     await waitFor(() => {
       expect(input).toHaveAttribute('aria-expanded', 'false');
     });

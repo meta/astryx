@@ -4,7 +4,7 @@
 /**
  * @file TypeaheadInputPress.a11y.chromium.spec.ts
  * @input The `Core/Typeahead` Default story in a built Storybook, in Chromium.
- * @output Real-browser proof of component:Typeahead FR10: with the list open,
+ * @output Real-browser proof of component:BaseTypeahead FR12: with the list open,
  *   a press in the field's own input keeps it open (native light dismiss used
  *   to close it), and a press elsewhere on the page closes it.
  * @position Runs in pr-a11y when Typeahead, Tokenizer, Popover or this spec

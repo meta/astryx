@@ -445,9 +445,14 @@ describe('BaseTypeahead', () => {
   });
 });
 
-// architecture:layer-runtime: a control beside an open layer is not outside.
+// component:BaseTypeahead FR12: a press on the field or in the list is inside.
 describe('BaseTypeahead press inside and outside', () => {
-  async function openList() {
+  function press(target: Element) {
+    fireEvent.pointerDown(target, {composed: true});
+    fireEvent.pointerUp(target, {composed: true});
+  }
+
+  async function openList(container?: HTMLElement) {
     render(
       <>
         <BaseTypeahead
@@ -458,8 +463,10 @@ describe('BaseTypeahead press inside and outside', () => {
         />
         <p>Elsewhere</p>
       </>,
+      container ? {container} : undefined,
     );
-    const input = screen.getByRole('combobox');
+    const root = container ?? document.body;
+    const input = root.querySelector('[role="combobox"]') as HTMLInputElement;
     input.focus();
     fireEvent.change(input, {target: {value: 'App'}});
     await waitFor(() => {
@@ -470,7 +477,7 @@ describe('BaseTypeahead press inside and outside', () => {
 
   it('keeps the list open on a press in its own input', async () => {
     const input = await openList();
-    fireEvent.pointerDown(input);
+    press(input);
     fireEvent.click(input);
     expect(input).toHaveAttribute('aria-expanded', 'true');
     // The list is a manual popover, so the browser does not light-dismiss it.
@@ -480,16 +487,42 @@ describe('BaseTypeahead press inside and outside', () => {
 
   it('keeps the list open on a press in the list', async () => {
     const input = await openList();
-    fireEvent.pointerDown(screen.getAllByRole('option', {hidden: true})[0]);
+    press(screen.getAllByRole('option', {hidden: true})[0]);
     expect(input).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('closes the list on a press outside the field and the list', async () => {
     const input = await openList();
-    fireEvent.pointerDown(screen.getByText('Elsewhere'));
+    press(screen.getByText('Elsewhere'));
     await waitFor(() => {
       expect(input).toHaveAttribute('aria-expanded', 'false');
     });
+  });
+
+  it('keeps the list open when a scroll starts outside (pointercancel)', async () => {
+    const input = await openList();
+    const elsewhere = screen.getByText('Elsewhere');
+    fireEvent.pointerDown(elsewhere, {composed: true});
+    fireEvent.pointerCancel(elsewhere, {composed: true});
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('keeps the list open on a press in its input inside a shadow root', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const container = document.createElement('div');
+    host.attachShadow({mode: 'open'}).appendChild(container);
+    try {
+      const input = await openList(container);
+      press(input);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      press(container.querySelector('p')!);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    } finally {
+      host.remove();
+    }
   });
 });
 

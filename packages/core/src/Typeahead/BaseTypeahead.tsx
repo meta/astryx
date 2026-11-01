@@ -39,6 +39,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {watchOutsidePress} from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
@@ -778,12 +779,41 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [searchSource]);
 
-  // Layer for dropdown
+  // Layer for dropdown. The list is a manual popover (see usePopover below):
+  // while it is open, a press on the combobox itself (its input, tokens or
+  // buttons) or in the list is inside, and a press anywhere else closes it
+  // (component:BaseTypeahead FR12). The watch starts when the list shows and
+  // stops when it hides.
+  const stopOutsidePressRef = useRef<(() => void) | null>(null);
+  const listIdRef = useRef('');
+  const hideListRef = useRef<() => void>(() => {});
   const handleLayerShow = useCallback(() => {
     onOpenChange?.(true);
-  }, [onOpenChange]);
+    stopOutsidePressRef.current?.();
+    stopOutsidePressRef.current = null;
+    const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
+    if (anchorEl == null) {
+      return;
+    }
+    const root = anchorEl.getRootNode() as Document | ShadowRoot;
+    stopOutsidePressRef.current = watchOutsidePress(
+      anchorEl.ownerDocument,
+      path => {
+        const anchor = anchorRef?.current ?? fallbackAnchorRef.current;
+        const list =
+          root.getElementById(listIdRef.current) ??
+          anchorEl.ownerDocument.getElementById(listIdRef.current);
+        return path.some(
+          target => target === anchor || (list != null && target === list),
+        );
+      },
+      () => hideListRef.current(),
+    );
+  }, [onOpenChange, anchorRef]);
 
   const handleLayerHide = useCallback(() => {
+    stopOutsidePressRef.current?.();
+    stopOutsidePressRef.current = null;
     onOpenChange?.(false);
     setHighlightedIndex(-1);
     closedGenRef.current = searchGenRef.current;
@@ -796,7 +826,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     onHide: handleLayerHide,
     // A manual popover: the browser's light dismiss counts a press in the
     // input as outside (a text input cannot be an invoker), so it would close
-    // the list on every press in the field. The effect below dismisses on a
+    // the list on every press in the field. handleLayerShow watches for a
     // press outside instead (architecture:layer-runtime); Escape stays on the
     // shared layer stack.
     hasLightDismiss: false,
@@ -806,34 +836,17 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     // DOM focus, so wrapping it in a modal dialog would misrepresent it.
     role: 'none',
   });
-
-  // A press on the combobox itself (its input, tokens or buttons) or in the
-  // list is inside; a press anywhere else closes the list.
-  const {isOpen: isListOpen, id: listId, hide: hideList} = popover;
-  useEffect(() => {
-    if (!isListOpen) {
-      return;
-    }
-    const doc =
-      (anchorRef?.current ?? fallbackAnchorRef.current)?.ownerDocument ??
-      document;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) {
-        return;
-      }
-      const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
-      if (
-        anchorEl?.contains(target) ||
-        doc.getElementById(listId)?.contains(target)
-      ) {
-        return;
-      }
-      hideList();
-    };
-    doc.addEventListener('pointerdown', onPointerDown, true);
-    return () => doc.removeEventListener('pointerdown', onPointerDown, true);
-  }, [isListOpen, listId, hideList, anchorRef]);
+  useIsomorphicLayoutEffect(() => {
+    listIdRef.current = popover.id;
+    hideListRef.current = popover.hide;
+  });
+  useEffect(
+    () => () => {
+      stopOutsidePressRef.current?.();
+      stopOutsidePressRef.current = null;
+    },
+    [],
+  );
 
   // Show the layer, deferring past the active click if a pointer is down.
   // Without this, popover="auto" light-dismiss immediately closes the
