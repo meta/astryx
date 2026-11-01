@@ -54,6 +54,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale, useTranslator} from '../i18n';
 import {useInputGroup} from '../InputGroup';
+import {isStatusInvalid} from '../InputGroup/InputGroupContext';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -659,7 +660,9 @@ export function NativeDateField({
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={
-            status?.type === 'error' || !isInputValid ? 'true' : undefined
+            isStatusInvalid(status, inputGroup) || !isInputValid
+              ? 'true'
+              : undefined
           }
           aria-busy={isBusy || undefined}
           {...stylex.props(

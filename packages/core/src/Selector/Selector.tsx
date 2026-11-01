@@ -96,7 +96,7 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
-import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTranslator} from '../i18n';
@@ -1951,7 +1951,7 @@ export function Selector<T extends SelectorOptionType>(
       undefined,
     'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
-    'aria-invalid': status?.type === 'error' ? 'true' : undefined,
+    'aria-invalid': isStatusInvalid(status, inputGroup) ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // The built-in keyboard model runs first; a caller handler sees the keys
     // it leaves uncancelled. A caller `onClick` arrives through `rest` and

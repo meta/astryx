@@ -44,7 +44,7 @@ import {
 } from '../Field';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
@@ -928,7 +928,9 @@ function PointerDateField({
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          status?.type === 'error' || !isInputValid ? 'true' : undefined
+          isStatusInvalid(status, inputGroup) || !isInputValid
+            ? 'true'
+            : undefined
         }
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}

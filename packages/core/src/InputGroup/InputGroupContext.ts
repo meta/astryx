@@ -18,6 +18,12 @@ export interface InputGroupContextValue {
   labelID: string;
   /** IDs of helper/status text owned by the group, for aria-describedby composition. */
   describedByIDs?: string;
+  /**
+   * Whether the group's status is an error. A member without a status of its
+   * own is invalid with it (`aria-invalid`), since the group's `role="group"`
+   * cannot carry `aria-invalid` itself.
+   */
+  isInvalid?: boolean;
 }
 
 export const InputGroupContext = createContext<InputGroupContextValue | null>(
@@ -31,4 +37,17 @@ InputGroupContext.displayName = 'InputGroupContext';
  */
 export function useInputGroup(): InputGroupContextValue | null {
   return use(InputGroupContext);
+}
+
+/**
+ * Whether a field is invalid for `aria-invalid`: its own status decides when
+ * it has one, otherwise the group's error status reaches it through context.
+ */
+export function isStatusInvalid(
+  status: {type: string} | undefined,
+  inputGroup: InputGroupContextValue | null,
+): boolean {
+  return status != null
+    ? status.type === 'error'
+    : inputGroup?.isInvalid === true;
 }

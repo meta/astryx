@@ -171,8 +171,13 @@ export function InputGroup({
       .join(' ') || undefined;
 
   const contextValue = useMemo(
-    () => ({isInGroup: true as const, labelID, describedByIDs}),
-    [labelID, describedByIDs],
+    () => ({
+      isInGroup: true as const,
+      labelID,
+      describedByIDs,
+      isInvalid: status?.type === 'error',
+    }),
+    [labelID, describedByIDs, status?.type],
   );
   const internalContextValue = useMemo(() => ({isDisabled}), [isDisabled]);
 

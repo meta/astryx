@@ -60,7 +60,7 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 
 // Public padding tokens for the `number-input` theme target. A theme writes an
@@ -1030,7 +1030,9 @@ export function NumberInput({
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          status?.type === 'error' || !isInputValid ? 'true' : undefined
+          isStatusInvalid(status, inputGroup) || !isInputValid
+            ? 'true'
+            : undefined
         }
         aria-labelledby={inputLabelledBy}
         {...stylex.props(
