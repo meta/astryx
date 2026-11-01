@@ -544,6 +544,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # Placeholder docs-prompt origins: the build and its browser contracts
+    # exercise the configured prompt. Deployed values live only in the
+    # deployment environment, never in this repository.
+    env:
+      NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: https://docs.example.test
+      NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
     steps:
       - name: Require a branch in this repository or the ci:run label
         if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
