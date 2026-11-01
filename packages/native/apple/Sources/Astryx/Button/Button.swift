@@ -383,8 +383,8 @@ struct AstryxButtonStyle: ButtonStyle {
     let drawn = label(configuration, padded: true)
       .background(shape.fill(fill))
       .background { if let underlay { shape.fill(underlay) } }
-      .overlay { if let edge { shape.strokeBorder(edge, lineWidth: 1) } }
-      .astryxShadow(shadow, in: shape, borderWidth: edge == nil ? 0 : 1)
+      .overlay { if let edge { shape.strokeBorder(edge, lineWidth: astryx.tokens.size.borderWidth) } }
+      .astryxShadow(shadow, in: shape, borderWidth: edge == nil ? 0 : astryx.tokens.size.borderWidth)
       .opacity(pressOpacity(configuration))
     if keepsTapMinimum {
       // Drawn at the token size; laid out at least 44 by 44 so the whole
