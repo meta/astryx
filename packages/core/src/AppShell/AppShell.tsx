@@ -728,15 +728,6 @@ export function AppShell({
     isMainScrollRegionRef.current = isMainScrollRegion;
     syncMainDelegation();
   }, [isMainScrollRegion, syncMainDelegation]);
-  useEffect(
-    () => () => {
-      mainOverflowRef.current?.stop();
-      mainOverflowRef.current = null;
-      mainDelegationRef.current?.release();
-      mainDelegationRef.current = null;
-    },
-    [],
-  );
 
   // Nav style derived values
   const hasBanner = isRenderable(banner);

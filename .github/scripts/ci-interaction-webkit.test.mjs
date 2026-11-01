@@ -281,7 +281,7 @@ describe('WebKit interaction proof routing', () => {
         '.changeset/toast-pause-sources.md',
         'packages/core/src/Toast/Toast.tsx',
         'packages/core/src/Toast/ToastViewport.test.tsx',
-        'packages/core/src/Toast/Toast.spec.md',
+        'docs/specs/components/Toast/Toast.spec.md',
       ],
       [
         '.changeset/textarea-counter-i18n.md',

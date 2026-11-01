@@ -2189,8 +2189,149 @@ describe('BottomSheet', () => {
       expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
         '0px',
       );
+      expect(body.scrollTop).toBe(0);
       expect(sheet.getBoundingClientRect()).toEqual(initialRect);
       expect(sheet.style.height).toBe('');
+    });
+
+    it('restores a top field when interactive keyboard dismissal leaves only the accessory bar', () => {
+      const viewport = mockVisualViewport(500);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Search items"
+          height="tall">
+          <input aria-label="Search" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Search'});
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 150 - body.scrollTop, bottom: 190 - body.scrollTop}),
+      );
+
+      input.focus();
+      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
+        '348px',
+      );
+      expect(body.scrollTop).toBe(0);
+
+      // Safari can move the sheet body during the interactive dismissal. The
+      // main keyboard has gone, but its accessory bar still shortens the visual
+      // viewport, so this is recovery without a full-height viewport yet.
+      body.scrollTop = 300;
+      viewport.height = 720;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+
+      expect(body.scrollTop).toBe(0);
+      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
+        '128px',
+      );
+
+      // Once that recovery step has been consumed, later layout work at the
+      // same visual-viewport height must not overwrite the person's scrolling.
+      body.scrollTop = 80;
+      void act(() => window.dispatchEvent(new Event('resize')));
+      // The ordinary safe-area pass may clamp scrolling just enough to keep
+      // the still-focused top field visible, but it must not reset to the old
+      // pre-keyboard position again.
+      expect(body.scrollTop).toBe(50);
+    });
+
+    it('re-reveals a later focused field after full keyboard recovery restores the opening scroll position', () => {
+      const viewport = mockVisualViewport(500);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Edit details"
+          height="tall">
+          <input aria-label="First" />
+          <input aria-label="Later" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const first = screen.getByRole('textbox', {name: 'First'});
+      const later = screen.getByRole('textbox', {name: 'Later'});
+      Object.defineProperty(body, 'scrollBy', {
+        configurable: true,
+        value: ({top = 0}: ScrollToOptions) => {
+          body.scrollTop += top;
+        },
+      });
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(first, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 150 - body.scrollTop, bottom: 190 - body.scrollTop}),
+      );
+      vi.spyOn(later, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 860 - body.scrollTop, bottom: 900 - body.scrollTop}),
+      );
+
+      first.focus();
+      expect(body.scrollTop).toBe(0);
+      later.focus();
+      expect(body.scrollTop).toBe(448);
+
+      viewport.height = 800;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+
+      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
+        '0px',
+      );
+      // Cleanup restores 0, then the unobstructed safe-area pass reveals the
+      // still-focused later field at the bottom of the 100–800 body viewport.
+      expect(body.scrollTop).toBe(100);
+    });
+
+    it('retains the accommodated body scroll through partial viewport recovery while focus is leaving', () => {
+      const viewport = mockVisualViewport(500);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Add a comment"
+          height="tall">
+          <input aria-label="Comment" />
+        </BottomSheet>,
+      );
+      const body = getBody();
+      const input = screen.getByRole('textbox', {name: 'Comment'});
+      Object.defineProperty(body, 'scrollBy', {
+        configurable: true,
+        value: ({top = 0}: ScrollToOptions) => {
+          body.scrollTop += top;
+        },
+      });
+      vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(
+        rect({top: 100, bottom: 800}),
+      );
+      vi.spyOn(input, 'getBoundingClientRect').mockImplementation(() =>
+        rect({top: 660 - body.scrollTop, bottom: 700 - body.scrollTop}),
+      );
+
+      input.focus();
+      expect(body.scrollTop).toBe(248);
+      input.blur();
+      viewport.height = 720;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+
+      expect(body.scrollTop).toBe(248);
+      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
+        '128px',
+      );
+
+      viewport.height = 800;
+      void act(() => viewport.dispatchEvent(new Event('resize')));
+      expect(body.scrollTop).toBe(0);
+      expect(body.style.getPropertyValue('--_sheet-keyboard-inset')).toBe(
+        '0px',
+      );
     });
 
     it('smoothly scrolls a focused Tall control above the keyboard', () => {

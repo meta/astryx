@@ -89,7 +89,8 @@ function buildFixture() {
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.tsx'), 'export function Badge() {}\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.doc.mjs'), "export default {name: 'Badge'};\n");
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/index.ts'), "export {Badge} from './Badge';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.spec.md'), '---\nschema_version: 3\n---\n');
+  fs.mkdirSync(path.join(upstream, 'docs/specs/components/Badge'), {recursive: true});
+  fs.writeFileSync(path.join(upstream, 'docs/specs/components/Badge/Badge.spec.md'), '---\nschema_version: 3\n---\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.tsx'), 'export function Card() {}\n');
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.doc.mjs'), "export default {name: 'Card'};\n");
   fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), "export {Card} from './Card';\n");
@@ -150,7 +151,7 @@ function buildFixture() {
   git(upstream, ['checkout', '-q', 'feature']);
   fs.appendFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), 'export const Card = {}\n');
   // Only Badge's knowledge record changes: no browser audit owns Badge.
-  fs.appendFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.spec.md'), 'record text\n');
+  fs.appendFileSync(path.join(upstream, 'docs/specs/components/Badge/Badge.spec.md'), 'record text\n');
   fs.appendFileSync(
     path.join(upstream, 'packages/richtext/src/RichTextEditor.tsx'),
     'export const richTextChanged = true\n',

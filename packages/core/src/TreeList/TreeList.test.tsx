@@ -1641,6 +1641,38 @@ describe('TreeList', () => {
     );
   });
 
+  it('typeahead reaches an accented label with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'dung', label: 'Dung', description: 'Đà Lạt'},
+          {id: 'dao', label: 'Đào', description: 'Hà Nội'},
+          {id: 'lodz', label: 'Łódź'},
+        ]}
+      />,
+    );
+    screen.getByText('Dung').closest('li')!.focus();
+    await user.keyboard('l');
+    expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
+  });
+
+  it('typeahead puts the exact match first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'lodz', label: 'Łódź'},
+          {id: 'dung', label: 'Dung'},
+          {id: 'dao', label: 'Đào'},
+        ]}
+      />,
+    );
+    screen.getByText('Łódź').closest('li')!.focus();
+    await user.keyboard('đ');
+    expect(document.activeElement).toBe(screen.getByText('Đào').closest('li'));
+  });
+
   it('lets a consumer prevent built-in TreeList keyboard navigation while receiving root div as event.currentTarget', () => {
     let capturedCurrentTarget: Element | null = null;
     const ref = {current: null as HTMLDivElement | null};
@@ -1733,5 +1765,66 @@ describe('TreeList', () => {
     expect(document.activeElement).toBe(headerButton);
     const items = screen.getAllByRole('treeitem');
     expect(items[0]).toHaveAttribute('tabindex', '0');
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('TreeList empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])(
+    'a header of %s names nothing; the tree keeps its own label',
+    (_name, header) => {
+      render(
+        <TreeList
+          items={simpleItems}
+          header={header as ReactNode}
+          aria-label="Files"
+        />,
+      );
+      const tree = screen.getByRole('tree');
+      expect(tree).not.toHaveAttribute('aria-labelledby');
+      expect(tree).toHaveAccessibleName('Files');
+    },
+  );
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    const {container: withSlots} = render(
+      <TreeList
+        items={[
+          {
+            id: 'a',
+            label: 'Item A',
+            startContent: value as ReactNode,
+            endContent: value as ReactNode,
+          },
+        ]}
+      />,
+    );
+    const {container: without} = render(
+      <TreeList items={[{id: 'a', label: 'Item A'}]} />,
+    );
+    expect(html(withSlots)).toBe(html(without));
+  });
+
+  it('renders 0 as a header and in the start and end slots, as React does', () => {
+    render(
+      <TreeList
+        header={0}
+        items={[{id: 'a', label: 'Item A', startContent: 0, endContent: 0}]}
+      />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
+    expect(screen.getByRole('tree')).toHaveAttribute('aria-labelledby');
   });
 });
