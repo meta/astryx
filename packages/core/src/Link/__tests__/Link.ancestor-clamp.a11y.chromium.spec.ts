@@ -46,21 +46,23 @@ test('a text-only Link clamps inside an ancestor Text maxLines={2}', async ({
     return {
       display: getComputedStyle(anchor).display,
       clamp: rootStyle.webkitLineClamp,
-      rootHeight: rootBox.height,
-      anchorHeight: anchorBox.height,
       overflowed: root.scrollHeight > root.clientHeight + 1,
+      // The clamp cuts the link mid text: the anchor starts inside the two
+      // visible lines and its box extends past the visible bottom edge.
+      anchorTopInside:
+        anchorBox.top >= rootBox.top - 1 && anchorBox.top <= rootBox.bottom - 1,
+      anchorBottomPastClamp: anchorBox.bottom > rootBox.bottom + 1,
     };
   });
   expect(measured).not.toBeNull();
   // The anchor flows inside the clamped lines rather than forming its own box.
   expect(measured?.display).toBe('inline');
-  // The ancestor clamps to two lines and the link is cut by that clamp,
-  // not overflowing past it.
+  // The ancestor clamps to two lines, and the link's own text runs past them
+  // so the clamp cuts the link itself, not just the paragraph after it.
   expect(measured?.clamp).toBe('2');
   expect(measured?.overflowed).toBe(true);
-  expect(measured?.anchorHeight).toBeLessThanOrEqual(
-    (measured?.rootHeight ?? 0) + 1,
-  );
+  expect(measured?.anchorTopInside).toBe(true);
+  expect(measured?.anchorBottomPastClamp).toBe(true);
 });
 
 test('a composed Link keeps its box and paints a keyboard focus outline', async ({
