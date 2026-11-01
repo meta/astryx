@@ -9,12 +9,19 @@
  *   commit as onCollapseChange, controlled or not (component:Resizable FR8:
  *   unchanged), and that a plain element behind the ref drops its listeners
  *   when it unmounts and is named and announced through the message catalog
- *   (spec:AST-107 FR6)
+ *   (spec:AST-107 FR6); and that a configuration-object region keeps its size
+ *   and collapse state across an `<Activity>` that hides and shows it
  * @position Integration tests for useResizable.ts and createResizable.ts
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
+import {
+  Activity,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {ResizeHandle} from './ResizeHandle';
@@ -236,5 +243,57 @@ describe('a plain element behind the ref (spec:AST-107 FR6)', () => {
       'aria-label',
       'Sidebar width',
     );
+  });
+});
+
+describe('a configuration-object region under an Activity', () => {
+  it('keeps its size and collapse state across a hide and a show', () => {
+    let held: ReturnType<typeof useResizableRegion> | undefined;
+    function useResizableRegion() {
+      return useResizable({defaultSize: 250, collapsible: true});
+    }
+    function Panel() {
+      held = useResizableRegion();
+      return <ResizeHandle resizable={held.props} />;
+    }
+    function Host() {
+      const [isVisible, setIsVisible] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setIsVisible(!isVisible)}>
+            visibility
+          </button>
+          <Activity mode={isVisible ? 'visible' : 'hidden'}>
+            <Panel />
+          </Activity>
+        </>
+      );
+    }
+    const toggle = () => {
+      act(() => {
+        screen.getByRole('button', {name: 'visibility'}).click();
+      });
+    };
+    render(<Host />);
+    act(() => {
+      held?.resize(300);
+    });
+    toggle();
+    toggle();
+    expect(held?.size).toBe(300);
+    expect(screen.getByRole('separator')).toHaveAttribute(
+      'aria-valuenow',
+      '300',
+    );
+    act(() => {
+      held?.collapse();
+    });
+    toggle();
+    toggle();
+    expect(held?.isCollapsed).toBe(true);
+    act(() => {
+      held?.expand();
+    });
+    expect(held?.size).toBe(300);
   });
 });
