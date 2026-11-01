@@ -143,7 +143,9 @@ Consumer props, content modes, and presentation policy remain documented in
   close, and the
   pointer menu observes its size and content to decide whether it scrolls. With
   `presentation="adaptive"` it subscribes to the compact-touch query while
-  mounted.
+  mounted. A menu never opened mounts no layer: its pointer menu surface mounts
+  at the first open and stays mounted after it, so a page with many context
+  menus (a table with one per cell) carries no closed menu surfaces.
 
 ## Accessibility contract
 
