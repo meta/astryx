@@ -547,6 +547,50 @@ describe('animate: keyframes on the compositor', () => {
     expect(animation.cancelled).toBe(true);
   });
 
+  it('a retarget while a look at the old curve\u2019s end waits for its frame still looks at the new curve\u2019s end in a frame', async () => {
+    // Each animation's frame look is its own: one still waiting for its frame
+    // for a replaced animation does not stand in for the new animation's.
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.settle});
+    const [first] = live('translate');
+    await commitFrame(clock);
+    // The engine dates each animation per frame, at `frameTime`.
+    let frameTime = clock;
+    const datedPerFrame = (animation: Recorded) => {
+      Object.defineProperty(animation, 'currentTime', {
+        configurable: true,
+        get: () => frameTime - (animation.startTime as number),
+      });
+      Object.defineProperty(animation, 'effect', {
+        configurable: true,
+        value: {getTiming: () => ({duration: animation.options.duration})},
+      });
+    };
+    datedPerFrame(first);
+    const firstCurve = Number(first.options.duration) - END_HOLD_MS;
+    // Inside the last frame before its end, with no frame drawn: its look
+    // waits for the next frame.
+    clock += firstCurve - 10;
+    await vi.advanceTimersByTimeAsync(firstCurve - 10);
+    expect(frameQueue.length).toBeGreaterThan(0);
+    // Retargeted before that frame comes; the page then draws no frame until
+    // the new curve is inside its own last frame.
+    animator.animate({x: 200}, {spring: springs.settle});
+    const second = live('translate').at(-1) as Recorded;
+    datedPerFrame(second);
+    const secondCurve = Number(second.options.duration) - END_HOLD_MS;
+    const secondEnd = (second.startTime as number) + secondCurve;
+    const wait = secondEnd - 10 - clock;
+    clock += wait;
+    await vi.advanceTimersByTimeAsync(wait);
+    expect(second.cancelled).toBe(false);
+    // The next frame reaches the new curve's end: it retires there, before
+    // that frame paints, with no timer run in between.
+    frameTime = secondEnd + 1;
+    await commitFrame(clock);
+    expect(second.cancelled).toBe(true);
+  });
+
   it('never retires an animation a sampler has paused', async () => {
     const {animator} = setup();
     animator.animate({x: 120}, {spring: springs.quickChange});
