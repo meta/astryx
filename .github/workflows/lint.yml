@@ -161,7 +161,8 @@ jobs:
       # main then reformats that file inside the merging pull request, which
       # fails Changeset coverage there for a change it never meant to make.
       # Check the files this pull request changes, with the Prettier and the
-      # file patterns the hook uses.
+      # file patterns the hook uses. The docs and spec lanes skip it with the
+      # rest of full lint, since they install no dependencies.
       - name: Check formatting of changed files
         if: github.event_name == 'pull_request' && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         env:
@@ -183,7 +184,7 @@ jobs:
             exit 1
           fi
           if [ "$status" -ne 0 ]; then
-            echo "::error title=Prettier failed::prettier --list-different exited with $status"
+            echo "::error title=Prettier failed::Prettier failed (xargs exited with $status); see the error above."
             exit "$status"
           fi
           echo 'Every changed file is formatted.'
