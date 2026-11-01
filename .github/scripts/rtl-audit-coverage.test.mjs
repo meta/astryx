@@ -20,6 +20,10 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
+  glyphRendersOnBlockAxis,
+  d1GlyphKey,
+  d1PairKey,
+  isUnchangedBlockAxisPair,
   finishFiniteAnimations,
   gradeDirectionalPair,
   orderD1StoryCandidates,
@@ -1014,6 +1018,106 @@ describe('finishFiniteAnimations', () => {
 
   it('does nothing in a document without the Web Animations API', () => {
     expect(finishFiniteAnimations({})).toBe(0);
+  });
+});
+
+describe('glyphRendersOnBlockAxis', () => {
+  // CSS matrix(a, b, c, d) order: rotate(90deg) is [0, 1, -1, 0].
+  const identity = [1, 0, 0, 1];
+  const mirror = [-1, 0, 0, 1];
+  const quarterTurn = [0, 1, -1, 0];
+  const mirroredQuarterTurn = [0, 1, 1, 0]; // scaleX(-1) . rotate(90deg)
+  const negativeQuarterTurn = [0, -1, 1, 0]; // rotate(-90deg)
+
+  it('keeps an unrotated chevron on the inline axis, mirrored or not', () => {
+    expect(glyphRendersOnBlockAxis('right', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', mirror)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', mirror)).toBe(false);
+  });
+
+  it('puts a chevron turned a quarter either way on the block axis', () => {
+    expect(glyphRendersOnBlockAxis('right', quarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', mirroredQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', negativeQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('left', quarterTurn)).toBe(true);
+  });
+
+  it('keeps a half-turned chevron on the inline axis', () => {
+    expect(glyphRendersOnBlockAxis('right', [-1, 0, 0, -1])).toBe(false);
+  });
+
+  it('ignores a glyph with no horizontal direction or no matrix', () => {
+    expect(glyphRendersOnBlockAxis(null, quarterTurn)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', undefined)).toBe(false);
+  });
+});
+
+describe('isUnchangedBlockAxisPair', () => {
+  const down = {dir: 'right', matrix: [0, 1, -1, 0]}; // rotate(90deg)
+  const up = {dir: 'right', matrix: [0, -1, 1, 0]}; // rotate(-90deg)
+  const mirroredDown = {dir: 'right', matrix: [0, 1, 1, 0]};
+  const right = {dir: 'right', matrix: [1, 0, 0, 1]};
+
+  it('leaves an expanded chevron that points down in both directions', () => {
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(down, mirroredDown)).toBe(true);
+  });
+
+  it('judges a chevron that points down in LTR and up in RTL', () => {
+    expect(isUnchangedBlockAxisPair(down, up)).toBe(false);
+  });
+
+  it('judges a pair that is horizontal on either side or missing', () => {
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, undefined)).toBe(false);
+  });
+});
+
+describe('d1GlyphKey', () => {
+  const path = 'm9 18 6-6-6-6';
+  const expanded = [0, 1, -1, 0]; // rotate(90deg): points down
+  const collapsed = [1, 0, 0, 1]; // points right, never mirrored
+
+  it('keeps an expanded and a collapsed copy of one chevron apart', () => {
+    expect(d1GlyphKey('right', path, expanded)).not.toBe(
+      d1GlyphKey('right', path, collapsed),
+    );
+  });
+
+  it('still merges repeated copies on the same axis', () => {
+    expect(d1GlyphKey('right', path, collapsed)).toBe(
+      d1GlyphKey('right', path, [1, 0, 0, 1]),
+    );
+  });
+
+  it('leaves the collapsed copy judged when it never mirrors', () => {
+    // The expanded copy is unjudged; the collapsed copy, kept separately,
+    // is still a pair D1 judges (and fails, since RTL equals LTR).
+    const down = {dir: 'right', matrix: expanded};
+    const right = {dir: 'right', matrix: collapsed};
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+  });
+});
+
+describe('d1PairKey', () => {
+  const collapsed = {dir: 'right', aria: 'Toggle Docs', matrix: [1, 0, 0, 1]};
+  const expanded = {dir: 'right', aria: 'Toggle Docs', matrix: [0, 1, -1, 0]};
+
+  it('pairs a collapsed and an expanded chevron under one label apart', () => {
+    expect(d1PairKey(collapsed, 0)).not.toBe(d1PairKey(expanded, 1));
+  });
+
+  it('pairs the same labelled glyph across directions', () => {
+    const mirrored = {...collapsed, matrix: [-1, 0, 0, 1]};
+    expect(d1PairKey(collapsed, 0)).toBe(d1PairKey(mirrored, 3));
+  });
+
+  it('falls back to position for an unlabelled glyph', () => {
+    const bare = {dir: 'right', aria: '', matrix: [1, 0, 0, 1]};
+    expect(d1PairKey(bare, 2)).toBe('idx:2::inline');
   });
 });
 

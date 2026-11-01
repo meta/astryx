@@ -5,7 +5,8 @@
 # (a `concurrency` group serializes runs, it does not count jobs), so each run
 # waits for room before its jobs start:
 #
-# - ci.yml's `admission` job, which every other ci.yml job needs, and the Main
+# - ci.yml's `admission` job, which every other ci.yml job but the Storybook
+#   build needs (that build starts beside it, and every job using it waits), and the Main
 #   workflow's `main-commit` job run this first. A step that uses this action
 #   MUST be named "Wait for room under the CI ceiling": a waiting `main` run is
 #   found by that name.
@@ -21,8 +22,9 @@
 #   plus a random 0-20 s so runs that look together spread out, and then
 #   starts.
 # - Each CI or Main run counts its live jobs, read once per look. A
-#   pull-request run still waiting here counts only that waiting job, so
-#   waiting runs never hold each other back by more than they use; a waiting
+#   pull-request run still waiting here counts the jobs it runs, its waiting
+#   job and the Storybook build that starts beside it, so waiting runs never
+#   hold each other back by more than they use; a waiting
 #   `main` run counts its whole peak. A run admitted in the last 45 seconds,
 #   before its jobs appear, counts at least its planned most. Every other
 #   workflow's run counts an estimate. A run not updated in two hours is a
@@ -166,10 +168,11 @@ runs:
                     .flatMap(job => job.steps ?? [])
                     .find(step => step.name === STEP);
                   if (wait?.status === 'in_progress') {
-                    // Still waiting for room. A pull-request run holds only
-                    // the job that waits; a `main` run holds its whole peak,
-                    // ahead of this one.
-                    const holds = isMain(run) ? estimate(run) : 1;
+                    // Still waiting for room. A `main` run holds its whole
+                    // peak, ahead of this one. A pull-request run holds what
+                    // it runs: the job that waits and its Storybook build,
+                    // which starts beside it.
+                    const holds = isMain(run) ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
                     if (isMain(run) && !main) mainWaiting = true;
                     large += holds;
                     counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);
