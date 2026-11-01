@@ -87,9 +87,10 @@ private func surface(
 }
 
 @MainActor
-@Test func aDisabledProminentBarButtonDrawsAsABarItemInItsVariantsColor() {
-  // FR11: disabled keeps core's meaning in a bar, a dimmed label with no fill
-  // or press response, and the label keeps primary's accent.
+@Test func theProminentBarFallbackDrawsALabelInItsVariantsColor() {
+  // Where SwiftUI's prominent glass style is unavailable, a primary bar
+  // Button draws no fill and keeps primary's accent in its label; disabled,
+  // it dims.
   let accent = rgba(Theme.default.light.color.accent)
   let drawn = Pixels(barStyled(surface: .glass(.barProminent(.accent)), isDimmed: true))
   #expect(drawn.at(drawn.width / 2, 1)[3] == 0)
