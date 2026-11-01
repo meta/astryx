@@ -311,10 +311,10 @@ they are separately named.
   workflows, of any event, waits for room before its jobs start: it starts once
   the other active runs' estimated jobs plus its own most fit under about
   ninety, and a pull-request run also waits while a `main` full check or release
-  re-check is waiting, looking every two minutes, for at most twelve minutes on
-  a pull request and fifteen for `main` (DEC-16). A pull request that may not
-  run CI starts at once, and waiting never skips or fails a job, so every
-  required context reports as before.
+  re-check is waiting, looking twice on a pull request, at once and after twelve
+  minutes, and every two minutes for at most fifteen for `main` (DEC-16). A pull
+  request that may not run CI starts at once, and waiting never skips or fails a
+  job, so every required context reports as before.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -582,8 +582,11 @@ workflows waits at its start until the other active runs' estimated jobs plus
 its own fit under ninety. Small workflows that are not admitted (linting, review
 bookkeeping, report publishing) always count at least the most they were
 measured running at once, eighteen jobs, so the room they can take stays free.
-Each look costs two API calls, counting each active run at its workflow's
-planned or measured most, so a run with room starts within seconds. A `main`
+Each CI or Main run counts its live jobs: a pull-request run still waiting
+counts none, so waiting runs never hold each other back, and a run admitted in
+the last three minutes counts at least its planned most. A look reads the active
+runs and each CI or Main run's jobs once, a pull request looks at most twice,
+and a run starts rather than spend a low API budget. A `main`
 full check or release re-check goes first: while one waits, pull-request runs
 wait too. Every job ends within its fifteen-minute budget, so `main` fits within
 fifteen minutes. Nothing is reserved for `main` outside those minutes.
