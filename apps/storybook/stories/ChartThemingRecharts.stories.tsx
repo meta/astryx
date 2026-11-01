@@ -244,6 +244,7 @@ function ThemeAwareRechartsExample({
         <div
           {...stylex.props(styles.chart)}
           aria-label="Quarterly performance chart"
+          data-astryx-rtl-physical="chart"
           data-bar-radius={barRadius}
           role="group">
           <ResponsiveContainer>

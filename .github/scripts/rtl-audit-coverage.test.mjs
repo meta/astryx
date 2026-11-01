@@ -21,6 +21,7 @@ import {
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
   finishFiniteAnimations,
+  gradePositionedPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   storyIdsForComponentFilters,
@@ -1012,5 +1013,39 @@ describe('finishFiniteAnimations', () => {
 
   it('does nothing in a document without the Web Animations API', () => {
     expect(finishFiniteAnimations({})).toBe(0);
+  });
+});
+
+describe('gradePositionedPair', () => {
+  const ltr = (physical = null) => ({parentW: 1000, relCenterX: 200, physical});
+  const at = relCenterX => ({parentW: 1000, relCenterX});
+
+  it('requires an unmarked element to mirror about its parent center', () => {
+    expect(gradePositionedPair(ltr(), at(800), 3)).toMatchObject({
+      expectation: 'mirror',
+      pass: true,
+    });
+    expect(gradePositionedPair(ltr(), at(200), 3).pass).toBe(false);
+  });
+
+  it('requires a chart overlay to keep its physical position (DR5)', () => {
+    expect(gradePositionedPair(ltr('chart'), at(200), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: true,
+    });
+  });
+
+  it('fails a mirrored chart tooltip', () => {
+    expect(gradePositionedPair(ltr('chart'), at(800), 3)).toMatchObject({
+      expectation: 'physical',
+      pass: false,
+    });
+  });
+
+  it('fails closed on an unknown marker', () => {
+    expect(gradePositionedPair(ltr('map'), at(200), 3)).toMatchObject({
+      expectation: 'invalid-marker',
+      pass: false,
+    });
   });
 });

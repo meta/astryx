@@ -526,6 +526,39 @@ export function finishFiniteAnimations(doc) {
   return finished;
 }
 
+/**
+ * Declared position semantics D5 accepts on an ancestor's
+ * `data-astryx-rtl-physical` attribute. `chart`: the element sits in chart
+ * coordinates, which stay physical in RTL (`design:bidirectionality` DR5), such
+ * as a tooltip that follows a plotted bar.
+ */
+export const PHYSICAL_POSITION_MARKERS = Object.freeze(['chart']);
+
+/**
+ * Grade one LTR/RTL pair of D5 positioned elements. By default the RTL center
+ * must mirror the LTR center about the parent's center. Under a declared
+ * `chart` marker it must keep the same physical position instead, and a
+ * mirrored chart overlay fails. An unknown marker fails closed rather than
+ * being guessed at.
+ */
+export function gradePositionedPair(ltr, rtl, tolerance) {
+  const marker = ltr.physical ?? null;
+  if (marker != null && !PHYSICAL_POSITION_MARKERS.includes(marker)) {
+    return {
+      expectation: 'invalid-marker',
+      expected: null,
+      delta: null,
+      pass: false,
+      reason: `unknown data-astryx-rtl-physical value "${marker}"`,
+    };
+  }
+  const expectation = marker === 'chart' ? 'physical' : 'mirror';
+  const expected =
+    expectation === 'physical' ? ltr.relCenterX : ltr.parentW - ltr.relCenterX;
+  const delta = Math.abs(rtl.relCenterX - expected);
+  return {expectation, expected, delta, pass: delta <= tolerance};
+}
+
 /** Classify one stable LTR/RTL contextual-decoration pair. */
 export function classifyDirectionalDecorationPair(ltr, rtl) {
   if (!ltr || !rtl) {

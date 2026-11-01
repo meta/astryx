@@ -240,17 +240,17 @@ The audit's `D` identifiers name repository-specific checks, not an external
 internationalization standard. Automatic discovery covers D1, D5, and D6; curated
 story targets supply the other dimensions.
 
-| ID  | Observed relationship                                                                             |
-| --- | ------------------------------------------------------------------------------------------------- |
-| D1  | Directional icons mirror or swap once.                                                            |
-| D2  | Previous/next controls exchange horizontal order.                                                 |
-| D3  | Directional interaction or scroll behavior follows the active direction.                          |
-| D4  | An overlay or positioned affordance follows its logical side.                                     |
-| D5  | Positioned elements mirror relative to their parent.                                              |
-| D6  | Contextual directional decorations receive exactly one bidi treatment.                            |
-| D7  | Coarse-pointer native input dimensions, centers, and hit-testing meet the owning target contract. |
-| D8  | Logical inline padding resolves to mirrored physical edges.                                       |
-| D9  | Grouped corners follow the declared logical inline side.                                          |
+| ID  | Observed relationship                                                                                                                                                                     |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | Directional icons mirror or swap once.                                                                                                                                                    |
+| D2  | Previous/next controls exchange horizontal order.                                                                                                                                         |
+| D3  | Directional interaction or scroll behavior follows the active direction.                                                                                                                  |
+| D4  | An overlay or positioned affordance follows its logical side.                                                                                                                             |
+| D5  | Positioned elements mirror relative to their parent; inside a declared chart plot (`data-astryx-rtl-physical="chart"`) they keep their physical position (`design:bidirectionality` DR5). |
+| D6  | Contextual directional decorations receive exactly one bidi treatment.                                                                                                                    |
+| D7  | Coarse-pointer native input dimensions, centers, and hit-testing meet the owning target contract.                                                                                         |
+| D8  | Logical inline padding resolves to mirrored physical edges.                                                                                                                               |
+| D9  | Grouped corners follow the declared logical inline side.                                                                                                                                  |
 
 D7 retains both the native input box and the visible wrapper box. Its
 `minimumTargetSize` width and height come from the curated target's owning
@@ -312,6 +312,7 @@ this record narrows the remaining decision to the options below.
 | INV9             | red/green mutation receipts for each new dimension                                                    | A new dimension has only passing self-confirming tests                                                                                                                                                                                                 |
 | INV10            | native width/height mutation fixtures plus D7 center/hit checks in LTR/RTL, sm/md                     | An undersized native target stays green despite conforming wrapper geometry                                                                                                                                                                            |
 | INV12–INV16      | candidate fixture-policy tests and built Storybook mutations; not enforced by the base implementation | reordering the generated story index changes D1; malformed/missing metadata silently skips; a fixture opt-out skips D5/D6 or closes a component gap; an exclusion on directional controls/cues survives semantic review or is omitted from the summary |
+| D5 (DR5)         | positioned-pair grading tests, plus the declared Recharts theming stories in a real built Storybook   | A mirrored chart tooltip passes, an unmarked overlay is graded as physical, or an unknown `data-astryx-rtl-physical` value is accepted                                                                                                                 |
 
 ### Implementation state
 

@@ -67,6 +67,7 @@ import {
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
   finishFiniteAnimations,
+  gradePositionedPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   validateStoryRtlAuditParameters,
@@ -594,6 +595,9 @@ const PM_DETECTOR = /* js */ `
       cls: (el.className && el.className.toString().slice(0, 48)) || '',
       parentW: pr.width,
       relCenterX,
+      // Declared position semantics (chart coordinates stay physical, DR5).
+      physical:
+        el.closest('[data-astryx-rtl-physical]')?.getAttribute('data-astryx-rtl-physical') ?? null,
     });
   }
   return out;
@@ -645,25 +649,29 @@ function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
   // parent's horizontal center.
   const n = Math.min(ltr.length, rtl.length);
   let anyFail = false;
+  let anyPhysical = false;
   const perEl = [];
   for (let i = 0; i < n; i++) {
     const L = ltr[i], R = rtl[i];
-    const expectedRtlCX = L.parentW - L.relCenterX; // mirror about parent center
-    const delta = Math.abs(R.relCenterX - expectedRtlCX);
-    const mirrored = delta <= PM_TOL;
-    if (!mirrored) {
+    // Mirror about the parent center, or keep the physical position under a
+    // declared chart marker (DR5); an unknown marker fails closed.
+    const grade = gradePositionedPair(L, R, PM_TOL);
+    if (grade.expectation === 'physical') anyPhysical = true;
+    if (!grade.pass) {
       anyFail = true;
       card.fails.push({
         cls: L.cls,
         tag: L.tag,
+        expectation: grade.expectation,
         parentW: Math.round(L.parentW),
         ltrRelCenterX: Math.round(L.relCenterX * 10) / 10,
         rtlRelCenterX: Math.round(R.relCenterX * 10) / 10,
-        expectedRtlCenterX: Math.round(expectedRtlCX * 10) / 10,
-        delta: Math.round(delta * 10) / 10,
+        expectedRtlCenterX: grade.expected == null ? null : Math.round(grade.expected * 10) / 10,
+        delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10,
+        reason: grade.reason,
       });
     }
-    perEl.push({idx: i, cls: L.cls, delta: Math.round(delta * 10) / 10, mirrored});
+    perEl.push({idx: i, cls: L.cls, expectation: grade.expectation, delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10, mirrored: grade.pass});
   }
   card.perEl = perEl;
   if (anyFail) {
@@ -671,12 +679,18 @@ function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
     card.notes.push(
       `positioned element(s) land on the wrong side in RTL: ` +
         card.fails
-          .map(f => `${f.cls || f.tag} (LTR cx ${f.ltrRelCenterX} → RTL cx ${f.rtlRelCenterX}, expected ~${f.expectedRtlCenterX}, Δ${f.delta}px)`)
+          .map(f => f.reason
+            ? `${f.cls || f.tag} (${f.reason})`
+            : `${f.cls || f.tag} (${f.expectation === 'physical' ? 'chart position should stay physical; ' : ''}LTR cx ${f.ltrRelCenterX} → RTL cx ${f.rtlRelCenterX}, expected ~${f.expectedRtlCenterX}, Δ${f.delta}px)`)
           .join('; '),
     );
   } else {
     card.verdict = 'pass';
-    card.notes.push(`every positioned candidate mirrors about its parent center (≤${PM_TOL}px)`);
+    card.notes.push(
+      anyPhysical
+        ? `every positioned candidate holds its expected position (mirrored, or physical in a declared chart plot) (≤${PM_TOL}px)`
+        : `every positioned candidate mirrors about its parent center (≤${PM_TOL}px)`,
+    );
   }
   return card;
 }
