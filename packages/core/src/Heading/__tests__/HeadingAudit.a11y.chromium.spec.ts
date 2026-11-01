@@ -560,6 +560,7 @@ for (const item of cases) {
         geometryStable,
         pageErrors,
         tooltipOnHover,
+        accessibilityTreeLevels: exposedLevels,
       },
       observations: {
         keyboardReachesTruncatedHeading,
