@@ -740,6 +740,62 @@
     }
   },
   {
+    "component": "Tab",
+    "storyId": "core-tablist--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab svg",
+      "next": ".astryx-tab span:text-is(\"Home\")"
+    }
+  },
+  {
+    "component": "TabMenu",
+    "storyId": "core-tablist--with-menu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab-menu span:text-is(\"More\")",
+      "next": ".astryx-tab-menu .astryx-icon"
+    }
+  },
+  {
+    "component": "SegmentedControlItem",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"radio\"] svg.astryx-icon",
+      "next": "[role=\"radio\"] span:text-is(\"Grid\")"
+    }
+  },
+  {
+    "component": "ToggleButtonGroup",
+    "storyId": "core-togglebutton--group-single",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"List view\"]",
+      "next": "button[aria-label=\"Grid view\"]"
+    }
+  },
+  {
+    "component": "TabList",
+    "storyId": "core-tablist--with-icons",
+    "dims": []
+  },
+  {
+    "component": "TabList",
+    "storyId": "core-tablist--with-menu",
+    "dims": []
+  },
+  {
+    "component": "SegmentedControl",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": []
+  },
+  {
+    "component": "ToggleButton",
+    "storyId": "core-togglebutton--group-single",
+    "dims": []
+  },
+  {
     "component": "Outline",
     "storyId": "core-outline--controlled",
     "dims": ["D2"],
