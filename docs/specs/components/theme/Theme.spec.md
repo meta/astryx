@@ -68,18 +68,18 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept | Closed values or states   | Meaning                                    | Availability by variant/orientation/state | Default  | Owner             | Stability | Invalid-value behavior           |
-| ------- | ------------------------- | ------------------------------------------ | ----------------------------------------- | -------- | ----------------- | --------- | -------------------------------- |
-| Mode    | `light`, `dark`, `system` | Forces a color mode or follows the system. | Every Theme.                              | `system` | `component:Theme` | Stable    | TypeScript rejects other values. |
+| Concept | Closed values or states   | Meaning                                    | Availability by variant/orientation/state | Default  | Owner             | Stability | Invalid-value behavior                                                                                                      |
+| ------- | ------------------------- | ------------------------------------------ | ----------------------------------------- | -------- | ----------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Mode    | `light`, `dark`, `system` | Forces a color mode or follows the system. | Every Theme.                              | `system` | `component:Theme` | Stable    | TypeScript rejects other values; at runtime any other value is treated as `system` (`architecture:theme-application` INV7). |
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                     | Basis                    |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | Theme renders one wrapper with `display: contents`, so it adds no layout box, carrying `data-astryx-theme` with the theme's name and the primary text color and body font.                    | Current source and tests |
-| FR2 | `mode="light"` or `"dark"` sets that `data-theme` and color scheme on the wrapper; `system` sets no `data-theme` and a `light dark` color scheme. A nested Theme sets its own wrapper's mode. | Current source and tests |
-| FR3 | Descendants read the theme and mode through Theme context; the nearest Theme wins (`architecture:theme-application` INV1).                                                                    | Current source and tests |
-| FR4 | The outermost Theme writes the theme name and any forced mode to `<html>` and removes them on unmount; a nested Theme never changes `<html>` (`architecture:theme-application` INV2, INV7).   | Current source and tests |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                         | Basis                    |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | Theme renders one wrapper with `display: contents`, so it adds no layout box, carrying `data-astryx-theme` with the theme's name and the primary text color and body font.                                                                                                                                                                                        | Current source and tests |
+| FR2 | `mode="light"` or `"dark"` sets that `data-theme` and color scheme on the wrapper; `system` sets no `data-theme` and a `light dark` color scheme. A nested Theme sets its own wrapper's mode. A Theme given any other value still writes it unchanged to its own wrapper's `data-theme`, with the `light dark` color scheme, though nothing reads that attribute. | Current source and tests |
+| FR3 | Descendants read the theme and mode through Theme context; the nearest Theme wins (`architecture:theme-application` INV1).                                                                                                                                                                                                                                        | Current source and tests |
+| FR4 | The outermost Theme writes the theme name and any forced mode to `<html>` and removes them on unmount; a nested Theme never changes `<html>` (`architecture:theme-application` INV2, INV7).                                                                                                                                                                       | Current source and tests |
 
 ### Allowed variation
 
@@ -131,7 +131,8 @@ Theme renders no themable part of its own, so no anatomy-theming map applies.
 Read from source, with no focused test yet:
 
 - FR1: `display: contents`, the text color, and the body font.
-- FR2: the color scheme for each mode.
+- FR2: the color scheme for each mode, and the wrapper's `data-theme` for a
+  value outside the three.
 - FR3: descendants reading the nearest Theme's context.
 
 ## Decision log
