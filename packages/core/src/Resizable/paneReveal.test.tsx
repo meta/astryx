@@ -20,6 +20,7 @@
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {useLayoutEffect, useRef, useState, type ReactNode} from 'react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type * as AnimatedLayoutModule from '../motion/animatedLayout';
 import {Layout} from '../Layout/Layout';
 import {LayoutContent} from '../Layout/LayoutContent';
@@ -285,6 +286,7 @@ const separator = () => screen.getByRole('separator', {name: 'Resize pane'});
 const grabZone = () => separator().firstElementChild as HTMLElement;
 
 beforeEach(() => {
+  __resetInteractionModalityForTest();
   commits = [];
   reveals.length = 0;
   region = undefined;
@@ -628,6 +630,38 @@ describe('focus leaves a collapsing pane, and the collapsed pane is inert (compo
     }
     expect(reveals).toHaveLength(0);
   });
+
+  it('keeps an end pane, reversed by its ResizeHandle, inert from its first commit when the region starts collapsed', () => {
+    render(<RefSplit isReversed options={{defaultIsCollapsed: true}} />);
+    expect(pane()).toHaveAttribute('inert');
+    expect(pane()).toHaveAttribute('aria-hidden', 'true');
+    act(() => {
+      region?.expand();
+    });
+    expect(reveals.map(r => r.edge)).toEqual(['inline-start']);
+    expect(pane()).not.toHaveAttribute('inert');
+  });
+
+  for (const input of ['pointer', 'keyboard'] as const) {
+    it(`moves focus to the handle with the ring the last input calls for (${input}; architecture:interaction-modality INV1)`, () => {
+      render(<RefSplit />);
+      const inside = screen.getByRole('button', {name: 'Inside'});
+      inside.focus();
+      if (input === 'pointer') {
+        fireEvent.pointerDown(inside);
+      } else {
+        fireEvent.keyDown(inside, {key: 'Enter'});
+      }
+      const focus = vi.spyOn(separator(), 'focus');
+      act(() => {
+        region?.collapse();
+      });
+      expect(document.activeElement).toBe(separator());
+      expect(focus.mock.calls).toEqual(
+        input === 'pointer' ? [[{focusVisible: false}]] : [[]],
+      );
+    });
+  }
 
   it('never makes a LayoutPanel without a resize controller inert', () => {
     render(
