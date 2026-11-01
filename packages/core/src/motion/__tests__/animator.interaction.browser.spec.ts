@@ -523,6 +523,152 @@ test('a spring started right before a block plays in full after it', async ({
   expect(Math.max(...later.map(f => f.x))).toBeGreaterThan((first?.x ?? 0) + 1);
 });
 
+test('a retarget made before the page can read a call\u2019s start begins where the screen shows the element (spec:AST-094 FR6)', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName !== 'chromium',
+    'screencast frame evidence is Chromium-only in Playwright, and Chromium is the engine that tells the page a composited start late',
+  );
+  await open(page);
+  const box = page.locator('#box');
+  await markElement(box, {inset: MARKER_INSET});
+  const cast = await startScreencast(page);
+  // A call from rest in one task. In the task after the frame that commits
+  // it, the page is busy for 150 ms while the compositor moves the box, so
+  // the browser's notice of the start waits behind it; then it retargets.
+  const spring = {response: 0.6, dampingRatio: 1};
+  const result = await page.evaluate(
+    async ({s, first, second}) =>
+      new Promise<{held: number; at: number}>(resolve => {
+        setTimeout(() => {
+          window.animator.animate({x: first}, {spring: s});
+          // The frame that commits it; a task queued there runs after it.
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              const end = performance.now() + 150;
+              while (performance.now() < end) {
+                // the page's main thread is busy
+              }
+              const at = performance.timeOrigin + performance.now();
+              const held = window.animator.get('x');
+              window.animator.animate({x: second}, {spring: s});
+              resolve({held, at});
+            }, 0);
+          });
+        }, 0);
+      }),
+    {s: spring, first: TRAVEL / 2, second: TRAVEL},
+  );
+  // Wait for the motion, not a wall clock: most of the way to the new
+  // target, then three more frames.
+  await page.waitForFunction(
+    min =>
+      (document.getElementById('box')?.getBoundingClientRect().left ?? 0) > min,
+    TRAVEL * 0.8,
+    {polling: 'raf', timeout: 0},
+  );
+  const seen = cast.frameCount();
+  await expect
+    .poll(() => cast.frameCount(), {timeout: 0})
+    .toBeGreaterThan(seen + 2);
+  const tracked = await trackMarker(page, await cast.stop());
+  const xs = tracked
+    .filter(f => f.box != null && f.box.width > 0 && f.box.height > 0)
+    .map(f => ({t: f.t, x: (f.box?.x ?? NaN) - MARKER_INSET}));
+  test.info().annotations.push({
+    type: 'retarget before the start notice',
+    description: JSON.stringify({held: result.held, at: result.at, xs}),
+  });
+  // Present and painted first: the marked box in the frames.
+  expect(xs.length).toBeGreaterThan(10);
+  // The screen never steps back: each presented frame is at or past the one
+  // before (both targets lie ahead)...
+  for (let i = 1; i < xs.length; i++) {
+    expect(xs[i].x, JSON.stringify(xs)).toBeGreaterThanOrEqual(xs[i - 1].x - 1);
+  }
+  // ...because the page reads the curve under way when it retargets.
+  expect(result.held).toBeGreaterThan(5);
+});
+
+for (const how of ['from a page frame callback', 'presented'] as const) {
+  test(`a call made in an animation-frame callback (${how}), whose next frame a busy task delays, keeps the start its own frame gave it: the screen never steps back (spec:AST-094 FR6)`, async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'screencast frame evidence is Chromium-only in Playwright, and Chromium is the engine that tells the page a composited start late',
+    );
+    await open(page);
+    const box = page.locator('#box');
+    await markElement(box, {inset: MARKER_INSET});
+    const cast = await startScreencast(page);
+    // Made in a frame, which commits it; a task queued in that frame runs
+    // after it and keeps the page busy for 150 ms, so the frame after it,
+    // and the browser's notice of the start, come late.
+    const spring = {response: 0.6, dampingRatio: 1};
+    await page.evaluate(
+      async ({s, travel, presented}) =>
+        new Promise<void>(resolve => {
+          const busy = () => {
+            setTimeout(() => {
+              const end = performance.now() + 150;
+              while (performance.now() < end) {
+                // the page's main thread is busy
+              }
+              resolve();
+            }, 0);
+          };
+          if (presented) {
+            // Its animations are made in its second frame's callback; this
+            // pair of frame callbacks runs right after the animator's.
+            window.animator.animate(
+              {x: travel},
+              {spring: s},
+              {start: 'presented'},
+            );
+            requestAnimationFrame(() => requestAnimationFrame(busy));
+          } else {
+            requestAnimationFrame(() => {
+              window.animator.animate({x: travel}, {spring: s});
+              busy();
+            });
+          }
+        }),
+      {s: spring, travel: TRAVEL, presented: how === 'presented'},
+    );
+    await page.waitForFunction(
+      min =>
+        (document.getElementById('box')?.getBoundingClientRect().left ?? 0) >
+        min,
+      TRAVEL * 0.8,
+      {polling: 'raf', timeout: 0},
+    );
+    const seen = cast.frameCount();
+    await expect
+      .poll(() => cast.frameCount(), {timeout: 0})
+      .toBeGreaterThan(seen + 2);
+    const tracked = await trackMarker(page, await cast.stop());
+    const xs = tracked
+      .filter(f => f.box != null && f.box.width > 0 && f.box.height > 0)
+      .map(f => ({t: f.t, x: (f.box?.x ?? NaN) - MARKER_INSET}));
+    test.info().annotations.push({
+      type: 'frame-made call behind a busy task',
+      description: JSON.stringify(xs),
+    });
+    expect(xs.length).toBeGreaterThan(10);
+    // The screen never steps back: each presented frame is at or past the
+    // one before.
+    for (let i = 1; i < xs.length; i++) {
+      expect(xs[i].x, JSON.stringify(xs)).toBeGreaterThanOrEqual(
+        xs[i - 1].x - 1,
+      );
+    }
+  });
+}
+
 test('no Layout or Paint runs while it animates', async ({
   page,
   browserName,
@@ -679,35 +825,55 @@ test('a finished animation leaves the element once the curve ends', async ({
   page,
 }) => {
   await open(page);
+  // Counted in frames, on the document timeline: an animation's time moves
+  // only at a frame, so neither the animator nor this loop can see the end
+  // between two frames, and under load WebKit's frames come up to 114 ms
+  // apart.
   const result = await page.evaluate(
-    async spring =>
-      new Promise<{curveEnd: number; leftAt: number}>(resolve => {
-        const start = performance.now();
-        window.animator.animate({x: 120}, {spring});
-        const box = document.getElementById('box') as HTMLElement;
-        const solved = Motion.solveSpring(Motion.toSpring(spring), {
-          from: 0,
-          to: 120,
-        });
-        const curveEnd = solved.settleTime(0.05) * 1000;
-        const tick = () => {
-          if (box.getAnimations().length === 0) {
-            resolve({curveEnd, leftAt: performance.now() - start});
-          } else {
+    async spring => {
+      const box = document.getElementById('box') as HTMLElement;
+      const handle = window.animator.animate({x: 120}, {spring});
+      const solved = Motion.solveSpring(Motion.toSpring(spring), {
+        from: 0,
+        to: 120,
+      });
+      // The curve ends this long after the browser starts it.
+      const end = (await handle.started) + solved.settleTime(0.05) * 1000;
+      // Each frame's time, and whether the animation is still on the element.
+      const frames: {time: number; present: boolean}[] = [];
+      await new Promise<void>(resolve => {
+        const tick = (time: number) => {
+          const present = box.getAnimations().length > 0;
+          frames.push({time, present});
+          if (present) {
             requestAnimationFrame(tick);
+          } else {
+            resolve();
           }
         };
         requestAnimationFrame(tick);
-      }),
+      });
+      return {end, frames};
+    },
     {response: 0.3, dampingRatio: 1},
   );
   test.info().annotations.push({
     type: 'animation lifetime',
-    description: JSON.stringify(result),
+    description: JSON.stringify({
+      end: result.end,
+      frames: result.frames.map(f => [
+        Math.round(f.time - result.end),
+        f.present,
+      ]),
+    }),
   });
-  // Gone within a couple of frames of the curve's end, not after the hold.
-  expect(result.leftAt).toBeGreaterThanOrEqual(result.curveEnd - 1);
-  expect(result.leftAt).toBeLessThan(result.curveEnd + 100);
+  const before = result.frames.filter(f => f.time < result.end);
+  const after = result.frames.filter(f => f.time >= result.end);
+  // On every frame before the curve's end, it is still there.
+  expect(before.every(f => f.present)).toBe(true);
+  // Gone by the second frame at or after it, not after the hold.
+  expect(after.filter(f => f.present).length).toBeLessThanOrEqual(1);
+  expect(after.at(-1)?.present).toBe(false);
 });
 
 test('a fade-in on an element its stylesheet hides stays visible once it retires', async ({

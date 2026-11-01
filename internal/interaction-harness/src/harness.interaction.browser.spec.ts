@@ -53,6 +53,7 @@ import {
   freezeTimers,
   holdAnimations,
   installInputLog,
+  type InputRecord,
   installLongTaskLog,
   installTimerGate,
   markElement,
@@ -80,6 +81,7 @@ import {
   traceRendering,
   trackMarker,
   waitForAnimation,
+  releaseAnimationLog,
   waitForRest,
   watchAnimations,
   webInputDriver,
@@ -202,29 +204,47 @@ test.describe('touch input', () => {
   test('the page receives trusted touches and pointers at the scripted positions and times', async ({
     page,
     browserName,
-  }) => {
-    await fixture(page);
-    const driver = await touchDriver(page);
+  }, testInfo) => {
     const script = drag(
       {x: 100, y: 100},
       {x: 100, y: 220},
       {durationMs: 200, hz: 60, restMs: 120},
     );
-    await driver.play(script);
-    const log = await readInputLog(page);
-    const moves = log.filter(r => r.type === 'pointermove');
-    const down = log.find(r => r.type === 'pointerdown');
-    const up = log.find(r => r.type === 'pointerup');
-    expect(down?.isTrusted).toBe(true);
-    expect(down?.pointerType).toBe('touch');
-    expect(up, JSON.stringify(log.map(r => r.type))).toBeDefined();
-    // (Not `cancelable`: with only passive listeners an engine may dispatch
-    // touchmove as non-blocking, which reads cancelable false.)
-    expect(
-      log.filter(r => r.type === 'touchmove').every(r => r.isTrusted),
-    ).toBe(true);
-    expect(moves.at(-1)?.y).toBe(220);
+    // One take: a fresh page, the script played, and the harness's record of
+    // when each step left (`dispatchedAt`) and when its dispatch was answered.
+    const take = async () => {
+      await fixture(page);
+      const driver = await touchDriver(page);
+      const answeredAt: number[] = [];
+      // Taken before the harness reads its own clock to schedule the script.
+      const playStart = Date.now();
+      const played = await driver.play(script, {
+        onEvent: () => {
+          answeredAt.push(Date.now());
+        },
+      });
+      const log = await readInputLog(page);
+      return {played, answeredAt, playStart, log};
+    };
+    const checkInput = (log: readonly InputRecord[]) => {
+      const moves = log.filter(r => r.type === 'pointermove');
+      const down = log.find(r => r.type === 'pointerdown');
+      const up = log.find(r => r.type === 'pointerup');
+      expect(down?.isTrusted).toBe(true);
+      expect(down?.pointerType).toBe('touch');
+      expect(up, JSON.stringify(log.map(r => r.type))).toBeDefined();
+      // (Not `cancelable`: with only passive listeners an engine may dispatch
+      // touchmove as non-blocking, which reads cancelable false.)
+      expect(
+        log.filter(r => r.type === 'touchmove').every(r => r.isTrusted),
+      ).toBe(true);
+      expect(moves.at(-1)?.y).toBe(220);
+      return {moves, up};
+    };
+
     if (browserName === 'chromium') {
+      const {log} = await take();
+      const {moves, up} = checkInput(log);
       // The scripted 16.67 ms spacing arrives exactly, and the 120 ms rest
       // before the lift is in the timestamps too.
       const deltas = moves
@@ -236,14 +256,88 @@ test.describe('touch input', () => {
       expect(
         (up?.timeStamp ?? NaN) - (moves.at(-1)?.timeStamp ?? NaN),
       ).toBeCloseTo(120, 0);
-    } else {
-      // WebKit stamps the real dispatch time: real-time pacing keeps it close.
-      const deltas = moves
-        .slice(1)
-        .map((m, i) => m.timeStamp - moves[i].timeStamp);
-      const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
-      expect(mean).toBeGreaterThan(14);
-      expect(mean).toBeLessThan(20);
+      return;
+    }
+
+    // WebKit takes no timestamp: the page stamps each event with the time it
+    // is dispatched, so its spacing is the harness's real-time pacing. Every
+    // take checks what holds under any load against the harness's own record:
+    // no move left before its scripted time, and the page's timestamps follow
+    // the sends, in order, never before them and never after WebKit answered
+    // the dispatch (it answers only once the page has the event), so a driver
+    // that holds the moves and sends them in a burst fails.
+    //
+    // The pacing is bounded from above too. The harness waits only while it
+    // is ahead of the script and sends a late step at once, so a move it
+    // waited for (it left more than 2 ms after the step before was answered)
+    // must leave on time (no more than 2 ms after its scripted time). A harness
+    // that paces slowly waits past every move's time: sending each step at
+    // twice its time leaves every move both waited for and late. A harness
+    // whose send itself outlasts the step's spacing never waits, so a move
+    // behind such a send is off pace too. A runner whose CPU quota holds the
+    // test process also wakes the harness late from a wait, or holds a send,
+    // on a few moves (in a container capped at 3 CPUs, where the quota stalls
+    // the process for about 100 ms at a time), so a take is off pace when
+    // more than half its moves are. It is re-taken once, as wheel bursts are,
+    // and a second such take fails. Under CPU starvation (a 3-CPU cap with 16
+    // workers, with the software compositor's threads matched to the cap by
+    // LP_NUM_THREADS), a pacer the cap throttles falls behind and need not
+    // wait, so the pacing check can miss a slow pacer there (sending each step
+    // at twice its time failed 8 of 20 runs), and the quota slows some sends
+    // past the step's spacing, which reads like a harness whose send is slow
+    // (the real test passed 40 of 40 there, re-taken 9 times).
+    for (const attempt of [1, 2] as const) {
+      const {played, answeredAt, playStart, log} = await take();
+      const {moves} = checkInput(log);
+      const sentAt = played.map(step => step.dispatchedAt);
+      const moveSteps = played.flatMap((step, i) =>
+        step.type === 'touchMove' ? [i] : [],
+      );
+      expect(moveSteps).toHaveLength(moves.length);
+      const timeOrigin = await page.evaluate(() => performance.timeOrigin);
+      for (const [m, i] of moveSteps.entries()) {
+        // Against the clock before play() started, not the start event's
+        // send, which can itself leave late. Date.now() counts whole
+        // milliseconds, hence the 1 ms.
+        expect(sentAt[i] - playStart).toBeGreaterThanOrEqual(played[i].t - 1);
+        // 2 ms of rounding between the two processes' clocks.
+        expect(timeOrigin + moves[m].timeStamp).toBeGreaterThanOrEqual(
+          sentAt[i] - 2,
+        );
+        expect(timeOrigin + moves[m].timeStamp).toBeLessThanOrEqual(
+          answeredAt[i] + 2,
+        );
+        if (m > 0) {
+          expect(moves[m].timeStamp).toBeGreaterThanOrEqual(
+            moves[m - 1].timeStamp,
+          );
+        }
+      }
+      // Lateness against the latest the play clock can have started: the
+      // start event's send.
+      const waitedLate = moveSteps.filter(
+        i =>
+          sentAt[i] - answeredAt[i - 1] > 2 &&
+          sentAt[i] - sentAt[0] - played[i].t > 2,
+      );
+      // A move behind a send that took longer than the step's spacing: a
+      // harness whose send itself is that slow never waits, and paces every
+      // move at the send's speed.
+      const slowSent = moveSteps.filter(
+        i => answeredAt[i - 1] - sentAt[i - 1] > played[i].t - played[i - 1].t,
+      );
+      const offPace = new Set([...waitedLate, ...slowSent]);
+      if (offPace.size <= moves.length / 2) {
+        return;
+      }
+      const lateMs = waitedLate.map(i =>
+        Math.round(sentAt[i] - sentAt[0] - played[i].t),
+      );
+      const note = `take ${attempt}: ${offPace.size} of ${moves.length} moves off pace: ${waitedLate.length} left late after the harness waited for them${lateMs.length > 0 ? ` (${lateMs.join(', ')} ms late)` : ''}, ${slowSent.length} followed a send slower than the step`;
+      if (attempt === 2) {
+        throw new Error(`touch pacing: ${note}`);
+      }
+      testInfo.annotations.push({type: 'touch-retake', description: note});
     }
   });
 
@@ -1432,7 +1526,11 @@ test.describe('wheel and pen input', () => {
     browser,
   }) => {
     // The page is free well before each next step arrives, so the gap is the
-    // dispatch's, not the page's.
+    // dispatch's, not the page's. The steps leave 400 ms apart, four times
+    // the 100 ms bound with the 30 ms listener long done when the next one
+    // arrives, so the case still has to throw: a runner whose CPU quota holds
+    // the engine for 100-300 ms could deliver steps 125 ms apart back to back,
+    // leaving no gap past the bound to classify.
     const context = await browser.newContext({
       viewport: {width: 402, height: 714},
       isMobile: false,
@@ -1454,7 +1552,7 @@ test.describe('wheel and pen input', () => {
           x: 200,
           y: 300,
           steps: Array.from({length: 4}, () => ({dx: 10})),
-          everyMs: 125,
+          everyMs: 400,
           maxGapMs: 100,
         }),
       ).rejects.toBeInstanceOf(WheelPacingError);
@@ -2407,6 +2505,53 @@ test.describe('holding', () => {
 });
 
 test.describe('animation state', () => {
+  test("releaseAnimationLog frees what the recorder kept, so a count after it reads the page's own objects", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      'forcing a garbage collection needs the DevTools protocol',
+    );
+    await fixture(page);
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.id = 'released';
+      el.style.cssText = 'width:40px;height:40px;background:red';
+      document.body.append(el);
+    });
+    const released = page.locator('#released');
+    await released.evaluate(el => {
+      (el as HTMLElement).style.transition = 'transform 60ms linear';
+      void (el as HTMLElement).offsetWidth;
+      (el as HTMLElement).style.transform = 'translateX(40px)';
+    });
+    await waitForAnimation(released);
+    await waitForRest(released);
+    // The page drops the element; only the recorder's log still holds it.
+    await released.evaluate(el => {
+      (window as unknown as {__released: WeakRef<Element>}).__released =
+        new WeakRef(el);
+      el.remove();
+    });
+    const cdp = await page.context().newCDPSession(page);
+    const alive = async () => {
+      await cdp.send('HeapProfiler.collectGarbage');
+      await cdp.send('HeapProfiler.collectGarbage');
+      return page.evaluate(
+        () =>
+          (
+            window as unknown as {__released: WeakRef<Element>}
+          ).__released.deref() != null,
+      );
+    };
+    // The control: without the release, the log keeps the removed element.
+    expect(await alive()).toBe(true);
+    await releaseAnimationLog(page);
+    expect(await alive()).toBe(false);
+    await cdp.detach();
+  });
+
   test('waitForAnimation reports a running transition and waitForRest resolves after it', async ({
     page,
   }) => {
@@ -2647,10 +2792,13 @@ test.describe('animation state', () => {
   }) => {
     await fixture(page);
     const box = page.locator('#box');
+    // Long enough to be running at a frame of a starved page, whose frames
+    // can come a second apart: a shorter one can start and finish between
+    // two of them (the case below).
     await page.addStyleTag({
       content:
         '@keyframes enter { from { opacity: 0 } to { opacity: 1 } }' +
-        ' .entering { animation: enter 60ms linear }',
+        ' .entering { animation: enter 1500ms linear }',
     });
     const watch = await watchAnimations(box);
     // The page's time origin, where a lost start lands, is well before the
@@ -2670,14 +2818,187 @@ test.describe('animation state', () => {
     await expect
       .poll(() => box.evaluate(el => el.classList.contains('entering')))
       .toBe(false);
+    const removedSeenAt = await page.evaluate(
+      () => performance.timeOrigin + performance.now(),
+    );
     const [entrance] = await watch.started();
     expect(entrance.kind).toBe('CSSAnimation');
     expect(entrance.finishedAt).not.toBeNull();
-    // It started on a frame after the trigger, not at the page's time origin.
+    // It started on a frame after the trigger, not at the page's time origin,
+    // and ran its whole duration before the page removed the class.
     expect(entrance.from).toBeGreaterThan(triggeredAt - 17);
-    expect(entrance.from).toBeLessThan(triggeredAt + 500);
-    expect(entrance.to - entrance.from).toBeCloseTo(60, 3);
+    expect(entrance.from + 1500).toBeLessThanOrEqual(removedSeenAt + 1);
+    expect(entrance.to - entrance.from).toBeCloseTo(1500, 3);
     expect(entrance.finishedAt ?? 0).toBeGreaterThanOrEqual(entrance.to - 1);
+  });
+
+  test("a CSS animation that starts and finishes between two of the page's frames is named, not reported as never started", async ({
+    page,
+    browserName,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes blink { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .blinking { animation: blink 30ms linear }',
+    });
+    const watch = await watchAnimations(box);
+    // The style is read at once, so the animation exists as the class lands,
+    // and the main thread then stays busy past its end: no frame runs inside
+    // it, as on a starved page whose frames come further apart.
+    await box.evaluate(el => {
+      el.classList.add('blinking');
+      void getComputedStyle(el).opacity;
+      const end = performance.now() + 150;
+      while (performance.now() < end) {
+        // the page's frames wait
+      }
+    });
+    const outcome = await watch.started({timeout: 1_000}).then(
+      started => started.map(a => a.name),
+      (error: Error) => error.message,
+    );
+    if (browserName === 'chromium') {
+      // Chromium starts a pending animation at the next frame, so it runs
+      // then and is recorded.
+      expect(outcome).toEqual(['blink']);
+      return;
+    }
+    // WebKit can start it as it was made: its start event then comes at the
+    // next frame, after it finished, when no animation is left to read, and
+    // the wait names it. When it starts it at the next frame instead, it runs
+    // then and is recorded. Either way it is never reported as never started.
+    if (Array.isArray(outcome)) {
+      expect(outcome).toEqual(['blink']);
+    } else {
+      expect(outcome).toMatch(
+        /the element's blink started and finished between two of the page's frames/,
+      );
+    }
+    test.info().annotations.push({
+      type: 'between-frames',
+      description: Array.isArray(outcome) ? 'recorded' : 'named',
+    });
+  });
+
+  test('a start event that finds nothing to read is named for a replay, for an exit the page removed, and once for a transition; a run the document still lists is never named', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes blink { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .blink-long { animation: blink 300ms linear }' +
+        ' .blink-paused { animation: blink 300ms linear paused }',
+    });
+    const betweenFrames =
+      "started and finished between two of the page's frames";
+    // A run of the animation the page's frames see, recorded and finished:
+    // a later run of it on the same element is a new run.
+    const first = await watchAnimations(box);
+    await box.evaluate(el => el.classList.add('blink-long'));
+    expect((await first.started()).map(a => a.name)).toEqual(['blink']);
+    await box.evaluate(el => {
+      (window as unknown as {__first: Animation}).__first =
+        el.getAnimations()[0];
+    });
+    await waitForRest(box);
+    // The same run replayed with play(): still listed, so its start event is
+    // never read as one that started and finished between two frames. (The
+    // engine's own start event may come too; this one comes at once.)
+    const replayed = await watchAnimations(box);
+    await box.evaluate(el => {
+      (window as unknown as {__first: Animation}).__first.play();
+      el.dispatchEvent(
+        new AnimationEvent('animationstart', {animationName: 'blink'}),
+      );
+    });
+    expect(
+      await replayed.started({timeout: 500}).then(
+        started => `recorded ${started.map(a => a.name).join(', ')}`,
+        (error: Error) => error.message,
+      ),
+    ).not.toContain(betweenFrames);
+    await waitForRest(box);
+    await box.evaluate(el => el.classList.remove('blink-long'));
+    // Each case sends the events an engine sends for a run that started and
+    // finished between two frames (WebKit sends them at the next frame, when
+    // the run is no longer listed), so the recorder has nothing to read.
+    const missed = async (
+      send: 'replay' | 'removed exit' | 'transition',
+    ): Promise<string> => {
+      const watch = await watchAnimations(box);
+      await box.evaluate((el, which) => {
+        if (which === 'replay') {
+          el.dispatchEvent(
+            new AnimationEvent('animationstart', {animationName: 'blink'}),
+          );
+          el.dispatchEvent(
+            new AnimationEvent('animationend', {animationName: 'blink'}),
+          );
+        } else if (which === 'removed exit') {
+          const child = document.createElement('div');
+          el.append(child);
+          child.dispatchEvent(
+            new AnimationEvent('animationstart', {
+              animationName: 'blink',
+              bubbles: true,
+            }),
+          );
+          child.dispatchEvent(
+            new AnimationEvent('animationend', {
+              animationName: 'blink',
+              bubbles: true,
+            }),
+          );
+          child.remove();
+        } else {
+          for (const type of ['transitionrun', 'transitionstart']) {
+            el.dispatchEvent(
+              new TransitionEvent(type, {propertyName: 'opacity'}),
+            );
+          }
+          el.dispatchEvent(
+            new TransitionEvent('transitionend', {propertyName: 'opacity'}),
+          );
+        }
+      }, send);
+      return watch.started({timeout: 500}).then(
+        started => `recorded ${started.map(a => a.name).join(', ')}`,
+        (error: Error) => error.message,
+      );
+    };
+    // A replay of the finished run: the earlier run does not answer for it.
+    expect(await missed('replay')).toContain(
+      "the element's blink started and finished between two of the page's frames",
+    );
+    // An exit the page removed, watched through its container.
+    expect(await missed('removed exit')).toContain(
+      "the element's blink started and finished between two of the page's frames",
+    );
+    // A transition sends two start events, and is named once.
+    expect(await missed('transition')).toContain(
+      "the element's opacity started and finished between two of the page's frames",
+    );
+    // A run that starts paused is listed, never recorded: its start event is
+    // not one that found nothing to read.
+    const paused = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.classList.add('blink-paused');
+      void getComputedStyle(el).opacity;
+      el.dispatchEvent(
+        new AnimationEvent('animationstart', {animationName: 'blink'}),
+      );
+    });
+    expect(
+      await paused.started({timeout: 500}).then(
+        started => `recorded ${started.map(a => a.name).join(', ')}`,
+        (error: Error) => error.message,
+      ),
+    ).not.toContain(betweenFrames);
+    await box.evaluate(el => el.classList.remove('blink-paused'));
   });
 
   test('a CSS animation or transition whose element the page removes at its end is dated from its start', async ({

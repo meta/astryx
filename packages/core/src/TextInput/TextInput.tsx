@@ -42,7 +42,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
@@ -123,6 +122,7 @@ import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 export type TextInputType = 'text' | 'password' | 'email';
 
 export interface TextInputProps extends Omit<
@@ -214,7 +214,7 @@ export interface TextInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * The size of the input.
    * - 'sm': Compact size (18px height)
