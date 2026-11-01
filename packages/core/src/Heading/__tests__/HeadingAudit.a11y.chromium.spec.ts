@@ -254,6 +254,50 @@ async function observe(page: Page) {
   }, EXPECTED_CASES);
 }
 
+type AxNode = {
+  role?: {value?: string};
+  backendDOMNodeId?: number;
+  properties?: {name: string; value?: {value?: unknown}}[];
+};
+
+/** Heading level per audit case, read from Chromium's accessibility tree. */
+async function axHeadingLevels(page: Page): Promise<Record<string, number>> {
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    await cdp.send('DOM.getDocument', {depth: 0});
+    const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
+      nodes: AxNode[];
+    };
+    const levels: Record<string, number> = {};
+    for (const node of nodes) {
+      if (node.role?.value !== 'heading' || node.backendDOMNodeId == null) {
+        continue;
+      }
+      const {object} = await cdp.send('DOM.resolveNode', {
+        backendNodeId: node.backendDOMNodeId,
+      });
+      if (object.objectId == null) {
+        continue;
+      }
+      const {result} = await cdp.send('Runtime.callFunctionOn', {
+        objectId: object.objectId,
+        functionDeclaration:
+          'function () { return this.getAttribute("data-audit-case"); }',
+        returnByValue: true,
+      });
+      const id = result.value as string | null;
+      const level = node.properties?.find(property => property.name === 'level')
+        ?.value?.value;
+      if (id != null && typeof level === 'number') {
+        levels[id] = level;
+      }
+    }
+    return levels;
+  } finally {
+    await cdp.detach();
+  }
+}
+
 test.beforeAll(async () => {
   fs.rmSync(OUTPUT, {recursive: true, force: true});
   fs.mkdirSync(OUTPUT, {recursive: true});
@@ -345,7 +389,10 @@ for (const item of cases) {
       observed.headings.map(heading => [heading.auditCase, heading]),
     );
 
-    // AR1, AR2: the browser's computed role and level, not the DOM tag alone.
+    // AR1, AR2: role and level as Chromium's accessibility tree exposes them,
+    // not the DOM tag alone. Playwright's role queries prefer the native
+    // h1-h6 level over aria-level, so they cannot observe the override.
+    const exposedLevels = await axHeadingLevels(page);
     for (const [id, outline] of Object.entries(OUTLINE)) {
       const heading = byCase[id];
       check(heading != null, `${id}: missing`);
@@ -356,12 +403,9 @@ for (const item of cases) {
         heading.tagName === outline.tag,
         `${id}: renders ${heading.tagName}`,
       );
-      const exposed = page
-        .getByRole('heading', {level: outline.level})
-        .and(page.locator(`[data-audit-case="${id}"]`));
       check(
-        (await exposed.count()) === 1,
-        `${id}: not exposed as a level ${outline.level} heading`,
+        exposedLevels[id] === outline.level,
+        `${id}: accessibility tree level ${exposedLevels[id]} is not ${outline.level}`,
       );
       check(heading.hasTarget, `${id}: no astryx-heading target`);
       check(
