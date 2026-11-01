@@ -11,14 +11,16 @@
  *   a window-splitter handle, with no React (spec:AST-107 FR6;
  *   `architecture:public-component-api` INV22); and readInitialResizableState,
  *   the state a region starts in, for the hook's first render
- * @position The Resizable family's factory, internal to the package; its
- *   input is resizeGesture.ts. Both forms of useResizable are its React
- *   wrapper, and ResizeHandle drives the same input through it. Importing it
- *   does no DOM work, so it is safe on the server
+ * @position Public factory of the Resizable family; its input is
+ *   resizeGesture.ts. Both forms of useResizable are its React wrapper, and
+ *   ResizeHandle drives the same input through it. Importing it does no DOM
+ *   work, so it is safe on the server
  *
  * The factory never sizes the panel: it reports the size, through
  * `onSizeChange` for an interaction and `subscribe` for every change, and the
  * caller applies it, as a React caller renders it.
+ *
+ * SYNC: When modified, update /packages/core/src/Resizable/createResizable.doc.mjs
  */
 
 import enCatalog from '../i18n/generated-locales/en.generated';
