@@ -15,6 +15,7 @@ import {
   confirmSourceRunIdentity,
   PR_ANALYSIS_MARKER,
   reconcilePrComment,
+  trustedFrames,
   resolveWorkflowRunPullRequest,
   validateAnalysisMetadata,
 } from './pr-preview.mjs';
@@ -202,6 +203,8 @@ async function reconcile({
   execute,
   baseStats,
   packageSize,
+  touched,
+  apiChanges,
 } = {}) {
   const value = previewAvailable
     ? {...requested, headRepository: requested.baseRepository}
@@ -219,6 +222,16 @@ async function reconcile({
   );
   if (packageSize)
     fs.writeFileSync(packageSizePath, JSON.stringify(packageSize));
+  const apiChangesPath = path.join(
+    path.dirname(paths.analysis),
+    'api-changes.json',
+  );
+  if (apiChanges) fs.writeFileSync(apiChangesPath, JSON.stringify(apiChanges));
+  const touchedPath = path.join(
+    path.dirname(paths.analysis),
+    'touched-components.json',
+  );
+  if (touched) fs.writeFileSync(touchedPath, JSON.stringify(touched));
   const {github, state} = githubFixture({
     value: githubFixtureValue,
     comments,
@@ -236,6 +249,8 @@ async function reconcile({
     metadataPath: paths.metadata,
     baseStatsPath,
     packageSizePath,
+    apiChangesPath,
+    touchedPath,
     a11yPath: paths.a11y,
     visualPath: paths.visual,
     createIfMissing,
@@ -485,6 +500,7 @@ describe('trusted PR preview identity', () => {
 
     expect(writeCapableJobs).toEqual([
       'spec-only-reconcile',
+      'frames',
       'comment',
       'report',
     ]);
@@ -554,7 +570,13 @@ describe('trusted PR preview identity', () => {
 describe('PR Comment keeps its outcome off main', () => {
   // workflow_run attaches these jobs to main's latest commit, so a failing step
   // here would turn main red for a pull request's problem.
-  const LANE = ['resolve', 'spec-only-reconcile', 'comment', 'report'];
+  const LANE = [
+    'resolve',
+    'spec-only-reconcile',
+    'frames',
+    'comment',
+    'report',
+  ];
   const OPTIONAL = new Set(['actions/download-artifact@v8']);
 
   it.each(LANE)('never fails the run from the %s job', name => {
@@ -581,10 +603,20 @@ describe('PR Comment keeps its outcome off main', () => {
 
   it('reports the outcome on the head of the run the event names', () => {
     const report = PR_COMMENT_WORKFLOW.jobs.report;
-    expect(report.needs).toEqual(['resolve', 'spec-only-reconcile', 'comment']);
+    expect(report.needs).toEqual([
+      'resolve',
+      'spec-only-reconcile',
+      'frames',
+      'comment',
+    ]);
     const [step] = report.steps;
     expect(step.env.HEAD_SHA).toBe('${{ github.event.workflow_run.head_sha }}');
-    for (const name of ['resolve', 'spec-only-reconcile', 'comment']) {
+    for (const name of [
+      'resolve',
+      'spec-only-reconcile',
+      'frames',
+      'comment',
+    ]) {
       expect(step.env.FAILED).toContain(
         `needs.${name}.outputs.failed == 'true'`,
       );
@@ -815,14 +847,131 @@ describe('PR comment preview reconciliation', () => {
     ['alias known', true],
   ])('shows both or neither branch links: %s', async (_label, ready) => {
     const {result} = await reconcile({previewAvailable: ready});
-    expect(result.body.includes('View Storybook for this PR')).toBe(ready);
-    expect(result.body.includes('View Sandbox for this PR')).toBe(ready);
-    expect(result.body.includes('> **Preview availability:**')).toBe(!ready);
-    if (ready) {
-      expect(result.body).toContain(`${VERCEL_ORIGIN}/storybook/`);
-      expect(result.body).toContain(`${VERCEL_ORIGIN}/sandbox/`);
-    }
+    expect(
+      result.body.includes(`[Storybook](${VERCEL_ORIGIN}/storybook/)`),
+    ).toBe(ready);
+    expect(result.body.includes(`[Sandbox](${VERCEL_ORIGIN}/sandbox/)`)).toBe(
+      ready,
+    );
+    // A fork's head is looked up like any other: Vercel builds fork previews.
+    expect(result.body).not.toContain('No preview');
     expect(result.body).not.toContain('facebook.github.io/astryx/pr/');
+  });
+
+  describe("this head's preview and the run's jobs", () => {
+    const deployment = (overrides = {}) => ({
+      id: 7,
+      environment: 'Preview',
+      creator: {login: 'vercel[bot]'},
+      ...overrides,
+    });
+    async function withGithub({deployments = [], statuses = [], jobs = []}) {
+      const value = identity({headRepository: 'meta/astryx'});
+      const harness = githubFixture({value});
+      harness.github.rest.repos = {
+        listDeployments: vi.fn(async () => ({data: deployments})),
+        listDeploymentStatuses: vi.fn(async () => ({data: statuses})),
+      };
+      harness.github.rest.actions.listJobsForWorkflowRun = vi.fn(async () => ({
+        data: jobs,
+      }));
+      const paths = fixture(value);
+      const seen = [];
+      const result = await reconcilePrComment({
+        github: harness.github,
+        core: {info: vi.fn(), warning: vi.fn()},
+        context: {
+          repo: {owner: 'meta', repo: 'astryx'},
+          serverUrl: 'https://github.com',
+        },
+        expectedIdentity: value,
+        analysisPath: paths.analysis,
+        metadataPath: paths.metadata,
+        a11yPath: paths.a11y,
+        visualPath: paths.visual,
+        execute: (node, args, options) => {
+          seen.push(args);
+          return execFileSync(node, args, options);
+        },
+      });
+      return {result, harness, args: seen[0]};
+    }
+
+    it("links Vercel's ready deployment of this exact head", async () => {
+      const {result, harness} = await withGithub({
+        deployments: [deployment()],
+        statuses: [
+          {
+            state: 'success',
+            environment_url: 'https://astryx-abc123-fbopensource.vercel.app',
+          },
+        ],
+      });
+      expect(harness.github.rest.repos.listDeployments).toHaveBeenCalledWith(
+        expect.objectContaining({sha: HEAD}),
+      );
+      expect(result.body).toContain(
+        '[Storybook](https://astryx-abc123-fbopensource.vercel.app/storybook/)',
+      );
+      expect(result.body).toContain('### 🔎 Preview · `aaaaaaa`');
+      expect(result.body).toContain("built from this PR's head");
+    });
+
+    it("ignores a deployment Vercel did not create, and an address that is not Vercel's", async () => {
+      for (const setup of [
+        {
+          deployments: [deployment({creator: {login: 'someone'}})],
+          statuses: [
+            {
+              state: 'success',
+              environment_url: 'https://astryx-abc123-fbopensource.vercel.app',
+            },
+          ],
+        },
+        {
+          deployments: [deployment()],
+          statuses: [
+            {state: 'success', environment_url: 'https://evil.example/'},
+          ],
+        },
+      ]) {
+        const {result} = await withGithub(setup);
+        expect(result.body).not.toContain('astryx-abc123');
+        expect(result.body).not.toContain('evil.example');
+        expect(result.body).toContain('⏳ Building…');
+      }
+    });
+
+    it('says a failed preview failed', async () => {
+      const {result} = await withGithub({
+        deployments: [deployment()],
+        statuses: [{state: 'failure'}],
+      });
+      expect(result.body).toContain('failed to build');
+    });
+
+    it("passes the run's jobs, so the report says which suites did not run", async () => {
+      const {result, args} = await withGithub({
+        jobs: [
+          {
+            name: 'test-node (1/4)',
+            status: 'completed',
+            conclusion: 'success',
+            steps: [],
+          },
+          {
+            name: 'pr-rtl (core)',
+            status: 'completed',
+            conclusion: 'skipped',
+            steps: [],
+          },
+        ],
+      });
+      expect(args).toContain('--jobs');
+      expect(result.body).toContain(
+        'Not run on this PR: add `ci:run-rtl` to run it.',
+      );
+    });
   });
 
   describe('the fallback report, when there is no trusted analysis', () => {
@@ -830,15 +979,15 @@ describe('PR comment preview reconciliation', () => {
       throw new Error('malformed analysis');
     };
 
-    it('links the branch alias under the same preview note as the report', async () => {
+    it('keeps the same preview line as the full report', async () => {
       const {result} = await reconcile({
         previewAvailable: true,
         createIfMissing: true,
         execute: failRender,
       });
       expect(result.body).toContain('trusted analysis is unavailable');
-      expect(result.body).toContain('> **Preview:** the links below open');
-      expect(result.body).toContain('View Storybook for this PR');
+      expect(result.body).toContain('### 🔎 Preview · ');
+      expect(result.body).toContain(`[Storybook](${VERCEL_ORIGIN}/storybook/)`);
     });
 
     it('points to Vercel when the alias cannot be computed', async () => {
@@ -848,8 +997,8 @@ describe('PR comment preview reconciliation', () => {
         createIfMissing: true,
         execute: failRender,
       });
-      expect(result.body).toContain('> **Preview availability:**');
-      expect(result.body).not.toContain('View Storybook for this PR');
+      expect(result.body).toContain('cannot be known in advance');
+      expect(result.body).not.toContain('/storybook/');
     });
 
     it('says nothing about previews on a draft', async () => {
@@ -874,7 +1023,7 @@ describe('PR comment preview reconciliation', () => {
 
   it('says the accessibility audit did not run when there is no report', async () => {
     const {result} = await reconcile({a11y: false});
-    expect(result.body).toContain('did not run on this pull request');
+    expect(result.body).toMatch(/Not run on this PR: add [^\n]*`ci:run-a11y`/);
     expect(result.body).not.toContain('No accessibility violations detected');
   });
 
@@ -882,7 +1031,7 @@ describe('PR comment preview reconciliation', () => {
     const value = identity({sourceConclusion: 'failure'});
     const {result} = await reconcile({value});
 
-    expect(result.body).toContain('Modified Components');
+    expect(result.body).toContain('Modified components');
     expect(result.body).toContain('Card');
     expect(result.body).toContain('CI concluded failure');
     expect(result.body).not.toContain('View Storybook for this PR');
@@ -991,6 +1140,42 @@ describe('PR comment preview reconciliation', () => {
     },
   );
 
+  it.each([
+    ['the exact head', HEAD, true],
+    ['another head', 'b'.repeat(40), false],
+  ])(
+    'passes the touched-components report only when it names %s',
+    async (_label, headSha, used) => {
+      const seen = [];
+      await reconcile({
+        touched: {headSha, components: []},
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--touched')).toBe(used);
+    },
+  );
+
+  it.each([
+    ['written', true],
+    ['absent', false],
+  ])(
+    'passes the API changes from the analysis artifact when %s',
+    async (_label, written) => {
+      const seen = [];
+      await reconcile({
+        apiChanges: written ? {version: 1, packages: []} : undefined,
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--api-changes')).toBe(written);
+    },
+  );
+
   it('falls back to a safe current message when analysis rendering fails', async () => {
     const stale = {
       id: 78,
@@ -1095,10 +1280,10 @@ describe('PR comment preview reconciliation', () => {
     expect(harness.state.updated).toHaveLength(1);
     expect(harness.state.comments).toHaveLength(1);
     expect(harness.state.comments[0].body).toContain(
-      'View Storybook for this PR',
+      `[Storybook](${VERCEL_ORIGIN}/storybook/)`,
     );
     expect(harness.state.comments[0].body).toContain(
-      'View Sandbox for this PR',
+      `[Sandbox](${VERCEL_ORIGIN}/sandbox/)`,
     );
     expect(harness.state.listedIssues).toEqual([5697, 5697]);
   });
@@ -1233,4 +1418,68 @@ describe('PR comment preview reconciliation', () => {
       ).toBe(origin);
     },
   );
+});
+
+describe('visual frames', () => {
+  const identity = {
+    prNumber: 9171,
+    headSha: 'a'.repeat(40),
+    baseRepository: 'meta/astryx',
+  };
+  const imageBase = `https://raw.githubusercontent.com/meta/astryx/assets/pr-9171/visual/${'a'.repeat(40)}/`;
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'frames-'));
+
+  it("passes frames only from this pull request's assets branch for this head", () => {
+    const published = JSON.stringify(['before/b.png', 'diff/b.png']);
+    const file = trustedFrames({
+      frames: {imageBase, published},
+      identity,
+      inputs: tmp(),
+    });
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+      imageBase,
+      published: ['before/b.png', 'diff/b.png'],
+    });
+    for (const bad of [
+      imageBase.replace('pr-9171', 'pr-1'),
+      imageBase.replace('a'.repeat(40), 'b'.repeat(40)),
+      'https://evil.example/visual/',
+    ])
+      expect(
+        trustedFrames({
+          frames: {imageBase: bad, published},
+          identity,
+          inputs: tmp(),
+        }),
+      ).toBeNull();
+  });
+
+  it('refuses frame paths that are not before/after/diff PNGs', () => {
+    for (const published of [
+      '["../x.png"]',
+      '["other/b.png"]',
+      '[]',
+      'not json',
+    ])
+      expect(
+        trustedFrames({
+          frames: {imageBase, published},
+          identity,
+          inputs: tmp(),
+        }),
+      ).toBeNull();
+  });
+
+  it('gives only the frames job contents: write, with no persisted credentials', () => {
+    const {jobs} = PR_COMMENT_WORKFLOW;
+    for (const [name, job] of Object.entries(jobs))
+      expect(job.permissions?.contents === 'write', name).toBe(
+        name === 'frames',
+      );
+    const checkout = jobs.frames.steps.find(step =>
+      String(step.uses).startsWith('actions/checkout@'),
+    );
+    expect(checkout.with).toEqual({ref: 'main', 'persist-credentials': false});
+    expect(jobs.comment.needs).toEqual(['resolve', 'frames']);
+  });
 });

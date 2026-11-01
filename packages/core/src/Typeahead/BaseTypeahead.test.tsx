@@ -293,6 +293,95 @@ describe('BaseTypeahead', () => {
     },
   );
 
+  // spec:AST-092 FR4: a replaced source's list is no longer current, so
+  // ArrowDown on the closed field loads the new source instead of showing it.
+  it('loads the replacement source when ArrowDown opens the closed field', async () => {
+    const user = userEvent.setup();
+    const originalSource: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: () => [resultItem],
+    };
+    const updatedBootstrap = vi.fn(() => [{id: '2', label: 'Updated result'}]);
+    const updatedSource: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: updatedBootstrap,
+    };
+    const renderField = (searchSource: SearchSource<SearchableItem>) => (
+      <BaseTypeahead
+        searchSource={searchSource}
+        value={null}
+        onChange={() => {}}
+        hasEntriesOnFocus
+      />
+    );
+    const {rerender} = render(renderField(originalSource));
+    const input = screen.getByRole('combobox');
+
+    await user.click(input);
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    await user.keyboard('{Escape}');
+    rerender(renderField(updatedSource));
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Updated result', hidden: true}),
+      ).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole('option', {name: 'Result', hidden: true}),
+    ).not.toBeInTheDocument();
+    expect(updatedBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it('searches the replacement source for the typed query when ArrowDown opens the closed field', async () => {
+    const user = userEvent.setup();
+    const originalSource: SearchSource<SearchableItem> = {
+      search: () => [resultItem],
+      bootstrap: () => [],
+    };
+    const updatedSearch = vi.fn(() => [{id: '2', label: 'Updated result'}]);
+    const updatedSource: SearchSource<SearchableItem> = {
+      search: updatedSearch,
+      bootstrap: () => [],
+    };
+    const renderField = (searchSource: SearchSource<SearchableItem>) => (
+      <BaseTypeahead
+        searchSource={searchSource}
+        value={null}
+        onChange={() => {}}
+      />
+    );
+    const {rerender} = render(renderField(originalSource));
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 're');
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Result', hidden: true}),
+      ).toBeInTheDocument();
+    });
+    await user.keyboard('{Escape}');
+    rerender(renderField(updatedSource));
+
+    await user.keyboard('{ArrowDown}');
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Updated result', hidden: true}),
+      ).toBeInTheDocument();
+    });
+    expect(updatedSearch).toHaveBeenCalledWith('re', expect.anything());
+    expect(
+      screen.queryByRole('option', {name: 'Result', hidden: true}),
+    ).not.toBeInTheDocument();
+  });
+
   it('re-shows cached results without bootstrapping again when the source is unchanged', async () => {
     const user = userEvent.setup();
     const bootstrap = vi.fn(() => [resultItem]);
@@ -346,7 +435,9 @@ describe('BaseTypeahead', () => {
     expect(input).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.change(input, {target: {value: '😀a'}});
-    await waitFor(() => expect(search).toHaveBeenCalledExactlyOnceWith('😀a'));
+    await waitFor(() =>
+      expect(search).toHaveBeenCalledExactlyOnceWith('😀a', expect.anything()),
+    );
   });
 
   it('exposes a completed empty search as a disabled listbox option', async () => {
@@ -498,7 +589,7 @@ describe('BaseTypeahead', () => {
             expect(input).not.toHaveAttribute('aria-busy');
             await act(async () => vi.advanceTimersByTimeAsync(1));
           }
-          expect(search).toHaveBeenLastCalledWith('next');
+          expect(search).toHaveBeenLastCalledWith('next', expect.anything());
           expect(input).toHaveAttribute('aria-busy', 'true');
           expect(options.queryByText('No matching frameworks')).toBeNull();
           expect(options.queryAllByRole('option', {hidden: true})).toHaveLength(

@@ -11,7 +11,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen, fireEvent} from '@testing-library/react';
-import {createRef, useState} from 'react';
+import {Profiler, createRef, useState} from 'react';
 import {BottomSheet} from './BottomSheet';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
 import {resetBottomSheetStackForTests} from './bottomSheetStack';
@@ -1268,6 +1268,286 @@ describe('BottomSheet', () => {
       // Transitions come back for the next gesture.
       act(() => reconciliationFrames.splice(0).forEach(frame => frame(0)));
       expect(sheet.style.transition).toBe('');
+    });
+
+    it('restores the layout height in the same task as the transform when a drag crosses its detent, without a synchronous render', async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      let commits = 0;
+      render(
+        <Profiler
+          id="sheet"
+          onRender={() => {
+            commits += 1;
+          }}>
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Release notes"
+            snapPoints={SNAP_POINTS}
+            height="tall">
+            Content
+          </BottomSheet>
+        </Profiler>,
+      );
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+
+      // Rest on p50 (offset 336): the scrolling area gives up 336px of
+      // layout height and the sheet carries no transform.
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+      fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
+      fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+
+      const replacedNodes: Node[] = [];
+      const mutations = new MutationObserver(records => {
+        for (const record of records) {
+          replacedNodes.push(...record.addedNodes, ...record.removedNodes);
+        }
+      });
+      mutations.observe(sheet, {childList: true, subtree: true});
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+
+      // Each finger sample arrives outside act(), as a browser delivers it:
+      // a render React schedules for later is still pending when this task
+      // ends, and the browser paints whatever the element holds then.
+      const reactGlobals = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+      const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
+      reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
+      const sampleAt = (time: number, y: number) => {
+        const event = new Event('pointermove', {bubbles: true});
+        Object.defineProperties(event, {
+          clientY: {value: y},
+          isPrimary: {value: true},
+          pointerId: {value: 1},
+          timeStamp: {value: time},
+        });
+        getHandle().dispatchEvent(event);
+        return {
+          height: sheet.style.height,
+          transform: sheet.style.transform,
+          inset: getBody().style.paddingBlockEnd,
+        };
+      };
+      let above: {height: string; transform: string; inset: string};
+      let below: {height: string; transform: string; inset: string};
+      const commitsBeforeCrossing = commits;
+      let commitsInCrossingTasks: number;
+      try {
+        // Up past the detent: the transform is written for the full height
+        // (no layout split), so the full height has to be there too.
+        above = sampleAt(4000, 136);
+        // Back down past it: the split returns with the transform.
+        below = sampleAt(5000, 436);
+        // React committed nothing inside those input tasks: the elements were
+        // written directly, not through a forced synchronous render.
+        commitsInCrossingTasks = commits - commitsBeforeCrossing;
+      } finally {
+        reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+      }
+      await act(async () => {});
+
+      expect(above.transform).toMatch(/^translateY\(/);
+      expect(above.height).toBe('784px');
+      // The scrolling area keeps its scroll position across the taller
+      // height: its end inset lands with it.
+      expect(above.inset).toBe('336px');
+      expect(below.transform).toBe('translateY(100px)');
+      expect(below.height).toBe('448px');
+      expect(below.inset).toBe('');
+      expect(commitsInCrossingTasks).toBe(0);
+      // The scheduled render caught up to the values already on screen.
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('translateY(100px)');
+      // Nothing in the sheet was replaced along the way.
+      mutations.disconnect();
+      expect(replacedNodes).toEqual([]);
+    });
+
+    it("rests at the detent's height when the finger lifts in the same task as the move that crossed it", async () => {
+      const observers = mockResizeObserverInstances();
+      mockVisualViewport(800);
+      mockWindowHeight(800);
+      render(
+        <BottomSheet
+          isOpen
+          onOpenChange={() => {}}
+          label="Release notes"
+          snapPoints={SNAP_POINTS}
+          height="tall">
+          Content
+        </BottomSheet>,
+      );
+      const sheet = getSheet();
+      const sheetObserver = observers.find(instance =>
+        instance.observed.has(sheet),
+      );
+      act(() => {
+        sheetObserver?.callback(
+          [resizeEntry(784, 736)],
+          sheetObserver as unknown as ResizeObserver,
+        );
+      });
+
+      // Rest on p50 (offset 336) with the 336px layout split.
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+      fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
+      fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
+      expect(sheet.style.height).toBe('448px');
+      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+
+      // A 3px nudge up crosses the detent, and the finger lifts before the
+      // render that move scheduled has committed: both arrive in one task,
+      // outside act(), as a browser can deliver them.
+      const reactGlobals = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+      const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
+      reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
+      const dispatch = (
+        type: 'pointermove' | 'pointerup',
+        time: number,
+        y: number,
+      ) => {
+        const event = new Event(type, {bubbles: true, cancelable: true});
+        Object.defineProperties(event, {
+          button: {value: 0},
+          clientY: {value: y},
+          isPrimary: {value: true},
+          pointerId: {value: 1},
+          timeStamp: {value: time},
+        });
+        getHandle().dispatchEvent(event);
+      };
+      let heightAboveDetent: string;
+      try {
+        dispatch('pointermove', 4000, 333);
+        heightAboveDetent = sheet.style.height;
+        dispatch('pointerup', 4500, 333);
+      } finally {
+        reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+      }
+      await act(async () => {});
+
+      // The crossing move drew the sheet at its full height...
+      expect(heightAboveDetent).toBe('784px');
+      // ...and at rest it is drawn at p50 again: the split height, no
+      // offset, and no end inset left over from the drag.
+      expect(sheet.style.height).toBe('448px');
+      expect(sheet.style.transform).toBe('');
+      expect(getBody().style.paddingBlockEnd).toBe('');
+    });
+
+    describe('with a caller-set height', () => {
+      // Rests on p50 (offset 336), presses the handle again, and returns the
+      // sheet and a dispatcher that delivers pointer events outside act(), as
+      // a browser does, so a render React schedules is still pending when
+      // each event's task ends.
+      function restOnHalfWithCallerHeight() {
+        const observers = mockResizeObserverInstances();
+        mockVisualViewport(800);
+        mockWindowHeight(800);
+        render(
+          <BottomSheet
+            isOpen
+            onOpenChange={() => {}}
+            label="Release notes"
+            snapPoints={SNAP_POINTS}
+            height="tall"
+            style={{height: '500px'}}>
+            Content
+          </BottomSheet>,
+        );
+        const sheet = getSheet();
+        const sheetObserver = observers.find(instance =>
+          instance.observed.has(sheet),
+        );
+        act(() => {
+          sheetObserver?.callback(
+            [resizeEntry(784, 736)],
+            sheetObserver as unknown as ResizeObserver,
+          );
+        });
+        fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
+        fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
+        fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
+        fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+        const outsideAct = (run: (dispatch: typeof dispatchRaw) => void) => {
+          const reactGlobals = globalThis as {
+            IS_REACT_ACT_ENVIRONMENT?: boolean;
+          };
+          const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
+          reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
+          try {
+            run(dispatchRaw);
+          } finally {
+            reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+          }
+        };
+        function dispatchRaw(
+          type: 'pointermove' | 'pointerup',
+          time: number,
+          y: number,
+        ) {
+          const event = new Event(type, {bubbles: true, cancelable: true});
+          Object.defineProperties(event, {
+            button: {value: 0},
+            clientY: {value: y},
+            isPrimary: {value: true},
+            pointerId: {value: 1},
+            timeStamp: {value: time},
+          });
+          getHandle().dispatchEvent(event);
+        }
+        return {sheet, outsideAct};
+      }
+
+      it('keeps the caller height through a drag across the detent and back', async () => {
+        const {sheet, outsideAct} = restOnHalfWithCallerHeight();
+        expect(sheet.style.height).toBe('500px');
+
+        const heights: string[] = [];
+        outsideAct(dispatch => {
+          dispatch('pointermove', 4000, 136);
+          heights.push(sheet.style.height);
+          dispatch('pointermove', 5000, 436);
+          heights.push(sheet.style.height);
+        });
+        await act(async () => {});
+        outsideAct(dispatch => {
+          dispatch('pointerup', 6000, 336);
+        });
+        await act(async () => {});
+
+        // The caller's height owns the element: the crossing writes only the
+        // transform and the end inset, and nothing replaces the height after.
+        expect(heights).toEqual(['500px', '500px']);
+        expect(sheet.style.height).toBe('500px');
+      });
+
+      it('keeps the caller height when the finger lifts in the same task as the crossing move', async () => {
+        const {sheet, outsideAct} = restOnHalfWithCallerHeight();
+
+        let heightAboveDetent = '';
+        outsideAct(dispatch => {
+          dispatch('pointermove', 4000, 333);
+          heightAboveDetent = sheet.style.height;
+          dispatch('pointerup', 4500, 333);
+        });
+        await act(async () => {});
+
+        expect(heightAboveDetent).toBe('500px');
+        expect(sheet.style.height).toBe('500px');
+      });
     });
 
     it('uses transforms while dragging and resizes to the visible snapped height', () => {

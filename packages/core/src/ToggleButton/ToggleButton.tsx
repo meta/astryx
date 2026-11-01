@@ -29,7 +29,7 @@ import {Button, type ButtonSize} from '../Button';
 import type {Elevation} from '../utils/types';
 import {useToggleButtonGroup} from './ToggleButtonGroup';
 import type {BaseProps} from '../BaseProps';
-import {themeProps} from '../utils/themeProps';
+import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {mergeProps} from '../utils/mergeProps';
 
 // =============================================================================
@@ -353,7 +353,6 @@ export function ToggleButton({
       isLoading={isLoading}
       isInterruptible
       isIconOnly={isIconOnly}
-      aria-pressed={isPressed}
       icon={resolvedIcon}
       tooltip={tooltip}
       {...mergeProps(
@@ -367,7 +366,14 @@ export function ToggleButton({
       style={style}
       onClick={handleClick}
       clickAction={clickAction}
-      {...props}>
+      {...props}
+      // The pressed state this component owns wins over a caller's
+      // same-named attributes (public-component-api INV5).
+      aria-pressed={isPressed}
+      {...themeDataAttributes({
+        isPressed: isPressed ? 'true' : 'false',
+        elevation,
+      })}>
       {labelContent}
     </Button>
   );
