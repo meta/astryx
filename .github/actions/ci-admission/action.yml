@@ -175,8 +175,10 @@ runs:
           const started = PHASE === 'rest' && Number(process.env.STARTED) > 0 ? Number(process.env.STARTED) : Date.now();
           const looked = PHASE === 'rest' ? Math.max(0, Number(process.env.LOOKS) || 0) : 0;
           core.setOutput('started', String(started));
-          if (PHASE === 'rest' && process.env.FITS === 'true') {
-            core.info('The whole run fit when its first job found room.');
+          // The rest waits only when room measured that the run did not fit;
+          // when room started on an API error or a low budget, so does the rest.
+          if (PHASE === 'rest' && process.env.FITS !== 'false') {
+            core.info(process.env.FITS === 'true' ? 'The whole run fit when its first job found room.' : 'Room did not measure the run; starting.');
             return;
           }
           let calls = 0;
@@ -262,7 +264,8 @@ runs:
                 return;
               }
               if (PHASE === 'room') {
-                if (!main && look === 1 && waitingPulls >= MAX_WAITING) {
+                // Pull requests only: merge-queue entries and `main` runs are never turned away.
+                if (pr != null && look === 1 && waitingPulls >= MAX_WAITING) {
                   core.setOutput('full', 'true');
                   core.warning(`CI is full: ${waitingPulls} pull-request runs are already waiting and there is no room (about ${others} other jobs + ${peak}).`);
                   return;

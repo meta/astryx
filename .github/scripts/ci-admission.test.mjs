@@ -88,7 +88,7 @@ describe('where runs wait', () => {
     expect(job.permissions).toEqual({actions: 'write'});
     const [stop] = job.steps;
     expect(stop['continue-on-error']).toBeUndefined();
-    expect(stop.run).toContain('CI is full: re-run or push later.');
+    expect(stop.run).toContain('CI is full: re-run all jobs or push later.');
     // It cancels the run when its token can, and fails either way.
     expect(stop.run).toContain('gh run cancel "$GITHUB_RUN_ID"');
     expect(stop.run.trim().split('\n').at(-1)).toBe('exit 1');
@@ -102,7 +102,7 @@ describe('where runs wait', () => {
     const isStop = step =>
       step.name === 'Stop when CI is full' &&
       step.if === "needs.room.outputs.full == 'true'" &&
-      step.run.includes('CI is full: re-run or push later.') &&
+      step.run.includes('CI is full: re-run all jobs or push later.') &&
       step.run.trim().endsWith('exit 1') &&
       step['continue-on-error'] === undefined;
     // Admission fails first, so every job behind it without its own status
@@ -382,6 +382,7 @@ describe('ci admission', () => {
     active = [],
     peak = 12,
     isMain = false,
+    merge = false,
     labels = [],
     pull = {},
     error,
@@ -441,16 +442,17 @@ describe('ci admission', () => {
     const context = {
       repo: {owner: 'o', repo: 'r'},
       runId: OWN,
-      payload: isMain
-        ? {}
-        : {
-            pull_request: {
-              draft: false,
-              head: {repo: {full_name: 'o/r'}},
-              labels: labels.map(name => ({name})),
-              ...pull,
+      payload:
+        isMain || merge
+          ? {}
+          : {
+              pull_request: {
+                draft: false,
+                head: {repo: {full_name: 'o/r'}},
+                labels: labels.map(name => ({name})),
+                ...pull,
+              },
             },
-          },
     };
     Object.assign(process.env, {
       PEAK: String(peak),
@@ -636,6 +638,32 @@ describe('ci admission', () => {
       expect(rest).toMatchObject({looks: 0, calls: 0});
     });
 
+    it('starts the rest at once when room did not measure the run', async () => {
+      // Room started on an API error or a low budget: it set no `fits`.
+      for (const fits of ['']) {
+        const rest = await admit({
+          active: prs(6),
+          peak: 16,
+          phase: 'rest',
+          fits,
+          started: String(NOW),
+          looked: '1',
+          maxWait: 12,
+          maxLooks: 2,
+        });
+        expect(rest).toMatchObject({looks: 0, calls: 0});
+        expect(rest.info).toContain('Room did not measure the run; starting.');
+      }
+      // A failed room lookup sets looks but not fits.
+      const room = await admit({
+        active: prs(6),
+        peak: 16,
+        phase: 'room',
+        error: new Error('rate limited'),
+      });
+      expect(room.outputs.fits).toBeUndefined();
+    });
+
     it('carries the wait on from room: its clock and its looks', async () => {
       // Room looked at once and found room for the build only; the rest looks
       // once more at the second look of the same twelve-minute wait.
@@ -708,6 +736,20 @@ describe('ci admission', () => {
       expect(result.warning[0]).toContain(
         'CI is full: 10 pull-request runs are already waiting',
       );
+    });
+
+    it('never turns away a merge-queue entry', async () => {
+      // A merge-queue run is not `main`, and carries no pull request.
+      const entry = await admit({
+        active: [...prs(5), ...waiting(12)],
+        peak: 16,
+        phase: 'room',
+        merge: true,
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(entry.outputs.full).toBeUndefined();
+      expect(entry.looks).toBe(2);
     });
 
     it('lets the tenth waiter wait, and never turns away a run that fits or a main run', async () => {

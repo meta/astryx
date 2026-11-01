@@ -347,7 +347,7 @@ they are separately named.
   release re-check or baseline capture is waiting, looking twice on a pull
   request, at once and after twelve minutes, and every two minutes for at most
   fifteen for `main` (DEC-16). At most ten pull-request runs wait at once: one
-  more that finds no room stops at once with "CI is full: re-run or push later",
+  more that finds no room stops at once with "CI is full: re-run all jobs or push later",
   and its required checks report the stopped run. A pull request that may not
   run CI admits nothing, and waiting never fails a job, so every required
   context reports as before.
@@ -756,8 +756,8 @@ waits, pull-request runs wait too, their Storybook builds included. Every job
 ends within its fifteen-minute budget, so `main` fits within fifteen minutes.
 Nothing is reserved for `main` outside those minutes. At most ten pull-request
 runs wait at once; one more that finds no room stops at once, "CI is full:
-re-run or push later", rather than add a waiting job to a full CI. A `main` run
-is never stopped.
+re-run all jobs or push later", rather than add a waiting job to a full CI. A
+`main` run is never stopped.
 
 CI can still pass ninety in four bounded ways, the first three rare:
 

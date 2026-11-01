@@ -154,7 +154,7 @@ jobs:
       - name: Stop when CI is full
         if: needs.room.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
           exit 1
 
       - name: Check out the admission action
@@ -197,7 +197,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
           exit 1
 
@@ -508,7 +508,7 @@ jobs:
       - name: Stop when CI is full
         if: needs.room.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
           exit 1
 
       - name: Check out the scope action
@@ -984,7 +984,7 @@ jobs:
       - name: Stop when CI is full
         if: needs.room.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
           exit 1
 
       - name: Check out the scope action
@@ -1563,7 +1563,7 @@ jobs:
       - name: Stop when CI is full
         if: needs.room.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
           exit 1
 
       - name: Assert parallel builds succeeded
