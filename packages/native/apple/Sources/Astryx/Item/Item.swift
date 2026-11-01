@@ -29,6 +29,8 @@ public struct Item<Marker: View, StartContent: View, EndContent: View>: View {
   let startContent: StartContent
   let endContent: EndContent
   @Environment(\.astryx) private var astryx
+  @Environment(\.astryxItemListTreatment) private var listTreatment
+  @State private var wordsHeight: CGFloat = 0
 
   /// A row from its labeled props. A single trailing closure is the start
   /// content; set `onClick` by label or as a trailing `onClick:` closure.
@@ -131,29 +133,31 @@ public struct Item<Marker: View, StartContent: View, EndContent: View>: View {
   /// A link or button row's fill and its press, painted by the button style
   /// so the press sits above a selected or highlighted fill, as core's does.
   private var pressStyle: ItemPressStyle {
-    ItemPressStyle(radius: astryx.tokens.radius.element, fill: background, pressed: astryx.tokens.color.overlayPressed)
+    ItemPressStyle(radius: cornerRadius, fill: background, pressed: astryx.tokens.color.overlayPressed)
   }
 
   /// The row's drawing; a tappable row is at least `minHeight` tall. A static
   /// row paints its own fill; a link or button row's style paints it.
   private func row(minHeight: CGFloat?, paintsFill: Bool) -> some View {
     HStack(alignment: rowAlignment, spacing: astryx.tokens.space.s2) {
-      slot(marker)
-      slot(startContent)
+      markerSlot
+      // A list's treatment is for this row only, not for rows nested in its slots.
+      slot(startContent.modifier(ItemSlotOutsideList()))
       // A disabled row dims its words and end content, as core does; the
       // marker and start content keep their own look (a checkbox shows its
       // own disabled state).
       words
         .frame(maxWidth: .infinity, alignment: .leading)
+        .modifier(ItemWordsHeight(isMeasured: measuresWords, height: $wordsHeight))
         .opacity(isDisabled ? 0.5 : 1)
-      slot(endContent)
+      slot(endContent.modifier(ItemSlotOutsideList()))
         .opacity(isDisabled ? 0.5 : 1)
     }
     .padding(.horizontal, inlinePadding)
     .padding(.vertical, blockPadding)
     .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .leading)
     .background(
-      RoundedRectangle(cornerRadius: astryx.tokens.radius.element, style: .continuous)
+      RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         .fill(paintsFill ? background ?? .clear : .clear)
     )
     .contentShape(Rectangle())
@@ -168,6 +172,43 @@ public struct Item<Marker: View, StartContent: View, EndContent: View>: View {
     } else {
       content
     }
+  }
+
+  /// The marker. Inside a list it centers on the label's first line,
+  /// whatever the row's alignment, as core's list markers do.
+  @ViewBuilder private var markerSlot: some View {
+    if listTreatment?.markerOnFirstLine == true {
+      let center = firstLineBoxHeight / 2
+      switch resolvedAlign {
+      case .firstLine:
+        slot(marker)
+      case .start:
+        marker.alignmentGuide(.top) { d in d.height / 2 - center }
+      case .center:
+        let words = wordsHeight
+        marker.alignmentGuide(VerticalAlignment.center) { d in words / 2 - center + d.height / 2 }
+      }
+    } else {
+      slot(marker)
+    }
+  }
+
+  /// Whether the row measures its words: only a centre-aligned row in a list
+  /// with markers, which places its marker from the words' height.
+  private var measuresWords: Bool {
+    listTreatment?.markerOnFirstLine == true && resolvedAlign == .center
+  }
+
+  /// The height of the label's first line box: the theme's leading at the
+  /// current text size.
+  private var firstLineBoxHeight: CGFloat {
+    astryx.tokens.font.body.leading * astryx.tokens.font.body.size * astryx.textScale
+  }
+
+  /// The row's corner radius: the theme's element radius, or square inside a
+  /// list with dividers.
+  private var cornerRadius: CGFloat {
+    listTreatment?.squareCorners == true ? 0 : astryx.tokens.radius.element
   }
 
   @ViewBuilder private var words: some View {
@@ -237,9 +278,15 @@ public struct Item<Marker: View, StartContent: View, EndContent: View>: View {
     }
   }
 
-  /// Inline padding: spacing 2, or 3 when spacious.
+  /// Inline padding: the list's own inset when a list sets one, else core's
+  /// for the density.
   var inlinePadding: CGFloat {
-    (props.density ?? .balanced) == .spacious ? astryx.tokens.space.s3 : astryx.tokens.space.s2
+    listTreatment?.inlineInset ?? Item.inlinePadding(density: props.density, tokens: astryx.tokens)
+  }
+
+  /// Core's inline padding for a density: spacing 2, or 3 when spacious.
+  static func inlinePadding(density: ItemDensity?, tokens: Tokens) -> CGFloat {
+    (density ?? .balanced) == .spacious ? tokens.space.s3 : tokens.space.s2
   }
 
   /// The space core's line height adds to the font's own line, grown with
@@ -350,5 +397,50 @@ private struct ItemAccessibility: ViewModifier {
 
   func body(content: Content) -> some View {
     content.accessibilityAddTraits(Item<EmptyView, EmptyView, EmptyView>.addedTraits(isSelected: isSelected))
+  }
+}
+
+/// Measures the words' height only when the row needs it.
+private struct ItemWordsHeight: ViewModifier {
+  let isMeasured: Bool
+  @Binding var height: CGFloat
+
+  func body(content: Content) -> some View {
+    if isMeasured {
+      content.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+    } else {
+      content
+    }
+  }
+}
+
+/// A row's slots sit outside its list: a row nested in a slot takes neither
+/// the list's treatment, its look, nor a number from it.
+private struct ItemSlotOutsideList: ViewModifier {
+  func body(content: Content) -> some View {
+    content
+      .environment(\.astryxItemListTreatment, nil)
+      .environment(\.astryxListContext, nil)
+      .environment(\.astryxListNumbers, nil)
+  }
+}
+
+/// How a list draws the rows it holds: the marker on the first line, its own
+/// inline inset (zero for a flush list), and square corners between dividers.
+struct ItemListTreatment: Equatable {
+  var markerOnFirstLine: Bool
+  var inlineInset: CGFloat?
+  var squareCorners: Bool
+}
+
+private struct ItemListTreatmentKey: EnvironmentKey {
+  static let defaultValue: ItemListTreatment? = nil
+}
+
+extension EnvironmentValues {
+  /// Set by `ListItem` on the `Item` it draws; `nil` for an `Item` alone.
+  var astryxItemListTreatment: ItemListTreatment? {
+    get { self[ItemListTreatmentKey.self] }
+    set { self[ItemListTreatmentKey.self] = newValue }
   }
 }
