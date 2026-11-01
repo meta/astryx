@@ -661,5 +661,25 @@
       "prev": ".astryx-typeahead-item > :first-child",
       "next": ".astryx-typeahead-item > :last-child"
     }
+  },
+  {
+    "component": "List",
+    "storyId": "core-list--interactive",
+    "dims": []
+  },
+  {
+    "component": "RadioList",
+    "storyId": "core-radiolist--default",
+    "dims": []
+  },
+  {
+    "component": "Selector",
+    "storyId": "core-selector--with-icons",
+    "dims": []
+  },
+  {
+    "component": "Typeahead",
+    "storyId": "core-typeahead--item-with-icon",
+    "dims": []
   }
 ]
