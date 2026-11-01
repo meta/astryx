@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.0",
     "@monaco-editor/react": "^4.8.0-rc.3",
     "@stylexjs/stylex": "catalog:",
     "@vercel/analytics": "^2.0.1",
