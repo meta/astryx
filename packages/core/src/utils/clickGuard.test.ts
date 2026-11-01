@@ -17,7 +17,7 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 
 import {GestureHost} from '../gestures/GestureHost';
 import {coarsePrimaryPointer} from '../gestures/__tests__/pointerQuery';
-import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
+import {markHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 import {MENU_PRESS_STRAY_CLICK_MS} from '../hooks/useMenuPress';
 import {
@@ -111,7 +111,7 @@ describe('clickGuard', () => {
     expect(click(target, 0).defaultPrevented).toBe(false);
     expect(withoutClickGuard(() => click(target)).defaultPrevented).toBe(false);
     const haptic = document.createElement('input');
-    haptic.setAttribute(HAPTIC_SWITCH_ATTRIBUTE, '');
+    markHapticSwitch(haptic);
     document.body.append(haptic);
     expect(click(haptic).defaultPrevented).toBe(false);
     // Still armed for the browser's own click.

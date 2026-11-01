@@ -6,7 +6,7 @@
  *   options (.github/scripts/lib/component-size.js)
  * @output Pins architecture:react-component-runtime INV13's bundle claim for
  *   the utils entry: it carries no byte of `gestures/` (the haptic switch's
- *   attribute lives in utils/hapticSwitch.ts for that)
+ *   attribute's owner module, privateAttributes/hapticSwitch.stylex.ts, serves that)
  * @position Node test over source, so it needs no build. The root and hooks
  *   entries carry gesture code exactly as far as the components and hooks
  *   that use a gesture import it: scripts/touch-support-bundle.test.mjs pins
