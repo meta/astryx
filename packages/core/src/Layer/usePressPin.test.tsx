@@ -2,14 +2,15 @@
 
 /**
  * @file usePressPin.test.tsx
- * @input Uses vitest, @testing-library/react, Tooltip, usePressPin
+ * @input Uses vitest, @testing-library/react, Tooltip, useTooltipInternal,
+ *   usePressPin
  * @output Proof of `pressTrigger="toggle"` (component:Tooltip FR9 and FR10):
  *   a press pins and closes the layer, a
  *   pinned layer survives the pointer leaving and closes on Escape, a second
  *   press, a press outside, or focus leaving; the trigger carries
  *   aria-expanded and aria-controls and the layer is announced once; the press
  *   stops at its trigger; a non-button trigger warns and keeps tap-only
- *   opening
+ *   opening; a trigger whose layer repeats its text pins with no toggle state
  * @position Unit tests beside usePressPin
  *
  * SYNC: When usePressPin.ts or useTooltip.tsx change, update these cases.
@@ -28,6 +29,7 @@ import {
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useRef, useState, type ReactElement, type ReactNode} from 'react';
 import {Tooltip} from '../Tooltip/Tooltip';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Dialog} from '../Dialog/Dialog';
 import {Item} from '../Item/Item';
@@ -669,6 +671,65 @@ describe('a toggle press stops at its trigger', () => {
     );
     tap(screen.getByRole('button', {name: 'About billing'}));
     expect(onRow).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** A truncated Text that is its own tab stop: its tooltip repeats its text. */
+function RepeatingText({text}: {text: string}): ReactElement {
+  const tooltip = useTooltipInternal({
+    pressTrigger: 'toggle',
+    repeatsTriggerText: true,
+  });
+  return (
+    <>
+      <span
+        ref={tooltip.ref}
+        tabIndex={0}
+        aria-describedby={tooltip.describedBy}>
+        {text}
+      </span>
+      {tooltip.renderTooltip(<span data-full="">{text}</span>)}
+    </>
+  );
+}
+
+describe('a trigger whose tooltip repeats its own text (component:Tooltip FR9)', () => {
+  it('pins without being a button, with no warning, toggle state, or announcement', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<RepeatingText text="Quarterly revenue by region" />);
+      const trigger = screen.getAllByText('Quarterly revenue by region')[0];
+      click(trigger);
+      const full = document.querySelector<HTMLElement>('[data-full]');
+      expect(
+        full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+      ).toBe(true);
+      expect(trigger).not.toHaveAttribute('aria-expanded');
+      expect(trigger).not.toHaveAttribute('aria-controls');
+      expect(announce).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+      fireEvent.keyDown(trigger, {key: 'Enter'});
+      expect(
+        full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+      ).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('inside an Astryx ClickableCard, with no wrapper to stop the press, the card does not open', () => {
+    const onCard = vi.fn();
+    render(
+      <ClickableCard label="Revenue" onClick={onCard}>
+        <RepeatingText text="Quarterly revenue by region" />
+      </ClickableCard>,
+    );
+    click(screen.getAllByText('Quarterly revenue by region')[0]);
+    const full = document.querySelector<HTMLElement>('[data-full]');
+    expect(
+      full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+    ).toBe(true);
+    expect(onCard).not.toHaveBeenCalled();
   });
 });
 
