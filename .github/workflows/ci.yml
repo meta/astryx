@@ -2016,9 +2016,14 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
 
+      # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
+      # from the CPU count it sees; a containerised or misreporting runner can
+      # show the host's. Pin it to the CPUs this job actually has.
       - name: Run WebKit interaction proofs
         if: steps.scope.outputs.applies == 'true'
         run: |
+          LP_NUM_THREADS="$(nproc)"
+          export LP_NUM_THREADS
           pnpm exec playwright test \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \

@@ -116,6 +116,15 @@ describe('WebKit interaction proof routing', () => {
     expect(run).not.toContain('--project chromium');
   });
 
+  it("sizes llvmpipe's thread pool from the job's own CPUs before Playwright runs", () => {
+    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    expect(run).toMatch(/^LP_NUM_THREADS="\$\(nproc\)"$/m);
+    expect(run).toMatch(/^export LP_NUM_THREADS$/m);
+    expect(run.indexOf('LP_NUM_THREADS')).toBeLessThan(
+      run.indexOf('playwright test'),
+    );
+  });
+
   it('runs only the specs whose code its scope covers', () => {
     const run = step(webkit, 'Run WebKit interaction proofs').run;
     const targets = [
