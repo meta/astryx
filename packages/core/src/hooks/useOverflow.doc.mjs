@@ -82,6 +82,18 @@ export const docs = {
       description:
         'Whether any items are overflowing (visibleCount < itemCount).',
     },
+    {
+      name: 'rows',
+      type: 'number',
+      description:
+        'Number of rows the visible items occupy. Measured on the multi-row path (maxRows above 1); the single-line path reports 1 without measuring.',
+    },
+    {
+      name: 'rowHeight',
+      type: 'number',
+      description:
+        'Measured max item height in pixels, for sizing the multi-row container. Measured on the multi-row path (maxRows above 1); the single-line path reports 0 without measuring, so item-height changes there never re-render the host.',
+    },
   ],
   usage: {
     description:
