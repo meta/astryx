@@ -33,6 +33,12 @@ public struct AstryxNodeView: View {
       } marker: {
         AstryxNodeList(nodes: item.props.marker ?? [], send: send)
       }
+    case .listItem(let row):
+      ListItem(row.viewProps(send: send)) {
+        AstryxNodeList(nodes: row.props.startContent ?? [], send: send)
+      } endContent: {
+        AstryxNodeList(nodes: row.props.endContent ?? [], send: send)
+      }
     default: AstryxUnsupportedNode(component: Self.componentName(node))
     }
   }
@@ -50,6 +56,7 @@ public struct AstryxNodeView: View {
     case .hStack: "HStack"
     case .icon: "Icon"
     case .item: "Item"
+    case .listItem: "ListItem"
     case .progressBar: "ProgressBar"
     case .selector: "Selector"
     case .switch: "Switch"
