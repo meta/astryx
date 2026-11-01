@@ -35,7 +35,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
-import {paddingStyles} from '../Layout/padding.stylex';
+import {paddingStyles} from '../Layout/paddingStyles.stylex';
 import type {SpacingStep} from '../utils/types';
 import {stableClassName} from '../naming';
 
