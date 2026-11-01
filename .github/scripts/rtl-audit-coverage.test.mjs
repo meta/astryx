@@ -1402,8 +1402,37 @@ describe('resolveFilterRoutes (filters resolve through the Storybook index)', ()
     expect(resolve(['core/nosuchthing']).routes).toEqual([]);
   });
 
-  it('is the whole route list when no filter is given', () => {
-    expect(resolve([]).routes).toBe(routes);
+  it('keeps every route in a full run and adopts the same orphan stories there', () => {
+    const full = resolve([]);
+    // Every existing route stays, including the orphan route itself.
+    for (const route of routes) expect(full.routes).toContainEqual(route);
+    expect(full.adopted).toEqual({
+      'core/ResizeHandle': [
+        'core-resizable--horizontal-split',
+        'core-resizable--snap-points',
+      ],
+    });
+  });
+
+  it('agrees with a filtered run on ResizeHandle and ChatLayoutScrollButton', () => {
+    const owned = (result, component) =>
+      result.routes
+        .filter(route => route.component === component)
+        .map(route => route.id)
+        .sort();
+    const full = resolve([]);
+    expect(owned(full, 'core/ResizeHandle')).toEqual(
+      owned(resolve(['core/resizehandle']), 'core/ResizeHandle'),
+    );
+    // Core/Chat never renders the scroll button: no adoption in either run,
+    // so its verified-N/A record still stands.
+    expect(owned(full, 'core/ChatLayoutScrollButton')).toEqual([]);
+    expect(
+      owned(
+        resolve(['core/chatlayoutscrollbutton']),
+        'core/ChatLayoutScrollButton',
+      ),
+    ).toEqual([]);
   });
 });
 

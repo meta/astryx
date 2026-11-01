@@ -1286,6 +1286,8 @@ function readVerifiedNa() {
  * its package's barrel (`core/resizehandle` → core/ResizeHandle in
  * packages/core/src/Resizable), or null.
  */
+const barrelExportsByPackage = new Map();
+
 function sourceOwnerOf(filter, publicComponentsByPackage) {
   const [packageName, requested] = filter.includes('/')
     ? filter.split('/')
@@ -1298,10 +1300,14 @@ function sourceOwnerOf(filter, publicComponentsByPackage) {
     );
     if (!component) continue;
     const sourceRoot = path.join(PROJECT_ROOT, pkg.src);
-    const implementation = componentExportsFromBarrel(
-      path.join(sourceRoot, 'index.ts'),
-      sourceRoot,
-    ).get(component);
+    // A full run asks for every storyless component, so read each barrel once.
+    if (!barrelExportsByPackage.has(name)) {
+      barrelExportsByPackage.set(
+        name,
+        componentExportsFromBarrel(path.join(sourceRoot, 'index.ts'), sourceRoot),
+      );
+    }
+    const implementation = barrelExportsByPackage.get(name).get(component);
     if (!implementation) continue;
     const folder = path
       .relative(PROJECT_ROOT, path.dirname(implementation))
@@ -1394,7 +1400,8 @@ async function cleanupRuntime() {
   }).filter(belongsToActivePackage);
   // Filters resolve through the index: a sub-component whose stories carry
   // its parent folder's non-component title (ResizeHandle under
-  // Core/Resizable) audits them under its own name.
+  // Core/Resizable) audits them under its own name, in a filtered run and in
+  // the full run alike.
   const resolvedFilters = resolveFilterRoutes({
     routes: storyRoutes,
     filters: FILTER,
