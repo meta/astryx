@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -12,6 +13,7 @@ import {
   Stack,
 } from '@astryxdesign/core/Layout';
 import {SideNav, SideNavItem} from '@astryxdesign/core/SideNav';
+import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
 
 const ps = stylex.create({
@@ -47,7 +49,8 @@ type Story = StoryObj<typeof ResizeHandle>;
 /** Basic horizontal split with divider line. */
 export const HorizontalSplit: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 250,
       minSize: 150,
       maxSize: 500,
@@ -72,7 +75,7 @@ export const HorizontalSplit: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -94,7 +97,8 @@ export const HorizontalSplit: Story = {
 /** Vertical split with divider line. */
 export const VerticalSplit: Story = {
   render: () => {
-    const top = useResizable({
+    const topHandleRef = useRef<HTMLDivElement>(null);
+    const top = useResizable(topHandleRef, {
       defaultSize: 250,
       minSize: 100,
       maxSize: 350,
@@ -117,7 +121,7 @@ export const VerticalSplit: Story = {
               <ResizeHandle
                 direction="vertical"
                 hasDivider
-                resizable={top.props}
+                ref={topHandleRef}
                 label="Resize editor"
               />
             </div>
@@ -139,7 +143,8 @@ export const VerticalSplit: Story = {
 /** Collapsible sidebar — drag past threshold or double-click to collapse. */
 export const Collapsible: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 260,
       minSize: 180,
       collapsible: true,
@@ -165,7 +170,7 @@ export const Collapsible: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -196,12 +201,14 @@ export const Collapsible: Story = {
 /** Three-panel IDE layout with nested horizontal + vertical splits. */
 export const ThreePanelIDE: Story = {
   render: () => {
-    const explorer = useResizable({
+    const explorerHandleRef = useRef<HTMLDivElement>(null);
+    const explorer = useResizable(explorerHandleRef, {
       defaultSize: 220,
       minSize: 150,
       maxSize: 400,
     });
-    const editor = useResizable({
+    const editorHandleRef = useRef<HTMLDivElement>(null);
+    const editor = useResizable(editorHandleRef, {
       defaultSize: 280,
       minSize: 100,
       maxSize: 350,
@@ -224,7 +231,7 @@ export const ThreePanelIDE: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={explorer.props}
+                ref={explorerHandleRef}
                 label="Resize explorer"
               />
             </>
@@ -248,7 +255,7 @@ export const ThreePanelIDE: Story = {
                 <ResizeHandle
                   direction="vertical"
                   hasDivider
-                  resizable={editor.props}
+                  ref={editorHandleRef}
                   label="Resize editor"
                 />
                 <div style={{flex: 1, padding: 16}}>
@@ -266,7 +273,8 @@ export const ThreePanelIDE: Story = {
 /** Snap points — sidebar snaps to predefined widths. */
 export const SnapPoints: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 260,
       minSize: 56,
       maxSize: 600,
@@ -295,7 +303,7 @@ export const SnapPoints: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -314,7 +322,8 @@ export const SnapPoints: Story = {
 /** Pill hidden at rest — only appears on hover/focus. */
 export const HiddenPill: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 250,
       minSize: 150,
       maxSize: 500,
@@ -338,7 +347,7 @@ export const HiddenPill: Story = {
                 direction="horizontal"
                 hasDivider
                 isAlwaysVisible={false}
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -357,7 +366,11 @@ export const HiddenPill: Story = {
 /** Disabled handle — divider visible but non-interactive. */
 export const Disabled: Story = {
   render: () => {
-    const sidebar = useResizable({defaultSize: 250, minSize: 150});
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
+      defaultSize: 250,
+      minSize: 150,
+    });
     return (
       <div {...stylex.props(ps.shell)}>
         <Layout
@@ -370,7 +383,7 @@ export const Disabled: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 isDisabled
                 label="Locked"
               />
@@ -390,7 +403,8 @@ export const Disabled: Story = {
 /** Integration with Layout — resizable sidebar with collapsible. */
 export const WithLayout: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 260,
       minSize: 180,
       maxSize: 450,
@@ -405,7 +419,7 @@ export const WithLayout: Story = {
             <>
               {!sidebar.isCollapsed && (
                 <LayoutPanel
-                  resizable={sidebar.props}
+                  width={sidebar.size}
                   hasDivider={false}
                   role="navigation"
                   label="Sidebar">
@@ -423,7 +437,7 @@ export const WithLayout: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize navigation"
               />
             </>
@@ -461,7 +475,8 @@ export const WithLayout: Story = {
 /** AppShell with resizable SideNav. */
 export const WithAppShell: Story = {
   render: () => {
-    const nav = useResizable({
+    const navHandleRef = useRef<HTMLDivElement>(null);
+    const nav = useResizable(navHandleRef, {
       defaultSize: 260,
       minSize: 200,
       maxSize: 400,
@@ -487,7 +502,7 @@ export const WithAppShell: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={nav.props}
+                ref={navHandleRef}
                 label="Resize navigation"
               />
             </>
@@ -522,7 +537,8 @@ export const WithAppShell: Story = {
  */
 export const WithEmbeddedFrame: Story = {
   render: () => {
-    const sidebar = useResizable({
+    const sidebarHandleRef = useRef<HTMLDivElement>(null);
+    const sidebar = useResizable(sidebarHandleRef, {
       defaultSize: 200,
       minSize: 120,
       maxSize: 520,
@@ -545,7 +561,7 @@ export const WithEmbeddedFrame: Story = {
               <ResizeHandle
                 direction="horizontal"
                 hasDivider
-                resizable={sidebar.props}
+                ref={sidebarHandleRef}
                 label="Resize sidebar"
               />
             </>
@@ -563,4 +579,192 @@ export const WithEmbeddedFrame: Story = {
       </div>
     );
   },
+};
+
+/**
+ * A LayoutPanel rendered at the size of a `useResizable(handleRef, options)`
+ * region slides closed and open from the edge facing its ResizeHandle, and
+ * the content beside it moves on the same motion. "Close panel" collapses it
+ * from inside, so focus moves to the handle and the collapsed panel is inert;
+ * Enter on the handle, a double-click or "Open panel" opens it again.
+ */
+function SlidingPanelSplit({side}: {side: 'start' | 'end'}) {
+  const handleRef = useRef<HTMLDivElement>(null);
+  const panel = useResizable(handleRef, {
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+  });
+  const pane = (
+    <LayoutPanel width={panel.size} data-testid="sliding-panel">
+      <Stack gap={2}>
+        <Heading level={4}>Panel</Heading>
+        <Button label="Close panel" onClick={panel.collapse} />
+      </Stack>
+    </LayoutPanel>
+  );
+  const handle = (
+    <ResizeHandle
+      ref={handleRef}
+      isReversed={side === 'end'}
+      hasDivider
+      label="Resize panel"
+    />
+  );
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          side === 'start' ? (
+            <>
+              {pane}
+              {handle}
+            </>
+          ) : undefined
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The content glides with the panel's edge.</Text>
+              <Button label="Open panel" onClick={panel.expand} />
+              <Button
+                label="Toggle panel"
+                onClick={panel.isCollapsed ? panel.expand : panel.collapse}
+              />
+            </Stack>
+          </LayoutContent>
+        }
+        end={
+          side === 'end' ? (
+            <>
+              {handle}
+              {pane}
+            </>
+          ) : undefined
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingStartPanel: Story = {
+  render: () => <SlidingPanelSplit side="start" />,
+};
+
+export const SlidingEndPanel: Story = {
+  render: () => <SlidingPanelSplit side="end" />,
+};
+
+/**
+ * A start LayoutPanel whose collapse state its parent owns: `isCollapsed`
+ * with `onCollapseChange`, and a toggle that flips the parent's state. The
+ * panel slides on each controlled change too.
+ */
+function ControlledSlidingPanel() {
+  const handleRef = useRef<HTMLDivElement>(null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const panel = useResizable(handleRef, {
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+    isCollapsed,
+    onCollapseChange: setIsCollapsed,
+  });
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel width={panel.size} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={panel.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle ref={handleRef} hasDivider label="Resize panel" />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The parent owns whether the panel is collapsed.</Text>
+              <Button
+                label="Toggle panel"
+                onClick={() => {
+                  setIsCollapsed(!isCollapsed);
+                }}
+              />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingControlledPanel: Story = {
+  render: () => <ControlledSlidingPanel />,
+};
+
+/**
+ * Browser fixtures for the configuration-object form (component:Resizable
+ * FR8, component:LayoutPanel FR7 and AR2): a start LayoutPanel that takes the
+ * hook's own `props` slides like the ref form, and one that takes a
+ * hand-built `ResizableProps` object (the same fields in an object the hook
+ * did not return) collapses without a slide. Both move focus inside them to
+ * the handle and go inert while collapsed. New code uses
+ * `useResizable(handleRef, options)` above.
+ */
+function PropsPanelSplit({isHandBuilt}: {isHandBuilt: boolean}) {
+  const panel = useResizable({
+    defaultSize: 200,
+    minSize: 120,
+    maxSize: 320,
+    collapsible: true,
+  });
+  const panelProps = isHandBuilt ? {...panel.props} : panel.props;
+  return (
+    <div {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel resizable={panelProps} data-testid="sliding-panel">
+              <Stack gap={2}>
+                <Heading level={4}>Panel</Heading>
+                <Button label="Close panel" onClick={panel.collapse} />
+              </Stack>
+            </LayoutPanel>
+            <ResizeHandle
+              resizable={panel.props}
+              hasDivider
+              label="Resize panel"
+            />
+          </>
+        }
+        content={
+          <LayoutContent data-testid="sliding-content">
+            <Stack gap={2}>
+              <Text>The content glides with the panel's edge.</Text>
+              <Button label="Open panel" onClick={panel.expand} />
+            </Stack>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const SlidingPanelWithHookProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt={false} />,
+};
+
+export const PanelWithHandBuiltProps: Story = {
+  tags: ['!autodocs', 'no-visual'],
+  render: () => <PropsPanelSplit isHandBuilt />,
 };

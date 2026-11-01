@@ -20,7 +20,8 @@ export const BARE_PANE_ID = 'a11y-splitter-pane';
 function BareSplitter({state}: {state: ResizeHandleBindingState}) {
   const direction = state.direction ?? 'horizontal';
   const containerRef = useRef<HTMLDivElement>(null);
-  const region = useResizable({
+  const regionHandleRef = useRef<HTMLDivElement>(null);
+  const region = useResizable(regionHandleRef, {
     containerRef: state.inContainer ? containerRef : undefined,
     defaultSize: state.facts.valueNow,
     minSize: state.facts.valueMin,
@@ -45,7 +46,7 @@ function BareSplitter({state}: {state: ResizeHandleBindingState}) {
   );
   const handle = (
     <ResizeHandle
-      resizable={region.props}
+      ref={regionHandleRef}
       label={state.label}
       direction={direction}
       isReversed={state.isReversed}

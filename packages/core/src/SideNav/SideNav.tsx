@@ -470,8 +470,11 @@ export function SideNav({
   });
 
   // useResizable is the sole collapse owner in every SideNav mode. Keeping that
-  // owner mounted when resize is toggled preserves the current collapse state.
-  const resizableHook = useResizable({
+  // owner mounted when resize is toggled preserves the current collapse state:
+  // its region answers collapse and expand with or without the handle, which
+  // renders only while the nav is resizable and expanded.
+  const resizeHandleRef = useRef<HTMLDivElement>(null);
+  const resizableHook = useResizable(resizeHandleRef, {
     defaultSize: resizableConfig.defaultWidth ?? 260,
     minSize: resizableConfig.minWidth ?? 180,
     maxSize: resizableConfig.maxWidth ?? 480,
@@ -759,7 +762,7 @@ export function SideNav({
         pillPlacement="end"
         isAlwaysVisible={false}
         xstyle={styles.resizableHandle}
-        resizable={resizableHook.props}
+        ref={resizeHandleRef}
         label={t('@astryx.sideNav.resizeSidebar')}
         aria-controls={navId}
       />

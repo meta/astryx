@@ -43,9 +43,11 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'Hook-based resizable panel system. useResizable() manages size state ' +
-      'and ResizeHandle provides the interactive pill-grip separator. ' +
-      'Pass resize props to existing layout components via their resizable prop.',
+      'Hook-based resizable panel system. useResizable(handleRef, options) ' +
+      'manages a region and ResizeHandle, given the same ref, is its ' +
+      'interactive pill-grip separator. Render the panel at the size the hook ' +
+      'reports, such as LayoutPanel width={region.size}. createResizable is ' +
+      'the same region without React.',
     bestPractices: [
       {
         guidance: true,
@@ -55,8 +57,9 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use useResizable() with existing Astryx layout components. ' +
-          'Pass the returned props to the resizable prop on LayoutPanel or SideNav.',
+          'Use useResizable(handleRef, options) with existing Astryx layout ' +
+          'components: give the ref to ResizeHandle and the size to the panel ' +
+          '(LayoutPanel width={region.size}). SideNav takes its own resizable prop.',
       },
       {
         guidance: true,
@@ -83,12 +86,13 @@ export const docs = {
       name: 'useResizable',
       displayName: 'useResizable',
       description:
-        'Hook that manages resize state for one or more panel regions. ' +
-        'Returns size, isCollapsed, collapse/expand/resize methods, and props to pass to handles.',
+        'Hook that manages the resize state of a panel region through its ' +
+        "handle's ref: useResizable(handleRef, options). Returns size, " +
+        'isCollapsed and collapse/expand/resize methods.',
       examples: [
         {
           label: 'Structured fixed pixels',
-          code: `const region = useResizable({
+          code: `const region = useResizable(handleRef, {
   defaultSize: pixel(333),
   containerRef,
 });`,
@@ -100,17 +104,18 @@ import {ResizeHandle, useResizable} from '@astryxdesign/core/Resizable';
 import {percent, pixel} from '@astryxdesign/core/Resizable/utils';
 
 const containerRef = useRef<HTMLDivElement>(null);
+const handleRef = useRef<HTMLDivElement>(null);
 
-const region = useResizable({
+const region = useResizable(handleRef, {
   defaultSize: percent(40, {min: pixel(333)}),
   containerRef,
 });
 
-<ResizeHandle direction="horizontal" resizable={region.props} />;`,
+<ResizeHandle ref={handleRef} direction="horizontal" />;`,
         },
         {
           label: 'Live percentage floor',
-          code: `const region = useResizable({
+          code: `const region = useResizable(handleRef, {
   defaultSize: 0,
   minSize: percent(40, {min: pixel(333)}),
   containerRef,
@@ -118,7 +123,7 @@ const region = useResizable({
         },
         {
           label: 'Live percentage ceiling',
-          code: `const region = useResizable({
+          code: `const region = useResizable(handleRef, {
   defaultSize: 500,
   maxSize: percent(10, {max: pixel(400)}),
   containerRef,
@@ -163,11 +168,6 @@ const region = useResizable({
           name: 'snaps',
           type: 'number[]',
           description: 'Pixel values to snap to during resize.',
-        },
-        {
-          name: 'shrinkOrder',
-          type: 'number',
-          description: 'Cascade priority: lower number shrinks first.',
         },
         {
           name: 'autoSaveId',
@@ -237,8 +237,7 @@ const region = useResizable({
           name: 'resizable',
           type: 'ResizableProps',
           description:
-            "Resize props from useResizable: connects handle to panel. Carries the region's axis ('horizontal' | 'vertical'), which must match this handle's direction.",
-          required: true,
+            "Deprecated: resize props from useResizable's configuration-object form. They carry the region's axis ('horizontal' | 'vertical'), which must match this handle's direction. Give the handle's ref to useResizable(handleRef, options) instead (<ResizeHandle ref={handleRef} />); isReversed and isDisabled stay on the handle. Removed in the next minor.",
         },
         {
           name: 'children',
@@ -260,16 +259,16 @@ const region = useResizable({
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Hook-based resizable panel system. useResizable() manages size state; ResizeHandle provides interactive pill-grip separator.',
+    'Hook-based resizable panel system. useResizable(handleRef, options) manages a region; ResizeHandle w/ same ref = interactive pill-grip separator.',
   usage: {
     anatomy,
     description:
-      'Hook-based resizable panel system. useResizable() manages size state; ResizeHandle provides interactive pill-grip separator. Pass resize props to existing layout components via their resizable prop.',
+      'Hook-based resizable panel system. useResizable(handleRef, options) manages a region; ResizeHandle w/ same ref = interactive pill-grip separator. Render panel at reported size (LayoutPanel width={region.size}). createResizable = same w/o React.',
     bestPractices: [
       {
         guidance: true,
         description:
-          'Use useResizable() w/ existing Astryx layout components. Pass returned props to resizable prop on LayoutPanel or SideNav.',
+          'Use useResizable(handleRef, options) w/ existing Astryx layout components: ref to ResizeHandle, size to panel (LayoutPanel width). SideNav has own resizable prop.',
       },
       {
         guidance: true,
@@ -287,7 +286,7 @@ export const docsDense = {
     {
       name: 'useResizable',
       description:
-        'Hook managing resize state for one or more panel regions. Returns size, isCollapsed, collapse/expand/resize methods, + props to pass to handles.',
+        "Hook managing a panel region's resize state through its handle's ref: useResizable(handleRef, options). Returns size, isCollapsed, collapse/expand/resize methods.",
       propDescriptions: {
         defaultSize:
           'initial pixels, exact N%, or percent(value, {min: pixel(value)}) / percent(value, {max: pixel(value)}); resolves once',
@@ -298,7 +297,6 @@ export const docsDense = {
         collapsible: 'region can collapse to size 0?',
         collapsedSize: 'px threshold triggering collapse during drag',
         snaps: 'px values to snap to during resize',
-        shrinkOrder: 'cascade priority: lower number shrinks first',
         autoSaveId: 'key for persisting sizes + collapse state to localStorage',
       },
     },
@@ -319,7 +317,8 @@ export const docsDense = {
         pillPlacement:
           'which side of divider pill sits on. auto = content side (derived from isReversed), flips when collapsed; start = left/top, end = right/bottom, center = centered on divider',
         label: 'accessible label for separator',
-        resizable: 'resize props from useResizable: connects handle to panel',
+        resizable:
+          'deprecated: config-object useResizable props; give handle ref to useResizable(handleRef, options) instead. Removed next minor.',
       },
     },
   ],

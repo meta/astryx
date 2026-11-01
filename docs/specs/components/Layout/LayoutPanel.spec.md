@@ -34,15 +34,15 @@ system_specs: [spec:AST-105]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `children`, `width`, `resizable`, `hasDivider`, `isScrollable`, `padding`, `label`, `role`, root `BaseProps`, and a root `ref`.                                                                                         |
-| Behavior                | A fixed-width side region at logical start or end that scrolls by default, with an optional divider on its content-facing edge.                                                                                         |
-| End-user impact         | People see a side panel that keeps its width, scrolls on its own, and mirrors to the other side in right-to-left.                                                                                                       |
-| Builder impact          | None: no API change; a collapsing resizable panel slides with no code change.                                                                                                                                           |
-| Compatibility/readiness | No API or default changes; a collapsing resizable panel slides (FR7) and moves focus out, then becomes inert (AR2): patch, `[feat]` slide and `[fix]` focus. Implementation gaps are listed under Current-state impact. |
-| Review checks           | Reject a divider on the outer edge, a panel that shrinks, an inferred landmark, `width` beating `resizable`, or a further publication mismatch.                                                                         |
-| Governing rules         | `family:layout-regions` FR1, FR2, FR4–FR8, FR10; `architecture:container-padding`; `architecture:public-component-api` INV5–INV8.                                                                                       |
+| Area                    | Contract                                                                                                                                                                                                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `children`, `width`, `resizable`, `hasDivider`, `isScrollable`, `padding`, `label`, `role`, root `BaseProps`, and a root `ref`.                                                                                                                                |
+| Behavior                | A fixed-width side region at logical start or end that scrolls by default, with an optional divider on its content-facing edge.                                                                                                                                |
+| End-user impact         | People see a side panel that keeps its width, scrolls on its own, and mirrors to the other side in right-to-left.                                                                                                                                              |
+| Builder impact          | None: no API change; a collapsing resizable panel slides with no code change.                                                                                                                                                                                  |
+| Compatibility/readiness | No API or default changes; `resizable` is deprecated for `width`; a collapsing resizable panel slides (FR7) and moves focus out, then becomes inert (AR2): patch, `[feat]` slide and `[fix]` focus. Implementation gaps are listed under Current-state impact. |
+| Review checks           | Reject a divider on the outer edge, a panel that shrinks, an inferred landmark, `width` beating `resizable`, or a further publication mismatch.                                                                                                                |
+| Governing rules         | `family:layout-regions` FR1, FR2, FR4–FR8, FR10; `architecture:container-padding`; `architecture:public-component-api` INV5–INV8.                                                                                                                              |
 
 This table is a review projection; the body below is authoritative.
 
@@ -64,7 +64,8 @@ Consumer syntax and examples belong in `LayoutPanel.doc.mjs`.
   adjacent ResizeHandle while the collapsed panel becomes inert (DOM: `inert`
   and `aria-hidden`; AR2, `[fix]` under `spec:AST-017` FR53).
 - Controlled/uncontrolled behavior: not applicable
-- Migration decision: none
+- Migration decision: `resizable` is deprecated; `width={region.size}` from
+  `useResizable(handleRef, options)` replaces it, and a minor removes it.
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -102,14 +103,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept   | Closed values or states               | Meaning                                                                    | Availability by variant/orientation/state | Default       | Owner                   | Stability | Invalid-value behavior           |
-| --------- | ------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------- | ------------- | ----------------------- | --------- | -------------------------------- |
-| Width     | number (px); CSS length string; unset | The panel's inline size.                                                   | Always                                    | content width | `component:LayoutPanel` | Stable    | —                                |
-| Resizable | the value from useResizable           | Supplies a resizable width that wins over `width`.                         | Always                                    | none          | `component:LayoutPanel` | Stable    | —                                |
-| Divider   | `true`, `false`                       | Draws a line on the panel's content-facing edge.                           | Start or end slot                         | `false`       | `component:LayoutPanel` | Stable    | —                                |
-| Scrolling | `true`, `false`                       | Scrolls overflow, or clips it.                                             | Always                                    | `true`        | `component:LayoutPanel` | Stable    | —                                |
-| Inset     | spacing step; `0`; unset              | Uniform padding that replaces the automatic inset; `0` is full bleed.      | Always                                    | automatic     | `component:LayoutPanel` | Stable    | Closed union; rejected by types. |
-| Landmark  | caller `role` and `label`             | Exposes the panel as the role the caller names, with that accessible name. | Always                                    | none          | caller                  | Stable    | —                                |
+| Concept   | Closed values or states               | Meaning                                                                    | Availability by variant/orientation/state | Default       | Owner                   | Stability  | Invalid-value behavior           |
+| --------- | ------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------- | ------------- | ----------------------- | ---------- | -------------------------------- |
+| Width     | number (px); CSS length string; unset | The panel's inline size.                                                   | Always                                    | content width | `component:LayoutPanel` | Stable     | —                                |
+| Resizable | the value from useResizable           | Supplies a resizable width that wins over `width`; deprecated for `width`. | Always                                    | none          | `component:LayoutPanel` | Deprecated | —                                |
+| Divider   | `true`, `false`                       | Draws a line on the panel's content-facing edge.                           | Start or end slot                         | `false`       | `component:LayoutPanel` | Stable     | —                                |
+| Scrolling | `true`, `false`                       | Scrolls overflow, or clips it.                                             | Always                                    | `true`        | `component:LayoutPanel` | Stable     | —                                |
+| Inset     | spacing step; `0`; unset              | Uniform padding that replaces the automatic inset; `0` is full bleed.      | Always                                    | automatic     | `component:LayoutPanel` | Stable     | Closed union; rejected by types. |
+| Landmark  | caller `role` and `label`             | Exposes the panel as the role the caller names, with that accessible name. | Always                                    | none          | caller                  | Stable     | —                                |
 
 ## Behavioral and layout contract
 

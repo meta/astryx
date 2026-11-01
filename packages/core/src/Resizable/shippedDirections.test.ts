@@ -2,7 +2,9 @@
 
 /**
  * @file Guards shipped useResizable/ResizeHandle axis pairings.
- * @input Storybook, docsite, and CLI template source that composes Resizable
+ * @input Storybook, docsite, and CLI template source that composes Resizable,
+ *   pairing a handle with its region by its ref (`useResizable(handleRef,
+ *   options)`) or by the deprecated `resizable={region.props}`
  * @output Every statically paired hook and handle uses the same axis
  * @position Static regression for shipped Resizable examples
  */
@@ -202,9 +204,66 @@ function pathOf(expression: ts.Expression): string | null {
   return null;
 }
 
+/**
+ * The name of the ref a `useResizable(handleRef, options)` call takes: an
+ * identifier bound to `useRef(…)` or `createRef(…)`; null for the
+ * configuration-object form.
+ */
+function refBindingPath(
+  expression: ts.Expression,
+  sourceFile: ts.SourceFile,
+  at: ts.Node,
+): string | null {
+  const value = unwrap(expression);
+  if (!ts.isIdentifier(value)) {
+    return null;
+  }
+  const initializer = variableInitializer(sourceFile, value.text, at);
+  if (initializer == null) {
+    return null;
+  }
+  const call = unwrap(initializer);
+  if (!ts.isCallExpression(call)) {
+    return null;
+  }
+  const callee = call.expression.getText(sourceFile);
+  return callee === 'useRef' ||
+    callee === 'React.useRef' ||
+    callee === 'createRef' ||
+    callee === 'React.createRef'
+    ? value.text
+    : null;
+}
+
 function hookBindings(sourceFile: ts.SourceFile): Binding[] {
   const bindings: Binding[] = [];
   const visit = (node: ts.Node): void => {
+    // A ref-form call whose result goes unused (the panes split the space by
+    // flex) still pairs its region with the handle holding the ref.
+    if (
+      ts.isExpressionStatement(node) &&
+      ts.isCallExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === 'useResizable'
+    ) {
+      const [first, second] = node.expression.arguments;
+      const refName =
+        first == null ? null : refBindingPath(first, sourceFile, node);
+      if (refName != null) {
+        const objectDirection =
+          second == null
+            ? {value: undefined as Direction | undefined}
+            : directionFromObject(second, sourceFile, node);
+        bindings.push({
+          path: refName,
+          direction:
+            'error' in objectDirection
+              ? objectDirection
+              : {value: objectDirection.value ?? 'horizontal'},
+          scope: enclosingFunction(node),
+        });
+      }
+    }
     if (
       ts.isVariableDeclaration(node) &&
       node.initializer != null &&
@@ -212,7 +271,11 @@ function hookBindings(sourceFile: ts.SourceFile): Binding[] {
       ts.isIdentifier(node.initializer.expression) &&
       node.initializer.expression.text === 'useResizable'
     ) {
-      const config = node.initializer.arguments[0];
+      const [first, second] = node.initializer.arguments;
+      // The ref form pairs a handle with its region by the ref it holds.
+      const refPath =
+        first == null ? null : refBindingPath(first, sourceFile, node);
+      const config = refPath != null ? second : first;
       const objectDirection =
         config == null
           ? {value: undefined as Direction | undefined}
@@ -222,7 +285,9 @@ function hookBindings(sourceFile: ts.SourceFile): Binding[] {
           ? objectDirection
           : {value: objectDirection.value ?? 'horizontal'};
       const scope = enclosingFunction(node);
-      if (ts.isIdentifier(node.name)) {
+      if (refPath != null) {
+        bindings.push({path: refPath, direction, scope});
+      } else if (ts.isIdentifier(node.name)) {
         bindings.push({path: node.name.text, direction, scope});
       } else if (ts.isObjectBindingPattern(node.name)) {
         for (const element of node.name.elements) {
@@ -284,6 +349,18 @@ function resizablePath(node: ts.JsxAttribute | undefined): string | null {
   return path?.endsWith('.props') ? path.slice(0, -'.props'.length) : path;
 }
 
+/** The ref a handle holds, which names its region in the ref form. */
+function refPath(node: ts.JsxAttribute | undefined): string | null {
+  if (
+    node?.initializer == null ||
+    !ts.isJsxExpression(node.initializer) ||
+    node.initializer.expression == null
+  ) {
+    return null;
+  }
+  return pathOf(node.initializer.expression);
+}
+
 function inspectSource(source: string, file: string): Pairing[] {
   if (!source.includes('ResizeHandle') || !source.includes('useResizable')) {
     return [];
@@ -302,7 +379,9 @@ function inspectSource(source: string, file: string): Pairing[] {
       (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) &&
       node.tagName.getText(sourceFile) === 'ResizeHandle'
     ) {
-      const region = resizablePath(attribute(node.attributes, 'resizable'));
+      const region =
+        resizablePath(attribute(node.attributes, 'resizable')) ??
+        refPath(attribute(node.attributes, 'ref'));
       const matches = bindings
         .filter(
           binding =>
@@ -334,7 +413,7 @@ function inspectSource(source: string, file: string): Pairing[] {
         handleDirection: 'value' in handle ? handle.value : null,
         error:
           region == null
-            ? 'resizable prop is not statically resolvable'
+            ? 'the handle names no region it resizes, by ref or resizable prop'
             : hook == null
               ? 'matching useResizable binding was not found'
               : 'error' in hook.direction
@@ -452,6 +531,43 @@ describe('shipped Resizable examples', () => {
     expect(
       inspect("{direction: 'vertical'}", 'direction="horizontal"')?.error,
     ).toBe('hook is vertical; handle is horizontal');
+    const inspectRef = (options: string, handleDirection: string) =>
+      inspectSource(
+        `function Example() {
+          const handleRef = useRef(null);
+          const region = useResizable(handleRef, ${options});
+          return <ResizeHandle ref={handleRef} ${handleDirection} />;
+        }`,
+        'fixture.tsx',
+      )[0];
+    expect(inspectRef('{}', 'direction="vertical"')?.error).toBe(
+      'hook is horizontal; handle is vertical',
+    );
+    expect(inspectRef("{direction: 'vertical'}", '')?.error).toBe(
+      'hook is vertical; handle is horizontal',
+    );
+    expect(
+      inspectRef("{direction: 'vertical'}", 'direction="vertical"')?.error,
+    ).toBeNull();
+    expect(
+      inspectSource(
+        `function Example() {
+          const handleRef = useRef(null);
+          useResizable(handleRef, {direction: 'vertical'});
+          return <ResizeHandle ref={handleRef} />;
+        }`,
+        'fixture.tsx',
+      )[0]?.error,
+    ).toBe('hook is vertical; handle is horizontal');
+    expect(
+      inspectSource(
+        `function Example() {
+          return <ResizeHandle direction="vertical" />;
+        }
+        const region = useResizable({});`,
+        'fixture.tsx',
+      )[0]?.error,
+    ).toBe('the handle names no region it resizes, by ref or resizable prop');
     expect(
       inspect("{direction: 'vertical'}", 'direction={getDirection()}')?.error,
     ).toBe('handle direction is not statically resolvable');

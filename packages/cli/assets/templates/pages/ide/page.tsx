@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useState, useMemo, type CSSProperties} from 'react';
+import {useRef, useState, useMemo, type CSSProperties} from 'react';
 
 import {Layout, LayoutContent, LayoutPanel} from '@astryxdesign/core/Layout';
 import {ResizeHandle, useResizable} from '@astryxdesign/core/Resizable';
@@ -200,7 +200,8 @@ export default function ResizableWorkspacePage() {
   const [activePropertiesTab, setActivePropertiesTab] = useState('properties');
   const fileTree = useMemo(() => buildFileTree(setActiveFile), []);
 
-  const startPanel = useResizable({
+  const startPanelHandleRef = useRef<HTMLDivElement>(null);
+  const startPanel = useResizable(startPanelHandleRef, {
     defaultSize: 256,
     minSize: 160,
     maxSize: 400,
@@ -208,7 +209,8 @@ export default function ResizableWorkspacePage() {
     collapsedSize: 50,
   });
 
-  const endPanel = useResizable({
+  const endPanelHandleRef = useRef<HTMLDivElement>(null);
+  const endPanel = useResizable(endPanelHandleRef, {
     defaultSize: 320,
     minSize: 180,
     maxSize: 500,
@@ -216,7 +218,8 @@ export default function ResizableWorkspacePage() {
     collapsedSize: 50,
   });
 
-  const bottomPanel = useResizable({
+  const bottomPanelHandleRef = useRef<HTMLDivElement>(null);
+  const bottomPanel = useResizable(bottomPanelHandleRef, {
     defaultSize: 300,
     minSize: 80,
     maxSize: Infinity,
@@ -262,7 +265,7 @@ export default function ResizableWorkspacePage() {
                     direction="horizontal"
                     hasDivider
                     isAlwaysVisible={false}
-                    resizable={startPanel.props}
+                    ref={startPanelHandleRef}
                     label="Resize file explorer"
                   />
                 </>
@@ -298,7 +301,7 @@ export default function ResizableWorkspacePage() {
                           hasDivider
                           isReversed
                           isAlwaysVisible={false}
-                          resizable={bottomPanel.props}
+                          ref={bottomPanelHandleRef}
                           label="Resize terminal"
                         />
                         {!bottomPanel.isCollapsed && (
@@ -348,7 +351,7 @@ export default function ResizableWorkspacePage() {
                           hasDivider
                           isReversed
                           isAlwaysVisible={false}
-                          resizable={endPanel.props}
+                          ref={endPanelHandleRef}
                           label="Resize properties panel"
                         />
                         {!endPanel.isCollapsed && (
