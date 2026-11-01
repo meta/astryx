@@ -70,8 +70,7 @@
 import {baselineAllowance} from './rule-baseline.mjs';
 
 /**
- * Where the repository config enforces the rule with its baseline; the
- * baseline script lints the same files.
+ * Where the repository config enforces the rule.
  */
 export const scope = {
   files: [
