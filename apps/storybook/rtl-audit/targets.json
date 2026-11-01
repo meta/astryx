@@ -631,5 +631,10 @@
       "overlay": ".astryx-resize-handle",
       "overlayRoot": ".astryx-layout"
     }
+  },
+  {
+    "component": "Layout",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": []
   }
 ]
