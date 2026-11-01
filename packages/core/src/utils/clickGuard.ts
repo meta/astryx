@@ -36,7 +36,7 @@
  * gestures/GestureHost.ts.
  */
 
-import {HAPTIC_SWITCH_ATTRIBUTE} from './hapticSwitch';
+import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {subscribeInput} from './inputStream';
 
 /**
@@ -163,8 +163,5 @@ function isExempt(event: MouseEvent): boolean {
   if (event.detail === 0 || unguardedDepth > 0) {
     return true;
   }
-  return (
-    event.target instanceof Element &&
-    event.target.hasAttribute(HAPTIC_SWITCH_ATTRIBUTE)
-  );
+  return isHapticSwitch(event.target);
 }

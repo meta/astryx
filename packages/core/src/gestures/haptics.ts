@@ -44,9 +44,7 @@ import {
   type HapticFeedbackKind,
 } from '../motion/uikit/gestures';
 import {isDisabledControl} from '../utils/pressDisabled';
-import {HAPTIC_SWITCH_ATTRIBUTE} from '../utils/hapticSwitch';
-
-export {HAPTIC_SWITCH_ATTRIBUTE};
+import {markHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 
 /** Whether this browser vibrates at all. */
 export function canVibrate(): boolean {
@@ -123,7 +121,7 @@ export function attachTapHaptic(label: HTMLLabelElement): () => void {
   const input = doc.createElement('input');
   input.type = 'checkbox';
   input.setAttribute('switch', '');
-  input.setAttribute(HAPTIC_SWITCH_ATTRIBUTE, '');
+  markHapticSwitch(input);
   input.setAttribute('aria-hidden', 'true');
   input.tabIndex = -1;
   input.style.cssText = VISUALLY_HIDDEN;
