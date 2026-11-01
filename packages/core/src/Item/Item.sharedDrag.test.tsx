@@ -16,9 +16,10 @@
  * @position Companion to Item.test.tsx for the shared drag path
  */
 
-import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
-import {act, cleanup, render, screen, waitFor} from '@testing-library/react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import {act, render, screen} from '@testing-library/react';
 import {Item} from './Item';
+import {createSwipe} from '../Swipe/createSwipe';
 import type * as SnapDragModule from '../dragToSnapPoints/createSnapDrag';
 import type {
   SnapDrag,
@@ -47,16 +48,16 @@ vi.mock('../dragToSnapPoints/createSnapDrag', async importOriginal => {
 
 /** A row 300 px wide whose trailing side has two 72 px entries. */
 function renderRow() {
-  render(
+  const {rerender} = render(
     <Item
       label="Conversation"
       data-testid="row"
-      swipeActions={{
+      swipe={createSwipe({
         trailing: [
           {label: 'Archive', onActivate: vi.fn()},
           {label: 'Delete', onActivate: vi.fn(), hasRemoval: true},
         ],
-      }}
+      })}
     />,
   );
   const row = screen.getByTestId('row');
@@ -73,32 +74,8 @@ function renderRow() {
   if (last == null) {
     throw new Error('the row created no shared drag');
   }
-  return {row, ...last};
+  return {row, rerender, ...last};
 }
-
-// The swipe layer is loaded lazily: load it once, so each row below renders
-// its layer, and creates its drag, at its first render.
-beforeAll(async () => {
-  render(
-    <Item
-      label="Warm"
-      data-testid="warm"
-      swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
-    />,
-  );
-  // The layer's chunk carries the gesture core: its first load in a cold
-  // worker can take longer than waitFor's default second.
-  await waitFor(
-    () => {
-      expect(
-        screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
-      ).not.toBeNull();
-    },
-    {timeout: 10_000},
-  );
-  cleanup();
-  created.length = 0;
-});
 
 describe('the row on the shared drag path', () => {
   afterEach(() => {
@@ -181,5 +158,69 @@ describe('the row on the shared drag path', () => {
     expect(
       model?.move?.({start: 0, translation: -52, total: -60, input: 'touch'}),
     ).toEqual({offset: -35, spring: SWIPE.tracking});
+  });
+
+  it('creates the drag once: a new value from an inline createSwipe call attaches nothing again (spec:AST-057 FR11)', () => {
+    const {rerender} = render(
+      <Item
+        label="Conversation"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [{label: 'Archive', onActivate: vi.fn()}],
+        })}
+      />,
+    );
+    expect(created).toHaveLength(1);
+    rerender(
+      <Item
+        label="Conversation"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [{label: 'Archive', onActivate: vi.fn()}],
+        })}
+      />,
+    );
+    rerender(
+      <Item
+        label="Conversation"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [{label: 'Delete', onActivate: vi.fn()}],
+        })}
+      />,
+    );
+    expect(created).toHaveLength(1);
+  });
+
+  it('starts no second settle when a new value arrives mid-settle (spec:AST-057 FR11)', () => {
+    const {options, snap, rerender} = renderRow();
+    const model = options.model;
+    model?.begin?.({start: 0, translation: 0, total: -10, input: 'scroll'});
+    model?.move?.({start: 0, translation: -100, total: -108, input: 'scroll'});
+    act(() => {
+      model?.release?.({
+        start: 0,
+        translation: -100,
+        total: -108,
+        input: 'scroll',
+        velocity: -400,
+      });
+    });
+    expect(snap.settleTo).toHaveBeenCalledTimes(1);
+    const setSnapPointsCalls = vi.mocked(snap.setSnapPoints).mock.calls.length;
+    rerender(
+      <Item
+        label="Conversation"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [
+            {label: 'Archive', onActivate: vi.fn()},
+            {label: 'Delete', onActivate: vi.fn(), hasRemoval: true},
+          ],
+        })}
+      />,
+    );
+    expect(snap.settleTo).toHaveBeenCalledTimes(1);
+    expect(snap.setSnapPoints).toHaveBeenCalledTimes(setSnapPointsCalls);
   });
 });

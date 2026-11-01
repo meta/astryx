@@ -31,6 +31,8 @@ import {rulesDeclaredFor} from '../__tests__/pressState';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
+import {createSwipe} from '../Swipe/createSwipe';
+import type {Swipe} from '../Swipe/swipeHost';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {List, ListItem} from '../List';
 import {emulateTouch} from './__tests__/emulateTouch';
@@ -783,32 +785,7 @@ describe('Item', () => {
   });
 });
 
-// The panels and the gesture are loaded lazily (React.lazy + Suspense), so the
-// first row with swipe actions renders them a tick after it mounts. Mount one
-// once up front: the resolved module is cached on the lazy component, and
-// every row below renders its panels synchronously.
-beforeAll(async () => {
-  render(
-    <Item
-      label="Warm"
-      data-testid="warm"
-      swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
-    />,
-  );
-  // The layer's chunk carries the gesture core: its first load in a cold
-  // worker can take longer than waitFor's default second.
-  await waitFor(
-    () => {
-      expect(
-        screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
-      ).not.toBeNull();
-    },
-    {timeout: 10_000},
-  );
-  cleanup();
-});
-
-describe('swipeActions', () => {
+describe('swipe', () => {
   // The gesture system outlives a test (one per document) and keeps the time
   // of the touches it has seen; a document clock never runs backwards, so
   // each test's fake clock starts after the last one's.
@@ -1058,8 +1035,7 @@ describe('swipeActions', () => {
         label="Conversation"
         onClick={onClick}
         data-testid="row"
-        swipeActions={{leading, trailing}}
-        swipeBehavior={behavior}
+        swipe={createSwipe({leading, trailing, swipeBehavior: behavior})}
       />,
     );
     const row = screen.getByTestId('row');
@@ -1095,11 +1071,11 @@ describe('swipeActions', () => {
   it('is served on a role-less row and a listitem, and not on a row whose role forbids interactive descendants', () => {
     const actions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
     const {rerender} = render(
-      <Item label="A" data-testid="row" swipeActions={actions} />,
+      <Item label="A" data-testid="row" swipe={createSwipe(actions)} />,
     );
     expect(panelOf(screen.getByTestId('row'), 'leading')).not.toBeNull();
     rerender(
-      <Item as="li" label="A" data-testid="row" swipeActions={actions} />,
+      <Item as="li" label="A" data-testid="row" swipe={createSwipe(actions)} />,
     );
     expect(panelOf(screen.getByTestId('row'), 'leading')).not.toBeNull();
     for (const role of [
@@ -1109,7 +1085,12 @@ describe('swipeActions', () => {
       'menuitemradio',
     ]) {
       rerender(
-        <Item role={role} label="A" data-testid="row" swipeActions={actions} />,
+        <Item
+          role={role}
+          label="A"
+          data-testid="row"
+          swipe={createSwipe(actions)}
+        />,
       );
       expect(panelOf(screen.getByTestId('row'), 'leading')).toBeNull();
     }
@@ -1125,7 +1106,7 @@ describe('swipeActions', () => {
           data-testid="row"
           interactiveRef={inputRef}
           startContent={<input ref={inputRef} type="radio" />}
-          swipeActions={actions}
+          swipe={createSwipe(actions)}
         />
       );
     }
@@ -1133,7 +1114,12 @@ describe('swipeActions', () => {
     expect(panelOf(screen.getByTestId('row'), 'leading')).toBeNull();
     unmount();
     render(
-      <Item label="A" data-testid="row" isDisabled swipeActions={actions} />,
+      <Item
+        label="A"
+        data-testid="row"
+        isDisabled
+        swipe={createSwipe(actions)}
+      />,
     );
     expect(panelOf(screen.getByTestId('row'), 'leading')).toBeNull();
   });
@@ -1151,7 +1137,9 @@ describe('swipeActions', () => {
           as="li"
           label="A"
           data-testid="row"
-          swipeActions={{trailing: [{label: 'Archive', onActivate: vi.fn()}]}}
+          swipe={createSwipe({
+            trailing: [{label: 'Archive', onActivate: vi.fn()}],
+          })}
         />
       </ul>,
     );
@@ -1888,20 +1876,23 @@ describe('swipeActions', () => {
       expect(onClick).not.toHaveBeenCalled();
     });
 
-    it('takes no press while open: the root is no pressable surface from the release that opens it until it closes', async () => {
+    it('takes no press while open: the root holds its press from the release that opens it until it closes', async () => {
       const {row} = renderRow();
       expect(row).toHaveAttribute('data-astryx-pressable');
+      expect(row).not.toHaveAttribute('data-astryx-press-held');
       dragLeading(row, 45);
-      // Settling open already counts as open.
-      expect(row).not.toHaveAttribute('data-astryx-pressable');
+      // Settling open already counts as open. The root stays a pressable
+      // surface; the press controller paints nothing on a held one.
+      expect(row).toHaveAttribute('data-astryx-press-held');
+      expect(row).toHaveAttribute('data-astryx-pressable');
       await settled();
       expect(xOf(row)).toBe(72);
-      expect(row).not.toHaveAttribute('data-astryx-pressable');
+      expect(row).toHaveAttribute('data-astryx-press-held');
       const f = finger(screen.getByRole('button', {name: 'Conversation'}), 2);
       f.down(150);
       f.up();
-      // Closing: a pressable surface again, for the next tap.
-      expect(row).toHaveAttribute('data-astryx-pressable');
+      // Closing: the press is free again, for the next tap.
+      expect(row).not.toHaveAttribute('data-astryx-press-held');
       await settled();
       expect(xOf(row)).toBe(0);
     });
@@ -2002,7 +1993,7 @@ describe('swipeActions', () => {
       it('lets the entries ride the row past the open width, the outermost stretching to the edge', () => {
         const {row} = twoEntries();
         // Where the entries' transform puts them against the track, from the
-        // travel and the side's geometry the swipe writes (ItemSwipeLayer's
+        // travel and the side's geometry the swipe writes (SwipeActionsLayer's
         // rule, which a browser computes; jsdom computes no calc()).
         const entriesX = () => {
           const style = (panelOf(row, 'leading') as HTMLElement).style;
@@ -2351,7 +2342,7 @@ describe('swipeActions', () => {
           ],
         });
         expect(warn).toHaveBeenCalledWith(
-          expect.stringContaining('swipeBehavior="commit"'),
+          expect.stringContaining("swipeBehavior: 'commit'"),
         );
       } finally {
         warn.mockRestore();
@@ -2360,13 +2351,13 @@ describe('swipeActions', () => {
   });
 
   it('gives the root back its own styles when the swipe actions go', () => {
-    const swipeActions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
+    const actions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
     const {rerender} = render(
       <Item
         label="Conversation"
         onClick={vi.fn()}
         data-testid="row"
-        swipeActions={swipeActions}
+        swipe={createSwipe(actions)}
       />,
     );
     const row = screen.getByTestId('row');
@@ -2382,6 +2373,27 @@ describe('swipeActions', () => {
     rerender(<Item label="Conversation" onClick={vi.fn()} data-testid="row" />);
     expect(screen.getByTestId('row')).toBe(row);
     expect(row.style.getPropertyValue('--_item-swipe-travel')).toBe('');
+  });
+
+  it('frees the press of a row that loses its swipe while open', async () => {
+    const {rerender} = render(
+      <Item
+        label="Open"
+        onClick={vi.fn()}
+        data-testid="open"
+        swipe={createSwipe({leading: [{label: 'Unread', onActivate: vi.fn()}]})}
+      />,
+    );
+    const open = screen.getByTestId('open');
+    layOut(open);
+    dragLeading(open, 45);
+    await settled();
+    expect(xOf(open)).toBe(72);
+    expect(open).toHaveAttribute('data-astryx-press-held');
+    rerender(<Item label="Open" onClick={vi.fn()} data-testid="open" />);
+    expect(screen.getByTestId('open')).toBe(open);
+    expect(open).not.toHaveAttribute('data-astryx-press-held');
+    expect(open).toHaveAttribute('data-astryx-pressable');
   });
 
   it('reads the direction logically under RTL: leading is toward the inline end', async () => {
@@ -2409,7 +2421,9 @@ describe('swipeActions', () => {
             label="Conversation"
             onClick={vi.fn()}
             data-testid="row"
-            swipeActions={{leading: [{label: 'Unread', onActivate}]}}
+            swipe={createSwipe({
+              leading: [{label: 'Unread', onActivate}],
+            })}
           />
         </div>,
       );
@@ -2450,6 +2464,248 @@ describe('swipeActions', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('swipes nothing for a value not made by createSwipe (spec:AST-057 FR1)', () => {
+    const forged = {
+      leading: [{label: 'Unread', onActivate: vi.fn()}],
+    } as unknown as Swipe;
+    render(<Item label="A" data-testid="row" swipe={forged} />);
+    const row = screen.getByTestId('row');
+    expect(panelOf(row, 'leading')).toBeNull();
+    expect(row.childElementCount).toBe(1);
+  });
+
+  describe('a new value from an inline createSwipe call (spec:AST-057 FR11)', () => {
+    function InlineRow({entries}: {entries: Entry[]}) {
+      return (
+        <Item
+          label="Conversation"
+          onClick={vi.fn()}
+          data-testid="row"
+          swipe={createSwipe({leading: entries})}
+        />
+      );
+    }
+
+    it('keeps a closed row closed and an open row open, and fires the newest handler', async () => {
+      const first = vi.fn();
+      const second = vi.fn();
+      const {rerender} = render(
+        <InlineRow entries={[{label: 'Unread', onActivate: first}]} />,
+      );
+      const row = screen.getByTestId('row');
+      layOut(row);
+      rerender(<InlineRow entries={[{label: 'Unread', onActivate: first}]} />);
+      expect(xOf(row)).toBe(0);
+      dragLeading(row, 45);
+      await settled();
+      expect(xOf(row)).toBe(72);
+      rerender(<InlineRow entries={[{label: 'Unread', onActivate: second}]} />);
+      await settled();
+      expect(xOf(row)).toBe(72);
+      expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
+      fireEvent.click(screen.getByRole('button', {name: 'Unread'}));
+      expect(first).not.toHaveBeenCalled();
+      expect(second).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a row settling open open through a new value', async () => {
+      const onActivate = vi.fn();
+      const {rerender} = render(
+        <InlineRow entries={[{label: 'Unread', onActivate: vi.fn()}]} />,
+      );
+      const row = screen.getByTestId('row');
+      layOut(row);
+      dragLeading(row, 45);
+      // Settling open from the release, which already counts as open (the
+      // settle itself is Item.sharedDrag.test.tsx's: jsdom has no animations).
+      expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
+      rerender(<InlineRow entries={[{label: 'Unread', onActivate}]} />);
+      expect(panelOf(row, 'leading')).not.toHaveAttribute('inert');
+      await settled();
+      expect(xOf(row)).toBe(72);
+      fireEvent.click(screen.getByRole('button', {name: 'Unread'}));
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    });
+
+    it('repaints a changed entry list on an open row', async () => {
+      const {rerender} = render(
+        <InlineRow entries={[{label: 'Unread', onActivate: vi.fn()}]} />,
+      );
+      const row = screen.getByTestId('row');
+      layOut(row);
+      dragLeading(row, 45);
+      await settled();
+      expect(xOf(row)).toBe(72);
+      const onActivate = vi.fn();
+      rerender(<InlineRow entries={[{label: 'Read', onActivate}]} />);
+      expect(screen.queryByRole('button', {name: 'Unread'})).toBeNull();
+      fireEvent.click(screen.getByRole('button', {name: 'Read'}));
+      expect(onActivate).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the deprecated swipeActions and swipeBehavior (spec:AST-057 DEP-0017)', () => {
+    // DEP-0017's loader brings their layer with `import()`: load it once, so
+    // each row below renders its layer at once, as it does in an app once the
+    // chunk has arrived.
+    beforeAll(async () => {
+      render(
+        <Item
+          label="Warm"
+          data-testid="warm"
+          swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
+        />,
+      );
+      await waitFor(
+        () => {
+          expect(
+            screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
+          ).not.toBeNull();
+        },
+        {timeout: 10_000},
+      );
+      cleanup();
+    });
+
+    function renderDeprecatedRow({
+      leading = [{label: 'Unread', onActivate: vi.fn()}],
+      behavior,
+    }: {leading?: Entry[]; behavior?: 'reveal' | 'commit'} = {}) {
+      render(
+        <Item
+          label="Conversation"
+          onClick={vi.fn()}
+          data-testid="row"
+          swipeActions={{leading}}
+          swipeBehavior={behavior}
+        />,
+      );
+      const row = screen.getByTestId('row');
+      layOut(row);
+      return {row};
+    }
+
+    it('still rest a row open and fire a tapped entry, as released', async () => {
+      const onActivate = vi.fn();
+      const {row} = renderDeprecatedRow({
+        leading: [{label: 'Unread', onActivate}],
+      });
+      dragLeading(row, 45);
+      await settled();
+      expect(xOf(row)).toBe(72);
+      fireEvent.click(screen.getByRole('button', {name: 'Unread'}));
+      expect(onActivate).toHaveBeenCalledTimes(1);
+      await settled();
+      expect(xOf(row)).toBe(0);
+    });
+
+    it('still slide a row out and fire on a confirmed full swipe under commit', async () => {
+      const onActivate = vi.fn();
+      const {row} = renderDeprecatedRow({
+        behavior: 'commit',
+        leading: [{label: 'Unread', onActivate}],
+      });
+      expect(panelOf(row, 'leading')).toHaveAttribute('aria-hidden', 'true');
+      dragLeading(row, 220);
+      await settled();
+      expect(onActivate).toHaveBeenCalledTimes(1);
+      await settled();
+      expect(xOf(row)).toBe(0);
+    });
+
+    it('give the root the style a row given swipe has', () => {
+      const leading = [{label: 'Unread', onActivate: vi.fn()}];
+      render(
+        <>
+          <Item label="A" data-testid="deprecated" swipeActions={{leading}} />
+          <Item
+            label="A"
+            data-testid="current"
+            swipe={createSwipe({leading})}
+          />
+        </>,
+      );
+      expect(screen.getByTestId('deprecated').className).toBe(
+        screen.getByTestId('current').className,
+      );
+    });
+
+    it('keep the released role gate: a listitem is served, an option is not', async () => {
+      const actions = {leading: [{label: 'Unread', onActivate: vi.fn()}]};
+      const {rerender} = render(
+        <Item as="li" label="A" data-testid="row" swipeActions={actions} />,
+      );
+      await act(async () => {});
+      expect(panelOf(screen.getByTestId('row'), 'leading')).not.toBeNull();
+      rerender(
+        <Item
+          role="option"
+          label="A"
+          data-testid="row"
+          swipeActions={actions}
+        />,
+      );
+      await act(async () => {});
+      expect(panelOf(screen.getByTestId('row'), 'leading')).toBeNull();
+    });
+
+    it('give way to swipe, and a development note names the props it ignores', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const ignored = vi.fn();
+        render(
+          <Item
+            label="A"
+            data-testid="row"
+            swipe={createSwipe({
+              trailing: [{label: 'Archive', onActivate: vi.fn()}],
+            })}
+            swipeActions={{leading: [{label: 'Unread', onActivate: ignored}]}}
+            swipeBehavior="commit"
+          />,
+        );
+        const row = screen.getByTestId('row');
+        expect(panelOf(row, 'trailing')).not.toBeNull();
+        expect(panelOf(row, 'leading')).toBeNull();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining(
+            '`swipe` is set, so the deprecated `swipeActions` and `swipeBehavior` are ignored.',
+          ),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('warn nothing at run time on their own (spec:AST-017 FR29)', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        renderDeprecatedRow();
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('keep the released warning for a committing side with more than one entry', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        renderDeprecatedRow({
+          behavior: 'commit',
+          leading: [
+            {label: 'Unread', onActivate: vi.fn()},
+            {label: 'Pin', onActivate: vi.fn()},
+          ],
+        });
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('swipeBehavior="commit"'),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 });
 

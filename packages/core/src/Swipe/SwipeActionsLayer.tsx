@@ -3,21 +3,23 @@
 'use client';
 
 /**
- * @file ItemSwipeLayer.tsx
+ * @file SwipeActionsLayer.tsx
  * @input The swipe entries per side, the behavior; useSwipeAction,
  *   theme tokens
- * @output Exports ItemSwipeLayer (default) — the panels of a row's swipe
- *   actions and the gesture that uncovers them — and the ItemSwipeBridge type
- *   through which the root reaches the gesture's key handler
- * @position Internal to Item, imported by Item.tsx with the row (no lazy
- *   chunk: a row's first swipe never waits for one). Tested through
- *   Item.test.tsx and Item.source-build.test.mjs.
+ * @output Exports SwipeActionsLayer (default): the panels of a row's swipe
+ *   actions and the gesture that uncovers them
+ * @position Brought by createSwipe.ts, which hands it to a row the swipe
+ *   serves; Item.tsx's deprecated path loads it with `import()`
+ *   (DeprecatedSwipeLayer.tsx). Tested through Item.test.tsx and
+ *   Item.source-build.test.mjs.
  *
- * The row's root stays Item's: it carries the swipe root styles and forwards
- * its key events into the bridge this layer fills; the gesture attaches to
- * the root itself. This layer renders the two panels as out-of-flow children
- * of that root, so the DOM is the one Item rendered before the split — no
- * element is added to the row for the swipe (spec AST-057, FR2).
+ * The row's root stays the row's: it takes the root style the swipe brings,
+ * and its key events reach this layer through the runtime's root registry
+ * (swipeRoots.ts), or, on the deprecated path, through the bridge Item
+ * forwards into; the gesture attaches to the root itself, and the layer holds
+ * the root's press while the row is open. This layer renders the two panels
+ * as out-of-flow children of that root, so no element is added to the row
+ * for the swipe (`spec:AST-057` FR2).
  *
  * A panel is two boxes and the entries themselves, all moved by transforms
  * that read the travel the gesture writes on the root (`spec:AST-057` FR2,
@@ -33,7 +35,7 @@
  * `architecture:component-style-authoring` INV7): the colours are
  * pseudo-elements.
  *
- * SYNC: the property names are swipeMotion.ts's and useSwipeAction.ts's.
+ * SYNC: the property names are useSwipeAction.ts's.
  */
 
 import {useEffect, useRef} from 'react';
@@ -50,7 +52,8 @@ import {themeProps} from '../utils/themeProps';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {isSwipeOpen, useSwipeAction, type SwipeSide} from './useSwipeAction';
-import type {ItemSwipeAction, ItemSwipeBehavior} from './Item';
+import type {SwipeAction, SwipeLayerProps} from './swipeHost';
+import {registerSwipeRoot} from './swipeRoots';
 
 // =============================================================================
 // Types
@@ -61,27 +64,6 @@ import type {ItemSwipeAction, ItemSwipeBehavior} from './Item';
  * events into (Escape closes a resting row). The layer writes it on every
  * render; the root reads it on every event.
  */
-export interface ItemSwipeBridge {
-  onKeyDown: (event: React.KeyboardEvent) => void;
-}
-
-export interface ItemSwipeLayerProps {
-  /**
-   * Called with the gesture for the root to forward into, after every render
-   * of the layer, and with `null` when the layer leaves.
-   */
-  onBridge: (bridge: ItemSwipeBridge | null) => void;
-  /**
-   * Called with `true` when the row opens (from the release that opens it)
-   * and with `false` when it closes or the layer leaves. The root takes no
-   * press while open: a tap on an open row's content only closes it, as in
-   * UIKit, where the cell never sees that touch.
-   */
-  onOpenChange: (isOpen: boolean) => void;
-  leading: ItemSwipeAction[];
-  trailing: ItemSwipeAction[];
-  behavior: ItemSwipeBehavior;
-}
 
 // =============================================================================
 // Styles
@@ -271,16 +253,15 @@ const swipeTrackFillStyles = stylex.create({
 // =============================================================================
 
 /**
- * The swipe half of an `Item` with `swipeActions`: both panels, rendered into
- * the root Item owns, and the gesture that drives that root.
+ * The swipe half of a row with swipe actions: both panels, rendered into the
+ * root the row owns, and the gesture that drives that root.
  */
-export default function ItemSwipeLayer({
+export default function SwipeActionsLayer({
   onBridge,
-  onOpenChange,
   leading,
   trailing,
   behavior,
-}: ItemSwipeLayerProps) {
+}: SwipeLayerProps) {
   // The entries, read when an entry fires (after the render that showed them).
   // Synchronizes the gesture system's fire callback, which runs outside React
   // from the recognizer, with the committed entries.
@@ -290,8 +271,6 @@ export default function ItemSwipeLayer({
   });
   const swipe = useSwipeAction({
     behavior,
-    // An open row's root takes no press.
-    onOpenChange,
     // A disabled outermost entry cannot fire, so a full swipe never confirms
     // toward it.
     canConfirm: side => {
@@ -313,15 +292,20 @@ export default function ItemSwipeLayer({
       trailing: trailing.length > 0,
     },
   });
-  // The root forwards its key events into what this publishes. The Effect
-  // installs this layer's key handler on Item's root, which
-  // lives outside the layer, and releases it when the layer leaves. React
-  // flushes effects before it delivers a discrete event, so a handler never
-  // meets a stale bridge.
+  // The root's key events reach this layer's key handler: through the
+  // runtime's registry for a row given `swipe`, or through the bridge Item
+  // forwards into on the deprecated path. The Effect publishes it for the
+  // root, which lives outside the layer, and releases it when the layer
+  // leaves. React flushes effects before it delivers a discrete event, so a
+  // key never meets a stale handler.
   useEffect(() => {
-    onBridge({onKeyDown: swipe.onKeyDown});
+    const root = swipe.rootRef.current;
+    const unregister =
+      root == null ? undefined : registerSwipeRoot(root, swipe.onKeyDown);
+    onBridge?.({onKeyDown: swipe.onKeyDown});
     return () => {
-      onBridge(null);
+      unregister?.();
+      onBridge?.(null);
     };
   });
   // Open from the release that opens it (`isSwipeOpen`), as UIKit counts it:
@@ -333,7 +317,10 @@ export default function ItemSwipeLayer({
   // except while the row is open on its side, so the row keeps one tab
   // stop, the other side's entries (out of sight behind the row) are never
   // reached, and a pointer that can hover never meets it.
-  const renderSwipePanel = (side: SwipeSide, entries: ItemSwipeAction[]) => {
+  const renderSwipePanel = (
+    side: SwipeSide,
+    entries: ReadonlyArray<SwipeAction>,
+  ) => {
     if (entries.length === 0) {
       return null;
     }
@@ -341,7 +328,7 @@ export default function ItemSwipeLayer({
     const isCommit = behavior === 'commit';
     const isLive = isOpen && swipe.state.side === side && !isCommit;
     const refs = swipe.panelRefs[side];
-    const renderEntry = (entry: ItemSwipeAction) => {
+    const renderEntry = (entry: SwipeAction) => {
       const variant = entry.variant ?? 'accent';
       const key = entry.id ?? entry.label;
       // The outermost entry is the full swipe's moving part itself; the
@@ -436,4 +423,4 @@ export default function ItemSwipeLayer({
   );
 }
 
-ItemSwipeLayer.displayName = 'ItemSwipeLayer';
+SwipeActionsLayer.displayName = 'SwipeActionsLayer';

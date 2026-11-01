@@ -100,6 +100,7 @@ describe('collectDocInputs over what this repo ships', () => {
       'createAnimator',
       'createDragToSnapPoints',
       'createPanGesture',
+      'createSwipe',
     ]);
   });
 

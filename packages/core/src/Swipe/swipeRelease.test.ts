@@ -5,7 +5,7 @@
  * @input vitest; swipeRelease.ts and the UIKit constants table
  * @output The release rule against the UIKit lab's releases; where a full
  *   swipe confirms; the swipe spring is the one UIKit reported
- * @position Unit tests of packages/core/src/Item/swipeRelease.ts
+ * @position Unit tests of packages/core/src/Swipe/swipeRelease.ts
  */
 
 import {describe, expect, it} from 'vitest';

@@ -1,0 +1,132 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file createSwipe.test.ts
+ * @input createSwipe and the reader of its values
+ * @output Checks `spec:AST-057` FR1 and FR3 for the constructor: an opaque,
+ *   frozen value made only by createSwipe, carrying the declared
+ *   entries and `swipeBehavior` (default `reveal`), with a development warning
+ *   for a committing side with more than one entry; and DEC-3, FR10 and FR11
+ *   for the runtime it carries: it decides which rows it serves from the
+ *   facts a row hands it, and serves every row and every value with the same
+ *   layer type and root handlers
+ * @position Unit tests of packages/core/src/Swipe/createSwipe.ts
+ */
+
+import {isValidElement} from 'react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import {createSwipe} from './createSwipe';
+import {swipeHostOf, type Swipe} from './swipeHost';
+
+const archive = {label: 'Archive', onActivate: () => {}};
+const remove = {label: 'Delete', onActivate: () => {}, hasRemoval: true};
+
+describe('createSwipe', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('makes an opaque, frozen value: nothing in it for a caller to read', () => {
+    const swipe = createSwipe({trailing: [archive]});
+    expect(Object.isFrozen(swipe)).toBe(true);
+    expect(Object.keys(swipe)).toEqual([]);
+    expect(createSwipe({trailing: [archive]})).not.toBe(swipe);
+  });
+
+  it('carries the entries per side and swipeBehavior, reveal by default', () => {
+    const host = swipeHostOf(
+      createSwipe({leading: [archive], trailing: [archive, remove]}),
+    );
+    expect(host?.leading).toEqual([archive]);
+    expect(host?.trailing).toEqual([archive, remove]);
+    expect(host?.behavior).toBe('reveal');
+    expect(
+      swipeHostOf(createSwipe({trailing: [archive], swipeBehavior: 'commit'}))
+        ?.behavior,
+    ).toBe('commit');
+    expect(swipeHostOf(createSwipe({}))?.leading).toEqual([]);
+  });
+
+  it('keeps the entries it was given, whatever the caller does with its arrays after', () => {
+    const trailing = [archive];
+    const host = swipeHostOf(createSwipe({trailing}));
+    trailing.push(remove);
+    expect(host?.trailing).toEqual([archive]);
+  });
+
+  it('is the only maker of a Swipe value', () => {
+    // @ts-expect-error A Swipe value comes only from createSwipe.
+    const typed: Swipe = {trailing: [archive]};
+    expect(swipeHostOf(typed)).toBeNull();
+    expect(swipeHostOf({} as Swipe)).toBeNull();
+  });
+
+  describe('the runtime a row hands its root to', () => {
+    const row = {
+      role: undefined,
+      isDisabled: false,
+      isDelegate: false,
+      isLinkRoot: false,
+    };
+
+    it('serves a role-less row and a listitem, and not a row whose role forbids interactive descendants (spec:AST-057 DEC-3)', () => {
+      const host = swipeHostOf(createSwipe({trailing: [archive]}));
+      expect(host?.attach(row)).not.toBeNull();
+      expect(host?.attach({...row, role: 'listitem'})).not.toBeNull();
+      for (const role of [
+        'option',
+        'menuitem',
+        'menuitemcheckbox',
+        'menuitemradio',
+      ]) {
+        expect(host?.attach({...row, role})).toBeNull();
+      }
+    });
+
+    it('serves no disabled row, no row that is the enlarged target of a control inside it, and no root that is a link', () => {
+      const host = swipeHostOf(createSwipe({trailing: [archive]}));
+      expect(host?.attach({...row, isDisabled: true})).toBeNull();
+      expect(host?.attach({...row, isDelegate: true})).toBeNull();
+      expect(host?.attach({...row, isLinkRoot: true})).toBeNull();
+    });
+
+    it('serves no row when no side has an entry', () => {
+      expect(swipeHostOf(createSwipe({}))?.attach(row)).toBeNull();
+      expect(
+        swipeHostOf(createSwipe({leading: [], trailing: []}))?.attach(row),
+      ).toBeNull();
+    });
+
+    it('gives every row and every value the same root handlers and layer type, so a new value changes nothing on the root (spec:AST-057 FR11)', () => {
+      const first = swipeHostOf(createSwipe({trailing: [archive]}))?.attach(
+        row,
+      );
+      const second = swipeHostOf(
+        createSwipe({leading: [archive], swipeBehavior: 'commit'}),
+      )?.attach(row);
+      expect(second?.rootProps).toBe(first?.rootProps);
+      expect(second?.rootStyle).toBe(first?.rootStyle);
+      expect(isValidElement(first?.layer)).toBe(true);
+      expect(isValidElement(second?.layer)).toBe(true);
+      if (isValidElement(first?.layer) && isValidElement(second?.layer)) {
+        expect(second.layer.type).toBe(first.layer.type);
+        expect(second.layer.props).toMatchObject({
+          leading: [archive],
+          trailing: [],
+          behavior: 'commit',
+        });
+      }
+    });
+  });
+
+  it('warns in development when a committing side has more than one entry', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    createSwipe({trailing: [archive], swipeBehavior: 'commit'});
+    createSwipe({trailing: [archive, remove]});
+    expect(warn).not.toHaveBeenCalled();
+    createSwipe({trailing: [archive, remove], swipeBehavior: 'commit'});
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("swipeBehavior: 'commit'"),
+    );
+  });
+});

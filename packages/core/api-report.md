@@ -1376,8 +1376,9 @@ component Item(props: ItemProps)
   prop ref?: React.Ref<HTMLElement>
   prop rel?: string
   prop startContent?: ReactNode
-  prop swipeActions?: ItemSwipeActions
-  prop swipeBehavior?: ItemSwipeBehavior = 'reveal'
+  prop swipe?: Swipe
+  prop swipeActions?: ItemSwipeActions @deprecated
+  prop swipeBehavior?: ItemSwipeBehavior = 'reveal' @deprecated
   prop target?: '_blank' | '_self'
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1512,8 +1513,9 @@ component ListItem(props: ListItemProps)
   prop ref?: React.Ref<HTMLLIElement>
   prop rel?: string
   prop startContent?: ReactNode
-  prop swipeActions?: ItemSwipeActions
-  prop swipeBehavior?: ItemSwipeBehavior = 'reveal'
+  prop swipe?: Swipe
+  prop swipeActions?: ItemSwipeActions @deprecated
+  prop swipeBehavior?: ItemSwipeBehavior = 'reveal' @deprecated
   prop target?: string
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -2965,6 +2967,7 @@ function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
+function createSwipe: (options: CreateSwipeOptions) => Swipe
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
 function defineSyntaxTheme: (input: SyntaxThemeInput) => SyntaxThemeDefinition
@@ -4041,6 +4044,10 @@ type CoreTokenName = keyof typeof colorDefaults | keyof typeof spacingDefaults |
 type CreateCodeLanguageOptions = CodeLanguageMeta & { tokenize: CodeLanguageTokenize }
 interface CreateStaticSourceOptions<T extends SearchableItem = SearchableItem>
   keywords?: (item: T) => string[]
+interface CreateSwipeOptions
+  leading?: ReadonlyArray<SwipeAction>
+  swipeBehavior?: SwipeBehavior = 'reveal'
+  trailing?: ReadonlyArray<SwipeAction>
 interface CustomOperatorValue
   Editor: React.ComponentType<{ isDisabled?: boolean; onChange: (value: string | null) => void; placeholder: string; value: string | null }>
   getString: (value: string) => string
@@ -4509,19 +4516,12 @@ interface ItemGroup<T extends SearchableItem = SearchableItem>
   heading: string | null
   items: T[]
 interface ItemProps extends BaseProps<HTMLElement> (props of Item)
-interface ItemSwipeAction
-  hasRemoval?: boolean = false
-  icon?: ReactNode
-  id?: string
-  isDisabled?: boolean
-  label: string
-  onActivate: () => void | Promise<void>
-  variant?: ItemSwipeActionVariant = 'accent'
-type ItemSwipeActionVariant = 'neutral' | 'accent' | 'destructive'
-interface ItemSwipeActions
+type ItemSwipeAction @deprecated = SwipeAction
+type ItemSwipeActionVariant @deprecated = SwipeActionVariant
+interface ItemSwipeActions @deprecated
   leading?: ItemSwipeAction[]
   trailing?: ItemSwipeAction[]
-type ItemSwipeBehavior = 'reveal' | 'commit'
+type ItemSwipeBehavior @deprecated = SwipeBehavior
 interface KbdProps extends BaseProps<HTMLSpanElement> (props of Kbd)
 type Key = string | number
 type KeyFallback = Key | (() => Key)
@@ -5290,6 +5290,18 @@ interface StringOperatorValue
   searchSource?: SearchSource
   type: 'string'
 type StyleOverrides = Record<string, string | Record<string, string>>
+type Swipe
+  [SWIPE]: true
+interface SwipeAction
+  hasRemoval?: boolean = false
+  icon?: ReactNode
+  id?: string
+  isDisabled?: boolean
+  label: string
+  onActivate: () => void | Promise<void>
+  variant?: SwipeActionVariant = 'accent'
+type SwipeActionVariant = 'neutral' | 'accent' | 'destructive'
+type SwipeBehavior = 'reveal' | 'commit'
 type SwitchLabelPosition = 'start' | 'end'
 type SwitchLabelSpacing = 'hug' | 'spread'
 interface SwitchProps extends Omit<BaseProps, 'onChange'> (props of Switch)
@@ -8507,6 +8519,19 @@ StepperOrientation (.)
 StepperProps (.)
 StepperRegistrationOptions (.)
 useStepperContext (.)
+```
+
+## `./Swipe`
+
+### Also exported from an earlier entry point
+
+```text
+CreateSwipeOptions (.)
+Swipe (.)
+SwipeAction (.)
+SwipeActionVariant (.)
+SwipeBehavior (.)
+createSwipe (.)
 ```
 
 ## `./Switch`

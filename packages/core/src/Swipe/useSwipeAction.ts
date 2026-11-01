@@ -9,17 +9,18 @@
  *   the trackpad splitter, the pan, the snap-point drag and the animator),
  *   the UIKit constants table and swipeRelease.ts
  * @output Exports useSwipeAction — the stops, the actions and the finger's
- *   model behind Item's `swipeActions` (where each part sits for the travel
- *   is ItemSwipeLayer's styles)
- * @position Internal to Item, through ItemSwipeLayer (the only module that
- *   imports it); tested through Item.test.tsx and the interaction proofs
+ *   model behind a row's swipe actions (where each part sits for the travel
+ *   is SwipeActionsLayer's styles)
+ * @position Internal to swipe actions, through SwipeActionsLayer (the only
+ *   module that imports it); tested through Item.test.tsx and the
+ *   interaction proofs
  *
  * A row's swipe runs the shared drag path every followed pan runs
  * (`spec:AST-094` FR43, DEC-24): the splitter, the pan, the snap-point drag
  * and the animator. The row declares its stops, per side (rest, the open
  * width, and out past the row's edge for a full swipe), and its actions;
  * the drag draws the row's travel into one custom property on the root
- * (`spec:AST-057` FR2) that every part of the panel reads (ItemSwipeLayer).
+ * (`spec:AST-057` FR2) that every part of the panel reads (SwipeActionsLayer).
  *
  * What a drag does depends on what drives it:
  *
@@ -89,6 +90,7 @@ import {reducedMotionFade} from '../motion/reducedMotion';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
 import type {SpringDescription} from '../motion/spring';
 import {swipeActions as SWIPE} from '../motion/uikit/swipeActions';
+import {setPressHeld} from '../privateAttributes/pressHeld.stylex';
 import {lockSelection} from '../utils/selectionLock';
 import {confirmedOffset, confirmPoint, resolveRelease} from './swipeRelease';
 
@@ -175,8 +177,6 @@ export interface UseSwipeActionOptions {
   fireOutermost: (side: SwipeSide) => boolean;
   /** Whether the side's outermost entry can fire: a disabled one never confirms a full swipe. */
   canConfirm: (side: SwipeSide) => boolean;
-  /** Told from the transition that opens or closes the row (open is `isSwipeOpen`). */
-  onOpenChange?: (isOpen: boolean) => void;
 }
 
 export interface UseSwipeActionResult {
@@ -193,6 +193,8 @@ export interface UseSwipeActionResult {
   close: () => void;
   /** Escape closes an open row with focus inside it. */
   onKeyDown: (event: ReactKeyboardEvent) => void;
+  /** The row root the gesture attaches to, once the panels have mounted. */
+  rootRef: {readonly current: HTMLElement | null};
 }
 
 // =============================================================================
@@ -369,7 +371,6 @@ export function useSwipeAction({
   sides,
   fireOutermost,
   canConfirm,
-  onOpenChange,
 }: UseSwipeActionOptions): UseSwipeActionResult {
   // The latest options, read by listeners and completions that outlive a render.
   // Synchronizes the gesture system (pan callbacks, settle completions, the
@@ -378,7 +379,6 @@ export function useSwipeAction({
     behavior,
     canConfirm,
     fireOutermost,
-    onOpenChange,
     sides,
   });
   useIsomorphicLayoutEffect(() => {
@@ -386,7 +386,6 @@ export function useSwipeAction({
       behavior,
       canConfirm,
       fireOutermost,
-      onOpenChange,
       sides,
     };
   });
@@ -400,15 +399,20 @@ export function useSwipeAction({
     stateRef.current = state;
   });
   // Every transition goes through here, so the one that opens or closes the
-  // row reports it at once, from the handler that caused it.
+  // row holds or frees its root's press at once, from the handler that caused
+  // it: an open row's root takes no press, so a tap on its content only
+  // closes it, as in UIKit, where the cell never sees that touch
+  // (`spec:AST-057` FR7). The root stays a pressable surface.
   const setSwipeState = useCallback((next: SwipeState) => {
-    const report = latestRef.current.onOpenChange;
     const wasOpen = isSwipeOpen(stateRef.current);
     const isOpen = isSwipeOpen(next);
     stateRef.current = next;
     setState(next);
     if (wasOpen !== isOpen) {
-      report?.(isOpen);
+      const root = rootRef.current;
+      if (root != null) {
+        setPressHeld(root, isOpen);
+      }
     }
   }, []);
 
@@ -1017,5 +1021,16 @@ export function useSwipeAction({
     [close, isOpen],
   );
 
-  return {activateEntry, close, onKeyDown, panelRefs, state};
+  // A row that loses its swipe while open takes presses again.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      const root = rootRef.current;
+      if (root != null) {
+        setPressHeld(root, false);
+      }
+    },
+    [],
+  );
+
+  return {activateEntry, close, onKeyDown, panelRefs, rootRef, state};
 }

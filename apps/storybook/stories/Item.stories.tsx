@@ -19,6 +19,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
 import {Stack} from '@astryxdesign/core/Layout';
 import {List, ListItem} from '@astryxdesign/core/List';
+import {createSwipe} from '@astryxdesign/core/Swipe';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 
@@ -578,7 +579,7 @@ export const SwipeActions: Story = {
                 {row.isUnread ? 'Mark read' : 'Mark unread'} · Archive · Delete
               </Text>
             }
-            swipeActions={{
+            swipe={createSwipe({
               leading: [
                 {
                   label: row.isUnread ? 'Read' : 'Unread',
@@ -602,7 +603,7 @@ export const SwipeActions: Story = {
                   hasRemoval: true,
                 },
               ],
-            }}
+            })}
           />
         ))}
         {rows.length === 0 && <ListItem label="All done." />}
@@ -612,7 +613,7 @@ export const SwipeActions: Story = {
 };
 
 /**
- * `swipeBehavior="commit"`: one verb per side; a release past the commit
+ * `swipeBehavior: 'commit'`: one verb per side; a release past the commit
  * point slides the row out and fires it, and nothing rests. The panel is
  * presentational.
  */
@@ -635,8 +636,7 @@ export const SwipeCommit: Story = {
             description="Swipe toward the start to dismiss"
             onClick={() => {}}
             endContent={<Text color="secondary">Dismiss</Text>}
-            swipeBehavior="commit"
-            swipeActions={{
+            swipe={createSwipe({
               trailing: [
                 {
                   label: 'Dismiss',
@@ -646,7 +646,8 @@ export const SwipeCommit: Story = {
                   hasRemoval: true,
                 },
               ],
-            }}
+              swipeBehavior: 'commit',
+            })}
           />
         ))}
         {rows.length === 0 && <ListItem label="All caught up." />}

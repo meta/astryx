@@ -13,7 +13,9 @@
  *   carries only the gesture code its touch components import; two components
  *   that import the touch module share one copy per page; only the internal
  *   `internal/touch` entry reaches it, and no consumer doc or component
- *   `import()` does
+ *   `import()` does, but for `Item`'s loader for its deprecated swipe props
+ *   (`spec:AST-057` DEP-0017), the one `import()` of swipe code, which this
+ *   guard counts out of `Item`'s import by name
  * @position Node test over source, so it needs no build
  */
 
@@ -59,6 +61,43 @@ const BUILD_OPTIONS = {
   metafile: true,
   write: false,
   logLevel: 'silent',
+};
+
+/**
+ * The one `import()` of swipe code: `Item`'s loader for its deprecated
+ * `swipeActions` and `swipeBehavior` (`spec:AST-057` DEP-0017), which loads the
+ * gesture the first time a row has them, so an import of `Item` loads none of
+ * it at once. Removed with the props (`spec:AST-057` CLN-0025).
+ */
+const DEPRECATED_SWIPE_LOADER = {
+  importer: 'packages/core/src/Item/Item.tsx',
+  target: 'packages/core/src/Swipe/DeprecatedSwipeLayer',
+};
+
+/**
+ * The rest of DEP-0017's deprecated-path exception, beside its loader: the
+ * released row style a row given the deprecated `swipeActions` takes from its
+ * first render. It holds no gesture code. Removed with the props
+ * (`spec:AST-057` CLN-0025).
+ */
+const DEPRECATED_SWIPE_STYLE = 'packages/core/src/Swipe/swipeHost.stylex';
+
+/**
+ * Counts DEP-0017's loader's chunk out of the import that holds the loader, as
+ * the size report's code splitting does; every other `import()` stays in.
+ */
+const DEPRECATED_SWIPE_LOADED_LATER = {
+  name: 'deprecated-swipe-loader',
+  setup(build) {
+    build.onResolve({filter: /DeprecatedSwipeLayer$/}, args =>
+      args.kind === 'dynamic-import' &&
+      path.relative(REPO, args.importer) === DEPRECATED_SWIPE_LOADER.importer &&
+      path.relative(REPO, path.resolve(args.resolveDir, args.path)) ===
+        DEPRECATED_SWIPE_LOADER.target
+        ? {path: args.path, external: true}
+        : undefined,
+    );
+  },
 };
 
 /**
@@ -123,6 +162,9 @@ const GESTURE_USERS = new Set([
   'hooks: usePanGesture',
   // The snap-point drag, which moves an element on that pan.
   'hooks: useDragToSnapPoints',
+  // Swipe actions: createSwipe brings a row's swipe on that drag
+  // (`spec:AST-057` FR10).
+  'Swipe',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
@@ -197,6 +239,7 @@ async function gestureCarriers(imports) {
     ...BUILD_OPTIONS,
     entryPoints: entries.map(entry => path.join(REPO, entry)),
     splitting: false,
+    plugins: [DEPRECATED_SWIPE_LOADED_LATER],
   });
   const outputs = new Map(
     Object.values(metafile.outputs).map(output => [output.entryPoint, output]),
@@ -361,5 +404,48 @@ describe('the touch module internals', () => {
       ),
     );
     expect(dynamic.map(file => path.relative(REPO, file))).toEqual([]);
+  });
+
+  it('reach Core only through DEP-0017\u2019s loader by import(): the one loader of swipe code', () => {
+    const loaders = filesUnder(CORE_SRC, /\.(ts|tsx)$/)
+      .filter(file => !/\.(test|spec)\.(ts|tsx)$|__tests__/.test(file))
+      .flatMap(file =>
+        [
+          ...fs
+            .readFileSync(file, 'utf8')
+            .matchAll(/\bimport\(\s*['"]([^'"]+)['"]/g),
+        ].map(([, specifier]) => [
+          path.relative(REPO, file),
+          path.relative(REPO, path.resolve(path.dirname(file), specifier)),
+        ]),
+      )
+      .filter(([, target]) => target.startsWith('packages/core/src/Swipe/'));
+    expect(loaders).toEqual([
+      [DEPRECATED_SWIPE_LOADER.importer, DEPRECATED_SWIPE_LOADER.target],
+    ]);
+  });
+
+  it('reach a Core component from swipe actions only through the reader of a swipe value and DEP-0017\u2019s row style', () => {
+    const imports = filesUnder(CORE_SRC, /\.(ts|tsx)$/)
+      .filter(file => !/\.(test|spec)\.(ts|tsx)$|__tests__/.test(file))
+      .filter(file => {
+        const own = path.relative(CORE_SRC, file);
+        return !own.startsWith(`Swipe${path.sep}`) && own !== 'index.ts';
+      })
+      .flatMap(file =>
+        [
+          ...fs
+            .readFileSync(file, 'utf8')
+            .matchAll(/^import\s+(?!type\b)[^;]*?from\s+['"]([^'"]+)['"]/gm),
+        ].map(([, specifier]) => [
+          path.relative(REPO, file),
+          path.relative(REPO, path.resolve(path.dirname(file), specifier)),
+        ]),
+      )
+      .filter(([, target]) => target.startsWith('packages/core/src/Swipe/'));
+    expect(imports).toEqual([
+      [DEPRECATED_SWIPE_LOADER.importer, 'packages/core/src/Swipe/swipeHost'],
+      [DEPRECATED_SWIPE_LOADER.importer, DEPRECATED_SWIPE_STYLE],
+    ]);
   });
 });
