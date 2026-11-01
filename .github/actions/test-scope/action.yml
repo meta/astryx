@@ -10,7 +10,9 @@
 #   base, so a long-lived branch does not inherit main's changes (#8812) and
 #   no history is fetched or deepened (#8826).
 # - The classifier (change-scope.cjs and its two helpers) is read from the PR's
-#   base commit, so a pull request cannot loosen its own classification.
+#   base commit, so a pull request cannot loosen its own classification. It is
+#   read in one GraphQL query, not a REST call per file: every job runs this
+#   step, and every workflow shares the repository's REST rate limit.
 # - Anything this step cannot decide (not a pull request, a missing trusted
 #   classifier, an API error, an empty file list or one GitHub truncates)
 #   puts everything in scope (spec:AST-030 FR3, FR4). A classifier that rejects the change (a spec-only PR with a
@@ -187,15 +189,28 @@ runs:
             if (files.length >= 3000) throw new Error('GitHub truncated the file list at 3000');
             if (files.length === 0) throw new Error('GitHub listed no changed files');
             root = fs.mkdtempSync(path.join(os.tmpdir(), 'test-scope-'));
-            for (const file of [
+            // The trusted policy comes from the base commit in one GraphQL
+            // query: every job in every run reads it, and one REST call per
+            // file counted against the repository's shared REST rate limit.
+            const policy = [
               '.github/scripts/change-scope.cjs',
               '.github/scripts/knowledge-paths.cjs',
               'scripts/component-packages.cjs',
               ...(audit ? ['.github/scripts/component-audit-scope.cjs'] : []),
-            ]) {
-              const {data} = await github.rest.repos.getContent({...context.repo, path: file, ref: pr.base.sha});
+            ];
+            const {repository} = await github.graphql(
+              `query($owner: String!, $repo: String!, ${policy.map((_, i) => `$f${i}: String!`).join(', ')}) {
+                repository(owner: $owner, name: $repo) {
+                  ${policy.map((_, i) => `f${i}: object(expression: $f${i}) { ... on Blob { text isTruncated } }`).join('\n')}
+                }
+              }`,
+              {...context.repo, ...Object.fromEntries(policy.map((file, i) => [`f${i}`, `${pr.base.sha}:${file}`]))},
+            );
+            for (const [i, file] of policy.entries()) {
+              const blob = repository?.[`f${i}`];
+              if (typeof blob?.text !== 'string' || blob.isTruncated) throw new Error(`the base has no readable ${file}`);
               fs.mkdirSync(path.join(root, path.dirname(file)), {recursive: true});
-              fs.writeFileSync(path.join(root, file), Buffer.from(data.content, 'base64'));
+              fs.writeFileSync(path.join(root, file), blob.text);
             }
           } catch (error) {
             core.warning(`Scope could not be decided (${error.message}); everything is in scope.`);

@@ -19,7 +19,8 @@ import React, {useMemo, useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
+import {isSegmentDisabledOnItsOwn} from '../privateAttributes/segmentDisabled.stylex';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {useTooltip} from '../Tooltip';
 import type {
@@ -198,12 +199,17 @@ export function SegmentedControl({
   // the radios, skips disabled ones, wraps at the ends, handles Home/End, and
   // repairs the tab stop on mount and whenever items mount/disable — replacing
   // the component's former inline keyboard handler and tab-stop repair effect.
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    itemSelector: '[role="radio"]:not([aria-disabled="true"])',
-    hasRovingTabIndex: true,
-    wrap: true,
-    orientation: 'horizontal',
-  });
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: '[role="radio"]:not([aria-disabled="true"])',
+      hasRovingTabIndex: true,
+      // Disabled with a reason, the control keeps one Tab stop so the reason is
+      // reachable (FR2, FR7): the selected segment, else the first segment not
+      // disabled by its own isDisabled, else the first.
+      disabledTabStop: showsDisabledMessage ? orderDisabledTabStop : undefined,
+      wrap: true,
+      orientation: 'horizontal',
+    });
 
   const hint = useKeyboardHint({
     orientation: 'horizontal',
@@ -271,8 +277,19 @@ export function SegmentedControl({
       layout,
       isDisabled,
       hasDisabledMessage: showsDisabledMessage,
+      disabledReasonID: showsDisabledMessage
+        ? disabledMessageTooltip.describedBy
+        : undefined,
     }),
-    [value, onChange, size, layout, isDisabled, showsDisabledMessage],
+    [
+      value,
+      onChange,
+      size,
+      layout,
+      isDisabled,
+      showsDisabledMessage,
+      disabledMessageTooltip.describedBy,
+    ],
   );
 
   return (
@@ -316,3 +333,21 @@ export function SegmentedControl({
 }
 
 SegmentedControl.displayName = 'SegmentedControl';
+
+/**
+ * The segments of a control disabled with a reason, its Tab stop first: the
+ * selected segment, else the first segment not disabled by its own
+ * isDisabled, else the first (FR2, FR7).
+ */
+function orderDisabledTabStop(list: HTMLElement): ReadonlyArray<HTMLElement> {
+  const segments = Array.from(
+    list.querySelectorAll<HTMLElement>('[role="radio"]'),
+  );
+  const stop =
+    segments.find(segment => segment.getAttribute('aria-checked') === 'true') ??
+    segments.find(segment => !isSegmentDisabledOnItsOwn(segment)) ??
+    segments[0];
+  return stop == null
+    ? []
+    : [stop, ...segments.filter(segment => segment !== stop)];
+}

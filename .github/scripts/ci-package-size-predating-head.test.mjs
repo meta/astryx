@@ -71,7 +71,7 @@ describe('package size on a head that predates it', () => {
 
   it('runs the comparison steps only after a measurement', () => {
     for (const name of [
-      'Find the merge base for package size',
+      "Download main's package size for the merge base",
       'Compare published package size',
     ]) {
       expect(step('build-storybook', name).if).toContain(
