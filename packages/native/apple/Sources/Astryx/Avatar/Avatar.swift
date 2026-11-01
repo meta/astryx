@@ -302,9 +302,13 @@ public struct Avatar<Status: View>: View {
 
   /// The URL the avatar opens, or `nil` when it has no usable `href`.
   var linkURL: URL? {
-    // Only an absolute URL the system can open; a malformed or relative
-    // `href` leaves the avatar static or a button.
-    guard let url = url(props.href), url.scheme != nil else { return nil }
+    // Only an absolute URL the system can open, and never one core's
+    // navigation destinations refuse (a script URL or an HTML `data:` URL);
+    // a malformed, relative, or refused `href` leaves the avatar static or a
+    // button.
+    guard let href = props.href, astryxSafeDestination(href) != nil,
+      let url = url(href), url.scheme != nil
+    else { return nil }
     return url
   }
 

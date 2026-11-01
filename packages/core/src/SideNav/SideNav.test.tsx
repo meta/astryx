@@ -36,6 +36,7 @@ import {SideNavSection} from './SideNavSection';
 import {LinkProvider} from '../Link/LinkProvider';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import pseudoCatalog from '../../locales/pseudo.json';
+import koreanCatalog from '../../locales/ko-KR.json';
 import {
   SideNavCollapseContext,
   type SideNavImperativeCollapseHandle,
@@ -358,6 +359,22 @@ describe('SideNavHeading', () => {
     }
   });
 
+  it('includes the visible heading in the menu trigger name without hrefs', () => {
+    render(<SideNavHeading heading="Acme" menu={<div>Menu content</div>} />);
+    expect(screen.getByRole('button')).toHaveAccessibleName('Acme, Open menu');
+  });
+
+  it('includes the heading in the translated menu trigger name', () => {
+    render(
+      <InternationalizationProvider
+        locale="ko-KR"
+        messages={{'ko-KR': koreanCatalog}}>
+        <SideNavHeading heading="Acme" menu={<div>Menu content</div>} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button')).toHaveAccessibleName('Acme, 메뉴 열기');
+  });
+
   it('shows chevron when menu is provided', () => {
     render(<SideNavHeading heading="My App" menu={<div>Menu content</div>} />);
     // The chevron SVG should be rendered
@@ -402,7 +419,7 @@ describe('SideNavHeading', () => {
         menu={<div>Menu</div>}
       />,
     );
-    const button = screen.getByRole('button', {name: 'Open menu'});
+    const button = screen.getByRole('button', {name: 'Product, Open menu'});
     expect(button).toHaveAttribute('aria-haspopup', 'true');
   });
 
@@ -448,7 +465,7 @@ describe('SideNavHeading', () => {
           }
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       for (const pointer of [
         {pointerType: 'mouse', pointerId: 1, button: 0},
         {pointerType: 'touch', pointerId: 2},
@@ -486,7 +503,7 @@ describe('SideNavHeading', () => {
           }
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expectNativeLinkClicks(
         screen.getByRole('menuitem', {name: 'Docs', hidden: true}),
       );
@@ -507,7 +524,7 @@ describe('SideNavHeading', () => {
           }
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       const item = (name: string) =>
         screen.getByRole('menuitem', {name, hidden: true});
       item('One').focus();
@@ -536,7 +553,7 @@ describe('SideNavHeading', () => {
           <button type="button">Outside</button>
         </>,
       );
-      const trigger = screen.getByRole('button', {name: 'Open menu'});
+      const trigger = screen.getByRole('button', {name: /Open menu/});
       await user.click(trigger);
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
       const mouse = {pointerType: 'mouse', pointerId: 3, button: 0};
@@ -570,7 +587,7 @@ describe('SideNavHeading', () => {
           }
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       const item = (name: string) =>
         screen.getByRole('menuitem', {name, hidden: true});
       for (const pointer of [
@@ -590,7 +607,7 @@ describe('SideNavHeading', () => {
     it('does not wrap the heading menu popup in a modal dialog', async () => {
       const user = userEvent.setup();
       render(<SideNavHeading heading="My App" menu={menuItems} />);
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     });
@@ -598,7 +615,7 @@ describe('SideNavHeading', () => {
     it('scopes role="menu" to only menuitem children with an accessible name', async () => {
       const user = userEvent.setup();
       render(<SideNavHeading heading="My App" menu={menuItems} />);
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       const menu = document.querySelector('[role="menu"]');
       expect(menu).not.toBeNull();
       expect(menu).toHaveAttribute('aria-label', 'My App');
@@ -612,7 +629,7 @@ describe('SideNavHeading', () => {
     it('keeps the popup heading button outside the menu and closes on click', async () => {
       const user = userEvent.setup();
       render(<SideNavHeading heading="My App" menu={menuItems} />);
-      const trigger = screen.getByRole('button', {name: 'Open menu'});
+      const trigger = screen.getByRole('button', {name: /Open menu/});
       await user.click(trigger);
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
       const menu = document.querySelector('[role="menu"]');
@@ -638,7 +655,7 @@ describe('SideNavHeading', () => {
           menu={menuItems}
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       const menu = document.querySelector('[role="menu"]');
       expect(menu).not.toBeNull();
@@ -3261,7 +3278,7 @@ describe('SideNav focus ring (A15)', () => {
 
   it('draws the shared ring on the heading menu trigger', () => {
     render(<SideNavHeading heading="My App" menu={<div>menu</div>} />);
-    expectSharedFocusRing(screen.getByRole('button', {name: 'Open menu'}));
+    expectSharedFocusRing(screen.getByRole('button', {name: /Open menu/}));
   });
 });
 
@@ -3530,7 +3547,7 @@ describe('SideNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<SideNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -3548,7 +3565,7 @@ describe('SideNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<SideNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -3568,7 +3585,7 @@ describe('SideNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<SideNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -3586,7 +3603,7 @@ describe('SideNavHeading hover/click guard', () => {
   it('returns focus to the trigger on Escape', async () => {
     const user = userEvent.setup();
     render(<SideNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
