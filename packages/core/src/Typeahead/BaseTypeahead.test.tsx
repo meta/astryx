@@ -376,7 +376,7 @@ describe('BaseTypeahead', () => {
         screen.getByRole('option', {name: 'Updated result', hidden: true}),
       ).toBeInTheDocument();
     });
-    expect(updatedSearch).toHaveBeenCalledWith('re');
+    expect(updatedSearch).toHaveBeenCalledWith('re', expect.anything());
     expect(
       screen.queryByRole('option', {name: 'Result', hidden: true}),
     ).not.toBeInTheDocument();
@@ -435,7 +435,9 @@ describe('BaseTypeahead', () => {
     expect(input).toHaveAttribute('aria-expanded', 'false');
 
     fireEvent.change(input, {target: {value: '😀a'}});
-    await waitFor(() => expect(search).toHaveBeenCalledExactlyOnceWith('😀a'));
+    await waitFor(() =>
+      expect(search).toHaveBeenCalledExactlyOnceWith('😀a', expect.anything()),
+    );
   });
 
   it('exposes a completed empty search as a disabled listbox option', async () => {
@@ -587,7 +589,7 @@ describe('BaseTypeahead', () => {
             expect(input).not.toHaveAttribute('aria-busy');
             await act(async () => vi.advanceTimersByTimeAsync(1));
           }
-          expect(search).toHaveBeenLastCalledWith('next');
+          expect(search).toHaveBeenLastCalledWith('next', expect.anything());
           expect(input).toHaveAttribute('aria-busy', 'true');
           expect(options.queryByText('No matching frameworks')).toBeNull();
           expect(options.queryAllByRole('option', {hidden: true})).toHaveLength(
