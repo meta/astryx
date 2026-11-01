@@ -44,7 +44,7 @@ system_specs: [spec:AST-002, spec:AST-020, spec:AST-029]
 | Behavior                | Unmatched text is preserved. Non-empty token values match literally from left to right. Structured tokens delegate to Badge and custom tokens to callers.                                          |
 | End-user impact         | Readers see mentions and other tokens in a sent message as the same chips they saw in the composer, in place, with the rest of the text unchanged.                                                 |
 | Builder impact          | None.                                                                                                                                                                                              |
-| Compatibility/readiness | Records shipped behavior; no public change. Evidence still pending for the claims listed as read from source.                                                                                      |
+| Compatibility/readiness | Records shipped behavior; no public change. One owner question stays open; evidence is pending for the claims listed as read from source.                                                          |
 | Review checks           | Reject zero-width matching, lost unmatched text, execution of custom renderers without a match, dropped root inputs, or claims about caller-owned content.                                         |
 | Governing rules         | `architecture:public-component-api/INV1, INV5–INV6, INV8–INV9`; `architecture:component-test-sufficiency/INV1–INV7`; ECMAScript RegExp progress semantics.                                         |
 
@@ -64,6 +64,14 @@ surrounding text.
 - Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **A shorter token can split a longer one.** When one token's value is a
+  prefix of another's and is listed first, the shorter value wins: with tokens
+  `@u1` then `@u12`, the text `@u12` renders the `@u1` chip followed by a
+  stray `2`. When two tokens share a value, the later definition renders
+  (OQ1).
 
 ## Ownership boundary
 
@@ -92,13 +100,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                    | Basis                                               |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| FR1 | The component MUST preserve unmatched text exactly and replace each matched non-empty serialized value at its original reading-order position. Where values overlap at a position, the token listed first in `tokens` matches; where two tokens share a value, the later definition renders. | Current source, tests, and docs                     |
-| FR2 | Empty token values MUST be ignored so the renderer always makes progress and never enters a zero-width global-match loop.                                                                                                                                                                    | Current source and tests                            |
-| FR3 | Structured matches MUST delegate label, variant, and icon rendering to Badge; custom matches MUST invoke the caller renderer only for an actual match.                                                                                                                                       | Current source, tests, and docs                     |
-| FR4 | Supported ref, DOM/data/ARIA, className, style, and xstyle inputs MUST reach or compose on the root span while the `chat-tokenized-text` target remains intact.                                                                                                                              | `architecture:public-component-api/INV5–INV6, INV8` |
-| FR5 | The component MUST remain render-only, with no state, Effect, listener, observer, timer, or owned asynchronous resource.                                                                                                                                                                     | Current source                                      |
+| ID  | Invariant                                                                                                                                                                                          | Basis                                               |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| FR1 | The component MUST preserve unmatched text exactly and replace each matched non-empty serialized value at its original reading-order position. How overlapping or duplicate values resolve is OQ1. | Current source, tests, and docs                     |
+| FR2 | Empty token values MUST be ignored so the renderer always makes progress and never enters a zero-width global-match loop.                                                                          | Current source and tests                            |
+| FR3 | Structured matches MUST delegate label, variant, and icon rendering to Badge; custom matches MUST invoke the caller renderer only for an actual match.                                             | Current source, tests, and docs                     |
+| FR4 | Supported ref, DOM/data/ARIA, className, style, and xstyle inputs MUST reach or compose on the root span while the `chat-tokenized-text` target remains intact.                                    | `architecture:public-component-api/INV5–INV6, INV8` |
+| FR5 | The component MUST remain render-only, with no state, Effect, listener, observer, timer, or owned asynchronous resource.                                                                           | Current source                                      |
 
 ### Allowed variation
 
@@ -168,14 +176,14 @@ optional during migration, so the map is deferred.
 | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------- | ------------------------------------ |
 | FR1–FR3, PR1 | `ChatTokenizedText.test.tsx` plain, single, multiple, repeated, special-character, surrounding-text, empty-value, and custom-match tests | plain, structured, custom, repeated, empty | Lost text, zero-width nontermination, or the wrong branch fails. | `audit:ChatTokenizedText/behavior`   |
 | FR4          | `ChatTokenizedText.test.tsx` ref and rest-prop tests                                                                                     | plain and tokenized roots                  | A dropped ref or prop fails.                                     | `audit:ChatTokenizedText/public-api` |
+| FR1–FR4      | `ChatTokenizedText.a11y.chromium.spec.ts` rendered states                                                                                | plain, structured, custom                  | A missing or duplicated `chat-tokenized-text` target fails.      | `audit:ChatTokenizedText/theming`    |
 | RTL relation | `apps/storybook/rtl-audit/verified-not-applicable.json`                                                                                  | all stories                                | —                                                                | `audit:ChatTokenizedText/i18n-rtl`   |
 
 Read from source, with no focused test yet:
 
-- FR1: the first-listed token winning an overlap, and the later definition
-  rendering for a shared value.
+- ORD2: values containing RegExp metacharacters matching literally.
 - FR3: `variant` and `icon` reaching the Badge.
-- FR4: `className`, `style`, and `xstyle` composition, and the target.
+- FR4: `className`, `style`, and `xstyle` composition.
 - FR5, AR3: no state, Effect, or interaction of the component's own.
 
 ## Decision log
@@ -184,7 +192,11 @@ No component-local decision is recorded.
 
 ## Open questions
 
-None.
+- **OQ1 — How should overlapping or duplicate token values resolve?**
+  (`human-api`) Today the first-listed value wins at a position, so a shorter
+  prefix splits a longer value, and the later of two identical values renders.
+  Whether matching should prefer the longest value, and how duplicates resolve,
+  changes what readers see.
 
 ## Content boundary
 
