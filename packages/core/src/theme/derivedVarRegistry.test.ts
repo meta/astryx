@@ -322,6 +322,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
+  // A CheckboxList row's own press paint, handed to its checkbox's box:
+  // written by the row's own press arms, never a value a theme author sets.
+  '--_checkbox-row-press-paint',
   '--_input-clear-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
   // author controls the surface transform/opacity as a whole, not these values.
