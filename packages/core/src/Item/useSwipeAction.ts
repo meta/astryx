@@ -499,6 +499,8 @@ export function useSwipeAction({
         velocity?: number;
         spring?: SpringDescription;
         onPass?: {offset: number; direction: 1 | -1; call: () => void};
+        /** Asked for in an input event's own task (see createSnapDrag). */
+        start?: 'next-frame';
       } = {},
     ): MotionHandle | null => {
       const snap = snapRef.current;
@@ -522,6 +524,7 @@ export function useSwipeAction({
         touchRelease,
         ...(options.velocity != null ? {velocity: options.velocity} : {}),
         ...(options.onPass != null ? {onPass: options.onPass} : {}),
+        ...(options.start != null ? {start: options.start} : {}),
       });
     },
     [setSwipeState],
@@ -570,6 +573,7 @@ export function useSwipeAction({
         cause: SettleCause;
         velocity?: number;
         spring?: SpringDescription;
+        start?: 'next-frame';
       },
     ) => {
       const sign = physicalSign(layout.side, layout.inlineSign);
@@ -605,17 +609,26 @@ export function useSwipeAction({
     [settle, slideOutThenFire],
   );
 
-  const close = useCallback(() => {
-    const layout = layoutRef.current;
-    if (!isOpen() || layout == null) {
-      return;
-    }
-    const root = rootRef.current;
-    if (root != null && root.contains(document.activeElement)) {
-      focusRowContent(root);
-    }
-    settle(layout, 'rest', 'idle');
-  }, [isOpen, settle]);
+  /**
+   * Closes an open row. `start: 'next-frame'` when asked for in an input
+   * event's own task (a key, a press, a tap): the close then starts at the
+   * first frame after that task, so a later listener of the event that holds
+   * the main thread delays it instead of letting it skip into its curve.
+   */
+  const close = useCallback(
+    (start?: 'next-frame') => {
+      const layout = layoutRef.current;
+      if (!isOpen() || layout == null) {
+        return;
+      }
+      const root = rootRef.current;
+      if (root != null && root.contains(document.activeElement)) {
+        focusRowContent(root);
+      }
+      settle(layout, 'rest', 'idle', start != null ? {start} : {});
+    },
+    [isOpen, settle],
+  );
 
   const activateEntry = useCallback(
     (fire: () => void, holdsOut: boolean) => {
@@ -628,12 +641,13 @@ export function useSwipeAction({
       if (root != null && root.contains(document.activeElement)) {
         focusRowContent(root);
       }
+      // An entry is activated in its press's or key's own task.
       if (holdsOut) {
-        slideOutThenFire(layout, fire, {cause: 'other'});
+        slideOutThenFire(layout, fire, {cause: 'other', start: 'next-frame'});
         return;
       }
       fire();
-      settle(layout, 'rest', 'idle');
+      settle(layout, 'rest', 'idle', {start: 'next-frame'});
     },
     [settle, slideOutThenFire],
   );
@@ -927,7 +941,7 @@ export function useSwipeAction({
         event.target instanceof Node &&
         !root.contains(event.target)
       ) {
-        close();
+        close('next-frame');
       }
     };
     const onScroll = (event: Event) => {
@@ -986,8 +1000,9 @@ export function useSwipeAction({
           ),
       }),
     tap => {
+      // Recognized at the lift, in its pointer event's own task.
       if (tap.state === 'ended') {
-        close();
+        close('next-frame');
       }
     },
   );
@@ -996,7 +1011,7 @@ export function useSwipeAction({
     (event: ReactKeyboardEvent) => {
       if (event.key === 'Escape' && isOpen()) {
         event.stopPropagation();
-        close();
+        close('next-frame');
       }
     },
     [close, isOpen],

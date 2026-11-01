@@ -192,6 +192,25 @@ describe('createSnapDrag (the options only Core passes)', () => {
     expect(travel(node)).toBe('-30px');
   });
 
+  it('starts a settle asked for in an input event’s own task at the next frame', () => {
+    const node = element();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-100, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+    });
+    const animate = vi.spyOn(snap.animator, 'animate');
+    snap.settleTo(0, {start: 'next-frame'});
+    expect(animate).toHaveBeenLastCalledWith(
+      {x: -100},
+      expect.anything(),
+      expect.objectContaining({start: 'next-frame'}),
+    );
+    snap.settleTo(1);
+    expect(animate.mock.lastCall?.[2]).not.toHaveProperty('start');
+  });
+
   it('settles on a snap point with the spring and velocity it is given, and returns its motion', async () => {
     const node = element();
     const onSettle = vi.fn();

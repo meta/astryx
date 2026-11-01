@@ -164,6 +164,12 @@ export interface SettleOptions {
    * from the drag.
    */
   onPass?: {offset: number; direction: 1 | -1; call: () => void};
+  /**
+   * The settle is asked for in an input event's own task (a key, a click, a
+   * tap): from rest it starts at the first frame after that task, however
+   * long the task runs (the animator's `start: 'next-frame'`).
+   */
+  start?: 'next-frame';
 }
 
 /** What `createSnapDrag` returns. */
@@ -273,7 +279,10 @@ export function createSnapDrag(
           ? {velocity: {[axis]: velocity}}
           : {}),
       },
-      {touchRelease: settleOptions.touchRelease === true},
+      {
+        touchRelease: settleOptions.touchRelease === true,
+        ...(settleOptions.start != null ? {start: settleOptions.start} : {}),
+      },
     );
     let finished = false;
     void handle.finished.then(arrived => {
