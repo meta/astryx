@@ -84,8 +84,8 @@ const INITIALS_FONT_SIZE_RATIO = 0.4;
  * 14.4px, 48px → 19.2px, …) — sizes nothing else in the system ever renders
  * text at, and 8px at `xsm` falls below the smallest step in the scale
  * (#6470). `xl`'s 51.2px ratio result has no step to snap to (42px, the
- * scale's own largest, is the closest available) — every other tier lands
- * within 1px of ratio-based value it replaces.
+ * scale's own largest, is the closest available). Each tier's size is also
+ * capped (NAMED_SIZE_INITIALS_MAX_PX).
  */
 const NAMED_SIZE_INITIALS_FONT_TOKEN: Record<
   AvatarNamedSize,
@@ -96,6 +96,21 @@ const NAMED_SIZE_INITIALS_FONT_TOKEN: Record<
   md: '--text-body-size', // 14px (ratio: 14.4px)
   lg: '--text-heading-2-size', // 20px (ratio: 19.2px)
   xl: '--text-display-1-size', // 42px (ratio: 51.2px)
+};
+
+/**
+ * The most an initials font size may grow, per named size: half the avatar's
+ * box. The type-scale tokens follow the root font size, but the box is fixed
+ * px, so at a 200% text size two-letter initials would outgrow the circle and
+ * clip (20/20/28/40/84px in a 20/24/36/48/128px box). At the default scale
+ * every token is already below its cap, so the rendered size is unchanged.
+ */
+const NAMED_SIZE_INITIALS_MAX_PX: Record<AvatarNamedSize, number> = {
+  xsm: 10,
+  sm: 12,
+  md: 18,
+  lg: 24,
+  xl: 64,
 };
 
 /**
@@ -305,11 +320,21 @@ const dynamicStyles = stylex.create({
  * `typography.scale` retints these too.
  */
 const initialsFontSizeStyles = stylex.create({
-  xsm: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.xsm]},
-  sm: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.sm]},
-  md: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.md]},
-  lg: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.lg]},
-  xl: {fontSize: typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.xl]},
+  xsm: {
+    fontSize: `min(${typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.xsm]}, ${NAMED_SIZE_INITIALS_MAX_PX.xsm}px)`,
+  },
+  sm: {
+    fontSize: `min(${typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.sm]}, ${NAMED_SIZE_INITIALS_MAX_PX.sm}px)`,
+  },
+  md: {
+    fontSize: `min(${typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.md]}, ${NAMED_SIZE_INITIALS_MAX_PX.md}px)`,
+  },
+  lg: {
+    fontSize: `min(${typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.lg]}, ${NAMED_SIZE_INITIALS_MAX_PX.lg}px)`,
+  },
+  xl: {
+    fontSize: `min(${typeScaleVars[NAMED_SIZE_INITIALS_FONT_TOKEN.xl]}, ${NAMED_SIZE_INITIALS_MAX_PX.xl}px)`,
+  },
 });
 
 const BORDER_WIDTH = 2;

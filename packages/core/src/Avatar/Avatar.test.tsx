@@ -65,16 +65,39 @@ describe('Avatar', () => {
     expect(style).not.toContain('--_avatar-fallback-font-size');
   });
 
-  it.each(['xsm', 'sm', 'md', 'lg', 'xl'] as const)(
-    'size %s takes the type-scale-aligned static style, not the proportional dynamic one (#6470)',
-    size => {
+  // StyleX compiles a named tier's font size into an atomic class, so its
+  // value is only visible in the injected stylesheet: read the declaration the
+  // element's own classes carry.
+  function fontSizeOf(el: HTMLElement): string | null {
+    const classes = el.className.split(/\s+/).filter(Boolean);
+    for (const sheet of Array.from(document.styleSheets)) {
+      for (const rule of Array.from(sheet.cssRules)) {
+        const match = rule.cssText.match(
+          /^\.([\w-]+)[^{]*\{\s*font-size:\s*([^;]+);/,
+        );
+        if (match != null && classes.includes(match[1])) {
+          return match[2];
+        }
+      }
+    }
+    return null;
+  }
+
+  it.each([
+    ['xsm', '--text-heading-6-size', 10],
+    ['sm', '--text-heading-6-size', 12],
+    ['md', '--text-body-size', 18],
+    ['lg', '--text-heading-2-size', 24],
+    ['xl', '--text-display-1-size', 64],
+  ] as const)(
+    'size %s reads its type-scale token, capped at half the box so a larger text size cannot clip the initials (#6470)',
+    (size, token, maxPx) => {
       render(<Avatar name="Ada Lovelace" size={size} />);
       const initials = screen.getByText('AL');
-      // The named tiers no longer go through the dynamic ratio style at all,
-      // so none of their font sizes are set as an inline custom property —
-      // only the numeric-size fallback (tested above) still does that.
-      const style = initials.getAttribute('style') ?? '';
-      expect(style).not.toMatch(/font-size/i);
+      expect(fontSizeOf(initials)).toBe(`min(var(${token}),${maxPx}px)`);
+      // The named tiers never go through the dynamic ratio style, so none of
+      // them sets a font size as an inline custom property.
+      expect(initials.getAttribute('style') ?? '').not.toMatch(/font-size/i);
     },
   );
 
