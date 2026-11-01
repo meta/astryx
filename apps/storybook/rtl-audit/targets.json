@@ -625,15 +625,6 @@
     }
   },
   {
-    "component": "Collapsible",
-    "storyId": "core-collapsible--single-mode",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-collapsible-trigger .astryx-icon",
-      "next": ".astryx-collapsible-trigger span:text-is(\"General Settings\")"
-    }
-  },
-  {
     "component": "Step",
     "storyId": "core-stepper--default-horizontal",
     "dims": ["D2"],
@@ -692,17 +683,17 @@
     }
   },
   {
-    "component": "NavHeadingMenu",
-    "storyId": "core-navmenu--default",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": ".astryx-nav-heading-menu",
-      "overlayRoot": "body"
-    }
-  },
-  {
     "component": "Dialog",
     "storyId": "core-dialog--default",
     "dims": []
+  },
+  {
+    "component": "NavHeadingMenu",
+    "storyId": "core-navmenu--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
+      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
+    }
   }
 ]

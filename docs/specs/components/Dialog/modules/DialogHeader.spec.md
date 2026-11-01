@@ -166,7 +166,7 @@ For this slot-targeted prop, `inline` means the slot's logical inline-end edge,
 | FR6–FR7             | Focused end-slot class-selection assertions                                                                 | close only; end content only; both; explicit `inline`, `block`, and `all` | An omitted prop changes released geometry, or an explicit value selects the wrong axes.      |
 | FR8                 | Source inspection, RTL CI, interaction tests, and focused real-browser geometry                             | LTR and RTL; custom end control; close action                             | Physical margins, caller-controlled amounts, or hit-target changes enter the implementation. |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                               | all five module anatomy entries and targets                               | Anatomy, docs, runtime targets, and the module map drift.                                    |
-| RTL relation        | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Dialog / Default` (dialog opened) | Title block and close control; LTR and RTL                                | A title that is not at the inline start of the close control fails D2.                       | `audit:DialogHeader/i18n-rtl` |
+| RTL relation        | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Dialog / Default` (dialog opened) | Title block and close control; LTR and RTL                                | A title that is not at the inline start of the close control fails D2.                       |
 
 ## Decision log
 
