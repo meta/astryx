@@ -311,10 +311,11 @@ they are separately named.
   run of the CI and Main workflows, of any event, waits for room before its jobs
   start: it starts once the other active runs' estimated jobs plus its own most
   fit under about ninety, and a pull-request run also waits while a `main` full
-  check or release re-check is waiting, looking twice on a pull request, at once
-  and after twelve minutes, and every two minutes for at most fifteen for `main`
-  (DEC-16). A pull request that may not run CI admits nothing, and waiting never
-  fails a job, so every required context reports as before.
+  check, release re-check or baseline capture is waiting, looking twice on a
+  pull request, at once and after twelve minutes, and every two minutes for at
+  most fifteen for `main` (DEC-16). A pull request that may not run CI admits
+  nothing, and waiting never fails a job, so every required context reports as
+  before.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -587,10 +588,11 @@ counts none, so waiting runs never hold each other back, and a run admitted in
 the last three minutes counts at least its planned most. A look reads the active
 runs and each CI or Main run's jobs once, so it costs two run listings plus one
 call per active CI or Main run. A pull request looks at most twice, and a run
-starts rather than spend a low API budget. A `main`
-full check or release re-check goes first: while one waits, pull-request runs
-wait too. Every job ends within its fifteen-minute budget, so `main` fits within
-fifteen minutes. Nothing is reserved for `main` outside those minutes.
+starts rather than spend a low API budget. A `main` full check, release re-check
+or baseline capture (every dispatch of the CI workflow) goes first: while one
+waits, pull-request runs wait too. Every job ends within its fifteen-minute
+budget, so `main` fits within fifteen minutes. Nothing is reserved for `main`
+outside those minutes.
 
 CI can still pass ninety in three rare, bounded ways:
 

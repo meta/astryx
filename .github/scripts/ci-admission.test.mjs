@@ -305,9 +305,12 @@ describe('ci admission', () => {
     maxWait = 15,
     maxLooks = 8,
     budget = 4000,
+    latencyMs = 0,
+    random = 0,
   } = {}) {
     vi.useFakeTimers({now: NOW});
-    vi.spyOn(Math, 'random').mockReturnValue(0);
+    vi.spyOn(Math, 'random').mockReturnValue(random);
+    const lookTimes = [];
     let looks = 0;
     let calls = 0;
     const logs = {info: [], warning: []};
@@ -319,7 +322,12 @@ describe('ci admission', () => {
             if (error) throw error;
             expect([event, per_page]).toEqual([undefined, 100]);
             calls += 1;
-            if (status === 'in_progress') looks += 1;
+            if (latencyMs > 0)
+              await new Promise(resolve => setTimeout(resolve, latencyMs));
+            if (status === 'in_progress') {
+              looks += 1;
+              lookTimes.push(Date.now() - NOW);
+            }
             return {
               data: {
                 workflow_runs: runs().filter(run => run.status === status),
@@ -371,7 +379,7 @@ describe('ci admission', () => {
     done.catch(() => {});
     await vi.advanceTimersByTimeAsync(20 * 60_000);
     await done;
-    return {...logs, looks, calls};
+    return {...logs, looks, calls, lookTimes};
   }
 
   it("admits at once at today's load: 56 live jobs and many pull-request runs waiting", async () => {
@@ -424,6 +432,22 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(freed).toMatchObject({looks: 2, warning: []});
+  });
+
+  it('waits out its second look even when the first is slow and the jitter long', async () => {
+    // 8 s per run listing and a jitter of almost 20 s: the second look still
+    // comes, about twelve minutes in, rather than giving up after one.
+    const pull = await admit({
+      active: prs(6),
+      maxWait: 12,
+      maxLooks: 2,
+      latencyMs: 8_000,
+      random: 0.999,
+    });
+    expect(pull.looks).toBe(2);
+    expect(pull.lookTimes[1]).toBeGreaterThan(11 * 60_000);
+    // Recorded once its first listing returns, 8 s after the look began.
+    expect(pull.lookTimes[1]).toBeLessThanOrEqual(12 * 60_000 + 8_000);
   });
 
   it('looks every two minutes for a main run, for at most fifteen', async () => {

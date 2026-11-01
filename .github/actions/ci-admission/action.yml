@@ -167,8 +167,11 @@ runs:
                 core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.`);
                 return;
               }
-              const wait = LOOK_MS + Math.floor(Math.random() * JITTER_MS);
-              if (look >= MAX_LOOKS || Date.now() - started + wait > MAX_WAIT_MS) {
+              // The time left decides, not the look's own API time: a slow
+              // look still waits the rest of the way for its next one.
+              const left = MAX_WAIT_MS - (Date.now() - started);
+              const wait = Math.min(LOOK_MS + Math.floor(Math.random() * JITTER_MS), left);
+              if (look >= MAX_LOOKS || wait <= 0) {
                 core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes (about ${others} other jobs${mainWaiting ? ', a main check waiting' : ''}); starting.`);
                 return;
               }
