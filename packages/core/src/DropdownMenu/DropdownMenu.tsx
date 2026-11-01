@@ -351,7 +351,7 @@ export type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>;
 export type DropdownMenuPresentation = AdaptivePresentation;
 
 /**
- * The props a custom `trigger` spreads onto the control that opens the menu.
+ * The props `renderTrigger` spreads onto the control that opens the menu.
  * They carry the press model — a mouse opens on press-down, a held finger
  * opens with the finger down — the keyboard opens (Enter, Space, ArrowDown,
  * ArrowUp), the toggle click, and the ARIA wiring that names the menu after
@@ -1736,7 +1736,7 @@ function DropdownMenuPopover({
             }}
             {...menuPress.menuProps}
             {...mergeProps(
-              themeProps('dropdown-menu'),
+              themeProps('dropdown-menu', {presentation: 'popover'}),
               stylex.props(
                 styles.dropdown,
                 resolvedMaxHeight != null &&
@@ -1790,8 +1790,8 @@ export function DropdownMenu(props: DropdownMenuProps) {
   // Both presentations hang the menu off ONE control.
   useDevWarning(
     'DropdownMenu',
-    '`button` and `trigger` are mutually exclusive: the menu hangs off one ' +
-      'control. `trigger` wins; drop `button`.',
+    '`button` and `renderTrigger` are mutually exclusive: the menu hangs ' +
+      'off one control. `renderTrigger` wins; drop `button`.',
     props.button != null && props.renderTrigger != null,
   );
   const requestedPresentation =
