@@ -979,7 +979,9 @@ jobs:
             await decideRunLabels({github, context, core});
 
   build-storybook:
-    needs: [admission]
+    # Starts beside admission instead of after it: it is one job, and every
+    # job that uses its build also needs admission, so the run's heavy legs
+    # still wait for room (spec:AST-030 FR16, DEC-16).
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
@@ -1442,7 +1444,7 @@ jobs:
   # pr-a11y itself, so neither runs there.
   pr-a11y-shard:
     name: pr-a11y (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
     strategy:
       fail-fast: false
@@ -1793,7 +1795,7 @@ jobs:
   # pr-a11y.
   a11y-contracts-shard:
     name: Accessibility spec-test contracts (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
     # Six legs: at three, the slowest leg took ~20 minutes, held by its longest
     # spec file; files longer than a leg's share are now cut across legs
@@ -1904,7 +1906,7 @@ jobs:
           delete-merged: true
 
   pr-interaction:
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
@@ -2022,7 +2024,7 @@ jobs:
   # required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
