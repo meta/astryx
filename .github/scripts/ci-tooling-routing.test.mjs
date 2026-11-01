@@ -10,7 +10,9 @@
  * @position Workflow contract for spec:AST-030's first implementation slice.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
@@ -130,11 +132,9 @@ describe('Node-tooling CI routing', () => {
     ]) {
       expect(step(ci.jobs['test-build'], name).if).toBe(BROAD_ONLY);
     }
-    // The merge-base size build is heavy build work and stays off the
-    // Node-tooling, docsite, and spec lanes.
-    expect(step(ci.jobs['size-base'], 'Setup Node and pnpm').if).toContain(
-      BROAD_ONLY,
-    );
+    // No size-base job: Main keeps the merge base's sizes, and build-storybook
+    // builds the base only when Main kept no record.
+    expect(ci.jobs['size-base']).toBeUndefined();
     expect(rootScripts['test:theme-family'].split(' && ')).toEqual([
       'pnpm -F @astryxdesign/core build',
       'pnpm -F @astryxdesign/sandbox generate:theme-family',
@@ -237,43 +237,114 @@ describe('Node-tooling CI routing', () => {
     );
   });
 
-  it("measures the merge base from main's kept build, building it only without one", () => {
+  it("reads the merge base's sizes from main's kept records, building the base only without one", () => {
     const main = load('.github/workflows/deploy.yml');
-    const keep = step(
-      main.jobs.typecheck,
-      "Keep this commit's package builds for PR size reports",
+    expect(step(main.jobs.typecheck, 'Record component sizes').run).toBe(
+      'node .github/scripts/analyze-pr.js --main-record --output component-size.json',
     );
-    expect(keep.with.name).toBe(
-      'dists-main-${{ needs.main-commit.outputs.sha }}',
-    );
-    const job = ci.jobs['size-base'];
-    expect(job.permissions.actions).toBe('read');
     expect(
-      step(job, "Find main's build of the merge base")['continue-on-error'],
-    ).toBe(true);
-    const download = step(job, "Download main's build of the merge base");
+      step(
+        main.jobs.typecheck,
+        "Keep this commit's component sizes for PR size reports",
+      ).with.name,
+    ).toBe('component-size-main-${{ needs.main-commit.outputs.sha }}');
+    // Main no longer keeps whole package builds for pull requests.
+    expect(
+      step(
+        main.jobs.typecheck,
+        "Keep this commit's package builds for PR size reports",
+      ),
+    ).toBeUndefined();
+    const job = ci.jobs['build-storybook'];
+    expect(job.permissions.actions).toBe('read');
+    const find = step(job, "Find main's size records for the merge base");
+    expect(find['continue-on-error']).toBe(true);
+    const download = step(
+      job,
+      "Download main's component sizes for the merge base",
+    );
     expect(download['continue-on-error']).toBe(true);
     expect(download.with.name).toBe(
-      'dists-main-${{ steps.merge-base.outputs.sha }}',
+      'component-size-main-${{ steps.merge-base.outputs.sha }}',
     );
-    const build = step(job, "Build the merge base's component packages");
-    expect(build.if).toContain("steps.download.outcome != 'success'");
-    expect(build.run).not.toContain('pnpm install');
-    // Measuring needs the base's dependencies on both paths.
-    const install = step(job, "Install the merge base's dependencies");
-    expect(install.run).toBe('pnpm install --frozen-lockfile');
-    expect(install.if).not.toContain('steps.download');
-    // Only Main's own run on main for the merge-base commit counts; both
-    // merge-base lookups share one helper (main-artifact.test.mjs).
-    const find = step(job, "Find main's build of the merge base").with.script;
-    expect(find).toContain('.github/scripts/lib/main-artifact.cjs');
-    expect(find).toContain('sha: process.env.BASE_SHA');
-    const packageFind = step(
+    // The analysis reads the record only when it was downloaded.
+    const analyze = step(job, 'Analyze components').run;
+    expect(analyze).toContain(
+      'if [ -f .component-size-base/component-size.json ]',
+    );
+    expect(analyze).toContain(
+      '--base-record .component-size-base/component-size.json',
+    );
+    // Only Main's own run on main for the merge-base commit counts, through
+    // the shared lookup helper (main-artifact.test.mjs).
+    expect(find.with.script).toContain('.github/scripts/lib/main-artifact.cjs');
+    expect(find.with.script).toContain('sha: process.env.BASE_SHA');
+    // The lookup and download come before the analysis that reads them.
+    const names = job.steps.map(entry => entry.name);
+    expect(
+      names.indexOf("Download main's component sizes for the merge base"),
+    ).toBeLessThan(names.indexOf('Analyze components'));
+    // Without a record the merge base builds beside the Storybook build, and
+    // the analysis waits for it, so every changed component keeps a before
+    // size (AST-080 FR8).
+    const start = step(job, 'Start building the merge base without a record');
+    // Main kept no record, or its download failed: either way the base builds.
+    expect(start.if).toContain("steps.component-download.outcome != 'success'");
+    expect(download.id).toBe('component-download');
+    expect(start.run).toContain(
+      'node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json',
+    );
+    expect(start.run).toMatch(/\|\| touch base-build\.failed &$/m);
+    expect(
+      names.indexOf("Find main's size records for the merge base"),
+    ).toBeLessThan(
+      names.indexOf('Start building the merge base without a record'),
+    );
+    expect(
+      names.indexOf('Start building the merge base without a record'),
+    ).toBeLessThan(names.indexOf('Build packages and Storybook'));
+    const wait = step(job, "Wait for the merge base's sizes");
+    expect(wait.if).toContain("steps.base-build.outputs.started == 'true'");
+    expect(names.indexOf("Wait for the merge base's sizes")).toBeLessThan(
+      names.indexOf('Analyze components'),
+    );
+  });
+
+  it.each([
+    ['built', 'base-build.done', true, '::notice title=Merge base built::'],
+    [
+      'failed',
+      'base-build.failed',
+      false,
+      '::warning title=Merge base not built::',
+    ],
+  ])('collects a merge base that %s', (_label, marker, kept, message) => {
+    const wait = step(
       ci.jobs['build-storybook'],
-      "Find main's package size for the merge base",
-    ).with.script;
-    expect(packageFind).toContain('.github/scripts/lib/main-artifact.cjs');
-    expect(packageFind).toContain('sha: process.env.BASE_SHA');
+      "Wait for the merge base's sizes",
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+    try {
+      fs.mkdirSync(path.join(root, '.component-size-base'));
+      fs.writeFileSync(
+        path.join(root, '.component-size-base/component-size.json'),
+        '{}',
+      );
+      fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
+      fs.writeFileSync(path.join(root, marker), '');
+      const out = execFileSync('bash', ['-e', '-c', wait.run], {
+        cwd: root,
+        encoding: 'utf8',
+      });
+      expect(out).toContain(message);
+      expect(
+        fs.existsSync(
+          path.join(root, '.component-size-base/component-size.json'),
+        ),
+      ).toBe(kept);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
   });
 
   it('builds no Sandbox and builds Storybook once per pull-request run', () => {

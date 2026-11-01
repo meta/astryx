@@ -15,6 +15,7 @@ import {
   confirmSourceRunIdentity,
   PR_ANALYSIS_MARKER,
   reconcilePrComment,
+  trustedFrames,
   resolveWorkflowRunPullRequest,
   validateAnalysisMetadata,
 } from './pr-preview.mjs';
@@ -492,6 +493,7 @@ describe('trusted PR preview identity', () => {
 
     expect(writeCapableJobs).toEqual([
       'spec-only-reconcile',
+      'frames',
       'comment',
       'report',
     ]);
@@ -561,7 +563,13 @@ describe('trusted PR preview identity', () => {
 describe('PR Comment keeps its outcome off main', () => {
   // workflow_run attaches these jobs to main's latest commit, so a failing step
   // here would turn main red for a pull request's problem.
-  const LANE = ['resolve', 'spec-only-reconcile', 'comment', 'report'];
+  const LANE = [
+    'resolve',
+    'spec-only-reconcile',
+    'frames',
+    'comment',
+    'report',
+  ];
   const OPTIONAL = new Set(['actions/download-artifact@v8']);
 
   it.each(LANE)('never fails the run from the %s job', name => {
@@ -588,10 +596,20 @@ describe('PR Comment keeps its outcome off main', () => {
 
   it('reports the outcome on the head of the run the event names', () => {
     const report = PR_COMMENT_WORKFLOW.jobs.report;
-    expect(report.needs).toEqual(['resolve', 'spec-only-reconcile', 'comment']);
+    expect(report.needs).toEqual([
+      'resolve',
+      'spec-only-reconcile',
+      'frames',
+      'comment',
+    ]);
     const [step] = report.steps;
     expect(step.env.HEAD_SHA).toBe('${{ github.event.workflow_run.head_sha }}');
-    for (const name of ['resolve', 'spec-only-reconcile', 'comment']) {
+    for (const name of [
+      'resolve',
+      'spec-only-reconcile',
+      'frames',
+      'comment',
+    ]) {
       expect(step.env.FAILED).toContain(
         `needs.${name}.outputs.failed == 'true'`,
       );
@@ -1357,4 +1375,68 @@ describe('PR comment preview reconciliation', () => {
       ).toBe(origin);
     },
   );
+});
+
+describe('visual frames', () => {
+  const identity = {
+    prNumber: 9171,
+    headSha: 'a'.repeat(40),
+    baseRepository: 'meta/astryx',
+  };
+  const imageBase = `https://raw.githubusercontent.com/meta/astryx/assets/pr-9171/visual/${'a'.repeat(40)}/`;
+  const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'frames-'));
+
+  it("passes frames only from this pull request's assets branch for this head", () => {
+    const published = JSON.stringify(['before/b.png', 'diff/b.png']);
+    const file = trustedFrames({
+      frames: {imageBase, published},
+      identity,
+      inputs: tmp(),
+    });
+    expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
+      imageBase,
+      published: ['before/b.png', 'diff/b.png'],
+    });
+    for (const bad of [
+      imageBase.replace('pr-9171', 'pr-1'),
+      imageBase.replace('a'.repeat(40), 'b'.repeat(40)),
+      'https://evil.example/visual/',
+    ])
+      expect(
+        trustedFrames({
+          frames: {imageBase: bad, published},
+          identity,
+          inputs: tmp(),
+        }),
+      ).toBeNull();
+  });
+
+  it('refuses frame paths that are not before/after/diff PNGs', () => {
+    for (const published of [
+      '["../x.png"]',
+      '["other/b.png"]',
+      '[]',
+      'not json',
+    ])
+      expect(
+        trustedFrames({
+          frames: {imageBase, published},
+          identity,
+          inputs: tmp(),
+        }),
+      ).toBeNull();
+  });
+
+  it('gives only the frames job contents: write, with no persisted credentials', () => {
+    const {jobs} = PR_COMMENT_WORKFLOW;
+    for (const [name, job] of Object.entries(jobs))
+      expect(job.permissions?.contents === 'write', name).toBe(
+        name === 'frames',
+      );
+    const checkout = jobs.frames.steps.find(step =>
+      String(step.uses).startsWith('actions/checkout@'),
+    );
+    expect(checkout.with).toEqual({ref: 'main', 'persist-credentials': false});
+    expect(jobs.comment.needs).toEqual(['resolve', 'frames']);
+  });
 });

@@ -1,0 +1,9 @@
+{
+  "name": "@astryxdesign/canary",
+  "astryx": {
+    "canaryOnly": true
+  },
+  "exports": {
+    ".": "./index.js"
+  }
+}

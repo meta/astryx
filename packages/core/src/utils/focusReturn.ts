@@ -111,9 +111,11 @@ export function moveFocusLeftBehind(
  * autofocus target, the control that opened a Dialog, or a menu trigger the
  * caller renders. Pass `options` (for example `preventScroll`) as to `focus()`.
  *
- * `modality` defaults to the page's last input. A caller moving focus inside a
- * second document (a same-origin iframe, a Document Picture-in-Picture window)
- * passes that document's, which it tracks with `trackInteractionModalityIn`.
+ * `modality` defaults to the last input in the element's own document: the
+ * page's for an element on the page, and a second document's (a same-origin
+ * iframe, a Document Picture-in-Picture window) for an element there, which
+ * the component tracks by passing its element's ref to
+ * `useInteractionModalityTracking`.
  *
  * Make sure modality tracking is active (`useInteractionModalityTracking()`)
  * in the component that calls this.
@@ -121,7 +123,7 @@ export function moveFocusLeftBehind(
 export function focusForLastInput(
   element: HTMLElement,
   options?: FocusOptions,
-  modality: InteractionModality = getInteractionModality(),
+  modality: InteractionModality = getInteractionModality(element),
 ): void {
   // A text-entry field paints its own focus treatment to show where typing
   // goes, and an extra blur there can run validation or mark it touched. The

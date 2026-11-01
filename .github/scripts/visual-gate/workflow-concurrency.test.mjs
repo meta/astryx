@@ -63,7 +63,10 @@ describe('PR report and deployment workflow contracts', () => {
       );
       expect(value.jobs[job].concurrency['cancel-in-progress']).toBe(false);
     }
-    expect(value.jobs.comment.needs).toBe('resolve');
+    expect(value.jobs.comment.needs).toEqual(['resolve', 'frames']);
+    expect(value.jobs.frames.concurrency.group).toBe(
+      'pr-frames-${{ needs.resolve.outputs.pr_number }}',
+    );
     // The comment job reads this head's preview state once; no job runs on a
     // deployment event, and none waits for one.
     expect(value.jobs.comment.permissions.deployments).toBe('read');
@@ -78,7 +81,7 @@ describe('PR report and deployment workflow contracts', () => {
     const value = workflow('pr-comment.yml');
     const reconcile = value.slice(
       value.indexOf('  spec-only-reconcile:'),
-      value.indexOf('  comment:'),
+      value.indexOf('  frames:'),
     );
     expect(reconcile).toContain('reconcilePrComment');
     expect(reconcile).toContain('createIfMissing: false');
