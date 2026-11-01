@@ -4416,6 +4416,47 @@ describe('DropdownMenu header and footer', () => {
   });
 });
 
+describe('DropdownMenu trigger tooltip', () => {
+  it('does not restore a hovered tooltip after a pointer pick', async () => {
+    const onSelect = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions', tooltip: 'More actions'}}
+        items={[{label: 'Rename', onClick: onSelect}]}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Actions'});
+    fireEvent.mouseEnter(trigger);
+    await waitFor(() => {
+      expect(screen.getByRole('tooltip', {hidden: true})).toHaveAttribute(
+        'popover-open',
+      );
+    });
+
+    // Chromium marks the menu's script focus during pointerdown as visible,
+    // before mousedown updates the modality. jsdom does not model that step.
+    const matches = trigger.matches.bind(trigger);
+    const focusVisible = vi
+      .spyOn(trigger, 'matches')
+      .mockImplementation(
+        selector => selector === ':focus-visible' || matches(selector),
+      );
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse', button: 0});
+    focusVisible.mockImplementation(selector =>
+      selector === ':focus-visible' ? false : matches(selector),
+    );
+    fireEvent.pointerUp(trigger, {pointerType: 'mouse', button: 0});
+    fireEvent.mouseLeave(trigger);
+    fireEvent.click(screen.getByText('Rename'));
+
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByRole('tooltip', {hidden: true})).not.toHaveAttribute(
+      'popover-open',
+    );
+  });
+});
+
 describe('DropdownMenu trigger refs across renders', () => {
   // A ref that is a new function on every render makes React call it again on
   // every commit (with null, then the element). Each call moved the menu's
