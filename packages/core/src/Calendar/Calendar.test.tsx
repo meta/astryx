@@ -456,6 +456,18 @@ describe('Calendar', () => {
       expect(screen.getByText('March 2019 – April 2019')).toBeInTheDocument();
     });
 
+    it('keeps max in the last pane when today is still in the month of max', () => {
+      // Today is 21 August 2026. Opening on [August, September] would leave
+      // the second pane with no selectable day.
+      render(<Calendar numberOfMonths={2} max="2026-08-21" />);
+
+      expect(screen.getByText('July 2026 – August 2026')).toBeInTheDocument();
+      expect(getDayButton(21, 'August', 2026)).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    });
+
     it('still honors an explicit focusDate outside the window', () => {
       render(
         <Calendar focusDate="2026-01-01" min="2027-03-04" max="2027-06-30" />,

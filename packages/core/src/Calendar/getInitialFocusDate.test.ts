@@ -57,6 +57,27 @@ describe('getInitialFocusDate', () => {
     expect(focusISO({max: '2020-02-09', numberOfMonths: 2})).toBe('2020-01-01');
   });
 
+  it('lands max in the last pane when today is still in the month of max', () => {
+    // Today is 2026-08-21: `max` of today, or later in August, would
+    // otherwise open on [August, September] with September all disabled.
+    expect(focusISO({max: '2026-08-21', numberOfMonths: 2})).toBe('2026-07-01');
+    expect(focusISO({max: '2026-08-31', numberOfMonths: 2})).toBe('2026-07-01');
+  });
+
+  it('keeps today in the single-pane layout when today is in the month of max', () => {
+    expect(focusISO({max: '2026-08-31'})).toBe('2026-08-21');
+  });
+
+  it('leaves the two-month layout on today when max is a later month', () => {
+    expect(focusISO({max: '2026-09-30', numberOfMonths: 2})).toBe('2026-08-21');
+  });
+
+  it('does not shift a two-month layout back past min when today is in the month of max', () => {
+    expect(
+      focusISO({min: '2026-08-03', max: '2026-08-31', numberOfMonths: 2}),
+    ).toBe('2026-08-03');
+  });
+
   it('does not shift the two-month layout back past min', () => {
     expect(
       focusISO({min: '2020-02-03', max: '2020-02-09', numberOfMonths: 2}),
