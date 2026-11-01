@@ -57,6 +57,7 @@ import {useTranslator} from '../i18n';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {getFocusableElements} from '../hooks/useFocusTrap';
+import {readAccessibleName} from '../utils/accessibleName';
 import {
   moveFocusLeftBehind,
   noteFocusWithin,
@@ -942,9 +943,9 @@ function controlsOutsideRows(
   );
 }
 
-/** A control's accessible name as its attributes or text give it. */
+/** A control's accessible name, so a re-rendered control is found again. */
 function controlName(control: HTMLElement): string {
-  return control.getAttribute('aria-label') ?? control.textContent.trim();
+  return readAccessibleName(control) ?? '';
 }
 
 /**

@@ -44,6 +44,7 @@ import React, {
   useState,
   type ReactNode,
 } from 'react';
+import {readAccessibleName} from '../utils/accessibleName';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
 import {Button, type ButtonProps} from '../Button';
@@ -524,77 +525,6 @@ function holdInvokerThroughPress(
   };
   doc.addEventListener('pointerup', onPressEnd, true);
   doc.addEventListener('pointercancel', onPressEnd, true);
-}
-
-/** Text an assistive technology reads from `element`, `aria-hidden` left out. */
-function visibleText(element: Element): string {
-  const copy = element.cloneNode(true) as Element;
-  for (const hidden of copy.querySelectorAll('[aria-hidden="true"]')) {
-    hidden.remove();
-  }
-  // An icon-only control is named by its image's alt, an inner aria-label, or
-  // an svg title rather than by text, so those count as its contents too.
-  for (const named of copy.querySelectorAll('img[alt], [aria-label]')) {
-    const name =
-      named.getAttribute(named.tagName === 'IMG' ? 'alt' : 'aria-label') ?? '';
-    named.replaceWith(copy.ownerDocument.createTextNode(` ${name} `));
-  }
-  for (const svg of copy.querySelectorAll('svg')) {
-    const title = svg.querySelector('title')?.textContent ?? '';
-    svg.replaceWith(copy.ownerDocument.createTextNode(` ${title} `));
-  }
-  return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
-}
-
-/**
- * The name a custom trigger gives the menu it labels (`aria-labelledby` on
- * the menu points at it): its own `aria-labelledby` targets, its
- * `aria-label`, its text, or its `title`, in that order.
- */
-function readAccessibleName(element: HTMLElement | null): string | undefined {
-  if (element == null) {
-    return undefined;
-  }
-  const labelledBy = element.getAttribute('aria-labelledby');
-  if (labelledBy != null && labelledBy.trim() !== '') {
-    const text = labelledBy
-      .split(/\s+/)
-      .map(id => element.ownerDocument.getElementById(id))
-      .filter((node): node is HTMLElement => node != null)
-      .map(visibleText)
-      .join(' ')
-      .trim();
-    if (text !== '') {
-      return text;
-    }
-  }
-  const label = element.getAttribute('aria-label')?.trim();
-  if (label) {
-    return label;
-  }
-  // A form control is named by its own <label>s; an input button by its value.
-  const labels =
-    'labels' in element
-      ? Array.from((element as HTMLInputElement).labels ?? [])
-      : [];
-  const labelText = labels.map(visibleText).join(' ').trim();
-  if (labelText !== '') {
-    return labelText;
-  }
-  if (
-    element instanceof HTMLInputElement &&
-    ['button', 'submit', 'reset'].includes(element.getAttribute('type') ?? '')
-  ) {
-    const value = element.value.trim();
-    if (value !== '') {
-      return value;
-    }
-  }
-  const text = visibleText(element);
-  if (text !== '') {
-    return text;
-  }
-  return element.getAttribute('title')?.trim() || undefined;
 }
 
 function DropdownMenuBottomSheet({
