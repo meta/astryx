@@ -609,6 +609,36 @@ describe('busyWindowProof in a slow tail', () => {
     expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
   });
 
+  it('under one step a frame, still fails a two-frame freeze that ends in a three-step catch-up, and reads one early frame as moved', () => {
+    // 0.8 px a frame on a 1 px grid, then the same doubled on a 2 px grid,
+    // the control moving on every frame. Frame 42 shows 33 px (0.8 px a frame
+    // from 0); an early frame there adds at most one step to the catch-up.
+    const control = moving().map(
+      f =>
+        ({
+          ...f,
+          box: {x: f.box!.y, y: 0, width: 12, height: 12},
+        }) as TrackedFrame,
+    );
+    const at08 = (held: readonly number[], grid: number) =>
+      moving().map((f, i) => {
+        const shown = held.includes(i) ? 42 : i;
+        return {
+          ...f,
+          box: {...f.box!, y: grid * Math.floor(0.8 * shown)},
+        } as TrackedFrame;
+      });
+    for (const grid of [1, 2]) {
+      // 32, 32, 33, 33, 33, 36 (doubled on the 2 px grid): a freeze.
+      const frozen = busyWindowProof(at08([43, 44], grid), BLOCK, {control});
+      expect(frozen.stepPx).toBe(grid);
+      expect(frozen.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
+      // 32, 32, 33, 33, 35: one early frame, then the frames go on.
+      const early = busyWindowProof(at08([43], grid), BLOCK, {control});
+      expect(early.verdict.failures).toEqual([]);
+    }
+  });
+
   it('still fails a frame that shows no step in a fast window', () => {
     // 3 px a frame, the control moving on every frame: one repeated frame is
     // a freeze there, and its 6 px catch-up two steps past the grid.

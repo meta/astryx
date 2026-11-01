@@ -142,13 +142,14 @@ export interface BusyControlRead {
   /** The control's longest time without a new position, the edges included. */
   readonly longestStallMs: number;
   /**
-   * Of `movedWith`, the frames counted as moved because the component's motion
-   * there was under one cast step per frame (see `busyWindowProof`).
+   * Of `movedWith`, the frames counted as moved where the cast could not show
+   * the component's motion: under one cast step per frame, or a frame
+   * delivered early under two (see `busyWindowProof`).
    */
   readonly belowStep: number;
   /**
    * The component's longest time without a new position, read the same way:
-   * a run of unchanged frames under one cast step per frame is motion.
+   * a run of unchanged frames the cast could not show is motion.
    */
   readonly componentStallMs: number;
 }
@@ -470,8 +471,8 @@ function slowStretches(
  * over the frames just before the run, a frame delivered early can show no
  * step too, so the change may carry the motion of every frame the run held
  * at that pace, to the nearest step. The run also has to read as a slowing
- * curve, at most one frame longer than the component's run before it. A freeze ends in a
- * catch-up of more than one step, a stall in a frame-counted animation is
+ * curve, at most one frame longer than the component's run before it. A
+ * freeze ends in a larger catch-up, a stall in a frame-counted animation is
  * longer than its runs before it, and a run that no change ends stays a miss.
  * The component still has to show a new position on at least
  * `minJudgedFrames` of the control's frames.
@@ -808,10 +809,10 @@ export function busyWindowProof(
     }
     const controlEdges = [judged.from, ...controlChanges, judged.to];
     // A frame with no new component position, in a run of such frames whose
-    // next change is a single cast step: the component moves under one step
-    // per frame there, which the cast cannot show on every frame, so the
-    // frame counts as moved. A freeze ends in a catch-up of more than one
-    // step, and a run that no change ends stays a miss.
+    // next change the cast's step or an early frame explains (`underStep`):
+    // the cast cannot show every frame there, so the frame counts as moved.
+    // A freeze ends in a larger catch-up, and a run that no change ends stays
+    // a miss.
     const series = tracked.flatMap(f =>
       f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
     );
@@ -855,16 +856,17 @@ export function busyWindowProof(
       // Under one step a frame the change that ends the run is a single step.
       // Under two, a frame delivered early can also show no step, and the
       // change then carries the motion of every frame the run held, at the
-      // pace of the frames before it, to the nearest step. At one step a
-      // frame or more, an early frame hides only that frame, so the run is
-      // one frame long.
+      // pace of the frames before it, to the nearest step. An early frame
+      // hides one frame's motion: at one step a frame or more the run is one
+      // frame long, and under one step a frame it adds at most one step to
+      // the catch-up.
       const catchUp = Math.abs(series[k].value - series[i].value);
       const pace = pxPerFrameBefore(start);
       const shown =
         catchUp < 1.5 * stepPx ||
         (pace != null &&
           pace < 2 * stepPx &&
-          (pace < stepPx || unchanged <= 1) &&
+          (pace < stepPx ? catchUp < 2.5 * stepPx : unchanged <= 1) &&
           catchUp <= (unchanged + 1) * pace + stepPx);
       if (!shown) {
         return false;
@@ -961,7 +963,7 @@ export function busyWindowProof(
       : `, on screen from +${onScreenFromMs.toFixed(0)} ms (nothing moved before the block)`) +
     (controlRead == null
       ? ''
-      : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} under one cast step a frame)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +
+      : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} where the cast could not show the step)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +
     notes.map(note => `; note: ${note}`).join('');
   return {
     ...stats,
