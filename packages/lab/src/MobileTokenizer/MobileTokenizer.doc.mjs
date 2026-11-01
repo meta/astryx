@@ -11,7 +11,7 @@ export const docs = {
     {name: 'isLabelHidden', type: 'boolean', description: 'Hide the visible label; the trigger and the sheet keep it as their accessible name.', default: 'false'},
     {name: 'searchSource', type: 'SearchSource<T>', description: 'Core Typeahead search source (search + bootstrap).', required: true},
     {name: 'value', type: 'T[]', description: 'Selected items (Core SearchableItem).', required: true},
-    {name: 'onChange', type: '(items: T[], change: MobileTokenizerChange<T>) => void', description: 'Mirrors Core Tokenizer: single-item add/create/remove, or reorder.', required: true},
+    {name: 'onChange', type: '(items: T[], change: MobileTokenizerChange<T>) => void', description: 'Called by Save when the selection draft differs from the opening value. Receives the complete committed selection plus the latest add/create/remove metadata.', required: true},
     {name: 'renderItem', type: '(item: T) => ReactNode', description: 'Custom content for a result row, shown beside its checkbox. Default: the item label.'},
     {name: 'placeholder', type: 'string', description: 'Trigger text when nothing is selected.'},
     {name: 'description', type: 'string', description: 'Help text under the field, read with the trigger.'},
@@ -24,14 +24,14 @@ export const docs = {
   ],
   usage: {
     description:
-      'Lab prototype for trying the touch Tokenizer flow: tap the field to open one searchable sheet where selected and available items share a full-row checkbox list. Selected items are grouped first when the sheet opens, while checkbox changes keep every existing row in place until the sheet closes; the latest selection is regrouped the next time it opens. Selected custom values stay in the list, and long result sets render progressively in 50-item batches. Custom text uses a trailing Add action, and guarded Clear all plus Done actions finish the unfiltered flow. The footer is hidden while searching. Clear all stays in the focus order when nothing is selected and says why; a confirmed clear returns focus to the search field and is announced inside the sheet. Every announcement — additions, removals, result counts — is delivered inside the open sheet. The trigger describes its selection to assistive technology (count, then the tokens) after the field description, status, and disabled reason. Strings come from the shared Astryx catalog.',
+      'Lab prototype for trying the touch Tokenizer flow: tap the field to open one searchable sheet where selected and available items share a full-row checkbox list. Selection changes remain in a draft until Save commits them; swipe, scrim, or Escape dismissal asks before discarding a dirty draft, while a clean dismissal closes directly. Selected items are grouped first when the sheet opens, while checkbox changes keep every existing row in place until the sheet closes; the latest selection is regrouped the next time it opens. Selected custom values stay in the list, and long result sets render progressively in 50-item batches. Custom text uses a trailing Add action. The bordered large search stays above the list, and scrolling or dragging results dismisses the software keyboard without clearing the query. Clear all and Save remain visible while searching. Clear all updates the draft only and requires confirmation; a confirmed clear returns focus to the search field and is announced inside the sheet. Every announcement — additions, removals, result counts — is delivered inside the open sheet. The trigger describes its committed selection to assistive technology (count, then the tokens) after the field description, status, and disabled reason. Strings come from the shared Astryx catalog.',
     bestPractices: [
       {guidance: true, description: 'Try this in Lab/canary to validate the flow; graduate via Core Tokenizer presentation="adaptive" when it ships.'},
       {guidance: false, description: 'Do not ship stable product on this Lab API; it has no theming or spec contract yet.'},
     ],
     anatomy: [
       {name: 'Trigger field', required: true, description: 'Button showing tokens as a summary, in the inline Tokenizer field\'s own box: same border, radius, surface, block size and token inset as the desktop field.'},
-      {name: 'Management sheet', required: true, description: 'One searchable list with trailing checkboxes for existing items, a trailing Add action for custom text, and equal-width Clear all and Done footer actions when unfiltered. Clear all requires confirmation and stays focusable with its reason when nothing is selected; the footer is hidden while searching. Nothing of the sheet is in the page while it is closed.'},
+      {name: 'Management sheet', required: true, description: 'One searchable list with trailing checkboxes for existing items, a trailing Add action for custom text, and persistent equal-width Clear all and Save footer actions. Save commits the draft; dirty dismissal asks before discarding. Nothing of the sheet is in the page while it is closed.'},
     ],
   },
 };
