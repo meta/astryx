@@ -39,6 +39,10 @@ enum ButtonGlass: Sendable, Equatable {
   case clear
   /// The system's glass, tinted with a token color.
   case prominent(ButtonColorRole)
+  /// In a bar, the bar's own glass, tinted with a token color: SwiftUI's
+  /// prominent glass button style, so the bar tints its glass rather than
+  /// a second glass drawing inside it (FR7).
+  case barProminent(ButtonColorRole)
 }
 
 /// What a Button draws behind its label (FR7–FR10, ORD2).
@@ -71,11 +75,12 @@ enum ButtonSurface: Sendable, Equatable {
       }
       return .solid(role, inBar: placement == .bar)
     }
+    let inBar = placement == .bar
     switch variant {
-    case .primary: return .glass(.prominent(.accent))
-    case .destructive: return .glass(.prominent(.error))
-    case .secondary: return .glass(placement == .bar ? .barItem : .regular)
-    case .ghost: return .glass(placement == .bar ? .barItem : .clear)
+    case .primary: return .glass(inBar ? .barProminent(.accent) : .prominent(.accent))
+    case .destructive: return .glass(inBar ? .barProminent(.error) : .prominent(.error))
+    case .secondary: return .glass(inBar ? .barItem : .regular)
+    case .ghost: return .glass(inBar ? .barItem : .clear)
     }
   }
 

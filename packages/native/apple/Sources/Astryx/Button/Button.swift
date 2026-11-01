@@ -112,8 +112,7 @@ public struct Button: View {
   }
 
   public var body: some View {
-    control
-      .buttonStyle(style)
+    styledControl
       .background { barProbe }
       // The shared Astryx tooltip on hover and keyboard focus, as core's
       // Button tooltip; its words are the VoiceOver hint.
@@ -182,6 +181,29 @@ public struct Button: View {
           ProgressView().controlSize(.small).tint(foreground)
         }
       }
+      .modifier(SystemBarLabel(tint: systemBarTint, style: style))
+  }
+
+  /// The tint a primary or destructive Button in a bar gives the bar's glass,
+  /// through SwiftUI's prominent glass style (FR7, FR8); nil elsewhere.
+  var systemBarTint: Color? {
+    guard case .glass(.barProminent(let role)) = surface else { return nil }
+    return role.color(astryx.tokens)
+  }
+
+  /// The control in its style: SwiftUI's prominent glass in a bar for primary
+  /// and destructive, so the bar tints its own glass; the Astryx style
+  /// everywhere else.
+  @ViewBuilder private var styledControl: some View {
+    #if os(iOS) && compiler(>=6.2)
+    if #available(iOS 26, *), let tint = systemBarTint {
+      control.buttonStyle(.glassProminent).tint(tint)
+    } else {
+      control.buttonStyle(style)
+    }
+    #else
+    control.buttonStyle(style)
+    #endif
   }
 
   private var style: AstryxButtonStyle {
@@ -309,7 +331,9 @@ struct AstryxButtonStyle: ButtonStyle {
         configuration, fill: role.color(astryx.tokens), edge: astryx.tokens.color.borderEmphasized,
         keepsTapMinimum: !inBar
       )
-    case .glass(.barItem):
+    case .glass(.barItem), .glass(.barProminent):
+      // `.barProminent` draws through SwiftUI's own style; this is only its
+      // fallback.
       barItemBody(configuration)
     case .glass(let glass):
       glassBody(configuration, glass: glass)
@@ -350,7 +374,9 @@ struct AstryxButtonStyle: ButtonStyle {
       // platform-minimum tap area counts.
       drawn.frame(minWidth: 44, minHeight: 44).contentShape(Rectangle())
     } else {
-      drawn.contentShape(Rectangle())
+      // In a bar, which may offer almost no width, the label stays whole
+      // (FR11).
+      drawn.fixedSize(horizontal: !fillsWidth, vertical: false).contentShape(Rectangle())
     }
   }
 
@@ -390,10 +416,31 @@ struct AstryxButtonStyle: ButtonStyle {
   @available(iOS 26, *)
   private func effect(_ glass: ButtonGlass) -> Glass {
     switch glass {
-    case .regular, .barItem: .regular.interactive()
+    case .regular, .barItem, .barProminent: .regular.interactive()
     case .clear: .clear.interactive()
     case .prominent(let role): .regular.tint(role.color(astryx.tokens)).interactive()
     }
   }
   #endif
+}
+
+/// A label drawn by SwiftUI's own prominent glass style in a bar: the theme's
+/// type in the variant's label color, kept whole, dimmed while disabled; the
+/// Astryx style draws all of this itself elsewhere.
+private struct SystemBarLabel: ViewModifier {
+  let tint: Color?
+  let style: AstryxButtonStyle
+
+  func body(content: Content) -> some View {
+    if tint != nil {
+      let font = style.astryx.tokens.font
+      content
+        .font(style.astryx.font(TypeStyle(font.label, families: font.family.body)))
+        .foregroundStyle(style.foreground)
+        .fixedSize(horizontal: !style.fillsWidth, vertical: false)
+        .opacity(style.isDimmed ? 0.5 : 1)
+    } else {
+      content
+    }
+  }
 }
