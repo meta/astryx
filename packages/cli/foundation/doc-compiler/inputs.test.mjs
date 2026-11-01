@@ -97,6 +97,8 @@ describe('collectDocInputs over what this repo ships', () => {
       'NavMenu',
       'Resizable',
       'SyntaxTheme',
+      'createAnimator',
+      'createPanGesture',
     ]);
   });
 

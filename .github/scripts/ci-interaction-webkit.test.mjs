@@ -242,7 +242,7 @@ describe('WebKit interaction proof routing', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
-      'packages/core/src/utils/clickGuard.ts',
+      'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
       'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',

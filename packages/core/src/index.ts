@@ -172,8 +172,24 @@ export * from './Outline';
 // Overflow list
 export * from './OverflowList';
 
+// Animating one element (spec:AST-107 FR3): from the package root only, as
+// one API has one entry; its hook ships from './hooks'.
+export {
+  createAnimator,
+  type Animator,
+  type AnimatorAnimateOptions,
+  type AnimatorChannel,
+  type AnimatorDecayVelocity,
+  type AnimatorHandle,
+  type AnimatorSnapshot,
+  type AnimatorValues,
+} from './animator/createAnimator';
+
 // Hooks
 export * from './hooks';
+
+// Gestures: the public layer over the gesture system (spec:AST-107)
+export {createPanGesture} from './gestures/createPanGesture';
 
 // Utilities
 export * from './utils';
