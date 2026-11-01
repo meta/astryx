@@ -445,6 +445,54 @@ describe('BaseTypeahead', () => {
   });
 });
 
+// architecture:layer-runtime: a control beside an open layer is not outside.
+describe('BaseTypeahead press inside and outside', () => {
+  async function openList() {
+    render(
+      <>
+        <BaseTypeahead
+          searchSource={fruitSource}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <p>Elsewhere</p>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    return input;
+  }
+
+  it('keeps the list open on a press in its own input', async () => {
+    const input = await openList();
+    fireEvent.pointerDown(input);
+    fireEvent.click(input);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    // The list is a manual popover, so the browser does not light-dismiss it.
+    const list = document.getElementById(input.getAttribute('aria-controls')!);
+    expect(list?.closest('[popover]')).toHaveAttribute('popover', 'manual');
+  });
+
+  it('keeps the list open on a press in the list', async () => {
+    const input = await openList();
+    fireEvent.pointerDown(screen.getAllByRole('option', {hidden: true})[0]);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('closes the list on a press outside the field and the list', async () => {
+    const input = await openList();
+    fireEvent.pointerDown(screen.getByText('Elsewhere'));
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+});
+
 describe('BaseTypeahead focus-out', () => {
   it('closes the dropdown when focus leaves the input', async () => {
     render(
