@@ -16,10 +16,17 @@ import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
 import {dirname, join, relative, resolve} from 'node:path';
 import {describe, expect, it} from 'vitest';
 
-/** The tables every touch module may share: the animator and gestures read them. */
+/**
+ * The tables shared code may read: the animator and gestures read these, and
+ * the paging math and the pager (one hook for every paging component: a
+ * paging Carousel, the photo viewer, a sheet's pages) read paging.
+ */
 const SHARED_TABLES = new Set([
   'motion/uikit/gestures.ts',
+  // The long-press values: useLongPress and the menus' press model read them.
+  'motion/uikit/longPress.ts',
   'motion/uikit/navigation.ts',
+  'motion/uikit/paging.ts',
   'motion/uikit/scroll.ts',
   'motion/uikit/springs.ts',
   'motion/uikit/timing.ts',

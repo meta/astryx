@@ -1,0 +1,105 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file GestureHost.bundle.test.ts
+ * @input GestureHost.ts, PressTracker.ts and usePressTracker.ts, bundled and
+ *   minified by esbuild
+ * @output The gesture host, the press tracker and its hook carry only the
+ *   UIKit gesture groups they read, never the whole table
+ *   (architecture:component-style-authoring INV6)
+ * @position Bundle evidence for packages/core/src/gestures: every recognizer
+ *   and press tracker attaches through the host, so what it imports ships
+ *   with every touch component
+ */
+
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {afterAll, describe, expect, it} from 'vitest';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+const gestures = path.resolve(here, '..');
+const repoRoot = path.resolve(here, '../../../../..');
+// Inside the repo so the script resolves `esbuild` by bare specifier, and
+// under node_modules so it is ignored and swept with the install.
+const workspace = mkdtempSync(
+  path.join(repoRoot, 'node_modules', '.astryx-gesture-host-bundle-'),
+);
+afterAll(() => {
+  rmSync(workspace, {recursive: true, force: true});
+});
+
+const script = path.join(workspace, 'bundle.mjs');
+writeFileSync(
+  script,
+  [
+    "import {build} from 'esbuild';",
+    'const [dir, module, name] = process.argv.slice(2);',
+    'const out = await build({',
+    "  stdin: {contents: `import {${name}} from './${module}'; console.log(${name});`, resolveDir: dir, loader: 'ts'},",
+    "  bundle: true, minify: true, format: 'esm', write: false, logLevel: 'silent',",
+    '});',
+    'console.log(JSON.stringify(out.outputFiles[0].text));',
+  ].join('\n'),
+);
+
+/** The minified bundle of one gestures module's named export. */
+function bundle(module: string, name = module): string {
+  return JSON.parse(
+    execFileSync(process.execPath, [script, gestures, module, name], {
+      encoding: 'utf8',
+      timeout: 120_000,
+    })
+      .trim()
+      .split('\n')
+      .pop() ?? '""',
+  ) as string;
+}
+
+describe('the gesture host bundle', () => {
+  const text = bundle('GestureHost');
+
+  it('carries the press group it reads', () => {
+    expect(text).toContain('scrollBrake:');
+  });
+
+  it('never carries the whole UIKit gesture table', () => {
+    // The table's own keys: only the union of every group has them.
+    expect(text).not.toContain('screenEdgePan:');
+    expect(text).not.toContain('longPress:');
+    // Groups the host never reads.
+    for (const key of [
+      'edgeRegion:',
+      'minimumMovementDecay:',
+      'scrollReleaseWeight:',
+    ]) {
+      expect(text).not.toContain(key);
+    }
+  });
+});
+
+describe.each([
+  ['PressTracker', 'createPressTracker'],
+  ['usePressTracker', 'usePressTracker'],
+])('the %s bundle', (module, name) => {
+  // NumberInput's stepper and every control reach the press tracker.
+  const text = bundle(module, name);
+
+  it('carries the press, pan and control groups it reads', () => {
+    expect(text).toContain('scrollBrake:');
+    expect(text).toContain('trackingExpansion:');
+  });
+
+  it('never carries the whole UIKit gesture table', () => {
+    expect(text).not.toContain('screenEdgePan:');
+    expect(text).not.toContain('longPress:');
+    for (const key of [
+      'edgeRegion:',
+      'minimumMovementDecay:',
+      'scrollReleaseWeight:',
+    ]) {
+      expect(text).not.toContain(key);
+    }
+  });
+});

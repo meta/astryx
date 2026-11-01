@@ -59,6 +59,8 @@ export default defineConfig({
   testMatch: [
     'internal/interaction-harness/src/**/*.interaction.browser.spec.ts',
     'packages/*/src/**/*.interaction.browser.spec.ts',
+    // The gesture system's own proofs (esbuild fixtures, no Storybook).
+    'packages/core/src/gestures/__tests__/browser/*.browser.spec.ts',
   ],
   // Playwright wipes its output directory per run; evidence (storyboards,
   // curve traces) goes to test-results/interaction-evidence instead.

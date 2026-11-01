@@ -68,7 +68,7 @@ import {
   type CompactDefinition,
 } from '../theme/themeAdaptations';
 import {useThemeDefinition} from '../theme/useTheme';
-import {TOUCH_QUERY} from './touchQueries';
+import {IOS_SUPPORTS_QUERY, TOUCH_QUERY} from './touchQueries';
 
 // The primary pointer is coarse: touch behaviours. Defined in touchQueries.ts,
 // which loads without React or the theme.
@@ -86,12 +86,9 @@ export const COMPACT_QUERY = DEFAULT_COMPACT_DEFINITION.query;
 export const COMPACT_TOUCH_QUERY =
   DEFAULT_COMPACT_DEFINITION.coarsePointerQuery;
 
-/**
- * The engine is WebKit on iOS or iPadOS: the only one that implements
- * `-webkit-touch-callout`. For a style iOS WebKit requires, never a
- * behaviour.
- */
-export const IOS_SUPPORTS_QUERY = '(-webkit-touch-callout: none)';
+// The engine is WebKit on iOS or iPadOS, for a style iOS WebKit requires.
+// Defined in touchQueries.ts, which loads without React or the theme.
+export {IOS_SUPPORTS_QUERY};
 
 /**
  * The iOS gate as StyleX keys, nested in this order: the media query
