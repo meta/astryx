@@ -341,8 +341,8 @@ a timestamp.
 
 `triggerBehavior` names how the layer answers each device. `adaptive`, the
 default and the released behavior, previews on hover and keyboard focus and
-opens on a tap; `hover` previews on hover and keyboard focus only, so touch and
-pen never open the layer; `toggle` adds the pin on every device. Under
+opens on a tap; `hover` previews on hover and keyboard focus only, so no touch or
+pen tap opens the layer; `toggle` adds the pin on every device. Under
 `adaptive`, a tap that already acts does not open the layer, so one tap does one thing: a
 truncated label inside a link follows the link, while a truncated label in
 running text opens its tooltip. Whether a tap acts is decided by walking out
