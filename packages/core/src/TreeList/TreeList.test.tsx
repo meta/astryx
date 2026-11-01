@@ -1865,6 +1865,37 @@ describe('TreeList collapse focus (AR2)', () => {
     expect(row('readme')).toHaveAttribute('tabindex', '-1');
   });
 
+  it('moves focus in a nested group to the outermost row that collapsed, and to the inner row when only it collapses', () => {
+    const Nested = ({outer, inner}: {outer: boolean; inner: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {
+            id: 'src',
+            label: 'src',
+            isExpanded: outer,
+            children: [
+              {
+                id: 'lib',
+                label: 'lib',
+                isExpanded: inner,
+                children: [{id: 'util', label: 'util.ts'}],
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer={false} inner />);
+    expect(row('src')).toHaveFocus();
+    rerender(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer inner={false} />);
+    expect(row('lib')).toHaveFocus();
+  });
+
   it('moves no focus that is outside the collapsing branch', () => {
     const {rerender} = render(<Example isExpanded />);
     row('readme')?.focus();

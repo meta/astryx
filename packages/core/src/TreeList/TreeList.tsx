@@ -44,6 +44,7 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   applyLayoutChangeTransition,
@@ -392,62 +393,72 @@ export function TreeList({
   );
   // Focus inside a branch's child group when it collapses would be lost once
   // the group goes (or turns inert for its exit). It moves to the collapsing
-  // row itself (AR2); focus anywhere else is not moved. Noted in the commit
-  // before the DOM changes, moved from the layout effect below.
+  // row itself (AR2); focus anywhere else is not moved. The shared sequence
+  // notes it in the commit before the DOM changes and moves it once the
+  // collapse has committed.
   // The tree's own document's last input decides the moved focus's ring.
   const {ref: modalityRef} = useInteractionModalityTracking();
-  const collapsingFocusRef = useRef<{focus: FocusWithin; id: string} | null>(
-    null,
+  const noteCollapsingFocus = useFocusLeavingChange<
+    ReadonlySet<string>,
+    {focus: FocusWithin; ids: string[]}
+  >(
+    expandedIds,
+    // Every expanded row whose group holds focus, outermost first: which of
+    // them collapsed is known only after the commit.
+    (previous: ReadonlySet<string>) => {
+      const tree = treeElementRef.current;
+      let focus: FocusWithin | null = null;
+      const ids: string[] = [];
+      for (const id of previous) {
+        const group = tree?.querySelector<HTMLElement>(
+          `[data-tree-id="${CSS.escape(id)}"] > [role="group"]`,
+        );
+        const noted = noteFocusWithin(group);
+        if (noted != null && group != null) {
+          focus = noted;
+          ids.push(id);
+        }
+      }
+      const rowOf = (id: string) =>
+        tree?.querySelector(`[data-tree-id="${CSS.escape(id)}"]`) ?? null;
+      ids.sort((a, b) => (rowOf(a)?.contains(rowOf(b)) === true ? -1 : 1));
+      return focus == null ? null : {focus, ids};
+    },
+    (noted: {focus: FocusWithin; ids: string[]}, expanded) => {
+      // The outermost row that collapsed: a row inside it goes with it.
+      const id = noted.ids.find(candidate => !expanded.has(candidate));
+      if (id == null) {
+        return;
+      }
+      const row = treeElementRef.current?.querySelector<HTMLElement>(
+        `[data-tree-id="${CSS.escape(id)}"]`,
+      );
+      const moved = moveFocusLeftBehind(
+        noted.focus,
+        row,
+        row?.querySelector(':scope > [role="group"]') ?? null,
+      );
+      // The row focus moved to holds the tree's one Tab stop; the roving pass
+      // that runs after this keeps an existing stop (AR1, AR2).
+      if (moved && row != null) {
+        for (const stop of treeElementRef.current?.querySelectorAll<HTMLElement>(
+          '[role="treeitem"][tabindex="0"]',
+        ) ?? []) {
+          stop.setAttribute('tabindex', '-1');
+        }
+        row.setAttribute('tabindex', '0');
+      }
+    },
   );
   const beforeExpansionChange = useCallback(
     (previous: ReadonlySet<string>) => {
-      collapsingFocusRef.current = null;
-      for (const id of previous) {
-        if (expandedIds.has(id)) {
-          continue;
-        }
-        const group = treeElementRef.current?.querySelector<HTMLElement>(
-          `[data-tree-id="${CSS.escape(id)}"] > [role="group"]`,
-        );
-        const focus = noteFocusWithin(group);
-        // The outermost collapsing row holding focus wins: a row inside it
-        // goes with it.
-        if (focus != null) {
-          collapsingFocusRef.current = {focus, id};
-          break;
-        }
-      }
+      noteCollapsingFocus(previous);
       if (animatedLayout != null) {
         measureChanges(previous);
       }
     },
-    [animatedLayout, expandedIds, measureChanges],
+    [animatedLayout, measureChanges, noteCollapsingFocus],
   );
-  useLayoutEffect(() => {
-    const collapsing = collapsingFocusRef.current;
-    collapsingFocusRef.current = null;
-    if (collapsing == null) {
-      return;
-    }
-    const row = treeElementRef.current?.querySelector<HTMLElement>(
-      `[data-tree-id="${CSS.escape(collapsing.id)}"]`,
-    );
-    const moved = moveFocusLeftBehind(
-      collapsing.focus,
-      row,
-      row?.querySelector(':scope > [role="group"]') ?? null,
-    );
-    // The row focus moved to holds the tree's one Tab stop; the roving pass
-    // that runs after this effect keeps an existing stop (AR1, AR2).
-    if (moved && row != null) {
-      for (const stop of treeElementRef.current?.querySelectorAll<HTMLElement>(
-        '[role="treeitem"][tabindex="0"]',
-      ) ?? []) {
-        stop.setAttribute('tabindex', '-1');
-      }
-      row.setAttribute('tabindex', '0');
-    }
-  }, [expandedIds]);
   // Without a handle the chevrons keep the theme's own turn: a spring a
   // handle set stays only while it is passed (`spec:AST-105` FR2).
   useLayoutEffect(() => {
