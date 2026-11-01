@@ -742,33 +742,35 @@ GitHub offers no repository-wide limit on concurrent jobs: a `concurrency` group
 serializes runs and does not count jobs. So every run of the CI and Main
 workflows waits at its start until the other active runs' estimated jobs plus
 its own fit under ninety. Small workflows that are not admitted (linting, review
-bookkeeping, report publishing) always count at least the most they were
-measured running at once, eighteen jobs, so the room they can take stays free:
-their jobs can rise from two to eighteen within two minutes, so a margin over
-the jobs they run at a look would not hold the ceiling. Each CI or Main run
-counts its live jobs: a pull-request run still waiting counts the jobs it runs,
-the job that waits and a Storybook build that found room, so waiting runs hold
-each other back by no more than they use, and a run admitted in the last
-forty-five seconds, before its jobs appear, counts at least its planned most. A
-run GitHub still lists as active but has not updated in two hours holds no
-runner and counts nothing. A look reads the active runs and each CI or Main
-run's jobs once, so it costs two run listings plus one call per active CI or
-Main run. A pull request spends at most two looks, at once and after twelve
-minutes; a look that finds it within ten jobs of room spends none, and the next
-comes four minutes later, so a nearly full CI admits it within minutes of the
-room freeing. A run starts rather than spend a low API budget. A `main` full
-check, release re-check or baseline capture (every dispatch of the CI workflow)
-goes first: while one waits, pull-request runs wait too, their Storybook builds
-included. A pull-request run that would fit and waits only for a `main` check
-looks again every two minutes until it starts, since `main` waits are short. The
-extra looks happen only while CI is near full or `main` waits. Every job ends
-within its fifteen-minute budget, so `main` fits within fifteen minutes. Nothing
-is reserved for `main` outside those minutes. At most ten pull-request runs wait
-at once, counting pull-request runs only; one more that finds no room stops at
-once, "CI is full: re-run all jobs or push later", rather than add a waiting job
-to a full CI. A `main` run is never stopped.
+bookkeeping, report publishing) always count at least eighteen jobs, so the room
+they can take stays free. Over a day's runs they peaked at twenty jobs at once,
+and rose by at most fourteen within two minutes in ninety-nine looks of a
+hundred (seventeen at most), so a margin over the jobs they run at a look would
+not hold the ceiling, and eighteen covers all but the rarest rises without
+lengthening every run's wait. Each CI or Main run counts its live jobs: a
+pull-request run still waiting counts the jobs it runs, the job that waits and a
+Storybook build that found room, so waiting runs hold each other back by no more
+than they use, and a run admitted in the last forty-five seconds, before its
+jobs appear, counts at least its planned most. A run GitHub still lists as
+active but has not updated in two hours holds no runner and counts nothing. A
+look reads the active runs and each CI or Main run's jobs once, so it costs two
+run listings plus one call per active CI or Main run. A pull request spends at
+most two looks, at once and after twelve minutes; a look that finds it within
+ten jobs of room spends none, and the next comes four minutes later, so a nearly
+full CI admits it within minutes of the room freeing. A run starts rather than
+spend a low API budget. A `main` full check, release re-check or baseline
+capture (every dispatch of the CI workflow) goes first: while one waits,
+pull-request runs wait too, their Storybook builds included. A pull-request run
+that would fit and waits only for a `main` check looks again every two minutes
+until it starts, since `main` waits are short. The extra looks happen only while
+CI is near full or `main` waits. Every job ends within its fifteen-minute
+budget, so `main` fits within fifteen minutes. Nothing is reserved for `main`
+outside those minutes. At most ten pull-request runs wait at once, counting
+pull-request runs only; one more that finds no room stops at once, "CI is full:
+re-run all jobs or push later", rather than add a waiting job to a full CI. A
+`main` run is never stopped.
 
-CI can still pass ninety in four bounded ways, the first three rare:
+CI can still pass ninety in five bounded ways, the first three rare:
 
 - A run that has waited its longest (fifteen minutes for `main`, twelve for a
   pull request) starts whatever the load, even while a `main` check waits. That
@@ -784,6 +786,8 @@ CI can still pass ninety in four bounded ways, the first three rare:
   job per waiting run: at most ten for pull requests, plus one for each waiting
   merge-queue entry and `main` run, which are never turned away, for at most a
   wait (twelve minutes for a pull request, fifteen for `main`).
+- Small workflows can run more jobs at once than the eighteen counted for them:
+  they peaked at twenty in a day's runs, two over, while their jobs ran.
 
 Rejected: a fixed reserve for `main` (it left about half the ceiling idle and
 stalled the pull-request queue); starting `main`'s checks at once (a burst would
