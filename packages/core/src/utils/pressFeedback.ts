@@ -3,7 +3,7 @@
 /**
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts), the menu-press marker
- *   (hooks/useMenuPress.ts) and the document's pointer, keyboard, scroll and
+ *   (hooks/menuPressMarker.ts) and the document's pointer, keyboard, scroll and
  *   visibility events
  * @output Exports PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps and
  *   installPressFeedback
@@ -45,7 +45,7 @@
  * pressFeedback.test.ts.
  */
 
-import {MENU_PRESS_MARKER} from '../hooks/useMenuPress';
+import {MENU_PRESS_MARKER} from '../hooks/menuPressMarker';
 import type {PressGesture, PressPaint, PressStep} from './pressGesture';
 import {
   idlePressGesture,
