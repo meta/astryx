@@ -119,12 +119,6 @@ const styles = stylex.create({
   rootScrollable: {
     overflowY: 'auto',
     overflowX: 'hidden',
-    // Hide scrollbar during programmatic scroll animation
-    // to prevent flash. Restored when animation settles.
-    scrollbarWidth: {
-      default: null,
-      ':is([data-astryx-scrolling])': 'none',
-    },
   },
 
   messageArea: {
