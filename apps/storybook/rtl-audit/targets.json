@@ -643,5 +643,10 @@
       "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
       "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
     }
+  },
+  {
+    "component": "Table",
+    "storyId": "core-table--in-card",
+    "dims": []
   }
 ]
