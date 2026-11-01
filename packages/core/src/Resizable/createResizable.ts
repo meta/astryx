@@ -124,7 +124,11 @@ export interface ResizableController {
   expand(): void;
   /** Resizes the region to `size` px, within its bounds. */
   resize(size: number): void;
-  /** Takes new options; the handle and the region keep their state. */
+  /**
+   * Takes the full set of options, as a new render does: an option left out
+   * returns to its default. The region keeps its size and collapse state,
+   * within the new options.
+   */
   update(options: CreateResizableOptions): void;
   /**
    * Calls `listener` after every change to `size` or `isCollapsed`, a

@@ -354,6 +354,33 @@ describe('createResizable without React (spec:AST-107 FR6)', () => {
     expect(handle.getAttribute('aria-valuemax')).toBe('250');
   });
 
+  it('takes the full set of options in update(): the region keeps its size and collapse state, and an option left out returns to its default', () => {
+    const {handle} = makeHandle();
+    const options = {
+      defaultSize: 300,
+      minSize: 200,
+      maxSize: 400,
+      collapsible: true,
+      label: 'Sidebar width',
+    };
+    const resizable = create(handle, options);
+    resizable.resize(350);
+    resizable.collapse();
+    resizable.update({...options, isDisabled: true});
+    expect(resizable.isCollapsed).toBe(true);
+    expect(handle.getAttribute('aria-valuemin')).toBe('200');
+    expect(handle.getAttribute('aria-label')).toBe('Sidebar width');
+    expect(handle.getAttribute('aria-disabled')).toBe('true');
+    resizable.update(options);
+    resizable.expand();
+    expect(resizable.size).toBe(350);
+    // Left out, as on a new render: the bounds and the name return to their
+    // defaults, and a region that cannot collapse is open.
+    resizable.update({defaultSize: 300});
+    expect(handle.getAttribute('aria-valuemin')).toBe('50');
+    expect(handle.getAttribute('aria-label')).toBe('Resize handle');
+  });
+
   it('calls subscribers after every change to its size or collapse state', () => {
     const {handle} = makeHandle();
     const resizable = create(handle, {defaultSize: 200, collapsible: true});
