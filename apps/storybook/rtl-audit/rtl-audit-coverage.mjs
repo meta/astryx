@@ -353,7 +353,7 @@ export function withD1CompletionIdentity(result, plannedStoryId) {
   };
 }
 
-const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1']);
+const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1', 'D5']);
 
 /** Validate resolved Storybook RTL-audit applicability metadata. */
 export function validateStoryRtlAuditParameters(value, storyId) {
@@ -366,6 +366,10 @@ export function validateStoryRtlAuditParameters(value, storyId) {
   for (const [dimension, applicability] of Object.entries(value)) {
     if (!STORY_RTL_AUDIT_DIMENSIONS.has(dimension)) {
       throw new Error(`${storyId} rtlAudit has unknown dimension ${dimension}`);
+    }
+    if (dimension === 'D5') {
+      result.D5 = validatePhysicalPosition(applicability, storyId);
+      continue;
     }
     if (
       applicability == null ||
@@ -395,6 +399,35 @@ export function validateStoryRtlAuditParameters(value, storyId) {
     };
   }
   return result;
+}
+
+/**
+ * Grade a curated order (D2) or scroll-direction (D3) pair. The relationship
+ * must hold in LTR and reverse in RTL. A relationship that keeps its LTR
+ * physical order in RTL is the RTL defect these checks exist for, so it fails
+ * rather than grading `partial` (INV3); so does one already wrong in LTR.
+ */
+export function gradeDirectionalPair(ltrOk, rtlOk) {
+  return ltrOk && rtlOk ? 'pass' : 'fail';
+}
+
+// rtlAudit.D5 declares a region whose positioned elements stay physical
+// (DR5); it never turns D5 off for the story.
+function validatePhysicalPosition(value, storyId) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${storyId} rtlAudit.D5 must be an object`);
+  }
+  if (!PHYSICAL_POSITION_MARKERS.includes(value.physical)) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.physical must be one of ${PHYSICAL_POSITION_MARKERS.join(', ')}`,
+    );
+  }
+  if (typeof value.within !== 'string' || !value.within.trim()) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.within must name the plot with a non-empty selector`,
+    );
+  }
+  return {physical: value.physical, within: value.within.trim()};
 }
 
 /** Selected owners for which the canonical Storybook route has no story. */
@@ -586,6 +619,129 @@ export function finishFiniteAnimations(doc) {
     }
   }
   return finished;
+}
+
+/**
+ * Declared position semantics a story's `rtlAudit.D5.physical` may name.
+ * `chart`: elements inside the declared plot sit in chart coordinates, which
+ * stay physical in RTL (`design:bidirectionality` DR5), such as a tooltip that
+ * follows a plotted bar.
+ */
+export const PHYSICAL_POSITION_MARKERS = Object.freeze(['chart']);
+
+/**
+ * Fail closed on a `rtlAudit.D5.within` selector the page cannot parse, so a
+ * typo cannot silently grade every overlay as mirrored. Runs in the page: keep
+ * it self-contained.
+ */
+export function assertSelectorParses(doc, selector) {
+  try {
+    doc.querySelector(selector);
+  } catch {
+    throw new Error(`rtlAudit.D5.within "${selector}" is not a valid selector`);
+  }
+}
+
+/**
+ * Bind a JSON value into an in-page detector's placeholder. A replacer
+ * function is used so `$` sequences in the value (`[data-plot='q$']`) are not
+ * read as replacement patterns.
+ */
+export function bindDetectorValue(source, placeholder, value) {
+  return source.replace(placeholder, () => JSON.stringify(value));
+}
+
+/**
+ * Grade one LTR/RTL pair of D5 positioned elements. By default the RTL center
+ * must mirror the LTR center about the parent's center. Under a declared
+ * `chart` marker it must keep the same physical position instead, and a
+ * mirrored chart overlay fails. An unknown marker fails closed rather than
+ * being guessed at.
+ */
+export function gradePositionedPair(ltr, rtl, tolerance) {
+  const marker = ltr.physical ?? null;
+  if (marker != null && !PHYSICAL_POSITION_MARKERS.includes(marker)) {
+    return {
+      expectation: 'invalid-marker',
+      expected: null,
+      delta: null,
+      pass: false,
+      reason: `unknown rtlAudit.D5 physical kind "${marker}"`,
+    };
+  }
+  const expectation = marker === 'chart' ? 'physical' : 'mirror';
+  const expected =
+    expectation === 'physical' ? ltr.relCenterX : ltr.parentW - ltr.relCenterX;
+  const delta = Math.abs(rtl.relCenterX - expected);
+  return {expectation, expected, delta, pass: delta <= tolerance};
+}
+
+/**
+ * Does a left- or right-pointing glyph render pointing up or down? `matrix` is
+ * the glyph's composed 2x2 transform (CSS `matrix(a, b, c, d)` order). A
+ * chevron rotated a quarter turn (a disclosure's expanded state) points along
+ * the block axis, which is direction-neutral (`design:bidirectionality` DR5),
+ * so its mirroring is not a D1 question even though its path reads as
+ * horizontal (`architecture:rtl-audit-evidence` INV12: applicability follows
+ * the glyph's semantic role, not its source shape).
+ */
+export function glyphRendersOnBlockAxis(dir, matrix) {
+  if ((dir !== 'left' && dir !== 'right') || !Array.isArray(matrix)) {
+    return false;
+  }
+  const sign = dir === 'right' ? 1 : -1;
+  // The tip's direction is the matrix applied to (±1, 0): its first column.
+  const dx = sign * matrix[0];
+  const dy = sign * matrix[1];
+  return Math.abs(dy) > Math.abs(dx);
+}
+
+/**
+ * The key D1's detector dedupes glyphs by: direction, path, and the axis the
+ * glyph renders on. A repeated glyph (many tree rows) is reported once, but an
+ * expanded copy (pointing down) and a collapsed copy (pointing sideways) of
+ * the same chevron stay separate, so an unjudged expanded copy cannot hide a
+ * collapsed one that fails to mirror. Runs in the page: keep it
+ * self-contained apart from glyphRendersOnBlockAxis.
+ */
+export function d1GlyphKey(dir, pathSig, matrix) {
+  const axis = glyphRendersOnBlockAxis(dir, matrix) ? 'block' : 'inline';
+  return dir + '::' + pathSig + '::' + axis;
+}
+
+/**
+ * The key D1 pairs an LTR glyph with its RTL counterpart by: the enclosing
+ * control's accessible label when it has one, else the glyph's position, plus
+ * the axis it renders on. A collapsed and an expanded chevron under one label
+ * (a tree toggle) are then judged as separate pairs, so an unjudged expanded
+ * copy cannot stand in for a collapsed copy that never mirrors.
+ */
+export function d1PairKey(glyph, index) {
+  const axis = glyphRendersOnBlockAxis(glyph.dir, glyph.matrix)
+    ? 'block'
+    : 'inline';
+  const label = glyph.aria && glyph.aria.trim();
+  return (label ? 'aria:' + label : 'idx:' + index) + '::' + axis;
+}
+
+/**
+ * Is this LTR/RTL pair one D1 leaves unjudged: a horizontal glyph that renders
+ * pointing the SAME way along the block axis in both directions (an expanded
+ * disclosure, down in both)? A glyph that points down in LTR and up in RTL
+ * changed direction, which DR5 forbids, so it stays judged.
+ */
+export function isUnchangedBlockAxisPair(ltr, rtl) {
+  if (
+    !ltr ||
+    !rtl ||
+    !glyphRendersOnBlockAxis(ltr.dir, ltr.matrix) ||
+    !glyphRendersOnBlockAxis(rtl.dir, rtl.matrix)
+  ) {
+    return false;
+  }
+  // The vertical component of each tip: positive is down in CSS.
+  const tipY = glyph => (glyph.dir === 'right' ? 1 : -1) * glyph.matrix[1];
+  return Math.sign(tipY(ltr)) === Math.sign(tipY(rtl));
 }
 
 /** Classify one stable LTR/RTL contextual-decoration pair. */

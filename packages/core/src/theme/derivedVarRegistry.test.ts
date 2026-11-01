@@ -265,6 +265,19 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
  * e.g. Carousel and Thumbnail set --_button-radius for their child Buttons,
  * but --_button-radius is documented in Button's doc.
  */
+/**
+ * Private system variables a component sets that are never a theming surface:
+ * no component documents them, and a theme never writes them. Each is named
+ * by the record that requires it.
+ */
+const PRIVATE_SYSTEM_VARS = new Set([
+  // Text and Heading FR3: a container that wraps with `overflow-wrap:
+  // anywhere` passes it to the Text inside it; Text reads it with a
+  // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
+  // keeps every such container setting it.
+  '--_astryx-text-overflow-wrap',
+]);
+
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   Carousel: ['--_button-radius'],
   Thumbnail: ['--_button-radius'],
@@ -387,7 +400,10 @@ describe('component CSS vars are documented and themeable', () => {
 
     it(`${dir}: all source vars are in doc file`, () => {
       const undocumented = sourceVars.filter(
-        v => !docVars.includes(v) && !crossVars.has(v),
+        v =>
+          !docVars.includes(v) &&
+          !crossVars.has(v) &&
+          !PRIVATE_SYSTEM_VARS.has(v),
       );
       expect(
         undocumented,

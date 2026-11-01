@@ -30,7 +30,7 @@ system_specs: []
 | Behavior                | A promotional card for a mega menu's featured slot: optional image, title, description, an optional call-to-action link, then caller content.                     |
 | End-user impact         | Users see a highlighted destination; screen-reader users skip a decorative image unless `imageAlt` names it.                                                      |
 | Builder impact          | None.                                                                                                                                                             |
-| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps (see Current-state impact).                                                                   |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                                                    |
 | Review checks           | Reject an image without `imageAlt` that is exposed to assistive technology, or a link rendered when only one of `linkLabel` and `linkHref` is set.                |
 | Governing rules         | `design:bidirectionality` DR4; `architecture:interaction-modality`; `architecture:component-theming-surface`.                                                     |
 
@@ -53,9 +53,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **The link arrow does not mirror.** The call-to-action link ends with a
-  literal `→`, which points right in right-to-left layouts too.
-  `design:bidirectionality` DR4 requires a progression glyph to mirror once.
 - **Browser default focus ring.** The call-to-action link does not use the shared
   focus outline; keyboard focus paints the browser's default ring.
   `architecture:interaction-modality` provides the shared indicator it bypasses.
@@ -79,12 +76,12 @@ No component-local concept beyond the consumer props.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                  | Basis                    |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
-| FR1 | The root `div` carries `top-nav-mega-menu-featured-card`, the forwarded `ref`, and other DOM props, and shows: the image (full width, 140 px tall) when `image` is set, then the title, description, link, and `children`. | Current source and tests |
-| FR2 | Without `imageAlt` the image is decorative: `alt=""`, `role="presentation"`, and `aria-hidden="true"`. With `imageAlt` it is a normal image with that alternative text.                                                    | Current source and tests |
-| FR3 | The link renders only when both `linkLabel` and `linkHref` are set, through the `LinkProvider` link component, as `linkLabel` followed by ` →`.                                                                            | Current source and tests |
-| FR4 | `className`, `style`, and `xstyle` merge after component styles.                                                                                                                                                           | Current source           |
+| ID  | Invariant                                                                                                                                                                                                                        | Basis                    |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| FR1 | The root `div` carries `top-nav-mega-menu-featured-card`, the forwarded `ref`, and other DOM props, and shows: the image (full width, 140 px tall) when `image` is set, then the title, description, link, and `children`.       | Current source and tests |
+| FR2 | Without `imageAlt` the image is decorative: `alt=""`, `role="presentation"`, and `aria-hidden="true"`. With `imageAlt` it is a normal image with that alternative text.                                                          | Current source and tests |
+| FR3 | The link renders only when both `linkLabel` and `linkHref` are set, through the `LinkProvider` link component, as `linkLabel` followed by ` →`; the arrow mirrors once in right-to-left layouts (`design:bidirectionality` DR4). | Current source and tests |
+| FR4 | `className`, `style`, and `xstyle` merge after component styles.                                                                                                                                                                 | Current source           |
 
 ### Allowed variation
 
@@ -125,16 +122,17 @@ anatomy-theming map is recorded.
 - `family:navigation-destinations` owns the accept/block decision for each
   destination this component renders.
 - `component:TopNavMegaMenu` renders the card in its featured area.
-- `design:bidirectionality` DR4 governs the link glyph gap.
+- `design:bidirectionality` DR4 governs the link glyph.
 
 ## Verification map
 
-| Contract | Verification                                         | Representative states       | Mutation or failure expectation              | Audit section                                    |
-| -------- | ---------------------------------------------------- | --------------------------- | -------------------------------------------- | ------------------------------------------------ |
-| FR1      | `TopNav.test.tsx` featured-card rest-forwarding test | Root props                  | Dropped props fail.                          | `audit:TopNavMegaMenuFeaturedCard/behavior`      |
-| FR2, FR3 | `TopNav.test.tsx` featured-card image tests          | With and without `imageAlt` | Exposed decorative image or lost link fails. | `audit:TopNavMegaMenuFeaturedCard/accessibility` |
+| Contract        | Verification                                                                  | Representative states          | Mutation or failure expectation                                                                                                                                                                                            | Audit section                                    |
+| --------------- | ----------------------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| FR1             | `TopNav.test.tsx` featured-card rest-forwarding test                          | Root props                     | Dropped props fail.                                                                                                                                                                                                        | `audit:TopNavMegaMenuFeaturedCard/behavior`      |
+| FR2, FR3        | `TopNav.test.tsx` featured-card image tests                                   | With and without `imageAlt`    | Exposed decorative image or lost link fails.                                                                                                                                                                               | `audit:TopNavMegaMenuFeaturedCard/accessibility` |
+| FR3 (RTL arrow) | `TopNav.test.tsx` featured-card arrow-mirror test, plus real-browser evidence | Link with a label, LTR and RTL | An arrow that points right in RTL, or a link name that changes, fails. Gap: the unit test sees the mirror class but not the inline-block box the transform needs; no committed browser check fails on an unmirrored arrow. | `audit:TopNavMegaMenuFeaturedCard/i18n-rtl`      |
 
-Read from source, with no focused test yet: the content order (FR1); the forwarded `ref` and the `top-nav-mega-menu-featured-card` target (FR1); that the link renders only when both `linkLabel` and `linkHref` are set (FR3); the image size (FR1), the `LinkProvider` link and trailing arrow (FR3), and FR4.
+Read from source, with no focused test yet: the content order (FR1); the forwarded `ref` and the `top-nav-mega-menu-featured-card` target (FR1); that the link renders only when both `linkLabel` and `linkHref` are set (FR3); the image size (FR1), the `LinkProvider` link (FR3), and FR4.
 
 ## Decision log
 

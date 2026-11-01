@@ -15,18 +15,15 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {isStableReleasePackage} from '../release/active-release.mjs';
+import {
+  DEFAULT_REGISTRY,
+  fetchVersionDocument,
+  packageKey,
+  registryUrl,
+} from './registry.mjs';
 
-const DEFAULT_REGISTRY = 'https://registry.npmjs.org';
 const DEFAULT_ATTEMPTS = 41;
 const DEFAULT_INTERVAL_MS = 15_000;
-
-function packageKey(name) {
-  return encodeURIComponent(name);
-}
-
-function registryUrl(registry, pathname) {
-  return new URL(pathname, `${registry.replace(/\/+$/u, '')}/`).href;
-}
 
 async function jsonResponse(response, label) {
   if (response.status !== 200) {
@@ -47,16 +44,8 @@ export async function verifyRegistryEntry({
   fetchImpl = fetch,
 }) {
   const encoded = packageKey(name);
-  const versionUrl = registryUrl(
-    registry,
-    `${encoded}/${encodeURIComponent(version)}`,
-  );
   const versionDocument = await jsonResponse(
-    await fetchImpl(versionUrl, {
-      cache: 'no-store',
-      headers: {accept: 'application/json'},
-      signal: AbortSignal.timeout(30_000),
-    }),
+    await fetchVersionDocument({name, version, registry, fetchImpl}),
     `${name}@${version} version document`,
   );
   if (versionDocument.version !== version) {

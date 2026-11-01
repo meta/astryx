@@ -556,7 +556,13 @@ export function CodeEditor({
         style,
       )}
       {...props}>
-      <div {...stylex.props(styles.editorContainer)} style={containerStyle}>
+      {/* Code, with its line numbers, keeps its own left-to-right direction
+          inside a right-to-left page (design:bidirectionality DR2): lines read
+          and indent correctly, and a long line scrolls from its start. */}
+      <div
+        dir="ltr"
+        {...stylex.props(styles.editorContainer)}
+        style={containerStyle}>
         {hasLineNumbers && (
           <div
             {...stylex.props(styles.gutter, gutterSizeStyle)}
@@ -570,7 +576,9 @@ export function CodeEditor({
         )}
         <div style={{position: 'relative', flex: 1}}>
           {showPlaceholder && (
-            <div {...stylex.props(styles.placeholder, sizeStyle)}>
+            // The placeholder is prose, not code: it takes its own text's
+            // direction, so an Arabic or Hebrew hint still reads correctly.
+            <div dir="auto" {...stylex.props(styles.placeholder, sizeStyle)}>
               {placeholder}
             </div>
           )}

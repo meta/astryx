@@ -66,8 +66,16 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  assertSelectorParses,
+  bindDetectorValue,
   resolveFilterRoutes,
   finishFiniteAnimations,
+  d1GlyphKey,
+  d1PairKey,
+  glyphRendersOnBlockAxis,
+  gradeDirectionalPair,
+  gradePositionedPair,
+  isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   validateStoryRtlAuditParameters,
@@ -375,6 +383,8 @@ async function iconPath(page, sel) {
 // Ambiguous glyphs are treated as NON-DIRECTIONAL (err toward not flagging).
 const DETECTOR = /* js */ `
 (() => {
+  const glyphRendersOnBlockAxis = ${glyphRendersOnBlockAxis.toString()};
+  const d1GlyphKey = ${d1GlyphKey.toString()};
   // Known directional path signatures (whitespace-normalized, lowercased).
   const LEFT_PATHS = new Set([
     'm15 6l-6 6 6 6',        // core defaultIcons chevronLeft
@@ -469,14 +479,15 @@ const DETECTOR = /* js */ `
     // icon has a real box and IS scanned.
     const box = svg.getBoundingClientRect();
     if (box.width < 1 || box.height < 1) continue;
-    // dedupe by (direction + path signature) so a repeated glyph (e.g. many
-    // tree rows) is reported once
-    const key = dir + '::' + dcat;
+    // dedupe by (direction + path signature + rendered axis) so a repeated
+    // glyph (e.g. many tree rows) is reported once, while an expanded copy and
+    // a collapsed copy of one chevron are both kept
+    const matrix = composedMatrixFor(svg);
+    const key = d1GlyphKey(dir, dcat, matrix);
     if (seenPaths.has(key)) continue;
     seenPaths.add(key);
     const btn = svg.closest('button,[role=button],a');
     const aria = btn ? (btn.getAttribute('aria-label') || '') : '';
-    const matrix = composedMatrixFor(svg);
     const flip =
       Math.abs(matrix[0] + 1) < 0.01 && Math.abs(matrix[1]) < 0.01 &&
       Math.abs(matrix[2]) < 0.01 && Math.abs(matrix[3] - 1) < 0.01;
@@ -540,7 +551,7 @@ function decorationCard(component, storyId, ltr, rtl) {
 // or "wildly off" reading that is pure noise — the spike's single false
 // positive came from exactly this, and the guard removes it.
 const PM_DETECTOR = /* js */ `
-(() => {
+((PHYSICAL) => {
   function parseMatrixX(t) {
     if (!t || t === 'none') return null;
     let m = t.match(/^matrix\\(([^)]+)\\)/);
@@ -596,14 +607,25 @@ const PM_DETECTOR = /* js */ `
       cls: (el.className && el.className.toString().slice(0, 48)) || '',
       parentW: pr.width,
       relCenterX,
+      // Inside the story-declared plot (rtlAudit.D5), chart coordinates stay
+      // physical (DR5).
+      physical: PHYSICAL && el.closest(PHYSICAL.within) ? PHYSICAL.physical : null,
     });
   }
   return out;
-})()
+})(__RTL_PHYSICAL__)
 `;
 
-async function detectPositioned(page) {
-  return page.evaluate(PM_DETECTOR).catch(() => []);
+async function detectPositioned(page, physical = null) {
+  // An unparsable plot selector errors the story rather than being skipped
+  // (INV13); it is checked outside the catch below.
+  if (physical) {
+    await page.evaluate(
+      `(${assertSelectorParses.toString()})(document, ${JSON.stringify(physical.within)})`,
+    );
+  }
+  const detector = bindDetectorValue(PM_DETECTOR, '__RTL_PHYSICAL__', physical);
+  return page.evaluate(detector).catch(() => []);
 }
 
 // Auto-discovery D5 for one story: compare LTR vs RTL positioned-element
@@ -614,6 +636,10 @@ const PM_TOL = Number(process.env.PM_TOL || 3); // px tolerance (signal gap was 
 
 function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
   const card = {component, storyId, dim: 'D5-positional', verdict: 'N-A', notes: [], candidates: 0, fails: []};
+  // Disclose every declared physical region (INV16), whatever the verdict.
+  if (ltrMeasure.physical) {
+    card.declaredD5Physical = {component, storyId, ...ltrMeasure.physical};
+  }
   const ltr = ltrMeasure.positioned;
   const revealedL = PM_REVEAL && ltrMeasure.revealed;
 
@@ -647,25 +673,29 @@ function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
   // parent's horizontal center.
   const n = Math.min(ltr.length, rtl.length);
   let anyFail = false;
+  let anyPhysical = false;
   const perEl = [];
   for (let i = 0; i < n; i++) {
     const L = ltr[i], R = rtl[i];
-    const expectedRtlCX = L.parentW - L.relCenterX; // mirror about parent center
-    const delta = Math.abs(R.relCenterX - expectedRtlCX);
-    const mirrored = delta <= PM_TOL;
-    if (!mirrored) {
+    // Mirror about the parent center, or keep the physical position under a
+    // declared chart marker (DR5); an unknown marker fails closed.
+    const grade = gradePositionedPair(L, R, PM_TOL);
+    if (grade.expectation === 'physical') anyPhysical = true;
+    if (!grade.pass) {
       anyFail = true;
       card.fails.push({
         cls: L.cls,
         tag: L.tag,
+        expectation: grade.expectation,
         parentW: Math.round(L.parentW),
         ltrRelCenterX: Math.round(L.relCenterX * 10) / 10,
         rtlRelCenterX: Math.round(R.relCenterX * 10) / 10,
-        expectedRtlCenterX: Math.round(expectedRtlCX * 10) / 10,
-        delta: Math.round(delta * 10) / 10,
+        expectedRtlCenterX: grade.expected == null ? null : Math.round(grade.expected * 10) / 10,
+        delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10,
+        reason: grade.reason,
       });
     }
-    perEl.push({idx: i, cls: L.cls, delta: Math.round(delta * 10) / 10, mirrored});
+    perEl.push({idx: i, cls: L.cls, expectation: grade.expectation, delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10, pass: grade.pass});
   }
   card.perEl = perEl;
   if (anyFail) {
@@ -673,12 +703,18 @@ function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
     card.notes.push(
       `positioned element(s) land on the wrong side in RTL: ` +
         card.fails
-          .map(f => `${f.cls || f.tag} (LTR cx ${f.ltrRelCenterX} → RTL cx ${f.rtlRelCenterX}, expected ~${f.expectedRtlCenterX}, Δ${f.delta}px)`)
+          .map(f => f.reason
+            ? `${f.cls || f.tag} (${f.reason})`
+            : `${f.cls || f.tag} (${f.expectation === 'physical' ? 'chart position should stay physical; ' : ''}LTR cx ${f.ltrRelCenterX} → RTL cx ${f.rtlRelCenterX}, expected ~${f.expectedRtlCenterX}, Δ${f.delta}px)`)
           .join('; '),
     );
   } else {
     card.verdict = 'pass';
-    card.notes.push(`every positioned candidate mirrors about its parent center (≤${PM_TOL}px)`);
+    card.notes.push(
+      anyPhysical
+        ? `every positioned candidate holds its expected position (mirrored, or physical in a declared chart plot) (≤${PM_TOL}px)`
+        : `every positioned candidate mirrors about its parent center (≤${PM_TOL}px)`,
+    );
   }
   return card;
 }
@@ -692,12 +728,18 @@ async function measureAutoStory(page, port, storyId, rtl, {positioned, decoratio
   await page.goto(storyUrl(port, storyId, rtl), {waitUntil: 'domcontentloaded'});
   await settle(page);
   const measure = {positioned: [], decorations: [], revealed: false};
-  if (positioned && !PM_REVEAL) measure.positioned = await detectPositioned(page);
+  // A story may declare a plot whose overlays stay physical (rtlAudit.D5);
+  // D5 still scans it. Malformed metadata throws (INV13).
+  const physical = positioned
+    ? (await readStoryRtlAuditParameters(page, storyId)).D5 ?? null
+    : null;
+  if (positioned && !PM_REVEAL) measure.positioned = await detectPositioned(page, physical);
   if (decorations || (positioned && PM_REVEAL)) {
     measure.revealed = await revealInteractionGated(page);
   }
-  if (positioned && PM_REVEAL) measure.positioned = await detectPositioned(page);
+  if (positioned && PM_REVEAL) measure.positioned = await detectPositioned(page, physical);
   if (decorations) measure.decorations = await detectDirectionalDecorations(page);
+  measure.physical = physical;
   return measure;
 }
 
@@ -749,7 +791,7 @@ async function autoD1(
   // Pair LTR<->RTL directional icons by aria-context (fallback: positional
   // index) and evaluate EACH pair, so a two-button name-swap (prev/next) is
   // seen per-button rather than washed out by a global multiset.
-  const keyOf = (i, idx) => (i.aria && i.aria.trim() ? 'aria:' + i.aria.trim() : 'idx:' + idx);
+  const keyOf = d1PairKey;
   const ltrBy = new Map();
   ltr.forEach((i, idx) => ltrBy.set(keyOf(i, idx), i));
   const rtlBy = new Map();
@@ -760,6 +802,7 @@ async function autoD1(
   let anyUnhandled = false; // at least one directional icon neither flips nor swaps
   let anyDoubleFlip = false;
   const perIcon = [];
+  let blockAxisOnly = 0; // unmirrored glyphs that point up or down in both directions
   for (const k of keys) {
     const L = ltrBy.get(k), R = rtlBy.get(k);
     // transform-mirror: the glyph's COMPOSED transform under RTL equals its LTR
@@ -780,6 +823,17 @@ async function autoD1(
     const doubleFlip =
       L && R && L.flip && R.flip &&
       L.matrix.every((v, i) => Math.abs(v - R.matrix[i]) < 0.01);
+    // A horizontal glyph turned a quarter turn (an expanded disclosure) points
+    // up or down. Pointing the same way along the block axis in BOTH
+    // directions, it carries no inline meaning (DR5): leaving it unmirrored is
+    // correct, so it is not judged. One that flips between down and up is
+    // still judged; a mirrored one renders the same and counts as handled.
+    const blockAxis = !mirrored && !swapped && isUnchangedBlockAxisPair(L, R);
+    if (blockAxis) {
+      blockAxisOnly++;
+      perIcon.push({icon: k, ltrDir: L.dir, rtlDir: R.dir, ltrMatrix: L.matrix, rtlMatrix: R.matrix, blockAxis: true});
+      continue;
+    }
     if (mirrored || swapped) anyMirrored = true;
     else if (doubleFlip) { anyDoubleFlip = true; anyUnhandled = true; }
     else anyUnhandled = true;
@@ -789,7 +843,10 @@ async function autoD1(
   // A component is RTL-ready for D1 iff EVERY directional icon is handled
   // (flips or swaps) and none double-flips. Any unhandled directional icon =>
   // not-RTL (the "shipped without RTL handling" signal).
-  if (!anyUnhandled && anyMirrored) {
+  if (!anyUnhandled && !anyMirrored && blockAxisOnly > 0) {
+    card.verdict = 'N-A';
+    card.notes.push('every directional glyph points along the block axis in both directions (rotated a quarter turn)');
+  } else if (!anyUnhandled && anyMirrored) {
     card.verdict = 'pass';
     card.notes.push('every directional icon mirrors (transform-flip and/or name-swap)');
   } else if (anyDoubleFlip) {
@@ -797,7 +854,7 @@ async function autoD1(
     card.notes.push('double-flip: a directional icon is flipped in BOTH LTR and RTL (nets to no mirror)');
   } else {
     card.verdict = 'fail';
-    const bad = perIcon.filter(p => !p.mirrored && !p.swapped).map(p => p.icon);
+    const bad = perIcon.filter(p => !p.blockAxis && !p.mirrored && !p.swapped).map(p => p.icon);
     card.notes.push(`directional glyph never mirrors: ${bad.join(', ')}`);
   }
   card.perIcon = perIcon;
@@ -884,7 +941,7 @@ async function checkD2(page, port, t, card) {
   const pR = await boxOf(page, prev), nR = await boxOf(page, next);
   if (!pL || !nL || !pR || !nR) { card.dims.D2 = 'N-A'; card.notes.push('D2: prev/next not found'); return; }
   const ltrOk = pL.cx < nL.cx, rtlOk = pR.cx > nR.cx;
-  card.dims.D2 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D2 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D2 prev/next cx: LTR ${pL.cx.toFixed(0)}<${nL.cx.toFixed(0)}=${ltrOk}; RTL ${pR.cx.toFixed(0)}>${nR.cx.toFixed(0)}=${rtlOk}`);
 }
 async function checkD3Scroll(page, port, t, card) {
@@ -901,7 +958,7 @@ async function checkD3Scroll(page, port, t, card) {
   const dL = await run(false), dR = await run(true);
   if (dL == null || dR == null) { card.dims.D3 = 'N-A'; card.notes.push('D3: scroller/next not found'); return; }
   const ltrOk = dL > 1, rtlOk = dR < -1;
-  card.dims.D3 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D3 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D3 scroll delta on next: LTR ${dL.toFixed(0)} (>0=${ltrOk}); RTL ${dR.toFixed(0)} (<0=${rtlOk})`);
 }
 async function checkD4(page, port, t, card) {
@@ -1594,6 +1651,9 @@ async function cleanupRuntime() {
   const surprises = autoFails;
   const pmFails = pmResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
   const decorationFails = decorationResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
+  const declaredD5PhysicalRegions = pmResults.flatMap(result =>
+    result.declaredD5Physical ? [result.declaredD5Physical] : [],
+  );
   const declaredD1Exclusions = autoResults
     .flatMap(result => result.declaredD1Exclusions ?? [])
     .sort(
@@ -1639,6 +1699,8 @@ async function cleanupRuntime() {
     // fresh page.
     pageRecoveries,
     declaredD1Exclusions,
+    // Story-declared plots whose overlays D5 grades as physical (DR5).
+    declaredD5PhysicalRegions,
     autoDiscovery: {
       total: autoResults.length,
       applicable: autoResults.filter(r => r.verdict !== 'N-A').length,
@@ -1676,6 +1738,7 @@ async function cleanupRuntime() {
   console.error(`DEC : ${report.directionalDecorations.pass} pass / ${report.directionalDecorations.fail} fail / ${report.directionalDecorations.na} N-A`);
   console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
   console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+  if (declaredD5PhysicalRegions.length > 0) console.error(`D5P : ${declaredD5PhysicalRegions.length} declared physical region(s): ${declaredD5PhysicalRegions.map(r => `${r.storyId} (${r.physical} within ${r.within})`).join('; ')}`);
   // Non-zero exit only signals CI (which is soft/continue-on-error). Surface a
   // signal but never let it hard-block during the stability window.
   const anySignal =
