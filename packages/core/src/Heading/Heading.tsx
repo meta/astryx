@@ -9,10 +9,11 @@
  * @position Core implementation; lives in own Heading/ dir, re-exported by Text/
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/Text/Text.doc.mjs (props table, features, implementation notes)
+ * - /packages/core/src/Text/Heading.doc.mjs (props table, theming target)
  * - /packages/core/src/Heading/Heading.test.tsx (tests for new/changed behavior)
- * - /packages/core/src/Text/index.ts (exports if types change)
- * - /apps/storybook/stories/Text.stories.tsx (storybook stories)
+ * - /packages/core/src/Heading/index.ts (exports if types change)
+ * - /packages/core/src/Text/index.ts (re-exports if types change)
+ * - /apps/storybook/stories/Heading.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/Heading/ (showcase blocks)
  * - /packages/cli/assets/templates/blocks/components/Text/ (showcase blocks)
  */
