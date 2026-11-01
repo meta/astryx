@@ -1613,6 +1613,30 @@ describe('spec owner workflow reconciliation', () => {
         expect(latestReviewGate(harness.state).description).toBe(tooLarge);
       });
 
+      it('stops, rather than decides, when the budget runs out comparing an approval', async () => {
+        // One record fits the budget; the approved commit's comparison does not.
+        const harness = createHarness({
+          headContent: currentRecord,
+          contentAt: {[oldHead]: currentRecord},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        countRequests(harness);
+
+        await reconcileSpecOwnerGate({
+          github: harness.github,
+          context: context({runId: 100n}),
+          core: harness.core,
+          workspace,
+          env,
+          requestBudget: 2,
+        });
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: tooLarge,
+        });
+      });
+
       it("lets a maintainer's dispatch decide past the budget", async () => {
         const harness = createHarness({
           changedFiles: moved,
