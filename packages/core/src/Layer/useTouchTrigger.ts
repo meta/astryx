@@ -195,6 +195,13 @@ export interface UseTouchTriggerReturn {
 
   /** Forget a tap-open. Call from every other close path (Escape, controlled). */
   clearTapOpen: () => void;
+
+  /**
+   * Arms the outside dismissal a tap-open gets: a press that lifts outside
+   * the trigger and the layer, or a scroll that starts there, hides it. A
+   * press pin arms it too (usePressPin).
+   */
+  armOutsideDismiss: () => void;
 }
 
 /**
@@ -414,5 +421,6 @@ export function useTouchTrigger(
     handlePointerEnter,
     handlePointerDown,
     clearTapOpen: disarmOutsideDismiss,
+    armOutsideDismiss,
   };
 }

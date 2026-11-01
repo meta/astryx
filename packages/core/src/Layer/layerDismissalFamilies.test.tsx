@@ -3,7 +3,7 @@
 /**
  * @file layerDismissalFamilies.test.tsx
  * @input Uses vitest, @testing-library/react, BottomSheet, Dialog, Lightbox,
- *   MobileNav, HoverCard, Tooltip
+ *   MobileNav, HoverCard, Tooltip (also pinned by `pressTrigger="toggle"`)
  * @output Tests that every overlay family shares the one dismissal stack
  * @position Colocated with layerStack; the families' own behavior is tested in
  *   their own files, this one only asks who takes the press
@@ -429,6 +429,107 @@ describe('overlay families on the shared dismissal stack', () => {
 
       expect(onCardChange).toHaveBeenCalledWith(false);
       expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('a Tooltip a press pinned takes the Escape first, and the Dialog stays open (spec:AST-003 FR4)', () => {
+      const onDialogChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <Tooltip content="Pinned tip" pressTrigger="toggle">
+            <button type="button">Info</button>
+          </Tooltip>
+        </Dialog>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Info'}));
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(screen.getByRole('button', {name: 'Info'})).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
+
+      let event = new KeyboardEvent('keydown');
+      act(() => {
+        event = pressEscape();
+      });
+
+      expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+      expect(screen.getByRole('button', {name: 'Info'})).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('a HoverCard a press pinned takes the Escape first, and the Dialog stays open (spec:AST-003 FR4)', () => {
+      const onDialogChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <HoverCard
+            content={<p>Pinned card</p>}
+            label="Profile"
+            pressTrigger="toggle">
+            <button type="button">Ada</button>
+          </HoverCard>
+        </Dialog>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Ada'}));
+      expect(screen.getByRole('button', {name: 'Ada'})).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
+
+      const event = pressEscape();
+
+      expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('a controlled HoverCard a press pinned takes the Escape first and reports it, and the Dialog stays open (spec:AST-003 FR4)', () => {
+      const onDialogChange = vi.fn();
+      const onCardChange = vi.fn();
+      function ControlledCard() {
+        const [isOpen, setIsOpen] = useState(false);
+        return (
+          <HoverCard
+            content={<p>Pinned card</p>}
+            label="Profile"
+            pressTrigger="toggle"
+            isOpen={isOpen}
+            onOpenChange={next => {
+              onCardChange(next);
+              setIsOpen(next);
+            }}>
+            <button type="button">Ada</button>
+          </HoverCard>
+        );
+      }
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <ControlledCard />
+        </Dialog>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Ada'}));
+      expect(onCardChange).toHaveBeenLastCalledWith(true);
+      expect(screen.getByRole('button', {name: 'Ada'})).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+
+      let event = new KeyboardEvent('keydown');
+      act(() => {
+        event = pressEscape();
+      });
+
+      expect(onCardChange).toHaveBeenLastCalledWith(false);
       expect(onDialogChange).not.toHaveBeenCalled();
       expect(event.defaultPrevented).toBe(true);
     });

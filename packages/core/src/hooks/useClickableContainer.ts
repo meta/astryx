@@ -22,6 +22,7 @@
 
 import {useCallback, useEffect, type RefObject, type MouseEvent} from 'react';
 import {isSafeUrl} from '../utils/safeUrl';
+import {isPressPinClick} from '../Layer/usePressPin';
 
 /**
  * Canonical list of interactive element selectors — native controls plus
@@ -170,7 +171,9 @@ export function useClickableContainer({
 
   const onClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
-      if (disabled) {
+      // A press that pinned or closed a tooltip or hover card stops at its
+      // trigger: the container does not act on it (component:Tooltip FR9).
+      if (disabled || isPressPinClick(event.nativeEvent)) {
         return;
       }
 
