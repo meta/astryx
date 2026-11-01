@@ -104,14 +104,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                    | Basis                             |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| FR1 | The root appears when at least one slot passes the shared scalar-presence predicate or `status` is present. Non-scalar values are treated as present without inspecting their inner content. | Current source and tests          |
-| FR2 | Accepted slot values render in timestamp, footer, status order with dots between values considered present; numeric `0` is visible in either slot, and non-scalar nodes remain opaque.       | Current source and tests          |
-| FR3 | A `user` message reverses row direction; `assistant`, `system`, and absent context use the forward path.                                                                                     | Current source                    |
-| FR4 | Status selects one of five registry icons and localized labels; failure uses the error text token, and sending has a CSS pulse suppressed under reduced motion.                              | Current source and locale catalog |
-| FR5 | The root merges the target, default StyleX output, and consumer `xstyle`, `className`, and `style`; accepted neutral DOM/ARIA inputs and `ref` reach that root.                              | Current source and tests          |
-| FR6 | A status item has a translated title and author-supplied `aria-label`, an icon and visible localized text. The row declares no live-region role or imperative announcement.                  | Current source and tests          |
+| ID  | Invariant                                                                                                                                                                                                    | Basis                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
+| FR1 | The root appears when at least one slot passes the shared scalar-presence predicate or `status` is present. Non-scalar values are treated as present without inspecting their inner content.                 | Current source and tests          |
+| FR2 | Accepted slot values render in timestamp, footer, status order with dots between values considered present; numeric `0` is visible in either slot, and non-scalar nodes remain opaque.                       | Current source and tests          |
+| FR3 | A `user` message reverses row direction; `assistant`, `system`, and absent context use the forward path.                                                                                                     | Current source                    |
+| FR4 | Status selects one of four registry icons (`delivered` and `read` share `checkDouble`) and localized labels; failure uses the error text token, and sending has a CSS pulse suppressed under reduced motion. | Current source and locale catalog |
+| FR5 | The root merges the target, default StyleX output, and consumer `xstyle`, `className`, and `style`; accepted neutral DOM/ARIA inputs and `ref` reach that root.                                              | Current source and tests          |
+| FR6 | A status item has a translated title and author-supplied `aria-label`, an icon and visible localized text. The row declares no live-region role or imperative announcement.                                  | Current source and tests          |
 
 ### Allowed variation
 
@@ -180,19 +180,19 @@ No component-local design decision is recorded.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                    | Representative states                         | Mutation or failure expectation                         | Audit section                          |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------- | -------------------------------------- |
-| FR1–FR2  | `ChatMessageMetadata.test.tsx` separator, empty-row, and numeric-zero tests; the metadata tests in `ChatMessageBubble.test.tsx` | empty scalar; zero; timestamp, footer, status | A stray separator, a blank row, or a hidden zero fails. | `audit:ChatMessageMetadata/behavior`   |
-| FR5      | `ChatMessageMetadata.test.tsx` "forwards rest props (data-_, aria-_, id) to the root element"                                   | data, ARIA, and id props                      | A dropped prop fails.                                   | `audit:ChatMessageMetadata/public-api` |
+| Contract      | Verification                                                                                                                                                                  | Representative states                          | Mutation or failure expectation                                                    | Audit section                          |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------- |
+| FR1–FR2       | `ChatMessageMetadata.test.tsx` separator, empty-row, and numeric-zero tests; the metadata tests in `ChatMessageBubble.test.tsx`                                               | empty scalar; zero; timestamp, footer, status  | A stray separator, a blank row, or a hidden zero fails.                            | `audit:ChatMessageMetadata/behavior`   |
+| FR5           | `ChatMessageMetadata.test.tsx` `forwards rest props (data-*, aria-*, id) to the root element`                                                                                 | data and id props                              | A dropped prop fails.                                                              | `audit:ChatMessageMetadata/public-api` |
+| FR3, FR4, FR6 | `ChatMessageMetadata.a11y.chromium.spec.ts` status and RTL sender-ordering tests; `ChatMessageBubble.test.tsx` "renders status" and "renders timestamp and status on one row" | each status; user and assistant in LTR and RTL | A wrong sender order, a missing caption or title, or a dropped status label fails. | `audit:ChatMessageMetadata/behavior`   |
 
 Read from source, with no focused test yet:
 
-- FR3: the user row reversing direction.
-- FR4: each status's icon and translated caption, the error color, and the
-  sending pulse and its reduced-motion suppression.
-- FR5: `ref`, `className`, `style`, and `xstyle` composition, and the target.
-- FR6, AR1–AR2: the status title and label, and no live region of the row's
-  own.
+- FR4: each status's icon, the error color, and the sending pulse and its
+  reduced-motion suppression.
+- FR5: ARIA passthrough, `ref`, `className`, `style`, and `xstyle`
+  composition, and the target.
+- FR6, AR1: no live region of the row's own.
 - PR1: no state, Effect, timer, observer, or listener.
 
 ## Decision log
