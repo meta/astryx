@@ -141,6 +141,8 @@ import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {PressBounds} from './PressTracker';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
 import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
+import {containsAlongFlatTree} from '../utils/flatTree';
+import {isIosWebKit} from '../utils/touchQueries';
 import {
   gestureHostStyle,
   type GestureHostStyle,
@@ -377,19 +379,6 @@ function landedOn(
     return retargeted;
   }
   return event.composedPath()[0] ?? retargeted;
-}
-
-/**
- * Whether `node` is `ancestor` or below it along the flat tree: across an open
- * shadow root to its host, which `Node.contains` does not follow.
- */
-function containsAlongFlatTree(ancestor: Node, node: Node): boolean {
-  for (let at: Node | null = node; at != null; at = parentAcrossShadow(at)) {
-    if (at === ancestor) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**
@@ -3053,19 +3042,6 @@ function coalescedHistory(event: PointerEvent): TouchSample[] {
     y: sample.clientY,
     time: eventTime(sample),
   }));
-}
-
-/**
- * iOS WebKit, by the one property only it implements (the engine check of
- * utils/touchPresentation.ts, which this module cannot import: it brings
- * React). It gates one behaviour, presented hit testing, an engine
- * workaround (`spec:AST-013` FR6) with its review condition and regression
- * fixture in motion/presentation.ts.
- */
-function isIosWebKit(
-  view: (Window & {CSS?: Partial<typeof CSS>}) | null,
-): boolean {
-  return view?.CSS?.supports?.('-webkit-touch-callout', 'none') === true;
 }
 
 /** The gesture host of a document, created on first use. */
