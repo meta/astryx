@@ -753,12 +753,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     loadingRef.current = false;
   }
   // A field that becomes disabled stops showing a search as busy in the same
-  // render; the layout effect below drops the work itself.
+  // render, and the dropped query shows no outcome, so no empty state; the
+  // layout effect below drops the work itself.
   const [disabledOfState, setDisabledOfState] = useState(isDisabled);
   if (disabledOfState !== isDisabled) {
     setDisabledOfState(isDisabled);
     if (isDisabled && isLoading) {
       setIsLoading(false);
+      setHasSearched(false);
     }
   }
 

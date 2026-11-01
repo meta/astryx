@@ -2556,6 +2556,8 @@ describe('Typeahead disabledMessage', () => {
       document.querySelector('[data-astryx-live-region="polite"]')
         ?.textContent ?? '',
     ).toBe('');
+    // The dropped query has no outcome: no empty state either.
+    expect(screen.queryByText('No results found')).not.toBeInTheDocument();
   });
 });
 
