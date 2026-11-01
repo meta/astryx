@@ -703,6 +703,25 @@ describe('buildAuditedComponentRoster', () => {
   });
 });
 
+describe('documented components outside component directories', () => {
+  it('routes a Core/Themes/Theme story to the documented Theme component', () => {
+    const routes = buildStoryComponentRoutes({
+      stories: [{id: 'core-themes-theme--default', title: 'Core/Themes/Theme'}],
+      publicComponentsByPackage: {core: ['Button', 'Theme']},
+    });
+    expect(routes.map(route => route.component)).toEqual(['core/Theme']);
+  });
+
+  it('finds Core Theme-family exports that live in a lowercase directory', () => {
+    const names =
+      componentPackages.documentedComponentsOutsideComponentDirectories(
+        new URL('../..', import.meta.url).pathname,
+        componentPackages.componentPackage('core'),
+      );
+    expect(names).toEqual(expect.arrayContaining(['MediaTheme', 'Theme']));
+  });
+});
+
 describe('audited package and story routing', () => {
   const publicComponentsByPackage = Object.fromEntries(
     AUDITED_PACKAGE_NAMES.map(packageName => {

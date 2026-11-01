@@ -96,31 +96,10 @@ import {
 const {
   componentExportsFromBarrel,
   componentPackage,
-  documentedComponentNames,
-  exportedComponentNames,
+  documentedComponentsOutsideComponentDirectories,
   flatPackageComponentNames,
   nestedPackageComponentNames,
 } = componentPackages;
-
-// Documented, exported components that live outside PascalCase directories
-// (Core's `theme/` holds Theme and MediaTheme), which roster discovery does not
-// reach. They join the roster as package-qualified entries (INV5), so a story
-// retitle cannot drop them.
-function documentedComponentsOutsideDiscovery(repoRoot, pkg) {
-  if (pkg.layout === 'flat') return [];
-  const sourceDir = path.join(repoRoot, pkg.src);
-  const exported = new Set(exportedComponentNames(sourceDir));
-  let entries = [];
-  try {
-    entries = fs.readdirSync(sourceDir, {withFileTypes: true});
-  } catch {
-    return [];
-  }
-  return entries
-    .filter(entry => entry.isDirectory() && !/^[A-Z]/.test(entry.name))
-    .flatMap(entry => documentedComponentNames(path.join(sourceDir, entry.name)))
-    .filter(name => exported.has(name));
-}
 
 const args = process.argv.slice(2);
 const getArg = name => {
@@ -1354,16 +1333,19 @@ async function cleanupRuntime() {
     try {
       const pkg = componentPackage(packageName);
       if (!pkg) throw new Error('package is missing from component registry');
+      // Documented exports outside component directories (Core's Theme
+      // family) are public too (INV5): they get roster entries and route
+      // their stories.
       const componentNames = pkg.layout === 'flat'
         ? flatPackageComponentNames(PROJECT_ROOT, pkg)
-        : nestedPackageComponentNames(PROJECT_ROOT, pkg);
+        : Array.from(new Set([
+          ...nestedPackageComponentNames(PROJECT_ROOT, pkg),
+          ...documentedComponentsOutsideComponentDirectories(PROJECT_ROOT, pkg),
+        ])).sort();
       publicComponentsByPackage[packageName] = componentNames;
       if (ACTIVE_PACKAGE_NAMES.includes(packageName)) {
         sourceComponents.push(
           ...componentNames.map(component => `${packageName}/${component}`),
-          ...documentedComponentsOutsideDiscovery(PROJECT_ROOT, pkg)
-            .filter(name => !componentNames.includes(name))
-            .map(component => `${packageName}/${component}`),
         );
       }
     } catch (error) {
