@@ -4,10 +4,19 @@
 
 /**
  * @file LayoutPanel.tsx
- * @input Uses React StyleX, LayoutAreaContext, LayoutSlotsContext
+ * @input Uses React StyleX, LayoutAreaContext, LayoutSlotsContext, the
+ *   resize channel (Resizable/resizablePane.ts) and LayoutChangeSnapshot
  * @output Exports LayoutPanel component and LayoutPanelProps
  * @position Sidebar panel for Layout start/end slots. Use for navigation panels,
  *   settings sidebars, detail panels, or any fixed-width side content.
+ *   Sized by a resize controller, it lends that controller its element in its
+ *   callback ref, which slides it closed and open: beside the ResizeHandle of
+ *   a useResizable(handleRef) region, or given the hook's own `resizable`
+ *   props (component:LayoutPanel FR7). It tells the controller of a collapse
+ *   or open before the DOM changes, in the commit that renders it. A
+ *   hand-built `resizable` object never slides. A collapsing panel moves focus
+ *   inside it to its ResizeHandle, then goes inert and aria-hidden while
+ *   collapsed (component:LayoutPanel AR2)
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Layout/Layout.doc.mjs
@@ -17,7 +26,7 @@
 
 import type {AriaRole, ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
-import {use} from 'react';
+import {use, useCallback, useRef, useState, useSyncExternalStore} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {LayoutAreaContext} from './LayoutAreaContext';
@@ -25,6 +34,14 @@ import {LayoutSlotsContext} from './LayoutSlotsContext';
 import {mergeProps} from '../utils';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import type {ResizableProps} from '../Resizable/useResizable';
+import {
+  createResizablePaneLink,
+  regionOfProps,
+  resizeHandleBeside,
+} from '../Resizable/resizablePane';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {themeProps} from '../utils/themeProps';
 import {
   paddingStyles,
@@ -99,6 +116,8 @@ const styles = stylex.create({
     marginInlineEnd: `calc(-1 * var(--layout-padding-inner-x, ${spacingVars['--spacing-4']}))`,
   },
 });
+
+const returnFalse = () => false;
 
 // Dynamic styles for sizing props
 const dynamicStyles = stylex.create({
@@ -226,6 +245,69 @@ export function LayoutPanel({
   // When resizable props are provided, use the hook-driven size
   const effectiveWidth = resizable ? resizable._size : width;
 
+  // A panel sized by a resize controller lends it its element in its callback
+  // ref, and the controller slides it on collapse and open
+  // (component:LayoutPanel FR7): beside the ResizeHandle of a
+  // useResizable(handleRef) region, which finds it from the handle and holds
+  // it collapsed; or handed to the region whose own `props` it takes. A
+  // hand-built `resizable` object has no region: it lends nothing and never
+  // slides.
+  const [paneLink] = useState(createResizablePaneLink);
+  const isHeldCollapsed = useSyncExternalStore(
+    paneLink.subscribe,
+    paneLink.isCollapsed,
+    returnFalse,
+  );
+  const isFoundBeside = resizable == null;
+  const region = resizable == null ? undefined : regionOfProps(resizable);
+  const lendRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      const isLent = isFoundBeside || region != null;
+      const pane = paneLink.attach(isLent ? element : null, isFoundBeside);
+      region?.attach(pane);
+    },
+    [paneLink, isFoundBeside, region],
+  );
+  const contentFacingEdge = area === 'end' ? 'inline-start' : 'inline-end';
+  // A collapse or open reaches the controller before the DOM changes, in the
+  // commit that renders it, whatever made it: the controller's own change or
+  // a controlled `isCollapsed` it hears of after this commit.
+  const isAtZero = effectiveWidth === 0;
+  const tellBeforeChange = useCallback(() => {
+    paneLink.beforeChange(isAtZero);
+  }, [paneLink, isAtZero]);
+  useIsomorphicLayoutEffect(() => {
+    paneLink.committed(effectiveWidth, contentFacingEdge);
+  });
+
+  // A collapsing panel moves focus inside it to its ResizeHandle, then goes
+  // inert and hidden from assistive technology, a commit later, so inert never
+  // drops that focus to the page; opening drops both at once
+  // (component:LayoutPanel AR2). The region's collapse state is the one its
+  // ref-form controller holds, or the `resizable` props' own, whether the
+  // hook's or a hand-built object.
+  const elementRef = useRef<HTMLDivElement>(null);
+  const isRegionCollapsed =
+    resizable == null ? isHeldCollapsed : resizable._isCollapsed;
+  const [isSettledCollapsed, setIsSettledCollapsed] =
+    useState(isRegionCollapsed);
+  if (!isRegionCollapsed && isSettledCollapsed) {
+    setIsSettledCollapsed(false);
+  }
+  useIsomorphicLayoutEffect(() => {
+    if (!isRegionCollapsed || isSettledCollapsed) {
+      return;
+    }
+    const element = elementRef.current;
+    const active = element?.ownerDocument.activeElement;
+    if (element != null && active != null && element.contains(active)) {
+      (paneLink.focusTarget() ?? resizeHandleBeside(element, area))?.focus();
+    }
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- the panel goes inert only after focus inside it has moved to its ResizeHandle (read from the DOM in this commit); inert in the collapsing commit would drop that focus to the page first
+    setIsSettledCollapsed(true);
+  }, [isRegionCollapsed, isSettledCollapsed, area, paneLink]);
+  const isConcealed = isRegionCollapsed && isSettledCollapsed;
+
   // Determine panel position
   const isStartPanel = area === 'start';
   const isEndPanel = area === 'end';
@@ -252,7 +334,7 @@ export function LayoutPanel({
 
   return (
     <div
-      ref={ref}
+      ref={useMergedRefs(ref, elementRef, lendRef)}
       role={role}
       aria-label={label}
       {...mergeProps(
@@ -281,7 +363,12 @@ export function LayoutPanel({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      {...(isConcealed ? {inert: true, 'aria-hidden': true} : {})}>
+      <LayoutChangeSnapshot
+        value={isAtZero}
+        onBeforeChange={tellBeforeChange}
+      />
       {children}
     </div>
   );
