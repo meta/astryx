@@ -40,9 +40,10 @@
  *   keyframes and corrected for a scaled ancestor. An element already gliding
  *   keeps that motion and adds the new move: the rest of its curve and the
  *   new move are summed into one new glide, velocity included. Its place
- *   before the change is read on its glide's own clock (the box with the
- *   applied `translate` taken out, plus the glide's offset at its current
- *   time), so the new glide starts where the old one is drawn. Nothing
+ *   before the change is read on the clock of every glide that carries it,
+ *   its own and its gliding ancestors' in the area (the box with each applied
+ *   `translate` taken out, plus each glide's offset at its current time), so
+ *   the new glide starts where the old one is drawn. Nothing
  *   animates height, and nothing scrolls the area.
  * - A measurement no commit claims by the next frame is dropped.
  * - The changed element plays its own entrance on the same spring, started in
@@ -567,41 +568,83 @@ function isStuck(element: Element, cache: WalkCache): boolean {
 }
 
 /**
- * `rect`, a box read before a change, with the element's running glide (if
- * any) put back on the glide's own clock. A box read samples a running
- * `translate` wherever the engine evaluates it, and WebKit evaluates it at the
- * moment of the read, while the glide's offset, and the glide a change
- * retargets it into, run on the timeline's frame time: from the box alone, a
- * change made `n` ms into a frame started the new glide `n` ms of motion
- * ahead of the one drawn (up to about 3 px on a slow frame). The `translate`
- * the engine applied is read first, then the box: WebKit samples a running
- * animation for `getComputedStyle` at the moment of the call, and a box read
- * after it shows that same sample, while the walk's earlier box read can be
- * from an earlier one. Taken out of that box (scaled by the ancestors, as the
- * glide's is), the `translate` leaves the element's place with no glide, and
- * the glide's offset at its current time goes back in. The glide
- * replaces any `translate` of the app's own while it runs, so the applied
- * value is the glide's alone. Where the engine reports no applied
- * `translate` at all (an environment without individual transform
- * properties), the box is taken as it is.
+ * `rect`, a box read before a change, with every running glide that carries
+ * the element put back on its glide's own clock: its own and those of its
+ * ancestors inside `area` (each of them a candidate of the same change, whose
+ * glide the flush retargets). A box read samples a running `translate`
+ * wherever the engine evaluates it, and WebKit evaluates it at the moment of
+ * the read, while a glide's offset, and the glide a change retargets it into,
+ * run on the timeline's frame time: from the box alone, a change made `n` ms
+ * into a frame started the new glide `n` ms of motion ahead of the one drawn
+ * (up to about 3 px on a slow frame), and a row inside a gliding card took up
+ * the card's difference. The box is read between two readings of every
+ * carrier's applied `translate` that agree: WebKit samples a running
+ * animation at the moment of each read, in steps of about a millisecond, so
+ * a box read between two equal readings is of that same sample, while the
+ * walk's earlier box read, or one read across a step, is of another. Taken
+ * out of that
+ * box (each scaled by its node's ancestors, as its glide is), the `translate`s
+ * leave the element's place with no glide, and each glide's offset at its
+ * current time goes back in. A glide replaces any `translate` of the app's
+ * own while it runs, so each applied value is the glide's alone. Where the
+ * engine reports no applied `translate` at all (an environment without
+ * individual transform properties), the box is taken as it is.
  */
-function onGlideClock(element: Element, rect: DOMRect): DOMRect {
-  const glide = glides.get(element);
-  const time = Number(glide?.animation.currentTime);
-  if (glide == null || !Number.isFinite(time)) {
+/**
+ * How many times `onGlideClock` reads a box and the applied translates around
+ * it to take all of them from one sample: it bounds the reads for one
+ * consistent snapshot (WebKit's samples step about once a millisecond, and a
+ * second reading lands inside one step), not a retry around a result.
+ */
+const SAMPLE_READS = 3;
+
+function onGlideClock(element: Element, rect: DOMRect, area: Element): DOMRect {
+  const carriers: {node: Element; glide: Glide; time: number}[] = [];
+  for (
+    let node: Element | null = element;
+    node != null && node !== area;
+    node = node.parentElement
+  ) {
+    const glide = glides.get(node);
+    const time = Number(glide?.animation.currentTime);
+    if (glide != null && Number.isFinite(time)) {
+      carriers.push({node, glide, time});
+    }
+  }
+  if (carriers.length === 0) {
     return rect;
   }
-  const translate =
-    element.ownerDocument.defaultView?.getComputedStyle(element).translate;
-  if (translate == null || translate === '') {
+  const view = element.ownerDocument.defaultView;
+  const appliedNow = () =>
+    carriers.map(({node}) => view?.getComputedStyle(node).translate);
+  let applied = appliedNow();
+  if (applied.some(translate => translate == null || translate === '')) {
     return rect;
   }
-  const box = element.getBoundingClientRect();
-  const [appliedX = 0, appliedY = 0] = numbersIn(translate);
-  const offset = glide.offsetAt(Math.min(Math.max(0, time), glide.durationMs));
-  const scale = scaleOf(element, box, ownScaleOf(element));
-  const dx = (offset.x - appliedX) * scale.x;
-  const dy = (offset.y - appliedY) * scale.y;
+  let box = element.getBoundingClientRect();
+  for (let read = 0; read < SAMPLE_READS; read++) {
+    const again = appliedNow();
+    if (again.every((translate, index) => translate === applied[index])) {
+      break;
+    }
+    applied = again;
+    box = element.getBoundingClientRect();
+  }
+  let dx = 0;
+  let dy = 0;
+  carriers.forEach(({node, glide, time}, index) => {
+    const [appliedX = 0, appliedY = 0] = numbersIn(applied[index] as string);
+    const offset = glide.offsetAt(
+      Math.min(Math.max(0, time), glide.durationMs),
+    );
+    const scale = scaleOf(
+      node,
+      node === element ? box : node.getBoundingClientRect(),
+      ownScaleOf(node),
+    );
+    dx += (offset.x - appliedX) * scale.x;
+    dy += (offset.y - appliedY) * scale.y;
+  });
   return new DOMRect(box.x + dx, box.y + dy, box.width, box.height);
 }
 
@@ -1169,7 +1212,7 @@ export function reportLayoutChange(
         );
         for (const [candidate, rect] of candidates) {
           if (!batch.before.has(candidate)) {
-            batch.before.set(candidate, onGlideClock(candidate, rect));
+            batch.before.set(candidate, onGlideClock(candidate, rect, area));
           }
         }
         batch.candidates.set(changed, [...candidates.keys()]);

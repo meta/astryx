@@ -661,6 +661,89 @@ test.describe('spec:AST-105 Coverage', () => {
     });
   }
 
+  /**
+   * As `retarget`, for a row inside a card that the first change sets
+   * gliding: the second change, inside the card and `lateMs` ms into a frame,
+   * moves the row within the card while the card's glide is retargeted. The
+   * row is read where it is drawn: its layout place plus every glide on it
+   * and on its ancestors, each from its keyframes at its current time.
+   */
+  async function nestedRetarget(page: Page, lateMs: number) {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="card"><div id="inner" class="grow"></div><div id="row" class="row"></div></div></div>`,
+    );
+    await change(page);
+    await page.waitForTimeout(100);
+    return page.evaluate(
+      async ({mutate, late}) => {
+        const card = document.querySelector('#card') as HTMLElement;
+        const row = document.querySelector('#row') as HTMLElement;
+        const layoutTop = (element: HTMLElement) => {
+          let y = 0;
+          for (
+            let node: HTMLElement | null = element;
+            node != null;
+            node = node.offsetParent as HTMLElement | null
+          ) {
+            y += node.offsetTop + (node === element ? 0 : node.clientTop);
+          }
+          return y - window.scrollY;
+        };
+        const drawnTop = (element: HTMLElement) => {
+          let y = window.glideBoxOf(element).top;
+          for (
+            let node = element.parentElement;
+            node != null && node !== document.body;
+            node = node.parentElement
+          ) {
+            y += window.glideBoxOf(node).top - layoutTop(node);
+          }
+          return y;
+        };
+        const frame = async () =>
+          new Promise<number>(resolve => requestAnimationFrame(resolve));
+        await frame();
+        await frame();
+        const cardGlidingBefore = card.getAnimations().length > 0;
+        const y1 = drawnTop(row);
+        const until = performance.now() + late;
+        while (performance.now() < until) {
+          // The change comes `late` ms into the frame.
+        }
+        await window.change({changed: '#inner', mutate});
+        const y1After = drawnTop(row);
+        return {
+          cardGlidingBefore,
+          cardGlidingAfter: card.getAnimations().length > 0,
+          rowGlidingAfter: row.getAnimations().length > 0,
+          y1,
+          y1After,
+        };
+      },
+      {
+        mutate: `document.querySelector('#inner').classList.add('open')`,
+        late: lateMs,
+      },
+    );
+  }
+
+  for (const lateMs of [0, 1, 9]) {
+    test(`a row inside a gliding card, moved by a change in the card ${lateMs} ms into its frame, starts where it is drawn`, async ({
+      page,
+    }) => {
+      // The row's recorded place carried the card's glide as WebKit sampled
+      // it at the read, while the card's own place is on its glide's clock:
+      // the row's new glide took up the difference (about 2.3 px at 9 ms).
+      const run = await nestedRetarget(page, lateMs);
+      expect(run.cardGlidingBefore).toBe(true);
+      expect(run.cardGlidingAfter).toBe(true);
+      expect(run.rowGlidingAfter).toBe(true);
+      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
+    });
+  }
+
   test('nested areas: motion stops at the inner area; an inner area moves as one unit', async ({
     page,
   }) => {
