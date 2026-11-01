@@ -617,6 +617,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   recordings for every claim about the reference values, and real-device
   evidence for every claim about iOS Safari and Android Chrome behavior
   (`spec:AST-013` FR10).
+- Presented hit testing (FR11's and FR19's iOS WebKit sentences): unit tests
+  that mimic iOS WebKit's hit testing at the motion's start, the WebKit tap and
+  drag proof with the correction off as its control, and the iOS Simulator
+  gate a merge; real-device evidence for it follows merge.
 
 ## Current-state impact
 
