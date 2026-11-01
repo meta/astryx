@@ -39,7 +39,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {watchOutsidePress} from '../Layer/outsidePress';
+import {useOutsidePress} from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
@@ -783,31 +783,22 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // while it is open, a press on the combobox itself (its input or its
   // buttons) or in the list is inside, and a press anywhere else closes it
   // (component:BaseTypeahead FR12). The watch starts when the list shows and
-  // stops when it hides or the field unmounts. An outside press hides the
+  // stops when it hides or the field unmounts (useOutsidePress owns that).
+  // An outside press hides the
   // popover element directly, which useLayer reconciles like the browser's
   // own light dismiss.
-  const stopOutsidePressRef = useRef<(() => void) | null>(null);
-  // The watch holds listeners on the field's document, an external system;
-  // a field unmounted while its list is open removes them here.
-  useEffect(
-    () => () => {
-      stopOutsidePressRef.current?.();
-      stopOutsidePressRef.current = null;
-    },
-    [],
-  );
+  const outsidePress = useOutsidePress();
   const handleLayerShow = useCallback(() => {
     onOpenChange?.(true);
-    stopOutsidePressRef.current?.();
-    stopOutsidePressRef.current = null;
     const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
     if (anchorEl == null) {
+      outsidePress.stop();
       return;
     }
     // The list's own element sits inside the popover element.
     const findLayer = () =>
       dropdownRef.current?.closest<HTMLElement>('[popover]') ?? null;
-    stopOutsidePressRef.current = watchOutsidePress(
+    outsidePress.start(
       anchorEl,
       path => {
         const anchor = anchorRef?.current ?? fallbackAnchorRef.current;
@@ -818,17 +809,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       },
       () => findLayer()?.hidePopover(),
     );
-  }, [onOpenChange, anchorRef]);
+  }, [onOpenChange, anchorRef, outsidePress]);
 
   const handleLayerHide = useCallback(() => {
-    stopOutsidePressRef.current?.();
-    stopOutsidePressRef.current = null;
+    outsidePress.stop();
     onOpenChange?.(false);
     setHighlightedIndex(-1);
     closedGenRef.current = searchGenRef.current;
     setHeldHeight(null);
     searchSource.cancel?.();
-  }, [onOpenChange, searchSource]);
+  }, [onOpenChange, searchSource, outsidePress]);
 
   const popover = usePopover({
     onShow: handleLayerShow,

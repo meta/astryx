@@ -18,6 +18,7 @@ import {
   afterAll,
   beforeEach,
   afterEach,
+  onTestFinished,
 } from 'vitest';
 import {
   render,
@@ -41,6 +42,7 @@ import {
   type ProfilerOnRenderCallback,
 } from 'react';
 import {FormLayout} from '../FormLayout/FormLayout';
+import {Dialog} from '../Dialog/Dialog';
 import {Typeahead} from './Typeahead';
 import {readFile} from 'node:fs/promises';
 import {resolve} from 'node:path';
@@ -512,6 +514,46 @@ describe('BaseTypeahead press inside and outside', () => {
     fireEvent.pointerDown(elsewhere, {composed: true});
     fireEvent.pointerCancel(elsewhere, {composed: true});
     expect(input).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('inside a Dialog, keeps the list on an input press and closes only the list on a press elsewhere in the dialog', async () => {
+    // jsdom has no showModal/close; stand-ins like Dialog's own tests use.
+    const {showModal, close} = HTMLDialogElement.prototype;
+    HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+      this.setAttribute('open', '');
+    };
+    HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+      this.removeAttribute('open');
+    };
+    onTestFinished(() => {
+      HTMLDialogElement.prototype.showModal = showModal;
+      HTMLDialogElement.prototype.close = close;
+    });
+    const onDialogChange = vi.fn();
+    render(
+      <Dialog isOpen={true} onOpenChange={onDialogChange}>
+        <BaseTypeahead
+          searchSource={fruitSource}
+          value={null}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <p>Dialog text</p>
+      </Dialog>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    press(input);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    press(screen.getByText('Dialog text'));
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+    expect(onDialogChange).not.toHaveBeenCalled();
   });
 
   it('removes its document listeners when the field unmounts with the list open', async () => {

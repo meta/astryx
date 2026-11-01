@@ -299,7 +299,7 @@ can perform its own action without closing the layer.
 
 A text field that owns a layer (a combobox's list) cannot be an invoker, so its
 layer is a manual popover. A press that starts and ends on the field's input or
-its buttons, or in the layer, is inside, judged across shadow roots; a press that
+its buttons, or in the layer, is inside, judged across open shadow roots; a press that
 starts and ends anywhere else closes the layer, a scroll or pinch that starts
 outside does not, and Escape stays on the shared stack.
 
