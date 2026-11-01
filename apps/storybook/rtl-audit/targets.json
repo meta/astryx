@@ -348,6 +348,66 @@
     }
   },
   {
+    "component": "Stack",
+    "storyId": "core-stack--horizontal",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stack > :first-child",
+      "next": ".astryx-stack > :nth-child(2)"
+    }
+  },
+  {
+    "component": "StackItem",
+    "storyId": "core-stack--stack-item-fill-size",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stack-item:first-child",
+      "next": ".astryx-stack-item:last-child"
+    }
+  },
+  {
+    "component": "HStack",
+    "storyId": "core-aspectratio--height-driven",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stack > :first-child",
+      "next": ".astryx-stack > :nth-child(2)"
+    }
+  },
+  {
+    "component": "VStack",
+    "storyId": "core-spinner--narrow-flex-host",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": "#storybook-root .astryx-stack > .astryx-stack:first-child",
+      "overlayRoot": "#storybook-root .astryx-stack:has(> .astryx-stack)"
+    }
+  },
+  {
+    "component": "Grid",
+    "storyId": "core-grid--with-grid-span",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-grid > :first-child",
+      "next": ".astryx-grid > :nth-child(2)"
+    }
+  },
+  {
+    "component": "Spinner",
+    "storyId": "core-spinner--narrow-flex-host",
+    "dims": []
+  },
+  {
+    "component": "AspectRatio",
+    "storyId": "core-aspectratio--height-driven",
+    "dims": []
+  },
+  {
+    "component": "Stack",
+    "storyId": "core-stack--stack-item-fill-size",
+    "dims": []
+  },
+  {
     "component": "DropdownMenu",
     "storyId": "core-dropdownmenu--alignment-end",
     "dims": ["D4"],
