@@ -51,11 +51,17 @@ describe('where runs wait', () => {
     expect(admission['runs-on']).toBe('ubuntu-slim');
     expect(admission.permissions).toEqual({actions: 'read', contents: 'read'});
     expect(wait.uses).toBe('./.ci-admission/.github/actions/ci-admission');
-    // Directly, or through the jobs it needs.
+    // Directly, or through the jobs it needs. The Storybook build starts
+    // beside admission, so no job reaches admission only through it.
+    const BESIDE = 'build-storybook';
+    expect(needsOf(ci.jobs[BESIDE])).toEqual([]);
     const reaches = id =>
-      needsOf(ci.jobs[id]).some(need => need === 'admission' || reaches(need));
+      needsOf(ci.jobs[id]).some(
+        need => need === 'admission' || (need !== BESIDE && reaches(need)),
+      );
     for (const id of Object.keys(ci.jobs)) {
-      if (id !== 'admission') expect(reaches(id), id).toBe(true);
+      if (id !== 'admission' && id !== BESIDE)
+        expect(reaches(id), id).toBe(true);
     }
   });
 
@@ -552,6 +558,20 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(held.looks).toBe(2);
+    // A waiting pull-request run whose Storybook build started beside its
+    // wait holds both: 48 + 2 x 4 + 18 + 16 = 90 fits; a fifth does not.
+    const building = id => ({
+      ...waitingRun(id),
+      jobs: [...waitingRun(id).jobs, {status: 'in_progress', steps: []}],
+    });
+    const withBuilds = count =>
+      Array.from({length: count}, (_, i) => building(90 + i));
+    expect(
+      (await admit({active: [...prs(4), ...withBuilds(4)], peak: 16})).looks,
+    ).toBe(1);
+    expect(
+      (await admit({active: [...prs(4), ...withBuilds(5)], peak: 16})).looks,
+    ).toBeGreaterThan(1);
     // Other pull-request runs waiting for room hold only their waiting jobs:
     // 48 + 8 waiting + 18 + 16 = 90 fits; a ninth waiting run does not.
     const waiting = count =>
