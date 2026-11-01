@@ -148,6 +148,42 @@ describe('runner classes shared with the free-runner contract', () => {
   });
 });
 
+describe('a variant that always uses a larger runner', () => {
+  it('makes the merged job non-standard, in the rendered line too', () => {
+    const diff = diffWorkflow(
+      {
+        on: 'pull_request',
+        jobs: {
+          a: {name: 'pr-rtl (core)', 'runs-on': 'ubuntu-latest'},
+          b: {name: 'pr-rtl (lab)', 'runs-on': 'ubuntu-latest'},
+        },
+      },
+      {
+        on: 'pull_request',
+        jobs: {
+          a: {name: 'pr-rtl (core)', 'runs-on': 'ubuntu-latest', steps: [1]},
+          b: {name: 'pr-rtl (lab)', 'runs-on': '4-core-ubuntu'},
+        },
+      },
+    );
+    expect(diff.changes[0].after.kind).toBe('non-standard');
+    const section = renderCiImpact({
+      jobMinutes: {before: 1, after: 1},
+      pool: {before: 10, after: 10, percent: 0},
+      concurrent: {before: 0, after: 0},
+      wall: {before: null, after: null, delta: null},
+      runsPerDay: 10,
+      sampled: 1,
+      changes: diff.changes,
+      flags: [],
+    });
+    expect(section).toContain(
+      'Changed jobs: pr-rtl changed: non-standard (ubuntu-latest, 4-core-ubuntu)',
+    );
+    expect(section).toContain('· non-standard runners</summary>');
+  });
+});
+
 describe('non-standard moves', () => {
   it('are decided per job id, before variants share a name', () => {
     const diff = diffWorkflow(

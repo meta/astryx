@@ -64,11 +64,18 @@ function runnerClass(jobOrRunsOn) {
   return classifyLabels(labelsOf(job));
 }
 
-/** One class for jobs that share a name: every label any of them can pick. */
+/**
+ * One class for jobs that share a name: every label any of them can pick. A
+ * variant that always runs on a non-standard runner makes the job
+ * non-standard, whatever the other variants use.
+ */
 function mergeClasses(a, b) {
   if (!a) return b;
   if (!b) return a;
-  return classifyLabels([...a.labels, ...b.labels]);
+  const merged = classifyLabels([...a.labels, ...b.labels]);
+  if (a.kind === 'non-standard' || b.kind === 'non-standard')
+    return {kind: 'non-standard', labels: merged.labels};
+  return merged;
 }
 
 /** A job's name as the run shows it, without its matrix suffix. */

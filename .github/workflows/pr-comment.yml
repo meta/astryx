@@ -477,15 +477,16 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
+            // Only this repository's own runs on main keep the history, at any
+            // commit (lib/main-artifact.cjs).
+            const {mainArtifactRunId} = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/main-artifact.cjs`);
             const name = `ci-history-${new Date().toISOString().slice(0, 10)}`;
-            const {data} = await github.rest.actions.listArtifactsForRepo({...context.repo, name, per_page: 20});
-            // Only this repository's own runs on main keep the history.
-            const artifact = data.artifacts.find(candidate =>
-              !candidate.expired &&
-              candidate.workflow_run?.head_branch === 'main' &&
-              candidate.workflow_run?.head_repository_id === candidate.workflow_run?.repository_id);
+            const runId = await mainArtifactRunId({github, ...context.repo, name});
             core.setOutput('name', name);
-            core.setOutput('run_id', artifact ? String(artifact.workflow_run.id) : '');
+            core.setOutput('run_id', runId ?? '');
 
       - name: Download today's CI history
         if: steps.identity.outputs.valid == 'true' && steps.ci-history.outputs.run_id != ''
