@@ -131,14 +131,14 @@ export const docs = {
       name: 'options.label',
       type: 'string',
       description:
-        'The handle’s accessible name, used when the element has no `aria-label` or `aria-labelledby` of its own. Pass a translated string.',
+        'The handle’s accessible name, used when the element has no `aria-label` or `aria-labelledby` of its own. Without it, `useResizable` names the handle with the message catalog’s translation, and the bare factory with the catalog’s English message.',
       default: "'Resize handle'",
     },
     {
       name: 'options.collapsedLabel',
       type: 'string',
       description:
-        'What the handle announces while collapsed. Pass a translated string.',
+        'What the handle announces while collapsed. Without it, `useResizable` uses the message catalog’s translation, and the bare factory the catalog’s English message.',
       default: "'Collapsed'",
     },
   ],

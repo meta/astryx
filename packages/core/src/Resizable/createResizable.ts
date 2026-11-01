@@ -117,10 +117,16 @@ export interface CreateResizableOptions {
   isDisabled?: boolean;
   /**
    * The handle's accessible name, when the element has none of its own.
+   * Without it, useResizable gives the message catalog's translation, and
+   * the bare factory the catalog's English message.
    * @default 'Resize handle'
    */
   label?: string;
-  /** What the handle announces while collapsed. @default 'Collapsed' */
+  /**
+   * What the handle announces while collapsed, from the message catalog in
+   * the same way when omitted.
+   * @default 'Collapsed'
+   */
   collapsedLabel?: string;
 }
 
