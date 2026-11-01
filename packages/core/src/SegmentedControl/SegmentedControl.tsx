@@ -20,6 +20,7 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
 import {useInternalListFocus} from '../hooks/useListFocus';
+import {isSegmentDisabledOnItsOwn} from '../privateAttributes/segmentDisabled.stylex';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {useTooltip} from '../Tooltip';
 import type {
@@ -205,9 +206,7 @@ export function SegmentedControl({
       // Disabled with a reason, the control keeps one Tab stop so the reason is
       // reachable (FR2, FR7): the selected segment, else the first segment not
       // disabled by its own isDisabled, else the first.
-      disabledTabStopSelectors: showsDisabledMessage
-        ? DISABLED_TAB_STOP_SELECTORS
-        : undefined,
+      disabledTabStop: showsDisabledMessage ? orderDisabledTabStop : undefined,
       wrap: true,
       orientation: 'horizontal',
     });
@@ -335,8 +334,20 @@ export function SegmentedControl({
 
 SegmentedControl.displayName = 'SegmentedControl';
 
-const DISABLED_TAB_STOP_SELECTORS = [
-  '[role="radio"][aria-checked="true"]',
-  '[role="radio"]:not([data-astryx-segment-disabled])',
-  '[role="radio"]',
-] as const;
+/**
+ * The segments of a control disabled with a reason, its Tab stop first: the
+ * selected segment, else the first segment not disabled by its own
+ * isDisabled, else the first (FR2, FR7).
+ */
+function orderDisabledTabStop(list: HTMLElement): ReadonlyArray<HTMLElement> {
+  const segments = Array.from(
+    list.querySelectorAll<HTMLElement>('[role="radio"]'),
+  );
+  const stop =
+    segments.find(segment => segment.getAttribute('aria-checked') === 'true') ??
+    segments.find(segment => !isSegmentDisabledOnItsOwn(segment)) ??
+    segments[0];
+  return stop == null
+    ? []
+    : [stop, ...segments.filter(segment => segment !== stop)];
+}

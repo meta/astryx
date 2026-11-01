@@ -128,13 +128,12 @@ export interface UseListFocusOptions {
 export interface InternalListFocusOptions extends UseListFocusOptions {
   /**
    * With `hasRovingTabIndex`, keeps one tab stop while every item is disabled:
-   * the selectors are tried in order within the list, the first element one
-   * of them matches carries `tabindex="0"`, and every other element the last
-   * selector matches carries `tabindex="-1"`. For a group that stays
+   * returns the elements that share it, the stop first. The hook gives the
+   * first `tabindex="0"` and the rest `tabindex="-1"`. For a group that stays
    * focusable while disabled, so its disabled reason is reachable by keyboard.
    * Unset (the default): no item holds the stop while every item is disabled.
    */
-  disabledTabStopSelectors?: ReadonlyArray<string>;
+  disabledTabStop?: (list: HTMLElement) => ReadonlyArray<HTMLElement>;
 }
 
 /**
@@ -361,7 +360,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
     hasHomeEnd = true,
     hasPaging = false,
     hasRovingTabIndex = false,
-    disabledTabStopSelectors,
+    disabledTabStop,
     hasCaretGuard = false,
   } = options;
 
@@ -490,19 +489,15 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
     const enabled = items.filter(el => !isItemDisabled(el));
     if (enabled.length === 0) {
       const listEl = listRef.current;
-      const fallbackSelector = disabledTabStopSelectors?.at(-1);
-      if (listEl == null || fallbackSelector == null) {
+      if (listEl == null || disabledTabStop == null) {
         return;
       }
-      let stop: HTMLElement | null = null;
-      for (const selector of disabledTabStopSelectors ?? []) {
-        stop = listEl.querySelector<HTMLElement>(selector);
-        if (stop != null) {
-          break;
-        }
+      const [stop, ...others] = disabledTabStop(listEl);
+      if (stop != null) {
+        setTabIndex(stop, 0);
       }
-      for (const el of listEl.querySelectorAll<HTMLElement>(fallbackSelector)) {
-        setTabIndex(el, el === stop ? 0 : -1);
+      for (const el of others) {
+        setTabIndex(el, -1);
       }
       return;
     }
@@ -511,7 +506,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
     for (const el of items) {
       setTabIndex(el, el === tabbable ? 0 : -1);
     }
-  }, [getItems, isItemDisabled, setTabIndex, disabledTabStopSelectors]);
+  }, [getItems, isItemDisabled, setTabIndex, disabledTabStop]);
 
   // Keep the tab stop valid across renders (items added/removed, disabled
   // toggled). Runs after every commit but only when roving tabindex is on.

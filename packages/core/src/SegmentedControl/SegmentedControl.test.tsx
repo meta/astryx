@@ -802,6 +802,12 @@ describe('SegmentedControl disabled state', () => {
     it.each([
       ['the value matches no segment', 'none', undefined, 'Grid'],
       ['the selected segment is itself disabled', 'grid', 'grid', 'Grid'],
+      [
+        'the value matches no segment and the first is itself disabled',
+        'none',
+        'grid',
+        'List',
+      ],
     ] as const)(
       'keeps one Tab stop when %s',
       async (_case, value, disabledSegment, expectedStop) => {

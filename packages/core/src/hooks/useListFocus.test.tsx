@@ -150,6 +150,16 @@ function RovingToolbar({
   );
 }
 
+function orderBy(first: string) {
+  return (list: HTMLElement) => {
+    const buttons = Array.from(list.querySelectorAll<HTMLElement>('button'));
+    const stop = buttons.find(button => button.dataset.testid === first);
+    return stop == null
+      ? buttons
+      : [stop, ...buttons.filter(button => button !== stop)];
+  };
+}
+
 describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
   it('stamps a single tab stop (first enabled item is tabbable)', () => {
     render(<RovingToolbar />);
@@ -171,22 +181,22 @@ describe('useListFocus roving tabindex (hasRovingTabIndex)', () => {
     }
   });
 
-  it('keeps one tab stop while every item is disabled, by the first selector that matches', () => {
+  it('keeps one tab stop while every item is disabled, on the element the callback returns first', () => {
     const {rerender} = render(
       <RovingToolbar
         disabledLabels={ROVING_LABELS}
-        disabledTabStopSelectors={['[data-testid="B"]', 'button']}
+        disabledTabStop={orderBy('B')}
       />,
     );
     expect(screen.getByTestId('B')).toHaveAttribute('tabindex', '0');
     expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '-1');
     expect(screen.getByTestId('C')).toHaveAttribute('tabindex', '-1');
 
-    // A preferred selector that matches nothing falls through to the next.
+    // The stop follows what the callback returns first.
     rerender(
       <RovingToolbar
         disabledLabels={ROVING_LABELS}
-        disabledTabStopSelectors={['[data-testid="Z"]', 'button']}
+        disabledTabStop={orderBy('A')}
       />,
     );
     expect(screen.getByTestId('A')).toHaveAttribute('tabindex', '0');

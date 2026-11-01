@@ -17,6 +17,7 @@
 
 import React, {type ReactNode} from 'react';
 import {joinAriaIDs} from '../utils/inputAria';
+import {segmentDisabledProps} from '../privateAttributes/segmentDisabled.stylex';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -245,7 +246,7 @@ export function SegmentedControlItem({
       aria-describedby={joinAriaIDs(ariaDescribedByProp, ctx.disabledReasonID)}
       data-value={value}
       // The group's fallback Tab stop skips segments disabled on their own.
-      data-astryx-segment-disabled={isDisabled || undefined}
+      {...segmentDisabledProps(isDisabled)}
       {...(!isSelected && !isItemDisabled ? pressable : undefined)}
       // Disabled items (including when the whole group is disabled) are not tab
       // stops — otherwise the selected segment stays keyboard-focusable but is
