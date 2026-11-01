@@ -9,7 +9,8 @@
  *   set `overflow-wrap: var(--_astryx-text-overflow-wrap, break-word)`, so a
  *   container that wraps its content with `anywhere` must pass that down
  *   through the variable, or a `<Text>` it holds stops wrapping long tokens
- *   the container's way (a centered or flex message is then cut off at 320 px)
+ *   the container's way (a centered or flex message is then cut off at 320 px).
+ *   The variable stops at a layer boundary (layerStructureReset).
  */
 
 import fs from 'node:fs';
@@ -78,6 +79,14 @@ describe('overflow-wrap: anywhere reaches Text through the private variable', ()
         `const s = {\n  message: {\n    overflowWrap: 'anywhere',\n    ${VAR_LINE},\n  },\n};`,
       ),
     ).toEqual([]);
+  });
+
+  it('stops at a layer boundary, so Text in a layer keeps its own wrap (AST-038 FR7)', () => {
+    const reset = fs.readFileSync(
+      path.join(ROOT, 'packages/core/src/Layer/layerStructureReset.stylex.ts'),
+      'utf8',
+    );
+    expect(reset).toContain("'--_astryx-text-overflow-wrap': 'initial'");
   });
 
   it('holds for every package source', () => {
