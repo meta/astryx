@@ -398,8 +398,10 @@ Known verification gaps:
 - INV23: the `@astryx/no-raw-private-attribute` rule runs with a baseline of
   the sites that predate it, and no owner module exists yet; public-API review
   covers what the rule cannot see: Changesets, component `.doc.mjs` files (the
-  lint does not reach them), and names assembled from the namespace with `+` or
-  reached through a member access or aliased import in a template. The `data-astryx-press` selector is copied in 14 Core files.
+  lint does not reach them), and names assembled from the namespace with `+` or reached in a template
+  through anything but `dataAttrNamespace` or `NAMESPACE` (a member access, an
+  aliased import, `classPrefix`), and names read or written through
+  `element.dataset`. The `data-astryx-press` selector is copied in 14 Core files.
   Other private attributes still written at their sites include
   `data-astryx-popover-fallback-close` and DropdownMenu's
   `data-astryx-submenu-regions`, which Popover and DropdownMenuSubMenu also read
