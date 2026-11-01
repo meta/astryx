@@ -178,10 +178,18 @@ public struct Button: View {
       .opacity(isLoading ? 0 : 1)
       .overlay {
         if isLoading {
-          ProgressView().controlSize(.small).tint(foreground)
+          ProgressView().controlSize(.small).tint(labelColor)
         }
       }
       .modifier(SystemBarLabel(tint: systemBarTint, style: style))
+  }
+
+  /// The label's and spinner's color: the variant's foreground, or, for a
+  /// disabled primary or destructive in a bar, which draws with no tinted
+  /// fill behind it, the variant's own color (FR11).
+  var labelColor: Color {
+    if isDisabled, case .glass(.barProminent(let role)) = surface { return role.color(astryx.tokens) }
+    return foreground
   }
 
   /// The tint an enabled primary or destructive Button in a bar gives the
@@ -425,9 +433,11 @@ struct AstryxButtonStyle: ButtonStyle {
   @available(iOS 26, *)
   private func effect(_ glass: ButtonGlass) -> Glass {
     switch glass {
-    case .regular, .barItem, .barProminent: .regular.interactive()
-    case .clear: .clear.interactive()
-    case .prominent(let role): .regular.tint(role.color(astryx.tokens)).interactive()
+    // A disabled Button keeps its focus stop but answers no touch with the
+    // glass's press effect, as the bar path draws it (FR11).
+    case .regular, .barItem, .barProminent: .regular.interactive(isEnabled)
+    case .clear: .clear.interactive(isEnabled)
+    case .prominent(let role): .regular.tint(role.color(astryx.tokens)).interactive(isEnabled)
     }
   }
   #endif
