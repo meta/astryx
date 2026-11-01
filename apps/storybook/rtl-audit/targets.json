@@ -605,5 +605,20 @@
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
     }
+  },
+  {
+    "component": "CheckboxIndicator",
+    "storyId": "core-indicator--all-states",
+    "dims": []
+  },
+  {
+    "component": "CheckIndicator",
+    "storyId": "core-indicator--all-states",
+    "dims": []
+  },
+  {
+    "component": "RadioIndicator",
+    "storyId": "core-indicator--all-states",
+    "dims": []
   }
 ]

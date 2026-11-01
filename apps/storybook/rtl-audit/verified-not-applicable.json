@@ -433,5 +433,17 @@
       "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
       "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
     }
+  },
+  {
+    "component": "core/CheckboxIndicator",
+    "reason": "CheckboxIndicator draws a centered square box with an equal border on every side, holding a checkmark or an indeterminate dash. Neither mark is a previous, next, start, end or progression cue, so neither mirrors (design:bidirectionality DR4/DR5). It owns no inline spacing, physical position, order, scroll, drag, overlay or keyboard behavior; its row placement belongs to the control that renders it."
+  },
+  {
+    "component": "core/CheckIndicator",
+    "reason": "CheckIndicator renders a centered checkmark glyph, or caller children, in an inline-flex box with no inline-axis spacing of its own. A checkmark is not a previous, next, start, end or progression cue, so it does not mirror (design:bidirectionality DR4/DR5). It owns no physical position, order, scroll, drag, overlay or keyboard behavior."
+  },
+  {
+    "component": "core/RadioIndicator",
+    "reason": "RadioIndicator draws a centered circle with an equal border and a centered dot; both are symmetric about the inline axis. It owns no directional glyph, inline spacing, physical position, order, scroll, drag, overlay or keyboard behavior; its row placement belongs to the control that renders it."
   }
 ]
