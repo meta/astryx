@@ -23,7 +23,9 @@
  *   `Input.dispatchTouchEvent` on the page proxy. Touches and the pointer
  *   events derived from them are trusted and cancelable, multi-touch works.
  *   Limits, measured with WebKit 26.5: no timestamp parameter (the page sees
- *   the real dispatch time, so velocity comes from real-time pacing, ±1 ms);
+ *   the real dispatch time, so velocity comes from real-time pacing: within
+ *   ~1 ms on an idle runner, but a runner whose CPU quota stalls the process
+ *   sends some steps late, and the ones behind them back to back);
  *   integer coordinates only; no native scrolling, fling or pinch-zoom from
  *   these touches; a `touchstart` lists only the fingers that landed in it
  *   (pointer events are exact); no click synthesised from a raw touch sequence (use

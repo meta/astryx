@@ -9,9 +9,15 @@
  */
 
 import fs from 'node:fs';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 import {ungated} from './ci-pr-gate.mjs';
+
+// The raw file host is offline here, so the dispatcher reads its rate-limit
+// helper through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
 
 const read = name =>
   yaml.parse(
@@ -184,7 +190,16 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     };
     const github = {
       rest: {
-        repos: {getBranch: async () => ({data: {commit: {sha: tip}}})},
+        repos: {
+          getBranch: async () => ({data: {commit: {sha: tip}}}),
+          getContent: async ({path}) => ({
+            data: {
+              content: fs
+                .readFileSync(new URL(`../../${path}`, import.meta.url))
+                .toString('base64'),
+            },
+          }),
+        },
         actions: {
           listJobsForWorkflowRun: async ({run_id}) => ({
             data: {jobs: runs.find(item => item.id === run_id)?.jobs ?? []},
