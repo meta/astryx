@@ -395,6 +395,9 @@ export function ResizeHandle({
   // the region as it is now, not as a snapshot from the press.
   const resizableRef = useRef(resizable);
   resizableRef.current = resizable;
+  // The region a drag in flight started on: told the gesture is over even
+  // after the prop has gone.
+  const dragRegionRef = useRef<ResizableProps | undefined>(undefined);
   const configRef = useRef({direction, isReversed, isDisabled});
   configRef.current = {direction, isReversed, isDisabled};
   const [isLegacyDragging, setIsLegacyDragging] = useState(false);
@@ -412,12 +415,23 @@ export function ResizeHandle({
           collapsible: region?._collapsible ?? false,
         };
       },
-      start: () => resizableRef.current?._onResizeStart(),
+      start: () => {
+        dragRegionRef.current = resizableRef.current;
+        resizableRef.current?._onResizeStart();
+      },
       move: delta => resizableRef.current?._onResizeMove(delta),
-      end: () => resizableRef.current?._onResizeEnd(),
+      end: () => {
+        const region = resizableRef.current ?? dragRegionRef.current;
+        dragRegionRef.current = undefined;
+        region?._onResizeEnd();
+      },
       // Not a resize end, but still the end of the gesture: the region froze
       // state for the duration of the drag and has to be told it is over.
-      cancel: () => resizableRef.current?._onResizeCancel?.(),
+      cancel: () => {
+        const region = resizableRef.current ?? dragRegionRef.current;
+        dragRegionRef.current = undefined;
+        region?._onResizeCancel?.();
+      },
       // The hook's own collapse and expand restore the size before the
       // collapse; a hand-built `ResizableProps` has none.
       get collapse() {
@@ -477,20 +491,23 @@ export function ResizeHandle({
     }
   }, [direction, regionDirection]);
 
-  // --- Cleanup on unmount ---
+  // --- Cleanup on unmount, or when the `resizable` prop goes ---
   // Removing the grab zone implicitly releases its captured pointer and takes
   // its listeners with it, so an in-flight drag stops driving the region on
-  // its own. The body cursor/user-select overrides are not on the element,
-  // though, so they have to be released here or they stick after the handle
-  // is gone, and the region, which outlives this handle, still has to hear
-  // that its gesture is over.
-  const gestureRef = useRef(gesture);
-  gestureRef.current = gesture;
+  // its own; a `resizable` prop that goes away takes the grab zone's handlers
+  // the same way. The body cursor/user-select overrides are not on the
+  // element, though, so they have to be released here or they stick, and the
+  // region, which outlives this handle, still has to hear that its gesture is
+  // over.
+  const hasRegion = resizable != null;
   useEffect(() => {
+    if (!hasRegion) {
+      return;
+    }
     return () => {
-      gestureRef.current?.interrupt();
+      legacyGesture.interrupt();
     };
-  }, []);
+  }, [hasRegion, legacyGesture]);
 
   // --- ARIA ---
   // When collapsed the panel's real size (0) sits below aria-valuemin, which

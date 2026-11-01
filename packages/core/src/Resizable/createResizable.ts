@@ -9,8 +9,10 @@
  * @output createResizable(handle, options) → {size, isCollapsed, collapse,
  *   expand, resize, update, subscribe, destroy}: a resizable region driven by
  *   a window-splitter handle, with no React (spec:AST-107 FR6;
- *   `architecture:public-component-api` INV22); and readInitialResizableState,
- *   the state a region starts in, for the hook's first render
+ *   `architecture:public-component-api` INV22); readInitialResizableState,
+ *   the state a region starts in, for the hook's first render; and the
+ *   hook's internal channel, which lets a factory go of the page and take it
+ *   back while keeping its region (suspend, resume)
  * @position The Resizable family's factory, internal to the package; its
  *   input is resizeGesture.ts. The configuration-object useResizable is its
  *   React wrapper, and ResizeHandle's `resizable` path drives the same input.
@@ -288,6 +290,15 @@ interface ResizableInternals {
    */
   hasSelection(): boolean;
   /**
+   * Lets go of the page and keeps the region: a gesture in flight ends as
+   * cancelled, the handle's listeners and attributes and the observers go,
+   * and collapse, expand and resize still apply and report. For a React
+   * caller whose component unmounts or an `<Activity>` hides.
+   */
+  suspend(): void;
+  /** Takes the page back after `suspend`: the handle, and the observers. */
+  resume(): void;
+  /**
    * The region's side of a gesture the factory does not own: the drag and
    * keys of a ResizeHandle given the configuration object's props.
    */
@@ -374,6 +385,8 @@ export function createResizable(
 ): ResizableController {
   let opts = options;
   let isDestroyed = false;
+  // Let go of the page by `suspend`, with the region kept.
+  let isSuspended = false;
   const listeners = new Set<() => void>();
   // The element the factory drives: its listeners and attributes.
   const drivenHandle = handle;
@@ -606,21 +619,26 @@ export function createResizable(
     if (isDestroyed) {
       return;
     }
-    // The observation a computation needs can change with it (a default made
-    // final stops following its container): settle both.
-    for (let pass = 0; pass < 3; pass++) {
-      const before = observation();
-      syncObservation();
+    if (isSuspended) {
+      // No observers and no handle: the last measured basis stands.
       compute();
-      const after = observation();
-      if (
-        before.container === after.container &&
-        before.viewport === after.viewport
-      ) {
-        break;
+    } else {
+      // The observation a computation needs can change with it (a default
+      // made final stops following its container): settle both.
+      for (let pass = 0; pass < 3; pass++) {
+        const before = observation();
+        syncObservation();
+        compute();
+        const after = observation();
+        if (
+          before.container === after.container &&
+          before.viewport === after.viewport
+        ) {
+          break;
+        }
       }
     }
-    if (drivenHandle != null) {
+    if (drivenHandle != null && !isSuspended) {
       announce();
     }
     persist();
@@ -905,16 +923,41 @@ export function createResizable(
   const onDoubleClick = () => {
     gesture.doubleClick();
   };
-  if (drivenHandle != null) {
-    drivenHandle.addEventListener('pointerdown', onPointerDown);
-    drivenHandle.addEventListener('pointermove', onPointerMove);
-    drivenHandle.addEventListener('pointerup', onPointerUp);
-    drivenHandle.addEventListener('pointercancel', onPointerCancel);
-    drivenHandle.addEventListener('lostpointercapture', onPointerCancel);
-    drivenHandle.addEventListener('keydown', onKeyDown);
-    drivenHandle.addEventListener('dblclick', onDoubleClick);
+  function bindHandle(): void {
+    drivenHandle?.addEventListener('pointerdown', onPointerDown);
+    drivenHandle?.addEventListener('pointermove', onPointerMove);
+    drivenHandle?.addEventListener('pointerup', onPointerUp);
+    drivenHandle?.addEventListener('pointercancel', onPointerCancel);
+    drivenHandle?.addEventListener('lostpointercapture', onPointerCancel);
+    drivenHandle?.addEventListener('keydown', onKeyDown);
+    drivenHandle?.addEventListener('dblclick', onDoubleClick);
   }
 
+  /**
+   * The handle's listeners and the observers go, and the handle gets its own
+   * attributes back; a gesture in flight has ended first.
+   */
+  function letGoOfPage(): void {
+    drivenHandle?.removeEventListener('pointerdown', onPointerDown);
+    drivenHandle?.removeEventListener('pointermove', onPointerMove);
+    drivenHandle?.removeEventListener('pointerup', onPointerUp);
+    drivenHandle?.removeEventListener('pointercancel', onPointerCancel);
+    drivenHandle?.removeEventListener('lostpointercapture', onPointerCancel);
+    drivenHandle?.removeEventListener('keydown', onKeyDown);
+    drivenHandle?.removeEventListener('dblclick', onDoubleClick);
+    stopObservingContainer?.();
+    stopObservingContainer = null;
+    containerElement = null;
+    if (isObservingViewport) {
+      window.removeEventListener('resize', onViewportResize);
+      isObservingViewport = false;
+    }
+    for (const [name, value] of original) {
+      setAttribute(name, value);
+    }
+  }
+
+  bindHandle();
   commit();
 
   const controller: ResizableController = {
@@ -955,21 +998,8 @@ export function createResizable(
       // than the factory's own, ends the same way.
       endGesture();
       isDestroyed = true;
-      drivenHandle?.removeEventListener('pointerdown', onPointerDown);
-      drivenHandle?.removeEventListener('pointermove', onPointerMove);
-      drivenHandle?.removeEventListener('pointerup', onPointerUp);
-      drivenHandle?.removeEventListener('pointercancel', onPointerCancel);
-      drivenHandle?.removeEventListener('lostpointercapture', onPointerCancel);
-      drivenHandle?.removeEventListener('keydown', onKeyDown);
-      drivenHandle?.removeEventListener('dblclick', onDoubleClick);
-      stopObservingContainer?.();
-      stopObservingContainer = null;
-      if (isObservingViewport) {
-        window.removeEventListener('resize', onViewportResize);
-        isObservingViewport = false;
-      }
-      for (const [name, value] of original) {
-        setAttribute(name, value);
+      if (!isSuspended) {
+        letGoOfPage();
       }
       listeners.clear();
       snapshotListeners.clear();
@@ -985,8 +1015,25 @@ export function createResizable(
     },
     model,
     hasSelection: () => chosenSize != null,
+    suspend() {
+      if (isDestroyed || isSuspended) {
+        return;
+      }
+      gesture.interrupt();
+      endGesture();
+      isSuspended = true;
+      letGoOfPage();
+    },
+    resume() {
+      if (isDestroyed || !isSuspended) {
+        return;
+      }
+      isSuspended = false;
+      bindHandle();
+      commit();
+    },
     syncContainer() {
-      if (isDestroyed) {
+      if (isDestroyed || isSuspended) {
         return;
       }
       const element = observation().container

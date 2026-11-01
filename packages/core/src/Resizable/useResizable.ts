@@ -11,7 +11,9 @@
  *   for handle. The region is the internal resize factory's (createResizable),
  *   with no handle of its own, so its state has one copy; a change reports in
  *   the commit that onCollapseChange's own state lands in, a controlled
- *   `isCollapsed` included (component:Resizable FR8)
+ *   `isCollapsed` included (component:Resizable FR8); collapse, expand and
+ *   resize apply and report whenever they are called, before the first
+ *   commit or while an `<Activity>` hides the region, as React state did
  * @position Public hook; consumed by layout components via `resizable` prop
  */
 
@@ -395,25 +397,15 @@ interface ResizableEntry {
 }
 
 /**
- * Where a region stands: its size as expanded (undefined while it is only the
- * temporary basis's stand-in), and whether it is collapsed.
- */
-type ResizableSelection = {size: number | undefined; isCollapsed: boolean};
-
-/**
  * The factory a hook holds, and one store over it for React: it follows the
  * factory the slot holds now, and reads the snapshot it reports, or the state
  * the region starts in before there is one. A reading equal in every part to
  * the last one is the last one, so a mount that settles where it started
- * renders once. While it holds no factory (its component hidden by an
- * `<Activity>`) it keeps the last reading, and where the region stood, for
- * the next factory to start from.
+ * renders once.
  */
 interface ResizableSlot {
   get(): ResizableEntry | null;
   set(next: ResizableEntry | null): void;
-  /** Where the region stood when the slot last let go of a factory. */
-  remembered(): ResizableSelection | undefined;
   subscribe(listener: () => void): () => void;
   read(): ResizableSnapshot;
 }
@@ -432,7 +424,6 @@ function sameSnapshot(a: ResizableSnapshot, b: ResizableSnapshot): boolean {
 function createSlot(initial: ResizableSnapshot): ResizableSlot {
   let current: ResizableEntry | null = null;
   let last: ResizableSnapshot = initial;
-  let selection: ResizableSelection | undefined;
   const listeners = new Set<() => void>();
   let stopFactory: (() => void) | null = null;
   const notify = () => {
@@ -455,14 +446,10 @@ function createSlot(initial: ResizableSnapshot): ResizableSlot {
   return {
     get: () => current,
     set(next) {
-      if (current != null && next == null) {
-        selection = readResizableSelection(current.resizable) ?? selection;
-      }
       current = next;
       follow();
       notify();
     },
-    remembered: () => selection,
     subscribe(listener) {
       listeners.add(listener);
       if (listeners.size === 1) {
@@ -514,10 +501,13 @@ interface ResizableReading {
 /**
  * createResizable in React, with nothing of its own (spec:AST-107 FR6): it
  * creates the factory as it mounts, on the element behind `ref` (null while
- * there is none), passes later options through `update`, destroys it as it
- * unmounts, and returns what the factory reports. Before its first commit (the
- * server, the first render, a hydrating render) it returns the state the
- * factory starts in.
+ * there is none), passes later options through `update`, and returns what the
+ * factory reports. Before its first commit (the server, the first render, a
+ * hydrating render) it returns the state the factory starts in. While it is
+ * unmounted or an `<Activity>` hides it, the factory lets go of the page and
+ * keeps the region, so collapse, expand and resize apply and report whenever
+ * they are called, as React state did: a call before the first commit starts
+ * the factory early, let go of the page until that commit.
  *
  * A controlled `isCollapsed` is read from the options in the render that
  * passes it, before `update` reaches the factory, so the size and collapse
@@ -539,19 +529,17 @@ function useResizableController(
   // configuration-object form passes no handle, NO_HANDLE). When the element
   // goes away the factory on it goes too, with its listeners and attributes,
   // and a factory with no handle keeps the region answering collapse, expand
-  // and resize; a new element gets a new factory. Each new factory starts
-  // where the region stood: the old factory's selection, or, after an
-  // `<Activity>` hid this component, the one the slot remembered.
+  // and resize; a new element gets a new factory, which starts where the old
+  // one's region stood. The same element takes the page back (`resume`).
   const follow = useCallback(() => {
     const element = ref.current;
     const entry = slot.get();
     if (entry != null && entry.element === element) {
+      readResizableInternals(entry.resizable)?.resume();
       return;
     }
     const previous =
-      entry == null
-        ? slot.remembered()
-        : readResizableSelection(entry.resizable);
+      entry == null ? undefined : readResizableSelection(entry.resizable);
     entry?.resizable.destroy();
     // A size shown against the temporary basis is not carried: the new
     // factory resolves the default against the container once it measures.
@@ -571,13 +559,22 @@ function useResizableController(
   useIsomorphicLayoutEffect(() => {
     follow();
   });
-  // Unmounting, or hidden by an `<Activity>`: the factory goes, and the slot
-  // remembers where the region stood, so a reveal starts there.
+  // Unmounting, or hidden by an `<Activity>`: the factory lets go of the
+  // page and keeps the region, so calls meanwhile apply and a reveal goes on
+  // from where it stands. A stand-in without the internal channel goes.
   useIsomorphicLayoutEffect(
     () => () => {
       const entry = slot.get();
-      slot.set(null);
-      entry?.resizable.destroy();
+      if (entry == null) {
+        return;
+      }
+      const channel = readResizableInternals(entry.resizable);
+      if (channel != null) {
+        channel.suspend();
+      } else {
+        slot.set(null);
+        entry.resizable.destroy();
+      }
     },
     [slot],
   );
@@ -621,17 +618,31 @@ function useResizableController(
     : snapshot.size;
 
   const getResizable = useCallback(() => slot.get()?.resizable ?? null, [slot]);
+  // A call before the first commit (from a child's layout effect, say)
+  // starts the factory now, let go of the page until that commit takes it.
+  const ensureResizable = useCallback((): ResizableController => {
+    const entry = slot.get();
+    if (entry != null) {
+      return entry.resizable;
+    }
+    const element = ref.current;
+    const createdWith = optionsRef.current;
+    const resizable = createResizable(element, createdWith);
+    readResizableInternals(resizable)?.suspend();
+    slot.set({element, resizable, createdWith});
+    return resizable;
+  }, [ref, slot]);
   const collapse = useCallback(() => {
-    getResizable()?.collapse();
-  }, [getResizable]);
+    ensureResizable().collapse();
+  }, [ensureResizable]);
   const expand = useCallback(() => {
-    getResizable()?.expand();
-  }, [getResizable]);
+    ensureResizable().expand();
+  }, [ensureResizable]);
   const resize = useCallback(
     (next: number) => {
-      getResizable()?.resize(next);
+      ensureResizable().resize(next);
     },
-    [getResizable],
+    [ensureResizable],
   );
   return {snapshot, getResizable, size, isCollapsed, collapse, expand, resize};
 }
