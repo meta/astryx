@@ -47,9 +47,10 @@ export interface TokenLinkProps extends HTMLAttributes<HTMLElement> {
   /** Whether the token is disabled. */
   isDisabled: boolean;
   /**
-   * Caller `onClick`, attached to the inner link. A click on the container
-   * surface is delegated to the link, so this runs once per activation
-   * whether the link or the surface was clicked.
+   * Caller `onClick`, attached to the inner link. A plain click on the
+   * container surface is delegated to the link, so this runs once per
+   * plain-click activation of the link or the surface. A Cmd/Ctrl-click or
+   * middle click on the surface opens the link in a new tab and skips it.
    */
   onLinkClick?: MouseEventHandler<HTMLElement>;
   /** Resolved link component (native `<a>` or a router link). */
