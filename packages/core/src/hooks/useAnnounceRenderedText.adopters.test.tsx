@@ -2,8 +2,9 @@
 
 /**
  * @file useAnnounceRenderedText.adopters.test.tsx
- * @input Every core component that announces its own rendered content, with
- *   the shared own-content module replaced by a recorder
+ * @input Every core component that announces its own rendered content
+ *   (Tooltip and HoverCard when a press pins them among them), with the
+ *   shared own-content module replaced by a recorder
  * @output architecture:react-component-runtime INV10 test: each adopter hands
  *   its own-content announcement to the shared module and announces none of it
  *   itself
@@ -67,6 +68,8 @@ const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
 const {TokenizerWithPresentation} =
   await import('../internal/tokenizer-presentation');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
+const {Tooltip} = await import('../Tooltip');
+const {HoverCard} = await import('../HoverCard');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
 
@@ -163,6 +166,28 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     );
     fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
     await expectDelegated('No results found');
+  },
+  'Tooltip/useTooltip.tsx': async () => {
+    // A tooltip a press pinned says its own text (component:Tooltip FR10).
+    render(
+      <Tooltip
+        content="Billed on the first of each month"
+        pressTrigger="toggle">
+        <button type="button">About billing</button>
+      </Tooltip>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
+    await expectDelegated('Billed on the first of each month');
+  },
+  'HoverCard/useHoverCard.tsx': async () => {
+    // An unlabelled card a press pinned says its own text (FR10).
+    render(
+      <HoverCard content={<p>Ada Lovelace, analyst</p>} pressTrigger="toggle">
+        <button type="button">Ada</button>
+      </HoverCard>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Ada'}));
+    await expectDelegated('Ada Lovelace, analyst');
   },
   'Tokenizer/TokenizerBottomSheet.tsx': async () => {
     // The sheet's own content is a caller's `emptySearchText` element; the
