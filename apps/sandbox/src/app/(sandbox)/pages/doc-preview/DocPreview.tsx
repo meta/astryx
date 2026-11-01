@@ -8,7 +8,7 @@ import {VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
 import {Divider} from '@astryxdesign/core/Divider';
 import type {DefinedTheme} from '@astryxdesign/core/theme';
-import type {ReferenceDoc, ReferenceSection} from '@astryxdesign/cli/authoring';
+import type {DocsReadDoc, DocsReadSection} from '@astryxdesign/cli/api';
 import {SectionRenderer} from './SectionRenderer';
 import {
   ColorTokenTable,
@@ -75,14 +75,14 @@ export function DocPreview({
   version,
   theme,
 }: {
-  doc: ReferenceDoc;
+  doc: DocsReadDoc;
   version?: string;
   theme: DefinedTheme;
 }) {
   const {usageSections, practiceSections, overviewSections} = useMemo(() => {
-    const usage: ReferenceSection[] = [];
-    const practice: ReferenceSection[] = [];
-    const other: ReferenceSection[] = [];
+    const usage: DocsReadSection[] = [];
+    const practice: DocsReadSection[] = [];
+    const other: DocsReadSection[] = [];
 
     for (const section of doc.sections) {
       const titleLower = section.title.toLowerCase();

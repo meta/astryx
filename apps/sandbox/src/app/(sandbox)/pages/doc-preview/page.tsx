@@ -11,7 +11,7 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {Spinner} from '@astryxdesign/core/Spinner';
-import type {ReferenceDoc} from '@astryxdesign/cli/authoring';
+import type {DocsReadDoc} from '@astryxdesign/cli/api';
 import {DocPreview} from './DocPreview';
 import {ThemeContext} from '@astryxdesign/core/theme';
 import {useContext} from 'react';
@@ -50,7 +50,7 @@ const TOPICS = [
 
 export default function DocPreviewPage() {
   const [topic, setTopic] = useState<string>('color');
-  const [docs, setDocs] = useState<Record<string, ReferenceDoc>>({});
+  const [docs, setDocs] = useState<Record<string, DocsReadDoc>>({});
   const [version, setVersion] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -61,7 +61,7 @@ export default function DocPreviewPage() {
         const data = mod.default as Record<string, unknown>;
         setVersion((data.__version as string) ?? '');
         const {__version: _, ...topics} = data;
-        setDocs(topics as Record<string, ReferenceDoc>);
+        setDocs(topics as Record<string, DocsReadDoc>);
         setLoading(false);
       })
       .catch(() => setLoading(false));
