@@ -1210,13 +1210,13 @@ component FormLayout(props: FormLayoutProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Grid(props: GridProps)
-  prop align?: GridAlignment = 'stretch'
+  prop align?: GridAlignment
   prop children?: ReactNode
   prop columnGap?: SpacingStep
   prop columns?: GridColumns
   prop gap?: SpacingStep
   prop height?: SizeValue
-  prop justify?: GridAlignment = 'stretch'
+  prop justify?: GridAlignment
   prop maxWidth?: SizeValue
   prop minHeight?: SizeValue
   prop ref?: React.Ref<HTMLDivElement>
