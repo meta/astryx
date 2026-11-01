@@ -957,6 +957,10 @@ export function createAnimator(
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
   const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
+  /** Channels whose retire looks again at the next frame (scheduleRetire). */
+  const retireFrames = new Set<Channel>();
+  /** The timer that starts those looks a frame before a curve's end. */
+  const retireLooks = new Map<Channel, ReturnType<typeof setTimeout>>();
   const touched = new Set<Channel>();
   /**
    * The stylesheet's opacity a Reduce Motion dip borrowed because no call
@@ -1179,6 +1183,8 @@ export function createAnimator(
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
     retireTimers.delete(channel);
+    clearTimeout(retireLooks.get(channel));
+    retireLooks.delete(channel);
     // An element's inline style takes the value on screen below, so its old
     // animation can go first. A pseudo-element has none: its old animation
     // keeps holding the value until the new one exists (same task, no frame in
@@ -1369,26 +1375,61 @@ export function createAnimator(
     end: number,
   ) => {
     clearTimeout(retireTimers.get(channel));
-    const retire = () => {
-      retireTimers.delete(channel);
+    retireTimers.delete(channel);
+    clearTimeout(retireLooks.get(channel));
+    retireLooks.delete(channel);
+    // Looks for the end in the next frame, before it paints: the frame whose
+    // time reaches the curve's end retires it there, where a timer could land
+    // between two frames under load and leave it on the element a frame or two
+    // past its curve. The timers stay, for a page that draws no frames (a
+    // hidden tab).
+    const lookAtFrame = () => {
+      if (requestFrame == null || retireFrames.has(channel)) {
+        return;
+      }
+      retireFrames.add(channel);
+      requestFrame(() => {
+        retireFrames.delete(channel);
+        retire(true);
+      });
+    };
+    // `atFrame`: a look from a frame callback, which leaves a pending timer
+    // where it is.
+    const retire = (atFrame = false) => {
+      if (!atFrame) {
+        retireTimers.delete(channel);
+      }
       if (running.get(channel) !== animation) {
         return;
       }
       // Paused or sought (a sampler holding it): retire when its own time
       // reaches the curve's end, never from the wall clock.
       const remaining = remainingCurve(animation);
-      if (remaining != null && remaining > 0) {
-        retireTimers.set(
-          channel,
-          setTimeout(
-            retire,
-            animation.playState === 'paused'
-              ? RETIRE_RECHECK_MS
-              : Math.max(remaining, END_RECHECK_MS),
-          ),
-        );
+      if (atFrame && remaining == null) {
+        // Its time cannot be read: the timer decides.
         return;
       }
+      if (remaining != null && remaining > 0) {
+        const paused = animation.playState === 'paused';
+        // A frame look keeps looking while up to two frames remain: the frame
+        // it ran in can be dated before the timer that started the looks was
+        // due, and the frame after it is the one that reaches the end.
+        if (!paused && remaining <= (atFrame ? 2 : 1) * END_RECHECK_MS) {
+          lookAtFrame();
+        }
+        if (!retireTimers.has(channel)) {
+          retireTimers.set(
+            channel,
+            setTimeout(
+              retire,
+              paused ? RETIRE_RECHECK_MS : Math.max(remaining, END_RECHECK_MS),
+            ),
+          );
+        }
+        return;
+      }
+      clearTimeout(retireTimers.get(channel));
+      retireTimers.delete(channel);
       running.delete(channel);
       // A pseudo-element holds its resting value, unless the stylesheet
       // takes it back now (a borrowed dip that has ended).
@@ -1423,6 +1464,20 @@ export function createAnimator(
       flushReleases();
     };
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
+    if (requestFrame != null) {
+      // Frames start looking a frame before the end, so the frame that
+      // reaches it retires it even when the timer above runs late.
+      retireLooks.set(
+        channel,
+        setTimeout(
+          () => {
+            retireLooks.delete(channel);
+            lookAtFrame();
+          },
+          Math.max(0, end - now() - END_RECHECK_MS),
+        ),
+      );
+    }
   };
 
   /** The element's own (stylesheet) opacity, read once when a dip starts. */
@@ -2969,6 +3024,11 @@ export function createAnimator(
                 clearTimeout(timer);
               }
               retireTimers.clear();
+              for (const timer of retireLooks.values()) {
+                clearTimeout(timer);
+              }
+              retireLooks.clear();
+              retireFrames.clear();
               demote();
               // demote() asks for a fresh will-change read of the node it
               // demotes; a detached node gets none.
@@ -3018,6 +3078,11 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      for (const timer of retireLooks.values()) {
+        clearTimeout(timer);
+      }
+      retireLooks.clear();
+      retireFrames.clear();
       if (isOpacityBorrowed) {
         // A running borrowed dip (or an exit by role returning to the
         // stylesheet) stays in the model through any attach, so a pending
@@ -3622,6 +3687,11 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      for (const timer of retireLooks.values()) {
+        clearTimeout(timer);
+      }
+      retireLooks.clear();
+      retireFrames.clear();
       handBackBorrow();
       demote();
       cancelSheetWillChangeRead();
