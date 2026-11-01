@@ -778,7 +778,8 @@ describe('ci.yml interaction proofs', () => {
   it('runs the interaction config in Chromium against the exact PR head', () => {
     // One fixed runner: out of scope, every step after the scope step skips.
     expect(KNOWN_RUNNERS.has(job['runs-on']), job['runs-on']).toBe(true);
-    expect(job.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(job.needs).toEqual(['admission', 'build-storybook']);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&

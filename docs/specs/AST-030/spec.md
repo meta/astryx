@@ -221,7 +221,7 @@ they are separately named.
   is the full suites behind the labels. No required context depends on the
   touched check, and it records each touched component's pass, fail, changed
   or not-run result per suite, or that the change was wide and how many
-  components it touched, for the pull-request comment. An opted-in PR's a11y MUST remain scoped to changed components
+  components it touched, for the pull-request comment. The default check also runs, in Chromium, the browser accessibility spec files the change adds or modifies, and only those files, routed by their own `@pr-a11y` lines read from the merge commit: a changed `release-only` spec waits for the release check, a changed `audit` spec for its component-audit pull request, and the run widens to no other spec. It stays inside the check's 15-minute budget by running at most four changed spec files, in path order, and stopping after eight minutes; a file over the limit is recorded as not run, with the label that runs it, and a spec that does not finish fails the run, so neither reads as passed. A pull request that changes no such file runs none, and a failing one turns the advisory check red on that pull request, wide changes included. An opted-in PR's a11y MUST remain scoped to changed components
   plus fast interaction guards; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
@@ -272,7 +272,8 @@ they are separately named.
   audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
   a readable build the audits run in full. PR accessibility, when it runs, stays
   scoped to changed components (FR12). Without a label, the default
-  touched-components check audits only the touched components and never
+  touched-components check audits only the touched components, and runs only
+  the browser accessibility spec files the change adds or modifies; it never
   widens (FR12). Shared infrastructure runs the full suite of the owners the
   pull request runs (visual, accessibility and RTL only with their `ci:run-*`
   labels, FR12): root
@@ -339,13 +340,14 @@ they are separately named.
   visual, accessibility and RTL owners a maintainer opts a pull request into
   with their `ci:run-*` labels are unaffected by these per-author limits. Every
   run of the CI and Main workflows, of any event, waits for room before its jobs
-  start: it starts once the other active runs' estimated jobs plus its own most
-  fit under about ninety, and a pull-request run also waits while a `main` full
-  check, release re-check or baseline capture is waiting, looking twice on a
-  pull request, at once and after twelve minutes, and every two minutes for at
-  most fifteen for `main` (DEC-16). A pull request that may not run CI admits
-  nothing, and waiting never fails a job, so every required context reports as
-  before.
+  start, except the CI workflow's Storybook build, which starts beside the wait
+  while every job that uses it still waits: it starts once the other active
+  runs' estimated jobs plus its own most fit under about ninety, and a
+  pull-request run also waits while a `main` full check, release re-check or
+  baseline capture is waiting, looking twice on a pull request, at once and
+  after twelve minutes, and every two minutes for at most fifteen for `main`
+  (DEC-16). A pull request that may not run CI admits nothing, and waiting never
+  fails a job, so every required context reports as before.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -470,6 +472,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR10     | surface-admission and routing contract tests                                                                                                       | existing surface; proposed surface with and without the full admission contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | a new surface adds lanes without its approved paths, commands, ownership, projections, and routing tests                                                                                                                                                                                                                                                                                             |
 | FR11     | surface owner, internal-job, and required-join contract tests                                                                                      | Build package browser behavior; CLI; theme-family broad fallback; mixed Core+CLI                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | a second owner is routed for one surface, an internal job masquerades as a lane, an owned failure misses its join, or an unrelated owner runs                                                                                                                                                                                                                                                        |
 | FR12     | Storybook visual-plan, canonical workflow, and repository-owner guard tests                                                                        | PR scope; full-plan maintenance; report-only publication; deployment/a11y/RTL/vibe artifacts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | another workflow captures or compares pixels, a renamed or aliased owner escapes the guard, or legitimate non-visual artifacts are rejected                                                                                                                                                                                                                                                          |
+| FR12     | `touched-components.test.mjs` changed-spec routing; `a11y-pr-contracts.test.mjs` `changedOnly` cases                                               | a pull request that adds a browser accessibility spec; one that changes an `always` spec; one that changes a `release-only` or an `audit` spec; one that changes more spec files than the limit; a component change with no spec change                                                                                                                                                                                                                                                                                                                                                                                      | a pull request that adds a browser accessibility spec that fails is not caught on that pull request, an unchanged, `release-only` or `audit` spec runs in the default check, a file over the limit is reported as passed, or the default check widens past the changed spec files                                                                                                                    |
 | FR13     | classifier, workflow contract, component-analysis and RTL-scope tests                                                                              | component change; shared module; Changeset beside code; infrastructure path; incomplete list; no build                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | an infrastructure path is scoped, a file-system guard test is skipped, a reverse dependent leaves visual/RTL or enters PR accessibility, or a full-suite event is narrowed                                                                                                                                                                                                                           |
 | FR14     | `workflow-paths.test.mjs` over every workflow                                                                                                      | path allowlist; required-context workflow                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a `paths-ignore`, a match-all or exclusion glob, or a path filter on a workflow that reports a required context fails                                                                                                                                                                                                                                                                                |
 | FR15     | workflow contract and reconciler tests                                                                                                             | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR; run over the request budget; maintainer dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, a non-command comment starts a runner, or an over-budget run decides                                                                                                                                                                                   |
@@ -608,6 +611,7 @@ while the full
 suites stay behind their labels; the
 modal-close, theme-var and story-play guards are steps of the accessibility
 owner, so they run with it, after merge or on a labelled pull request. A
+browser accessibility spec file a pull request adds or modifies runs in that same job, by itself, so a new scoped or `always` spec is checked on its own pull request rather than first on `main`'s release check; an `audit` or `release-only` spec still first runs on its audit pull request or the release check. It costs nothing on a pull request that changes no spec. A
 failure on `main` is repaired forward with an atomic pull request, not reverted
 first. This supersedes DEC-5's choice to keep these checks off main pushes:
 running the browser suites on every update of every open pull request costs
@@ -736,17 +740,19 @@ its own fit under ninety. Small workflows that are not admitted (linting, review
 bookkeeping, report publishing) always count at least the most they were
 measured running at once, eighteen jobs, so the room they can take stays free.
 Each CI or Main run counts its live jobs: a pull-request run still waiting
-counts only the job that waits, so waiting runs hold each other back by no more
-than they use, and a run admitted in the last forty-five seconds, before its
-jobs appear, counts at least its planned most. A run GitHub still lists as
-active but has not updated in two hours holds no runner and counts nothing. A
-look reads the active runs and each CI or Main run's jobs once, so it costs two
-run listings plus one call per active CI or Main run. A pull request looks at
-most twice, and a run starts rather than spend a low API budget. A `main` full
-check, release re-check or baseline capture (every dispatch of the CI workflow)
-goes first: while one waits, pull-request runs wait too. Every job ends within
-its fifteen-minute budget, so `main` fits within fifteen minutes. Nothing is
-reserved for `main` outside those minutes.
+counts the jobs it runs, the job that waits and the Storybook build that starts
+beside it, so waiting runs hold each other back by no more than they use, and a
+run admitted in the last forty-five seconds, before its jobs appear, counts at
+least its planned most. A run GitHub still lists as active but has not updated
+in two hours holds no runner and counts nothing. A look reads the active runs
+and each CI or Main run's jobs once, so it costs two run listings plus one call
+per active CI or Main run. A pull request looks at most twice, and a run starts
+rather than spend a low API budget. A `main` full check, release re-check or
+baseline capture (every dispatch of the CI workflow) goes first: while one
+waits, pull-request runs wait too, all but their Storybook builds, which the
+waiting check counts. Every job ends within its fifteen-minute budget, so `main`
+fits within fifteen minutes. Nothing is reserved for `main` outside those
+minutes.
 
 CI can still pass ninety in three rare, bounded ways:
 

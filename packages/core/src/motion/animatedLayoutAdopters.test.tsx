@@ -352,6 +352,37 @@ describe("a close plays the content's exit (spec:AST-105 FR4)", () => {
     expect(content.style.getPropertyValue('margin-block-end')).toBe('');
   });
 
+  it('moves focus inside a closing Collapsible to its trigger while the content plays its exit (component:Collapsible AR4)', async () => {
+    const example = (isOpen: boolean) => (
+      <Area withHandle>
+        {layout => (
+          <Collapsible
+            trigger="Details"
+            isOpen={isOpen}
+            onOpenChange={() => {}}
+            animatedLayout={layout}>
+            <button type="button">Inside</button>
+          </Collapsible>
+        )}
+      </Area>
+    );
+    const {rerender} = render(example(true));
+    stubGeometry();
+    const trigger = screen.getByRole('button', {name: 'Details'});
+    const content = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    ) as HTMLElement;
+    vi.spyOn(content, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 40, 400, 40),
+    );
+    screen.getByRole('button', {name: 'Inside'}).focus();
+    rerender(example(false));
+    await flush();
+    // Still on screen for the exit, and inert, so focus left it.
+    expect(content).toHaveAttribute('inert');
+    expect(trigger).toHaveFocus();
+  });
+
   it("keeps a collapsing TreeList row's child group until its exit ends, out of the keyboard order", async () => {
     const user = userEvent.setup();
     render(

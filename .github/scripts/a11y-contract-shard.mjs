@@ -307,19 +307,31 @@ function parseShard(value) {
   return {index, count};
 }
 
+/**
+ * Seconds per file and per test from every leg's log. A file the split cut
+ * runs in several legs, so its seconds add up across their logs.
+ * @param {string[]} texts one log per leg
+ */
+export function recordLogs(texts) {
+  const seconds = {};
+  const tests = {};
+  for (const text of texts) {
+    for (const [file, value] of Object.entries(recordDurations(text)))
+      seconds[file] = Math.round(((seconds[file] ?? 0) + value) * 10) / 10;
+    Object.assign(tests, recordTestDurations(text));
+  }
+  return {seconds, tests};
+}
+
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
   const args = process.argv.slice(2);
   if (args[0] === 'record') {
-    const seconds = {};
-    const tests = {};
-    for (const file of args.slice(1)) {
-      const text = fs.readFileSync(file, 'utf8');
-      Object.assign(seconds, recordDurations(text));
-      Object.assign(tests, recordTestDurations(text));
-    }
+    const {seconds, tests} = recordLogs(
+      args.slice(1).map(file => fs.readFileSync(file, 'utf8')),
+    );
     const current = JSON.parse(fs.readFileSync(DURATIONS, 'utf8'));
     const sorted = values =>
       Object.fromEntries(

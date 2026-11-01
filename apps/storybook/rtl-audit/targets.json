@@ -544,6 +544,78 @@
     }
   },
   {
+    "component": "Step",
+    "storyId": "core-stepper--default-horizontal",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-step:first-child .astryx-step-indicator",
+      "next": ".astryx-step:first-child .astryx-step-label"
+    }
+  },
+  {
+    "component": "OverflowList",
+    "storyId": "core-overflowlist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-overflow-list > button:first-child",
+      "next": ".astryx-overflow-list button:has-text(\"more\")"
+    }
+  },
+  {
+    "component": "DialogHeader",
+    "storyId": "core-dialog--default",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Open Modal\")"},
+    "selectors": {
+      "prev": ".astryx-dialog-header-title-block",
+      "next": ".astryx-dialog-header-end-content"
+    }
+  },
+  {
+    "component": "AlertDialog",
+    "storyId": "core-alertdialog--delete",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Delete item\")"},
+    "selectors": {
+      "prev": "[role=\"alertdialog\"] button:has-text(\"Cancel\")",
+      "next": "[role=\"alertdialog\"] button:has-text(\"Delete\") >> nth=-1"
+    }
+  },
+  {
+    "component": "MobileNav",
+    "storyId": "core-mobilenav--default",
+    "dims": ["D4"],
+    "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
+    "selectors": {
+      "overlay": "[class*=\"astryx-mobile-nav\"] > div:first-child",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "MoreMenu",
+    "storyId": "core-moremenu--default",
+    "dims": ["D4"],
+    "setup": {"click": "button[aria-label=\"More options\"]"},
+    "selectors": {
+      "overlay": "[role=\"menu\"]",
+      "overlayRoot": "button[aria-label=\"More options\"]"
+    }
+  },
+  {
+    "component": "Dialog",
+    "storyId": "core-dialog--default",
+    "dims": []
+  },
+  {
+    "component": "NavHeadingMenu",
+    "storyId": "core-navmenu--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
+      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
+    }
+  },
+  {
     "component": "ChartLegend",
     "storyId": "charts-chrome-legend--default",
     "dims": ["D2"],
@@ -616,6 +688,15 @@
     }
   },
   {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
     "component": "DrawerHeader",
     "storyId": "core-drawerheader--audit",
     "dims": ["D2"],
@@ -625,75 +706,34 @@
     }
   },
   {
-    "component": "Step",
-    "storyId": "core-stepper--default-horizontal",
-    "dims": ["D2"],
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
     "selectors": {
-      "prev": ".astryx-step:first-child .astryx-step-indicator",
-      "next": ".astryx-step:first-child .astryx-step-label"
+      "subject": ".astryx-blockquote"
     }
   },
   {
-    "component": "OverflowList",
-    "storyId": "core-overflowlist--default",
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-overflow-list > button:first-child",
-      "next": ".astryx-overflow-list button:has-text(\"more\")"
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
     }
   },
   {
-    "component": "DialogHeader",
-    "storyId": "core-dialog--default",
-    "dims": ["D2"],
-    "setup": {"click": "button:has-text(\"Open Modal\")"},
-    "selectors": {
-      "prev": ".astryx-dialog-header-title-block",
-      "next": ".astryx-dialog-header-end-content"
-    }
-  },
-  {
-    "component": "AlertDialog",
-    "storyId": "core-alertdialog--delete",
-    "dims": ["D2"],
-    "setup": {"click": "button:has-text(\"Delete item\")"},
-    "selectors": {
-      "prev": "[role=\"alertdialog\"] button:has-text(\"Cancel\")",
-      "next": "[role=\"alertdialog\"] button:has-text(\"Delete\") >> nth=-1"
-    }
-  },
-  {
-    "component": "MobileNav",
-    "storyId": "core-mobilenav--default",
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
     "dims": ["D4"],
-    "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
     "selectors": {
-      "overlay": "[class*=\"astryx-mobile-nav\"] > div:first-child",
-      "overlayRoot": "body"
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
     }
   },
   {
-    "component": "MoreMenu",
-    "storyId": "core-moremenu--default",
-    "dims": ["D4"],
-    "setup": {"click": "button[aria-label=\"More options\"]"},
-    "selectors": {
-      "overlay": "[role=\"menu\"]",
-      "overlayRoot": "button[aria-label=\"More options\"]"
-    }
-  },
-  {
-    "component": "Dialog",
-    "storyId": "core-dialog--default",
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": []
-  },
-  {
-    "component": "NavHeadingMenu",
-    "storyId": "core-navmenu--with-icons",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
-      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
-    }
   }
 ]

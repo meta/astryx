@@ -111,6 +111,28 @@ export const docs = {
       type: 'string',
       description: 'HTML id attribute.',
     },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        'StyleX styles applied to the heading element. Must be a stylex.create() value: not an inline style object like style={{}}.',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description: 'CSS class name applied to the heading element.',
+    },
+    {
+      name: 'style',
+      type: 'React.CSSProperties',
+      description:
+        'Inline styles applied to the heading element. When `maxLines` is above 1, its line clamp replaces any `WebkitLineClamp` in `style`.',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLHeadingElement>',
+      description: 'Ref forwarded to the heading element.',
+    },
   ],
 };
 
@@ -212,6 +234,28 @@ export const docsZh = {
       type: 'string',
       description: 'HTML id 属性。',
     },
+    {
+      name: 'xstyle',
+      type: 'StyleXStyles',
+      description:
+        '应用于标题元素的 StyleX 样式。必须是 stylex.create() 的值，而不是 style={{}} 这样的内联样式对象。',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description: '应用于标题元素的 CSS 类名。',
+    },
+    {
+      name: 'style',
+      type: 'React.CSSProperties',
+      description:
+        '应用于标题元素的内联样式。当 `maxLines` 大于 1 时，其行数截断会替换 `style` 中的 `WebkitLineClamp`。',
+    },
+    {
+      name: 'ref',
+      type: 'React.Ref<HTMLHeadingElement>',
+      description: '转发到标题元素的 Ref。',
+    },
   ],
 };
 
@@ -244,5 +288,10 @@ export const docsDense = {
     hasCapsize: 'Optical alignment via text-box-trim; forces block display.',
     hasStrikethrough: 'Strikethrough text decoration.',
     id: 'HTML id attribute.',
+    xstyle: 'StyleX styles on the heading; stylex.create() value only.',
+    className: 'CSS class on the heading.',
+    style:
+      'inline styles on the heading; with maxLines>1 the line clamp replaces WebkitLineClamp.',
+    ref: 'ref to the heading element.',
   },
 };
