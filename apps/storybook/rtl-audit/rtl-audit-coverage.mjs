@@ -207,6 +207,68 @@ export function componentRoutesForFilters(routes, filters) {
   );
 }
 
+/**
+ * Resolve component filters to story routes through the Storybook index, not
+ * the export name alone. A filter a route names selects that route. A filter
+ * no route names adopts its source folder's orphan stories that render it:
+ * stories whose index `componentPath` lies in that folder, whose title names
+ * no public component, and whose story file uses the component
+ * (ResizeHandle adopts Core/Resizable's; ChatLayoutScrollButton adopts none
+ * of Core/Chat's, which never render it). Adopted stories are routed to the filter's
+ * own component, so it keeps its own coverage entry and verified-N/A record.
+ * A filter with neither selects nothing and stays a coverage gap
+ * (`architecture:rtl-audit-evidence` INV5).
+ * @param {{
+ *   routes: {id: string, component: string}[],
+ *   filters: string[],
+ *   knownComponents: string[],
+ *   componentPathOf: (storyId: string) => string | undefined,
+ *   ownerOf: (filter: string) => {component: string, folder: string} | null,
+ *   renders: (storyId: string, component: string) => boolean,
+ * }} input
+ */
+export function resolveFilterRoutes({
+  routes,
+  filters,
+  knownComponents,
+  componentPathOf,
+  ownerOf,
+  renders,
+}) {
+  if (filters.length === 0) return {routes, adopted: {}};
+  const known = new Set(knownComponents.map(name => name.toLowerCase()));
+  const selected = new Map();
+  const adopted = {};
+  for (const filter of filters) {
+    const direct = routes.filter(route =>
+      routeMatchesComponentFilter(route, filter),
+    );
+    for (const route of direct) {
+      selected.set(`${route.component}::${route.id}`, route);
+    }
+    if (direct.length > 0) continue;
+    const owner = ownerOf(filter);
+    if (owner == null) continue;
+    const orphans = routes.filter(
+      route =>
+        !known.has(route.component.toLowerCase()) &&
+        (componentPathOf(route.id) ?? '')
+          .replace(/^(\.\.\/)+/, '')
+          .startsWith(`${owner.folder}/`) &&
+        renders(route.id, owner.component),
+    );
+    if (orphans.length === 0) continue;
+    adopted[owner.component] = orphans.map(route => route.id).sort();
+    for (const {id} of orphans) {
+      selected.set(`${owner.component}::${id}`, {
+        id,
+        component: owner.component,
+      });
+    }
+  }
+  return {routes: [...selected.values()], adopted};
+}
+
 /** Story ids owned by any bare or package-qualified component filter. */
 export function storyIdsForComponentFilters(routes, filters) {
   return [
@@ -498,6 +560,32 @@ function isMirrorOf(rtl, ltr) {
   }
   const expected = [-ltr[0], ltr[1], -ltr[2], ltr[3]];
   return expected.every((value, index) => Math.abs(value - rtl[index]) < 0.01);
+}
+
+/**
+ * Jump every finite animation in `doc` to its end state and return how many
+ * were finished. The audit's zero-duration style only reaches transitions and
+ * animations that start after it is injected; one a story started on mount (a
+ * drawer sliding in) keeps running, so LTR and RTL would otherwise be sampled
+ * at different points of it. Infinite animations (spinners) are left alone.
+ * Runs in the page: keep it self-contained.
+ */
+export function finishFiniteAnimations(doc) {
+  let finished = 0;
+  for (const animation of doc.getAnimations?.() ?? []) {
+    const endTime = animation.effect?.getComputedTiming?.().endTime;
+    if (!Number.isFinite(endTime)) {
+      continue;
+    }
+    try {
+      animation.finish();
+      finished++;
+    } catch {
+      // A zero-playback-rate or infinite-effect animation cannot finish;
+      // leave it.
+    }
+  }
+  return finished;
 }
 
 /** Classify one stable LTR/RTL contextual-decoration pair. */

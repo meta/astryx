@@ -241,19 +241,21 @@ function createHarness({
           state.calls.push(`status:${input.context}:${input.state}`);
           return {data: status};
         },
-        getContent: async ({ref, path: filePath}) => ({
-          data: {
-            content: Buffer.from(
-              `${ref}:${filePath}` in contentAt
-                ? contentAt[`${ref}:${filePath}`]
-                : ref in contentAt
-                  ? contentAt[ref]
-                  : ref === state.pr.head.sha
-                    ? headContent
-                    : baseContent,
-            ).toString('base64'),
-          },
-        }),
+        getContent: async ({ref, path: filePath}) => {
+          const text =
+            `${ref}:${filePath}` in contentAt
+              ? contentAt[`${ref}:${filePath}`]
+              : ref in contentAt
+                ? contentAt[ref]
+                : ref === state.pr.head.sha
+                  ? headContent
+                  : baseContent;
+          // null: the path is absent at that commit.
+          if (text === null) {
+            throw Object.assign(new Error('Not Found'), {status: 404});
+          }
+          return {data: {content: Buffer.from(text).toString('base64')}};
+        },
       },
     },
     graphql: async query => {
@@ -606,6 +608,113 @@ describe('spec owner workflow reconciliation', () => {
       ).toBe(false);
     },
   );
+
+  it('keeps a package architecture record made current pending without exact-head approval', async () => {
+    const record = authority =>
+      `---\nkind: architecture\nid: architecture:native-swift-slots\nauthority: ${authority}\n---\n\nA slot is a typed view.\n`;
+    const harness = createHarness({
+      changedFile: {
+        filename: 'packages/native/specs/swift/slots.spec.md',
+        status: 'modified',
+      },
+      baseContent: record('draft'),
+      headContent: record('current'),
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'pending',
+      description: 'Mirrors review-required · spec waiting (eng)',
+    });
+    expect(harness.state.calls).not.toContain('enable-auto-merge');
+  });
+
+  it('needs no owner approval for an edit to a draft package architecture record', async () => {
+    const record = body =>
+      `---\nkind: architecture\nid: architecture:native-swift-slots\nauthority: draft\n---\n\n${body}\n`;
+    const harness = createHarness({
+      changedFile: {
+        filename: 'packages/native/specs/swift/slots.spec.md',
+        status: 'modified',
+      },
+      baseContent: record('A slot is a view.'),
+      headContent: record('A slot is a typed view.'),
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestReviewGate(harness.state).state).toBe('success');
+    expect(
+      harness.state.calls.some(call =>
+        call.includes('No knowledge records changed'),
+      ),
+    ).toBe(false);
+  });
+
+  it('keeps a Swift platform record made current pending without exact-head approval', async () => {
+    const harness = createHarness({
+      changedFile: {
+        filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md',
+        status: 'modified',
+      },
+      baseContent:
+        '---\nkind: component\nid: component:swift/TextInput\nauthority: draft\n---\n',
+      headContent:
+        '---\nkind: component\nid: component:swift/TextInput\nauthority: current\n---\n',
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestReviewGate(harness.state)).toMatchObject({state: 'pending'});
+    expect(latestGateStatus(harness.state)).toMatchObject({
+      state: 'pending',
+      description: 'Mirrors review-required · spec waiting (eng)',
+    });
+    expect(
+      harness.state.calls.some(call =>
+        call.includes('No knowledge records changed'),
+      ),
+    ).toBe(false);
+    expect(harness.state.calls).not.toContain('enable-auto-merge');
+  });
+
+  it('leaves the gate clear when a Swift view changes and its platform record does not', async () => {
+    const harness = createHarness({
+      changedFile: {
+        filename:
+          'packages/native/apple/Sources/Astryx/TextInput/TextInput.swift',
+        status: 'modified',
+      },
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestGateStatus(harness.state)).toMatchObject({state: 'success'});
+    expect(harness.state.calls).not.toContain('enable-auto-merge');
+  });
+
+  it('needs no owner approval for an edit to a draft Swift platform record', async () => {
+    const draft =
+      '---\nkind: component\nid: component:swift/TextInput\nauthority: draft\n---\n';
+    const harness = createHarness({
+      changedFile: {
+        filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md',
+        status: 'modified',
+      },
+      baseContent: draft,
+      headContent: `${draft}\n## Intent\n\nUpdated.\n`,
+    });
+
+    await run(harness, context({runId: 100n, action: 'synchronize'}));
+
+    expect(latestReviewGate(harness.state).state).toBe('success');
+    expect(
+      harness.state.calls.some(call =>
+        call.includes('No knowledge records changed'),
+      ),
+    ).toBe(false);
+  });
 
   it('accepts an exact-head derived theme-owner review for a current theme record', async () => {
     const review = {
@@ -1377,6 +1486,346 @@ describe('spec owner workflow reconciliation', () => {
       expect(latestReviewGate(harness.state)).toMatchObject({
         state: 'pending',
         description: waiting,
+      });
+    });
+
+    describe('a large spec move', () => {
+      // Every component record moved, unchanged, from packages to docs.
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+        sha: `blob-${i}`,
+      }));
+
+      function countContentReads(harness) {
+        const counter = {reads: 0};
+        const getContent = harness.github.rest.repos.getContent;
+        harness.github.rest.repos.getContent = async input => {
+          counter.reads += 1;
+          return getContent(input);
+        };
+        return counter;
+      }
+
+      it('keeps an approval without re-reading files whose blobs match', async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[oldHead]: currentRecord},
+          filesAt: {[oldHead]: moved},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        const counter = countContentReads(harness);
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state).state).toBe('success');
+        // The snapshot's base and head text for each moved record, and
+        // nothing more: the fingerprint reuses the head text, and the
+        // approved commit's identical blobs need no read (was 1,800).
+        expect(counter.reads).toBe(600);
+      });
+
+      it('reads and normalizes only a path whose blob differs', async () => {
+        const target = moved[7];
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          // A bookkeeping-only edit: normalization drops it, so the approval
+          // still counts.
+          contentAt: {
+            [`${oldHead}:${target.filename}`]: currentRecord.replace(
+              'approved_at: 2026-10-28',
+              'approved_at: 2026-10-27',
+            ),
+          },
+          filesAt: {
+            [oldHead]: moved.map(file =>
+              file === target ? {...file, sha: 'blob-earlier'} : file,
+            ),
+          },
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        const counter = countContentReads(harness);
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state).state).toBe('success');
+        expect(counter.reads).toBe(601);
+      });
+
+      it('resets when the head copies a record the approval renamed', async () => {
+        // The approved commit moved docs/specs/x to docs/specs/y; the head
+        // copies it instead, so docs/specs/x is still there.
+        const x = 'docs/specs/x/spec.md';
+        const moveOrCopy = status => [
+          {
+            filename: 'docs/specs/y/spec.md',
+            previous_filename: x,
+            status,
+            changes: 0,
+            sha: 'blob-y',
+          },
+        ];
+        const harness = createHarness({
+          changedFiles: moveOrCopy('copied'),
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${x}`]: null},
+          filesAt: {[oldHead]: moveOrCopy('renamed')},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+
+      it('resets when a path renamed away is re-added with other text', async () => {
+        // docs/specs/a moves to docs/specs/b, and docs/specs/c takes its
+        // place at docs/specs/a, with text that changed since the approval.
+        const a = 'docs/specs/a/spec.md';
+        const swap = sha => [
+          {
+            filename: a,
+            previous_filename: 'docs/specs/c/spec.md',
+            status: 'renamed',
+            changes: 2,
+            sha,
+          },
+          {
+            filename: 'docs/specs/b/spec.md',
+            previous_filename: a,
+            status: 'renamed',
+            changes: 0,
+            sha: 'blob-b',
+          },
+        ];
+        const harness = createHarness({
+          changedFiles: swap('blob-a-now'),
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${a}`]: changedRecord},
+          filesAt: {[oldHead]: swap('blob-a-approved')},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+
+      it("still resets when a moved file's text changed", async () => {
+        const target = moved[7];
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${target.filename}`]: changedRecord},
+          filesAt: {
+            [oldHead]: moved.map(file =>
+              file === target ? {...file, sha: 'blob-earlier'} : file,
+            ),
+          },
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+    });
+
+    describe('renamed records', () => {
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+        sha: `blob-${i}`,
+      }));
+      const baseTree = moved.map(file => ({
+        path: file.previous_filename,
+        type: 'blob',
+        sha: file.sha,
+      }));
+
+      async function reconcileCounting({tree, edited = null}) {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          comments: [ownerComment(`/approve-spec ${head}`)],
+        });
+        harness.github.rest.git = {
+          getTree: async () => {
+            if (!tree) throw new Error('Not available');
+            return {
+              data: {
+                tree: tree.map(entry =>
+                  entry.path === edited
+                    ? {...entry, sha: 'blob-edited'}
+                    : entry,
+                ),
+                truncated: false,
+              },
+            };
+          },
+        };
+        const counter = {reads: 0};
+        const getContent = harness.github.rest.repos.getContent;
+        harness.github.rest.repos.getContent = async input => {
+          counter.reads += 1;
+          return getContent(input);
+        };
+        await run(harness, context({runId: 100n}));
+        return {reads: counter.reads, gate: latestReviewGate(harness.state)};
+      }
+
+      it('reuses the head text as the base text of an unchanged rename', async () => {
+        const withoutTree = await reconcileCounting({tree: null});
+        const withTree = await reconcileCounting({tree: baseTree});
+
+        expect(withTree.gate).toEqual(withoutTree.gate);
+        expect(withTree.gate.state).toBe('success');
+        expect(withoutTree.reads - withTree.reads).toBe(300);
+      });
+
+      it('still reads the base text when the base changed the old path', async () => {
+        const withoutTree = await reconcileCounting({tree: null});
+        const oneEdited = await reconcileCounting({
+          tree: baseTree,
+          edited: moved[7].previous_filename,
+        });
+
+        expect(withoutTree.reads - oneEdited.reads).toBe(299);
+      });
+    });
+
+    describe('a spec change too large for one run', () => {
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+      }));
+      const tooLarge =
+        '⏳ Too large to reconcile automatically: a maintainer can run the Review signal workflow for this PR';
+
+      // The job's request count, as lib/rate-limit-backoff.cjs keeps it: a
+      // request counts once it reaches the client, a tick after the call.
+      function countRequests(harness) {
+        const counter = {requests: 0, waits: 0};
+        const repos = harness.github.rest.repos;
+        for (const name of ['getContent', 'compareCommitsWithBasehead']) {
+          const method = repos[name];
+          repos[name] = async input => {
+            await Promise.resolve();
+            counter.requests += 1;
+            return method(input);
+          };
+        }
+        harness.github.__rateLimitBackoff = counter;
+        return counter;
+      }
+
+      it('stops at the budget and leaves the gate pending, even after an owner command', async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+        });
+        const counter = countRequests(harness);
+
+        await commentRun(harness, ownerComment(`/approve-spec ${head}`));
+
+        // Parallel reads stop at the budget too, not one batch past it.
+        expect(counter.requests).toBe(300);
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: tooLarge,
+        });
+        expect(latestGateStatus(harness.state)).toMatchObject({
+          state: 'pending',
+          description:
+            'Mirrors review-required · spec too large to reconcile automatically',
+        });
+      });
+
+      it('stops parallel reads at the budget, not a batch past it', async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+        });
+        const counter = countRequests(harness);
+
+        await reconcileSpecOwnerGate({
+          github: harness.github,
+          context: context({runId: 100n}),
+          core: harness.core,
+          workspace,
+          env,
+          requestBudget: 100,
+        });
+
+        expect(counter.requests).toBe(100);
+        expect(latestReviewGate(harness.state).description).toBe(tooLarge);
+      });
+
+      it('stops, rather than decides, when the budget runs out comparing an approval', async () => {
+        // One record fits the budget; the approved commit's comparison does not.
+        const harness = createHarness({
+          headContent: currentRecord,
+          contentAt: {[oldHead]: currentRecord},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+        countRequests(harness);
+
+        await reconcileSpecOwnerGate({
+          github: harness.github,
+          context: context({runId: 100n}),
+          core: harness.core,
+          workspace,
+          env,
+          requestBudget: 2,
+        });
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: tooLarge,
+        });
+      });
+
+      it("lets a maintainer's dispatch decide past the budget", async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          comments: [ownerComment(`/approve-spec ${head}`)],
+        });
+        const counter = countRequests(harness);
+
+        await run(
+          harness,
+          context({runId: 100n, eventName: 'workflow_dispatch'}),
+        );
+
+        expect(counter.requests).toBeGreaterThan(300);
+        expect(latestReviewGate(harness.state).state).toBe('success');
       });
     });
 

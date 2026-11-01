@@ -154,6 +154,24 @@ function componentRecord(overrides = {}) {
   return `---\n${frontmatter}\n---\n\n# Button component contract\n\n${sections}\n`;
 }
 
+function platformRecord(overrides = {}) {
+  return componentRecord({
+    id: 'component:swift/Button',
+    platform_of: 'component:Button',
+    verified_by: '[packages/native/apple/Tests/AstryxTests/ButtonTests.swift]',
+    ...overrides,
+  });
+}
+
+function writeSwiftTest(root) {
+  const swiftTest = path.join(
+    root,
+    'packages/native/apple/Tests/AstryxTests/ButtonTests.swift',
+  );
+  fs.mkdirSync(path.dirname(swiftTest), {recursive: true});
+  fs.writeFileSync(swiftTest, '');
+}
+
 function moduleRecord(overrides = {}) {
   const values = {
     schema_version: '3',
@@ -1697,8 +1715,11 @@ describe('knowledge validation', () => {
       componentRecord(),
     );
     const folder = path.join(root, 'docs/specs/components/Button');
-    // Platform records are not checked yet (no platform_of in the schema).
-    fs.writeFileSync(path.join(folder, 'Button.swift.spec.md'), '# Swift\n');
+    writeSwiftTest(root);
+    fs.writeFileSync(
+      path.join(folder, 'Button.swift.spec.md'),
+      platformRecord(),
+    );
     fs.writeFileSync(path.join(folder, 'Button.klingon.spec.md'), '# ?\n');
     fs.writeFileSync(
       path.join(root, 'docs/specs/components/Loose.spec.md'),
@@ -1709,6 +1730,182 @@ describe('knowledge validation', () => {
     expect(
       problems.filter(problem => problem.includes('must be <ComponentRoot>')),
     ).toHaveLength(2);
+  });
+
+  it('checks a platform record with the shared validator and against its core component', async () => {
+    const root = fixtureRoot();
+    fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
+    fs.writeFileSync(
+      recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
+      componentRecord(),
+    );
+    writeSwiftTest(root);
+    const swift = path.join(
+      root,
+      'docs/specs/components/Button/Button.swift.spec.md',
+    );
+    const swiftProblems = async overrides => {
+      fs.writeFileSync(swift, platformRecord(overrides));
+      return (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+      );
+    };
+
+    expect(await swiftProblems()).toEqual([]);
+    expect(
+      await swiftProblems({
+        id: 'component:Button',
+        platform_of: 'component:Card',
+        owners: '[]',
+        verified_by: '[packages/native/apple/Tests/Missing.swift]',
+      }),
+    ).toEqual([
+      'docs/specs/components/Button/Button.swift.spec.md: id must match "^component:swift/Button$".',
+      'docs/specs/components/Button/Button.swift.spec.md: owners must be a non-empty inline list.',
+      'docs/specs/components/Button/Button.swift.spec.md: duplicate id component:Button; first declared in docs/specs/components/Button/Button.spec.md.',
+      'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
+      'docs/specs/components/Button/Button.swift.spec.md: verified_by path packages/native/apple/Tests/Missing.swift is not in the repository.',
+    ]);
+    // It is placed like the core record it implements.
+    for (const [misplaced, message] of [
+      [
+        'docs/specs/components/Buton/Button.swift.spec.md',
+        'platform records must live at docs/specs/components/<ComponentRoot>/',
+      ],
+      [
+        'docs/specs/components/Button/Banana.swift.spec.md',
+        'platform record for Banana must match component root "Button"',
+      ],
+    ]) {
+      const misplacedPath = path.join(root, misplaced);
+      fs.mkdirSync(path.dirname(misplacedPath), {recursive: true});
+      const name = path.basename(misplaced, '.swift.spec.md');
+      fs.writeFileSync(
+        misplacedPath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+      const misplacedProblems = (await validateKnowledgeRoot(root)).filter(
+        problem => problem.startsWith(misplaced),
+      );
+      expect(misplacedProblems.join('\n')).toContain(message);
+      fs.rmSync(misplacedPath);
+    }
+    // Its applicability blocks are validated, since specs:for reads them.
+    fs.writeFileSync(
+      swift,
+      withReviewApplicability(platformRecord(), {'not-a-trigger': ['INV1']}) +
+        '\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": []}\n```\n',
+    );
+    const blockProblems = (await validateKnowledgeRoot(root)).filter(problem =>
+      problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+    );
+    expect(
+      blockProblems.some(problem => problem.includes('review-applicability')),
+    ).toBe(true);
+    expect(blockProblems).toContain(
+      'docs/specs/components/Button/Button.swift.spec.md: path-applicability:v1 requires a non-empty paths list.',
+    );
+    // The shared validator's current-record rules apply, verified_by included.
+    expect(
+      await swiftProblems({authority: 'current', verified_by: '[]'}),
+    ).toEqual(
+      expect.arrayContaining([
+        'docs/specs/components/Button/Button.swift.spec.md: current records require non-empty verified_by.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_by to name an authorized owner.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_at as YYYY-MM-DD.',
+      ]),
+    );
+    expect(
+      await swiftProblems({
+        authority: 'current',
+        approved_by: 'cixzhang',
+        approved_at: '2026-11-01',
+      }),
+    ).toEqual([]);
+  });
+
+  it('places a flat-package platform record by the same rules as its core record', async () => {
+    const root = fixtureRoot();
+    const source = path.join(root, 'packages/charts/src');
+    fs.writeFileSync(
+      path.join(source, 'index.ts'),
+      "export {Chart} from './Chart';\nexport {Ghost} from './Ghost';\n",
+    );
+    fs.writeFileSync(
+      path.join(source, 'Chart.tsx'),
+      'export function Chart() {}\n',
+    );
+    fs.writeFileSync(
+      path.join(source, 'Ghost.tsx'),
+      'export function Ghost() {}\n',
+    );
+    writeSwiftTest(root);
+    const swiftRecord = (folder, name) => {
+      const filePath = path.join(
+        root,
+        `docs/specs/components/${folder}/${name}.swift.spec.md`,
+      );
+      fs.mkdirSync(path.dirname(filePath), {recursive: true});
+      fs.writeFileSync(
+        filePath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+    };
+    swiftRecord('Chart', 'Chart');
+    swiftRecord('Chart', 'Ghost');
+
+    const problems = (await validateKnowledgeRoot(root)).join('\n');
+    expect(problems).not.toContain('Chart/Chart.swift.spec.md');
+    expect(problems).toContain(
+      'docs/specs/components/Chart/Ghost.swift.spec.md: platform record for Ghost must match component root "Chart"',
+    );
+  });
+
+  it('checks a package architecture record under packages/<package>/specs/', async () => {
+    const root = fixtureRoot();
+    const template = fs.readFileSync(
+      path.join(root, 'docs/templates/knowledge/architecture.md'),
+      'utf8',
+    );
+    const slots = path.join(root, 'packages/native/specs/swift/slots.spec.md');
+    const writeSlots = (id, kind = 'architecture') => {
+      fs.mkdirSync(path.dirname(slots), {recursive: true});
+      fs.writeFileSync(
+        slots,
+        template
+          .replace('id: architecture:<surface>', `id: ${id}`)
+          .replace('kind: architecture', `kind: ${kind}`),
+      );
+    };
+    const packageProblems = async () =>
+      (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('packages/native/specs/'),
+      );
+    // Guidance Markdown that is not a `<slug>.spec.md` is not a candidate.
+    fs.mkdirSync(path.join(root, 'packages/native/specs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'packages/native/specs/README.md'),
+      '# Native specs\n',
+    );
+
+    writeSlots('architecture:native-swift-slots');
+    expect(await packageProblems()).toEqual([]);
+
+    writeSlots('architecture:swift-slots');
+    expect(await packageProblems()).toEqual([
+      'packages/native/specs/swift/slots.spec.md: id must be architecture:native-swift-slots to match its path.',
+    ]);
+
+    writeSlots('architecture:native-swift-slots', 'bogus');
+    expect(await packageProblems()).toContain(
+      'packages/native/specs/swift/slots.spec.md: a record under packages/native/specs/ must be kind: architecture.',
+    );
   });
 
   it('rejects a nested component record instead of treating it as a module', async () => {

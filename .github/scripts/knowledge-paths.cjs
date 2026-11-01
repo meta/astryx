@@ -31,6 +31,14 @@ const COMPONENT_SPEC_ROOT = 'docs/specs/components';
  */
 const PLATFORM_SPEC_LANGUAGES = Object.freeze(['swift']);
 
+/**
+ * Where each platform language keeps its component code, as
+ * `<root>/<Module>/<ComponentRoot>/…`.
+ */
+const PLATFORM_SOURCE_ROOTS = Object.freeze({
+  swift: 'packages/native/apple/Sources',
+});
+
 const IGNORED_COMPONENT_KNOWLEDGE_SEGMENTS = new Set([
   '__fixtures__',
   '__generated__',
@@ -148,6 +156,65 @@ function isComponentSpecRecordPath(filePath) {
 
 function isPlatformComponentSpecPath(filePath) {
   return classifyPlatformComponentSpecPath(filePath) !== null;
+}
+
+/**
+ * A package's own architecture record:
+ * `packages/<package>/specs/…/<slug>.spec.md`. Its id is `architecture:`
+ * followed by the package name, each directory between `specs/` and the file,
+ * and the slug, joined by hyphens
+ * (`packages/native/specs/swift/accessibility.spec.md` is
+ * `architecture:native-swift-accessibility`). Null for any other path.
+ */
+function classifyPackageArchitectureRecordPath(filePath) {
+  const match = /^packages\/([^/]+)\/specs\/(.+)$/.exec(
+    normalizePath(filePath),
+  );
+  if (!match) return null;
+  const segments = match[2].split('/');
+  const fileName = segments.pop();
+  if (
+    !/^[a-z0-9][a-z0-9-]*\.spec\.md$/.test(fileName) ||
+    fileName.endsWith('.generated.spec.md') ||
+    segments.some(
+      segment =>
+        segment.startsWith('.') || isIgnoredComponentKnowledgeSegment(segment),
+    )
+  ) {
+    return null;
+  }
+  const slug = fileName.slice(0, -'.spec.md'.length);
+  return {
+    packageName: match[1],
+    id: `architecture:${[match[1], ...segments, slug].join('-')}`,
+  };
+}
+
+function isPackageArchitectureRecordPath(filePath) {
+  return classifyPackageArchitectureRecordPath(filePath) !== null;
+}
+
+/**
+ * A platform language's component code file:
+ * `<source root>/<Module>/<ComponentRoot>/…/<file>`. Returns the language,
+ * component root, and file stem; null for any other path, a spec file, or a
+ * file in an ignored directory.
+ */
+function locatePlatformComponentSource(filePath) {
+  const normalized = normalizePath(filePath);
+  if (normalized.endsWith('.md')) return null;
+  for (const [language, sourceRoot] of Object.entries(PLATFORM_SOURCE_ROOTS)) {
+    if (!normalized.startsWith(`${sourceRoot}/`)) continue;
+    const segments = normalized.slice(sourceRoot.length + 1).split('/');
+    if (segments.length < 3) return null;
+    if (segments.some(isIgnoredComponentKnowledgeSegment)) return null;
+    return {
+      language,
+      componentRoot: segments[1],
+      stem: segments.at(-1).split('.')[0],
+    };
+  }
+  return null;
 }
 
 /**
@@ -315,14 +382,18 @@ module.exports = {
   COMPONENT_PACKAGE_NAMES,
   COMPONENT_SPEC_ROOT,
   IGNORED_COMPONENT_KNOWLEDGE_SEGMENTS,
+  PLATFORM_SOURCE_ROOTS,
   PLATFORM_SPEC_LANGUAGES,
   classifyComponentKnowledgePath,
+  classifyPackageArchitectureRecordPath,
   classifyPlatformComponentSpecPath,
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
   isLegacyComponentSpecPath,
+  isPackageArchitectureRecordPath,
   isPlatformComponentSpecPath,
   locateComponentKnowledgePath,
+  locatePlatformComponentSource,
   resolveComponentPackage,
 };

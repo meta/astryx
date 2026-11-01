@@ -31,6 +31,52 @@ describe('spec-only change scope', () => {
     expect(result.specOnly).toBe(true);
   });
 
+  it('treats a platform record beside the core record as a component record', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(true);
+    expect(result.surfaces).toEqual([SURFACES.KNOWLEDGE]);
+  });
+
+  it('owner-gates a platform record changed with its Swift view', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/Button/Button.swift.spec.md'},
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+  });
+
+  it('does not owner-gate a Swift view change that leaves its platform record alone', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(false);
+  });
+
+  it('does not treat an unsupported language or a misplaced platform file as a record', () => {
+    for (const filename of [
+      'docs/specs/components/Button/Button.kotlin.spec.md',
+      'docs/specs/components/Button/modules/Button.swift.spec.md',
+    ]) {
+      expect(classifyChanges([{filename}]).specOnly).toBe(false);
+    }
+  });
+
+  it('owner-gates a package architecture record like docs/architecture/', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/specs/swift/slots.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+    expect(
+      classifyChanges([{filename: 'packages/native/specs/README.md'}])
+        .touchesKnowledgeRecords,
+    ).toBe(false);
+  });
+
   it('owner-gates architecture records without granting the spec-only fast path', () => {
     const result = classifyChanges([
       {filename: 'docs/architecture/knowledge-contracts.md'},

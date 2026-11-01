@@ -1641,6 +1641,38 @@ describe('TreeList', () => {
     );
   });
 
+  it('typeahead reaches an accented label with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'dung', label: 'Dung', description: 'Đà Lạt'},
+          {id: 'dao', label: 'Đào', description: 'Hà Nội'},
+          {id: 'lodz', label: 'Łódź'},
+        ]}
+      />,
+    );
+    screen.getByText('Dung').closest('li')!.focus();
+    await user.keyboard('l');
+    expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
+  });
+
+  it('typeahead puts the exact match first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'lodz', label: 'Łódź'},
+          {id: 'dung', label: 'Dung'},
+          {id: 'dao', label: 'Đào'},
+        ]}
+      />,
+    );
+    screen.getByText('Łódź').closest('li')!.focus();
+    await user.keyboard('đ');
+    expect(document.activeElement).toBe(screen.getByText('Đào').closest('li'));
+  });
+
   it('lets a consumer prevent built-in TreeList keyboard navigation while receiving root div as event.currentTarget', () => {
     let capturedCurrentTarget: Element | null = null;
     const ref = {current: null as HTMLDivElement | null};

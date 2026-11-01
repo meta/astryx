@@ -75,19 +75,23 @@ interface Frames {
   readonly copiesSeen: number;
   /** Other inert copies seen: the content's old wrap. */
   readonly wrapCopiesSeen: number;
-  /** Distinct rail-edge positions seen: more than a few means it moved. */
+  /**
+   * Distinct positions the edge passes through, on the motion's own clock:
+   * more than a few means it moved. Read from the glide's keyframes, not from
+   * the frames sampled, which a loaded runner can deliver too few of.
+   */
   readonly edges: number;
 }
 
 /**
  * Presses the rail's collapse/expand button (`press` runs the press itself:
  * a tap or a click) after `delays` ms each, then samples every frame until
- * `durationMs` after the last press.
+ * the motion has ended on its own clock.
  */
 async function sampleMotion(
   page: Page,
   press: () => Promise<void>,
-  {presses = 1, gapMs = 0, durationMs = 1000} = {},
+  {presses = 1, gapMs = 0} = {},
 ): Promise<Frames> {
   await page.evaluate(() => {
     const state = {
@@ -100,6 +104,7 @@ async function sampleMotion(
       edges: new Set<number>(),
       running: true,
     };
+
     (window as unknown as {railFrames: typeof state}).railFrames = state;
     const panel = document.querySelector('.astryx-layout-panel');
     const main = document.querySelector('[role="main"]');
@@ -121,6 +126,7 @@ async function sampleMotion(
         element.getBoundingClientRect().right - (inset ? Number(inset[1]) : 0)
       );
     };
+    const glides = new WeakSet<Animation>();
     const sample = () => {
       if (!state.running) {
         return;
@@ -140,7 +146,26 @@ async function sampleMotion(
         }
       }
       const edge = Math.max(shownRight(panel), ...copies.map(shownRight));
-      state.edges.add(Math.round(edge));
+      // The positions the edge passes through, on the motion's own clock: the
+      // content column's glide keyframes, which the compositor plays whether
+      // or not a loaded page samples its frames. The edge stays on the column
+      // on every sampled frame (maxGap), so it passes through them too.
+      for (const animation of column.getAnimations()) {
+        if (glides.has(animation)) {
+          continue;
+        }
+        glides.add(animation);
+        for (const frame of (
+          animation.effect as KeyframeEffect
+        ).getKeyframes()) {
+          const offset = /(-?[\d.]+)px/.exec(
+            String(frame.translate ?? frame.transform ?? ''),
+          );
+          if (offset != null) {
+            state.edges.add(Math.round(Number(offset[1])));
+          }
+        }
+      }
       state.maxGap = Math.max(
         state.maxGap,
         Math.abs(edge - column.getBoundingClientRect().left),
@@ -161,7 +186,32 @@ async function sampleMotion(
     }
     await press();
   }
-  await page.waitForTimeout(durationMs);
+  // Until the motion has ended on its own clock: no animation it runs is still
+  // running, then two more frames, so what its end commits has landed. A
+  // loaded runner changes how long this takes, not what the frames read.
+  await toggleButton(page).evaluate(async toggle => {
+    const frame = async () =>
+      new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      });
+    const running = () =>
+      document.getAnimations().some(animation => {
+        const effect = animation.effect as KeyframeEffect | null;
+        // Animations on the toggle element itself are its press feedback.
+        return (
+          effect != null &&
+          effect.target !== toggle &&
+          animation.playState === 'running' &&
+          Number.isFinite(Number(effect.getComputedTiming().endTime))
+        );
+      });
+    await frame();
+    while (running()) {
+      await frame();
+    }
+    await frame();
+    await frame();
+  });
   return page.evaluate(() => {
     const state = (
       window as unknown as {

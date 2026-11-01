@@ -510,11 +510,11 @@ CI collects tests by file name, never from a list of test files, so a new test
 needs no edit to `.github/workflows/`. Put the test where its kind is collected
 and CI picks it up:
 
-| Kind                                     | Put it                                                                                                             | Collected by                                                              | CI job                                                        |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Unit and integration (jsdom or Node)     | `*.test.ts(x)` / `*.test.mjs` beside the code, in a path the `ui` or `node` project of `vitest.config.ts` includes | the `ui` and `node` Vitest projects                                       | `test-ui`, `test-node` (sharded)                              |
-| Browser accessibility or engine behavior | `*.a11y.chromium.spec.ts` (Chromium) or `*.a11y.browser.spec.ts` (Chromium and WebKit) under `packages/*/src/`     | `pnpm test:a11y-contract`; pull requests run `pnpm test:a11y-contract:pr` | `pr-a11y`; every spec in the release check's `a11y-contracts` |
-| Visual regression                        | a Storybook story                                                                                                  | the visual plan                                                           | `pr-visual`                                                   |
+| Kind                                     | Put it                                                                                                             | Collected by                                                              | CI job                                                                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit and integration (jsdom or Node)     | `*.test.ts(x)` / `*.test.mjs` beside the code, in a path the `ui` or `node` project of `vitest.config.ts` includes | the `ui` and `node` Vitest projects                                       | `test-ui`, `test-node` (sharded)                                                                                                                  |
+| Browser accessibility or engine behavior | `*.a11y.chromium.spec.ts` (Chromium) or `*.a11y.browser.spec.ts` (Chromium and WebKit) under `packages/*/src/`     | `pnpm test:a11y-contract`; pull requests run `pnpm test:a11y-contract:pr` | `pr-a11y` (with `ci:run-a11y`); up to four changed spec files in the touched-components check; every spec in the release check's `a11y-contracts` |
+| Visual regression                        | a Storybook story                                                                                                  | the visual plan                                                           | `pr-visual`                                                                                                                                       |
 
 A browser spec runs on a pull request when the PR changes the spec, its
 component folder, or the component it is named after (`ChatSendButton.a11y.chromium.spec.ts`
@@ -534,7 +534,9 @@ any other value:
 
 These routes apply when a pull request runs the accessibility owner, which it
 does only with the `ci:run-a11y` label; `main` and release checks run every
-spec. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
+spec. Without the label, the touched-components check still runs up to four
+spec files the pull request adds or modifies, by these same routes, so a
+changed `audit` or `release-only` spec waits. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
 from your branch would run (component tokens need CI's `analysis.json`; without
 it the runner says so and leaves those specs out). A spec writes its receipts under
 `test-results/<name>/` or, for a component audit, a top-level
@@ -932,6 +934,16 @@ Storybook story for anything you added or altered.
   takes effect on the next push or a close and reopen, and removing it stops
   that suite from the next run. When the accessibility audit did not run, the
   pull-request comment names `ci:run-a11y`.
+- **Every pull request runs a touched-components check** (visual,
+  accessibility and RTL for only the components it changes): its visual part
+  runs in the visual job, and accessibility and RTL in one job on a standard
+  runner. It also runs up to four browser accessibility spec files the change
+  adds or modifies, by themselves, so a new spec is checked on its own pull
+  request (an `audit` or `release-only` spec still waits for its audit pull
+  request or the release check), wide changes included. Its component audits
+  skip a wide change, one that touches more than five components or changes
+  shared styles (themes, tokens, shared `.stylex.ts` files); add the
+  `ci:run-*` labels for those. It is advisory: no required check waits for it.
 - **A pull request that changes CI states its CI impact.** When it changes a
   workflow, a composite action or a CI script, its description carries a
   `CI impact:` line: each changed job's runner class (standard or
