@@ -7,6 +7,9 @@ unpublished.** Specs live next to their component as
 [`playwright.interaction.config.ts`](../../playwright.interaction.config.ts) on
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
+An accessibility spec (`*.a11y.browser.spec.ts`, under
+[`playwright.config.ts`](../../playwright.config.ts)) may use the animation
+holds and the timer gate too, to check a state an animation passes through.
 
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
@@ -50,7 +53,7 @@ committed: a pull request links or attaches it.
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                             |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
-| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`.                                                                                                       |
+| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).                |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`.                                                |
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event): PNG contact sheet + JSON trace.                                                                                                                                      |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
@@ -160,8 +163,9 @@ casts are 2 px quantized: the frames come at the
 viewport's size, but the page in them is captured at half resolution, so
 positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
 motion per frame, a frame delivered a few ms early shows no step and reads as
-not moved. The proof reports `stepPx` and `pxPerFrame` and notes motion under
-two steps per frame, which never fails it. Move a proof's element at least two
+not moved. The proof reports `stepPx` and `pxPerFrame` and notes each stretch
+that moves under two steps per frame, read over four frames at a time so a
+slow tail inside a fast window shows, which never fails it. Move a proof's element at least two
 steps a frame: the self-tests move 560 px in 1,600 ms, about 4.8 px a frame.
 
 On a two-core runner the software compositor and the screencast share the core
@@ -187,9 +191,12 @@ which the control moved on fewer than four frames fails, since the machine
 presented too little to judge. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
-on every frame. The run must also read as a slowing curve, at most one frame
-longer than the component's run before it. A freeze ends in a catch-up of more
-than one step, a stall in a frame-counted animation is longer than its runs
+on every frame. Where it moved under two steps a frame over the frames just
+before the run (a spring's slow tail inside a fast window), a frame delivered
+early can show no step too, so the change may carry the motion of every frame
+the run held at that pace, to the nearest step. The run must also read as a
+slowing curve, at most one frame longer than the component's run before it. A
+freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs
 before it, and a run that no change ends stays a miss. The component still has
 to show a new position on at least four of the control's frames. The cast step (`stepPx`)
 is read from the value's changes in the judged part, so a position the page
@@ -257,12 +264,13 @@ in all, and lists each retake under `recaptures` in the trace.
 |                                                        | Chromium 149                                                                                                           | WebKit 26.5 (Linux build)                                                                                                                          |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Trusted touch + pointer events, multi-touch            | yes                                                                                                                    | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                |
-| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; real-time pacing keeps velocities within ~1 ms                                                                             |
+| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner, but a CPU-starved one sends some steps late, then back to back     |
 | Sub-pixel touch positions                              | yes                                                                                                                    | no: integer CSS px                                                                                                                                 |
 | Native scroll, fling, pinch-zoom from injected touches | yes                                                                                                                    | no                                                                                                                                                 |
 | Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                              |
 | Click synthesised from a touch                         | yes                                                                                                                    | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                                                                       |
 | Curve sampling, storyboards, input log                 | yes                                                                                                                    | yes                                                                                                                                                |
+| A CSS animation shorter than a gap between two frames  | yes: a pending animation starts at the next frame, and runs then                                                       | no: it can start and finish inside the gap, and its start event, sent at the next frame, finds nothing to record; `waitForAnimation` names it      |
 | Screencast frame evidence (busy main thread)           | yes                                                                                                                    | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                                                                 |
 | Rendering trace, long tasks                            | yes                                                                                                                    | no (Playwright exposes neither)                                                                                                                    |
 | Compositor presentation record                         | yes                                                                                                                    | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                                                                        |
@@ -290,8 +298,11 @@ steps it holds meanwhile reach the page coalesced into one, stamped like the
 step before it, so the burst times each WebKit step by when the page's first
 listener received it (`wheelArrivals`). Two things can split a run past
 `maxGapMs`. When a step reached the page within one frame of its own wheel
-listeners finishing the step before, those listeners held it back: the burst
-throws `WheelPageStallError`, the page split the gesture, and the proof fails.
+listeners finishing the step before, and the gap is more than a frame wider
+than the harness's own spacing of those sends, those listeners held it back:
+the burst throws `WheelPageStallError`, the page split the gesture, and the
+proof fails. A page can only widen a gap, so one no wider than the send
+spacing is the dispatch's even when a starved renderer also held the step.
 Otherwise the dispatch stalled before the page (a loaded runner) and it throws
 `WheelPacingError` with the gaps. Wrap such a
 proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on

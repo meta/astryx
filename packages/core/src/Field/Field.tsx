@@ -22,7 +22,6 @@ import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {FieldLabel} from './FieldLabel';
 import {FieldStatus} from '../FieldStatus/FieldStatus';
-import type {FieldStatusVariant} from '../FieldStatus/FieldStatus';
 import {useFieldStatusAnnouncement} from '../FieldStatus/useFieldStatusAnnouncement';
 import {spacingVars, borderVars, sizeVars} from '../theme/tokens.stylex';
 import type {IconType} from '../Icon';
@@ -32,6 +31,7 @@ import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {Text} from '../Text/Text';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
+import type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 const styles = stylex.create({
   container: {
@@ -187,7 +187,7 @@ export interface FieldProps extends Omit<
    * - 'tooltip': No message box; the input surfaces status through a tooltip on its on-field icon
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field — label, control, and status — so

@@ -1,0 +1,27 @@
+{
+  "name": "@astryxdesign/demo",
+  "version": "0.0.0",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./chip": {
+      "types": "./lib/chip.d.ts",
+      "default": "./lib/chip.js"
+    },
+    "./internal/secret": {
+      "types": "./lib/internal/secret.d.ts",
+      "default": "./lib/internal/secret.js"
+    },
+    "./demo.css": {
+      "types": "./src/demo.css.d.ts",
+      "default": "./lib/demo.css"
+    },
+    "./cjs": "./lib/cjs.js",
+    "./locales/*.json": "./lib/locales/*.json",
+    "./theme.css": {
+      "default": "./lib/theme.css"
+    }
+  }
+}

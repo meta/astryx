@@ -622,9 +622,13 @@ function DropdownMenuBottomSheet({
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
   const backLabel = t('@astryx.dropdownMenu.back');
   const buttonRef = useRef<HTMLElement>(null);
+  // The trigger, where focus returns after the sheet closes, carries the
+  // modality tracking for its document.
+  const modality = useInteractionModalityTracking();
   // The caller's `button.ref` rides along with the sheet's own trigger ref.
   const triggerRef = useMergedRefs<HTMLButtonElement>(
     buttonRef as React.Ref<HTMLButtonElement>,
+    modality.ref,
     button.ref,
   );
   const triggerId = useId();
@@ -636,7 +640,7 @@ function DropdownMenuBottomSheet({
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
+  } = useFocusReturnVisibility(modality);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousSubmenuDepthRef = useRef(0);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -793,9 +797,14 @@ function DropdownMenuBottomSheet({
     </Heading>
   );
   // A stable ref: an inline one re-runs on every render (null, then the element).
-  const sheetTriggerRef = useCallback((el: HTMLElement | null) => {
-    buttonRef.current = el;
-  }, []);
+  const sheetModalityRef = modality.ref;
+  const sheetTriggerRef = useCallback(
+    (el: HTMLElement | null) => {
+      buttonRef.current = el;
+      sheetModalityRef(el);
+    },
+    [sheetModalityRef],
+  );
   return (
     <>
       {renderTrigger != null ? (
@@ -950,14 +959,14 @@ function DropdownMenuPopover({
   const pendingControlledOpenRef = useRef(false);
   const suppressControlledRollbackHideRef = useRef(false);
 
-  useInteractionModalityTracking();
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const modality = useInteractionModalityTracking();
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  } = useFocusReturnVisibility(modality);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
   const hasRegions = useMemo(
@@ -1598,12 +1607,18 @@ function DropdownMenuPopover({
   // popover's anchor off the trigger and back: two inline-style writes on the
   // trigger per render of the menu.
   const popoverTriggerRef = popover.triggerRef;
+  // The trigger, where focus returns, also carries the modality tracking for
+  // its document.
+  const modalityRef = modality.ref;
   const triggerRef = useCallback(
     (el: HTMLElement | null) => {
       buttonRef.current = el;
       popoverTriggerRef(el);
+      // Called with each node and with `null`, so its cleanup isn't returned
+      // (a returned cleanup would stop React's `null` call to the others).
+      modalityRef(el);
     },
-    [popoverTriggerRef],
+    [popoverTriggerRef, modalityRef],
   );
   const consumerButtonRef = button.ref;
   const buttonTriggerRef = useCallback(
@@ -1715,7 +1730,7 @@ function DropdownMenuPopover({
               )?.(event);
               if (event.target === event.currentTarget) {
                 setIsMenuKeyboardFocused(
-                  getInteractionModality() === 'keyboard',
+                  getInteractionModality(event.currentTarget) === 'keyboard',
                 );
               }
             }}

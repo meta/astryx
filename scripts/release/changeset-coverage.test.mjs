@@ -241,6 +241,35 @@ describe('classifyPath — what ships to consumers', () => {
     expect(result.reason).toMatch(reason);
   });
 
+  it('exempts a package-root API report that files does not pack, despite its exclusion globs', () => {
+    const negated = repo({
+      'packages/core/package.json': manifest('@astryxdesign/core', {
+        files: ['dist', 'src', '!**/*.test.*'],
+      }),
+    });
+    const result = classifyPath('packages/core/api-report.md', at(negated));
+    expect(result).toEqual({
+      ships: false,
+      reason: 'API report, outside the tarball',
+    });
+    expect(
+      classifyPath('packages/core/src/Button/Button.tsx', at(negated)).ships,
+    ).toBe(true);
+  });
+
+  it('ships an API report that files packs', () => {
+    const packed = repo({
+      'packages/core/package.json': manifest('@astryxdesign/core', {
+        files: ['dist', 'api-report.md'],
+      }),
+    });
+    expect(classifyPath('packages/core/api-report.md', at(packed))).toEqual({
+      ships: true,
+      package: '@astryxdesign/core',
+      surface: 'docs',
+    });
+  });
+
   it('treats a Changesets-ignored package as exempt even when it is not private', () => {
     const ignored = repo({
       'apps/sandbox/package.json': manifest('@astryxdesign/sandbox'),
