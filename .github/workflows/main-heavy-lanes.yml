@@ -35,7 +35,8 @@ concurrency:
 jobs:
   dispatch:
     runs-on: ubuntu-slim
-    timeout-minutes: 5
+    # Room for the rate-limit wait (at most five minutes) and the dispatch.
+    timeout-minutes: 10
     permissions:
       actions: write
       contents: read
@@ -48,6 +49,27 @@ jobs:
           SHA: ${{ github.sha }}
         with:
           script: |
+            // Wait out the repository's shared API rate limit, with the helper
+            // read from this workflow's own trusted commit (no checkout). The
+            // raw file host spends none of that budget; the API is the fallback.
+            {
+              const helperPath = '.github/scripts/lib/rate-limit-backoff.cjs';
+              let helperSource;
+              try {
+                const response = await fetch(`https://raw.githubusercontent.com/${context.repo.owner}/${context.repo.repo}/${context.sha}/${helperPath}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                helperSource = await response.text();
+              } catch {
+                const {data: helper} = await github.rest.repos.getContent({...context.repo, ref: context.sha, path: helperPath});
+                helperSource = Buffer.from(helper.content, 'base64').toString('utf8');
+              }
+              const helperModule = {exports: {}};
+              new Function('module', 'exports', 'require', helperSource)(
+                helperModule, helperModule.exports,
+                () => { throw new Error('rate-limit-backoff.cjs must stay dependency-free'); },
+              );
+              helperModule.exports.installRateLimitBackoff({github, core});
+            }
             // Each lane starts at most once in its window; the schedule's
             // quarter-hour cadence adds up to 15 minutes to it.
             const HEAVY_WINDOW_MINUTES = 175;
@@ -139,25 +161,12 @@ jobs:
             }
 
             // A full unit run that did not complete (FR21): run the next one at
-            // once and tell the guardian. A newer run, such as a recheck that
-            // replaced it, leaves nothing to do.
+            // once and tell the guardian, after the dispatches below. A newer
+            // run, such as a recheck that replaced it, leaves nothing to do.
             const INCOMPLETE = ['cancelled', 'skipped', 'timed_out', 'startup_failure', 'stale', 'action_required'];
             const newest = units[0];
-            if (newest?.status === 'completed' && INCOMPLETE.includes(newest.conclusion)) {
-              unit = true;
-              const title = 'Main unit tests: an hourly run did not complete';
-              const note = `The full unit run ${newest.html_url} for ${newest.head_sha.slice(0, 7)} ended ${newest.conclusion}. The next run was dispatched for ${short}.`;
-              const {data: found} = await github.rest.search.issuesAndPullRequests({
-                q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`,
-              });
-              const issue = found.items.find(item => item.title === title);
-              if (issue) {
-                await github.rest.issues.createComment({...context.repo, issue_number: issue.number, body: note});
-              } else {
-                await github.rest.issues.create({...context.repo, title, body: `${note}\n\nClose this issue once main's full unit runs complete again (spec:AST-030 FR21).`});
-              }
-              core.warning(note);
-            }
+            const incomplete = newest?.status === 'completed' && INCOMPLETE.includes(newest.conclusion);
+            if (incomplete) unit = true;
 
             // ci.yml queues release-checks in one group (one running, one
             // waiting; a newer one replaces the waiting one). A merge landing
@@ -174,9 +183,40 @@ jobs:
             }
             // A release-check always brings a full unit run of the same commit,
             // so a release cut from it has both: this one, or one a person
-            // dispatched for the tip, such as the release owner's own check.
+            // dispatched for the tip, such as the release owner's own check,
+            // while that commit is still the tip. A maintenance capture runs
+            // no release-authority job and is not a release-check.
             const unitAtTip = await covered(allUnits, false);
-            const personCheckAtTip = allChecks.some(run => run.actor?.login !== BOT && run.conclusion !== 'cancelled' && run.head_sha === tip);
+            const isReleaseCheck = async run => {
+              const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+              });
+              return jobs.some(job => job.name === 'release-authority' && job.conclusion !== 'skipped');
+            };
+            let personCheckAtTip = false;
+            if (!unitAtTip && !unit && !heavy) {
+              for (const run of allChecks.filter(item => item.actor?.login !== BOT && item.conclusion !== 'cancelled' && item.head_sha === tip)) {
+                if (await isReleaseCheck(run)) {
+                  personCheckAtTip = true;
+                  break;
+                }
+              }
+            }
             if (unit || ((heavy || personCheckAtTip) && !unitAtTip)) {
               await github.rest.actions.createWorkflowDispatch({...context.repo, workflow_id: 'deploy.yml', ref: 'main'});
+            }
+
+            if (incomplete) {
+              const title = 'Main unit tests: an hourly run did not complete';
+              const note = `The full unit run ${newest.html_url} for ${newest.head_sha.slice(0, 7)} ended ${newest.conclusion}. The next run was dispatched for ${short}.`;
+              core.warning(note);
+              const {data: found} = await github.rest.search.issuesAndPullRequests({
+                q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open in:title "${title}"`,
+              });
+              const issue = found.items.find(item => item.title === title);
+              if (issue) {
+                await github.rest.issues.createComment({...context.repo, issue_number: issue.number, body: note});
+              } else {
+                await github.rest.issues.create({...context.repo, title, body: `${note}\n\nClose this issue once main's full unit runs complete again (spec:AST-030 FR21).`});
+              }
             }
