@@ -37,7 +37,9 @@
 #   stale record GitHub still lists as active, and counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
-#   after its longest wait), every two minutes for the rare `main` run. When the
+#   after its longest wait), every two minutes for the rare `main` run. A
+#   pull-request run that would fit but yields to a waiting `main` check looks
+#   again every two minutes while it does, outside that count. When the
 #   repository's API budget is low, the run starts rather than spend it.
 # - A pull request that may not run CI (a draft, or a fork without `ci:run`)
 #   starts at once, so its required contexts report their failure (FR17).
@@ -122,6 +124,10 @@ runs:
           const MAX_WAIT_MS = Number(process.env.MAX_WAIT_MINUTES || '15') * 60_000;
           const MAX_LOOKS = Math.max(1, Number(process.env.MAX_LOOKS || '8'));
           const LOOK_MS = MAX_LOOKS > 1 ? (MAX_WAIT_MS - JITTER_MS) / (MAX_LOOKS - 1) : MAX_WAIT_MS;
+          // A run that would fit but yields to a waiting `main` check looks
+          // again this soon, outside its count of looks, since `main` waits
+          // are short.
+          const YIELD_LOOK_MS = 2 * 60_000;
           const STEP = 'Wait for room under the CI ceiling';
           // At most this many pull-request runs wait at once; one more finding
           // no room is turned away (spec:AST-030 DEC-16).
@@ -192,8 +198,11 @@ runs:
               }
               if (next > 0) await new Promise(resolve => setTimeout(resolve, next + Math.floor(Math.random() * JITTER_MS)));
             }
+            // Looks that found no room; a look that only yielded to `main` is
+            // not one of them.
+            let spent = looked;
             for (let look = looked + 1; ; look += 1) {
-              core.setOutput('looks', String(look));
+              core.setOutput('looks', String(spent + 1));
               const seen = new Set();
               let large = 0;
               let small = 0;
@@ -240,7 +249,7 @@ runs:
                     // which starts beside it.
                     const holds = isMain(run) ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
                     if (isMain(run) && !main) mainWaiting = true;
-                    if (!isMain(run)) waitingPulls += 1;
+                    if (run.event === 'pull_request') waitingPulls += 1;
                     large += holds;
                     counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);
                     continue;
@@ -275,11 +284,15 @@ runs:
                   return;
                 }
               }
+              // Room for what this look admits, if no `main` check waited.
+              const yielding = mainWaiting && others + (PHASE === 'room' ? 1 : peak) <= CI_CEILING;
+              if (!yielding) spent += 1;
+              core.setOutput('looks', String(spent));
               // The time left decides, not the look's own API time: a slow
               // look still waits the rest of the way for its next one.
               const left = MAX_WAIT_MS - (Date.now() - started);
-              const wait = Math.min(LOOK_MS + Math.floor(Math.random() * JITTER_MS), left);
-              if (look >= MAX_LOOKS || wait <= 0) {
+              const wait = Math.min((yielding ? YIELD_LOOK_MS : LOOK_MS) + Math.floor(Math.random() * JITTER_MS), left);
+              if (spent >= MAX_LOOKS || wait <= 0) {
                 core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes (about ${others} other jobs${mainWaiting ? ', a main check waiting' : ''}); starting.`);
                 return;
               }

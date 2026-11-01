@@ -738,6 +738,20 @@ describe('ci admission', () => {
       );
     });
 
+    it('counts only waiting pull-request runs toward the ten', async () => {
+      const queued = Array.from({length: 12}, (_, i) =>
+        waitingRun(400 + i, {event: 'merge_group'}),
+      );
+      const result = await admit({
+        active: [...prs(5), ...waiting(9), ...queued],
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(result.outputs.full).toBeUndefined();
+    });
+
     it('never turns away a merge-queue entry', async () => {
       // A merge-queue run is not `main`, and carries no pull request.
       const entry = await admit({
@@ -827,6 +841,53 @@ describe('ci admission', () => {
     expect(freed.looks).toBe(3);
   });
 
+  it('starts a pull-request run within one two-minute look of a waiting main check starting', async () => {
+    // 2026-11-01 16:16Z: a pull-request run yielded to a main push waiting
+    // for room, slept to its second look twelve minutes later, though the push
+    // started at 16:17. Here main waits two and a half minutes.
+    const MAIN_WAIT = 150_000;
+    const others = prs(3);
+    const result = await admit({
+      active: () =>
+        Date.now() - NOW < MAIN_WAIT
+          ? [
+              ...others,
+              waitingRun(71, {
+                event: 'push',
+                path: '.github/workflows/deploy.yml',
+              }),
+            ]
+          : [
+              ...others,
+              admittedRun(71, 4, {
+                event: 'push',
+                path: '.github/workflows/deploy.yml',
+              }),
+            ],
+      peak: 16,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(result.warning).toEqual([]);
+    const started = result.lookTimes.at(-1);
+    expect(started).toBeGreaterThanOrEqual(MAIN_WAIT);
+    expect(started - MAIN_WAIT).toBeLessThanOrEqual(2 * 60_000 + 20_000);
+    // Yield looks do not spend the run's two looks.
+    expect(result.looks).toBe(3);
+  });
+
+  it('keeps two looks when there is no room, a waiting main check or not', async () => {
+    // 6 x 12 + 18 + 16 = 106: no room, so the yield does not shorten the wait.
+    const result = await admit({
+      active: [...prs(6), waitingRun(72, {event: 'workflow_dispatch'})],
+      peak: 16,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(result.looks).toBe(2);
+    expect(result.lookTimes[1]).toBeGreaterThan(11 * 60_000);
+  });
+
   it('lets a waiting main run go first, counting its whole peak; never waits for a pull-request run', async () => {
     const mainWaiting = waitingRun(70, {event: 'workflow_dispatch'});
     const held = await admit({
@@ -838,6 +899,8 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(held.looks).toBe(2);
+    // It would fit but yields, so it looks again in two minutes, not twelve.
+    expect(held.lookTimes[1]).toBeLessThanOrEqual(2 * 60_000 + 20_000);
     // A waiting pull-request run whose Storybook build started beside its
     // wait holds both: 48 + 2 x 4 + 18 + 16 = 90 fits; a fifth does not.
     const building = id => ({

@@ -346,11 +346,12 @@ they are separately named.
   about ninety, and a pull-request run also waits while a `main` full check,
   release re-check or baseline capture is waiting, looking twice on a pull
   request, at once and after twelve minutes, and every two minutes for at most
-  fifteen for `main` (DEC-16). At most ten pull-request runs wait at once: one
-  more that finds no room stops at once with "CI is full: re-run all jobs or push later",
-  and its required checks report the stopped run. A pull request that may not
-  run CI admits nothing, and waiting never fails a job, so every required
-  context reports as before.
+  fifteen for `main` (DEC-16); a pull-request run that would fit but waits for a
+  `main` check looks again every two minutes while it does. At most ten
+  pull-request runs wait at once: one more that finds no room stops at once with
+  "CI is full: re-run all jobs or push later", and its required checks report
+  the stopped run. A pull request that may not run CI admits nothing, and
+  waiting never fails a job, so every required context reports as before.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -752,12 +753,15 @@ CI or Main run's jobs once, so it costs two run listings plus one call per
 active CI or Main run. A pull request looks at most twice, and a run starts
 rather than spend a low API budget. A `main` full check, release re-check or
 baseline capture (every dispatch of the CI workflow) goes first: while one
-waits, pull-request runs wait too, their Storybook builds included. Every job
-ends within its fifteen-minute budget, so `main` fits within fifteen minutes.
-Nothing is reserved for `main` outside those minutes. At most ten pull-request
-runs wait at once; one more that finds no room stops at once, "CI is full:
-re-run all jobs or push later", rather than add a waiting job to a full CI. A
-`main` run is never stopped.
+waits, pull-request runs wait too, their Storybook builds included. A
+pull-request run that would fit and waits only for a `main` check looks again
+every two minutes until it starts, since `main` waits are short; the extra looks
+happen only then. Every job ends within its fifteen-minute budget, so `main`
+fits within fifteen minutes. Nothing is reserved for `main` outside those
+minutes. At most ten pull-request runs wait at once, counting pull-request runs
+only; one more that finds no room stops at once, "CI is full: re-run all jobs or
+push later", rather than add a waiting job to a full CI. A `main` run is never
+stopped.
 
 CI can still pass ninety in four bounded ways, the first three rare:
 
