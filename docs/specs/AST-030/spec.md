@@ -413,7 +413,7 @@ they are separately named.
   the commit as `sha`. A unit run counts only for the commit it names. That run reports one pass or
   fail for that exact commit. It runs to completion: it
   has its own concurrency group, which no push cancels, and a newer dispatch
-  queues behind it. A unit run that is skipped, cancelled or otherwise does not
+  queues behind it; only a release re-check replaces it (FR22, DEC-18). A unit run that is skipped, cancelled or otherwise does not
   complete makes the next one dispatch at once and is reported in the
   guardian's issue; a newer run that replaced it, such as a recheck, leaves
   nothing to report. A stable release publishes only from a cut commit with
@@ -746,9 +746,10 @@ day).
 Main ran both unit suites after every push, about a hundred full runs a day,
 to catch the rare break two pull requests that pass alone make together. One
 full run about an hour, beside the release-check of the same commit, catches
-that break within about an hour and a half. The run is never scoped and never
-cancelled, and one that does not finish is run again at once and reported, so
-every merge is covered by a unit run that completed. The fast checks that
+that break within about an hour and a half. The run is never scoped, and no push
+cancels it; one that does not finish is run again at once and reported, unless
+a release re-check replaced it (DEC-18), so every merge is covered by a unit
+run that completed. The fast checks that
 pull requests rely on, typecheck and the build with its size record, stay on
 every push.
 
