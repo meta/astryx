@@ -659,5 +659,20 @@
       "prev": ".astryx-grid > .astryx-grid-span:first-child",
       "next": ".astryx-grid > :nth-child(2)"
     }
+  },
+  {
+    "component": "Spinner",
+    "storyId": "core-spinner--narrow-flex-host",
+    "dims": []
+  },
+  {
+    "component": "AspectRatio",
+    "storyId": "core-aspectratio--height-driven",
+    "dims": []
+  },
+  {
+    "component": "Stack",
+    "storyId": "core-stack--stack-item-fill-size",
+    "dims": []
   }
 ]
