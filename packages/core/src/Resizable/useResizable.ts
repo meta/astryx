@@ -4,19 +4,25 @@
 
 /**
  * @file useResizable.ts
- * @input Resize configuration (defaultSize, minSize, maxSize, snaps), with
- *   removed pixel-bound aliases rejected even through assembled objects, and
- *   collapse configuration (collapsible, defaultIsCollapsed, isCollapsed)
- * @output Hook return: size, isCollapsed, collapse/expand/resize methods, props
- *   for handle. The region is the internal resize factory's (createResizable),
- *   with no handle of its own, so its state has one copy; a change reports in
- *   the commit that onCollapseChange's own state lands in, a controlled
- *   `isCollapsed` included (component:Resizable FR8)
+ * @input A handle's ref and createResizable's options; or, in the
+ *   configuration-object form, resize configuration (defaultSize, minSize,
+ *   maxSize, snaps), with removed pixel-bound aliases rejected even through
+ *   assembled objects, and collapse configuration (collapsible,
+ *   defaultIsCollapsed, isCollapsed)
+ * @output `useResizable(handleRef, options)`: createResizable's thin React
+ *   wrapper (spec:AST-107 FR6), returning size, isCollapsed and the
+ *   collapse/expand/resize methods. The configuration-object form builds on
+ *   createResizable too, with no handle of its own, so the region's state has
+ *   one copy (architecture:public-component-api INV22), and returns the same
+ *   plus props for a handle. Both report a change in the commit that
+ *   onCollapseChange's own state lands in, a controlled `isCollapsed`
+ *   included (component:Resizable FR8)
  * @position Public hook; consumed by layout components via `resizable` prop
  */
 
 import {
   useCallback,
+  useMemo,
   useReducer,
   useRef,
   useState,
@@ -24,6 +30,7 @@ import {
   type RefObject,
 } from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useTranslator} from '../i18n/useTranslator';
 import type {SizeValue} from '../utils/types';
 import type {ResizableSize} from './utils';
 import {
@@ -39,6 +46,7 @@ import {
   DEFAULT_COLLAPSED_SIZE,
   type ResizableDirection,
 } from './resizableModel';
+import {watchHandleRef} from './resizeGesture';
 
 // =============================================================================
 // Types
@@ -385,8 +393,22 @@ type MultiResizableArgument<Config extends UseResizableMultiConfig> =
     : never;
 
 // =============================================================================
-// The resize factory in React
+// The handle-taking hook: createResizable's thin React wrapper
 // =============================================================================
+
+/** What `useResizable(handleRef, options)` returns: the factory's state and controls. */
+export interface UseResizableResult {
+  /** The region's size in px, 0 while collapsed. */
+  size: number;
+  /** Whether the region is collapsed. */
+  isCollapsed: boolean;
+  /** Collapse the region, when it is collapsible. */
+  collapse: () => void;
+  /** Expand the region to the size it had before it collapsed. */
+  expand: () => void;
+  /** Resize the region to a pixel value, within its bounds. */
+  resize: (size: number) => void;
+}
 
 interface ResizableEntry {
   readonly element: HTMLElement | null;
@@ -497,14 +519,12 @@ function createSlot(initial: ResizableSnapshot): ResizableSlot {
   };
 }
 
-/** What the hook renders from its factory. */
-interface ResizableReading {
-  /** The region's size in px, 0 while collapsed. */
-  readonly size: number;
-  readonly isCollapsed: boolean;
-  readonly collapse: () => void;
-  readonly expand: () => void;
-  readonly resize: (size: number) => void;
+function isElementRef(value: unknown): value is RefObject<HTMLElement | null> {
+  return typeof value === 'object' && value != null && 'current' in value;
+}
+
+/** What both forms render from their factory. */
+interface ResizableReading extends UseResizableResult {
   /** The bounds the handle announces, and the size as expanded. */
   readonly snapshot: ResizableSnapshot;
   /** The factory the region has now: null before its first commit. */
@@ -527,16 +547,20 @@ interface ResizableReading {
 function useResizableController(
   ref: RefObject<HTMLElement | null>,
   options: CreateResizableOptions,
+  collapsedText?: string,
 ): ResizableReading {
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  const collapsedTextRef = useRef(collapsedText);
+  collapsedTextRef.current = collapsedText;
   const [slot] = useState(() => createSlot(readInitialResizableState(options)));
   const [serverInitial] = useState(() =>
     readInitialResizableState(options, 'server'),
   );
   // The factory follows the element behind the ref. A ref is stable across an
-  // element swap, so its current node is compared after every commit (the
-  // configuration-object form passes no handle, NO_HANDLE). When the element
+  // element swap, so its current node is compared after every commit, and
+  // whenever a ResizeHandle given the ref attaches or lets go of its element,
+  // which a child can do without this component rendering. When the element
   // goes away the factory on it goes too, with its listeners and attributes,
   // and a factory with no handle keeps the region answering collapse, expand
   // and resize; a new element gets a new factory. Each new factory starts
@@ -566,11 +590,18 @@ function useResizableController(
             defaultIsCollapsed: previous.isCollapsed,
           };
     const resizable = createResizable(element, createdWith);
+    readResizableInternals(resizable)?.setCollapsedText(
+      collapsedTextRef.current,
+    );
     slot.set({element, resizable, createdWith});
   }, [ref, slot]);
   useIsomorphicLayoutEffect(() => {
     follow();
   });
+  useIsomorphicLayoutEffect(
+    () => (ref === NO_HANDLE ? undefined : watchHandleRef(ref, follow)),
+    [ref, follow],
+  );
   // Unmounting, or hidden by an `<Activity>`: the factory goes, and the slot
   // remembers where the region stood, so a reveal starts there.
   useIsomorphicLayoutEffect(
@@ -587,6 +618,12 @@ function useResizableController(
       entry.resizable.update(options);
     }
   }, [slot, options]);
+  useIsomorphicLayoutEffect(() => {
+    const entry = slot.get();
+    if (entry != null) {
+      readResizableInternals(entry.resizable)?.setCollapsedText(collapsedText);
+    }
+  }, [slot, collapsedText]);
   // A container swapped behind `containerRef` with the same options: the
   // factory follows it at each commit, as it follows new options.
   useIsomorphicLayoutEffect(() => {
@@ -636,6 +673,43 @@ function useResizableController(
   return {snapshot, getResizable, size, isCollapsed, collapse, expand, resize};
 }
 
+/**
+ * The ref-taking form: the factory on the element behind the ref, named and
+ * announced through the message catalog unless the caller names it.
+ */
+function useResizableElement(
+  ref: RefObject<HTMLElement | null>,
+  options: CreateResizableOptions = {},
+): UseResizableResult {
+  const translate = useTranslator();
+  const label = options.label ?? translate('@astryx.resizable.handle.label');
+  const named = useMemo(() => ({...options, label}), [options, label]);
+  const {size, isCollapsed, collapse, expand, resize} = useResizableController(
+    ref,
+    named,
+    translate('@astryx.resizable.collapsed'),
+  );
+  return {size, isCollapsed, collapse, expand, resize};
+}
+
+/**
+ * Makes the element behind `handleRef` a window splitter that resizes a
+ * region: `createResizable` in React (spec:AST-107 FR6). The options are
+ * createResizable's; later options reach the factory through `update`. Render
+ * the panel at `size`.
+ *
+ * @example
+ * ```
+ * const handleRef = useRef(null);
+ * const sidebar = useResizable(handleRef, {defaultSize: 260, minSize: 180});
+ * <LayoutPanel width={sidebar.size}>…</LayoutPanel>
+ * <ResizeHandle ref={handleRef} />
+ * ```
+ */
+export function useResizable(
+  handleRef: RefObject<HTMLElement | null>,
+  options?: CreateResizableOptions,
+): UseResizableResult;
 export function useResizable<const Config extends UseResizableSingleConfig>(
   config: SingleResizableArgument<Config>,
 ): ResizableRegion;
@@ -643,12 +717,20 @@ export function useResizable<const Config extends UseResizableMultiConfig>(
   config: MultiResizableArgument<Config>,
 ): Record<string, ResizableRegion>;
 export function useResizable(
-  config: UseResizableSingleConfig | UseResizableMultiConfig,
-): ResizableRegion | Record<string, ResizableRegion> {
-  if ('regions' in config) {
+  first:
+    | RefObject<HTMLElement | null>
+    | UseResizableSingleConfig
+    | UseResizableMultiConfig,
+  options?: CreateResizableOptions,
+): UseResizableResult | ResizableRegion | Record<string, ResizableRegion> {
+  if (isElementRef(first)) {
     // eslint-disable-next-line @eslint-react/rules-of-hooks, react-compiler/react-compiler -- branch is determined by call-site type (stable per call site)
-    return useMultiResizable(config);
+    return useResizableElement(first, options);
+  }
+  if ('regions' in first) {
+    // eslint-disable-next-line @eslint-react/rules-of-hooks, react-compiler/react-compiler -- branch is determined by call-site type (stable per call site)
+    return useMultiResizable(first);
   }
   // eslint-disable-next-line @eslint-react/rules-of-hooks, react-compiler/react-compiler -- branch is determined by call-site type (stable per call site)
-  return useSingleResizable(config);
+  return useSingleResizable(first);
 }

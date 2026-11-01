@@ -12,9 +12,10 @@
  *   `architecture:public-component-api` INV22); and readInitialResizableState,
  *   the state a region starts in, for the hook's first render
  * @position The Resizable family's factory, internal to the package; its
- *   input is resizeGesture.ts. The configuration-object useResizable is its
- *   React wrapper, and ResizeHandle's `resizable` path drives the same input.
- *   Importing it does no DOM work, so it is safe on the server
+ *   input is resizeGesture.ts. Both forms of useResizable are its React
+ *   wrapper, and ResizeHandle drives the same input through it: over the
+ *   region its `resizable` prop describes, or by rendering the factory bound
+ *   to its element. Importing it does no DOM work, so it is safe on the server
  *
  * The factory never sizes the panel: it reports the size, through
  * `onSizeChange` for an interaction and `subscribe` for every change, and the
@@ -42,16 +43,22 @@ import {
   type ResizableDirection,
 } from './resizableModel';
 import {
+  bindResizeHandle,
   createResizeGesture,
+  isClaimedResizeHandle,
   type ResizeGesture,
   type ResizeGestureModel,
   type ResizeGestureState,
+  type ResizeHandleBinding,
+  type ResizeHandleConfig,
+  type ResizeHandleView,
 } from './resizeGesture';
 import type {ResizableSize} from './utils';
 
 /**
- * The catalog's messages for the handle: its name when no other is given, and
- * what it announces while collapsed (the shipped English messages).
+ * The catalog's messages for a plain handle: its name when no other is given,
+ * and what it announces while collapsed. The bare factory uses the shipped
+ * English messages; useResizable gives the provider's translation instead.
  */
 const LABEL_KEY = '@astryx.resizable.handle.label';
 const COLLAPSED_LABEL_KEY = '@astryx.resizable.collapsed';
@@ -98,19 +105,23 @@ export interface CreateResizableOptions {
   onCollapseChange?: (isCollapsed: boolean) => void;
   /**
    * The handle sits after the panel it resizes (the panel is at the end), so
-   * a drag toward the start grows it.
+   * a drag toward the start grows it. On a ResizeHandle, its own
+   * `isReversed` prop does the same: either one reverses the handle.
    * @default false
    */
   isReversed?: boolean;
   /**
-   * Ignores pointer and keyboard input and says so; the handle keeps its tab
-   * stop.
+   * Ignores pointer and keyboard input and says so; a plain element keeps its
+   * tab stop. On a ResizeHandle, its own `isDisabled` prop does the same:
+   * either one disables the handle.
    * @default false
    */
   isDisabled?: boolean;
   /**
-   * The handle's accessible name, when the element has none of its own.
-   * Without it, the message catalog's English message names it.
+   * A plain element's accessible name, when it has none of its own. Without
+   * it, useResizable gives the message catalog's translation, and the bare
+   * factory the catalog's English message. A ResizeHandle takes its own
+   * `label` prop.
    * @default 'Resize handle'
    */
   label?: string;
@@ -278,6 +289,11 @@ interface ResizableInternals {
   /** Calls `listener` after every change to the snapshot. */
   subscribeSnapshot(listener: () => void): () => void;
   /**
+   * What a plain handle announces while collapsed: the provider's
+   * translation of the catalog message, or undefined for the English one.
+   */
+  setCollapsedText(text: string | undefined): void;
+  /**
    * Follows the element behind `containerRef` when it has changed without
    * new options, as a React caller's commit may have swapped it.
    */
@@ -375,10 +391,23 @@ export function createResizable(
   let opts = options;
   let isDestroyed = false;
   const listeners = new Set<() => void>();
-  // The element the factory drives: its listeners and attributes.
-  const drivenHandle = handle;
-  const isReversed = (): boolean => opts.isReversed ?? false;
-  const isDisabled = (): boolean => opts.isDisabled ?? false;
+  // A handle ResizeHandle renders: the component renders the separator's
+  // attributes and forwards its events, so the factory adds neither.
+  const isRenderedByResizeHandle =
+    handle != null && isClaimedResizeHandle(handle);
+  // A plain element the factory drives itself: its listeners and attributes.
+  const drivenHandle = isRenderedByResizeHandle ? null : handle;
+  let isDragging = false;
+  let collapsedText: string | undefined;
+  let view: ResizeHandleView | null = null;
+  const viewListeners = new Set<() => void>();
+  // The ResizeHandle's own isReversed and isDisabled, while it renders the
+  // handle: either it or the options reverses or disables the handle.
+  let handleConfig: ResizeHandleConfig | null = null;
+  const isReversed = (): boolean =>
+    (opts.isReversed ?? false) || (handleConfig?.isReversed ?? false);
+  const isDisabled = (): boolean =>
+    (opts.isDisabled ?? false) || (handleConfig?.isDisabled ?? false);
   const didWarn = {
     min: {current: false},
     max: {current: false},
@@ -623,6 +652,7 @@ export function createResizable(
     if (drivenHandle != null) {
       announce();
     }
+    refreshView();
     persist();
     const reported = {
       size: derived.isCollapsed ? 0 : derived.size,
@@ -687,6 +717,35 @@ export function createResizable(
     }
   }
 
+  /** The view a ResizeHandle renders, replaced only when it changes. */
+  function refreshView(): void {
+    if (!isRenderedByResizeHandle) {
+      return;
+    }
+    const next: ResizeHandleView = {
+      size: derived.isCollapsed ? 0 : derived.size,
+      isCollapsed: derived.isCollapsed,
+      minPx: derived.min,
+      effectiveMaxPx: derived.effectiveMax,
+      isDragging,
+      direction: direction(),
+      isReversed: isReversed(),
+      isDisabled: isDisabled(),
+    };
+    if (
+      view != null &&
+      (Object.keys(next) as (keyof ResizeHandleView)[]).every(
+        key => view?.[key] === next[key],
+      )
+    ) {
+      return;
+    }
+    view = next;
+    for (const listener of [...viewListeners]) {
+      listener();
+    }
+  }
+
   // --- The handle's attributes ---
   const original = new Map<string, string | null>();
   if (drivenHandle != null) {
@@ -737,7 +796,7 @@ export function createResizable(
     );
     setAttribute(
       'aria-valuetext',
-      isCollapsed ? enCatalog[COLLAPSED_LABEL_KEY] : null,
+      isCollapsed ? (collapsedText ?? enCatalog[COLLAPSED_LABEL_KEY]) : null,
     );
     setAttribute('aria-disabled', isDisabled() ? 'true' : null);
   }
@@ -882,7 +941,12 @@ export function createResizable(
       isDisabled: isDisabled(),
     }),
     dragging => {
-      setAttribute('data-resizing', dragging ? '' : null);
+      isDragging = dragging;
+      if (isRenderedByResizeHandle) {
+        refreshView();
+      } else {
+        setAttribute('data-resizing', dragging ? '' : null);
+      }
     },
   );
 
@@ -916,6 +980,28 @@ export function createResizable(
   }
 
   commit();
+
+  const binding: ResizeHandleBinding = {
+    gesture,
+    read: () => view as ResizeHandleView,
+    configure(config) {
+      if (isDestroyed) {
+        return;
+      }
+      handleConfig = config;
+      refreshView();
+    },
+    subscribe(listener) {
+      viewListeners.add(listener);
+      return () => {
+        viewListeners.delete(listener);
+      };
+    },
+  };
+  const unbind =
+    handle != null && isRenderedByResizeHandle
+      ? bindResizeHandle(handle, binding)
+      : null;
 
   const controller: ResizableController = {
     get size() {
@@ -955,6 +1041,8 @@ export function createResizable(
       // than the factory's own, ends the same way.
       endGesture();
       isDestroyed = true;
+      unbind?.();
+      viewListeners.clear();
       drivenHandle?.removeEventListener('pointerdown', onPointerDown);
       drivenHandle?.removeEventListener('pointermove', onPointerMove);
       drivenHandle?.removeEventListener('pointerup', onPointerUp);
@@ -985,6 +1073,15 @@ export function createResizable(
     },
     model,
     hasSelection: () => chosenSize != null,
+    setCollapsedText(text) {
+      if (isDestroyed || text === collapsedText) {
+        return;
+      }
+      collapsedText = text;
+      if (drivenHandle != null) {
+        announce();
+      }
+    },
     syncContainer() {
       if (isDestroyed) {
         return;

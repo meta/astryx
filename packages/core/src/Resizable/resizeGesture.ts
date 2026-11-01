@@ -4,11 +4,13 @@
  * @file resizeGesture.ts
  * @input A handle element, a resize model (its state, and a gesture's start,
  *   move, end and cancel), and the handle's axis, reversal and disabled state
- * @output createResizeGesture: the window splitter's input in one place: a
- *   pointer drag that holds its pointer, the arrow keys, Home, End and Enter,
- *   and a double-click collapse; and the body's drag cursor
+ * @output createResizeGesture: the window splitter's input in one place, for
+ *   createResizable and ResizeHandle alike: a pointer drag that holds its
+ *   pointer, the arrow keys, Home, End and Enter, and a double-click collapse;
+ *   and the body's drag cursor
  * @position Internal to the Resizable family. createResizable listens with it
- *   on a plain element. No React, and no DOM work on import
+ *   on a plain element; ResizeHandle forwards its React events to it. No React,
+ *   and no DOM work on import
  */
 
 import type {ResizableDirection} from './resizableModel';
@@ -376,4 +378,168 @@ export function createResizeGesture(
       toggleCollapse(model);
     },
   };
+}
+
+// =============================================================================
+// A factory bound to a ResizeHandle
+// =============================================================================
+
+/** A ResizeHandle's own props that shape the input of the region it renders. */
+export interface ResizeHandleConfig {
+  readonly isReversed: boolean;
+  readonly isDisabled: boolean;
+}
+
+/** What a ResizeHandle renders from the factory bound to it. */
+export interface ResizeHandleView {
+  readonly size: number;
+  readonly isCollapsed: boolean;
+  readonly minPx: number;
+  /** The maximum the handle reports, or undefined when there is none. */
+  readonly effectiveMaxPx: number | undefined;
+  readonly isDragging: boolean;
+  readonly direction: ResizableDirection;
+  readonly isReversed: boolean;
+  readonly isDisabled: boolean;
+}
+
+/**
+ * A factory driving a handle that ResizeHandle renders. ResizeHandle renders
+ * the separator's attributes and look from `read()`, and forwards its React
+ * events to `gesture`, so a caller's `onKeyDown` runs before the handle's own
+ * key handling (component:Resizable FR7); the factory adds no listener or
+ * attribute of its own to that element.
+ */
+export interface ResizeHandleBinding {
+  readonly gesture: ResizeGesture;
+  /** The current view, the same object until something in it changes. */
+  read(): ResizeHandleView;
+  /**
+   * The handle's own `isReversed` and `isDisabled`, or null when it lets go.
+   * Either the handle or the factory's options reverses or disables the
+   * handle; the view reports the result.
+   */
+  configure(config: ResizeHandleConfig | null): void;
+  /** Calls `listener` after every change to `read()`. */
+  subscribe(listener: () => void): () => void;
+}
+
+/** A ResizeHandle's claim on its element: the factory bound to it, if any. */
+export interface ResizeHandleClaim {
+  get(): ResizeHandleBinding | null;
+  set(binding: ResizeHandleBinding | null): void;
+  subscribe(listener: () => void): () => void;
+}
+
+export function createResizeHandleClaim(): ResizeHandleClaim {
+  let binding: ResizeHandleBinding | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => binding,
+    set(next) {
+      if (next === binding) {
+        return;
+      }
+      binding = next;
+      for (const listener of [...listeners]) {
+        listener();
+      }
+    },
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+const claims = new WeakMap<Element, ResizeHandleClaim>();
+// The factory bound to an element, kept while the factory lives: a
+// ResizeHandle that lets go of the element and claims it again (an
+// `<Activity>` that hides and shows it) renders the same factory again.
+const bindings = new WeakMap<Element, ResizeHandleBinding>();
+
+/** ResizeHandle marks the element it renders as its own. */
+export function claimResizeHandle(
+  element: Element,
+  claim: ResizeHandleClaim,
+): void {
+  claims.set(element, claim);
+  claim.set(bindings.get(element) ?? null);
+}
+
+/** ResizeHandle lets go of its element; it stops rendering its factory. */
+export function releaseResizeHandle(
+  element: Element,
+  claim: ResizeHandleClaim,
+): void {
+  if (claims.get(element) === claim) {
+    claims.delete(element);
+    claim.set(null);
+  }
+}
+
+/**
+ * Binds a factory to `element` when ResizeHandle renders it, returning the
+ * function that unbinds it; null for any other element, which the factory
+ * then drives itself.
+ */
+export function bindResizeHandle(
+  element: Element,
+  binding: ResizeHandleBinding,
+): (() => void) | null {
+  const claim = claims.get(element);
+  if (claim == null) {
+    return null;
+  }
+  bindings.set(element, binding);
+  claim.set(binding);
+  return () => {
+    if (bindings.get(element) === binding) {
+      bindings.delete(element);
+    }
+    const current = claims.get(element);
+    if (current?.get() === binding) {
+      current.set(null);
+    }
+  };
+}
+
+// =============================================================================
+// The ref a ResizeHandle is given, watched by the hook that holds it
+// =============================================================================
+
+type HandleRef = {readonly current: unknown};
+
+const handleRefWatchers = new WeakMap<HandleRef, () => void>();
+
+/**
+ * Calls `onChange` when a ResizeHandle given `ref` attaches or lets go of its
+ * element, which a child can do without the hook's own component rendering:
+ * a handle a child mounts, unmounts, or hides and shows in its own
+ * `<Activity>`. Returns the function that stops watching.
+ */
+export function watchHandleRef(
+  ref: HandleRef,
+  onChange: () => void,
+): () => void {
+  handleRefWatchers.set(ref, onChange);
+  return () => {
+    if (handleRefWatchers.get(ref) === onChange) {
+      handleRefWatchers.delete(ref);
+    }
+  };
+}
+
+/** A ResizeHandle given `ref` has attached or let go of its element. */
+export function notifyHandleRef(ref: unknown): void {
+  if (typeof ref === 'object' && ref != null) {
+    handleRefWatchers.get(ref as HandleRef)?.();
+  }
+}
+
+/** Whether ResizeHandle renders `element`. */
+export function isClaimedResizeHandle(element: Element): boolean {
+  return claims.has(element);
 }
