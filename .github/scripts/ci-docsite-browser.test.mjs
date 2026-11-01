@@ -29,13 +29,14 @@ describe('docsite-test', () => {
   it('is one job that builds the docsite once and runs both suites on it', () => {
     expect(jobs['docsite-data']).toBeUndefined();
     expect(jobs['docsite-browser']).toBeUndefined();
-    expect(owner.needs).toBeUndefined();
+    // Only CI's run admission, which never skips (ci-admission.test.mjs).
+    expect(owner.needs).toEqual(['admission']);
     expect(owner['continue-on-error']).toBeUndefined();
     // A required context keeps only the draft skip in its condition; an
     // outside contributor's run stops at the first step with the reason.
     expect(owner.if).toBe(
       gated(
-        "${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') }}",
+        "${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() }}",
         PR_REPORT_GATE,
       ),
     );
