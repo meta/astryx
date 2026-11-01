@@ -544,8 +544,11 @@ export function findComponentReadme(coreDir, name) {
   }
 
   // Sub-component fallback: find the source file, then walk up
-  // looking for any .doc.mjs in the same or parent directories
-  const sourcePath = findComponentSource(coreDir, name);
+  // looking for any .doc.mjs in the same or parent directories. Only a file
+  // that exports the component or hook `name` counts (see
+  // findExportedComponentSource): a lowercase module elsewhere in the tree,
+  // such as a motion table, must not pick up the nearest doc.
+  const sourcePath = findExportedComponentSource(coreDir, name);
   if (sourcePath) {
     let dir = path.dirname(sourcePath);
     while (dir.startsWith(srcDir)) {
@@ -635,6 +638,31 @@ export function findComponentSource(coreDir, name) {
 
   // Fallback: search entire src tree for the file
   return searchDir(srcDir);
+}
+
+// A name a Core doc documents: a component (PascalCase, as JSX requires of a
+// component) or a hook (`use` followed by PascalCase). Matched case for case:
+// `button` is not `Button`.
+const DOCUMENTED_NAME_RE = /^(?:use)?[A-Z][A-Za-z0-9]*$/;
+
+/**
+ * The source file of the component or hook `name`, found anywhere in Core: the
+ * name must be a component's or a hook's, matched case for case, and the file
+ * found for it must export it (bare or `XDS`-prefixed). Any other module that
+ * shares the name's spelling, such as the motion table
+ * `motion/uikit/button.ts`, is not that component.
+ * @param {string} coreDir
+ * @param {string} name
+ * @returns {string | null}
+ */
+export function findExportedComponentSource(coreDir, name) {
+  if (!DOCUMENTED_NAME_RE.test(name)) return null;
+  const sourcePath = findComponentSource(coreDir, name);
+  if (sourcePath == null) return null;
+  return moduleExportsName(sourcePath, name) ||
+    moduleExportsName(sourcePath, `XDS${name}`)
+    ? sourcePath
+    : null;
 }
 
 /**
