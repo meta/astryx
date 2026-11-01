@@ -10,7 +10,7 @@
  *   finger's, read at any moment
  * @position Gesture hook of packages/core/src/gestures, over the
  *   finger-scroll watch (fingerScroll.ts), kept on the scroller's node by
- *   the gesture hooks' shared attachment (useAttachment.ts). An internal
+ *   the gesture hooks' shared attachment (hooks/useAttachment.ts). An internal
  *   piece of the touch
  *   module with no public API, not in the gestures barrel: a scroll-driven
  *   component (a tab bar that minimizes, a header that collapses, a picker
@@ -32,7 +32,7 @@
 import {useCallback, useRef, type RefObject} from 'react';
 import {isFingerScroll, watchFingerScrolls} from './fingerScroll';
 import {getGestureHost} from './GestureHost';
-import {useAttachment} from './useAttachment';
+import {useAttachment} from '../hooks/useAttachment';
 
 function isDocument(value: unknown): value is Document {
   return typeof Document !== 'undefined' && value instanceof Document;
