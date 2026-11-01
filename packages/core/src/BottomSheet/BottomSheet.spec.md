@@ -218,7 +218,7 @@ remain documented in `BottomSheet.doc.mjs`.
   has these elements, each with one job:
   - the dialog carries the sheet's dialog role, modality and the top layer
     when the sheet is modal, and holds the panel at the block end with its
-    own grid; a covered sheet's recede (FR6) is this element's transform;
+    own flex row; a covered sheet's recede (FR6) is this element's transform;
   - the panel paints the `bottom-sheet` target;
   - the grabber bar is the drag handle, and its `::before` draws the handle;
   - the body is the scroll area;
