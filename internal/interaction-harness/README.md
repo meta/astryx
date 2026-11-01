@@ -7,6 +7,9 @@ unpublished.** Specs live next to their component as
 [`playwright.interaction.config.ts`](../../playwright.interaction.config.ts) on
 a phone-sized touch screen (402 × 714 CSS px page, 402 × 874 screen, 3 device
 pixels per CSS px, touch, mobile viewport rules), in Chromium and WebKit.
+An accessibility spec (`*.a11y.browser.spec.ts`, under
+[`playwright.config.ts`](../../playwright.config.ts)) may use the animation
+holds and the timer gate too, to check a state an animation passes through.
 
 The harness proves its own instruments in
 [`src/harness.interaction.browser.spec.ts`](src/harness.interaction.browser.spec.ts).
@@ -267,6 +270,7 @@ in all, and lists each retake under `recaptures` in the trace.
 | Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                              |
 | Click synthesised from a touch                         | yes                                                                                                                    | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                                                                       |
 | Curve sampling, storyboards, input log                 | yes                                                                                                                    | yes                                                                                                                                                |
+| A CSS animation shorter than a gap between two frames  | yes: a pending animation starts at the next frame, and runs then                                                       | no: it can start and finish inside the gap, and its start event, sent at the next frame, finds nothing to record; `waitForAnimation` names it      |
 | Screencast frame evidence (busy main thread)           | yes                                                                                                                    | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                                                                 |
 | Rendering trace, long tasks                            | yes                                                                                                                    | no (Playwright exposes neither)                                                                                                                    |
 | Compositor presentation record                         | yes                                                                                                                    | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                                                                        |

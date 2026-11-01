@@ -23,7 +23,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/Tokenizer.tsx (the trigger and the lazy host)
- * - /packages/core/src/Tokenizer/Tokenizer.spec.md (FR16–FR24, AR6, PR6)
+ * - /docs/specs/components/Tokenizer/Tokenizer.spec.md (FR16–FR24, AR6, PR6)
  */
 
 import {
