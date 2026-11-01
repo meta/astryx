@@ -17,8 +17,8 @@
  * it must exit 0 and report the Core, Rich Text, and Vega components the branch
  * touched.
  *
- * The reach test keeps its fixture under the checkout's `node_modules/.cache`,
- * not the system temporary directory: esbuild reads the listing of every
+ * The base and head size tests keep their fixtures under the checkout's
+ * `node_modules/.cache`, not the system temporary directory: esbuild reads the listing of every
  * directory above a file it bundles, and a shared machine's temporary
  * directory can hold hundreds of thousands of entries.
  */
@@ -47,6 +47,16 @@ function gitTry(dir, args) {
   } catch (e) {
     return {status: e.status, stdout: e.stdout || '', stderr: e.stderr || ''};
   }
+}
+
+/** Write the record Main keeps for a built tree, as deploy.yml does. */
+function mainRecord(root, output, env = process.env) {
+  execFileSync(process.execPath, [SCRIPT, '--main-record', '--output', output], {
+    cwd: root,
+    encoding: 'utf8',
+    env,
+  });
+  return JSON.parse(fs.readFileSync(output, 'utf8'));
 }
 
 /**
@@ -316,19 +326,25 @@ describe('analyze-pr component ownership', () => {
 // past the test's time.
 const FIXTURE_ROOT = path.join(SCRIPTS_DIR, '../../node_modules/.cache/analyze-pr-test');
 
+/** A fixture repository and analyze-pr's scratch directory under FIXTURE_ROOT. */
+function fixtureBox(name) {
+  fs.mkdirSync(FIXTURE_ROOT, {recursive: true});
+  const box = fs.mkdtempSync(path.join(FIXTURE_ROOT, `${name}-`));
+  const repo = path.join(box, 'repo');
+  const scratch = path.join(box, 'tmp');
+  fs.mkdirSync(repo);
+  fs.mkdirSync(scratch);
+  return {box, repo, env: {...process.env, TMPDIR: scratch}};
+}
+
 describe('analyze-pr base and head sizes', () => {
   it('sizes a component whose bundle reaches a changed shared module', () => {
-    fs.mkdirSync(FIXTURE_ROOT, {recursive: true});
-    const box = fs.mkdtempSync(path.join(FIXTURE_ROOT, 'reach-'));
-    const repo = path.join(box, 'repo');
-    const scratch = path.join(box, 'tmp');
-    fs.mkdirSync(repo);
-    fs.mkdirSync(scratch);
+    const {box, repo, env} = fixtureBox('reach');
     const analyze = (...flags) =>
       execFileSync(
         process.execPath,
         [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json', ...flags],
-        {cwd: repo, encoding: 'utf8', env: {...process.env, TMPDIR: scratch}},
+        {cwd: repo, encoding: 'utf8', env},
       );
     const write = (file, content) => {
       fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
@@ -402,7 +418,7 @@ describe('analyze-pr base and head sizes', () => {
   });
 
   it('adds the components of another package whose bundle reaches a changed Core module', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-crossreach-'));
+    const {box, repo, env} = fixtureBox('crossreach');
     const write = (file, content) => {
       fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
       fs.writeFileSync(path.join(repo, file), content);
@@ -443,7 +459,7 @@ describe('analyze-pr base and head sizes', () => {
       execFileSync(
         process.execPath,
         [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json'],
-        {cwd: repo, encoding: 'utf8'},
+        {cwd: repo, encoding: 'utf8', env},
       );
       const analysis = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
       // RTL and visual follow the Core change into Lab, as the full audit the
@@ -451,12 +467,12 @@ describe('analyze-pr base and head sizes', () => {
       expect(analysis.dependentComponentOwners).toEqual(['core/Card', 'lab/Sketch']);
       expect(analysis.forceFullComponentAudits).toBe(false);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
-  it('decides reach in the merge-base build when only the base is built', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-basereach-'));
+  it('decides reach from the merge base record when only the base is built', () => {
+    const {box, repo, env} = fixtureBox('basereach');
     const baseRoot = path.join(repo, '.size-base');
     const write = (root, file, content) => {
       fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -483,27 +499,29 @@ describe('analyze-pr base and head sizes', () => {
       git(repo, ['checkout', '-q', '-b', 'feature']);
       write(repo, 'packages/core/src/hooks/useHold.ts', 'export function useHold() { return 2; }\n');
       git(repo, ['commit', '-qam', 'touch the shared hook only']);
-      // Only the merge base is built, as in the size-base job.
+      // Only the merge base is built, as on main, which keeps its record.
       write(baseRoot, 'packages/core/dist/Card/Card.js', "import {useHold} from '../hooks/useHold.js';\nexport function Card() { return useHold(); }\n");
       write(baseRoot, 'packages/core/dist/Badge/Badge.js', 'export function Badge() { return 0; }\n');
       write(baseRoot, 'packages/core/dist/hooks/useHold.js', 'export function useHold() { return 1; }\n');
       write(baseRoot, 'packages/core/dist/index.js', "export {Card} from './Card/Card.js';\nexport {Badge} from './Badge/Badge.js';\n");
 
+      mainRecord(baseRoot, path.join(repo, 'record.json.out'), env);
       execFileSync(
         process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-root', '.size-base', '--base-only', '--output', 'base.json'],
-        {cwd: repo, encoding: 'utf8'},
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-record', 'record.json.out', '--output', 'base.json'],
+        {cwd: repo, encoding: 'utf8', env},
       );
       const base = JSON.parse(fs.readFileSync(path.join(repo, 'base.json'), 'utf8'));
+      // Badge's bundle never reached the hook, so it stays out.
       expect(Object.keys(base.baseComponentSizes)).toEqual(['core/Card']);
       expect(base.baseComponentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
   it('measures the merge base through its own defining module when the pull request renames it', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-rename-'));
+    const {box, repo, env} = fixtureBox('rename');
     const baseRoot = path.join(repo, '.size-base');
     const write = (root, file, content) => {
       fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -532,20 +550,21 @@ describe('analyze-pr base and head sizes', () => {
       write(baseRoot, 'packages/core/dist/Card/Card.js', 'export function Card() { return 1; }\n');
       write(baseRoot, 'packages/core/dist/index.js', 'export const other = 1;\n');
 
+      mainRecord(baseRoot, path.join(repo, 'record.json.out'), env);
       execFileSync(
         process.execPath,
-        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-root', '.size-base', '--base-only', '--output', 'base.json'],
-        {cwd: repo, encoding: 'utf8'},
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-record', 'record.json.out', '--output', 'base.json'],
+        {cwd: repo, encoding: 'utf8', env},
       );
       const base = JSON.parse(fs.readFileSync(path.join(repo, 'base.json'), 'utf8'));
       expect(base.baseComponentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 
-  it('measures ESM entries by module type and reads base sizes from a merge-base build', () => {
-    const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-analyze-size-'));
+  it('measures ESM entries by module type and reads base sizes from the merge base record', () => {
+    const {box, repo, env} = fixtureBox('size');
     const baseRoot = path.join(repo, '.size-base');
     const write = (root, file, content) => {
       fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
@@ -632,6 +651,7 @@ describe('analyze-pr base and head sizes', () => {
         'export const head = 2;\n'.repeat(40),
       );
 
+      mainRecord(baseRoot, path.join(repo, 'record.json.out'), env);
       execFileSync(
         process.execPath,
         [
@@ -640,12 +660,12 @@ describe('analyze-pr base and head sizes', () => {
           'main',
           '--head',
           'HEAD',
-          '--base-root',
-          '.size-base',
+          '--base-record',
+          'record.json.out',
           '--output',
           'analysis.json',
         ],
-        {cwd: repo, encoding: 'utf8'},
+        {cwd: repo, encoding: 'utf8', env},
       );
       const analysis = JSON.parse(
         fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'),
@@ -672,32 +692,20 @@ describe('analyze-pr base and head sizes', () => {
       expect(headBundle.gzipBytes).toBeGreaterThan(0);
       expect(baseBundle.gzipBytes).toBeGreaterThan(0);
 
+      expect(analysis.baseSha).toBe(git(repo, ['rev-parse', 'main']));
+      expect(analysis.baseComponentSizes['core/Chat'].importGzipBytes).toBeGreaterThan(0);
+
+      // Without a readable record, Before stays empty rather than failing.
       execFileSync(
         process.execPath,
-        [
-          SCRIPT,
-          '--base',
-          'main',
-          '--head',
-          'HEAD',
-          '--base-root',
-          '.size-base',
-          '--base-only',
-          '--output',
-          'size-base.json',
-        ],
-        {cwd: repo, encoding: 'utf8'},
+        [SCRIPT, '--base', 'main', '--head', 'HEAD', '--base-record', 'missing.json.out', '--output', 'analysis.json'],
+        {cwd: repo, encoding: 'utf8', env},
       );
-      const baseOnly = JSON.parse(
-        fs.readFileSync(path.join(repo, 'size-base.json'), 'utf8'),
-      );
-      expect(baseOnly.headSha).toBe(git(repo, ['rev-parse', 'HEAD']));
-      expect(baseOnly.baseSha).toBe(git(repo, ['rev-parse', 'main']));
-      expect(baseOnly.baseComponentStats.Card.esmBytes).toBe(100);
-      expect(baseOnly.componentStats).toBeUndefined();
-      expect(baseOnly.baseComponentSizes['core/Chat'].importGzipBytes).toBeGreaterThan(0);
+      const withoutRecord = JSON.parse(fs.readFileSync(path.join(repo, 'analysis.json'), 'utf8'));
+      expect(withoutRecord.baseComponentSizes).toBeUndefined();
+      expect(withoutRecord.componentSizes['core/Card'].importGzipBytes).toBeGreaterThan(0);
     } finally {
-      fs.rmSync(repo, {recursive: true, force: true});
+      fs.rmSync(box, {recursive: true, force: true});
     }
   });
 });

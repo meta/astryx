@@ -248,6 +248,36 @@ describe('buildVisualDeltas', () => {
     expect(section).toContain("3 more are in the run's visual report.");
   });
 
+  it('shows thumbnails for the frames publish-frames.mjs published, and only those', () => {
+    const section = buildVisualDeltas({
+      verdict: {
+        status: 'changed',
+        changes: [change('b', 50), change('a', 1)],
+        added: ['core-dialog--default__neutral-light'],
+      },
+      frames: {
+        imageBase: 'https://raw.example/frames',
+        published: [
+          'before/b.png',
+          'after/b.png',
+          'diff/b.png',
+          'after/core-dialog--default__neutral-light.png',
+        ],
+      },
+    });
+    expect(section).toContain('| Component · story | Before | After | Diff |');
+    expect(section).toContain(
+      '<img src="https://raw.example/frames/before/b.png" height="120" alt="before frame">',
+    );
+    expect(section).toContain(
+      '| Card · a (neutral, light) | not published | not published | not published |',
+    );
+    // An added shot has an after frame only.
+    expect(section).toContain(
+      '| — | <img src="https://raw.example/frames/after/core-dialog--default__neutral-light.png" height="120" alt="after frame"> | — |',
+    );
+  });
+
   it('is absent without changes, or when the visual run failed', () => {
     expect(buildVisualDeltas({verdict: {status: 'ok', changes: []}})).toBe('');
     expect(buildVisualDeltas({verdict: null})).toBe('');

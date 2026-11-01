@@ -7,6 +7,8 @@
  *   ShadCN client in TypeScript and JavaScript modes, verifies exact written
  *   bytes and dependencies, then compiles every installed source file against
  *   current local exports or the exact published packages named by production.
+ *   ShadCN's own scratch directories stay inside each consumer, which is
+ *   removed afterwards.
  * @input A generated preview or hidden production registry under
  *   apps/docsite/public/shadcn.
  * @output A clean-consumer proof for every canonical item and alias route.
@@ -449,13 +451,17 @@ function runShadcn(project, itemPaths) {
   if (!fs.existsSync(SHADCN_BIN)) {
     fail('the pinned ShadCN binary is not installed');
   }
+  // ShadCN leaves an empty temporary directory behind for every file it
+  // transforms: keep them inside the consumer, which main() removes.
+  const scratch = path.join(project, '.tmp');
+  fs.mkdirSync(scratch, {recursive: true});
   const result = spawnSync(
     SHADCN_BIN,
     ['add', ...itemPaths, '--yes', '--overwrite', '--silent'],
     {
       cwd: project,
       encoding: 'utf8',
-      env: {...process.env, CI: 'true'},
+      env: {...process.env, CI: 'true', TMPDIR: scratch},
       maxBuffer: MAX_COMMAND_OUTPUT,
       timeout: 10 * 60_000,
     },
