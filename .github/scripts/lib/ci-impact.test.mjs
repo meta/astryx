@@ -403,6 +403,20 @@ describe('renderCiImpact', () => {
     );
   });
 
+  it('names composite action and CI script changes as not measured', () => {
+    const section = renderCiImpact({
+      ...impact,
+      changes: [],
+      unmeasuredFiles: ['.github/actions/setup/action.yml'],
+    });
+    expect(section).toContain(
+      '· 1 CI action or script file changed (not measured)</summary>',
+    );
+    expect(section).toContain(
+      'Not measured (the jobs that use these keep their recent minutes above): .github/actions/setup/action.yml.',
+    );
+  });
+
   it('renders nothing for a pull request that does not change CI', () => {
     expect(renderCiImpact(null)).toBe('');
   });

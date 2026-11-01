@@ -380,6 +380,9 @@ function renderCiImpact(impact) {
     (impact.otherWorkflows || []).length > 0
       ? `${(impact.otherWorkflows || []).length} other workflow${(impact.otherWorkflows || []).length === 1 ? '' : 's'} changed (not measured)`
       : null,
+    (impact.unmeasuredFiles || []).length > 0
+      ? `${impact.unmeasuredFiles.length} CI action or script file${impact.unmeasuredFiles.length === 1 ? '' : 's'} changed (not measured)`
+      : null,
   ].filter(Boolean);
   const rows = [
     [
@@ -420,6 +423,16 @@ function renderCiImpact(impact) {
         } runners${workflow.change === 'removed' ? '' : '; its minutes are not measured here'}`,
     )
     .join(' · ');
+  const files = impact.unmeasuredFiles || [];
+  const unmeasured =
+    files.length > 0
+      ? `Not measured (the jobs that use these keep their recent minutes above): ${files
+          .slice(0, 10)
+          .map(inline)
+          .join(
+            ', ',
+          )}${files.length > 10 ? `, and ${files.length - 10} more` : ''}.\n\n`
+      : '';
   const jobs = impact.changes
     .map(
       change =>
@@ -430,7 +443,7 @@ function renderCiImpact(impact) {
     .map(row => `| ${row.join(' | ')} |`)
     .join(
       '\n',
-    )}\n\n${jobs ? `Changed jobs: ${jobs}\n\n` : ''}${workflows ? `Other workflows: ${workflows}\n\n` : ''}${impact.flags.length > 0 ? `**Flags:** ${impact.flags.join('; ')}.\n\n` : ''}Assumptions: before is each job's average over the last ${num(impact.sampled)} pull-request runs; after keeps that for unchanged jobs and uses this run's minutes for added or changed ones; runs a day is the last 7 days' average; time to green compares this run with the median.\n\n</details>\n\n`;
+    )}\n\n${jobs ? `Changed jobs: ${jobs}\n\n` : ''}${workflows ? `Other workflows: ${workflows}\n\n` : ''}${unmeasured}${impact.flags.length > 0 ? `**Flags:** ${impact.flags.join('; ')}.\n\n` : ''}Assumptions: before is each job's average over the last ${num(impact.sampled)} pull-request runs; after keeps that for unchanged jobs and uses this run's minutes for added or changed ones; runs a day averages the seven whole days before today; time to green compares this run with the median.\n\n</details>\n\n`;
 }
 
 module.exports = {

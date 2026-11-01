@@ -11,6 +11,7 @@ import yaml from 'yaml';
 
 import {
   branchPreviewOrigin,
+  ciHistory,
   confirmOrStandDown,
   confirmSourceRunIdentity,
   PR_ANALYSIS_MARKER,
@@ -1518,6 +1519,28 @@ describe('CI impact in the report', () => {
     );
   });
 
+  it('names a composite-action-only change as not measured', async () => {
+    let seen;
+    await reconcile({
+      extendGithub: github => {
+        ciChange(github);
+        github.rest.pulls.listFiles = vi.fn(async () => ({
+          data: [{filename: '.github/actions/setup/action.yml'}],
+        }));
+      },
+      execute: (_node, args) => {
+        seen = args;
+        return '## PR Analysis Report\n';
+      },
+    });
+    const impact = JSON.parse(
+      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
+    );
+    expect(impact.unmeasuredFiles).toEqual([
+      '.github/actions/setup/action.yml',
+    ]);
+  });
+
   it('passes no impact for a pull request that does not change CI', async () => {
     let seen;
     await reconcile({
@@ -1533,5 +1556,33 @@ describe('CI impact in the report', () => {
       },
     });
     expect(seen).not.toContain('--ci-impact');
+  });
+});
+
+describe('CI history window', () => {
+  it('counts the seven whole days before today', async () => {
+    const calls = [];
+    const github = {
+      rest: {
+        actions: {
+          listWorkflowRuns: vi.fn(async request => {
+            calls.push(request);
+            return {data: {total_count: 7, workflow_runs: []}};
+          }),
+        },
+      },
+    };
+    const history = await ciHistory({
+      github,
+      owner: 'meta',
+      repo: 'astryx',
+      now: new Date('2026-11-01T02:00:00Z'),
+    });
+    const counted = calls.filter(call => call.per_page === 1);
+    expect(counted.map(call => call.created)).toEqual([
+      '2026-10-25..2026-10-31',
+      '2026-10-25..2026-10-31',
+    ]);
+    expect(history.runsLast7Days).toBe(14);
   });
 });

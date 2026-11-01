@@ -123,7 +123,7 @@ const CI_HISTORY_RUNS = 20;
 /**
  * Recent pull-request CI runs: the latest CI_HISTORY_RUNS successful runs with
  * their jobs' timings, and how many runs did work (succeeded or failed) in the
- * last 7 days. Read once a day: the
+ * seven whole days before today. Read once a day: the
  * comment job keeps it as an artifact and passes it back in `cached`.
  */
 export async function ciHistory({
@@ -134,9 +134,13 @@ export async function ciHistory({
   now = new Date(),
 }) {
   if (cached?.runs) return cached;
-  const since = new Date(now.getTime() - 7 * 24 * 3600 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  // The seven whole days before today (UTC), so runs a day divides seven
+  // days of runs by seven.
+  const day = offset =>
+    new Date(now.getTime() - offset * 24 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
+  const window = `${day(7)}..${day(1)}`;
   // Runs that did work: a draft's or an out-of-scope run concludes skipped.
   const count = async status =>
     (
@@ -146,7 +150,7 @@ export async function ciHistory({
         workflow_id: 'ci.yml',
         event: 'pull_request',
         status,
-        created: `>=${since}`,
+        created: window,
         per_page: 1,
       })
     ).data.total_count;
@@ -287,6 +291,13 @@ export async function gatherCiImpact({
     return {
       ...impact,
       otherWorkflows,
+      // Composite actions and CI scripts change what jobs do, but this run's
+      // minutes are not compared with theirs: named, not measured.
+      unmeasuredFiles: names.filter(
+        name =>
+          ciImpact.CI_PATH.test(name) &&
+          !/^\.github\/workflows\/[^/]+\.ya?ml$/.test(name),
+      ),
       flags: [
         ...impact.flags,
         ...otherWorkflows
