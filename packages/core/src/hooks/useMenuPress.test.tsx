@@ -484,6 +484,140 @@ describe('useMenuPress — the trigger', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("a finger held on the trigger may drift 12 pt and still opens under every primary pointer; past FR29's 13 pt drift allowance it is a scroll (spec:AST-094 FR29, FR43; useMenuPress FR9)", () => {
+    vi.useFakeTimers();
+    const original = window.matchMedia;
+    const pointerIs = (coarse: boolean) => {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: (query: string) =>
+          ({
+            matches: coarse && query === '(pointer: coarse)',
+            media: query,
+            onchange: null,
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            addListener: () => {},
+            removeListener: () => {},
+            dispatchEvent: () => false,
+          }) as MediaQueryList,
+      });
+    };
+    const hold = (drift: number) => {
+      const onOpenChange = vi.fn();
+      const {unmount} = render(<Harness onOpenChange={onOpenChange} />);
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+      fireEvent.pointerMove(trigger, {...touch(), clientX: 0, clientY: drift});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      const opened = onOpenChange.mock.calls.some(([open]) => open === true);
+      fireEvent.pointerUp(trigger, touch());
+      unmount();
+      return opened;
+    };
+    try {
+      for (const coarse of [true, false]) {
+        pointerIs(coarse);
+        expect(hold(12)).toBe(true);
+        expect(hold(14)).toBe(false);
+      }
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+    }
+  });
+
+  it("measures FR29's drift allowance on each axis where the primary pointer is fine, as on a phone: a finger's (12, 12) settle on the trigger still opens, a 14 px drift does not (useMenuPress FR9)", () => {
+    vi.useFakeTimers();
+    const original = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    });
+    const hold = (dx: number, dy: number) => {
+      const onOpenChange = vi.fn();
+      const {unmount} = render(<Harness onOpenChange={onOpenChange} />);
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+      fireEvent.pointerMove(trigger, {...touch(), clientX: dx, clientY: dy});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      const opened = onOpenChange.mock.calls.some(([open]) => open === true);
+      fireEvent.pointerUp(trigger, touch());
+      unmount();
+      return opened;
+    };
+    try {
+      expect(hold(12, 12)).toBe(true);
+      expect(hold(0, 14)).toBe(false);
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+    }
+  });
+
+  it('reads no pointer query from a menu, its rows or its trigger, a press on the trigger included: its drift allowance is the same under every primary pointer (spec:AST-094 FR24, FR43)', () => {
+    vi.useFakeTimers();
+    const original = window.matchMedia;
+    const listening: string[] = [];
+    const read: string[] = [];
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      writable: true,
+      value: (query: string) =>
+        read.push(query) &&
+        ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addEventListener: () => listening.push(query),
+          removeEventListener: () => {},
+          addListener: () => listening.push(query),
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        } as MediaQueryList),
+    });
+    try {
+      const {unmount} = render(<Harness />);
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+      act(() => {
+        vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+      });
+      fireEvent.pointerUp(trigger, touch());
+      expect(listening.filter(query => query.includes('pointer'))).toEqual([]);
+      expect(read.filter(query => query.includes('pointer'))).toEqual([]);
+      unmount();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: original,
+      });
+    }
+  });
+
   it('marks the menu root as carrying the press model', () => {
     render(<Harness />);
     expect(screen.getByRole('menu')).toHaveAttribute('data-astryx-menu-press');
