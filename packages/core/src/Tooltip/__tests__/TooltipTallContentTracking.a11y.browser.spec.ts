@@ -309,14 +309,7 @@ async function focusTallTriggerOnPhone(page: Page, triggerY: number) {
   );
   await trigger.focus();
   await expect(page.getByRole('tooltip')).toBeVisible();
-  await page.waitForTimeout(200);
-  expect(
-    await page.evaluate(
-      sel =>
-        document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-      TOOLTIP,
-    ),
-  ).toBe(true);
+  await expectSwitched(page);
 }
 
 test('a switched tooltip whose trigger moves toward the far edge moves to the roomier side, readable', async ({
@@ -411,7 +404,17 @@ async function openHeldTooltip(
     },
     [TRIGGER, triggerY],
   );
-  await page.waitForTimeout(300);
+}
+
+/**
+ * Wait until the tooltip has switched to its anchor-clear list. A switch that
+ * follows a move waits for the move observer's report, which a loaded
+ * machine makes later.
+ */
+async function expectSwitched(page: Page) {
+  await expect(page.locator(TOOLTIP)).toHaveAttribute(
+    'data-astryx-clears-anchor',
+  );
 }
 
 async function hasSwitched(page: Page): Promise<boolean | undefined> {
@@ -479,7 +482,7 @@ test('a scroll that moves a tall tooltip’s trigger never leaves the tooltip ov
   // phone; the page scrolls in steps that carry the trigger down the screen,
   // past the middle, until the room above is the larger.
   await openHeldTooltip(page, {width: 390, height: 700}, '', 150);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectSwitched(page);
   for (let step = 0; step < 4; step++) {
     const frames = await page.evaluate(
       async ({sel, tip}) => {
@@ -532,7 +535,7 @@ test('a smooth scroll that carries a tall tooltip’s trigger leaves it clear an
   // many frames; the observer must follow every frame of it, not only the
   // first, and stay armed for the next move.
   await openHeldTooltip(page, {width: 390, height: 700}, '', 150);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectSwitched(page);
   const settle = async () =>
     page.evaluate(async () => {
       const frame = async () =>
@@ -641,7 +644,7 @@ test('a trigger that a scrolled container hides for several seconds is followed 
   // that settle before the case starts.
   await scrollTriggerTo(150);
   await page.waitForTimeout(1500);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectSwitched(page);
 
   await scrollTriggerTo(-150);
   await page.waitForTimeout(3500);
@@ -1029,7 +1032,7 @@ test('placing a shown tooltip afresh keeps every animation in its content in its
   }, TRIGGER);
   await page.waitForTimeout(450);
   if (browserName === 'chromium') {
-    expect(await hasSwitched(page)).toBe(true);
+    await expectSwitched(page);
   }
   const after = await read();
   // In Chromium the browser recreated the content's CSS animations: this is
