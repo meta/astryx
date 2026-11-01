@@ -605,5 +605,14 @@
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
     }
+  },
+  {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
   }
 ]

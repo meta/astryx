@@ -500,6 +500,26 @@ function isMirrorOf(rtl, ltr) {
   return expected.every((value, index) => Math.abs(value - rtl[index]) < 0.01);
 }
 
+/**
+ * Does a left- or right-pointing glyph render pointing up or down? `matrix` is
+ * the glyph's composed 2x2 transform (CSS `matrix(a, b, c, d)` order). A
+ * chevron rotated a quarter turn (a disclosure's expanded state) points along
+ * the block axis, which is direction-neutral (`design:bidirectionality` DR5),
+ * so its mirroring is not a D1 question even though its path reads as
+ * horizontal (`architecture:rtl-audit-evidence` INV12: applicability follows
+ * the glyph's semantic role, not its source shape).
+ */
+export function glyphRendersOnBlockAxis(dir, matrix) {
+  if ((dir !== 'left' && dir !== 'right') || !Array.isArray(matrix)) {
+    return false;
+  }
+  const sign = dir === 'right' ? 1 : -1;
+  // The tip's direction is the matrix applied to (±1, 0): its first column.
+  const dx = sign * matrix[0];
+  const dy = sign * matrix[1];
+  return Math.abs(dy) > Math.abs(dx);
+}
+
 /** Classify one stable LTR/RTL contextual-decoration pair. */
 export function classifyDirectionalDecorationPair(ltr, rtl) {
   if (!ltr || !rtl) {

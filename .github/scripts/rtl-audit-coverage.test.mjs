@@ -20,6 +20,7 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
+  glyphRendersOnBlockAxis,
   orderD1StoryCandidates,
   resolveD1Applicability,
   storyIdsForComponentFilters,
@@ -976,5 +977,37 @@ describe('audited package and story routing', () => {
     expect(coverage.results.map(result => result.component)).toEqual(
       components,
     );
+  });
+});
+
+describe('glyphRendersOnBlockAxis', () => {
+  // CSS matrix(a, b, c, d) order: rotate(90deg) is [0, 1, -1, 0].
+  const identity = [1, 0, 0, 1];
+  const mirror = [-1, 0, 0, 1];
+  const quarterTurn = [0, 1, -1, 0];
+  const mirroredQuarterTurn = [0, 1, 1, 0]; // scaleX(-1) . rotate(90deg)
+  const negativeQuarterTurn = [0, -1, 1, 0]; // rotate(-90deg)
+
+  it('keeps an unrotated chevron on the inline axis, mirrored or not', () => {
+    expect(glyphRendersOnBlockAxis('right', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', mirror)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', mirror)).toBe(false);
+  });
+
+  it('puts a chevron turned a quarter either way on the block axis', () => {
+    expect(glyphRendersOnBlockAxis('right', quarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', mirroredQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', negativeQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('left', quarterTurn)).toBe(true);
+  });
+
+  it('keeps a half-turned chevron on the inline axis', () => {
+    expect(glyphRendersOnBlockAxis('right', [-1, 0, 0, -1])).toBe(false);
+  });
+
+  it('ignores a glyph with no horizontal direction or no matrix', () => {
+    expect(glyphRendersOnBlockAxis(null, quarterTurn)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', undefined)).toBe(false);
   });
 });
