@@ -780,13 +780,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [searchSource]);
 
   // Layer for dropdown. The list is a manual popover (see usePopover below):
-  // while it is open, a press on the combobox itself (its input, tokens or
+  // while it is open, a press on the combobox itself (its input or its
   // buttons) or in the list is inside, and a press anywhere else closes it
-  // (component:BaseTypeahead FR12). The watch starts when the list shows and
-  // stops when it hides.
+  // (component:BaseTypeahead FR12). The watch starts when the list shows,
+  // stops when it hides, and stops itself if the field unmounts while open.
+  // An outside press hides the popover element directly, which useLayer
+  // reconciles like the browser's own light dismiss.
   const stopOutsidePressRef = useRef<(() => void) | null>(null);
-  const listIdRef = useRef('');
-  const hideListRef = useRef<() => void>(() => {});
   const handleLayerShow = useCallback(() => {
     onOpenChange?.(true);
     stopOutsidePressRef.current?.();
@@ -795,19 +795,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     if (anchorEl == null) {
       return;
     }
-    const root = anchorEl.getRootNode() as Document | ShadowRoot;
+    // The list's own element sits inside the popover element.
+    const findLayer = () =>
+      dropdownRef.current?.closest<HTMLElement>('[popover]') ?? null;
     stopOutsidePressRef.current = watchOutsidePress(
-      anchorEl.ownerDocument,
+      anchorEl,
       path => {
         const anchor = anchorRef?.current ?? fallbackAnchorRef.current;
-        const list =
-          root.getElementById(listIdRef.current) ??
-          anchorEl.ownerDocument.getElementById(listIdRef.current);
+        const layer = findLayer();
         return path.some(
-          target => target === anchor || (list != null && target === list),
+          target => target === anchor || (layer != null && target === layer),
         );
       },
-      () => hideListRef.current(),
+      () => findLayer()?.hidePopover(),
     );
   }, [onOpenChange, anchorRef]);
 
@@ -836,17 +836,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     // DOM focus, so wrapping it in a modal dialog would misrepresent it.
     role: 'none',
   });
-  useIsomorphicLayoutEffect(() => {
-    listIdRef.current = popover.id;
-    hideListRef.current = popover.hide;
-  });
-  useEffect(
-    () => () => {
-      stopOutsidePressRef.current?.();
-      stopOutsidePressRef.current = null;
-    },
-    [],
-  );
 
   // Show the layer, deferring past the active click if a pointer is down.
   // Without this, popover="auto" light-dismiss immediately closes the

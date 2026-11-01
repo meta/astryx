@@ -15,26 +15,35 @@
  * follows closes the layer if it is outside too, and a pointercancel (the
  * browser took the gesture for a scroll or a pinch) forgets it. Inside is
  * judged on the event's composed path, so a field or list inside a shadow
- * root, which the document sees as its shadow host, is still inside.
+ * root, which the document sees as its shadow host, is still inside. The watch
+ * also stops itself at the first press after its owner leaves the document, so
+ * an owner unmounted while its layer is open needs no cleanup of its own.
  */
 
 /**
- * Watch `doc` for a press outside, until the returned function is called.
+ * Watch the owner's document for a press outside, until the returned function
+ * is called or the owner leaves the document.
  *
- * @param doc - The document the layer lives in.
+ * @param owner - The element that owns the layer (the field); its document is
+ *   watched.
  * @param isInside - Whether a press with this composed path is inside.
  * @param onOutside - Called once for each press that starts and ends outside.
  * @returns Stops watching.
  */
 export function watchOutsidePress(
-  doc: Document,
+  owner: Element,
   isInside: (path: ReadonlyArray<EventTarget>) => boolean,
   onOutside: () => void,
 ): () => void {
+  const doc = owner.ownerDocument;
   let startedOutside = false;
 
   // Capture phase, so a press whose target stops propagation is still seen.
   const handleDown = (event: PointerEvent) => {
+    if (!owner.isConnected) {
+      stop();
+      return;
+    }
     startedOutside = !isInside(event.composedPath());
   };
   const handleUp = (event: PointerEvent) => {
@@ -48,12 +57,14 @@ export function watchOutsidePress(
     startedOutside = false;
   };
 
-  doc.addEventListener('pointerdown', handleDown, true);
-  doc.addEventListener('pointerup', handleUp, true);
-  doc.addEventListener('pointercancel', handleCancel, true);
-  return () => {
+  function stop() {
     doc.removeEventListener('pointerdown', handleDown, true);
     doc.removeEventListener('pointerup', handleUp, true);
     doc.removeEventListener('pointercancel', handleCancel, true);
-  };
+  }
+
+  doc.addEventListener('pointerdown', handleDown, true);
+  doc.addEventListener('pointerup', handleUp, true);
+  doc.addEventListener('pointercancel', handleCancel, true);
+  return stop;
 }

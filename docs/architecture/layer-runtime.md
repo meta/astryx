@@ -298,13 +298,10 @@ interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
 A text field that owns a layer (a combobox's list) cannot be an invoker, so its
-layer is a manual popover. A press that starts and ends on the field, its tokens
-or its buttons, or in the layer, is inside, judged across shadow roots; a press
-that starts and ends anywhere else closes the layer, a scroll or pinch that
-starts outside does not, and Escape stays on the shared stack. Implementation
-gap: Layer's outside-press watch serves BaseTypeahead only; `useTouchTrigger`'s
-tap dismissal and ContextMenu still keep their own checks
-(`architecture:react-component-runtime` INV16).
+layer is a manual popover. A press that starts and ends on the field's input or
+its buttons, or in the layer, is inside, judged across shadow roots; a press that
+starts and ends anywhere else closes the layer, a scroll or pinch that starts
+outside does not, and Escape stays on the shared stack.
 
 ### Current dismissal plumbing
 
@@ -330,6 +327,9 @@ Outside interaction is not coordinated by the shared stack. Current paths are
 independent:
 
 - auto popovers use native light dismiss;
+- BaseTypeahead's list, a manual popover, uses Layer's outside-press watch,
+  which closes on a press that starts and ends outside the field and the list
+  and forgets a cancelled press (a scroll);
 - native dialogs handle backdrop clicks locally;
 - ContextMenu uses a local outside `mousedown` listener, which skips the
   compatibility mouse events of the finger press that opened the menu;
@@ -612,6 +612,8 @@ above are the stack's, the mounting under them is this gap's.
   menu focus, and exposure-induced re-hover suppression.
 - `Layer/useTouchTrigger.ts` owns touch trigger classification and the current
   touch-only outside listener for Tooltip/HoverCard.
+- `Layer/outsidePress.ts` owns the outside-press watch for a text field's
+  manual layer, used by BaseTypeahead.
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
