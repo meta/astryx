@@ -15,6 +15,7 @@
  */
 
 import {memo, useRef, type ReactElement, type ReactNode, type Ref} from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import type {
@@ -470,7 +471,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     const headerInner = hasSlots ? (
       <>
         {before}
-        {after != null ? (
+        {isRenderable(after) ? (
           <div {...stylex.props(styles.headerLabelRow)}>
             {resolvedContent}
             {after}

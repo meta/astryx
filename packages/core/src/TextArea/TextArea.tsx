@@ -691,6 +691,7 @@ export function TextArea({
             {statusIcon}
           </span>
         )}
+        {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
         {maxLength != null && (
           <div
             id={counterID}

@@ -303,12 +303,14 @@ function SortHeaderButton<T extends Record<string, unknown>>({
             color={direction != null ? 'accent' : 'secondary'}
           />
         </span>
+        {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `rank` is the column's sort position, a number */}
         {rank != null && (
           <span {...stylex.props(sortStyles.rank)} aria-hidden="true">
             {rank}
           </span>
         )}
       </button>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `rank` is the column's sort position, a number */}
       {rank != null && (
         // Hidden, so it adds nothing to the button's or the header's name;
         // aria-describedby still reads it.

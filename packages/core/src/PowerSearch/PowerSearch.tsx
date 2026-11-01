@@ -1084,6 +1084,7 @@ export function PowerSearch({
   // Build combined endContent from resultCount + endContent props
   const combinedEndContent = useMemo((): React.ReactNode => {
     const resultCountNode =
+      // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `resultCountText` is a formatted string, not a slot
       resultCountText != null ? (
         <span {...stylex.props(resultCountStyles.text)}>{resultCountText}</span>
       ) : null;
