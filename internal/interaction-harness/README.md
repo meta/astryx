@@ -53,7 +53,7 @@ committed: a pull request links or attaches it.
 | `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                             |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
-| `curves.ts`     | `holdAnimations`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).                |
+| `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
 | `math.ts`       | Oracles independent of the code under test: `cubicBezier`, `timingFunction`, `springStep` (SwiftUI response / dampingFraction, initial velocity), `projectDecay`, `rubberBand`, `parseTransform`, `compareCurve`, `timeline`.                                                |
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event): PNG contact sheet + JSON trace.                                                                                                                                      |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
@@ -76,7 +76,15 @@ animations are Web Animations too), seek to a time, read `getComputedStyle`:
 the presented value at that exact time, independent of frame timing. Finished
 animations, ones the page paused and ones on a scroll or view timeline are left
 alone; held animations keep their offsets from the first hold's earliest start, and release
-resumes only them. Compare it with an
+resumes only them. A hold sent from the test reaches the page after a round
+trip, and on a loaded runner a short animation can end first: for one that an
+action starts, `await armHold(page, scope)` before the action arms the page
+itself: it looks on every frame and every 4 ms between frames (WebKit can go
+about 70 ms without a frame while it first composites a layer),
+holds everything running under the scope as soon as one of them runs (or
+`count` of them, for parts that start apart; with `newOnly`, only what starts
+after the arm, for a turn that starts mid-motion), and `held()` after the
+action returns that held set. Compare it with an
 oracle from `math.ts` through `compareCurve`; a tolerance states the error
 budget (for a spring baked into `linear()` stops of `h` ms, chords err by up to
 `h² / 8 · |x''|`). A seek past an animation's end lands half a millisecond
@@ -270,6 +278,7 @@ in all, and lists each retake under `recaptures` in the trace.
 | Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                              |
 | Click synthesised from a touch                         | yes                                                                                                                    | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                                                                       |
 | Curve sampling, storyboards, input log                 | yes                                                                                                                    | yes                                                                                                                                                |
+| A CSS animation shorter than a gap between two frames  | yes: a pending animation starts at the next frame, and runs then                                                       | no: it can start and finish inside the gap, and its start event, sent at the next frame, finds nothing to record; `waitForAnimation` names it      |
 | Screencast frame evidence (busy main thread)           | yes                                                                                                                    | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                                                                 |
 | Rendering trace, long tasks                            | yes                                                                                                                    | no (Playwright exposes neither)                                                                                                                    |
 | Compositor presentation record                         | yes                                                                                                                    | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                                                                        |

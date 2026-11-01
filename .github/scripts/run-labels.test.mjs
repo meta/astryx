@@ -274,8 +274,10 @@ describe('decideRunLabel', () => {
 // Replay: each label's decision through every heavy owner's condition on a
 // pull request whose other needs succeeded.
 describe('each label runs only its own suite', () => {
+  // pr-visual runs on every pull request for its default touched check; its
+  // full check's step needs ci:run-visual (ci-heavy-lanes.test.mjs).
   const OWNERS = {
-    visual: ['visual-scout', 'pr-visual'],
+    visual: ['visual-scout'],
     a11y: ['pr-a11y-guards', 'pr-a11y-specs', 'pr-a11y'],
     rtl: ['pr-rtl-shard', 'pr-rtl-merge', 'pr-rtl'],
   };
