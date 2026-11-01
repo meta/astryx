@@ -255,6 +255,7 @@ const styles = stylex.create({
 // =============================================================================
 
 function hasVisibleContent(children: ReactNode): boolean {
+  // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatLayout FR5 names exactly null, undefined, false and an empty array as empty children; '' and true are not
   if (children == null || children === false) {
     return false;
   }

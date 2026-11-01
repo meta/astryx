@@ -115,6 +115,8 @@ function diffWorkflow(base, head) {
     changes.push({
       id,
       name: displayName(id, after ?? before),
+      // The base side's name: a renamed job's history is under it.
+      baseName: before ? displayName(id, before) : null,
       change: !before ? 'added' : !after ? 'removed' : 'changed',
       before: before ? runnerClass(before) : null,
       after: after ? runnerClass(after) : null,
@@ -259,10 +261,17 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
   const added = new Set(
     diff.changes.filter(c => c.change === 'added').map(c => c.name),
   );
+  // A changed job's history is under its base-side name (a rename keeps it).
+  const baseNameOf = new Map(
+    diff.changes
+      .filter(c => c.change === 'changed' && c.baseName)
+      .map(c => [c.name, c.baseName]),
+  );
+  const historyName = name => baseNameOf.get(name) ?? name;
   const share = name =>
     added.has(name) || history.sampled === 0
       ? 1
-      : (history.jobRuns?.[name] ?? 0) / history.sampled;
+      : (history.jobRuns?.[historyName(name)] ?? 0) / history.sampled;
   const changed = new Set(
     diff.changes.filter(c => c.change !== 'removed').map(c => c.name),
   );
@@ -272,7 +281,7 @@ function estimateImpact({diff, history, currentJobs, currentWallMinutes}) {
   const after = sum(diff.names.after, name =>
     changed.has(name) && current[name] !== undefined
       ? current[name] * share(name)
-      : (history.jobMinutes[name] ?? 0),
+      : (history.jobMinutes[historyName(name)] ?? 0),
   );
   const perDay = value => value * history.runsPerDay;
   const poolBefore = perDay(before);

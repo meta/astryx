@@ -10,8 +10,8 @@
  *   of modified components (preview links, JS and CSS size and lines of code
  *   against main, and a fixed-position mark per browser suite when any ran),
  *   three rows visible and the rest collapsed; the changed shots, collapsed,
- *   when any changed; one line for package size; one line for suites that
- *   did not run
+ *   when any changed; one line for package size; one line for API changes,
+ *   with their rows collapsed; one line for suites that did not run
  * @position Used by generate-pr-comment.js. Everything here reads data the CI
  *   run and the comment job already have; nothing starts a job. GitHub shows
  *   the CI checks and CodeBunny posts its own review, so neither is repeated.
@@ -515,6 +515,21 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
   return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
 }
 
+// The API report step's own renderer (scripts/api-report/changes.mjs), so
+// the PR report and `pnpm api:report` show API changes one way.
+const {renderChanges} = require('../../../scripts/api-report/changes.mjs');
+
+/**
+ * API changes (the API report step's api-changes.json): one visible line per
+ * package, the rows in one closed disclosure; nothing when no package has a
+ * change or a report to refresh.
+ */
+function apiChangesLine(report) {
+  if (!report || !Array.isArray(report.packages)) return '';
+  const out = renderChanges(report.packages);
+  return out ? `${out}\n` : '';
+}
+
 /** The compact report body, between the heading and the footer. */
 function buildCompactReport({
   analysis,
@@ -524,6 +539,7 @@ function buildCompactReport({
   a11yReport = null,
   visualVerdict = null,
   packageSize = null,
+  apiChanges = null,
   visualFrames = null,
 }) {
   const origin =
@@ -534,10 +550,11 @@ function buildCompactReport({
     touched,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict, frames: visualFrames})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict, frames: visualFrames})}${packagesLine(packageSize)}${apiChangesLine(apiChanges)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
 }
 
 module.exports = {
+  apiChangesLine,
   visualShots,
   SUITES,
   VISUAL_FRAME_LIMIT,

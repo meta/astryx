@@ -205,6 +205,7 @@ async function reconcile({
   baseStats,
   packageSize,
   touched,
+  apiChanges,
   extendGithub,
   ciHistoryPath,
 } = {}) {
@@ -224,6 +225,11 @@ async function reconcile({
   );
   if (packageSize)
     fs.writeFileSync(packageSizePath, JSON.stringify(packageSize));
+  const apiChangesPath = path.join(
+    path.dirname(paths.analysis),
+    'api-changes.json',
+  );
+  if (apiChanges) fs.writeFileSync(apiChangesPath, JSON.stringify(apiChanges));
   const touchedPath = path.join(
     path.dirname(paths.analysis),
     'touched-components.json',
@@ -247,6 +253,7 @@ async function reconcile({
     metadataPath: paths.metadata,
     baseStatsPath,
     packageSizePath,
+    apiChangesPath,
     touchedPath,
     a11yPath: paths.a11y,
     visualPath: paths.visual,
@@ -1160,6 +1167,24 @@ describe('PR comment preview reconciliation', () => {
         },
       });
       expect(seen[0].includes('--touched')).toBe(used);
+    },
+  );
+
+  it.each([
+    ['written', true],
+    ['absent', false],
+  ])(
+    'passes the API changes from the analysis artifact when %s',
+    async (_label, written) => {
+      const seen = [];
+      await reconcile({
+        apiChanges: written ? {version: 1, packages: []} : undefined,
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--api-changes')).toBe(written);
     },
   );
 

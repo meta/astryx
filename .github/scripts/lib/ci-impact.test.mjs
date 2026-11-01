@@ -389,6 +389,45 @@ describe('a changed job that ran in none of the sampled runs', () => {
   });
 });
 
+describe('a renamed job', () => {
+  it('keeps its history under the base-side name', () => {
+    const history = summarizeHistory({
+      runsLast7Days: 70,
+      runs: [
+        {
+          run_started_at: at(0),
+          updated_at: at(10),
+          jobs: [job('build', 0, 10)],
+        },
+      ],
+    });
+    const diff = diffWorkflow(
+      {
+        on: 'pull_request',
+        jobs: {b: {name: 'build', 'runs-on': 'ubuntu-latest'}},
+      },
+      {
+        on: 'pull_request',
+        jobs: {b: {name: 'compile', 'runs-on': 'ubuntu-latest', steps: [1]}},
+      },
+    );
+    expect(diff.changes[0]).toMatchObject({
+      name: 'compile',
+      baseName: 'build',
+      change: 'changed',
+    });
+    const impact = estimateImpact({
+      diff,
+      history,
+      currentJobs: [job('compile', 0, 14)],
+      currentWallMinutes: 14,
+    });
+    expect(impact.jobMinutes).toEqual({before: 10, after: 14});
+    expect(impact.pool.percent).toBeCloseTo(40);
+    expect(impact.flags).toContain('runner-pool usage +40%');
+  });
+});
+
 describe('renderCiImpact', () => {
   const impact = {
     jobMinutes: {before: 52, after: 53},

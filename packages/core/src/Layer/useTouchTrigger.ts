@@ -6,11 +6,13 @@
  * @file useTouchTrigger.ts
  * @input Touch trigger mode, layer open state, trigger ref, show/hide callbacks
  * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
- *   TOUCH_POINTER_TYPES and useTapStop (internal: not re-exported from index)
+ *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES and useTapStop (internal:
+ *   not re-exported from index)
  * @position Layer hook; shared touch behavior for useTooltip and useHoverCard
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Layer/index.ts
+ * - /packages/core/src/hooks/useClickableContainer.ts (innermostInteractive)
  *
  * Hover is the one trigger a touch screen cannot express. A tap synthesizes
  * `mouseenter`, so an untreated hover layer either opens on every tap and
@@ -24,7 +26,10 @@
  * action — an info icon, an abbreviation, a truncated label — has nothing to
  * lose, so the tap opens the layer and the next tap outside dismisses it. That
  * is `auto`; `tap` and `none` state the choice outright, which is what an
- * icon-button whose only job is to reveal the layer needs.
+ * icon-button whose only job is to reveal the layer needs. An `aria-disabled`
+ * control performs no action: a tap that lands in one, or on a label for a
+ * disabled control, opens the layer, so its reason has a touch path. (A
+ * natively `disabled` control receives no click at all.)
  *
  * A touch decides nothing until it is a tap. A finger landing on the trigger
  * may be starting a scroll, a pinch or a long press, and only the browser
@@ -47,6 +52,11 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from './gestureCounter';
+import {
+  innermostInteractive,
+  matchesInteractiveSelectors,
+} from '../hooks/useClickableContainer';
+import {isDisabledControl} from '../utils/pressDisabled';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 
 /**
@@ -128,15 +138,25 @@ const ACTION_ROLES = new Set([
  * with no role) gets both: the layer opens and the handler runs.
  */
 export function isActionTrigger(element: HTMLElement): boolean {
+  // A disabled control performs no action: its tap is free to open the layer
+  // that explains why it is disabled.
+  if (isDisabledControl(element)) {
+    return false;
+  }
   const role = element.getAttribute('role');
   if (role != null && role !== '') {
     return ACTION_ROLES.has(role);
   }
 
   switch (element.tagName) {
+    case 'LABEL': {
+      // A label acts by operating its control, so a label for a disabled one
+      // performs none.
+      const control = (element as HTMLLabelElement).control;
+      return control == null || !isDisabledControl(control);
+    }
     case 'BUTTON':
     case 'INPUT':
-    case 'LABEL':
     case 'SELECT':
     case 'SUMMARY':
     case 'TEXTAREA':
@@ -147,6 +167,41 @@ export function isActionTrigger(element: HTMLElement): boolean {
     default:
       return isEditable(element);
   }
+}
+
+/**
+ * Whether this element takes a tap itself, as a disabled control does: an
+ * `aria-disabled` (or `:disabled`) control, or a label for one.
+ */
+function isDisabledTarget(element: Element): boolean {
+  if (isDisabledControl(element)) {
+    return true;
+  }
+  if (element.tagName === 'LABEL') {
+    const control = (element as HTMLLabelElement).control;
+    return control != null && isDisabledControl(control);
+  }
+  return false;
+}
+
+/**
+ * Whether a tap landed in a disabled control: walking out from the tapped
+ * element on the clickable containers' own walk (`innermostInteractive`),
+ * with labels counted, the innermost interactive element is an
+ * `aria-disabled` control or a label for a disabled control. That element
+ * takes the tap: the layer opens with its reason, and nothing activates.
+ * Every other tap is left to the trigger (`isActionTrigger`).
+ */
+export function tapLandsOnDisabledControl(tapped: Element): boolean {
+  const innermost = innermostInteractive(
+    tapped,
+    null,
+    element =>
+      matchesInteractiveSelectors(element) ||
+      element.tagName === 'LABEL' ||
+      isDisabledControl(element),
+  );
+  return innermost != null && isDisabledTarget(innermost);
 }
 
 /**
@@ -350,14 +405,19 @@ export function useTouchTrigger(
 
   // What a tap on the trigger does. It runs from the tap's `click`, after the
   // render that armed it, so it reads the latest props through this ref.
-  const answerTapRef = useRef<() => void>(() => {});
-  answerTapRef.current = () => {
+  const answerTapRef = useRef<(tapEvent: Event) => void>(() => {});
+  answerTapRef.current = (tapEvent: Event) => {
     const trigger = triggerRef.current;
+    // A tap that landed in a disabled control is that control's: its reason
+    // opens. Every other tap is the trigger's to decide.
+    const tapped = tapEvent.target instanceof Element ? tapEvent.target : null;
     const mode =
       touchTrigger === 'auto'
-        ? trigger != null && isActionTrigger(trigger)
-          ? 'none'
-          : 'tap'
+        ? tapped != null && tapLandsOnDisabledControl(tapped)
+          ? 'tap'
+          : trigger != null && isActionTrigger(trigger)
+            ? 'none'
+            : 'tap'
         : touchTrigger;
 
     if (mode === 'none' || !isEnabled) {
@@ -409,10 +469,10 @@ export function useTouchTrigger(
           forgetPendingTapRef.current = null;
         }
       };
-      const handleTap = () => {
+      const handleTap = (tapEvent: Event) => {
         forget();
         if (currentGesture() === gesture) {
-          answerTapRef.current();
+          answerTapRef.current(tapEvent);
         }
       };
       trigger.addEventListener('click', handleTap);
