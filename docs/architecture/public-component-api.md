@@ -111,13 +111,16 @@ guidance owns the process used to propose and test APIs.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
   a composed child. One interaction behavior is one prop, never parallel touch,
-  mouse, or focus props: when the behavior differs by device, that prop takes an
-  `'adaptive'` default that resolves per device beside explicit fixed values, as
-  `presentation="adaptive"` does (`spec:AST-043`), and the default is the
-  shipped behavior; Tooltip and HoverCard `triggerBehavior` (`'adaptive'`,
-  `'hover'`, `'toggle'`) follow this. An `is…` or `has…` boolean names only a
-  true on/off that has no third state, and `presentation` names which surface
-  appears.
+  mouse, or focus props: when the behavior differs by device, that prop offers
+  an adaptive value that resolves per device beside explicit fixed values, named
+  `'adaptive'` when it has one device resolution and `'adaptive-<target>'` when
+  it has several, as `presentation` does (`spec:AST-043/DEC-1`,
+  `component:DropdownMenuSubMenu`); the default is the shipped behavior, which
+  is the adaptive value when the shipped behavior already differs by device.
+  Tooltip and HoverCard `triggerBehavior` (`'adaptive'`, `'hover'`, `'toggle'`)
+  follow this. An `is…` or `has…` boolean names only a true on/off that has no
+  third state, and `presentation` names which surface appears and, under INV16,
+  the input mode of an open surface.
 - **INV4 — New props express caller-owned intent.** New public props follow
   `spec:AST-002/DEC-1`. A component keeps a decision internal when it can derive
   the correct result from state, content, layout, context, or platform behavior.
@@ -383,7 +386,9 @@ Known verification gaps:
 
 - INV2, INV3: these shipped props predate the behavior-prop rule and keep their
   names until a minor renames them under INV9: Tooltip and HoverCard
-  `focusTrigger`; Tooltip, HoverCard, and Popover `isEnabled`; Overlay `showOn`;
+  `focusTrigger` and `touchTrigger`; Tooltip, HoverCard, Text, and Heading
+  `hasHoverIndication` and `hasTruncateTooltip`, which take more than two
+  states; Tooltip, HoverCard, and Popover `isEnabled`; Overlay `showOn`;
   Thumbnail `showRemoveOn`; Popover `hasLightDismiss`, `hasEscapeDismiss`, and
   `isModal`; Dialog, Drawer, and BottomSheet `purpose`; Banner `isDismissable`;
   Drawer, BottomSheet, and BottomSheetSwitcher `hasScrim`; CommandPalette
