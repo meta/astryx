@@ -22,10 +22,11 @@
  *
  * Both modes use useListFocus for DOM-based keyboard navigation.
  * Open state is managed internally — right-click opens, click-outside/Escape closes.
- * The menu's layer mounts at its first open, and shows as it attaches: a
- * closed context menu that was never opened adds no popover element to the
- * page (a table with a menu on every cell would otherwise carry one per cell).
- * Once mounted it stays, so every later open and close, its exit animation
+ * The menu's layer mounts at its first open, and shows as it attaches
+ * (`useLayer`'s `lazyMount`, kept mounted after the first show): a closed
+ * context menu that was never opened adds no popover element to the page (a
+ * table with a menu on every cell would otherwise carry one per cell). Once
+ * mounted it stays, so every later open and close, its exit animation
  * included, runs as before.
  * The trigger wrapper is a `div` by default; `triggerAs` makes it an inline
  * `span`, so a reference inside prose can own a context menu without
@@ -54,7 +55,7 @@ import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button';
 import {Heading} from '../Heading';
 import {Icon} from '../Icon';
-import {useLayer} from '../Layer/useLayer';
+import {useLayerInternal} from '../Layer/useLayer';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {currentGesture} from '../Layer/gestureCounter';
@@ -380,10 +381,6 @@ export function ContextMenu({
   const openingGestureRef = useRef<number | null>(null);
 
   const [isOpen, setIsOpen] = useState(false);
-  // Whether the menu's layer is mounted: from the first open on (see the file
-  // header). A ref too, read synchronously by the open path.
-  const [hasLayer, setHasLayer] = useState(false);
-  const hasLayerRef = useRef(false);
   // An open from the trigger moves focus into the menu once it shows: a frame
   // after the show, which for a first open comes as its layer attaches.
   const focusOnShowRef = useRef(false);
@@ -405,8 +402,11 @@ export function ContextMenu({
     [onOpenChange],
   );
 
-  const layer = useLayer({
+  const layer = useLayerInternal({
     mode: 'context',
+    // Mounted at the first open and kept (see the file header).
+    lazyMount: true,
+    keepsMountAfterShow: true,
     onHide: useCallback(() => {
       setIsOpen(false);
       onOpenChange?.(false);
@@ -600,15 +600,10 @@ export function ContextMenu({
       if (usesBottomSheet) {
         updateOpenState(true);
       } else {
+        // A first open mounts the layer, and the show runs from the popover
+        // element's callback ref as it attaches, in the same commit, before
+        // the browser paints; a later one shows at once.
         focusOnShowRef.current = true;
-        if (!hasLayerRef.current) {
-          // The first open mounts the layer, then shows it: a show asked
-          // before the popover element exists waits for it, and runs from the
-          // element's callback ref as it attaches, in the same commit, before
-          // the browser paints.
-          hasLayerRef.current = true;
-          setHasLayer(true);
-        }
         layer.show();
       }
     },
@@ -896,13 +891,13 @@ export function ContextMenu({
             {renderedBottomSheetContent}
           </LazyMenuBottomSheet>
         </Suspense>
-      ) : hasLayer ? (
+      ) : (
         layer.render(<LayerDepthProvider>{renderedMenu}</LayerDepthProvider>, {
           placement: 'below',
           alignment: 'start',
           xstyle: [popoverXstyle, layerAnimations.below],
         })
-      ) : null}
+      )}
     </>
   );
 }
