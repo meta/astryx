@@ -12,7 +12,7 @@ export const docs = {
     {name: 'delay', type: 'number', description: 'Delay before showing on hover, in milliseconds.', default: '200'},
     {name: 'hideDelay', type: 'number', description: 'Delay before hiding after mouse or focus leaves, in milliseconds.', default: '0'},
     {name: 'focusTrigger', type: "'auto' | 'always' | 'never'", description: 'When focus should open the tooltip. auto only attaches focus listeners to naturally focusable elements.', default: "'auto'"},
-    {name: 'touchTrigger', type: "'auto' | 'tap' | 'none'", description: 'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own; tap always opens (an info icon rendered as a button); none never opens on touch.', default: "'auto'"},
+    {name: 'touchTrigger', type: "'auto' | 'tap' | 'none'", description: 'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (an aria-disabled control performs none); tap always opens (an info icon rendered as a button); none never opens on touch.', default: "'auto'"},
     {name: 'isEnabled', type: 'boolean', description: 'Whether hover and focus triggers are enabled.', default: 'true'},
     {name: 'isOpen', type: 'boolean', description: 'Controlled open state. true force-shows, false force-hides, undefined lets hover/focus manage visibility.'},
     {name: 'isDefaultOpen', type: 'boolean', description: 'Whether the tooltip should be shown on mount.', default: 'false'},
