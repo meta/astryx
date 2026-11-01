@@ -56,8 +56,14 @@ export function listedTests(listing) {
         line: spec.line ?? 0,
         column: spec.column ?? 0,
       });
+    // An anonymous `test.describe(() => …)` adds no title, as in Playwright's
+    // own title path, which a test list matches against.
     for (const child of suite.suites ?? [])
-      visit(child, [...titles, child.title], child.file ?? file);
+      visit(
+        child,
+        child.title ? [...titles, child.title] : titles,
+        child.file ?? file,
+      );
   };
   // A top-level suite is a file; its title is the file, not a title path.
   for (const suite of listing.suites ?? []) visit(suite, [], suite.file);

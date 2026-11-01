@@ -118,6 +118,12 @@ jobs:
       release_head: ${{ steps.release-authority.outputs.head || steps.main-authority.outputs.head }}
       release_plan_digest: ${{ steps.release-authority.outputs.planDigest }}
     steps:
+      # Marks a release re-check, so the re-check workflow can tell its runs
+      # from main's hourly check of the same commit.
+      - name: Mark a release re-check
+        if: inputs.recheck
+        run: echo 'Release re-check'
+
       # Full history only where the release-branch validator reads it (tags,
       # the cut commit, release diffs). A main pre-cut check fetches current
       # main on top, so 50 commits are plenty there; the full clone took over

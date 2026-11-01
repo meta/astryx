@@ -158,6 +158,7 @@ describe('release re-check trigger', () => {
     runs = {},
   } = {}) {
     const calls = {dispatches: [], reruns: [], notices: []};
+    lastCalls = calls;
     const github = {
       rest: {
         repos: {
@@ -178,6 +179,13 @@ describe('release re-check trigger', () => {
             ]);
             return {data: {workflow_runs: runs[workflow_id] ?? []}};
           },
+          listJobsForWorkflowRun: async ({run_id}) => ({
+            data: {
+              jobs: Object.values(runs)
+                .flat()
+                .find(item => item.id === run_id).jobs,
+            },
+          }),
           reRunWorkflowFailedJobs: async ({run_id}) => {
             calls.reruns.push(run_id);
           },
@@ -236,7 +244,8 @@ describe('release re-check trigger', () => {
         repo: 'r',
         workflow_id: 'deploy.yml',
         ref: 'main',
-        inputs: {sha: TIP, recheck: 'true'},
+        // Without `sha`: only a tip re-check takes the validation group.
+        inputs: {recheck: 'true'},
       },
     ]);
   });
@@ -261,44 +270,80 @@ describe('release re-check trigger', () => {
     );
   });
 
+  // The calls of the latest trigger, readable after one that throws.
+  let lastCalls;
+  /** A workflow-token dispatch of this commit; a re-check when its marker step ran. */
   const run = (
     id,
     conclusion,
-    status = 'completed',
-    login = 'github-actions[bot]',
+    {status = 'completed', login = 'github-actions[bot]', recheck = true} = {},
   ) => ({
     id,
     status,
     conclusion,
     html_url: `run/${id}`,
-    triggering_actor: {login},
+    actor: {login},
+    jobs: [
+      {
+        steps: [
+          {
+            name: 'Mark a release re-check',
+            conclusion: recheck ? 'success' : 'skipped',
+          },
+        ],
+      },
+    ],
   });
 
   it("re-runs only the failed jobs of this commit's latest re-check runs", async () => {
     const calls = await trigger({
       failedOnly: true,
       runs: {
-        // A person's release-check of the same commit is not a re-check.
         'ci.yml': [
-          run(9, 'failure', 'completed', 'someone'),
+          // A person's release-check of the same commit is not a re-check,
+          run(9, 'failure', {login: 'someone'}),
+          // and neither is the hourly check the workflow token dispatched.
+          run(10, 'failure', {recheck: false}),
           run(7, 'failure'),
         ],
-        'deploy.yml': [run(8, 'success')],
+        'deploy.yml': [run(11, 'failure', {recheck: false}), run(8, 'success')],
       },
     });
     expect(calls.reruns).toEqual([7]);
     expect(calls.dispatches).toEqual([]);
   });
 
-  it('refuses to re-run a re-check that is missing or still running', async () => {
+  it('finds both re-check runs before it re-runs either', async () => {
+    // The Main re-check is missing: nothing is re-run, ci.yml's failure included.
     await expect(
-      trigger({
-        failedOnly: true,
-        runs: {'ci.yml': [run(7, null, 'in_progress')]},
-      }),
-    ).rejects.toThrow('still in_progress');
-    await expect(
-      trigger({failedOnly: true, runs: {'ci.yml': [run(7, 'success')]}}),
+      trigger({failedOnly: true, runs: {'ci.yml': [run(7, 'failure')]}}),
     ).rejects.toThrow('No re-check');
+    expect(lastCalls.reruns).toEqual([]);
+    const pending = trigger({
+      failedOnly: true,
+      runs: {
+        'ci.yml': [run(7, 'failure')],
+        'deploy.yml': [run(8, null, {status: 'in_progress'})],
+      },
+    });
+    await expect(pending).rejects.toThrow('still in_progress');
+    expect(lastCalls.reruns).toEqual([]);
+  });
+
+  it('marks a re-check run with a step, leaving run names as they are', () => {
+    const mark = (job, condition) => {
+      const step = job.steps.find(
+        item => item.name === 'Mark a release re-check',
+      );
+      expect(step.if).toBe(condition);
+    };
+    mark(ci.jobs['release-authority'], 'inputs.recheck');
+    const main = read('deploy.yml');
+    mark(
+      main.jobs['main-commit'],
+      "github.event_name == 'workflow_dispatch' && inputs.recheck",
+    );
+    expect(ci['run-name']).toBeUndefined();
+    expect(main['run-name']).toBeUndefined();
   });
 });

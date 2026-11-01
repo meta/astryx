@@ -506,7 +506,8 @@ retroactive status as release evidence.
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
 **Superseded in part by:** `spec:AST-030/DEC-11` (main is checked about hourly,
-not on every push)
+not on every push); `spec:AST-030/DEC-18` (a release re-check cancels the check
+running in main's lane)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
@@ -616,14 +617,13 @@ minutes.
 **Reference:** `spec:AST-030/DEC-18`
 **Decider:** `cixzhang`, `2026-10-31`
 
-`main` holds one full release-check and one full unit run at a time, so CI's
-ceiling leaves room for exactly those (DEC-16). A release re-check uses the same
-lanes and cancels whatever is running there instead of waiting behind it. It
-checks `main`'s tip in full, so the cancelled run's commits stay covered, and
-the release owner waits only for the re-check itself. Re-running only failed
-jobs is allowed at the same commit, because that run's passing jobs already
-checked it. This narrows DEC-7's never-cancel rule to every check other than a
-release re-check.
+`main` holds one full release-check and one full unit run at a time. A release
+re-check uses the same lanes and cancels whatever is running there instead of
+waiting behind it. It checks `main`'s tip in full, so the cancelled run's
+commits stay covered, and the release owner waits only for the re-check itself.
+Re-running only failed jobs is allowed at the same commit, because that run's
+passing jobs already checked it. This narrows DEC-7's never-cancel rule to every
+check other than a release re-check.
 
 Rejected: a separate lane for re-checks (`main` would run two full checks at
 once and need room for both); re-running only failed legs after a fix (a fix can

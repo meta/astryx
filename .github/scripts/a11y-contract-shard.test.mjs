@@ -144,6 +144,40 @@ describe('a11y contract shards', () => {
     expect(lineSelects('[chromium] › p/b.spec.ts', test)).toBe(false);
   });
 
+  it('drops an anonymous describe from the title path, as Playwright does', () => {
+    const [test] = listedTests({
+      suites: [
+        {
+          title: 'x.spec.ts',
+          file: 'x.spec.ts',
+          suites: [
+            {
+              title: '',
+              file: 'x.spec.ts',
+              suites: [
+                {
+                  title: 'ltr',
+                  file: 'x.spec.ts',
+                  specs: [
+                    {title: 'opens', file: 'x.spec.ts', line: 3, column: 5},
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(test.titles).toEqual(['ltr', 'opens']);
+    // So the line a cut file's part lists selects exactly that test.
+    const leg = [
+      {file: 'x.spec.ts', part: 1, parts: 2, tests: [test], seconds: 1},
+    ];
+    expect(testListLines(leg)).toEqual([
+      '[chromium] › x.spec.ts › ltr › opens',
+    ]);
+  });
+
   it('lists every test of a Playwright JSON listing in declaration order', () => {
     expect(
       listedTests({

@@ -80,6 +80,12 @@ jobs:
             }
             core.setOutput('sha', sha);
 
+      # Marks a release re-check, so the re-check workflow can tell its runs
+      # from main's hourly check of the same commit.
+      - name: Mark a release re-check
+        if: github.event_name == 'workflow_dispatch' && inputs.recheck
+        run: echo 'Release re-check'
+
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.
   sync-exports:

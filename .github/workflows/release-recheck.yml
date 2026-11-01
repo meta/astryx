@@ -6,13 +6,13 @@
 # - ci.yml's canonical release-check (visual, accessibility, RTL, typecheck,
 #   registry) in its wide shards, which takes the main check lane, cancelling
 #   any check running there;
-# - the Main workflow's full unit run on the same commit, which takes the
+# - the Main workflow's full unit run on main's tip, which takes the
 #   validation group the same way.
-# Pull requests never hold it back: CI's ceiling leaves main what it needs
-# (DEC-16).
 #
 # With `failed-only`, it re-runs just the failed or cancelled jobs of this
-# commit's latest re-check runs. That is sound because it is the same commit:
+# commit's latest re-check runs, found by their "Mark a release re-check" step,
+# so an hourly check of the same commit is never mistaken for one. It finds both
+# runs before it re-runs either. That is sound because it is the same commit:
 # each run's passing jobs already checked it, so a run whose re-run passes is
 # a full passing check of that commit, which is what the release publish
 # requires. A fix is a new commit and gets a full re-check.
@@ -68,17 +68,33 @@ jobs:
             }
 
             if (failedOnly) {
+              const MARK = 'Mark a release re-check';
+              const runs = [];
               for (const workflow_id of WORKFLOWS) {
                 const {data} = await github.rest.actions.listWorkflowRuns({
                   ...context.repo, workflow_id, event: 'workflow_dispatch', branch: 'main', head_sha: sha, per_page: 20,
                 });
-                const run = data.workflow_runs.find(candidate => candidate.triggering_actor?.login === 'github-actions[bot]');
+                let run;
+                // Newest first; a run is a re-check when its marker step ran.
+                for (const candidate of data.workflow_runs) {
+                  if (candidate.actor?.login !== 'github-actions[bot]') continue;
+                  const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                    ...context.repo, run_id: candidate.id, filter: 'latest', per_page: 100,
+                  });
+                  if (jobs.some(job => job.steps?.some(step => step.name === MARK && step.conclusion === 'success'))) {
+                    run = candidate;
+                    break;
+                  }
+                }
                 if (run == null) {
                   throw new Error(`No re-check of ${sha.slice(0, 7)} in ${workflow_id}; dispatch a full re-check.`);
                 }
                 if (run.status !== 'completed') {
                   throw new Error(`${workflow_id} re-check ${run.html_url} is still ${run.status}.`);
                 }
+                runs.push({workflow_id, run});
+              }
+              for (const {workflow_id, run} of runs) {
                 if (run.conclusion === 'success') {
                   core.info(`${workflow_id}: ${run.html_url} already passed.`);
                   continue;
@@ -101,7 +117,9 @@ jobs:
             });
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'deploy.yml', ref: 'main',
-              inputs: {sha, recheck: 'true'},
+              // Without `sha`: a re-check validates main's tip, which takes
+              // the validation group; a `sha` run never does.
+              inputs: {recheck: 'true'},
             });
             await core.summary
               .addHeading('Release re-check started')
