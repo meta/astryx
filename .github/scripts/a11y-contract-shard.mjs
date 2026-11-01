@@ -15,7 +15,8 @@
  *   assigns every listed test to exactly one leg, choosing the split that
  *   finishes soonest when each leg runs its files in path order on its
  *   workers, using the recorded seconds (a test with none counts as its
- *   file's average, or the median). The numbers only steer balance; coverage
+ *   file's average, or the median of scripts/lib/duration-split.mjs). The
+ *   numbers only steer balance; coverage
  *   never depends on them, and the partition proves every test is selected
  *   by exactly one leg's list. A file longer than one leg's fair share is cut
  *   into consecutive runs of its tests, each in a different leg, so the
@@ -29,6 +30,7 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {medianOf} from '../../scripts/lib/duration-split.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -146,10 +148,7 @@ export function partitionTests(tests, count, recorded, readSource = () => '') {
     if (!byFile.has(test.file)) byFile.set(test.file, []);
     byFile.get(test.file).push(test);
   }
-  const known = Object.values(perTest)
-    .filter(value => value > 0)
-    .sort((a, b) => a - b);
-  const median = known.length > 0 ? known[Math.floor(known.length / 2)] : 1;
+  const median = medianOf(Object.values(perTest).filter(value => value > 0));
   const seconds = test => {
     if (perTest[testKey(test)] > 0) return perTest[testKey(test)];
     const file = perFile[test.file];
