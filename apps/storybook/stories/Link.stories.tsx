@@ -165,6 +165,31 @@ export const TruncatedInConstrainedLine: Story = {
   ),
 };
 
+/**
+ * A long text-only Link inside `<Text maxLines={2}>` clamps with the ancestor
+ * text, while a composed Link (element child) keeps its own box and focus ring.
+ */
+export const ClampedByAncestorText: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 24, width: 220}}>
+      <Text maxLines={2} data-testid="ancestor-clamp-text">
+        <Link href="/changelog">
+          Quarterly planning review with the product and research teams across
+          every region, plus the follow up retrospective notes and the rollout
+          summary
+        </Link>{' '}
+        and the closing remarks that follow the link in the same paragraph
+      </Text>
+      <p style={{margin: 0}} data-testid="composed-host">
+        <Link href="/team" data-testid="composed-link">
+          <strong>Team</strong> directory and roster listing for the whole org
+        </Link>
+      </p>
+    </div>
+  ),
+};
+
 export const AllVariants: Story = {
   render: () => (
     <div

@@ -214,6 +214,11 @@ export const docs = {
         description:
           'Use Text for headings; use Heading with a `level` prop (1\u20136) for section titles and headings.',
       },
+      {
+        guidance: false,
+        description:
+          'Expect `maxLines` to truncate a `Link` child whose children include elements, such as an external link icon. That inline-flex layout escapes an ancestor clamp; give the Link its own `maxLines` (a Link whose children are only text is clamped fine).',
+      },
     ],
   },
 };
@@ -269,6 +274,11 @@ export const docsZh = {
         description:
           'Use Text for headings; use Heading with a `level` prop (1\u20136) for section titles and headings.',
       },
+      {
+        guidance: false,
+        description:
+          'Expect `maxLines` to truncate a `Link` child whose children include elements, such as an external link icon. That inline-flex layout escapes an ancestor clamp; give the Link its own `maxLines` (a Link whose children are only text is clamped fine).',
+      },
     ],
   },
 };
@@ -312,6 +322,10 @@ export const docsDense = {
       {
         guidance: false,
         description: 'Raw <p>/<h1>/<span>; use Text/Heading for theme tokens.',
+      },
+      {
+        guidance: false,
+        description: 'maxLines cannot truncate an external Link child; give the Link its own maxLines.',
       },
       {
         guidance: false,

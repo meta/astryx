@@ -484,3 +484,184 @@ describe('pressed state', () => {
     expect(hasPressedArm(screen.getByText('Docs').closest('a')!)).toBe(false);
   });
 });
+
+// =============================================================================
+// Display: an ancestor clamp (<Text maxLines>) can only truncate an anchor
+// that participates in the surrounding line boxes, so the plain anchor must
+// be `inline`; flex layout is reserved for the icon/button forms (#6021).
+// =============================================================================
+
+/**
+ * Extracts class-name tokens from a CSS selector (e.g. the selectorText of
+ * a CSSStyleRule), so callers can match against an element's classList by
+ * exact token rather than by substring. Handles compound selectors
+ * (`.a.b:hover`) and comma-separated selector lists (`.a, .b`).
+ */
+function classTokensFromSelector(selectorText: string): string[] {
+  const tokens: string[] = [];
+  const classRegex = /\.([-_a-zA-Z0-9]+)/g;
+  let match: RegExpExecArray | null;
+  while ((match = classRegex.exec(selectorText)) !== null) {
+    tokens.push(match[1]);
+  }
+  return tokens;
+}
+
+/**
+ * Recursively collects every CSSStyleRule from a rule list, descending into
+ * grouping rules (e.g. `@media`) so declarations nested in a condition are
+ * not missed.
+ */
+function collectStyleRules(rules: CSSRuleList, out: CSSStyleRule[]): void {
+  for (const rule of Array.from(rules)) {
+    if (rule instanceof CSSStyleRule) {
+      out.push(rule);
+    } else if ('cssRules' in rule && rule.cssRules) {
+      collectStyleRules((rule as CSSGroupingRule).cssRules, out);
+    }
+  }
+}
+
+/**
+ * Returns the `display` value of every injected CSS rule that targets `el`,
+ * matched via the CSSOM (real selector tokens + real class list) rather than
+ * substring checks on raw selector/body text — a hashed atomic class like
+ * `x1a` can be a substring of an unrelated class like `x1a2b3c4`, so
+ * string-based matching can both false-positive and false-negative.
+ */
+function displayDeclarationsFor(el: Element): string[] {
+  const classes = new Set(Array.from(el.classList));
+  const styleRules: CSSStyleRule[] = [];
+  for (const sheet of Array.from(document.styleSheets)) {
+    let rules: CSSRuleList;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    collectStyleRules(rules, styleRules);
+  }
+
+  const declarations: string[] = [];
+  for (const rule of styleRules) {
+    const matchesElement = classTokensFromSelector(rule.selectorText).some(
+      token => classes.has(token),
+    );
+    if (!matchesElement) {
+      continue;
+    }
+    const display = rule.style.getPropertyValue('display');
+    if (display) {
+      declarations.push(display.trim());
+    }
+  }
+  return declarations;
+}
+
+describe('Link display', () => {
+  it('renders a plain anchor inline so an ancestor clamp can reach it', () => {
+    const {container} = render(<Link href="/docs">Documentation</Link>);
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+  });
+
+  it('keeps flex layout for the external-link icon form', () => {
+    const {container} = render(
+      <Link href="https://example.com" isExternalLink>
+        External docs
+      </Link>,
+    );
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline-flex');
+  });
+
+  it('keeps the flex root (visible focus box) for display="block" links', () => {
+    const {container} = render(
+      <Link href="/docs" display="block">
+        Documentation
+      </Link>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('keeps the flex root for links clamping themselves via maxLines', () => {
+    const {container} = render(
+      <Link href="/docs" maxLines={2}>
+        Documentation
+      </Link>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('keeps flex layout for the button-rendered form', () => {
+    const {container} = render(
+      <Link onClick={() => {}} role="button">
+        Action
+      </Link>,
+    );
+    const button = container.querySelector('button')!;
+    expect(displayDeclarationsFor(button)).toContain('inline-flex');
+  });
+
+  it('keeps the flex root for composed links with element children (e.g. HStack)', () => {
+    const {container} = render(
+      <Link href="/docs">
+        <div>Composed content</div>
+      </Link>,
+    );
+    expect(displayDeclarationsFor(container.querySelector('a')!)).toContain(
+      'inline-flex',
+    );
+  });
+
+  it('keeps plain inline display for text-only children so ancestor clamp reaches them', () => {
+    const {container} = render(<Link href="/docs">Text only {'content'}</Link>);
+    const anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+  });
+
+  it('stays inline for labels assembled with a false or nullish conditional', () => {
+    const condition = false;
+    const {container, rerender} = render(
+      <Link href="/docs">Docs{condition && ' (new)'}</Link>,
+    );
+    let anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+
+    rerender(<Link href="/docs">Docs{null}</Link>);
+    anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+
+    rerender(<Link href="/docs">Docs{undefined}</Link>);
+    anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+  });
+
+  it('stays inline for a Fragment wrapping only text, boxed for a Fragment with an element', () => {
+    const {container, rerender} = render(
+      <Link href="/docs">
+        <>Fragment text</>
+      </Link>,
+    );
+    let anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline');
+    expect(displayDeclarationsFor(anchor)).not.toContain('inline-flex');
+
+    rerender(
+      <Link href="/docs">
+        <>
+          Fragment <span>element</span>
+        </>
+      </Link>,
+    );
+    anchor = container.querySelector('a')!;
+    expect(displayDeclarationsFor(anchor)).toContain('inline-flex');
+  });
+});
