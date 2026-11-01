@@ -605,5 +605,56 @@
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
     }
+  },
+  {
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": ".astryx-blockquote"
+    }
+  },
+  {
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
+    }
+  },
+  {
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
+    }
+  },
+  {
+    "component": "Kbd",
+    "storyId": "core-kbd--special-keys",
+    "dims": []
+  },
+  {
+    "component": "Skeleton",
+    "storyId": "core-skeleton--shapes",
+    "dims": []
+  },
+  {
+    "component": "Timer",
+    "storyId": "core-timer--default",
+    "dims": []
+  },
+  {
+    "component": "VisuallyHidden",
+    "storyId": "core-visuallyhidden--default",
+    "dims": []
+  },
+  {
+    "component": "LinkProvider",
+    "storyId": "core-link-navigation--destinations",
+    "dims": []
   }
 ]
