@@ -8,7 +8,8 @@
  * @output Exports ListContext for sharing density, dividers, the row edge
  *   treatment, and marker style between List and ListItem, and
  *   ListMarkerScope, which sets the marker for the items inside it, or a
- *   task item's checkbox in its place
+ *   task item's checkbox in its place, and whether their List has a marker
+ *   gutter whose outside counters keep the ordinary themed text inset
  * @position Internal context; consumed by List.tsx and ListItem.tsx
  */
 
@@ -54,6 +55,14 @@ export interface ListContextValue {
    * `'none'`.
    */
   task?: ListTaskMarker;
+  /**
+   * Whether the List has Markdown's outside-marker gutter, set by
+   * ListMarkerScope; internal. Its number column keeps the ordinary themed
+   * width, while whole counters may paint toward inline-start beyond it.
+   * Markdown sets this on its non-swipe numbered rows and allows outside ink
+   * on their List, so its text starts match RichText without a width threshold.
+   */
+  hasMarkerGutter?: boolean;
 }
 
 export const ListContext = createContext<ListContextValue | null>(null);
@@ -62,22 +71,27 @@ ListContext.displayName = 'ListContext';
 /**
  * Draws `marker` on the List items inside it, in place of the marker their
  * List's `listStyle` names, or `task`'s read-only checkbox in place of either;
- * internal, for Markdown's nested lists and task items in mixed lists. Outside
- * a List, or in a List without markers, it changes nothing.
+ * internal, for Markdown's nested lists and task items in mixed lists. With
+ * `hasMarkerGutter`, counters keep the ordinary marker column and may paint
+ * outside it toward inline-start. Outside a List, or in a List without markers, it
+ * changes nothing.
  */
 export function ListMarkerScope({
   marker,
   task,
+  hasMarkerGutter = false,
   children,
 }: {
   readonly marker: ListMarker;
   readonly task?: ListTaskMarker;
+  readonly hasMarkerGutter?: boolean;
   readonly children: ReactNode;
 }): ReactNode {
   const context = use(ListContext);
   const value = useMemo(
-    () => (context == null ? null : {...context, marker, task}),
-    [context, marker, task],
+    () =>
+      context == null ? null : {...context, marker, task, hasMarkerGutter},
+    [context, marker, task, hasMarkerGutter],
   );
   return value == null ? (
     children

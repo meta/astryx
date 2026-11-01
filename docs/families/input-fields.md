@@ -318,8 +318,8 @@ DEC-6 does not require unrelated components to add a new floor.
   and current source-busy feedback is an in-flow static clock without
   `aria-busy`; selected, source-busy, and grouped combinations do not have the
   focused geometry coverage required by FR1–FR3 and FR7. PRs
-  [#5555](https://github.com/facebook/astryx/pull/5555) and
-  [#5682](https://github.com/facebook/astryx/pull/5682) document attempted
+  [#5555](https://github.com/meta/astryx/pull/5555) and
+  [#5682](https://github.com/meta/astryx/pull/5682) document attempted
   implementations and are non-authoritative evidence. Any implementation keeps its
   DOM/CSS mechanism component-owned and must be reviewed against this contract at
   its exact head.
@@ -329,7 +329,7 @@ DEC-6 does not require unrelated components to add a new floor.
   change intrinsic inline size. PR #5555 is non-authoritative evidence of an
   attempted component-local reserve. Tokenizer is not InputGroup-compatible on
   current main; DEC-5 admits it once its grouped path satisfies FR3 and defaults to
-  a single-line overflow treatment without changing ungrouped behavior. [#4405](https://github.com/facebook/astryx/pull/4405)
+  a single-line overflow treatment without changing ungrouped behavior. [#4405](https://github.com/meta/astryx/pull/4405)
   is implementation evidence to review against that authority, not a Tokenizer-only
   exception or authority by itself.
 - **Selector source-state semantics:** Selector and MultiSelector keep provided
@@ -353,7 +353,7 @@ DEC-6 does not require unrelated components to add a new floor.
   members whose direct control and owning root reliably expose resolved size.
   Eligible members preserve attached placement; unsupported wrapped, custom, tall,
   and translucent surfaces retain component-owned placement, normally detached.
-  [PR #5769](https://github.com/facebook/astryx/pull/5769) is non-authoritative
+  [PR #5769](https://github.com/meta/astryx/pull/5769) is non-authoritative
   evidence of an attempted implementation that derives overlap from a descendant
   `data-size`; that mechanism does not by itself establish eligibility or root-size
   ownership.
@@ -361,18 +361,14 @@ DEC-6 does not require unrelated components to add a new floor.
   below accepts root `xstyle`/`className`/`style`, and none accepts `container*`
   or `control*`. Today's targets:
 
-  | Component                          | Root styling reaches | Base props reach                       | Primary semantic control | Root styling migrates to |
-  | ---------------------------------- | -------------------- | -------------------------------------- | ------------------------ | ------------------------ |
-  | FileInput                          | control box          | native file input                      | native file input        | `control*`               |
-  | DateInput (pointer, native, touch) | control box          | control box                            | date input               | `control*`               |
-  | DateRangeInput                     | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
-  | DateTimeInput (pointer, touch)     | control box          | control box                            | date-time input          | `control*`               |
-  | Selector                           | control box          | trigger button                         | trigger button           | `control*`               |
-  | MultiSelector                      | control box          | not forwarded                          | trigger button           | `control*`               |
-  | ComplexSelector                    | control box          | control box                            | trigger button           | `control*`               |
-  | Typeahead                          | Field                | Field                                  | combobox input           | `container*`             |
-  | Tokenizer                          | Field                | Field                                  | combobox input           | `container*`             |
-  | Slider                             | Field                | not forwarded; `ref` on the track      | slider control           | `container*`             |
+  | Component      | Root styling reaches | Base props reach                       | Primary semantic control | Root styling migrates to |
+  | -------------- | -------------------- | -------------------------------------- | ------------------------ | ------------------------ |
+  | FileInput      | control box          | native file input                      | native file input        | `control*`               |
+  | DateRangeInput | control box          | control box; `ref` on a trigger button | range trigger            | `control*`               |
+  | Selector       | control box          | trigger button                         | trigger button           | `control*`               |
+  | Typeahead      | Field                | Field                                  | combobox input           | `container*`             |
+  | Tokenizer      | Field                | Field                                  | combobox input           | `container*`             |
+  | Slider         | Field                | not forwarded; `ref` on the track      | slider control           | `container*`             |
 
   Conformance is an approved removal of root
   styling; an `astryx upgrade` codemod rewrites each component's root styling to

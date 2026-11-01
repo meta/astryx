@@ -5,7 +5,11 @@
 /**
  * @file Item.tsx
  * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer
- * @output Exports Item component, ItemProps type; publishes the shared inline inset
+ * @output Exports Item component, ItemProps type; publishes the shared inline inset.
+ *   Only numbered composing rows keep their start/label/end slots in one flex
+ *   group, through Item's private exact-marker scope; other marked rows keep
+ *   their flat children. This lets List share a counter track without changing
+ *   those slots' own layout.
  * @position Core layout primitive; consumed by index.ts, tested by Item.test.tsx
  *
  * The swipe actions live in ItemSwipeLayer, reached only through a dynamic
@@ -28,6 +32,7 @@
 import {
   lazy,
   Suspense,
+  use,
   useCallback,
   useId,
   useRef,
@@ -43,12 +48,19 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
-import {isRenderable, mergeProps} from '../utils';
+import {isLayerSurface} from '../Layer/layerSurfacePress';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useClickableContainer} from '../hooks/useClickableContainer';
+import {
+  innermostInteractive,
+  useClickableContainer,
+} from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -352,6 +364,22 @@ const styles = stylex.create({
     textAlign: 'start',
     borderRadius: radiusVars['--radius-element'],
   },
+  // One content cell beside the marker. Its slots retain the row's flex
+  // alignment and gap, including first-line alignment and tall start content.
+  // A numbered List can then subgrid the row into marker/content columns.
+  markerContent: {
+    display: 'flex',
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'inherit',
+    alignSelf: 'stretch',
+    gap: 'inherit',
+  },
+  markerContentFirstLine: {
+    // A tall start/end slot moves the first text baseline down. The marker
+    // must follow that baseline, not the stretched group's top edge.
+    alignSelf: 'baseline',
+  },
   alignStart: {
     alignItems: 'flex-start',
   },
@@ -586,7 +614,15 @@ export function Item({
   ...restProps
 }: ItemProps) {
   const pressable = usePressFeedback();
+  const columnMarker = use(ItemMarkerColumnsContext);
   const LinkComponent = useLinkComponent();
+  // A disabled row's anchor has no destination, so no activation path (a
+  // screen reader's click, Enter, a link context menu) can navigate
+  // (spec:AST-085 FR2). Like a disabled Link, it keeps the link role and skips
+  // the router link component, which may require a live href. The element type
+  // then changes with `isDisabled`, so focus follows the swap (FR4).
+  const RowAnchor = isDisabled ? 'a' : LinkComponent;
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>();
 
   // Delegation mode: the row is an enlarged click/tap target for a nested
   // control (e.g. a checkbox) that owns the keyboard access and action. The
@@ -686,7 +722,7 @@ export function Item({
 
   // Inline rows are one line by definition, so the description always
   // ellipsizes there — a ReactNode description cannot wrap the row open.
-  const isInline = layout === 'inline' && description != null;
+  const isInline = layout === 'inline' && hasRenderableDescription;
 
   const descriptionTruncateStyle =
     descriptionLines != null
@@ -710,9 +746,9 @@ export function Item({
         )}>
         {label}
       </span>
-      {description != null && (
+      {hasRenderableDescription && (
         <span
-          id={hasRenderableDescription ? descriptionID : undefined}
+          id={descriptionID}
           {...stylex.props(
             styles.description,
             isInline && styles.inlineDescription,
@@ -732,16 +768,20 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
+    if (
+      target.closest('button, a, input, select, textarea') ||
+      // A press inside an open Tooltip or HoverCard belongs to it
+      // (component:Tooltip FR11, component:HoverCard FR11).
+      innermostInteractive(target, e.currentTarget, isLayerSurface) != null
+    ) {
       return;
     }
     onClick?.(e);
   };
 
-  const innerContent = (
+  const content = (
     <>
-      {marker}
-      {startContent != null && (
+      {isRenderable(startContent) && (
         <span
           {...stylex.props(
             styles.startContent,
@@ -764,19 +804,18 @@ export function Item({
           {labelAndDescription}
         </span>
       ) : href != null && !isLinkRoot ? (
-        <LinkComponent
-          href={href}
-          target={target}
-          rel={rel}
-          aria-disabled={isDisabled || undefined}
-          tabIndex={isDisabled ? -1 : undefined}
+        <RowAnchor
+          ref={anchorRef}
+          {...(isDisabled
+            ? {role: 'link', 'aria-disabled': true, tabIndex: -1}
+            : {href, target, rel})}
           {...stylex.props(
             styles.invisibleAnchor,
             isInline && styles.inlineContent,
             isDisabled && styles.disabledContent,
           )}>
           {labelAndDescription}
-        </LinkComponent>
+        </RowAnchor>
       ) : onClick != null ? (
         <button
           type="button"
@@ -800,7 +839,7 @@ export function Item({
         </span>
       )}
 
-      {endContent != null && (
+      {isRenderable(endContent) && (
         <span
           {...stylex.props(
             styles.endContent,
@@ -900,7 +939,18 @@ export function Item({
       onClick={rootOnClick}>
       <ItemDescriptionContext
         value={hasRenderableDescription ? descriptionID : null}>
-        {innerContent}
+        {isRenderable(marker) && marker}
+        {isRenderable(marker) && columnMarker === marker ? (
+          <span
+            {...stylex.props(
+              styles.markerContent,
+              align === 'first-line' && styles.markerContentFirstLine,
+            )}>
+            {content}
+          </span>
+        ) : (
+          content
+        )}
       </ItemDescriptionContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one

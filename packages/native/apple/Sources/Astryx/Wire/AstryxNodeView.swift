@@ -15,14 +15,24 @@ public struct AstryxNodeView: View {
 
   public var body: some View {
     switch node {
+    case .button(let button): Button(button.viewProps(send: send))
     case .text(let text): Text(text.viewProps(send: send))
     case .heading(let heading): Heading(heading.viewProps(send: send))
+    case .textInput(let input): TextInput(input.viewProps(send: send))
     case .card(let card): Card(card.viewProps(send: send), children: card.props.children ?? [], send: send)
     case .icon(let icon): Icon(icon.viewProps(send: send))
     case .avatar(let avatar):
       Avatar(avatar.viewProps(send: send)) { AstryxNodeList(nodes: avatar.props.status ?? [], send: send) }
     case .avatarStatusDot(let dot): AvatarStatusDot(dot.viewProps(send: send))
     case .thumbnail(let thumbnail): Thumbnail(thumbnail.viewProps(send: send))
+    case .item(let item):
+      Item(item.viewProps(send: send)) {
+        AstryxNodeList(nodes: item.props.startContent ?? [], send: send)
+      } endContent: {
+        AstryxNodeList(nodes: item.props.endContent ?? [], send: send)
+      } marker: {
+        AstryxNodeList(nodes: item.props.marker ?? [], send: send)
+      }
     default: AstryxUnsupportedNode(component: Self.componentName(node))
     }
   }
@@ -39,6 +49,7 @@ public struct AstryxNodeView: View {
     case .heading: "Heading"
     case .hStack: "HStack"
     case .icon: "Icon"
+    case .item: "Item"
     case .progressBar: "ProgressBar"
     case .selector: "Selector"
     case .switch: "Switch"

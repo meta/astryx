@@ -43,6 +43,15 @@ export interface TapGestureRecognizerOptions extends GestureRecognizerOptions<Ta
 const TAP = UIKIT_TAP;
 
 export class TapGestureRecognizer extends GestureRecognizer {
+  override get kind(): GestureRecognizer['kind'] {
+    return 'tap';
+  }
+
+  /** @internal The host's brand: a tap decides at the lift, so it never claims mid-move (recognizerInternals). */
+  protected get family(): 'tap' {
+    return 'tap';
+  }
+
   numberOfTapsRequired: number;
   numberOfTouchesRequired: number;
   allowableMovement: number;

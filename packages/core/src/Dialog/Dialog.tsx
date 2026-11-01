@@ -41,6 +41,8 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {useScrollLock} from '../hooks/useScrollLock';
@@ -69,7 +71,7 @@ import {
   overlayPaddingReset,
 } from '../Layout/padding.stylex';
 import type {SpacingStep} from '../utils/types';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {devWarn} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
@@ -91,8 +93,11 @@ function getDialogDirection(
   distance = 16,
 ): {x: number; y: number} {
   const rect = triggerEl.getBoundingClientRect();
-  const dx = rect.left + rect.width / 2 - window.innerWidth / 2;
-  const dy = rect.top + rect.height / 2 - window.innerHeight / 2;
+  // The trigger's own window: its rect is measured in that window's viewport,
+  // which is not the page's when the dialog renders into a second document.
+  const view = triggerEl.ownerDocument.defaultView ?? window;
+  const dx = rect.left + rect.width / 2 - view.innerWidth / 2;
+  const dy = rect.top + rect.height / 2 - view.innerHeight / 2;
   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
   return {
     x: Math.round((dx / dist) * distance),
@@ -222,6 +227,10 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         'none',
     },
+  },
+  // A dialog present on page load opens where it rests (spec:AST-013 FR13).
+  openSettled: {
+    animationName: 'none',
   },
   // Backdrop using ::backdrop pseudo-element
   backdrop: {
@@ -460,7 +469,7 @@ export interface DialogProps extends BaseProps<HTMLDialogElement> {
  * ```
  */
 export function Dialog({
-  isOpen,
+  isOpen: isOpenProp,
   isInline = false,
   onOpenChange,
   width = 400,
@@ -476,6 +485,17 @@ export function Dialog({
   ref,
   ...props
 }: DialogProps) {
+  // A modal dialog open on the server renders closed until hydration, and
+  // opens in the render after it, the first one that can call showModal(): a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have, over a live page (FR8). An inline dialog is not modal and
+  // renders as it is.
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && (isInline || !isHydrating);
+  // A dialog open on the server was present on page load, so it opens settled,
+  // with no entry motion; its later opens animate as usual (spec:AST-013 FR13).
+  const [settledOpen] = useSettledOpen(isOpenProp && !isInline, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   // When no explicit padding prop, use theme default (--astryx-dialog-padding)
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;
@@ -526,13 +546,17 @@ export function Dialog({
     [titleId, hasConsumerName],
   );
 
-  const mergedDialogRef = useMergedRefs(ref, attachDialog);
+  // Input in a second document (a same-origin iframe, a Document
+  // Picture-in-Picture window) never reaches the page's listeners, so the
+  // dialog's own document keeps its own last input for the focus return while
+  // this Dialog is mounted, from before it opens until it unmounts.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+
+  const mergedDialogRef = useMergedRefs(ref, attachDialog, modalityRef);
 
   // Capture the element that was focused when the dialog opened, for
   // directional animation origin and focus restoration on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
-
-  useInteractionModalityTracking();
 
   // This runs in a layout effect so the capture lands before any descendant's
   // passive mount effect: all layout effects run before any passive effect,
@@ -545,7 +569,15 @@ export function Dialog({
     if (isInline || !isOpen) {
       return;
     }
-    triggerElementRef.current = document.activeElement as HTMLElement | null;
+    // The dialog's own document while it holds focus: an app can render a
+    // dialog into a second document (a same-origin iframe, a Document
+    // Picture-in-Picture window) through a portal, and a control there that
+    // opens it is focused in that document, which the page's document reports
+    // only as the iframe element, or not at all. A control in the page that
+    // opens such a dialog leaves focus in the page.
+    const dialogDocument = dialogRef.current?.ownerDocument ?? document;
+    const doc = dialogDocument.hasFocus() ? dialogDocument : document;
+    triggerElementRef.current = doc.activeElement as HTMLElement | null;
   }, [isOpen, isInline]);
 
   // Derive dismissal behavior from purpose
@@ -567,7 +599,7 @@ export function Dialog({
       // captured by the layout effect above, before any descendant effect
       // could move focus.
       const trigger = triggerElementRef.current;
-      if (trigger && trigger !== document.body) {
+      if (trigger && trigger !== trigger.ownerDocument.body) {
         const dir = getDialogDirection(trigger);
         dialog.style.setProperty('--dialog-dir-x', `${dir.x}px`);
         dialog.style.setProperty('--dialog-dir-y', `${dir.y}px`);
@@ -591,9 +623,11 @@ export function Dialog({
       if (dialog.open) {
         dialog.close();
       }
-      // Return focus to the element that opened the dialog
-      if (triggerElementRef.current) {
-        focusForLastInput(triggerElementRef.current);
+      // Return focus to the element that opened the dialog, with the ring
+      // the last input in that element's own document calls for.
+      const trigger = triggerElementRef.current;
+      if (trigger) {
+        focusForLastInput(trigger);
       }
       triggerElementRef.current = null;
     }
@@ -809,6 +843,7 @@ export function Dialog({
             })(),
           isFullscreen && styles.fullscreen,
           isFullscreen && isOpen && styles.fullscreenOpen,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,
@@ -816,7 +851,7 @@ export function Dialog({
       )}
       onClick={chainEventHandlers(handleClick, onClickProp)}
       onCancel={handleCancel}
-      aria-modal="true"
+      aria-modal={isHydrating ? undefined : 'true'}
       // The default aria-labelledby (from a DialogHeader title) is set
       // imperatively in `attachDialog`; a consumer-provided aria-labelledby
       // flows through {...safeProps} above and wins.

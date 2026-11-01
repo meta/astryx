@@ -222,7 +222,7 @@ const fullConfig: PowerSearchConfig = {
     },
     {
       key: 'unread',
-      label: 'Unread only',
+      label: 'Only show unread',
       defaultOperator: 'yes',
       operators: [{key: 'yes', label: '', value: {type: 'empty'}}],
     },

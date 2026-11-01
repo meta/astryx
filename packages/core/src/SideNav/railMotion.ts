@@ -5,7 +5,7 @@
 /**
  * @file railMotion.ts
  * @input The rail's outer element, the animated-layout module's handle,
- *   motion and in-place swap (motion/animatedLayout.ts)
+ *   motion and two-state edge reveal (motion/animatedLayout.ts)
  * @output Exports `SideNavShellContext` (what AppShell lends its SideNav),
  *   `createRailLayout`, `snapshotRail` and `playRail`: the rail's collapse
  *   motion
@@ -14,28 +14,30 @@
  *
  * Collapsing or expanding the rail plays one motion on one clock, the
  * `springs.settle` role the animated-layout module reads (`spec:AST-105`
- * FR4):
- * - Layout snaps to the final rail width at once; nothing animates a width.
- * - A collapse covers the old rail by a clip: the module's in-place swap
- *   (`spec:AST-105` FR8) holds the old, expanded rail as one transient copy
- *   and the clip closes it to the new width. The copy's text fades over the
- *   first 40%; the real collapsed rail, raised above the copy, fades in over
- *   the last 30%, so the real rail, icons only, is all that remains.
- * - An expand reveals the real rail by a clip from the old width, its text
- *   fading in over the last 60% so no label shows at the collapsed width,
- *   under the old, collapsed rail held by the same swap, which fades over the
- *   first 60%: the first frame is the frame before the click.
- * - In AppShell the rail's edge rides the content column's glide, frame by
- *   frame, so the two never part, also when a change interrupts a running
- *   one; the copy is laid in the row that holds both.
+ * FR4). The rail is FR9's edge reveal in its inline two-state form, which
+ * the module produces (`architecture:react-component-runtime` INV12): layout
+ * snaps to the final rail width at once, nothing animates a width, and the
+ * module clips the rail's inline-end edge from the width it shows to the new
+ * one. A collapse covers the old, expanded rail, held as one transient copy,
+ * with the real collapsed rail raised above it; an expand reveals the real
+ * rail under the old, collapsed one. In AppShell that edge rides the content
+ * column's glide, frame by frame, so the two never part, also when a change
+ * interrupts a running one. Every starting clip applies in the commit's
+ * layout effect, before the first frame paints. Under Reduce Motion it
+ * follows `design:reduced-motion`: opacity only under a coarse primary
+ * pointer (DR2), an immediate change otherwise (DR3). Without Web
+ * Animations, the change lands at once.
+ *
+ * What this file adds is the rail's own fades, on the same progress:
+ * - A collapse fades the copy's text over the first 40% and the copy over
+ *   the last 30%, while the real collapsed rail, its icons, fades in over the
+ *   last 30%, so the real rail, icons only, is all that remains.
+ * - An expand fades the real rail's text in over the last 60%, so no label
+ *   shows at the collapsed width, while the old, collapsed rail fades over
+ *   the first 60%: the first frame is the frame before the click.
  * - A change made during a running motion starts from what the rail shows:
  *   its width, its labels' opacity and its collapsed icons' opacity, so the
  *   rail stays continuous.
- * - Every starting clip applies in the commit's layout effect, before the
- *   first frame paints.
- * - Under Reduce Motion it follows `design:reduced-motion`: opacity only
- *   under a coarse primary pointer (DR2), an immediate change otherwise
- *   (DR3). Without Web Animations, the change lands at once.
  *
  * SYNC: When modified, update SideNav.tsx, AppShell.tsx and
  * SideNavRailMotion.test.tsx.
@@ -44,11 +46,10 @@
 import {createContext} from 'react';
 import {
   createAnimatedLayout,
-  holdLayoutSwap,
-  layoutMotionFor,
-  playLayoutFrames,
-  playLayoutSwap,
+  holdLayoutEdge,
+  playLayoutEdge,
   type AnimatedLayout,
+  type LayoutEdgeHold,
   type LayoutSwap,
 } from '../motion/animatedLayout';
 
@@ -88,12 +89,12 @@ export interface RailShown {
 }
 
 export interface RailSnapshot {
-  readonly rail: HTMLElement;
-  readonly railRect: DOMRect;
+  /** The old rail, held for the module's edge reveal. */
+  readonly hold: LayoutEdgeHold;
+  /** The old rail as one transient copy, or null when it cannot be held. */
+  readonly swap: LayoutSwap | null;
   /** What the rail shows when the change lands. */
   readonly shown: RailShown;
-  /** The old rail, held by the swap. */
-  readonly swap: LayoutSwap | null;
 }
 
 /** A playing rail motion. */
@@ -114,19 +115,22 @@ export function snapshotRail(
   running: RailShown | null,
   isCollapsed: boolean,
 ): RailSnapshot | null {
-  if (rail == null || typeof rail.animate !== 'function') {
+  // The rail's edge is the one beside the content, its inline end.
+  const hold = holdLayoutEdge(handle, rail, {
+    edge: 'inline-end',
+    shown: running?.width ?? null,
+  });
+  if (hold == null) {
     return null;
   }
-  const railRect = rail.getBoundingClientRect();
   return {
-    rail,
-    railRect,
+    hold,
+    swap: hold.swap,
     shown: running ?? {
-      width: railRect.width,
+      width: hold.extent,
       labels: isCollapsed ? 0 : 1,
       collapsed: isCollapsed ? 1 : 0,
     },
-    swap: holdLayoutSwap(handle, rail),
   };
 }
 
@@ -141,17 +145,6 @@ function textElements(rail: HTMLElement): Element[] {
   );
 }
 
-/** `element`'s ancestor (or itself) that sits directly in `host`. */
-function childOf(host: Element, element: HTMLElement): HTMLElement | null {
-  let node: HTMLElement | null = element;
-  while (node != null && node.parentElement !== host) {
-    node = node.parentElement;
-  }
-  return node;
-}
-
-const AT_REST: RailMotion = {end: () => {}, shown: () => null};
-
 /**
  * After the change commits, before paint: play the rail's motion from the
  * snapshot, on the module's motion. With a `column` (in AppShell), the rail's
@@ -163,19 +156,8 @@ export function playRail(
   handle: AnimatedLayout,
   column: HTMLElement | null = null,
 ): RailMotion {
-  const {railRect, swap, shown: from} = snapshot;
-  // The rail as it is now: a resizable rail's nav remounts when its resize
-  // wrapper comes and goes with the collapse.
-  const rail = current?.isConnected === true ? current : snapshot.rail;
-  if (!rail.isConnected) {
-    return AT_REST;
-  }
-  const motion = layoutMotionFor(rail);
-  const next = rail.getBoundingClientRect();
-  if (motion.kind === 'instant' || Math.abs(next.width - from.width) < 0.5) {
-    return AT_REST;
-  }
-  const isCollapse = next.width < from.width;
+  const {shown: from} = snapshot;
+  let isCollapse = false;
   // The labels and the collapsed icons over the motion's progress, from what
   // the rail showed.
   const labelsAt = (p: number) =>
@@ -186,130 +168,42 @@ export function playRail(
     isCollapse
       ? from.collapsed + (1 - from.collapsed) * clamp((p - 0.7) / 0.3)
       : from.collapsed * (1 - clamp(p / 0.6));
-  const rtl = getComputedStyle(rail).direction === 'rtl';
-  const sign = rtl ? -1 : 1;
-  const inset = (px: number) =>
-    rtl ? `inset(0px 0px 0px ${px}px)` : `inset(0px ${px}px 0px 0px)`;
-  // The row that holds the rail and the column, or the rail's parent.
-  const host =
-    column?.parentElement != null && column.parentElement.contains(rail)
-      ? column.parentElement
-      : rail.parentElement;
-  // Riding needs the swap: its frames carry the column's travel. Without one
-  // (old content that cannot be copied) the clip follows the motion's curve.
-  const rides = host != null && column?.parentElement === host && swap != null;
-  // The width the rail shows over the motion: on the column's glide (its
-  // travel so far added to where it started), or on the motion's curve.
-  const widthAt = (p: number, ride: {x: number}) =>
-    rides
-      ? from.width + sign * ride.x
-      : from.width + (next.width - from.width) * p;
-  const now = () => Number(rail.ownerDocument.timeline?.currentTime ?? 0);
-  const startedAt = now();
-  const durationMs =
-    motion.kind === 'spring' ? motion.progress.durationMs : motion.durationMs;
-  const shown = (): RailShown | null => {
-    const elapsed = now() - startedAt;
-    if (elapsed >= durationMs) {
-      return null;
-    }
-    const p =
-      motion.kind === 'spring' ? 1 - motion.progress.remaining(elapsed) : 0;
-    let width = from.width + (next.width - from.width) * p;
-    if (rides && column != null) {
-      // The rail's edge is the column's: read it where it shows.
-      const edge = column.getBoundingClientRect();
-      const own = rail.getBoundingClientRect();
-      width = rtl ? own.right - edge.right : edge.left - own.left;
-    }
-    return {width, labels: labelsAt(p), collapsed: collapsedAt(p)};
-  };
-  const rideWith =
-    rides && column != null
-      ? {
-          element: column,
-          travel: {x: sign * (from.width - next.width), y: 0},
-          isCopyMoved: false,
-        }
-      : undefined;
-  // The copy keeps the rail's inline-start edge where the rail is now, so it
-  // meets the real rail wherever SideNav sits (a centered rail moves).
-  const at = DOMRect.fromRect({
-    x: rtl ? next.right - railRect.width : next.left,
-    y: next.top,
-    width: railRect.width,
-    height: railRect.height,
+  const motion = playLayoutEdge(snapshot.hold, current, handle, {
+    edge: 'inline-end',
+    rideWith: column,
+    parts: (isConceal, rail) => {
+      isCollapse = isConceal;
+      return isConceal
+        ? {
+            // The old rail's text fades early, the copy late, as the real
+            // collapsed rail, raised above it, fades in.
+            copyOpacity: p => 1 - clamp((p - 0.7) / 0.3),
+            copyText: labelsAt,
+            incoming: [
+              {element: rail, frames: p => ({opacity: collapsedAt(p)})},
+            ],
+          }
+        : {
+            // The old, collapsed rail fades early; the real rail's text, late.
+            copyOpacity: collapsedAt,
+            incoming: textElements(rail).map(element => ({
+              element,
+              frames: (p: number) => ({opacity: labelsAt(p)}),
+            })),
+          };
+    },
   });
-
-  if (isCollapse) {
-    // A collapse covers the old rail, held by the swap, from the width it
-    // shows down to the new one; the real, collapsed rail fades in above it.
-    if (swap == null || host == null) {
-      return AT_REST;
-    }
-    const raised = childOf(host, rail);
-    const restore =
-      raised == null
+  return {
+    end: motion.end,
+    shown: () => {
+      const now = motion.shown();
+      return now == null
         ? null
         : {
-            position: raised.style.position,
-            zIndex: raised.style.zIndex,
+            width: now.extent,
+            labels: labelsAt(now.progress),
+            collapsed: collapsedAt(now.progress),
           };
-    if (raised != null) {
-      if (getComputedStyle(raised).position === 'static') {
-        raised.style.position = 'relative';
-      }
-      raised.style.zIndex = '2';
-    }
-    const end = playLayoutSwap(
-      {...swap, rect: at},
-      {
-        host,
-        isOpaque: true,
-        copy: (p, ride) => ({
-          clipPath: inset(railRect.width - widthAt(p, ride)),
-          opacity: 1 - clamp((p - 0.7) / 0.3),
-        }),
-        copyText: labelsAt,
-        rideWith,
-        onEnd: () => {
-          if (raised != null && restore != null) {
-            raised.style.position = restore.position;
-            raised.style.zIndex = restore.zIndex;
-          }
-        },
-        incoming: [{element: rail, frames: p => ({opacity: collapsedAt(p)})}],
-      },
-    );
-    return {end, shown};
-  }
-
-  // An expand reveals the real rail from the width it showed, its text fading
-  // in late, under the old, collapsed rail fading early.
-  const incoming = [
-    {
-      element: rail,
-      frames: (p: number, ride: {x: number}) => ({
-        clipPath: inset(next.width - widthAt(p, ride)),
-      }),
     },
-    ...textElements(rail).map(element => ({
-      element,
-      frames: (p: number) => ({opacity: labelsAt(p)}),
-    })),
-  ];
-  const end =
-    swap != null && host != null
-      ? playLayoutSwap(
-          {...swap, rect: at},
-          {
-            host,
-            isOpaque: true,
-            copy: p => ({opacity: collapsedAt(p)}),
-            rideWith,
-            incoming,
-          },
-        )
-      : playLayoutFrames(handle, incoming);
-  return {end, shown};
+  };
 }

@@ -193,6 +193,19 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-medium'],
     textTransform: 'uppercase',
   },
+  // After `fallback` on a lone Avatar: in forced colors its initials and
+  // default icon take the color around them, which the browser forces to
+  // CanvasText, so a control that paints itself disabled (GrayText) or
+  // selected (HighlightText) carries them with it; an
+  // authored color would be forced to CanvasText whatever the control shows.
+  // A grouped face keeps it: its ring's opaque fill is forced to Canvas, so
+  // only CanvasText is sure to read on it.
+  loneFallback: {
+    color: {
+      default: colorVars['--color-text-secondary'],
+      '@media (forced-colors: active)': 'currentColor',
+    },
+  },
   status: {
     position: 'absolute',
   },
@@ -784,6 +797,7 @@ export function Avatar({
               themeProps('avatar-fallback', {size: resolvedSize}),
               stylex.props(
                 styles.fallback,
+                avatarGroup == null && styles.loneFallback,
                 dynamicStyles.fontSize(numericSize),
               ),
             )}>
@@ -794,7 +808,10 @@ export function Avatar({
           <div
             {...mergeProps(
               themeProps('avatar-fallback', {size: resolvedSize}),
-              stylex.props(styles.fallback),
+              stylex.props(
+                styles.fallback,
+                avatarGroup == null && styles.loneFallback,
+              ),
             )}>
             <DefaultIcon size={numericSize} />
           </div>

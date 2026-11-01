@@ -437,7 +437,7 @@ describe('PowerSearch', () => {
       expect((input as HTMLInputElement).value).toBe('');
     });
 
-    it('keeps the input natively disabled when disabled without a reason', () => {
+    it("keeps the input's tab stop when disabled without a reason", () => {
       render(
         <PowerSearch
           config={config}
@@ -446,7 +446,9 @@ describe('PowerSearch', () => {
           isDisabled
         />,
       );
-      expect(screen.getByRole('combobox')).toBeDisabled();
+      const input = screen.getByRole('combobox');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 
@@ -474,6 +476,30 @@ describe('PowerSearch', () => {
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('5 results');
       });
+    });
+
+    it('announces Clear all in its own words, "All filters removed" (component:PowerSearch; Tokenizer AR7)', async () => {
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[
+            {
+              field: 'status',
+              operator: 'is',
+              value: {type: 'enum', value: 'open'},
+            },
+          ]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Clear all'}));
+      expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('All filters removed');
+      });
+      // Not the Tokenizer's own words.
+      expect(politeRegion()).not.toHaveTextContent('All items removed');
     });
 
     it('does not announce the result count present on mount under StrictMode, only a later change', async () => {

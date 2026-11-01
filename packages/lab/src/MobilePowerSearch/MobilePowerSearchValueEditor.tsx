@@ -4,36 +4,35 @@
 
 /**
  * @file MobilePowerSearchValueEditor.tsx
- * @input OperatorValue, staged FilterValue, onChange, label;
- *   public @astryxdesign/core inputs (DateInput, DateRangeInput,
- *   DateTimeInput, Icon, List, NumberInput, TextInput, TimeInput, Typeahead,
- *   VisuallyHidden) and the Lab MobileTokenizer
+ * @input OperatorValue, staged FilterValue, onChange, label, timezoneID;
+ *   public @astryxdesign/core inputs (Calendar, DateTimeInput, EmptyState,
+ *   Icon, List, NumberInput, TextInput, TimeInput, Typeahead, VisuallyHidden)
  * @output Sheet-native value editor for MobilePowerSearch: enum, enum_list and
- *   date_relative as full-row List choices with trailing checks; string_list
- *   and entity_list as a MobileTokenizer whose own sheet opens over the step;
- *   every other non-nested value type as the matching public input
+ *   date_relative as full-row List choices with persistent radio or checkbox
+ *   indicators; string_list and entity_list as inline searchable checkbox
+ *   rows; every other non-nested value type as the matching public input
  * @position Lab sub-component consumed by MobilePowerSearch.tsx
  *
- * Core's PowerSearchValueEditor is private, so this file rebuilds each
- * editor from public inputs. Closed vocabularies (enum, enum_list,
- * date_relative) are rendered as rows instead of a Selector or Tokenizer,
- * because a dropdown layer inside a sheet stacks a second overlay on a surface
- * the user is already inside. Open lists (string_list, entity_list) use the
- * touch MobileTokenizer instead of Core's chip input with a popover menu: its
- * trigger shows the staged tokens in the step, and tapping it opens a tall
- * searchable sheet titled with the field's name. The step's heading and
- * operator rows already name the field, so that tokenizer's label is hidden.
- * Every editor stages its value; the sheet footer confirms it.
+ * Core's PowerSearchValueEditor is private, so this file rebuilds each editor
+ * from public inputs. Closed vocabularies render as rows, open lists keep their
+ * search and selectable results inline, and date-only values use an inline
+ * Calendar. Every editor stages its value; the sheet footer confirms it.
  */
 
-import React, {useCallback, useMemo, type FormEvent} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {DateInput} from '@astryxdesign/core/DateInput';
-import {
-  DateRangeInput,
-  type DateRange,
-} from '@astryxdesign/core/DateRangeInput';
+import {Calendar, type DateRange} from '@astryxdesign/core/Calendar';
+import {DateTimeInput} from '@astryxdesign/core/DateTimeInput';
+import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {Icon} from '@astryxdesign/core/Icon';
+import {CheckboxIndicator, RadioIndicator} from '@astryxdesign/core/Indicator';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {NumberInput} from '@astryxdesign/core/NumberInput';
 import type {
@@ -49,15 +48,25 @@ import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import type {ISODateString, ISOTimeString} from '@astryxdesign/core/utils';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
-import {MobileTokenizer} from '../MobileTokenizer';
 import {
+  isoDateTimeToUnixSeconds,
   isoDateToUnixSeconds,
   unixSecondsToISODate,
+  unixSecondsToISODateTime,
 } from './mobilePowerSearchUtils';
 
 const styles = stylex.create({
   input: {
     paddingBlockStart: spacingVars['--spacing-1'],
+  },
+  inlineCalendar: {
+    display: 'flex',
+    justifyContent: 'center',
+  },
+  inlineSearch: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-3'],
   },
 });
 
@@ -74,13 +83,9 @@ export interface MobilePowerSearchValueEditorProps {
   isDisabled?: boolean;
   /** Max suggestions in string and entity value typeaheads. */
   maxMenuItems?: number;
+  /** IANA timezone used by date-only, date-time, and date-range editors. */
+  timezoneID?: string;
 }
-
-// The date editors read and write the UTC day, as the Core PowerSearch
-// editor does (`component:PowerSearch` DEC-3): a `date_absolute` is the UTC
-// midnight of the chosen day, and `isDateOnly: false` gets the same date-only
-// editor, so one filter means the same instant in both presentations.
-const DATE_ZONE = 'UTC';
 
 const EMPTY_SOURCE: SearchSource<SearchableItem> = {
   search: () => [],
@@ -100,20 +105,18 @@ interface ChoiceItem {
 function ChoiceRows({
   items,
   selected,
+  selectionMode,
   isDisabled,
   onToggle,
 }: {
   items: ReadonlyArray<ChoiceItem>;
   selected: ReadonlySet<string>;
+  selectionMode: 'single' | 'multiple';
   isDisabled?: boolean;
   onToggle: (value: string, isSelected: boolean) => void;
 }) {
-  // The sheet body publishes its inline padding as container padding, so
-  // `bleed` runs the rows edge to edge (a tap anywhere across the sheet width
-  // lands on the row) while choice text keeps the body's inset and lines up
-  // with the sheet title and the operator radios.
   return (
-    <List hasDividers density="spacious" edge="bleed">
+    <List density="spacious" edge="flush">
       {items.map(item => {
         const isSelected = selected.has(item.value);
         return (
@@ -130,18 +133,204 @@ function ChoiceRows({
               )
             }
             startContent={item.icon}
-            isSelected={isSelected}
             isDisabled={isDisabled}
             endContent={
-              isSelected ? (
-                <Icon icon="check" size="sm" color="accent" />
-              ) : undefined
+              selectionMode === 'multiple' ? (
+                <CheckboxIndicator
+                  state={isSelected ? 'checked' : 'unchecked'}
+                  isDisabled={isDisabled}
+                />
+              ) : (
+                <RadioIndicator
+                  state={isSelected ? 'checked' : 'unchecked'}
+                  isDisabled={isDisabled}
+                />
+              )
             }
             onClick={() => onToggle(item.value, isSelected)}
           />
         );
       })}
     </List>
+  );
+}
+
+function InlineListSearch({
+  label,
+  searchSource,
+  selectedItems,
+  allowsCreate = false,
+  renderItem,
+  isDisabled,
+  maxMenuItems = 10,
+  onChange,
+}: {
+  label: string;
+  searchSource: SearchSource<SearchableItem>;
+  selectedItems: ReadonlyArray<SearchableItem>;
+  allowsCreate?: boolean;
+  renderItem?: (item: SearchableItem) => React.ReactNode;
+  isDisabled: boolean;
+  maxMenuItems?: number;
+  onChange: (items: SearchableItem[]) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<SearchableItem[]>([]);
+  const requestIdRef = useRef(0);
+  const selectedIds = useMemo(
+    () => new Set(selectedItems.map(item => item.id)),
+    [selectedItems],
+  );
+
+  useEffect(() => {
+    const requestId = ++requestIdRef.current;
+    const trimmed = query.trim();
+    const timeout = setTimeout(
+      () => {
+        let pending: Promise<SearchableItem[]> | SearchableItem[];
+        try {
+          pending =
+            trimmed === ''
+              ? searchSource.bootstrap()
+              : searchSource.search(trimmed);
+        } catch {
+          if (requestId === requestIdRef.current) {
+            setResults([]);
+          }
+          return;
+        }
+        void Promise.resolve(pending).then(
+          items => {
+            if (requestId === requestIdRef.current) {
+              setResults(items.slice(0, maxMenuItems));
+            }
+          },
+          () => {
+            if (requestId === requestIdRef.current) {
+              setResults([]);
+            }
+          },
+        );
+      },
+      trimmed === '' ? 0 : 150,
+    );
+    return () => {
+      clearTimeout(timeout);
+      searchSource.cancel?.();
+    };
+  }, [maxMenuItems, query, searchSource]);
+
+  const visibleItems = useMemo(() => {
+    const byId = new Map<string, SearchableItem>();
+    if (query.trim() === '') {
+      for (const item of selectedItems) {
+        byId.set(item.id, item);
+      }
+    }
+    for (const item of results) {
+      byId.set(item.id, item);
+    }
+    const trimmed = query.trim();
+    if (
+      allowsCreate &&
+      trimmed !== '' &&
+      ![...byId.values()].some(
+        item => item.label.toLocaleLowerCase() === trimmed.toLocaleLowerCase(),
+      )
+    ) {
+      byId.set(`__inline_create__${trimmed}`, {
+        id: `__inline_create__${trimmed}`,
+        label: trimmed,
+        auxiliaryData: {isCreate: true},
+      });
+    }
+    return [...byId.values()];
+  }, [allowsCreate, query, results, selectedItems]);
+
+  return (
+    <div {...stylex.props(styles.inlineSearch)}>
+      <TextInput
+        label={`Search ${label}`}
+        isLabelHidden
+        value={query}
+        onChange={setQuery}
+        placeholder="Search…"
+        startIcon={<Icon icon="search" size="sm" color="secondary" />}
+        hasClear
+        size="lg"
+        isDisabled={isDisabled}
+        width="100%"
+      />
+      {visibleItems.length === 0 ? (
+        <EmptyState
+          icon={<Icon icon="search" size="lg" color="secondary" />}
+          title={
+            allowsCreate && query.trim() === ''
+              ? `Add ${label === 'ID' ? 'an ID' : 'a value'}`
+              : 'No results found'
+          }
+          description={
+            allowsCreate && query.trim() === ''
+              ? `Enter ${label === 'ID' ? 'an ID' : 'a value'} above, then select it to include it.`
+              : 'Try a different search.'
+          }
+          headingLevel={4}
+          isCompact
+        />
+      ) : (
+        <List density="spacious" edge="flush">
+          {visibleItems.map(item => {
+            const isCreate =
+              (item.auxiliaryData as {isCreate?: boolean} | undefined)
+                ?.isCreate === true;
+            const valueId = isCreate ? item.label : item.id;
+            const isSelected = selectedIds.has(valueId);
+            const visibleLabel = isCreate ? `Add ${item.label}` : item.label;
+            return (
+              <ListItem
+                key={item.id}
+                label={
+                  renderItem != null && !isCreate ? (
+                    renderItem(item)
+                  ) : isSelected ? (
+                    <>
+                      <span aria-hidden="true">{visibleLabel}</span>
+                      <VisuallyHidden>{`${visibleLabel}, selected`}</VisuallyHidden>
+                    </>
+                  ) : (
+                    visibleLabel
+                  )
+                }
+                aria-label={
+                  renderItem != null
+                    ? `${visibleLabel}${isSelected ? ', selected' : ''}`
+                    : undefined
+                }
+                isDisabled={isDisabled}
+                endContent={
+                  <CheckboxIndicator
+                    state={isSelected ? 'checked' : 'unchecked'}
+                    isDisabled={isDisabled}
+                  />
+                }
+                onClick={() => {
+                  if (isSelected) {
+                    onChange(
+                      selectedItems.filter(selected => selected.id !== valueId),
+                    );
+                  } else {
+                    onChange([
+                      ...selectedItems,
+                      isCreate ? {id: item.label, label: item.label} : item,
+                    ]);
+                  }
+                }}
+              />
+            );
+          })}
+        </List>
+      )}
+    </div>
   );
 }
 
@@ -215,6 +404,7 @@ export function MobilePowerSearchValueEditor({
   label,
   isDisabled = false,
   maxMenuItems,
+  timezoneID,
 }: MobilePowerSearchValueEditorProps) {
   const selectedValues = useMemo<ReadonlySet<string>>(() => {
     if (filterValue?.type === 'enum' || filterValue?.type === 'date_relative') {
@@ -266,6 +456,7 @@ export function MobilePowerSearchValueEditor({
             <Typeahead
               label="Value"
               isLabelHidden
+              size="lg"
               searchSource={operatorValue.searchSource}
               value={current ? {id: current, label: current} : null}
               onChange={item =>
@@ -285,6 +476,7 @@ export function MobilePowerSearchValueEditor({
           <TextInput
             label="Value"
             isLabelHidden
+            size="lg"
             value={current}
             placeholder="Enter a value"
             onChange={value => onChange({type: 'string', value})}
@@ -296,32 +488,28 @@ export function MobilePowerSearchValueEditor({
     }
 
     case 'string_list': {
-      const current: SearchableItem[] =
+      const selectedItems: SearchableItem[] =
         filterValue?.type === 'string_list'
-          ? filterValue.value.map(v => ({id: v, label: v}))
+          ? filterValue.value.map(value => ({id: value, label: value}))
           : [];
-      const hasCreate =
-        operatorValue.isArbitraryStringAllowed || !operatorValue.searchSource;
       return (
-        <div {...stylex.props(styles.input)}>
-          <MobileTokenizer
-            label={label ?? 'Values'}
-            isLabelHidden
-            searchSource={operatorValue.searchSource ?? EMPTY_SOURCE}
-            value={current}
-            onChange={items =>
-              onChange({
-                type: 'string_list',
-                value: items.map(item => item.label),
-              })
-            }
-            placeholder="Add values..."
-            debounceMs={operatorValue.searchSource ? 150 : 0}
-            hasCreate={hasCreate}
-            maxMenuItems={maxMenuItems}
-            isDisabled={isDisabled}
-          />
-        </div>
+        <InlineListSearch
+          label={label ?? 'values'}
+          searchSource={operatorValue.searchSource ?? EMPTY_SOURCE}
+          selectedItems={selectedItems}
+          allowsCreate={
+            operatorValue.isArbitraryStringAllowed ||
+            !operatorValue.searchSource
+          }
+          isDisabled={isDisabled}
+          maxMenuItems={maxMenuItems}
+          onChange={items =>
+            onChange({
+              type: 'string_list',
+              value: items.map(item => item.label),
+            })
+          }
+        />
       );
     }
 
@@ -334,6 +522,7 @@ export function MobilePowerSearchValueEditor({
           <NumberInput
             label="Value"
             isLabelHidden
+            size="lg"
             value={current}
             onChange={value =>
               onChange(
@@ -365,6 +554,7 @@ export function MobilePowerSearchValueEditor({
           <TimeInput
             label="Time"
             isLabelHidden
+            size="lg"
             value={current}
             onChange={value => {
               if (value != null) {
@@ -385,26 +575,50 @@ export function MobilePowerSearchValueEditor({
         filterValue?.type === 'date_absolute'
           ? filterValue.unixSeconds
           : undefined;
+      if (operatorValue.isDateOnly === false) {
+        return (
+          <div {...stylex.props(styles.input)}>
+            <DateTimeInput
+              label="Date and time"
+              isLabelHidden
+              size="lg"
+              value={
+                unixSeconds == null
+                  ? undefined
+                  : unixSecondsToISODateTime(unixSeconds, timezoneID)
+              }
+              onChange={value => {
+                if (value != null) {
+                  onChange({
+                    type: 'date_absolute',
+                    unixSeconds: isoDateTimeToUnixSeconds(value, timezoneID),
+                  });
+                }
+              }}
+              isDisabled={isDisabled}
+              width="100%"
+            />
+          </div>
+        );
+      }
       return (
-        <div {...stylex.props(styles.input)}>
-          <DateInput
-            label="Date"
-            isLabelHidden
+        <div {...stylex.props(styles.inlineCalendar)}>
+          <Calendar
+            mode="single"
             value={
               unixSeconds == null
-                ? undefined
-                : unixSecondsToISODate(unixSeconds, DATE_ZONE)
+                ? null
+                : unixSecondsToISODate(unixSeconds, timezoneID)
             }
             onChange={value => {
-              if (value != null) {
+              if (!isDisabled) {
                 onChange({
                   type: 'date_absolute',
-                  unixSeconds: isoDateToUnixSeconds(value, DATE_ZONE),
+                  unixSeconds: isoDateToUnixSeconds(value, timezoneID),
                 });
               }
             }}
-            isDisabled={isDisabled}
-            width="100%"
+            dateConstraints={isDisabled ? [() => false] : undefined}
           />
         </div>
       );
@@ -415,6 +629,7 @@ export function MobilePowerSearchValueEditor({
         <ChoiceRows
           items={relativeDateChoices(operatorValue)}
           selected={selectedValues}
+          selectionMode="single"
           isDisabled={isDisabled}
           onToggle={value => onChange({type: 'date_relative', value})}
         />
@@ -427,48 +642,43 @@ export function MobilePowerSearchValueEditor({
         current = {
           start: unixSecondsToISODate(
             resolveRangePart(filterValue.value.start, nowSeconds),
-            DATE_ZONE,
+            timezoneID,
           ),
           end: unixSecondsToISODate(
             resolveRangePart(filterValue.value.end, nowSeconds),
-            DATE_ZONE,
+            timezoneID,
           ),
         };
       }
       return (
-        <div {...stylex.props(styles.input)}>
-          <DateRangeInput
-            label="Date range"
-            isLabelHidden
+        <div {...stylex.props(styles.inlineCalendar)}>
+          <Calendar
+            mode="range"
             value={current}
             onChange={range => {
-              if (range == null) {
-                return;
+              if (!isDisabled) {
+                onChange({
+                  type: 'date_range',
+                  value: {
+                    start: {
+                      type: 'ABSOLUTE',
+                      unixSeconds: isoDateToUnixSeconds(
+                        range.start as ISODateString,
+                        timezoneID,
+                      ),
+                    },
+                    end: {
+                      type: 'ABSOLUTE',
+                      unixSeconds: isoDateToUnixSeconds(
+                        range.end as ISODateString,
+                        timezoneID,
+                      ),
+                    },
+                  },
+                });
               }
-              onChange({
-                type: 'date_range',
-                value: {
-                  start: {
-                    type: 'ABSOLUTE',
-                    unixSeconds: isoDateToUnixSeconds(
-                      range.start as ISODateString,
-                      DATE_ZONE,
-                    ),
-                  },
-                  end: {
-                    type: 'ABSOLUTE',
-                    unixSeconds: isoDateToUnixSeconds(
-                      range.end as ISODateString,
-                      DATE_ZONE,
-                    ),
-                  },
-                },
-              });
             }}
-            hasClear={false}
-            numberOfMonths={1}
-            isDisabled={isDisabled}
-            width="100%"
+            dateConstraints={isDisabled ? [() => false] : undefined}
           />
         </div>
       );
@@ -479,6 +689,7 @@ export function MobilePowerSearchValueEditor({
         <ChoiceRows
           items={operatorValue.values}
           selected={selectedValues}
+          selectionMode="single"
           isDisabled={isDisabled}
           onToggle={value => onChange({type: 'enum', value})}
         />
@@ -489,6 +700,7 @@ export function MobilePowerSearchValueEditor({
         <ChoiceRows
           items={operatorValue.values}
           selected={selectedValues}
+          selectionMode="multiple"
           isDisabled={isDisabled}
           onToggle={(value, isSelected) => {
             const existing =
@@ -504,7 +716,7 @@ export function MobilePowerSearchValueEditor({
       );
 
     case 'entity_list': {
-      const current: SearchableItem[] =
+      const selectedItems: SearchableItem[] =
         filterValue?.type === 'entity_list'
           ? filterValue.value.map((entity: PowerSearchEntity) => ({
               id: entity.id,
@@ -513,33 +725,28 @@ export function MobilePowerSearchValueEditor({
             }))
           : [];
       return (
-        <div {...stylex.props(styles.input)}>
-          <MobileTokenizer
-            label={label ?? 'Entities'}
-            isLabelHidden
-            searchSource={operatorValue.searchSource ?? EMPTY_SOURCE}
-            value={current}
-            onChange={items =>
-              onChange({
-                type: 'entity_list',
-                value: items.map(item => {
-                  const aux = item.auxiliaryData as
-                    {photo?: string} | undefined;
-                  return {
-                    id: item.id,
-                    label: item.label,
-                    ...(aux?.photo ? {photo: aux.photo} : {}),
-                  };
-                }),
-              })
-            }
-            renderItem={operatorValue.renderItem}
-            placeholder="Search..."
-            debounceMs={operatorValue.searchSource ? 150 : 0}
-            maxMenuItems={maxMenuItems}
-            isDisabled={isDisabled}
-          />
-        </div>
+        <InlineListSearch
+          label={label ?? 'entities'}
+          searchSource={operatorValue.searchSource ?? EMPTY_SOURCE}
+          selectedItems={selectedItems}
+          renderItem={operatorValue.renderItem}
+          isDisabled={isDisabled}
+          maxMenuItems={maxMenuItems}
+          onChange={items =>
+            onChange({
+              type: 'entity_list',
+              value: items.map(item => {
+                const auxiliaryData = item.auxiliaryData as
+                  {photo?: string} | undefined;
+                return {
+                  id: item.id,
+                  label: item.label,
+                  ...(auxiliaryData?.photo ? {photo: auxiliaryData.photo} : {}),
+                };
+              }),
+            })
+          }
+        />
       );
     }
 

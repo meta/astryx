@@ -4,7 +4,7 @@
  * @file inputDisabledFocus.ts
  * @input Uses StyleX and theme tokens
  * @output inputDisabledFocusStyles (internal; not re-exported from Field/index.ts)
- * @position Field wrapper style shared by TextInput and TextArea
+ * @position Field wrapper style shared by the text-entry fields
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -23,6 +23,20 @@ export const inputDisabledFocusStyles = stylex.create({
     boxShadow: {
       default: 'none',
       ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+    },
+  },
+  // The same ring for a field whose input sits deeper than the wrapper's
+  // direct children (Typeahead, Tokenizer). Keyed on the input itself, so a
+  // focused token or status button keeps only its own outline.
+  nestedRing: {
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':has(input[aria-disabled="true"]:focus-visible)':
+        colorVars['--color-accent'],
+    },
+    boxShadow: {
+      default: 'none',
+      ':has(input[aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
 });

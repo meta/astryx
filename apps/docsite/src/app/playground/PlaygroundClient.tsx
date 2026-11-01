@@ -38,6 +38,7 @@ import {useSearchParams} from 'next/navigation';
 import dynamic from 'next/dynamic';
 import * as stylex from '@stylexjs/stylex';
 import {AppShell} from '@astryxdesign/core/AppShell';
+import {DocsBanner} from '../../components/InternalDocsPrompt';
 import {compressCode, decompressCode} from '../../lib/compress';
 import {createPreviewConnector, previewSrc} from './previewChannel';
 import type {PreviewConnector} from './previewChannel';
@@ -954,6 +955,7 @@ export function PlaygroundClient() {
       variant="section"
       height="fill"
       contentPadding={0}
+      banner={<DocsBanner />}
       mobileNav={isMobile ? false : {}}
       topNav={mobileTopNav}
       sideNav={playgroundSideNav}>

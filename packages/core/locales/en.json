@@ -788,8 +788,16 @@
     "description": "Screen-reader-only label on the vertical drag handle at the right edge of the SideNav that lets the user resize the sidebar's width."
   },
   "@astryx.sideNav.heading.openMenu": {
-    "defaultMessage": "Open menu",
-    "description": "Screen-reader-only label on the `⋯` overflow-menu button embedded in a SideNav section heading. Same string as `topNav.heading.openMenu` — translations may share."
+    "defaultMessage": "{heading}, Open menu",
+    "description": "Accessible name of the chevron menu button in SideNavHeading. `{heading}` is the visible product or workspace name and must be included unchanged."
+  },
+  "@astryx.slider.minimumThumb": {
+    "defaultMessage": "Minimum value",
+    "description": "Accessible name of the lower thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Minimum value, 20\". Never shown on screen."
+  },
+  "@astryx.slider.maximumThumb": {
+    "defaultMessage": "Maximum value",
+    "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
@@ -802,6 +810,10 @@
   "@astryx.table.noData": {
     "defaultMessage": "No data",
     "description": "Fallback empty-state text in the table body when there are zero rows. Neutral tone (not error-y); consumers commonly override with something specific like \"No results\"."
+  },
+  "@astryx.table.columnResize.resizeColumn": {
+    "defaultMessage": "Resize column {label}",
+    "description": "Accessible name for a Table column-resize handle (a vertical separator between header cells). `label` is the column header's visible text, or the column key when the header has no text."
   },
   "@astryx.table.filter.allPlaceholder": {
     "defaultMessage": "All",
@@ -855,25 +867,9 @@
     "defaultMessage": "Clear sort",
     "description": "Screen-reader-only label on a column header button that will remove the current sort. \"Clear\" here means remove, not transparent. Part of the sort set."
   },
-  "@astryx.table.sort.direction.ascending": {
-    "defaultMessage": "ascending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.direction.descending": {
-    "defaultMessage": "descending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.sortBy": {
-    "defaultMessage": "Sort by {label}",
-    "description": "Aria label for a sortable Table header button when the column is unsorted. `label` is the column header text."
-  },
-  "@astryx.table.sort.sortedBy": {
-    "defaultMessage": "Sort by {label}, sorted {direction}",
-    "description": "Aria label for a sorted Table header button. `direction` is the localized direction word from @astryx.table.sort.direction.*."
-  },
-  "@astryx.table.sort.sortedByWithPriority": {
-    "defaultMessage": "Sort by {label}, sorted {direction}, priority {rank, number} of {total, number}",
-    "description": "Aria label for a sorted Table header button in multi-sort. `rank` is the 1-based position of this column in the sort order; `total` is the number of sorted columns."
+  "@astryx.table.sort.priority": {
+    "defaultMessage": "Priority {rank, number} of {total, number}",
+    "description": "Screen-reader description of a sortable Table column header button while several columns are sorted: this column's place in the sort order. The button's name is the column header text and its direction is announced from aria-sort."
   },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Dismiss notification",
@@ -888,8 +884,8 @@
     "description": "Label on the \"×\" button that removes every token/chip from a Tokenizer input. Imperative verb + determiner \"all\"; short."
   },
   "@astryx.topNav.heading.openMenu": {
-    "defaultMessage": "Open menu",
-    "description": "Screen-reader-only label on the `⋯` overflow button in a TopNav section heading. Kept separate from `sideNav.heading.openMenu` so translations may diverge."
+    "defaultMessage": "{hasHeading, select, true {{heading}, } other {}}Open menu",
+    "description": "Accessible name of the chevron menu button in TopNavHeading. When `hasHeading` is `true`, include the visible product or workspace name `{heading}` unchanged; otherwise use the generic menu action without a separator."
   },
   "@astryx.topNav.landmarkLabel": {
     "defaultMessage": "Top navigation",
@@ -1009,11 +1005,11 @@
   },
   "@astryx.dateTimeInput.timeHint12h": {
     "defaultMessage": "e.g., 2:30 PM",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 12-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 12-hour format. Gives an example of expected input format; write the example time as your locale writes 12-hour time."
   },
   "@astryx.dateTimeInput.timeHint24h": {
     "defaultMessage": "e.g., 14:30",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 24-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 24-hour format. Gives an example of expected input format; write the example time as your locale writes 24-hour time."
   },
   "@astryx.dateTimeInput.timeSuffix": {
     "defaultMessage": "{label} time",
@@ -1110,6 +1106,10 @@
   "@astryx.powersearch.placeholder": {
     "defaultMessage": "Search…",
     "description": "Grey placeholder text inside the empty PowerSearch input. Imperative verb; trailing `…` is one character."
+  },
+  "@astryx.powersearch.allFiltersRemoved": {
+    "defaultMessage": "All filters removed",
+    "description": "Screen-reader announcement after a PowerSearch field's Clear all removes every filter. Distinct from @astryx.tokenizer.allRemoved: PowerSearch words its items as filters."
   },
   "@astryx.resizable.collapsed": {
     "defaultMessage": "Collapsed",
@@ -1567,6 +1567,10 @@
     "defaultMessage": "Expand all rows",
     "description": "Aria label for the Table tree-data header toggle when rows are collapsed and clicking it expands them."
   },
+  "@astryx.textArea.counter": {
+    "defaultMessage": "{count, number}/{limit, number}",
+    "description": "Visible character counter at the bottom of a TextArea that has a character limit, for example `62/2,000`. `{count}` is the characters typed so far and `{limit}` the limit; keep both numbers and reorder or change the separator if your language needs to."
+  },
   "@astryx.textArea.charactersRemaining": {
     "defaultMessage": "{count, number} {count, plural, one {character} other {characters}} remaining",
     "description": "Screen-reader-only announcement of how many characters the user can still type before hitting a TextArea's maxLength. Announced politely as the count nears the limit. `{count}` is the number remaining — example: `12 characters remaining`."
@@ -1643,6 +1647,10 @@
     "defaultMessage": "{count, number} of {total, number} selected",
     "description": "Polite screen-reader announcement of how many MultiSelector options are selected out of the total, spoken after each toggle. Live-region text, never shown on screen; example: `3 of 12 selected`."
   },
+  "@astryx.multiSelector.selectedCount": {
+    "defaultMessage": "{count, plural, one {# selected} other {# selected}}",
+    "description": "Visible text on a closed MultiSelector's trigger when it shows a count of the chosen options (`triggerDisplay=\"count\"`), for example `2 selected`. `{count}` is the number of chosen options; use a plural form if your language needs one."
+  },
   "@astryx.multiSelector.createOption": {
     "defaultMessage": "Create \"{query}\"",
     "description": "Label of the first row in a MultiSelector's search panel when `hasCreate` is set and the typed text matches no option. Picking it reports a creation to the caller. `{query}` is the trimmed text the person typed, shown in quotes."
@@ -1693,7 +1701,7 @@
   },
   "@astryx.tokenizer.create": {
     "defaultMessage": "Create \"{value}\"",
-    "description": "Label of the create row inside a Tokenizer's bottom sheet when `hasCreate` is set and the typed text matches no existing item. `{value}` is the typed text, e.g. `Create \"Marketing\"`."
+    "description": "Label of a Tokenizer's create row, in the inline menu and the bottom sheet, when `hasCreate` is set and the typed text matches no existing item. `{value}` is the typed text, e.g. `Create \"Marketing\"`."
   },
   "@astryx.tokenizer.add": {
     "defaultMessage": "Add",
@@ -1705,7 +1713,31 @@
   },
   "@astryx.tokenizer.done": {
     "defaultMessage": "Done",
-    "description": "Label of the primary footer button inside a Tokenizer's bottom sheet; pressing it closes the sheet. Selections are already applied, so this is not a confirm."
+    "description": "Label for immediate-apply Tokenizer bottom-sheet flows. Draft selection flows use tokenizer.save."
+  },
+  "@astryx.tokenizer.save": {
+    "defaultMessage": "Save",
+    "description": "Label of the primary footer button inside a Tokenizer's bottom sheet; pressing it commits the current selection draft and closes the sheet. Imperative verb; short."
+  },
+  "@astryx.tokenizer.selectionLimit": {
+    "defaultMessage": "Select up to {count, plural, one {# item} other {# items}}",
+    "description": "Tooltip on the disabled Save action when a Tokenizer selection draft exceeds a maxEntries limit that changed while the sheet was open. `{count}` is the current maximum."
+  },
+  "@astryx.tokenizer.discardChangesTitle": {
+    "defaultMessage": "Discard changes?",
+    "description": "Title of the confirmation dialog shown when someone tries to dismiss a Tokenizer bottom sheet after changing its selection draft. A question."
+  },
+  "@astryx.tokenizer.discardChangesDescription": {
+    "defaultMessage": "Your changes to {label} haven't been saved.",
+    "description": "Body of the dirty-dismiss confirmation inside a Tokenizer bottom sheet. `{label}` is the field label, e.g. `Your changes to Tags haven't been saved.`"
+  },
+  "@astryx.tokenizer.keepEditing": {
+    "defaultMessage": "Keep editing",
+    "description": "Label of the safe cancel action in the Tokenizer dirty-dismiss confirmation. It closes the confirmation and returns to the unchanged draft."
+  },
+  "@astryx.tokenizer.discardChanges": {
+    "defaultMessage": "Discard changes",
+    "description": "Label of the destructive action in the Tokenizer dirty-dismiss confirmation. It closes the sheet without committing its selection draft."
   },
   "@astryx.tokenizer.clearAllTitle": {
     "defaultMessage": "Clear all selected items?",
@@ -1721,7 +1753,7 @@
   },
   "@astryx.tokenizer.allRemoved": {
     "defaultMessage": "All items removed",
-    "description": "Polite screen-reader announcement after a confirmed Clear all in a Tokenizer's bottom sheet has removed every selected item. Live-region text, never shown on screen."
+    "description": "Polite screen-reader announcement after a Tokenizer's Clear all has removed every selected item: the inline Clear all button, or a confirmed Clear all in the bottom sheet. Live-region text, never shown on screen."
   },
   "@astryx.tokenizer.selectedCount": {
     "defaultMessage": "{count, number} selected",
@@ -2150,6 +2182,10 @@
   "@astryx.comments.resolvedBy": {
     "defaultMessage": "Resolved by {name}",
     "description": "Tooltip of the Resolved text on a comment thread in a lab Comments panel. `name` is the person who resolved it."
+  },
+  "@astryx.comments.errorAnnouncement": {
+    "defaultMessage": "{title} {description}",
+    "description": "Screen-reader announcement for an error Banner in a lab Comments panel that has a title and a description, read once when the Banner appears. `title` is the Banner's title (for example `Couldn't send this comment.`) and `description` its description (for example `Retrying didn't work.`). Reorder or punctuate as the language needs."
   },
   "@astryx.comments.retryFailed": {
     "defaultMessage": "Retrying didn't work.",

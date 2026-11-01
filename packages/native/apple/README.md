@@ -26,13 +26,14 @@ apple/
 │   │   │   └── Generated/ # typed tokens and every published theme, generated; do not edit
 │   │   ├── Resources/     # core's messages per locale, generated; do not edit
 │   │   ├── Localization/
-│   │   ├── Icon/          # Icon, Icon.spec.md
-│   │   ├── Avatar/        # Avatar, Avatar.spec.md
+│   │   ├── Icon/          # Icon
+│   │   ├── Avatar/        # Avatar
+│   │   ├── Item/          # Item
 │   │   ├── Text/          # Text
 │   │   ├── Heading/       # Heading
 │   │   ├── Button/        # Button
 │   │   ├── TextInput/     # TextInput
-│   │   ├── Thumbnail/     # Thumbnail, Thumbnail.spec.md
+│   │   ├── Thumbnail/     # Thumbnail
 │   │   ├── Card/          # Card
 │   │   └── Banner/        # Banner
 │   └── AstryxNative/      # contracts, wire, logic host (module AstryxNative)
@@ -46,6 +47,9 @@ apple/
     └── Tests/
 ```
 
+Each component's Swift spec sits beside its core spec, at
+`docs/specs/components/<ComponentRoot>/<Name>.swift.spec.md`.
+
 - **`Sources/Astryx/<Name>/`** holds one folder per component, named as in
   `packages/core/src/<Name>/`. Each view has core's component name in the
   `Astryx` module (`Button`, `Text`), which re-exports SwiftUI and the
@@ -53,15 +57,10 @@ apple/
   that also imports SwiftUI, write `Astryx.Button` and `SwiftUI.Button`. A
   component's parameters use core's prop names
   and values (`variant: .primary`, `size: .lg`, `isLoading`), so code reads
-  the same across web and native. `Text`, `Heading`, and `Card` take the
-  generated `TextProps`, `HeadingProps`, and `CardProps`, as AST-093 FR5 asks;
-  the others keep four exceptions, the interim shape FR5 exempts until they move onto the generated
-  contracts:
-  - `Button` takes `action` where core has `onClick`.
-  - `Button` takes `fillsWidth` where core has `width="100%"`.
-  - `Button` takes `icon` as a shared icon name (`"search"`), which the
-    generated `ButtonProps` does not carry yet.
-  - `TextInput` takes a `Binding` where core has `value` and `onChange`.
+  the same across web and native. Every view with a core contract takes its
+  generated `<Name>Props` (AST-093 FR5) and has a labeled initializer that
+  builds the same props; `Banner` has no native contract yet (the generated
+  contracts do not include it), so its parameters are hand-written.
 - **`Templates/`** holds one folder per page template, named after the
   `astryx template` id. Templates are clone-only, as on the web: you copy a
   template's folder into your app and own it from then on. They are a
@@ -103,9 +102,9 @@ tokens in the current mode as typed members (`tokens.color.textPrimary`,
 `tokens.space.s4`, `tokens.font.body.size`), so a misspelled token fails to
 compile. Font tokens come grouped: each type style (`tokens.font.body`,
 `tokens.font.heading1`) holds its `size`, `weight`, and `leading`, and
-`tokens.font.family`, `.size`, and `.weight` hold the scales. Text sizes grow with Dynamic Type. The components still read some
-tokens by core's name (`astryx.color("color-accent")`); moving them onto the
-typed members comes next.
+`tokens.font.family`, `.size`, and `.weight` hold the scales. Text sizes grow
+with Dynamic Type. An app reads the same members for its own SwiftUI layout,
+such as stack spacing (`astryx.tokens.space.s4`).
 
 `Icon(.search)` draws a shared icon name as the platform's SF Symbol, at
 core's icon size and color, hidden from VoiceOver unless it has a `label`.
@@ -147,6 +146,17 @@ export:
 ```sh
 node packages/native/scripts/swift-ios-theme.mjs --theme ./src/acmeTheme.ts#acmeTheme --out ./Sources/Theme
 ```
+
+The generator reads the CSS forms its spec lists
+(`specs/swift/library/theme-generator.md`, G7): hex and named colors, `rgb()`,
+`hsl()`, `hwb()`, Lab, LCH, OKLab, OKLCH, `color()` in the listed spaces,
+`color-mix()`, and relative colors (wide-gamut colors kept as Display P3),
+lengths with `calc()`, and `[light, dark]` tuples. A value it can only
+approximate, such as a color outside Display P3 (clipped, as browsers draw it),
+prints a warning after the run; a value with no static form, such as
+`currentColor` or `50%`, takes core's default for that token with a warning, or
+stops the run when core has none. A form the generator does not read yet stops
+the run, saying so. Add `--strict` to fail on any warning.
 
 A theme's local tokens are not generated yet; the generator names each one it
 leaves out.
@@ -198,8 +208,6 @@ system type, read its tokens from `astryx`, and add tests under
 
 ## Not here yet
 
-- The views do not use the generated contract types in `AstryxNative` yet.
-  Moving them onto those types is how a core prop change reaches Swift.
 - Pixel and behavior parity with the web components has not been measured.
-- Increase Contrast, theme-local tokens, and platform theme entries
+- Theme-local tokens and platform theme entries
   (`defineNativeTheme`, reserved as `Theme.native`) are not wired in.

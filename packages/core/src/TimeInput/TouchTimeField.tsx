@@ -46,7 +46,8 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useTranslator} from '../i18n';
+import {useLocale, useTranslator} from '../i18n';
+import {formatLocaleTime} from '../utils/timeFormat';
 import {colorVars, sizeVars, spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -57,8 +58,6 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {themeProps} from '../utils/themeProps';
 import {
   clampTime,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   getInputARIA,
   isTimeInRange,
@@ -238,6 +237,7 @@ export function TouchTimeField({
     ...controlProps
   } = rest;
   const t = useTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');
@@ -302,10 +302,8 @@ export function TouchTimeField({
     [changeAction, isEffectivelyDisabled, onChange, setOptimisticValue],
   );
 
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
   const displayValue = optimisticValue
-    ? formatDisplayTime(optimisticValue, hasSeconds)
+    ? formatLocaleTime(optimisticValue, locale, hourFormat, hasSeconds)
     : '';
 
   const fallbackTime = useMemo(() => {

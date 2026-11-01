@@ -23,11 +23,14 @@
  * the commands are checked with each script expanded to its body.
  */
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {matrixFor} from './ci-matrix.mjs';
 import componentPackages from '../../scripts/component-packages.cjs';
 
 const {COMPONENT_PACKAGE_NAMES} = componentPackages;
@@ -52,8 +55,7 @@ function declaredProjects() {
  * deliberate edit here.
  */
 const KNOWN_RUNNERS = new Set([
-  '2-core-ubuntu-arm',
-  '4-core-ubuntu',
+  'ubuntu-24.04-arm',
   'ubuntu-slim',
   'ubuntu-latest',
 ]);
@@ -113,7 +115,7 @@ describe.each(Object.entries(WORKFLOWS))(
     it('gives the Node suite more than one Vitest worker', () => {
       // Vitest uses one worker per CPU beyond the first: on two cores the
       // suite would run one file at a time.
-      expect(workflow.jobs['test-node']['runs-on']).toBe('4-core-ubuntu');
+      expect(workflow.jobs['test-node']['runs-on']).toBe('ubuntu-latest');
     });
 
     it('runs every declared Vitest project in some lane', () => {
@@ -166,7 +168,7 @@ describe.each(Object.entries(WORKFLOWS))(
       expect(suites).toHaveLength(2);
       const [share, isolated] = suites;
       // Its share is the full UI project, or for a scoped pull request the
-      // tests related to its diff (check-scope's full_suite).
+      // tests related to its diff (the scope step's full_suite).
       if (graphScoped) {
         expect(share.run.trim()).toBe(
           [
@@ -187,7 +189,7 @@ describe.each(Object.entries(WORKFLOWS))(
           ].join('\n'),
         );
         expect(share.env.SCOPED).toBe(
-          "${{ github.event_name == 'pull_request' && needs.check-scope.outputs.full_suite == 'false' }}",
+          "${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}",
         );
         // The Node lane runs the same scoped share, guards included.
         const node = workflow.jobs['test-node'].steps.find(
@@ -295,11 +297,16 @@ describe.each(Object.entries(WORKFLOWS))(
           );
         }
       } else {
-        const commands = runLines(join);
+        // deploy.yml passes each result through the step's environment;
+        // main-unit-run.test.mjs runs its pass and fail cases.
+        const step = join.steps.find(
+          candidate => candidate.name === 'Assert every push gate succeeded',
+        );
         for (const lane of lanes) {
-          expect(commands, `join does not assert ${lane}`).toContain(
-            `needs.${lane}.result }}" = "success"`,
-          );
+          expect(
+            Object.values(step.env),
+            `join does not assert ${lane}`,
+          ).toContain(`\${{ needs.${lane}.result }}`);
         }
       }
     });
@@ -317,7 +324,11 @@ describe.each(Object.entries(WORKFLOWS))(
     if (scopeConditional) {
       it('keeps the lightweight-docs skip on every lane', () => {
         for (const lane of lanes) {
-          expect(workflow.jobs[lane].if).toContain('always()');
+          // Each lane decides its own scope; there is no scope job to wait on.
+          expect(
+            workflow.jobs[lane].steps.some(step => step.id === 'scope'),
+            `${lane} has no scope step`,
+          ).toBe(true);
           const steps = workflow.jobs[lane].steps;
           const suite = steps.find(step =>
             expandScripts(step.run ?? '').includes('--project'),
@@ -328,9 +339,11 @@ describe.each(Object.entries(WORKFLOWS))(
           expect(suite.if, `${lane} suite is unconditional`).toContain(
             "spec_only != 'true'",
           );
+          // A scope step that fails (a classifier rejecting the change)
+          // fails the lane; nothing lets the suite skip past it.
           expect(
-            steps.some(step =>
-              step.run?.includes('refusing to skip required work'),
+            steps.some(
+              step => step.id === 'scope' && step['continue-on-error'] !== true,
             ),
             `${lane} does not guard against an unclassified scope`,
           ).toBe(true);
@@ -360,7 +373,9 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it("runs the merge commit's runner against the PR head", () => {
-    expect(run.if).toBe('${{ !cancelled() }}');
+    expect(run.if).toBe(
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+    );
     // The merge commit the steps come from, not the PR's recorded base, which
     // can lag main and predate the runner.
     expect(run.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
@@ -376,7 +391,9 @@ describe('ci.yml pr-a11y browser specs', () => {
   });
 
   it('uploads every spec receipt in one head-bound artifact', () => {
-    expect(upload.if).toBe('${{ !cancelled() }}');
+    expect(upload.if).toBe(
+      "(!cancelled()) && steps.scope.outputs.has_components == 'true'",
+    );
     expect(upload.with.name).toBe(
       'pr-a11y-evidence-${{ needs.build-storybook.outputs.short_hash }}',
     );
@@ -397,21 +414,44 @@ describe('ci.yml RTL package sharding', () => {
   const shard = workflow.jobs['pr-rtl-shard'];
   const join = workflow.jobs['pr-rtl'];
 
-  it('skips component discovery for spec-only changes and classifies other lightweight lanes', () => {
-    const classification = workflow.jobs['check-components'];
-    expect(classification.if).toContain("github.event_name == 'pull_request'");
-    expect(classification.if).toContain(
-      "needs.check-scope.outputs.spec_only != 'true'",
-    );
-    const commands = runLines(classification);
-    for (const lane of ['docsite_only', 'tooling_only']) {
-      expect(commands).toContain(`needs.check-scope.outputs.${lane}`);
+  it('decides component scope inside each audit job, with no classification job', () => {
+    expect(workflow.jobs['check-components']).toBeUndefined();
+    for (const job of Object.values(workflow.jobs)) {
+      expect(JSON.stringify(job)).not.toContain('needs.check-components');
     }
-    expect(commands).toContain('has_components=false');
-    expect(commands).toContain('has_rtl_components=false');
-    expect(commands).toContain('has_rtl_harness=false');
-    expect(commands).toContain('force_full_component_audits=false');
-    expect(commands).toContain('has_stable_visual=false');
+    // Every job that reads the step's audit outputs asks for them: without
+    // `component-audit`, those outputs are missing and the job would skip its
+    // audits while reporting success.
+    const auditOutput =
+      /steps\.scope\.outputs\.(has_components|has_rtl_components|has_rtl_harness|force_full_component_audits|changed_files_path)/;
+    const readers = Object.entries(workflow.jobs).filter(([, job]) =>
+      auditOutput.test(JSON.stringify(job)),
+    );
+    expect(readers.map(([name]) => name).sort()).toEqual(
+      [
+        'pr-a11y-guards',
+        'pr-a11y-specs',
+        'pr-rtl',
+        'pr-rtl-merge',
+        'pr-rtl-shard',
+        'pr-touched-components',
+        'pr-visual',
+        'visual-scout',
+      ].sort(),
+    );
+    for (const [name, job] of readers) {
+      const scope = job.steps.find(step => step.id === 'scope');
+      expect(scope.with?.['component-audit'], name).toBe('true');
+    }
+    expect(runLines(shard)).toContain(
+      '--force-full "${{ steps.scope.outputs.force_full_component_audits }}"',
+    );
+    expect(runLines(shard)).toContain(
+      '--has-components "${{ steps.scope.outputs.has_rtl_components }}"',
+    );
+    expect(runLines(shard)).toContain(
+      '--has-harness "${{ steps.scope.outputs.has_rtl_harness }}"',
+    );
   });
 
   it('binds component evidence source, Storybook bytes, and RTL code to the PR head', () => {
@@ -424,8 +464,10 @@ describe('ci.yml RTL package sharding', () => {
       'a11y-contracts-shard',
       'pr-rtl-shard',
     ]) {
-      const checkout = workflow.jobs[name].steps.find(candidate =>
-        candidate.uses?.startsWith('actions/checkout@'),
+      const checkout = workflow.jobs[name].steps.find(
+        candidate =>
+          candidate.uses?.startsWith('actions/checkout@') &&
+          candidate.with?.path !== '.test-scope',
       );
       expect(checkout?.with?.ref, `${name} checkout is not exact-head`).toBe(
         exactRef,
@@ -435,7 +477,7 @@ describe('ci.yml RTL package sharding', () => {
       candidate => candidate.name === 'Verify Storybook source checkout',
     );
     expect(storybookVerify.if).toContain(
-      "needs.check-scope.outputs.tooling_only != 'true'",
+      "steps.scope.outputs.tooling_only != 'true'",
     );
     expect(runLines(workflow.jobs['build-storybook'])).toContain(
       'astryx-build-sha.txt',
@@ -471,23 +513,26 @@ describe('ci.yml RTL package sharding', () => {
   });
 
   it('runs one bounded shard for every canonical component package', () => {
-    const legs = shard.strategy.matrix.include;
-    expect([...new Set(legs.map(leg => leg.package))]).toEqual([
-      ...COMPONENT_PACKAGE_NAMES,
-    ]);
-    // Each package's parts are numbered 1..parts exactly once.
-    for (const name of COMPONENT_PACKAGE_NAMES) {
-      const parts = legs.filter(leg => leg.package === name);
-      expect(parts.map(leg => leg.part)).toEqual(
-        Array.from({length: parts[0].parts}, (_, index) => index + 1),
-      );
-      expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
+    // A release-check splits Core wider than a pull request (FR23).
+    for (const event of ['pull_request', 'workflow_dispatch']) {
+      const legs = matrixFor(shard.strategy.matrix.include, event);
+      expect([...new Set(legs.map(leg => leg.package))]).toEqual([
+        ...COMPONENT_PACKAGE_NAMES,
+      ]);
+      // Each package's parts are numbered 1..parts exactly once.
+      for (const name of COMPONENT_PACKAGE_NAMES) {
+        const parts = legs.filter(leg => leg.package === name);
+        expect(parts.map(leg => leg.part)).toEqual(
+          Array.from({length: parts[0].parts}, (_, index) => index + 1),
+        );
+        expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
+      }
     }
-    expect(shard['runs-on']).toBe('4-core-ubuntu');
-    // Pull requests get the 15-minute PR budget; the full release roster, 30.
-    expect(shard['timeout-minutes']).toBe(
-      "${{ github.event_name == 'workflow_dispatch' && 30 || 15 }}",
-    );
+    // Standard runner for pull requests; a dispatched release gate takes the
+    // paid release pool (ci-free-runners.test.mjs).
+    expect(shard['runs-on']).toContain("|| 'ubuntu-latest'");
+    // Every leg, the release roster's included, keeps the 15-minute budget.
+    expect(shard['timeout-minutes']).toBe(15);
     expect(shard['continue-on-error']).not.toBe(true);
     const scope = shard.steps.find(
       step => step.name === 'Resolve RTL shard scope',
@@ -501,7 +546,9 @@ describe('ci.yml RTL package sharding', () => {
     expect(scope.run).toContain('--manifest rtl-shard-scope.json');
     expect(audit.if).toContain("steps.rtl-scope.outputs.should_run == 'true'");
     expect(audit['continue-on-error']).toBe(true);
-    expect(validation.if).toBe('always()');
+    expect(validation.if).toBe(
+      "always() && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')",
+    );
     expect(validation.run).toContain('steps.rtl-scope.outcome');
     expect(validation.run).toContain(
       'produced no explicit should_run decision',
@@ -517,16 +564,16 @@ describe('ci.yml RTL package sharding', () => {
   });
 
   it('keeps pr-rtl as a fail-closed join over every matrix shard', () => {
-    expect(join.needs).toEqual(
-      expect.arrayContaining(['check-components', 'pr-rtl-shard']),
-    );
+    expect(join.needs).toEqual(expect.arrayContaining(['pr-rtl-shard']));
     const commands = runLines(join);
-    expect(commands).toContain('needs.check-components.result');
     expect(commands).toContain('needs.pr-rtl-shard.result');
     expect(commands).toContain('.github/scripts/rtl-join.mjs');
     expect(commands).toContain('--reports-dir rtl-shard-reports');
     expect(commands).toContain(
-      '--force-full "${{ needs.check-components.outputs.force_full_component_audits }}"',
+      '--force-full "${{ steps.scope.outputs.force_full_component_audits }}"',
+    );
+    expect(commands).toContain(
+      '--check-components "${{ steps.scope.outcome }}"',
     );
     const download = join.steps.find(
       step => step.name === 'Download applicable RTL shard reports',
@@ -543,13 +590,17 @@ describe('ci.yml RTL package sharding', () => {
     const upload = shard.steps.find(
       step => step.name === 'Upload RTL shard evidence',
     );
-    expect(upload.if).toBe('always() && matrix.parts == 1');
+    expect(upload.if).toBe(
+      "(always() && matrix.parts == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')",
+    );
     expect(upload.with.name).toBe('rtl-audit-report-${{ matrix.package }}');
     expect(upload.with.path).toContain('rtl-shard-scope.json');
     expect(upload.with.path).toContain('rtl-audit-report.json');
     expect(upload.with['if-no-files-found']).toBe('error');
     const part = shard.steps.find(step => step.name === 'Upload RTL part');
-    expect(part.if).toBe('always() && matrix.parts > 1');
+    expect(part.if).toBe(
+      "(always() && matrix.parts > 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')",
+    );
     expect(part.with.name).toBe(
       'rtl-audit-part-${{ matrix.package }}-${{ matrix.part }}',
     );
@@ -662,9 +713,11 @@ describe('deploy.yml push gating', () => {
     ]);
     const join = workflow.jobs.test.steps.find(
       step => step.name === 'Assert every push gate succeeded',
-    ).run;
+    );
     for (const owner of ['test-ui', 'test-node', 'typecheck']) {
-      expect(join).toContain(`needs.${owner}.result`);
+      expect(Object.values(join.env)).toContain(
+        `\${{ needs.${owner}.result }}`,
+      );
     }
   });
 
@@ -730,18 +783,14 @@ describe('ci.yml interaction proofs', () => {
   const step = name => job.steps.find(candidate => candidate.name === name);
 
   it('runs the interaction config in Chromium against the exact PR head', () => {
-    // Four cores when the proofs apply, a slim runner when it passes without work.
-    const labels = [...job['runs-on'].matchAll(/'([^']+)'/g)]
-      .map(match => match[1])
-      .filter(label => label !== 'true');
-    expect(labels).toEqual(['4-core-ubuntu', 'ubuntu-slim']);
-    for (const label of labels)
-      expect(KNOWN_RUNNERS.has(label), label).toBe(true);
-    expect(job.needs).toEqual(
-      expect.arrayContaining(['check-scope', 'build-storybook']),
-    );
-    const checkout = job.steps.find(candidate =>
-      candidate.uses?.startsWith('actions/checkout@'),
+    // One fixed runner: out of scope, every step after the scope step skips.
+    expect(KNOWN_RUNNERS.has(job['runs-on']), job['runs-on']).toBe(true);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(job.needs).toEqual(['room', 'admission', 'build-storybook']);
+    const checkout = job.steps.find(
+      candidate =>
+        candidate.uses?.startsWith('actions/checkout@') &&
+        candidate.with?.path === undefined,
     );
     expect(checkout?.with?.ref).toBe(
       '${{ github.event.pull_request.head.sha }}',
@@ -756,11 +805,8 @@ describe('ci.yml interaction proofs', () => {
   });
 
   it('runs whenever the harness, its config, a component or a story changes', () => {
-    const scope = workflow.jobs['interaction-scope'].steps.find(
-      candidate =>
-        candidate.name === 'Decide whether the interaction proofs apply',
-    ).run;
-    expect(scope).toContain('.github/scripts/pr-scope-touches.sh');
+    const scope = job.steps.find(candidate => candidate.id === 'scope').with
+      .paths;
     for (const path of [
       'internal/interaction-harness/',
       'internal/a11y-spec/',
@@ -773,8 +819,6 @@ describe('ci.yml interaction proofs', () => {
     ]) {
       expect(scope).toContain(path);
     }
-    // Unknown scope (exit 2) runs the proofs; only "out of scope" skips them.
-    expect(scope).toContain('if [ "$scope" = 1 ]; then');
   });
 });
 
@@ -788,10 +832,10 @@ describe('scoped browser audits (spec:AST-030 FR9, FR13)', () => {
     throw new Error(`no step named ${name}`);
   };
 
-  it('asks component analysis for full audits unless check-scope reports a scoped suite', () => {
+  it('asks component analysis for full audits unless the scope step reports a scoped suite', () => {
     const analyze = stepNamed('Analyze components');
     expect(analyze.env.FULL_SUITE).toBe(
-      '${{ needs.check-scope.outputs.full_suite }}',
+      '${{ steps.scope.outputs.full_suite }}',
     );
     expect(analyze.run).toContain(
       'if [ "$FULL_SUITE" != false ]; then FORCE_FULL=(--force-full); fi',
@@ -820,16 +864,137 @@ describe('scoped browser audits (spec:AST-030 FR9, FR13)', () => {
     );
   });
 
-  it('scopes the visual classification only on a pull request check-scope scoped', () => {
-    const check = stepNamed('Check for component changes');
-    expect(check.env.SCOPED).toBe(
-      "${{ github.event_name == 'pull_request' && needs.check-scope.outputs.full_suite == 'false' }}",
+  it("scopes the stable visual plan from the PR's own files", () => {
+    const visual = stepNamed('Run the visual gate for the touched components');
+    expect(visual.env.BROAD_STABLE_VISUAL).toBe(
+      '${{ steps.visual-scope.outputs.broad_stable_visual }}',
     );
-    expect(check.run).toContain(
+    expect(visual.if).toContain(
+      "steps.visual-scope.outputs.has_stable_visual == 'true'",
+    );
+    const decide = stepNamed('Decide stable visual scope');
+    expect(decide.env.SCOPED).toBe(
+      "${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}",
+    );
+    expect(decide.run).toContain(
       'if [ "$SCOPED" = true ]; then VISUAL_ARGS=(--scoped); fi',
     );
-    expect(check.run).toContain(
+    expect(decide.run).toContain(
       'visual-scope.mjs --github-output "$GITHUB_OUTPUT" "${VISUAL_ARGS[@]}"',
+    );
+  });
+});
+
+describe('heavy lanes outside their component scope (spec:AST-030 FR9)', () => {
+  const workflow = load('ci.yml');
+  const RTL =
+    "(steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')";
+  const gates = {
+    'pr-a11y-guards': "steps.scope.outputs.has_components == 'true'",
+    'pr-a11y-specs': "steps.scope.outputs.has_components == 'true'",
+    'pr-rtl-shard': RTL,
+    'pr-visual': "steps.visual-scope.outputs.has_stable_visual == 'true'",
+  };
+
+  it.each(Object.entries(gates))(
+    '%s downloads the PR analysis only inside its component scope',
+    (name, gate) => {
+      const download = workflow.jobs[name].steps.find(
+        step => step.name === 'Download analysis artifact',
+      );
+      expect(download.if).toContain(gate);
+    },
+  );
+
+  it('installs nothing for the visual jobs outside their visual scope', () => {
+    const scout = workflow.jobs['visual-scout'].steps.find(
+      step => step.name === 'Setup Node and pnpm',
+    );
+    expect(scout.if).toBe(
+      "steps.visual-scope.outputs.has_stable_visual == 'true' && steps.visual-scope.outputs.broad_stable_visual == 'true'",
+    );
+    for (const name of ['Setup Node and pnpm', 'Install Playwright']) {
+      const step = workflow.jobs['pr-visual'].steps.find(
+        candidate => candidate.name === name,
+      );
+      expect(step.if, name).toBe(
+        "github.event_name != 'pull_request' || steps.visual-scope.outputs.has_stable_visual == 'true'",
+      );
+    }
+  });
+
+  it('gives the full visual plan when the file list is unreadable or there is no pull request', () => {
+    const decide = (job, {event, files, specialized = 'false'}) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'visual-scope-'));
+      try {
+        const output = path.join(dir, 'output');
+        const filesPath = path.join(dir, 'files');
+        fs.writeFileSync(output, '');
+        fs.writeFileSync(filesPath, files);
+        const step = workflow.jobs[job].steps.find(
+          candidate => candidate.name === 'Decide stable visual scope',
+        );
+        const result = spawnSync(
+          'bash',
+          ['-e', '-c', step.run.replaceAll('${{ github.event_name }}', event)],
+          {
+            cwd: path.resolve(import.meta.dirname, '../..'),
+            env: {
+              ...process.env,
+              GITHUB_OUTPUT: output,
+              FILES_PATH: filesPath,
+              SCOPED: 'false',
+              SPECIALIZED: specialized,
+            },
+            encoding: 'utf8',
+          },
+        );
+        expect(result.status, result.stderr).toBe(0);
+        return fs.readFileSync(output, 'utf8');
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    };
+    const full = 'has_stable_visual=true\nbroad_stable_visual=true\n';
+    for (const job of ['visual-scout', 'pr-visual']) {
+      expect(decide(job, {event: 'pull_request', files: ''}), job).toBe(full);
+      expect(
+        decide(job, {event: 'workflow_dispatch', files: 'docs/x.md\n'}),
+        job,
+      ).toBe(full);
+      expect(
+        decide(job, {
+          event: 'pull_request',
+          files: 'packages/core/src/Button/Button.tsx\n',
+          specialized: 'true',
+        }),
+        job,
+      ).toBe('has_stable_visual=false\nbroad_stable_visual=false\n');
+    }
+  });
+
+  it('reports no stable visual work on a specialized lane', () => {
+    for (const name of ['visual-scout', 'pr-visual']) {
+      const decide = workflow.jobs[name].steps.find(
+        step => step.name === 'Decide stable visual scope',
+      );
+      expect(decide.env.SPECIALIZED, name).toContain(
+        "steps.scope.outputs.spec_only == 'true'",
+      );
+      const shortCircuit = decide.run.indexOf('"$SPECIALIZED" = true');
+      expect(shortCircuit, name).toBeGreaterThanOrEqual(0);
+      expect(shortCircuit, name).toBeLessThan(
+        decide.run.indexOf('!= pull_request'),
+      );
+    }
+  });
+
+  it('validates spec records whenever docsite-test cannot decide its scope', () => {
+    const validate = workflow.jobs['docsite-test'].steps.find(
+      step => step.name === 'Validate spec records',
+    );
+    expect(validate.if).toBe(
+      "(steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')",
     );
   });
 });

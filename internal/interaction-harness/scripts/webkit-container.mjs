@@ -16,10 +16,19 @@
  * docker daemon the container runs as the invoking user (rootless podman and
  * rootless docker already map it), so the `test-results/` it writes into the
  * mounted checkout stay the host user's and the next host run can clear them.
+ *
+ * WebKit composites through Mesa's software GL in the image, which compiles
+ * each shader variant the first time a page draws it: 450–700 ms for the
+ * first frame of a blurred or newly animated layer, long enough for a short
+ * animation to end before it is ever presented. Mesa caches what it compiles,
+ * and the cache is kept on the host (`~/.cache/astryx-webkit-shaders/<image>`,
+ * or `ASTRYX_WEBKIT_SHADER_CACHE`), so a run starts with every shader an
+ * earlier run compiled instead of paying for them in its first tests.
  */
 import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -42,6 +51,21 @@ if (engine == null) {
   process.exit(1);
 }
 const args = process.argv.slice(2);
+// Where the container sees the host's shader cache (see the header).
+const containerShaderCache = '/astryx-shader-cache';
+// Resolved to an absolute path: a bare relative value would be mounted as a
+// named volume rather than a host directory. An empty value means the default.
+const shaderCache = process.env.ASTRYX_WEBKIT_SHADER_CACHE
+  ? path.resolve(process.env.ASTRYX_WEBKIT_SHADER_CACHE)
+  : path.join(
+      os.homedir(),
+      '.cache',
+      'astryx-webkit-shaders',
+      image.replace(/[^\w.-]+/g, '_'),
+    );
+fs.mkdirSync(shaderCache, {recursive: true});
+// The harness self-test reads this marker inside the container.
+fs.writeFileSync(path.join(shaderCache, 'ASTRYX-SHADER-CACHE'), `${image}\n`);
 const env = [
   'ASTRYX_STORYBOOK_DIR',
   'ASTRYX_INTERACTION_EVIDENCE',
@@ -77,8 +101,17 @@ const command = [
   ...user,
   '--network=host',
   '--ipc=host',
+  // Podman caps a container at 2,048 processes, threads included. Every
+  // worker's browser and the tests' own child processes run in this one, and
+  // at eight workers WebKit could not start a page's process: `newPage` (a
+  // frame decode's scratch page) waited out the test.
+  '--pids-limit=-1',
   '-v',
   `${root}:${root}`,
+  '-v',
+  `${shaderCache}:${containerShaderCache}`,
+  '-e',
+  `MESA_SHADER_CACHE_DIR=${containerShaderCache}`,
   '-w',
   root,
   ...env,

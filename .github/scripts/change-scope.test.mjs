@@ -18,17 +18,63 @@ describe('spec-only change scope', () => {
       {filename: 'docs/families/input-fields.md'},
       {filename: 'docs/design/selection-inputs.md'},
       {filename: 'packages/themes/neutral/neutral.spec.md'},
-      {filename: 'packages/core/src/Selector/Selector.spec.md'},
+      {filename: 'docs/specs/components/Selector/Selector.spec.md'},
       {
         filename:
-          'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+          'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md',
       },
-      {filename: 'packages/lab/src/FutureInput/FutureInput.spec.md'},
-      {filename: 'packages/charts/src/Chart.spec.md'},
-      {filename: 'packages/richtext/src/RichTextView.spec.md'},
-      {filename: 'packages/vega/src/VegaChart.spec.md'},
+      {filename: 'docs/specs/components/FutureInput/FutureInput.spec.md'},
+      {filename: 'docs/specs/components/Chart/Chart.spec.md'},
+      {filename: 'docs/specs/components/RichTextView/RichTextView.spec.md'},
+      {filename: 'docs/specs/components/VegaChart/VegaChart.spec.md'},
     ]);
     expect(result.specOnly).toBe(true);
+  });
+
+  it('treats a platform record beside the core record as a component record', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(true);
+    expect(result.surfaces).toEqual([SURFACES.KNOWLEDGE]);
+  });
+
+  it('owner-gates a platform record changed with its Swift view', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/Button/Button.swift.spec.md'},
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+  });
+
+  it('does not owner-gate a Swift view change that leaves its platform record alone', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(false);
+  });
+
+  it('does not treat an unsupported language or a misplaced platform file as a record', () => {
+    for (const filename of [
+      'docs/specs/components/Button/Button.kotlin.spec.md',
+      'docs/specs/components/Button/modules/Button.swift.spec.md',
+    ]) {
+      expect(classifyChanges([{filename}]).specOnly).toBe(false);
+    }
+  });
+
+  it('owner-gates a package architecture record like docs/architecture/', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/specs/swift/slots.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+    expect(
+      classifyChanges([{filename: 'packages/native/specs/README.md'}])
+        .touchesKnowledgeRecords,
+    ).toBe(false);
   });
 
   it('owner-gates architecture records without granting the spec-only fast path', () => {
@@ -168,16 +214,47 @@ describe('spec-only change scope', () => {
   });
 
   it.each([
-    'packages/core/src/__tests__/TopLevel.spec.md',
-    'packages/core/src/Selector/__fixtures__/fixture.spec.md',
-    'packages/core/src/Selector/.hidden/Hidden.spec.md',
-    'packages/core/src/Selector/.Hidden.spec.md',
-    'packages/core/src/Selector/generated/fake.spec.md',
-    'packages/core/src/Selector/plugins/fake.generated.spec.md',
+    'docs/specs/components/__tests__/TopLevel.spec.md',
+    'docs/specs/components/Selector/__fixtures__/fixture.spec.md',
+    'docs/specs/components/Selector/.hidden/Hidden.spec.md',
+    'docs/specs/components/Selector/.Hidden.spec.md',
+    'docs/specs/components/Selector/generated/fake.spec.md',
+    'docs/specs/components/Selector/plugins/fake.generated.spec.md',
   ])('ignores non-record component spec path %s consistently', filename => {
     const result = classifyChanges([{filename}]);
     expect(result.specOnly).toBe(false);
     expect(result.touchesKnowledgeRecords).toBe(false);
+  });
+
+  it.each([
+    ['packages/core/src/Selector/Selector.spec.md', ['runtime:core']],
+    [
+      'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+      ['runtime:core'],
+    ],
+    ['packages/charts/src/ChartAxis.spec.md', ['runtime:charts']],
+    [
+      'packages/native/apple/Sources/Astryx/Button/Button.spec.md',
+      ['shared-or-unknown'],
+    ],
+  ])(
+    'owner-gates a spec left at its old path, %s, without the spec-only fast path',
+    (filename, surfaces) => {
+      const result = classifyChanges([{filename}]);
+      expect(result.specOnly).toBe(false);
+      expect(result.touchesKnowledgeRecords).toBe(true);
+      expect(result.surfaces).toEqual(surfaces);
+    },
+  );
+
+  it.each([
+    'packages/core/src/__tests__/TopLevel.spec.md',
+    'packages/core/src/Selector/__fixtures__/fixture.spec.md',
+    'packages/core/src/Selector/plugins/fake.generated.spec.md',
+    'packages/cli/src/Prompt.spec.md',
+    'packages/core/src/Button/Button.a11y.chromium.spec.ts',
+  ])('does not owner-gate %s as an old-path record', filename => {
+    expect(classifyChanges([{filename}]).touchesKnowledgeRecords).toBe(false);
   });
 
   it('fails closed for an empty change set', () => {
@@ -205,7 +282,7 @@ describe('spec-only change scope', () => {
     expect(
       classifyChanges([
         {
-          filename: 'packages/core/src/Selector/Selector.spec.md',
+          filename: 'docs/specs/components/Selector/Selector.spec.md',
           previous_filename: 'packages/core/src/Selector/Selector.tsx',
         },
       ]).specOnly,
@@ -257,7 +334,7 @@ describe('positive CI surfaces', () => {
 
   it('keeps pure specification records in the knowledge singleton', () => {
     const result = classifyChanges([
-      {filename: 'packages/core/src/Button/Button.spec.md'},
+      {filename: 'docs/specs/components/Button/Button.spec.md'},
     ]);
     expect(result.specOnly).toBe(true);
     expect(result.toolingOnly).toBe(false);
@@ -268,7 +345,7 @@ describe('positive CI surfaces', () => {
     {
       name: 'component spec plus component code',
       files: [
-        'packages/core/src/Button/Button.spec.md',
+        'docs/specs/components/Button/Button.spec.md',
         'packages/core/src/Button/Button.tsx',
       ],
       surfaces: [SURFACES.KNOWLEDGE, 'runtime:core'],
@@ -276,7 +353,7 @@ describe('positive CI surfaces', () => {
     {
       name: 'module spec plus Table plugin code',
       files: [
-        'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+        'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md',
         'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.tsx',
       ],
       surfaces: [SURFACES.KNOWLEDGE, 'runtime:core'],

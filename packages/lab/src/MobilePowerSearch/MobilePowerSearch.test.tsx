@@ -193,6 +193,12 @@ const authorFilter: PowerSearchFilter = {
   value: {type: 'string', value: 'Ada'},
 };
 
+const unassignedFilter: PowerSearchFilter = {
+  field: 'unassigned',
+  operator: 'isTrue',
+  value: {type: 'empty'},
+};
+
 const people: SearchableItem[] = [
   {id: 'p1', label: 'Ada Lovelace'},
   {id: 'p2', label: 'Grace Hopper'},
@@ -400,25 +406,6 @@ function sheet(): HTMLElement {
 }
 
 /**
- * The sheet a list value's MobileTokenizer opens over the value step: the
- * last open dialog in the document, which is the topmost.
- */
-function tokenizerSheet(): HTMLElement {
-  const dialogs = document.querySelectorAll<HTMLElement>('dialog[open]');
-  if (dialogs.length < 2) {
-    throw new Error('no tokenizer sheet over the value step');
-  }
-  return dialogs[dialogs.length - 1];
-}
-
-/** Opens the MobileTokenizer named `name` from the value step. */
-function openTokenizer(name: string): HTMLElement {
-  const trigger = within(sheet()).getByRole('button', {name});
-  fireEvent.click(trigger);
-  return trigger;
-}
-
-/**
  * Completes every pending sheet motion. jsdom resolves no transition timing,
  * so the panels wait for a native transitionend; this fires it.
  */
@@ -436,6 +423,7 @@ function tapRow(name: RegExp | string): void {
   // The replace handoff keeps the outgoing sheet presented while the incoming
   // one enters; the last match is always on the sheet that just arrived.
   fireEvent.click(matches[matches.length - 1]);
+  settleSheets();
 }
 
 function openAddFlow(): void {
@@ -478,7 +466,9 @@ function expectBleedRowsOnBodyInset(list: HTMLElement): void {
     expect(row.getAttribute('style') ?? '').not.toContain('--_item-inset');
   }
   // The published padding is the body's inline padding (spacing-4).
-  const body = list.closest('[class*="body"]') as HTMLElement | null;
+  const body = list.closest(
+    '[class*="body"], [class*="scrollContent"]',
+  ) as HTMLElement | null;
   expect(body).not.toBeNull();
   const computed = getComputedStyle(body!);
   expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
@@ -615,7 +605,7 @@ describe('MobilePowerSearch trigger', () => {
 
   it('announces a result count change through the page channel while closed, and nothing for the count present on mount, under StrictMode', async () => {
     const pageRegion = () =>
-      document.querySelector('body > [aria-live="polite"]');
+      document.querySelector('[data-astryx-live-region="polite"]');
     const {rerender} = render(
       <StrictMode>
         <MobilePowerSearch
@@ -701,7 +691,7 @@ describe('MobilePowerSearch trigger', () => {
 // =============================================================================
 
 describe('MobilePowerSearch Filters sheet', () => {
-  it('shows selected filters as chevron rows with bold values', () => {
+  it('shows selected filters as editable rows with direct remove actions and bold values', () => {
     setup({filters: [openFilter]});
     openSheet();
     const list = within(sheet()).getByRole('list');
@@ -709,11 +699,52 @@ describe('MobilePowerSearch Filters sheet', () => {
     expect(within(row).getByText('Open')).toHaveStyle({
       fontWeight: 'var(--font-weight-bold)',
     });
-    expect(within(list).queryByRole('button', {name: /^Remove/})).toBeNull();
-    expect(list.querySelectorAll('svg')).toHaveLength(1);
+    expect(
+      within(list).getByRole('button', {name: 'Remove Status filter'}),
+    ).toBeTruthy();
   });
 
-  it('places Add filter in the header and Clear all plus Done in the footer', () => {
+  it('uses a direct remove button for an applied one-tap filter instead of a checked indicator', () => {
+    const {onChange} = setup({filters: [unassignedFilter]});
+    openSheet();
+    const remove = within(sheet()).getByRole('button', {
+      name: 'Remove Unassigned filter',
+    });
+    expect(remove.querySelector('svg')).toBeTruthy();
+    expect(within(sheet()).queryByText('Unassigned, selected')).toBeNull();
+    fireEvent.click(remove);
+    expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+  });
+
+  it('shows only the centered Add filter action when no filters are applied', () => {
+    function EmptyStateHarness() {
+      const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>([
+        openFilter,
+      ]);
+      return (
+        <MobilePowerSearch
+          config={config}
+          filters={filters}
+          onChange={next => setFilters(next)}
+        />
+      );
+    }
+    render(<EmptyStateHarness />);
+    openSheet();
+    fireEvent.click(
+      within(sheet()).getByRole('button', {name: 'Remove Status filter'}),
+    );
+    const addActions = within(sheet()).getAllByRole('button', {
+      name: 'Add filter',
+    });
+    expect(addActions).toHaveLength(1);
+    expect(within(sheet()).queryByRole('button', {name: 'Done'})).toBeNull();
+    expect(
+      within(sheet()).queryByRole('button', {name: 'Clear all'}),
+    ).toBeNull();
+  });
+
+  it('places the Add filter icon in the header and full-width Clear all plus Done in the fixed footer', () => {
     setup({filters: [openFilter]});
     openSheet();
     const heading = within(sheet()).getByRole('heading', {name: 'Filters'});
@@ -730,8 +761,12 @@ describe('MobilePowerSearch Filters sheet', () => {
     expect(
       list.compareDocumentPosition(clearAll) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(add).toHaveAttribute('data-variant', 'secondary');
     expect(done).toHaveAttribute('data-variant', 'primary');
-    expect(getComputedStyle(clearAll.parentElement!).position).toBe('sticky');
+    expect(clearAll).toHaveAttribute('data-variant', 'secondary');
+    expect(getComputedStyle(clearAll).flexGrow).toBe('1');
+    expect(getComputedStyle(done).flexGrow).toBe('1');
+    expect(getComputedStyle(clearAll.parentElement!).position).toBe('relative');
   });
 
   it('runs filter rows edge to edge on the body inset (List edge="bleed")', () => {
@@ -749,7 +784,7 @@ describe('MobilePowerSearch Filters sheet', () => {
     expect(trigger()).toHaveFocus();
   });
 
-  it('clears removable filters, closes, and restores focus', () => {
+  it('clears removable filters, keeps Filters open, and announces the outcome there', async () => {
     function Harness() {
       const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>([
         openFilter,
@@ -765,59 +800,50 @@ describe('MobilePowerSearch Filters sheet', () => {
     render(<Harness />);
     openSheet();
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
-    expect(isSheetOpen()).toBe(false);
-    settleSheets();
-    expect(trigger()).toHaveFocus();
+    const confirmation = screen.getByRole('alertdialog', {
+      name: 'Clear all filters?',
+    });
+    fireEvent.click(
+      within(confirmation).getByRole('button', {name: 'Clear filters'}),
+    );
+    expect(isSheetOpen()).toBe(true);
+    expect(within(sheet()).getByText('No filters applied')).toBeTruthy();
     expect(within(field()).queryByText('Open')).toBeNull();
+    await waitFor(() =>
+      expect(sheetRegion().textContent).toContain('Editable filters removed'),
+    );
+    expect(pageRegionText()).toBe('');
   });
 
-  it('Clear all removes every filter, read-only ones included, as the Core field does (DEC-3), and announces it once the flow has closed', async () => {
+  it('returns to Filters unchanged when the clear confirmation scrim is pressed', () => {
+    const {onChange} = setup({filters: [openFilter]});
+    openSheet();
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
+    const confirmation = screen.getByRole('alertdialog', {
+      name: 'Clear all filters?',
+    });
+    fireEvent.click(confirmation);
+    expect(
+      screen.queryByRole('alertdialog', {name: 'Clear all filters?'}),
+    ).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(isSheetOpen()).toBe(true);
+    expect(within(sheet()).getByText('Status is')).toBeTruthy();
+  });
+
+  it('clears every removable filter but keeps read-only ones', () => {
     const pinned: PowerSearchFilter = {...openFilter, isReadOnly: true};
     const {onChange} = setup({filters: [authorFilter, pinned]});
     openSheet();
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
-    expect(onChange).toHaveBeenCalledWith([], 'remove', 1);
-    expect(isSheetOpen()).toBe(false);
-    // Nothing is spoken while the dialog is still exiting; the trigger's
-    // focus after the exit is the signal.
-    expect(pageRegionText()).toBe('');
-    settleSheets();
-    trigger().focus();
-    await waitFor(() => expect(pageRegionText()).toBe('All filters removed'));
-  });
-
-  it('Clear all with a result count that changes in the same commit speaks both once the flow has closed', async () => {
-    function CountFollowsFilters() {
-      const [filters, setFilters] = useState<PowerSearchFilter[]>([
-        openFilter,
-        authorFilter,
-      ]);
-      return (
-        <MobilePowerSearch
-          config={config}
-          filters={filters}
-          onChange={next => setFilters([...next])}
-          resultCount={filters.length * 10}
-        />
-      );
-    }
-    render(<CountFollowsFilters />);
-    openSheet();
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
-    expect(isSheetOpen()).toBe(false);
-    settleSheets();
-    trigger().focus();
-    await waitFor(() =>
-      expect(pageRegionText()).toBe('All filters removed. 0 results'),
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(
+        screen.getByRole('alertdialog', {name: 'Clear all filters?'}),
+      ).getByRole('button', {name: 'Clear filters'}),
     );
-  });
-
-  it('shows Clear all when every filter is read-only, since Clear all removes those too', () => {
-    const pinned: PowerSearchFilter = {...openFilter, isReadOnly: true};
-    const {onChange} = setup({filters: [pinned]});
-    openSheet();
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
-    expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+    expect(onChange).toHaveBeenCalledWith([pinned], 'remove', 0);
+    expect(isSheetOpen()).toBe(true);
   });
 
   it('respects hasClear', () => {
@@ -856,6 +882,14 @@ describe('MobilePowerSearch Filters sheet', () => {
     expect(
       within(sheet()).getByRole('button', {name: 'Author is Ada'}),
     ).toBeTruthy();
+  });
+
+  it('hides Clear all when every filter is read-only', () => {
+    setup({filters: [{...openFilter, isReadOnly: true}]});
+    openSheet();
+    expect(
+      within(sheet()).queryByRole('button', {name: 'Clear all'}),
+    ).toBeNull();
   });
 });
 
@@ -907,19 +941,23 @@ describe('MobilePowerSearch Add filter', () => {
     ).toBeNull();
   });
 
-  it('closes to the trigger when Back is pressed from direct entry', () => {
+  it('closes to the trigger when footer Done is pressed from direct entry', () => {
     setup();
     openSheet();
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Back'}));
+    expect(within(sheet()).queryByRole('button', {name: 'Back'})).toBeNull();
+    expect(within(sheet()).queryByRole('button', {name: 'Close'})).toBeNull();
+    expect(within(sheet()).queryByRole('button', {name: 'Cancel'})).toBeNull();
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Done'}));
     expect(isSheetOpen()).toBe(false);
     settleSheets();
     expect(trigger()).toHaveFocus();
   });
 
-  it('returns to Filters and focuses Add filter when Back is pressed from management', () => {
+  it('returns to Filters and focuses Add filter when Add filter is dismissed from management', () => {
     setup({filters: [openFilter]});
     openAddFlow();
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Back'}));
+    expect(within(sheet()).queryByRole('button', {name: 'Back'})).toBeNull();
+    fireEvent.keyDown(sheet(), {key: 'Escape'});
     expect(
       within(sheet()).getByRole('heading', {name: 'Filters'}),
     ).toBeTruthy();
@@ -933,7 +971,14 @@ describe('MobilePowerSearch Add filter', () => {
     openAddFlow();
     const status = within(sheet()).getByRole('button', {name: 'Status'});
     expect(status.textContent).toBe('Status');
+    expect(
+      within(sheet()).getByRole('heading', {name: 'General', level: 4}),
+    ).toBeTruthy();
+    expect(within(sheet()).getByRole('list', {name: 'General'})).toBeTruthy();
     expect(within(sheet()).getByRole('button', {name: 'Author'})).toBeTruthy();
+    expect(
+      within(sheet()).getByRole('heading', {name: 'Metadata', level: 4}),
+    ).toBeTruthy();
     expect(within(sheet()).getByRole('list', {name: 'Metadata'})).toBeTruthy();
     expect(status.closest('li')?.querySelectorAll('svg')).toHaveLength(1);
   });
@@ -958,7 +1003,22 @@ describe('MobilePowerSearch Add filter', () => {
     const search = within(sheet()).getByRole('textbox', {
       name: 'Search filters',
     });
+    expect(search).not.toHaveFocus();
+    search.focus();
+    const scrollBody = Array.from(
+      sheet().querySelectorAll<HTMLElement>('div'),
+    ).find(element => getComputedStyle(element).overflowY === 'auto')!;
+    fireEvent.scroll(scrollBody);
+    expect(search).toHaveFocus();
+    fireEvent.touchStart(scrollBody, {touches: [{clientY: 100}]});
+    fireEvent.touchMove(scrollBody, {touches: [{clientY: 107}]});
+    expect(search).toHaveFocus();
+    fireEvent.touchMove(scrollBody, {touches: [{clientY: 109}]});
+    expect(search).not.toHaveFocus();
+    search.focus();
     fireEvent.change(search, {target: {value: 'Field'}});
+    fireEvent.scroll(scrollBody);
+    expect(search).toHaveFocus();
     expect(
       within(sheet()).getAllByRole('button', {name: /^Field/}),
     ).toHaveLength(2);
@@ -966,9 +1026,7 @@ describe('MobilePowerSearch Add filter', () => {
     expect(within(sheet()).getByRole('button', {name: 'Field 7'})).toBeTruthy();
     expect(within(sheet()).queryByRole('button', {name: 'Field 3'})).toBeNull();
     fireEvent.change(search, {target: {value: 'nope'}});
-    expect(
-      within(sheet()).getByText('No filters match your search'),
-    ).toBeTruthy();
+    expect(within(sheet()).getByText('No filters found')).toBeTruthy();
   });
 
   it('leaves out nested-only fields and warns the developer', () => {
@@ -1033,14 +1091,16 @@ describe('MobilePowerSearch Add filter', () => {
 // =============================================================================
 
 describe('MobilePowerSearch value sheet', () => {
-  it('runs field rows and choice rows edge to edge on the body inset', () => {
+  it('keeps field rows edge to edge and contains choice rows in their own section', () => {
     setup();
     openAddFlow();
     for (const list of within(sheet()).getAllByRole('list')) {
       expectBleedRowsOnBodyInset(list);
     }
     tapRow('Status');
-    expectBleedRowsOnBodyInset(within(sheet()).getByRole('list'));
+    expect(within(sheet()).getByRole('list').className).not.toContain(
+      'reachesContainerPadding',
+    );
   });
 
   it('stages an enum selection and commits it with exact add metadata', () => {
@@ -1093,24 +1153,28 @@ describe('MobilePowerSearch value sheet', () => {
       within(sheet()).getByRole('heading', {name: 'Filters'}),
     ).toBeTruthy();
     expect(
-      within(sheet()).getByRole('button', {name: 'Add filter'}),
-    ).toHaveFocus();
+      within(sheet())
+        .getAllByRole('button', {name: 'Add filter'})
+        .some(button => button === document.activeElement),
+    ).toBe(true);
   });
 
-  it('confirms an empty-value operator through Add filter', () => {
+  it('adds a single empty-value field immediately without opening an empty editor', () => {
     const {onChange} = setup();
     openAddFlow();
+    const fieldPickerPlus = within(sheet())
+      .getByText('Unassigned')
+      .closest('li');
+    expect(fieldPickerPlus?.querySelectorAll('svg')).toHaveLength(1);
     tapRow('Unassigned');
-    expect(onChange).not.toHaveBeenCalled();
-    expect(
-      within(sheet()).getByRole('heading', {name: 'Unassigned is true'}),
-    ).toBeTruthy();
-    addFilter();
     expect(onChange).toHaveBeenCalledWith(
       [{field: 'unassigned', operator: 'isTrue', value: {type: 'empty'}}],
       'add',
       0,
     );
+    expect(
+      within(sheet()).getByRole('heading', {name: 'Filters'}),
+    ).toBeTruthy();
   });
 
   it('shows the operator step as radios only when a field has several', () => {
@@ -1121,9 +1185,13 @@ describe('MobilePowerSearch value sheet', () => {
     expect(
       within(sheet()).getByRole('radiogroup', {name: 'Operator'}),
     ).toBeTruthy();
+    const selectedOperator = within(sheet()).getByRole('radio', {
+      name: 'Status is',
+    });
+    expect(selectedOperator).toBeChecked();
     expect(
-      within(sheet()).getByRole('radio', {name: 'Status is'}),
-    ).toBeChecked();
+      getComputedStyle(selectedOperator.closest('.astryx-item')!).flexDirection,
+    ).toBe('row-reverse');
     fireEvent.click(
       within(sheet()).getByRole('radio', {name: 'Status is not'}),
     );
@@ -1237,14 +1305,14 @@ describe('MobilePowerSearch value sheet', () => {
     );
   });
 
-  it('opens the edit sheet with Cancel, Apply and Remove from a selected row', () => {
+  it('opens the edit sheet with only Cancel and Apply from a selected row', () => {
     setup({filters: [openFilter]});
     openEditFlow('Status is Open');
     expect(within(sheet()).getByRole('heading', {name: 'Status'})).toBeTruthy();
     expect(within(sheet()).queryByRole('button', {name: 'Back'})).toBeNull();
     expect(within(sheet()).getByRole('button', {name: 'Cancel'})).toBeTruthy();
     expect(within(sheet()).getByRole('button', {name: 'Apply'})).toBeTruthy();
-    expect(within(sheet()).getByRole('button', {name: 'Remove'})).toBeTruthy();
+    expect(within(sheet()).queryByRole('button', {name: /^Remove/})).toBeNull();
     expect(
       within(sheet()).getByRole('button', {name: 'Open, selected'}),
     ).toBeTruthy();
@@ -1289,10 +1357,12 @@ describe('MobilePowerSearch value sheet', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it('removes a filter from its edit sheet with exact remove metadata', () => {
+  it('removes a filter directly from the Filters sheet with exact remove metadata', () => {
     const {onChange} = setup({filters: [authorFilter, openFilter]});
-    openEditFlow('Status is Open');
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Remove'}));
+    openSheet();
+    fireEvent.click(
+      within(sheet()).getByRole('button', {name: 'Remove Status filter'}),
+    );
     expect(onChange).toHaveBeenCalledWith([authorFilter], 'remove', 1);
     expect(
       within(sheet()).getByRole('heading', {name: 'Filters'}),
@@ -1327,11 +1397,15 @@ describe('MobilePowerSearch value sheet', () => {
       );
     }
     render(<Harness />);
-    openEditFlow('Status is Open');
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Remove'}));
+    openSheet();
+    fireEvent.click(
+      within(sheet()).getByRole('button', {name: 'Remove Status filter'}),
+    );
     expect(
-      within(sheet()).getByRole('button', {name: 'Author is Grace'}),
-    ).toHaveFocus();
+      within(sheet())
+        .getAllByRole('button', {name: 'Remove Author filter'})
+        .some(button => button === document.activeElement),
+    ).toBe(true);
   });
 
   it('focuses Add filter after the last editable filter is removed', () => {
@@ -1348,11 +1422,13 @@ describe('MobilePowerSearch value sheet', () => {
       );
     }
     render(<Harness />);
-    openEditFlow('Status is Open');
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Remove'}));
-    expect(within(sheet()).getByText('No filters selected')).toBeTruthy();
+    openSheet();
+    fireEvent.click(
+      within(sheet()).getByRole('button', {name: 'Remove Status filter'}),
+    );
+    expect(within(sheet()).getByText('No filters applied')).toBeTruthy();
     expect(
-      within(sheet()).getByRole('button', {name: 'Add filter'}),
+      within(sheet()).getAllByRole('button', {name: 'Add filter'})[0],
     ).toHaveFocus();
   });
 
@@ -1524,11 +1600,11 @@ describe('MobilePowerSearch value sheet', () => {
 // Content search
 // =============================================================================
 
-describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
-  // Three sibling BottomSheets, one per step, controlled by one `step` value:
-  // a same-update close and open is the stack's replace handoff. These read
-  // only what a person or assistive technology can observe: which dialogs
-  // are open, which is modal, and which is inert and hidden.
+describe('MobilePowerSearch step sheets (retained stack)', () => {
+  // Dismissing the top step closes only that sheet, so the prior step returns
+  // through the stack's reveal motion instead of reopening above the current
+  // one. These assertions read only what a person or assistive technology can
+  // observe.
   function stepDialogs(): HTMLElement[] {
     return Array.from(document.querySelectorAll<HTMLElement>('dialog[open]'));
   }
@@ -1543,31 +1619,35 @@ describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
     expect(sheet()).toHaveAttribute('aria-modal', 'true');
   });
 
-  it('Filters → Add filter is a replace handoff: the entering step is on top, the leaving step stays presented, inert and hidden, then leaves', () => {
+  it('pushes Add filter above Filters without a Back button and dismisses it to reveal Filters', () => {
     setup({filters: [openFilter]});
     openSheet();
     const filters = sheet();
     tapRow('Add filter');
-    const open = stepDialogs();
-    expect(open.map(d => d.getAttribute('aria-label'))).toEqual([
+    expect(stepDialogs().map(d => d.getAttribute('aria-label'))).toEqual([
       'Filters',
       'Add filter',
     ]);
-    // The one being replaced: still presented, out of the tab order and the
-    // accessibility tree; the entering step is the interactive one.
     expect(filters).toHaveAttribute('inert');
     expect(filters).toHaveAttribute('aria-hidden', 'true');
     expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
     expect(sheet()).not.toHaveAttribute('inert');
     expect(sheet()).not.toHaveAttribute('aria-hidden');
-    // The entering step's motion completes first, then the retained step's
-    // fade (the stack sequences them): only the new step remains.
-    settleSheets();
+
     settleSheets();
     expect(stepDialogs().map(d => d.getAttribute('aria-label'))).toEqual([
+      'Filters',
       'Add filter',
     ]);
-    expect(isSheetOpen()).toBe(true);
+
+    expect(within(sheet()).queryByRole('button', {name: 'Back'})).toBeNull();
+    fireEvent.keyDown(sheet(), {key: 'Escape'});
+    settleSheets();
+    expect(stepDialogs().map(d => d.getAttribute('aria-label'))).toEqual([
+      'Filters',
+    ]);
+    expect(sheet()).not.toHaveAttribute('inert');
+    expect(sheet()).not.toHaveAttribute('aria-hidden');
   });
 
   it('a step on its own is one open modal dialog, interactive and exposed', () => {
@@ -1592,11 +1672,12 @@ describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
       'aria-label',
       expect.stringContaining('Status'),
     );
-    // Back from the value step, Back from Add filter, Done from Filters.
+    // Cancel from the value step, dismiss Add filter, Done from Filters.
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
     settleSheets();
     expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
-    fireEvent.click(within(sheet()).getByRole('button', {name: 'Back'}));
+    expect(within(sheet()).queryByRole('button', {name: 'Back'})).toBeNull();
+    fireEvent.keyDown(sheet(), {key: 'Escape'});
     settleSheets();
     expect(sheet()).toHaveAttribute('aria-label', 'Filters');
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Done'}));
@@ -1616,7 +1697,19 @@ describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
     expect(trigger()).toHaveFocus();
   });
 
-  it('a scrim press on the Filters step (purpose info) closes the flow; on the value step (purpose form) it does not', () => {
+  it('Escape on a nested value step reveals its retained parent', () => {
+    setup({filters: [openFilter]});
+    openSheet();
+    tapRow('Add filter');
+    tapRow(/^Status/);
+    settleSheets();
+    fireEvent.keyDown(sheet(), {key: 'Escape'});
+    settleSheets();
+    expect(isSheetOpen()).toBe(true);
+    expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
+  });
+
+  it('a scrim press on the Filters step closes the flow; a nested value scrim reveals its parent', () => {
     setup({filters: [openFilter]});
     openSheet();
     settleSheets();
@@ -1625,23 +1718,24 @@ describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
     expect(isSheetOpen()).toBe(false);
     settleSheets();
 
-    openEditFlow(/^Status/);
+    openSheet();
+    tapRow('Add filter');
+    tapRow(/^Status/);
     settleSheets();
     expect(sheet()).toHaveAttribute(
       'aria-label',
       expect.stringContaining('Status'),
     );
     fireEvent.click(sheet());
+    settleSheets();
     expect(isSheetOpen()).toBe(true);
-    expect(sheet()).toHaveAttribute(
-      'aria-label',
-      expect.stringContaining('Status'),
-    );
+    expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
   });
 
-  it('a downward swipe on the Filters step dismisses the flow', () => {
+  it('a downward swipe on Add filter reveals Filters instead of closing the flow', () => {
     setup({filters: [openFilter]});
     openSheet();
+    tapRow('Add filter');
     settleSheets();
     const handle = sheet().querySelector<HTMLElement>(
       '.astryx-bottom-sheet > div[aria-hidden="true"]',
@@ -1668,18 +1762,18 @@ describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
       clientY: 120,
       pointerType: 'touch',
     });
-    expect(isSheetOpen()).toBe(false);
+    settleSheets();
+    expect(isSheetOpen()).toBe(true);
+    expect(sheet()).toHaveAttribute('aria-label', 'Filters');
   });
 
-  it('a stale dismissal from the leaving sheet cannot end the flow: a scrim press on the replaced Filters sheet is ignored once the step has moved on', () => {
+  it('a scrim press on the covered Filters sheet is ignored while Add filter is on top', () => {
     setup({filters: [openFilter]});
     openSheet();
     const filters = sheet();
     tapRow('Add filter');
-    // The leaving Filters dialog is still presented (fading, inert); a click
-    // on its own element is the scrim path, which BottomSheet does not gate
-    // on its open state — the flow's per-step guard must ignore it because
-    // the flow is on Add filter now.
+    // The covered Filters dialog stays presented but inert. A click on its own
+    // dialog must not dismiss the active Add filter sheet or end the flow.
     fireEvent.click(filters);
     expect(isSheetOpen()).toBe(true);
     expect(sheet()).toHaveAttribute('aria-label', 'Add filter');
@@ -1687,7 +1781,7 @@ describe('MobilePowerSearch step sheets (stacked, replacing)', () => {
 });
 
 describe('MobilePowerSearch content search', () => {
-  it('opens empty content-search configurations directly to Add filter with focus in the search', () => {
+  it('opens empty content-search configurations directly to Add filter without focusing the search', () => {
     setup({config: contentSearchConfig, placeholder: 'Search content…'});
     openSheet();
     expect(
@@ -1695,7 +1789,7 @@ describe('MobilePowerSearch content search', () => {
     ).toBeTruthy();
     const input = within(sheet()).getByRole('searchbox', {name: 'Search'});
     expect(input).toHaveAttribute('placeholder', 'Search content…');
-    expect(input).toHaveFocus();
+    expect(input).not.toHaveFocus();
   });
 
   it('lists suggestions inline below the search, reachable with ArrowDown', () => {
@@ -1911,29 +2005,26 @@ describe('MobilePowerSearch value types', () => {
     );
   });
 
-  it('string_list: the mobile tokenizer creates free-text values in its own sheet, staged on the trigger and committed by the footer', async () => {
+  it('string_list: creates and selects an ID inline, then commits it from the value footer', async () => {
     const {onChange} = setupValues();
     openAddFlow();
     tapRow('ID');
-    const trigger = openTokenizer('ID');
-    const inner = tokenizerSheet();
-    fireEvent.change(within(inner).getByLabelText('Search ID'), {
-      target: {value: 'ABC-1'},
-    });
-    // The value editor debounces the search by 150ms; on a busy CI box that
-    // and the sheet's render can outlast the 1s default, so wait longer.
-    fireEvent.click(
-      await within(inner).findByRole(
-        'button',
-        {name: 'Add ABC-1'},
-        {timeout: 15000},
-      ),
+    const input = within(sheet()).getByRole('textbox', {name: 'Search ID'});
+    fireEvent.change(input, {target: {value: 'ABC-1'}});
+    const result = await within(sheet()).findByRole(
+      'button',
+      {name: 'Add ABC-1'},
+      {timeout: 15000},
     );
-    // The pick shows on the trigger in the value step at once; the step's
-    // footer stays disabled by nothing but the staged value.
-    expect(within(trigger).getByText('ABC-1')).toBeInTheDocument();
-    fireEvent.click(within(inner).getByRole('button', {name: 'Done'}));
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    const resultList = result.closest('[role="list"]') as HTMLElement;
+    expect(
+      getComputedStyle(resultList.parentElement!.parentElement!)
+        .backgroundColor,
+    ).not.toBe('var(--color-background-muted)');
+    fireEvent.click(result);
+    expect(
+      within(sheet()).getByRole('button', {name: 'Add ABC-1, selected'}),
+    ).toBeTruthy();
     addFilter();
     expect(onChange).toHaveBeenCalledWith(
       [
@@ -2010,7 +2101,7 @@ describe('MobilePowerSearch value types', () => {
     expect(within(sheet()).getByRole('button', {name: 'Apply'})).toBeEnabled();
   });
 
-  it('date_absolute (date only): the date input shows the stored day', () => {
+  it('date_absolute (date only): renders the stored day in an inline calendar', () => {
     const dateFilter: PowerSearchFilter = {
       field: 'created',
       operator: 'after',
@@ -2019,16 +2110,20 @@ describe('MobilePowerSearch value types', () => {
     };
     setupValues({filters: [dateFilter], timezoneID: 'UTC'});
     openEditFlow(/^Created is after/);
-    const input = within(sheet()).getByRole('combobox', {name: 'Date'});
-    expect(input).toHaveValue('March 10, 2024');
+    expect(within(sheet()).getByRole('grid')).toBeTruthy();
+    expect(
+      sheet()
+        .querySelector('button[data-date="2024-03-10"]')
+        ?.closest('[role="gridcell"]'),
+    ).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('date_absolute with isDateOnly: false gets the date-only editor, as the Core editor does (DEC-3)', () => {
+  it('date_absolute with isDateOnly: false keeps the large date-and-time editor', () => {
     setupValues();
     openAddFlow();
     tapRow('Updated');
-    expect(within(sheet()).queryByLabelText('Date and time')).toBeNull();
-    expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toBeTruthy();
+    expect(within(sheet()).getByLabelText('Date and time')).toBeTruthy();
+    expect(within(sheet()).queryByRole('grid')).toBeNull();
   });
 
   it('date_relative: rows stage a single relative value', () => {
@@ -2056,7 +2151,7 @@ describe('MobilePowerSearch value types', () => {
     );
   });
 
-  it('date_range: the range input is rendered with the stored range', () => {
+  it('date_range: renders the stored range in an inline calendar', () => {
     const rangeFilter: PowerSearchFilter = {
       field: 'window',
       operator: 'between',
@@ -2070,37 +2165,37 @@ describe('MobilePowerSearch value types', () => {
     };
     setupValues({filters: [rangeFilter], timezoneID: 'UTC'});
     openEditFlow(/^Window is between/);
-    const range = within(sheet()).getByLabelText('Date range');
-    expect(range.textContent ?? (range as HTMLInputElement).value).toMatch(
-      /Mar 1, 2024/,
-    );
+    expect(within(sheet()).getByRole('grid')).toBeTruthy();
+    expect(
+      sheet()
+        .querySelector('button[data-date="2024-03-01"]')
+        ?.closest('[role="gridcell"]'),
+    ).toHaveAttribute('aria-selected', 'true');
+    expect(
+      sheet()
+        .querySelector('button[data-date="2024-03-09"]')
+        ?.closest('[role="gridcell"]'),
+    ).toHaveAttribute('aria-selected', 'true');
   });
 
-  it('entity_list: the mobile tokenizer picks entities from the search source in its own sheet, staged on the trigger and committed by the footer', async () => {
+  it('entity_list: searches and selects an entity inline, then commits it from the value footer', async () => {
     const {onChange} = setupValues();
     openAddFlow();
     tapRow('Assignee');
-    const trigger = openTokenizer('Assignee');
-    const inner = tokenizerSheet();
-    fireEvent.change(within(inner).getByLabelText('Search Assignee'), {
-      target: {value: 'Ada'},
+    const input = within(sheet()).getByRole('textbox', {
+      name: 'Search Assignee',
     });
-    // The value editor debounces the search by 150ms; on a busy CI box that
-    // and the sheet's render can outlast the 1s default, so wait longer.
+    fireEvent.change(input, {target: {value: 'Ada'}});
     fireEvent.click(
-      await within(inner).findByRole(
-        'checkbox',
+      await within(sheet()).findByRole(
+        'button',
         {name: 'Ada Lovelace'},
         {timeout: 15000},
       ),
     );
-    expect(within(trigger).getByText('Ada Lovelace')).toBeInTheDocument();
-    // The footer's Done shows once the search is cleared.
-    fireEvent.change(within(inner).getByLabelText('Search Assignee'), {
-      target: {value: ''},
-    });
-    fireEvent.click(within(inner).getByRole('button', {name: 'Done'}));
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      within(sheet()).getByRole('button', {name: 'Ada Lovelace, selected'}),
+    ).toBeTruthy();
     addFilter();
     expect(onChange).toHaveBeenCalledWith(
       [
@@ -2116,41 +2211,6 @@ describe('MobilePowerSearch value types', () => {
       'add',
       0,
     );
-  });
-
-  it("entity_list: the tokenizer's sheet is titled with the field's name, and the hidden label still names the trigger", () => {
-    setupValues();
-    openAddFlow();
-    tapRow('Assignee');
-    // The step already shows the field heading and the operator rows, so the
-    // tokenizer paints no label of its own...
-    const step = sheet();
-    expect(within(step).queryByText('Entities')).toBeNull();
-    const trigger = within(step).getByRole('button', {name: 'Assignee'});
-    // ...while the trigger is still named after the field.
-    expect(trigger).toHaveAccessibleName('Assignee');
-    fireEvent.click(trigger);
-    expect(tokenizerSheet()).toHaveAccessibleName('Assignee');
-  });
-
-  it("entity_list: Escape in the tokenizer's sheet closes only that sheet; the value step and the flow stay open", () => {
-    setupValues();
-    openAddFlow();
-    tapRow('Assignee');
-    const trigger = openTokenizer('Assignee');
-    const inner = tokenizerSheet();
-    expect(inner).toHaveAccessibleName('Assignee');
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.keyDown(inner, {key: 'Escape'});
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    // The inner sheet closes its dialog after its exit motion...
-    settleSheets();
-    expect(inner).not.toHaveAttribute('open');
-    // ...and the flow behind it is untouched.
-    expect(isSheetOpen()).toBe(true);
-    expect(
-      within(sheet()).getByRole('button', {name: 'Assignee'}),
-    ).toBeInTheDocument();
   });
 
   it('custom: the configured editor stages a JSON string', () => {
@@ -2204,80 +2264,32 @@ describe('MobilePowerSearch timezone', () => {
     value: {type: 'date_absolute', unixSeconds: BOUNDARY_SECONDS},
   };
 
-  // The browser's zone is pinned west of Greenwich, so the instant's day
-  // there (March 9) differs from its UTC day (March 10) and a regression to
-  // the UTC day on tokens or rows fails on a UTC runner too.
-  describe('in a browser zone west of Greenwich', () => {
-    const originalTZ = process.env.TZ;
-    beforeEach(() => {
-      process.env.TZ = 'America/Los_Angeles';
-    });
-    afterEach(() => {
-      if (originalTZ === undefined) {
-        delete process.env.TZ;
-      } else {
-        process.env.TZ = originalTZ;
-      }
-    });
-
-    it.each([['Asia/Tokyo'], ['Pacific/Honolulu'], [undefined]])(
-      'formats the token and the row exactly as the Core token does — the day in the browser zone, no time — and the editor reads the UTC day, whatever timezoneID says (DEC-3, FR11, FR12): %s',
-      timezoneID => {
-        // Core's token: `formatDateAbsoluteCompact` in the browser's zone.
-        expect(
-          new Intl.DateTimeFormat('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric',
-            calendar: 'gregory',
-          }).format(BOUNDARY_SECONDS * 1000),
-        ).toBe('Mar 9, 2024');
-        setup({config: valueTypesConfig, filters: [dateFilter], timezoneID});
-        const tokenValue = within(field()).getByText('Mar 9, 2024');
-        expect(tokenValue).toHaveStyle({
-          fontWeight: 'var(--font-weight-bold)',
-        });
-        expect(tokenValue.textContent).not.toMatch(/\d:\d\d/);
-        openSheet();
-        const row = within(sheet()).getByRole('button', {
-          name: 'Created is after Mar 9, 2024',
-        });
-        expect(within(row).getByText('Mar 9, 2024')).toHaveStyle({
-          fontWeight: 'var(--font-weight-bold)',
-        });
-        fireEvent.click(row);
-        // 03:00 UTC on March 10: the editor reads the UTC day, in Tokyo and
-        // Honolulu alike.
-        expect(
-          within(sheet()).getByRole('combobox', {name: 'Date'}),
-        ).toHaveValue('March 10, 2024');
-      },
-    );
-  });
-
-  it('a picked day is stored as its UTC midnight, as the Core editor stores it (DEC-3)', () => {
-    const {onChange} = setup({config: valueTypesConfig, filters: []});
-    openAddFlow();
-    tapRow('Created');
-    const input = within(sheet()).getByRole('combobox', {name: 'Date'});
-    fireEvent.change(input, {target: {value: 'March 9, 2024'}});
-    fireEvent.blur(input);
-    addFilter();
-    expect(onChange).toHaveBeenCalledWith(
-      [
-        {
-          field: 'created',
-          operator: 'after',
-          value: {
-            type: 'date_absolute',
-            unixSeconds: Date.UTC(2024, 2, 9) / 1000,
-          },
-        },
-      ],
-      'add',
-      0,
-    );
-  });
+  it.each([
+    ['Asia/Tokyo', 'Mar 10, 2024', 'March 10, 2024'],
+    ['Pacific/Honolulu', 'Mar 9, 2024', 'March 9, 2024'],
+  ])(
+    'formats the token, the row and the editor in %s',
+    (timezoneID, compact) => {
+      setup({config: valueTypesConfig, filters: [dateFilter], timezoneID});
+      const tokenValue = within(field()).getByText(new RegExp(compact));
+      expect(tokenValue).toHaveStyle({fontWeight: 'var(--font-weight-bold)'});
+      openSheet();
+      const row = within(sheet()).getByRole('button', {
+        name: new RegExp(`^Created is after ${compact}`),
+      });
+      expect(within(row).getByText(new RegExp(compact))).toHaveStyle({
+        fontWeight: 'var(--font-weight-bold)',
+      });
+      fireEvent.click(row);
+      expect(
+        sheet()
+          .querySelector(
+            `button[data-date="${timezoneID === 'Asia/Tokyo' ? '2024-03-10' : '2024-03-09'}"]`,
+          )
+          ?.closest('[role="gridcell"]'),
+      ).toHaveAttribute('aria-selected', 'true');
+    },
+  );
 
   it('converts a picked day to midnight in the configured zone', () => {
     expect(isoDateToUnixSeconds('2024-03-09', 'Pacific/Honolulu')).toBe(
@@ -2372,9 +2384,11 @@ describe('MobilePowerSearch Core parity', () => {
       expect(
         within(sheet()).queryByRole('button', {name: 'Clear all'}),
       ).toBeNull();
-      expect(
-        within(sheet()).getByRole('button', {name: 'Add filter'}),
-      ).toHaveFocus();
+      const addFilterButtons = within(sheet()).getAllByRole('button', {
+        name: 'Add filter',
+      });
+      expect(addFilterButtons).toHaveLength(1);
+      expect(addFilterButtons[0]).toHaveFocus();
     });
 
     it("moves focus from a dropped field's row in Add filter to a remaining row", () => {
@@ -2441,7 +2455,7 @@ describe('MobilePowerSearch Core parity', () => {
   });
 
   describe('a filter the config no longer knows', () => {
-    it('lists it by its raw keys on the trigger and in the Filters sheet, titles its step the same way, and lets Remove take it out', () => {
+    it('lists it by its raw keys, exposes the unavailable state, and removes it directly from Filters', () => {
       function Removable() {
         const [filters, setFilters] = useState<
           ReadonlyArray<PowerSearchFilter>
@@ -2467,13 +2481,15 @@ describe('MobilePowerSearch Core parity', () => {
         within(sheet()).getByText('This filter is no longer available'),
       ).toBeTruthy();
       expect(within(sheet()).queryByRole('button', {name: 'Apply'})).toBeNull();
-      fireEvent.click(within(sheet()).getByRole('button', {name: 'Remove'}));
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+      fireEvent.click(
+        within(sheet()).getByRole('button', {name: 'Remove legacy filter'}),
+      );
       expect(
         within(sheet()).queryByRole('button', {name: 'legacy was'}),
       ).toBeNull();
-      // The nearest remaining row that is a button takes focus.
       expect(
-        within(sheet()).getByRole('button', {name: 'Status is Open'}),
+        within(sheet()).getByRole('button', {name: 'Remove Status filter'}),
       ).toHaveFocus();
     });
 
@@ -2492,7 +2508,7 @@ describe('MobilePowerSearch Core parity', () => {
   });
 
   describe('the unavailable state', () => {
-    it('moves focus to Remove when a controlled config update removes the edited operator, and announces it in the sheet', async () => {
+    it('moves focus to Cancel when a controlled config update removes the edited operator, and announces it in the sheet', async () => {
       const {rerender} = setup({filters: [openFilter]});
       openEditFlow('Status is Open');
       within(sheet()).getByRole('radio', {name: 'Status is not'}).focus();
@@ -2514,7 +2530,7 @@ describe('MobilePowerSearch Core parity', () => {
         within(sheet()).getByText('This filter is no longer available'),
       ).toBeTruthy();
       expect(
-        within(sheet()).getByRole('button', {name: 'Remove'}),
+        within(sheet()).getByRole('button', {name: 'Cancel'}),
       ).toHaveFocus();
       await waitFor(() =>
         expect(sheetRegion().textContent).toBe(
@@ -2573,7 +2589,7 @@ describe('MobilePowerSearch Core parity', () => {
   });
 
   describe('announcements inside the open sheet', () => {
-    it('announces "Removed {label}" in the Filters sheet after Remove, as the Core token does', async () => {
+    it('announces "Removed {label}" in Filters after direct row removal', async () => {
       function Removable() {
         const [filters, setFilters] = useState<
           ReadonlyArray<PowerSearchFilter>
@@ -2587,15 +2603,17 @@ describe('MobilePowerSearch Core parity', () => {
         );
       }
       render(<Removable />);
-      openEditFlow('Author is Ada');
-      fireEvent.click(within(sheet()).getByRole('button', {name: 'Remove'}));
+      openSheet();
+      fireEvent.click(
+        within(sheet()).getByRole('button', {name: 'Remove Author filter'}),
+      );
       await waitFor(() =>
         expect(sheetRegion().textContent).toBe('Removed Author is Ada'),
       );
       expect(pageRegionText()).toBe('');
     });
 
-    it('speaks "No filters match your search" from its rendered element once per query, and not for an empty query', async () => {
+    it('speaks "No filters found" from its rendered element once per query, and not for an empty query', async () => {
       const many: PowerSearchConfig = {
         name: 'Many',
         fields: Array.from({length: 9}, (_, i) => ({
@@ -2612,17 +2630,17 @@ describe('MobilePowerSearch Core parity', () => {
         name: 'Search filters',
       });
       fireEvent.change(search, {target: {value: 'nope'}});
-      expect(
-        within(sheet()).getByText('No filters match your search'),
-      ).toBeTruthy();
+      expect(within(sheet()).getByText('No filters found')).toBeTruthy();
       await waitFor(() =>
-        expect(sheetRegion().textContent).toBe('No filters match your search'),
+        expect(sheetRegion().textContent).toBe(
+          'No filters found Try a different search.',
+        ),
       );
       fireEvent.change(search, {target: {value: ''}});
       // The message is gone from the body; only the live region still holds
       // the words it spoke.
       expect(
-        within(sheet()).queryByText('No filters match your search', {
+        within(sheet()).queryByText('No filters found', {
           ignore:
             '[data-astryx-modal-live-region] *, [data-astryx-modal-live-region]',
         }),
@@ -2644,7 +2662,8 @@ describe('MobilePowerSearch Core parity', () => {
       // Back to Filters: the Add filter sheet's body stays mounted, its
       // results list emptied by the step change — no empty-result message is
       // spoken, not on the page and not in the Filters dialog.
-      fireEvent.click(within(sheet()).getByRole('button', {name: 'Back'}));
+      expect(within(sheet()).queryByRole('button', {name: 'Back'})).toBeNull();
+      fireEvent.keyDown(sheet(), {key: 'Escape'});
       expect(
         within(sheet()).getByRole('heading', {name: 'Filters'}),
       ).toBeTruthy();
@@ -2721,9 +2740,7 @@ describe('MobilePowerSearch Core parity', () => {
       expect(
         within(sheet()).getByRole('heading', {name: 'Add filter'}),
       ).toBeTruthy();
-      expect(
-        within(sheet()).queryByText('No filters match your search'),
-      ).toBeNull();
+      expect(within(sheet()).queryByText('No filters found')).toBeNull();
     });
 
     it("keeps the content searchbox's aria-controls pointing at an element while nothing lists", () => {

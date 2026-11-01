@@ -256,6 +256,110 @@ describe('Token accessibility', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps aria-labelledby and aria-describedby on a disabled link token', () => {
+    render(
+      <>
+        <span id="dl-label">Docs section</span>
+        <span id="dl-hint">Unavailable offline</span>
+        <Token
+          label="Docs"
+          href="/docs"
+          isDisabled
+          aria-labelledby="dl-label"
+          aria-describedby="dl-hint"
+        />
+      </>,
+    );
+    const link = screen.getByRole('link', {name: 'Docs section'});
+    expect(link).toHaveAccessibleDescription('Unavailable offline');
+  });
+
+  it("passes aria-labelledby and aria-describedby to a clickable token's button (public-component-api INV5)", () => {
+    render(
+      <>
+        <span id="field-label">Fruit</span>
+        <span id="field-hint">Pick one</span>
+        <Token
+          label="Apple"
+          onClick={() => {}}
+          aria-labelledby="field-label"
+          aria-describedby="field-hint"
+          data-testid="token"
+        />
+      </>,
+    );
+    const button = screen.getByRole('button', {name: 'Fruit'});
+    expect(button).toHaveAccessibleDescription('Pick one');
+    expect(screen.getByTestId('token')).not.toHaveAttribute('aria-labelledby');
+  });
+
+  it('reflects the disabled state on the token target in every structure (theming-surface INV6)', () => {
+    render(
+      <>
+        <Token label="Static" isDisabled data-testid="static" />
+        <Token
+          label="Clickable"
+          onClick={() => {}}
+          isDisabled
+          data-testid="clickable"
+        />
+        <Token label="Link" href="/docs" isDisabled data-testid="link" />
+        <Token
+          label="Link with remove"
+          href="/docs"
+          onRemove={() => {}}
+          isDisabled
+          data-testid="link-and-remove"
+        />
+        <Token label="Enabled" href="/docs" data-testid="enabled" />
+      </>,
+    );
+    for (const id of ['static', 'clickable', 'link', 'link-and-remove']) {
+      expect(screen.getByTestId(id), id).toHaveAttribute(
+        'data-disabled',
+        'disabled',
+      );
+    }
+    expect(screen.getByTestId('enabled')).not.toHaveAttribute('data-disabled');
+  });
+
+  it('keeps a disabled link token a focusable link with no destination (spec:AST-085 FR1, FR5)', async () => {
+    const user = userEvent.setup();
+    const onRemove = vi.fn();
+    render(
+      <>
+        <Token label="Docs" href="/docs" isDisabled />
+        <Token label="Guide" href="/guide" isDisabled onRemove={onRemove} />
+      </>,
+    );
+    for (const name of ['Docs', 'Guide']) {
+      const link = screen.getByRole('link', {name});
+      expect(link, name).toHaveAttribute('aria-disabled', 'true');
+      expect(link, name).not.toHaveAttribute('href');
+    }
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Docs'})).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Guide'})).toHaveFocus();
+    await user.tab();
+    await user.keyboard('{Enter}');
+    expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it("passes other keys to a disabled link token's onKeyDown, but not Enter or Space", async () => {
+    const user = userEvent.setup();
+    const onKeyDown = vi.fn();
+    render(
+      <Token label="Docs" href="/docs" isDisabled onKeyDown={onKeyDown} />,
+    );
+    await user.tab();
+    await user.keyboard('{ArrowRight}');
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown.mock.calls[0][0].key).toBe('ArrowRight');
+    await user.keyboard('{Enter} ');
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps both buttons focusable and inert when isDisabled is true', async () => {
     const user = userEvent.setup();
     const handleClick = vi.fn();
@@ -349,6 +453,78 @@ describe('Token accessibility', () => {
       'button[aria-label="Remove Token"]',
     );
     expect(removeButton).toBeInTheDocument();
+  });
+});
+
+describe('Token link onClick', () => {
+  // jsdom does not implement navigation, so a native listener stops it. React
+  // handlers still run for the click.
+  function stopNavigation(link: HTMLElement) {
+    link.addEventListener('click', e => e.preventDefault());
+  }
+
+  it('calls a caller onClick once when a link token is clicked', () => {
+    const handleClick = vi.fn();
+    render(<Token label="Tag" href="/test" onClick={handleClick} />);
+    const link = screen.getByRole('link', {name: 'Tag'});
+    stopNavigation(link);
+
+    fireEvent.click(link);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+    expect(link).toHaveAttribute('href', '/test');
+  });
+
+  it('calls a caller onClick once when the link of a removable token is clicked', () => {
+    const handleClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={() => {}}
+      />,
+    );
+    const link = screen.getByRole('link', {name: 'Tag'});
+    stopNavigation(link);
+
+    fireEvent.click(link);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls a caller onClick once when the surface of a removable token is clicked', () => {
+    const handleClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={() => {}}
+        data-testid="token"
+      />,
+    );
+    stopNavigation(screen.getByRole('link', {name: 'Tag'}));
+
+    // The surface click is delegated to the link; it must not run twice.
+    fireEvent.click(screen.getByTestId('token'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call a caller onClick when the remove button is clicked', () => {
+    const handleClick = vi.fn();
+    const handleRemove = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={handleRemove}
+      />,
+    );
+    stopNavigation(screen.getByRole('link', {name: 'Tag'}));
+
+    fireEvent.click(screen.getByRole('button', {name: 'Remove Tag'}));
+    expect(handleRemove).toHaveBeenCalledTimes(1);
+    expect(handleClick).not.toHaveBeenCalled();
   });
 });
 

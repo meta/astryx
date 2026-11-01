@@ -17,7 +17,12 @@ import {
 import userEvent from '@testing-library/user-event';
 import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
+import {
+  colorVars,
+  sizeVars,
+  spacingVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
+import {inputWrapperStyles} from '@astryxdesign/core/Field';
 import {MobileTokenizer, type MobileTokenizerChange} from './MobileTokenizer';
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
 
@@ -124,6 +129,200 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('MobileTokenizer (Lab, single-sheet flow)', () => {
+  it('keeps the bordered large search and footer actions visible while searching, and dismisses the keyboard without clearing the query when results move', async () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', {name: /Tags/}));
+    const search = await screen.findByLabelText('Search Tags');
+    const list = await screen.findByTestId('mobile-tokenizer-list');
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+
+    expect(search.closest('.astryx-text-input')).toBeInTheDocument();
+    act(() => search.focus());
+    fireEvent.change(search, {target: {value: 'En'}});
+    await screen.findByRole('checkbox', {name: 'Eng'});
+    expect(screen.getByRole('button', {name: 'Clear all'})).toBeVisible();
+    expect(screen.getByRole('button', {name: 'Save'})).toBeVisible();
+
+    fireEvent.scroll(list);
+    expect(search).toHaveFocus();
+    expect(search).toHaveValue('En');
+
+    // Filtering a scrolled list can produce its own scroll event as the
+    // browser clamps scrollTop; typing must continue to own focus.
+    fireEvent.change(search, {target: {value: 'Eng'}});
+    fireEvent.scroll(list);
+    expect(search).toHaveFocus();
+    fireEvent.change(search, {target: {value: 'Engi'}});
+    expect(search).toHaveValue('Engi');
+    expect(search).toHaveFocus();
+
+    fireEvent.touchStart(list, {
+      touches: [{identifier: 1, target: list, clientY: 120}],
+    });
+    fireEvent.touchMove(list, {
+      touches: [{identifier: 1, target: list, clientY: 115}],
+    });
+    expect(search).toHaveFocus();
+    fireEvent.touchMove(list, {
+      touches: [{identifier: 1, target: list, clientY: 100}],
+    });
+    expect(search).not.toHaveFocus();
+    expect(search).toHaveValue('Engi');
+  });
+
+  it('guards dirty Escape, scrim, and swipe dismissal; keeps the draft after confirmation scrim or Keep editing; and discards only on request', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} />);
+    const trigger = screen.getByRole('button', {name: /Tags/});
+    fireEvent.click(trigger);
+    const sheet = await screen.findByRole('dialog', {name: 'Tags'});
+    const energizer = await screen.findByRole('checkbox', {name: 'Energizer'});
+    fireEvent.click(energizer);
+    expect(energizer).toBeChecked();
+    expect(spy).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(sheet, {key: 'Escape'});
+    let discard = await screen.findByRole('alertdialog', {
+      name: 'Discard changes?',
+    });
+    fireEvent.click(discard);
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
+    );
+    expect(energizer).toBeChecked();
+    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(sheet);
+    discard = await screen.findByRole('alertdialog', {
+      name: 'Discard changes?',
+    });
+    fireEvent.click(
+      within(discard).getByRole('button', {name: 'Keep editing'}),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
+    );
+    expect(energizer).toBeChecked();
+    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+
+    const handle = sheet.querySelector<HTMLElement>(
+      '.astryx-bottom-sheet > div[aria-hidden="true"]',
+    )!;
+    fireEvent.pointerDown(handle, {
+      pointerId: 1,
+      clientY: 0,
+      button: 0,
+      isPrimary: true,
+      pointerType: 'touch',
+    });
+    fireEvent.pointerMove(handle, {
+      pointerId: 1,
+      clientY: 40,
+      pointerType: 'touch',
+    });
+    fireEvent.pointerMove(handle, {
+      pointerId: 1,
+      clientY: 120,
+      pointerType: 'touch',
+    });
+    fireEvent.pointerUp(handle, {
+      pointerId: 1,
+      clientY: 120,
+      pointerType: 'touch',
+    });
+    discard = await screen.findByRole('alertdialog', {
+      name: 'Discard changes?',
+    });
+    const actions = within(discard).getAllByRole('button');
+    expect(actions.map(action => action.textContent)).toEqual([
+      'Discard changes',
+      'Keep editing',
+    ]);
+    expect(actions[0]).toHaveAttribute('data-variant', 'destructive');
+    expect(actions[1]).toHaveAttribute('data-variant', 'secondary');
+    fireEvent.click(actions[0]);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('forced disabled closure also closes a dirty-discard confirmation', async () => {
+    const spy = vi.fn();
+    const props = {
+      label: 'Tags',
+      searchSource: source,
+      value: [ITEMS[0]],
+      debounceMs: 0,
+      onChange: spy,
+    };
+    const {rerender} = render(<MobileTokenizer {...props} />);
+    const trigger = screen.getByRole('button', {name: /Tags/});
+    fireEvent.click(trigger);
+    const sheet = await screen.findByRole('dialog', {name: 'Tags'});
+    fireEvent.click(await screen.findByRole('checkbox', {name: 'Energizer'}));
+    fireEvent.keyDown(sheet, {key: 'Escape'});
+    expect(
+      await screen.findByRole('alertdialog', {name: 'Discard changes?'}),
+    ).toBeInTheDocument();
+
+    rerender(<MobileTokenizer {...props} isDisabled />);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    await waitFor(() =>
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('blocks Save if maxEntries drops below the current draft until the draft returns within the limit', async () => {
+    const spy = vi.fn();
+    const props = {
+      label: 'Tags',
+      searchSource: source,
+      value: [] as SearchableItem[],
+      debounceMs: 0,
+      onChange: spy,
+    };
+    const {rerender} = render(<MobileTokenizer {...props} maxEntries={2} />);
+    const trigger = screen.getByRole('button', {name: /Tags/});
+    fireEvent.click(trigger);
+    const design = await screen.findByRole('checkbox', {name: 'Design'});
+    const eng = await screen.findByRole('checkbox', {name: 'Eng'});
+    fireEvent.click(design);
+    fireEvent.click(eng);
+
+    rerender(<MobileTokenizer {...props} maxEntries={1} />);
+    const save = screen.getByRole('button', {name: 'Save'});
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).toHaveAccessibleDescription('Select up to 1 item');
+    fireEvent.click(save);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(spy).not.toHaveBeenCalled();
+
+    fireEvent.click(eng);
+    expect(save).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(save);
+    expect(spy).toHaveBeenCalledWith(
+      [ITEMS[0]],
+      expect.objectContaining({item: ITEMS[0], type: 'add'}),
+    );
+  });
+
+  it('closes directly when edits return the draft to its opening selection', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} />);
+    const trigger = screen.getByRole('button', {name: /Tags/});
+    fireEvent.click(trigger);
+    const sheet = await screen.findByRole('dialog', {name: 'Tags'});
+    const energizer = await screen.findByRole('checkbox', {name: 'Energizer'});
+    fireEvent.click(energizer);
+    fireEvent.click(energizer);
+
+    fireEvent.keyDown(sheet, {key: 'Escape'});
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('keeps rows stable while open and applies selected-first order on reopen', async () => {
     const spy = vi.fn();
     render(<Harness spy={spy} />);
@@ -155,10 +354,7 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     expect(design.lastElementChild).toHaveAttribute('data-size', 'md');
 
     fireEvent.click(screen.getByRole('checkbox', {name: 'Energizer'}));
-    expect(spy).toHaveBeenCalledWith(
-      [ITEMS[0], ITEMS[1], ITEMS[3]],
-      expect.objectContaining({type: 'add'}),
-    );
+    expect(spy).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByRole('checkbox', {name: 'Energizer'})).toBeChecked(),
     );
@@ -170,10 +366,7 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     ]);
 
     fireEvent.click(screen.getByRole('checkbox', {name: 'Eng'}));
-    expect(spy).toHaveBeenLastCalledWith(
-      [ITEMS[0], ITEMS[3]],
-      expect.objectContaining({type: 'remove'}),
-    );
+    expect(spy).not.toHaveBeenCalled();
     expect(checkboxLabels()).toEqual([
       'Design',
       'Eng',
@@ -181,7 +374,11 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
       'Energizer',
     ]);
 
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenCalledWith(
+      [ITEMS[0], ITEMS[3]],
+      expect.objectContaining({item: ITEMS[1], type: 'remove'}),
+    );
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
     await act(async () => {
@@ -193,6 +390,38 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
       'Eng',
       'Engineer',
     ]);
+  });
+
+  it('reports the net changed item when draft actions cancel each other', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} />);
+    const trigger = screen.getByRole('button', {name: /Tags/});
+    fireEvent.click(trigger);
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Energizer'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Energizer'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith([ITEMS[1]], {
+      item: ITEMS[0],
+      type: 'remove',
+    });
+  });
+
+  it('does not commit a selection toggled back to its opening value', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} />);
+    fireEvent.click(screen.getByRole('button', {name: /Tags/}));
+    await screen.findByRole('checkbox', {name: 'Design'});
+
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it('creates a custom entry with a trailing Add action', async () => {
@@ -207,12 +436,8 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
       screen.queryByRole('checkbox', {name: 'Create "Custom"'}),
     ).not.toBeInTheDocument();
     const create = await screen.findByRole('button', {name: 'Add Custom'});
-    expect(
-      screen.queryByRole('button', {name: 'Clear all'}),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole('button', {name: 'Done'}),
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Clear all'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Save'})).toBeInTheDocument();
     expect(create).toHaveAttribute('data-size', 'lg');
     expect(screen.getByTestId('mobile-tokenizer-create-row')).toHaveTextContent(
       'Create "Custom"',
@@ -220,14 +445,18 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     await act(async () => {
       fireEvent.click(create);
     });
+    expect(spy).not.toHaveBeenCalled();
+    expect(trigger).not.toHaveTextContent('Custom');
+    expect(search).toHaveValue('');
+    const custom = await screen.findByRole('checkbox', {name: 'Custom'});
+    expect(custom).toBeChecked();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     expect(spy).toHaveBeenCalledWith(
       [{id: 'Custom', label: 'Custom'}],
       expect.objectContaining({type: 'create'}),
     );
     await waitFor(() => expect(trigger).toHaveTextContent('Custom'));
-    expect(search).toHaveValue('');
-    const custom = await screen.findByRole('checkbox', {name: 'Custom'});
-    expect(custom).toBeChecked();
   });
 
   it('renders long lists in 50-item batches and resets the window for search', async () => {
@@ -320,30 +549,49 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     );
   });
 
-  it('keeps large equal-width Clear all and Done footer actions while guarding the bulk clear', async () => {
+  it('keeps large equal-width Clear all and Save footer actions while guarding the bulk clear', async () => {
     const spy = vi.fn();
     render(<Harness spy={spy} />);
     fireEvent.click(screen.getByRole('button', {name: /Tags/}));
     const list = await screen.findByTestId('mobile-tokenizer-list');
 
     const clearAll = screen.getByRole('button', {name: 'Clear all'});
-    const done = screen.getByRole('button', {name: 'Done'});
+    const save = screen.getByRole('button', {name: 'Save'});
     expect(clearAll).toHaveAttribute('data-size', 'lg');
     expect(clearAll).toHaveAttribute('data-variant', 'secondary');
-    expect(done).toHaveAttribute('data-size', 'lg');
+    expect(save).toHaveAttribute('data-size', 'lg');
     expect(list.compareDocumentPosition(clearAll)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(list.compareDocumentPosition(done)).toBe(
+    expect(list.compareDocumentPosition(save)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     fireEvent.click(clearAll);
     const confirmation = screen.getByRole('alertdialog');
+    expect(confirmation).toHaveClass('astryx-alert-dialog');
     expect(confirmation).toHaveTextContent('Clear all selected items?');
+    const confirmationActions = within(confirmation).getAllByRole('button');
+    expect(confirmationActions.map(action => action.textContent)).toEqual([
+      'Clear selection',
+      'Cancel',
+    ]);
+    expect(confirmationActions[0]).toHaveAttribute(
+      'data-variant',
+      'destructive',
+    );
+    expect(confirmationActions[1]).toHaveAttribute('data-variant', 'secondary');
     expect(spy).not.toHaveBeenCalled();
     fireEvent.click(
       within(confirmation).getByRole('button', {name: 'Clear selection'}),
     );
+    expect(spy).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(screen.getByRole('button', {name: 'Clear all'})).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    );
+    fireEvent.click(save);
     expect(spy).toHaveBeenLastCalledWith(
       [],
       expect.objectContaining({type: 'remove'}),
@@ -436,6 +684,17 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     for (const name of indicatorClasses) {
       expect(indicator).toHaveClass(name);
     }
+
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    expect(row).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(row);
+    expect(row).toBeChecked();
+    expect(spy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenCalledWith(
+      [ITEMS[3]],
+      expect.objectContaining({item: ITEMS[3], type: 'add'}),
+    );
   });
 
   it('paints the placeholder of a disabled empty trigger GrayText in forced colors (AST-085 FR6)', () => {
@@ -479,7 +738,7 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     const forced = stylex.create({
       trigger: {
         borderColor: {
-          default: colorVars['--color-border'],
+          default: colorVars['--color-border-emphasized'],
           '@media (forced-colors: active)': 'GrayText',
         },
         color: {default: null, '@media (forced-colors: active)': 'GrayText'},
@@ -564,7 +823,7 @@ describe('MobileTokenizer Core-sheet parity', () => {
     expect(screen.queryByLabelText('Search Tags')).toBeNull();
     const sheet = await openSheet();
     expect(sheet).toHaveAttribute('open');
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     // Closed but retained for its exit; the trigger's focus (BottomSheet's
     // hand-back after the exit) releases it.
     const trigger = screen.getByRole('button', {name: /Tags/});
@@ -679,6 +938,45 @@ describe('MobileTokenizer Core-sheet parity', () => {
     }
   });
 
+  it("draws the closed trigger as the inline Tokenizer field's box: the shared input wrapper (1px emphasized border, element radius, surface), the md block size, the 3px token-row inset and gap — no 44px touch height (FR16)", () => {
+    const atoms = (className: string | undefined) =>
+      (className ?? '')
+        .split(' ')
+        .filter(name => name !== '' && !name.includes('__'));
+    const inset = `calc(${spacingVars['--spacing-1']} - 1px)`;
+    const own = stylex.create({
+      box: {
+        minHeight: sizeVars['--size-element-md'],
+        paddingBlock: inset,
+        paddingInline: inset,
+        gap: spacingVars['--spacing-1'],
+        rowGap: inset,
+        flexWrap: 'wrap',
+      },
+      touch: {minHeight: 44},
+    });
+    render(
+      <MobileTokenizer
+        label="Tags"
+        searchSource={source}
+        value={[ITEMS[0], ITEMS[1]]}
+        onChange={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Tags'});
+    // The very classes Core's inline field and sheet trigger compose: the
+    // shared box with the field's own wrap, inset and size on top (later
+    // wins per property, as in the component).
+    for (const name of atoms(
+      stylex.props(inputWrapperStyles.base, own.box).className,
+    )) {
+      expect(trigger).toHaveClass(name);
+    }
+    for (const name of atoms(stylex.props(own.touch).className)) {
+      expect(trigger).not.toHaveClass(name);
+    }
+  });
+
   it('paints the trigger on the input surface, so a status band behind it does not show through the tokens', () => {
     const atoms = (style: stylex.StyleXStyles) =>
       stylex
@@ -754,7 +1052,7 @@ describe('MobileTokenizer Core-sheet parity', () => {
     expect(onBlur).not.toHaveBeenCalled();
     // Closing hands focus back to the trigger: that is not focus entering
     // from outside, so the caller's onFocus stays quiet for it.
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     act(() => trigger.focus());
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(sheet).not.toBeInTheDocument();
@@ -788,9 +1086,9 @@ describe('MobileTokenizer Core-sheet parity', () => {
     await screen.findByRole('checkbox', {name: 'Design'});
     expect(trigger).not.toHaveFocus();
     expect(events).toEqual([]);
-    // Done: BottomSheet hands focus to the trigger. The trigger never had
+    // Save: BottomSheet hands focus to the trigger. The trigger never had
     // focus, so this is the entry.
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     act(() => trigger.focus());
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(events).toEqual(['focus']);
@@ -802,7 +1100,7 @@ describe('MobileTokenizer Core-sheet parity', () => {
     act(() => trigger.focus());
     fireEvent.click(trigger);
     await screen.findByRole('dialog');
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     act(() => trigger.focus());
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     act(() => screen.getByRole('button', {name: 'Elsewhere'}).focus());
@@ -990,10 +1288,7 @@ describe('MobileTokenizer Core-sheet parity', () => {
     fireEvent.click(
       within(confirmation).getByRole('button', {name: 'Clear selection'}),
     );
-    expect(spy).toHaveBeenCalledWith(
-      [],
-      expect.objectContaining({type: 'remove'}),
-    );
+    expect(spy).not.toHaveBeenCalled();
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
     expect(screen.getByLabelText('Search Tags')).toHaveFocus();
     await waitFor(() => expect(liveText(sheet)).toBe('All items removed'));
@@ -1004,6 +1299,11 @@ describe('MobileTokenizer Core-sheet parity', () => {
     expect(spent).toHaveAccessibleDescription('Nothing selected');
     fireEvent.click(spent);
     expect(screen.queryByRole('alertdialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenCalledWith(
+      [],
+      expect.objectContaining({type: 'remove'}),
+    );
   });
 
   it('announces each toggle and the result count from inside the dialog (AR6, AST-086 FR14)', async () => {

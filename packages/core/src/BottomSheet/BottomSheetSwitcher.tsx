@@ -67,7 +67,7 @@
  * - /packages/core/src/BottomSheet/BottomSheetStacking.test.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcherContext.ts
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs
- * - /packages/core/src/BottomSheet/BottomSheetSwitcher.spec.md
+ * - /docs/specs/components/BottomSheet/BottomSheetSwitcher.spec.md
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.test.tsx
  * - /packages/core/src/BottomSheet/index.ts
  * - /apps/storybook/stories/BottomSheetSwitcher.stories.tsx
@@ -87,6 +87,8 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
@@ -250,9 +252,11 @@ function takeOverScrim(dialog: HTMLDialogElement, opacity: number): void {
  * by one state value that names the open step; closing the top sheet and
  * opening the next in the same update, from inside the open step, runs the
  * same replace handoff (see BottomSheet, "Replacing a sheet"). Keeps working until a future minor
- * release removes it: on its own as released (plus two fixes: a toast raised
- * from a step now renders above the flow and can be pressed, and reduced motion
- * follows design:reduced-motion), as one stack level when stacked.
+ * release removes it: on its own as released (plus three fixes: a toast raised
+ * from a step now renders above the flow and can be pressed, reduced motion
+ * follows design:reduced-motion, and a flow whose active sheet is set on the
+ * server renders closed until hydration, then opens that sheet settled), as
+ * one stack level when stacked.
  */
 export interface BottomSheetSwitcherProps extends BaseProps<HTMLDialogElement> {
   /**
@@ -309,10 +313,11 @@ export interface BottomSheetSwitcherProps extends BaseProps<HTMLDialogElement> {
  * `sheetId` and no switcher, for modal and `hasScrim={false}` flows alike; a
  * step changed from outside the flow's sheets closes and opens with the
  * sheets' own motion. The switcher keeps working until a future
- * minor release removes it: on its own as released (plus two fixes: a toast
- * raised from a step now renders above the flow and can be pressed, and reduced
- * motion follows design:reduced-motion), and as one level of the stack when
- * stacked with other sheets.
+ * minor release removes it: on its own as released (plus three fixes: a toast
+ * raised from a step now renders above the flow and can be pressed, reduced
+ * motion follows design:reduced-motion, and a flow whose active sheet is set
+ * on the server renders closed until hydration, then opens that sheet
+ * settled), and as one level of the stack when stacked with other sheets.
  */
 export function BottomSheetSwitcher({
   activeSheet: activeSheetProp,
@@ -335,7 +340,21 @@ export function BottomSheetSwitcher({
   // for it; with the host closed the flow simply reads as closed.
   const host = use(BottomSheetHostContext);
   const isHostOpen = host?.isOpen ?? true;
-  const activeSheet = isHostOpen ? activeSheetProp : null;
+  // A flow with an active sheet on the server reads as closed until
+  // hydration, and opens in the render after it, the first one that can enter
+  // its native host: a <dialog> painted open with aria-modal before it is
+  // modal claims a state it does not have (`component:BottomSheet` FR17).
+  const isHydrating = useIsHydrating();
+  const activeSheet = isHostOpen && !isHydrating ? activeSheetProp : null;
+  // The step active on the server was present on page load, so it opens
+  // settled, with no entry motion; the first change of step animates as
+  // usual (spec:AST-013 FR13). It latches on the flow's own request: a host
+  // sheet hydrating reads as closed to a flow inside it.
+  const [settledSheet, releaseSettledSheet] = useSettledOpen(
+    activeSheetProp,
+    activeSheet,
+    null,
+  );
   // Every sheet host applies the switcher's dialog surface to its own dialog.
   const dialogProps = useShallowStable<BottomSheetSwitcherDialogProps>({
     ...restDialogProps,
@@ -1033,6 +1052,8 @@ export function BottomSheetSwitcher({
   const contextValue = useMemo<BottomSheetSwitcherContextValue>(
     () => ({
       activeSheet,
+      settledSheet,
+      releaseSettledSheet,
       hasScrim,
       onActiveSheetChange,
       getSheetPhase,
@@ -1075,6 +1096,8 @@ export function BottomSheetSwitcher({
       registerSheetDialog,
       registerSheetElement,
       registerSheetPurpose,
+      releaseSettledSheet,
+      settledSheet,
       stackView,
     ],
   );

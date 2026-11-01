@@ -76,6 +76,9 @@ Approved implementations:
 - `packages/core/src/PowerSearch/formatFilterValue.ts`
 - `packages/core/src/NumberInput/numberParser.ts` — reads typed and pasted
   numbers under the field's locale
+- `packages/core/src/utils/timeFormat.ts` — time-of-day text for TimeInput and
+  DateTimeInput: the locale's hour cycle, digits, separator, and day periods,
+  formatted and parsed back
 - `packages/core/src/i18n/useCollator.ts`
 - `packages/charts/src/formatters.ts`
 
@@ -184,6 +187,80 @@ function useSortedNames(names: string[]) {
   );
 }
 ```
+
+### `@astryx/no-internal-barrel-import`
+
+Reports a relative import, inside a package's own shipped source, that
+resolves to a folder's index file (a barrel) instead of the module that defines
+what it imports: `import {List} from '../List'` rather than
+`import {List} from '../List/List'`. A barrel pulls every sibling export into
+the importer's module graph, so a lazily imported module that goes through one
+drags unrelated code, and in a single-file bundle import cycles, along with it.
+It checks `import`, `export … from` and literal `import()`; type-only imports
+and exports are erased by the compiler and allowed. Public consumers keep
+importing from the package entry (`@astryxdesign/core`), which this rule never
+reads.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). Barrel imports that
+existed when the rule arrived are listed by file in
+`no-internal-barrel-import.baseline.json` and stay allowed until a codemod
+removes them; remove an entry when you fix its import, and never add one.
+`node internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.mjs`
+rewrites the list from the source (`--check` verifies it), for example after
+merging `main` into this rule's own branch or after a codemod.
+
+### `@astryx/no-raw-private-attribute`
+
+Reports a private `data-astryx-*` attribute written by hand outside its owner
+module (`architecture:public-component-api` INV23). Each private attribute has
+one owner module in the package that writes it,
+`packages/<package>/src/privateAttributes/<name>.stylex.ts`, named in camelCase
+(`focusOwner.stylex.ts` owns `data-astryx-focus-owner`), that writes its
+name and selectors once and exports ready-made styles, setter props and the
+runtime readers its package needs; every other file spreads those exports.
+
+```ts
+// flagged outside the owner module
+el.setAttribute('data-astryx-popover-fallback-close', '');
+const styles = stylex.create({
+  base: {transform: {default: null, '[data-astryx-press="on"]': 'scale(0.98)'}},
+});
+<div data-astryx-submenu-host="" />;
+style.setAttribute(dataAttr('theme-prose'), name);
+
+// fine: public attributes INV23 lists
+<div data-astryx-theme="dark" />;
+const scope = `[data-astryx-media="${surface}"]`;
+el.setAttribute(dataAttr('theme'), name);
+```
+
+It checks string literals in any position (object keys, call arguments,
+selectors inside `stylex.create` and `stylex.when.*`),
+template literals (including `data-${dataAttrNamespace}-…`), JSX attribute
+names, and `dataAttr()` calls. A name it cannot read (`data-astryx-${part}`,
+`dataAttr(name)`) is reported as `data-astryx-*`. Inside an owner module only
+its own attribute may be written, and the module may not export the raw name or
+a selector as a string: not as an exported or default-exported value, not inside
+an exported object, array or function's return value, and not through a module
+constant one of those uses, including a selector built from that constant in a
+template or with `+`. The name stays allowed there as an object key
+(setter props and `stylex.create` selectors) and as a call argument (a writer,
+or a `closest`/`matches` reader). An import of another package's owner module is
+reported. The public attributes INV23 lists are never reported: `theme`,
+`media`, `aspect-ratio-override`, `token`, `token-value`, `menu-press`,
+`pressable` and `edge-comp`, each after `data-astryx-`. `naming.ts`, which
+builds every name, is not checked.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). The repo config does
+not lint `.mjs` outside the CLI, so `.doc.mjs` text stays with public-API
+review. Sites that existed when the rule arrived are listed by file in
+`no-raw-private-attribute.baseline.json`, once per site, and that many stay
+allowed until they move into an owner module; remove an entry when you move its
+site, and never add one.
+`node internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
 
 ### `@astryx/no-core-internal-import`
 
@@ -482,7 +559,7 @@ export function Badge({label}) {
 - Make state controlled via props (consumer owns the state)
 - If the component legitimately needs client behavior, remove it from the presentational list
 
-See: https://github.com/facebook/astryx/issues/493
+See: https://github.com/meta/astryx/issues/493
 
 ### `@astryx/no-nullish-jsx-guard`
 
@@ -514,9 +591,17 @@ import {isRenderable} from '@astryxdesign/core/utils';
 }
 ```
 
-Ships as a **warning in both tiers** while core migrates its existing call sites; promote to `error` in strict mode once migrated. Provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
+It also flags `isRenderable` written out by hand anywhere (an assignment, a condition, a return): a chain that tests one value for nullishness or the empty string and for a boolean.
 
-See: https://github.com/facebook/astryx/issues/2538
+```ts
+const hasLabel = label !== '' && label != null && typeof label !== 'boolean'; // flagged
+if (rendered == null || typeof rendered === 'boolean') return null; // flagged
+const hasLabel = isRenderable(label); // good
+```
+
+The presets ship it as a warning. The repository config enforces it in core and richtext, where it is an error in strict mode. A check of a string, number or data value, or a documented `false` opt-out, says so with `// eslint-disable-next-line @astryx/no-nullish-jsx-guard -- <reason>`. The rule still takes `{baseline, root}` (each value's allowed checks per file) for a codebase that adopts it with existing call sites. A chain that also tests the value against another type (`typeof value === 'string'`, `isValidElement`, `Array.isArray`, `instanceof`) is a type switch and is not flagged. For a JSX guard, the rule also provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
+
+See: https://github.com/meta/astryx/issues/2538
 
 ### `@astryx/focus-outline-keyboard-only`
 
@@ -654,7 +739,7 @@ The second spread replaced the className the first built, so `astryx-breadcrumb-
 
 **Scope:** two or more spreads on one opening element whose expressions are statically recognizable className producers. A spread of anything else — `{...rest}`, `{...popover.triggerProps}`, an unknown call — is not a producer and does not count, so one producer beside any number of those is fine. `mergeProps()` is the sanctioned merge and concatenates class names, so anything already inside a single `mergeProps()` call is correct however many producers it takes; it only becomes a problem beside a **second** spread that produces a className of its own. A producer reached through a conditional (`{...(cond ? stylex.props(a) : {})}`) is out of scope: no call site writes one, and reading through the branches invites guesses the rule cannot verify.
 
-Ships as a **warning in both tiers** for now. The spread check has exactly one violation in the repo, in `BreadcrumbItem.tsx`, whose fix is open in [#5332](https://github.com/facebook/astryx/pull/5332); both tiers go back to `error` when that lands.
+Ships as a **warning in both tiers** for now. The spread check has exactly one violation in the repo, in `BreadcrumbItem.tsx`, whose fix is open in [#5332](https://github.com/meta/astryx/pull/5332); both tiers go back to `error` when that lands.
 
 ### `@astryx/disabled-cursor`
 
@@ -755,7 +840,7 @@ detected). Handler indirection is resolved only one hop within the same file —
 imported handler is treated as unknown and not flagged. A `role`/`type`/
 `contentEditable` spread via `{...props}` is not seen.
 
-See: https://github.com/facebook/astryx/issues/4892
+See: https://github.com/meta/astryx/issues/4892
 
 ### `@astryx/require-table-section`
 
@@ -855,7 +940,7 @@ the tests, so a change in that behaviour has to be deliberate. A deliberate
 unwrapped row (the contract test in `Table.test.tsx`) opts out with an
 `eslint-disable-next-line` and a reason.
 
-See: https://github.com/facebook/astryx/issues/5277
+See: https://github.com/meta/astryx/issues/5277
 
 ### `@astryx/no-light-dark-outside-theme`
 
@@ -921,7 +1006,7 @@ not covered — a `@media (prefers-color-scheme: …)` block or a
 says nothing about either. `light-dark()` is where the pattern actually shows up
 in this repo; the others can be added if they start to.
 
-See: https://github.com/facebook/astryx/pull/5321
+See: https://github.com/meta/astryx/pull/5321
 
 ### `@astryx/no-raw-color`
 

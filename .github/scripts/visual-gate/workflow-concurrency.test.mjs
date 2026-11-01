@@ -3,14 +3,12 @@
 /**
  * @file Guard PR reporting, preview staging, and remaining Pages writers.
  * @input Workflow definitions plus the docsite builder and PR reconciler.
- * @output Node tests that keep exact-head Vercel links and visual evidence
+ * @output Node tests that keep branch-alias Vercel links and visual evidence
  *   separate from the remaining Pages publisher until its migration is proven.
  * @position Repository workflow contract tests.
  */
 
-import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -52,90 +50,38 @@ describe('PR report and deployment workflow contracts', () => {
     expect(reportScript).not.toMatch(/visual|verdict/i);
   });
 
-  it('serializes early preview and later CI enrichment per PR, not across PRs', () => {
+  it('serializes the report per PR, not across PRs, and waits for no deployment', () => {
     const value = yaml.parse(workflow('pr-comment.yml'));
-    expect(value.on.deployment_status).toBeDefined();
+    expect(Object.keys(value.on)).toEqual(['workflow_run']);
     expect(value.on.workflow_run.types).toEqual(['completed']);
     expect(value.concurrency).toBeUndefined();
-    expect(value.jobs['preview-comment'].concurrency.group).toBe(
-      'pr-report-${{ needs.resolve-preview.outputs.pr_number }}',
-    );
+    expect(value.jobs['resolve-preview']).toBeUndefined();
+    expect(value.jobs['preview-comment']).toBeUndefined();
     for (const job of ['comment', 'spec-only-reconcile']) {
       expect(value.jobs[job].concurrency.group).toBe(
         'pr-report-${{ needs.resolve.outputs.pr_number }}',
       );
       expect(value.jobs[job].concurrency['cancel-in-progress']).toBe(false);
     }
+    expect(value.jobs.comment.needs).toEqual(['resolve', 'frames']);
+    expect(value.jobs.frames.concurrency.group).toBe(
+      'pr-frames-${{ needs.resolve.outputs.pr_number }}',
+    );
+    // The comment job reads this head's preview state once; no job runs on a
+    // deployment event, and none waits for one.
+    expect(value.jobs.comment.permissions.deployments).toBe('read');
+    // It writes no repository contents.
+    expect(value.jobs.comment.permissions.contents).toBeUndefined();
     expect(workflow('pr-comment.yml')).toContain(
       'validateAnalysisMetadata(metadata, {',
     );
-  });
-
-  it('routes Vercel success directly to a trusted early comment and CI completion to enrichment', () => {
-    const value = workflow('pr-comment.yml');
-    const jobs = yaml.parse(value).jobs;
-    expect(jobs['resolve-preview'].if).toContain(
-      "github.event_name == 'deployment_status'",
-    );
-    expect(jobs['resolve-preview'].if).toContain(
-      "github.event.deployment.environment == 'Preview'",
-    );
-    expect(jobs['resolve-preview'].if).toContain(
-      "github.event.deployment.creator.login == 'vercel[bot]'",
-    );
-    expect(jobs['resolve-preview'].steps[0].with.ref).toBe('main');
-    const guard = jobs['resolve-preview'].steps[1];
-    expect(guard.run).toContain('available=false');
-    expect(guard.run).toContain('Preview resolver is not on trusted main yet');
-    expect(jobs['resolve-preview'].steps[2].if).toBe(
-      "steps.trusted.outputs.available == 'true'",
-    );
-    expect(jobs['resolve-preview'].steps[2].with.script).toContain(
-      'resolveVercelDeploymentEvent',
-    );
-    expect(jobs['preview-comment'].needs).toBe('resolve-preview');
-    expect(jobs['preview-comment'].steps[1].with.script).toContain(
-      'reconcileEarlyPreviewComment',
-    );
-    expect(jobs.resolve.if).toContain("github.event_name == 'workflow_run'");
-    expect(jobs.comment.needs).toBe('resolve');
-    expect(jobs.comment.permissions.deployments).toBe('read');
-  });
-
-  it('skips pre-merge deployment events when the resolver is absent from trusted main', () => {
-    const guard = yaml.parse(workflow('pr-comment.yml')).jobs['resolve-preview']
-      .steps[1];
-    const root = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'astryx-preview-bootstrap-'),
-    );
-    const output = path.join(root, 'outputs');
-    try {
-      const run = () =>
-        execFileSync('bash', ['-e', '-c', guard.run], {
-          cwd: root,
-          env: {...process.env, GITHUB_OUTPUT: output},
-          encoding: 'utf8',
-        });
-      expect(run()).toContain('Preview resolver is not on trusted main yet');
-      expect(fs.readFileSync(output, 'utf8')).toContain('available=false');
-      fs.mkdirSync(path.join(root, '.github/scripts/lib'), {recursive: true});
-      fs.writeFileSync(
-        path.join(root, '.github/scripts/lib/vercel-preview.mjs'),
-        'trusted main',
-      );
-      fs.writeFileSync(output, '');
-      expect(run()).toBe('');
-      expect(fs.readFileSync(output, 'utf8')).toContain('available=true');
-    } finally {
-      fs.rmSync(root, {recursive: true, force: true});
-    }
   });
 
   it('reconciles spec-only comments without creating a preview or extra build', () => {
     const value = workflow('pr-comment.yml');
     const reconcile = value.slice(
       value.indexOf('  spec-only-reconcile:'),
-      value.indexOf('  comment:'),
+      value.indexOf('  frames:'),
     );
     expect(reconcile).toContain('reconcilePrComment');
     expect(reconcile).toContain('createIfMissing: false');
@@ -150,7 +96,7 @@ describe('PR report and deployment workflow contracts', () => {
       value.indexOf('  pr-rtl-shard:'),
     );
     expect(visual).toContain(
-      '[build-storybook, check-components, maintenance-request, visual-scout]',
+      '[build-storybook, maintenance-request, visual-scout, run-labels]',
     );
     expect(visual).toContain(
       'name: storybook-${{ needs.build-storybook.outputs.short_hash }}',
@@ -160,9 +106,8 @@ describe('PR report and deployment workflow contracts', () => {
     expect(value).not.toContain(
       'storybook_url=https://${REPO_OWNER}.github.io',
     );
-    expect(value).toContain(
-      'name: sandbox-${{ steps.urls.outputs.short_hash }}',
-    );
+    // Vercel builds the Sandbox preview; CI uploads no Sandbox of its own.
+    expect(value).not.toContain('name: sandbox-');
   });
 
   it('stages both static apps in Vercel preview and production', () => {
@@ -192,16 +137,19 @@ describe('PR report and deployment workflow contracts', () => {
     expect(routing).toContain("source: '/sandbox/:path+'");
     expect(routing).toContain("destination: '/sandbox/:path+/index.html'");
     const comment = workflow('pr-comment.yml');
-    expect(comment).toContain('deployments: read');
     expect(comment).not.toContain('deploy-preview.yml');
     expect(comment).not.toContain('gh-pages-publisher.mjs');
     const reconciler = fs.readFileSync(
       path.join(ROOT, '.github/scripts/lib/pr-preview.mjs'),
       'utf8',
     );
-    expect(reconciler).toContain('resolveVercelPreview');
-    expect(reconciler).toContain('`${previewOrigin}/storybook/`');
-    expect(reconciler).toContain('`${previewOrigin}/sandbox/`');
+    expect(reconciler).toContain('branchPreviewOrigin(identity)');
+    const status = fs.readFileSync(
+      path.join(ROOT, '.github/scripts/lib/pr-status.js'),
+      'utf8',
+    );
+    expect(status).toContain('[Storybook](${origin}/storybook/)');
+    expect(status).toContain('[Sandbox](${origin}/sandbox/)');
   });
 
   it('publishes only the static compatibility landing to GitHub Pages', () => {

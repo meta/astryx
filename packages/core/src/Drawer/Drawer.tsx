@@ -52,13 +52,16 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Drawer/Drawer.doc.mjs (props table, features, usage)
  * - /packages/core/src/Drawer/Drawer.test.tsx (tests for new/changed behavior)
- * - /packages/core/src/Drawer/Drawer.spec.md (component contract)
+ * - /packages/core/src/Drawer/__tests__/DrawerNonModalPageScroll.a11y.chromium.spec.ts (the page beside a non-modal drawer scrolls)
+ * - /docs/specs/components/Drawer/Drawer.spec.md (component contract)
  * - /packages/core/src/Drawer/index.ts (exports if types change)
  * - /packages/cli/assets/templates/blocks/components/Drawer/ (showcase blocks)
  * - /apps/storybook/stories/Drawer.stories.tsx (examples and visual coverage)
  */
 
 import {useCallback, useRef, useState, type ReactNode} from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -121,8 +124,13 @@ const styles = stylex.create({
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
     boxShadow: shadowVars['--shadow-high'],
-    overflow: 'hidden',
-    overscrollBehavior: 'contain',
+    // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
+    // Chromium then holds a finger's drag on the page beside an open
+    // non-modal drawer in that container's overscroll containment, so the
+    // page stops scrolling. `clip` clips the off-screen panel the same way
+    // without a scroll container (MobileNav's dialog does the same). The
+    // content area keeps its own scrolling and containment.
+    overflow: 'clip',
     outline: 'none',
     // Full-height side panel, pinned across the block axis.
     insetBlockStart: 0,
@@ -195,6 +203,14 @@ const styles = stylex.create({
         default: 'translateX(-100%)',
         ':dir(rtl)': 'translateX(100%)',
       },
+    },
+  },
+  // A drawer present on page load opens where it rests (spec:AST-013 FR13):
+  // the collapse reduced motion uses, so the transition still ends.
+  openSettled: {
+    transitionDuration: '0.01s',
+    '::backdrop': {
+      transitionDuration: '0.01s',
     },
   },
   // Scrim via the browser's ::backdrop pseudo-element (top layer).
@@ -420,7 +436,7 @@ export interface DrawerProps extends BaseProps<HTMLDialogElement> {
  * ```
  */
 export function Drawer({
-  isOpen,
+  isOpen: isOpenProp,
   onOpenChange,
   side = 'end',
   width = 400,
@@ -438,6 +454,17 @@ export function Drawer({
   ref,
   ...props
 }: DrawerProps) {
+  // A drawer open on the server renders closed until hydration, and opens in
+  // the render after it, the first one that can enter its native host: a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have (FR17).
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && !isHydrating;
+  // A drawer open on the server was present on page load, so it opens settled,
+  // with no slide-in; its later opens and closes animate as usual
+  // (spec:AST-013 FR13).
+  const [settledOpen] = useSettledOpen(isOpenProp, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const {containerRef: focusTrapRef} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen && hasScrim,
@@ -496,6 +523,11 @@ export function Drawer({
   // same top-most/IME rules as the shared Escape listener.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
       event.preventDefault();
       if (shouldDismissOnCloseRequest() && allowEscape) {
         handleDismiss();
@@ -556,6 +588,7 @@ export function Drawer({
           isOpen && sideOpenStyle,
           hasScrim && styles.scrim,
           hasScrim && isOpen && styles.scrimOpen,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,
@@ -564,7 +597,7 @@ export function Drawer({
       {...safeProps}
       popover={hasScrim ? undefined : 'manual'}
       aria-label={label}
-      aria-modal={hasScrim ? 'true' : undefined}
+      aria-modal={hasScrim && !isHydrating ? 'true' : undefined}
       {...(purpose === 'required' && hasScrim
         ? {role: 'alertdialog'}
         : undefined)}

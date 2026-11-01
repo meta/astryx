@@ -23,6 +23,8 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {RadioListContext, RadioListFormContext} from './RadioList';
+import {RadioListReasonContext} from './RadioListReasonContext';
+import {joinAriaIDs} from '../utils/inputAria';
 import {colorVars, radiusVars} from '../theme/tokens.stylex';
 import {mergeProps, isRenderable, rtlStyles} from '../utils';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
@@ -266,6 +268,7 @@ export function RadioListItem({
   // the touch press controller (pressableCoverage.test.ts).
   const pressable = usePressFeedback();
   const context = use(RadioListContext);
+  const disabledReasonID = use(RadioListReasonContext);
   if (!context) {
     throw new Error('RadioListItem must be used within an RadioList');
   }
@@ -351,6 +354,12 @@ export function RadioListItem({
         // disabled blocks no submit, while one enabled option keeps the choice
         // required (FR3).
         required={context.isRequired && !isDisabled}
+        // Chromium reports an unanswered native-required radio invalid before
+        // any interaction; the invalid state follows the group's status
+        // instead (RadioList FR6).
+        aria-invalid={
+          context.isRequired ? context.status?.type === 'error' : undefined
+        }
         onChange={() => {
           if (isDisabled) {
             return;
@@ -368,7 +377,12 @@ export function RadioListItem({
         // exclusive — aria-labelledby would otherwise win over it.
         aria-label={ariaLabel}
         aria-labelledby={ariaLabel == null ? labelID : undefined}
-        aria-describedby={hasDescription ? descriptionID : undefined}
+        // The item's own description, then the group's disabled reason
+        // (RadioList's disabledMessage), which describes each radio (FR5).
+        aria-describedby={joinAriaIDs(
+          hasDescription ? descriptionID : undefined,
+          disabledReasonID,
+        )}
         {...stylex.props(
           styles.input,
           rtlStyles.centerInline('-50%'),

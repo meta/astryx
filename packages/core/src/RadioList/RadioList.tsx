@@ -16,6 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/RadioList/ (showcase blocks)
  */
 
+import {RadioListReasonContext} from './RadioListReasonContext';
 import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 import React, {
   useCallback,
@@ -307,7 +308,8 @@ export function RadioList({
   // Disabled-reason tooltip. Applies to the whole-group disabled state. The
   // tooltip listeners attach to the radiogroup container; the radios stay
   // focusable via aria-disabled, as every disabled radio does, and selection
-  // is blocked in the item's onChange guard.
+  // is blocked in the item's onChange guard. The reason describes the
+  // radiogroup and each radio (see RadioListReasonContext).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -547,7 +549,14 @@ export function RadioList({
         )}>
         <RadioListContext value={contextValue}>
           <RadioListFormContext value={formContextValue}>
-            {children}
+            <RadioListReasonContext
+              value={
+                showsDisabledMessage
+                  ? disabledMessageTooltip.describedBy
+                  : undefined
+              }>
+              {children}
+            </RadioListReasonContext>
           </RadioListFormContext>
         </RadioListContext>
       </div>

@@ -24,12 +24,16 @@ nested `AGENTS.md`.
   global baseline claims with `node scripts/review-global-baselines.mjs
 --authority-commit <base-sha> --review-head <head-sha> --triggers
 <comma-separated-triggers>`, then read
-  the component's `{Name}.spec.md` when one exists and any `module:*` records it
+  the component's `docs/specs/components/<ComponentRoot>/{Name}.spec.md` when
+  one exists and any `module:*` records it
   lists. Load global records before narrower owners, but resolve the direct
   component or family owner first when it governs the exact delta. A global
   route exposes only the listed claim; it never makes the whole record govern
   the component or change. Preserve each matched record, claim, trigger, and
   match reason in the review receipt.
+- Before editing a path, run `pnpm specs:for <path>`. After editing, before
+  you commit or push, run `pnpm specs:for --diff origin/main` and follow every
+  concern-routed claim.
 - Any path: `pnpm specs:for <path>` lists the current records linked to it,
   the specs that decided them, and the global claims its component's triggers
   route. It reads the working tree, so on a pull-request branch it shows that
@@ -141,7 +145,7 @@ Runners may also write an optional `<promptId>.provenance.json` sidecar beside t
 
 ## AI Context
 
-For architectural context, decisions, and research, see the **[GitHub Wiki](https://github.com/facebook/astryx/wiki)**:
+For architectural context, decisions, and research, see the **[GitHub Wiki](https://github.com/meta/astryx/wiki)**:
 
 - **Decisions** — API Conventions, Why StyleX, StyleX Distribution
 - **Architecture** — System Architecture, Component Authoring Guide
@@ -169,6 +173,7 @@ Documentation lives in two places:
 - **Testing**: Vitest (colocated tests)
 - **Components**: `packages/core/`
 - **Storybook**: `apps/storybook/`
+- **Imports inside a package**: import the defining module (`'../List/List'`), never a folder's index barrel (`'../List'`); public consumers import `@astryxdesign/core`. `@astryx/no-internal-barrel-import` enforces it.
 
 ## JSDoc Conventions
 

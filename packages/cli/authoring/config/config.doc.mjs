@@ -31,7 +31,7 @@ export const doc = {
       type: 'string',
       description:
         "Where reports about Core go: `{@command gap-report}` routes a Core report here when no handler is loaded, gapReport handlers receive it as `report.target.issuesUrl`, and `{@command swizzle}` prints it as the feedback link for a Core component. A report or swizzle for an integration's component uses that integration's own issuesUrl, never this one. An absolute URL; a value that is not a URL makes the config invalid.",
-      default: "'https://github.com/facebook/astryx/issues/new'",
+      default: "'https://github.com/meta/astryx/issues/new'",
     },
     {
       name: 'hooks',

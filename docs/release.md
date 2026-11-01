@@ -1,6 +1,6 @@
 # Releasing to npm with trusted publishing
 
-The public [Release Process](https://github.com/facebook/astryx/wiki/Release-Process)
+The public [Release Process](https://github.com/meta/astryx/wiki/Release-Process)
 is the operational authority. This page explains the repository and npm mechanics.
 
 Astryx publishes its public `@astryxdesign/*` packages from GitHub Actions through
@@ -10,8 +10,14 @@ stable package is built from an immutable release tag and published with provena
 ## Release sequence
 
 1. Run the canonical full-scope `release-check` on an exact commit from current
-   `main`. Cut only from that checked SHA while it remains in current `main`
-   history. A minor cut additionally requires Cindy, the release owner, to
+   `main`. That commit also needs a passing full unit run of the Main workflow:
+   main's scheduler dispatches one with every release-check of main's tip, a
+   person's included, within about 15 minutes while that commit is still the
+   tip. A release owner can also dispatch the Main workflow beside their own
+   check with `sha` set to the checked commit, which tests exactly that
+   commit; a dispatch without `sha` tests whatever is main's tip when it
+   starts and is no receipt. Cut only from a SHA with both while it remains in current `main`
+   history; the stable publish refuses a cut commit without both. A minor cut additionally requires Cindy, the release owner, to
    explicitly sign off on the exact `vX.Y.0` immediately before the branch is
    created; scheduled or standing authority never substitutes for that sign-off.
 2. Create the single marked `release/vX.Y.Z` branch. Its version is the fixed-group
@@ -26,7 +32,7 @@ stable package is built from an immutable release tag and published with provena
    failed criterion is fixed on that PR rather than by moving the release head
    afterwards. For a patch, self-grade the complete generated changelogs and draft
    GitHub Release notes against the public [Blog Review
-   Rubric](https://github.com/facebook/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)
+   Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)
    under the `update` profile, record the result on the PR, and fix and re-grade
    every failed criterion. A minor requires Cindy's explicit human editorial
    approval of the changelogs, release notes, and required public blog, recorded
@@ -105,7 +111,7 @@ node scripts/npm/setup-trusted-publishing.mjs \
   `0.0.0-bootstrap.0` placeholder under the `bootstrap` dist-tag. npm makes a
   package's first version its `latest`, so a plain install of the package
   resolves to the empty placeholder until the package's first stable release.
-- `--setup-trust` registers `release.yml` for `facebook/astryx` with direct
+- `--setup-trust` registers `release.yml` for `meta/astryx` with direct
   publish allowed. The script refuses npm older than 11.15: older npm ignores
   the publish permission, creating a publisher that can only stage releases,
   and lists every existing publisher as a conflict.
@@ -114,9 +120,9 @@ node scripts/npm/setup-trusted-publishing.mjs \
 
 Then open the package's trusted-publisher settings on npmjs.com
 (`https://www.npmjs.com/package/<name>/access`) and confirm the
-`facebook/astryx` `release.yml` entry allows `npm publish`, not only
+`meta/astryx` `release.yml` entry allows `npm publish`, not only
 `npm stage publish`. The same page is the manual path when the script cannot
-finish: add a GitHub Actions publisher with owner `facebook`, repository
+finish: add a GitHub Actions publisher with owner `meta`, repository
 `astryx`, workflow `release.yml`, no environment, and `npm publish` allowed.
 
 npm expires a new trusted publisher that no publish has validated within 48
