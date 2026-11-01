@@ -238,6 +238,24 @@ jobs:
           path: package-size.json
           retention-days: 14
 
+      # A pull request's API changes compare its head's build with this
+      # surface of its merge base (ci.yml build-storybook), so a committed
+      # report main forgot to regenerate never shows as a pull request's rows
+      # (architecture:public-component-api INV24). Evidence only: it never
+      # fails this job.
+      - name: Record the published API surface
+        continue-on-error: true
+        run: node scripts/api-report/cli.mjs --surface api-surface
+
+      - name: Keep this commit's API surface for PR API changes
+        if: hashFiles('api-surface/surface.json') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: api-surface-main-${{ needs.main-commit.outputs.sha }}
+          path: api-surface/
+          retention-days: 14
+
       - name: Verify package exports
         run: node scripts/verify-exports.mjs
 

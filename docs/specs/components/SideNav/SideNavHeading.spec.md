@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/SideNav/SideNav.test.tsx,
     apps/storybook/stories/SideNav.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families:
@@ -190,14 +191,15 @@ map is recorded.
 
 ## Verification map
 
-| Contract     | Verification                                                                  | Representative states                                                            | Mutation or failure expectation                              | Audit section                        |
-| ------------ | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------ |
-| FR1–FR4, AR1 | `SideNav.test.tsx` SideNavHeading and headerEndContent suites                 | Each configuration                                                               | Wrong element, unnamed link, or misplaced end content fails. | `audit:SideNavHeading/behavior`      |
-| FR5          | `SideNav.test.tsx` SideNavHeading hover/click guard suite                     | Hover, click, late click, Escape                                                 | Lost guard or focus return fails.                            | `audit:SideNavHeading/behavior`      |
-| FR6, AR2     | `SideNav.test.tsx` menu popover semantics suite                               | Whole trigger; mixed; collapsed                                                  | A dialog wrapper or misplaced menu role fails.               | `audit:SideNavHeading/accessibility` |
-| FR8          | `SideNav.test.tsx` SideNavHeading collapsed suite                             | Link, menu, plain, no icon                                                       | Missing name, tooltip, or invoker fails.                     | `audit:SideNavHeading/behavior`      |
-| FR9          | `SideNav.test.tsx` focus ring suite                                           | Whole-heading link, collapsed link, menu trigger                                 | A missing shared ring class fails.                           | `audit:SideNavHeading/accessibility` |
-| FR10         | `SideNav.test.tsx` SideNavHeading menu-popover suite (touch and mouse slides) | Touch and mouse slides across items; a caller button and link; a release outside | Removing the adoption fails the slide tests.                 | —                                    |
+| Contract     | Verification                                                                                         | Representative states                                                            | Mutation or failure expectation                                                                                                      | Audit section                        |
+| ------------ | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ |
+| FR1–FR4, AR1 | `SideNav.test.tsx` SideNavHeading and headerEndContent suites                                        | Each configuration                                                               | Wrong element, unnamed link, or misplaced end content fails.                                                                         | `audit:SideNavHeading/behavior`      |
+| FR5          | `SideNav.test.tsx` SideNavHeading hover/click guard suite                                            | Hover, click, late click, Escape                                                 | Lost guard or focus return fails.                                                                                                    | `audit:SideNavHeading/behavior`      |
+| FR6, AR2     | `SideNav.test.tsx` menu popover semantics suite                                                      | Whole trigger; mixed; collapsed                                                  | A dialog wrapper or misplaced menu role fails.                                                                                       | `audit:SideNavHeading/accessibility` |
+| FR8          | `SideNav.test.tsx` SideNavHeading collapsed suite                                                    | Link, menu, plain, no icon                                                       | Missing name, tooltip, or invoker fails.                                                                                             | `audit:SideNavHeading/behavior`      |
+| FR9          | `SideNav.test.tsx` focus ring suite                                                                  | Whole-heading link, collapsed link, menu trigger                                 | A missing shared ring class fails.                                                                                                   | `audit:SideNavHeading/accessibility` |
+| FR10         | `SideNav.test.tsx` SideNavHeading menu-popover suite (touch and mouse slides)                        | Touch and mouse slides across items; a caller button and link; a release outside | Removing the adoption fails the slide tests.                                                                                         | —                                    |
+| RTL relation | RTL audit curated D2 and D8 targets (`apps/storybook/rtl-audit/targets.json`) on `SideNav / Default` | Heading icon and title, with 0px start and 8px end padding; LTR and RTL          | An icon that is not at the inline start of the title, or an end padding that stays on the same physical side in RTL, fails D2 or D8. | `audit:SideNavHeading/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 

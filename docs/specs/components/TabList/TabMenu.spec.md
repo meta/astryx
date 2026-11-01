@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/TabList/TabList.test.tsx,
     apps/storybook/stories/TabList.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:overlay-dismissal, family:action-groups]
@@ -162,12 +163,13 @@ recorded.
 
 ## Verification map
 
-| Contract | Verification                                                       | Representative states                             | Mutation or failure expectation              | Audit section                 |
-| -------- | ------------------------------------------------------------------ | ------------------------------------------------- | -------------------------------------------- | ----------------------------- |
-| FR1, FR3 | `TabList.test.tsx` TabMenu and host-attribute tests                | Closed, open                                      | Lost popup attributes fail.                  | `audit:TabMenu/accessibility` |
-| FR2, FR4 | `TabList.test.tsx` TabMenu label, heading, and menuitemradio tests | Selected and unselected                           | Wrong label or missing `aria-checked` fails. | `audit:TabMenu/behavior`      |
-| FR5      | `TabList.test.tsx` TabMenu keyboard navigation tests               | ArrowUp, ArrowDown, Home, End, Tab, Escape, Enter | Extra tab stops or a menu left open fails.   | `audit:TabMenu/accessibility` |
-| FR7      | `TabList.test.tsx` TabMenu suite (touch and mouse slides)          | Touch and mouse slides across options             | Removing the adoption fails the slide tests. | —                             |
+| Contract     | Verification                                                                                   | Representative states                             | Mutation or failure expectation                                  | Audit section                 |
+| ------------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------- | ----------------------------- |
+| FR1, FR3     | `TabList.test.tsx` TabMenu and host-attribute tests                                            | Closed, open                                      | Lost popup attributes fail.                                      | `audit:TabMenu/accessibility` |
+| FR2, FR4     | `TabList.test.tsx` TabMenu label, heading, and menuitemradio tests                             | Selected and unselected                           | Wrong label or missing `aria-checked` fails.                     | `audit:TabMenu/behavior`      |
+| FR5          | `TabList.test.tsx` TabMenu keyboard navigation tests                                           | ArrowUp, ArrowDown, Home, End, Tab, Escape, Enter | Extra tab stops or a menu left open fails.                       | `audit:TabMenu/accessibility` |
+| FR7          | `TabList.test.tsx` TabMenu suite (touch and mouse slides)                                      | Touch and mouse slides across options             | Removing the adoption fails the slide tests.                     | —                             |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TabList / With menu` | Menu tab label and its chevron; LTR and RTL       | A label that is not at the inline start of its chevron fails D2. | `audit:TabMenu/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 

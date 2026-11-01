@@ -340,14 +340,17 @@ they are separately named.
   visual, accessibility and RTL owners a maintainer opts a pull request into
   with their `ci:run-*` labels are unaffected by these per-author limits. Every
   run of the CI and Main workflows, of any event, waits for room before its jobs
-  start, except the CI workflow's Storybook build, which starts beside the wait
-  while every job that uses it still waits: it starts once the other active
-  runs' estimated jobs plus its own most fit under about ninety, and a
-  pull-request run also waits while a `main` full check, release re-check or
-  baseline capture is waiting, looking twice on a pull request, at once and
-  after twelve minutes, and every two minutes for at most fifteen for `main`
-  (DEC-16). A pull request that may not run CI admits nothing, and waiting never
-  fails a job, so every required context reports as before.
+  start, except the CI workflow's Storybook build, which starts as soon as there
+  is room for it while every job that uses it waits for room for the run: it
+  starts once the other active runs' estimated jobs plus its own most fit under
+  about ninety, and a pull-request run also waits while a `main` full check,
+  release re-check or baseline capture is waiting, looking twice on a pull
+  request, at once and after twelve minutes, and every two minutes for at most
+  fifteen for `main` (DEC-16). At most ten pull-request runs wait at once: one
+  more that finds no room stops at once with "CI is full: re-run all jobs or push later",
+  and its required checks report the stopped run. A pull request that may not
+  run CI admits nothing, and waiting never fails a job, so every required
+  context reports as before.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
   starts its pull-request run, which runs what the change reaches (FR13,
@@ -740,21 +743,23 @@ its own fit under ninety. Small workflows that are not admitted (linting, review
 bookkeeping, report publishing) always count at least the most they were
 measured running at once, eighteen jobs, so the room they can take stays free.
 Each CI or Main run counts its live jobs: a pull-request run still waiting
-counts the jobs it runs, the job that waits and the Storybook build that starts
-beside it, so waiting runs hold each other back by no more than they use, and a
-run admitted in the last forty-five seconds, before its jobs appear, counts at
-least its planned most. A run GitHub still lists as active but has not updated
-in two hours holds no runner and counts nothing. A look reads the active runs
-and each CI or Main run's jobs once, so it costs two run listings plus one call
-per active CI or Main run. A pull request looks at most twice, and a run starts
+counts the jobs it runs, the job that waits and a Storybook build that found
+room, so waiting runs hold each other back by no more than they use, and a run
+admitted in the last forty-five seconds, before its jobs appear, counts at least
+its planned most. A run GitHub still lists as active but has not updated in two
+hours holds no runner and counts nothing. A look reads the active runs and each
+CI or Main run's jobs once, so it costs two run listings plus one call per
+active CI or Main run. A pull request looks at most twice, and a run starts
 rather than spend a low API budget. A `main` full check, release re-check or
 baseline capture (every dispatch of the CI workflow) goes first: while one
-waits, pull-request runs wait too, all but their Storybook builds, which the
-waiting check counts. Every job ends within its fifteen-minute budget, so `main`
-fits within fifteen minutes. Nothing is reserved for `main` outside those
-minutes.
+waits, pull-request runs wait too, their Storybook builds included. Every job
+ends within its fifteen-minute budget, so `main` fits within fifteen minutes.
+Nothing is reserved for `main` outside those minutes. At most ten pull-request
+runs wait at once; one more that finds no room stops at once, "CI is full:
+re-run all jobs or push later", rather than add a waiting job to a full CI. A
+`main` run is never stopped.
 
-CI can still pass ninety in three rare, bounded ways:
+CI can still pass ninety in four bounded ways, the first three rare:
 
 - A run that has waited its longest (fifteen minutes for `main`, twelve for a
   pull request) starts whatever the load, even while a `main` check waits. That
@@ -765,6 +770,11 @@ CI can still pass ninety in three rare, bounded ways:
   jobs until its next look.
 - A run starts when the GitHub API cannot be read, a rate limit included. It is
   over by at most its own jobs.
+- A waiting run's own waiting job starts before it finds room; its Storybook
+  build starts only once there is room for it. CI is over by at most one slim
+  job per waiting run: at most ten for pull requests, plus one for each waiting
+  merge-queue entry and `main` run, which are never turned away, for at most a
+  wait (twelve minutes for a pull request, fifteen for `main`).
 
 Rejected: a fixed reserve for `main` (it left about half the ceiling idle and
 stalled the pull-request queue); starting `main`'s checks at once (a burst would

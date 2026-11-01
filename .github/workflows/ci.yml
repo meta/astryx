@@ -92,17 +92,58 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
-  # Admits the whole run under CI's ceiling of about ninety concurrent jobs
-  # (spec:AST-030 FR16, DEC-16). Every job here but build-storybook needs this
-  # one, directly or through the jobs it needs; build-storybook starts beside
-  # it, and every job that uses the build needs this one too. Like every other job it skips for a draft or an
-  # unlabelled fork, which run no CI (FR17); the required contexts still report
-  # through their own status rules. Otherwise it never fails, so each job's own
-  # condition decides exactly as before. `peak` is the most jobs a run holds at once: a
-  # release-check's from its legs, a pull request's from its measured most plus
-  # the suites its labels opt into (ci-admission.test.mjs). A pull request
-  # waits at most twelve minutes, inside the fifteen-minute job budget.
+  # Admit the whole run under CI's ceiling of about ninety concurrent jobs
+  # (spec:AST-030 FR16, DEC-16), in two slim jobs: `room` waits until the
+  # Storybook build has room and starts it, and `admission` waits for the rest
+  # of the run unless it already fit. Every job here but build-storybook and
+  # ci-full needs admission, directly or through the jobs it needs, so a
+  # waiting run holds only its one waiting job and a build that found room.
+  # Like every other job both skip for a draft or an unlabelled fork, which run
+  # no CI (FR17); the required contexts still report through their own status
+  # rules. Neither fails, so each job's own condition decides exactly as before,
+  # except for a pull-request run CI is full for, which ci-full stops. `peak` is
+  # the most jobs a run holds at once: a release-check's from its legs, a pull
+  # request's from its measured most plus the suites its labels opt into
+  # (ci-admission.test.mjs). A pull request waits at most twelve minutes in all,
+  # inside the fifteen-minute job budget.
+  room:
+    # Finds room for the run's first job, its Storybook build, and records
+    # whether the whole run fit on that look. A pull-request run finding ten
+    # others already waiting, and no room, is turned away: CI is full.
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-slim
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      fits: ${{ steps.room.outputs.fits }}
+      full: ${{ steps.room.outputs.full }}
+      started: ${{ steps.room.outputs.started }}
+      looks: ${{ steps.room.outputs.looks }}
+    steps:
+      - name: Check out the admission action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/ci-admission
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Wait for room under the CI ceiling
+        id: room
+        uses: ./.ci-admission/.github/actions/ci-admission
+        continue-on-error: true
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
+        with:
+          phase: room
+          peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
+          main: ${{ github.event_name == 'workflow_dispatch' }}
+          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
+          max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
+
   admission:
+    needs: [room]
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
     runs-on: ubuntu-slim
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
@@ -110,6 +151,12 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Check out the admission action
         uses: actions/checkout@v7
         with:
@@ -122,11 +169,37 @@ jobs:
         continue-on-error: true
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
         with:
+          phase: rest
+          fits: ${{ needs.room.outputs.fits }}
+          started: ${{ needs.room.outputs.started }}
+          looks: ${{ needs.room.outputs.looks }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
+
+  # Stops a pull-request run that CI is full for (room found no room and ten
+  # other pull-request runs waiting), with the reason, so it builds nothing.
+  # It cancels the run when its token can. A fork's read-only token cannot;
+  # then admission fails, the jobs behind it skip, and build, test and
+  # docsite-test fail with the same reason, never skip or pass.
+  ci-full:
+    needs: [room]
+    if: github.event_name == 'pull_request' && needs.room.outputs.full == 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      # actions: write lets the run cancel itself.
+      actions: write
+    steps:
+      - name: Stop, CI is full
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
+          exit 1
 
   maintenance-request:
     needs: [admission]
@@ -415,7 +488,7 @@ jobs:
   # only the production build has the opaque-origin sandbox at all. The
   # spec-only lane validates spec records here, where it always has.
   docsite-test:
-    needs: [admission]
+    needs: [room, admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
     # The Next.js production build uses every core it gets.
     runs-on: ubuntu-latest
@@ -432,6 +505,12 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
@@ -879,6 +958,7 @@ jobs:
   test:
     needs:
       [
+        room,
         release-bump,
         test-ui,
         test-node,
@@ -901,6 +981,12 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
@@ -980,10 +1066,11 @@ jobs:
             await decideRunLabels({github, context, core});
 
   build-storybook:
-    # Starts beside admission instead of after it: it is one job, and every
-    # job that uses its build also needs admission, so the run's heavy legs
-    # still wait for room (spec:AST-030 FR16, DEC-16).
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
+    # Starts once there is room for it, beside admission's wait for the rest of
+    # the run; every job that uses its build also needs admission, so the heavy
+    # legs still wait for room (spec:AST-030 FR16, DEC-16).
+    needs: [room]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
@@ -1050,11 +1137,12 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         uses: ./.github/actions/setup
 
-      # Main keeps each commit's size records for 14 days (deploy.yml): every
-      # public component's sizes and every published package's. The merge
-      # base is compared from them; it is built here only when Main kept no
-      # component record for it. The lookup runs before the Storybook build so
-      # that build can run beside it.
+      # Main keeps each commit's size records and API surface for 14 days
+      # (deploy.yml): every public component's sizes, every published
+      # package's, and every published package's API report. The merge base is
+      # compared from them; it is built here only when Main kept no component
+      # record for it. The lookup runs before the Storybook build so that build
+      # can run beside it.
       - name: Find the merge base
         id: merge-base
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
@@ -1076,6 +1164,7 @@ jobs:
             for (const [output, prefix, missing] of [
               ['component_run_id', 'component-size-main', 'the merge base is built here instead'],
               ['package_run_id', 'package-size-main', 'package sizes are shown without a budget'],
+              ['api_run_id', 'api-surface-main', 'the API changes compare with its committed reports unless the merge base is built for its sizes'],
             ]) {
               const name = `${prefix}-${process.env.BASE_SHA}`;
               const runId = await mainArtifactRunId({github, ...context.repo, name, sha: process.env.BASE_SHA});
@@ -1094,21 +1183,38 @@ jobs:
           github-token: ${{ github.token }}
           path: .component-size-base
 
+      - name: Download main's API surface for the merge base
+        id: api-download
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.size-records.outputs.api_run_id != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: api-surface-main-${{ steps.merge-base.outputs.sha }}
+          run-id: ${{ steps.size-records.outputs.api_run_id }}
+          github-token: ${{ github.token }}
+          path: .api-surface-base
+
       # No component record of this merge base was read (Main kept none, or
-      # its download failed): build the base beside
-      # the Storybook build and record its sizes with this head's analyzer, so
-      # every changed component still has a before size (AST-080 FR8). It runs
-      # in the background; the wait before the analysis collects it.
+      # its download failed): build the base beside the Storybook build and
+      # record its sizes with this head's analyzer, so every changed component
+      # still has a before size (AST-080 FR8). When Main kept no API surface
+      # either, it also builds the published packages the pull request
+      # changes, and the API changes step reports this base (INV24). A missing
+      # API surface alone starts no build: the API changes then compare with
+      # the merge base's committed reports, marked as such. It runs in the
+      # background; the wait before the analysis collects it.
       - name: Start building the merge base without a record
         id: base-build
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.merge-base.outputs.sha != '' && steps.component-download.outcome != 'success'
         env:
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          NEED_API: ${{ steps.api-download.outcome != 'success' }}
         run: |
           git worktree add --detach .size-base "$BASE_SHA"
           mkdir -p .component-size-base
-          # The inner script reads BASE_SHA and HEAD_SHA from this step's env.
+          # The inner script reads BASE_SHA, HEAD_SHA and NEED_API from this
+          # step's env.
           # shellcheck disable=SC2016
           nohup bash -c '
             set -e
@@ -1116,13 +1222,25 @@ jobs:
             pnpm install --frozen-lockfile
             # Core and its build tooling always build: the other component
             # packages depend on them. Another package builds only when the
-            # pull request changes its source.
+            # pull request changes its source. A published package the base
+            # leaves unbuilt is reported from the head build only when none of
+            # its report inputs changed (SHARED_INPUTS in the API report CLI);
+            # otherwise from its committed report.
             pnpm -F @astryxdesign/build build
             pnpm -F @astryxdesign/core build
             for pkg in lab charts richtext vega; do
               git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "packages/$pkg/src" || pnpm -F "@astryxdesign/$pkg" build
             done
             node ../.github/scripts/analyze-pr.js --main-record --output ../.component-size-base/component-size.json
+            if [ "$NEED_API" = true ]; then
+              {
+                for dir in packages/themes/*/; do
+                  git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- "$dir" || pnpm -F "./$dir" build
+                done
+                # The CLI publishes declarations generated from its JSDoc.
+                git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
+              } || echo "Building the published packages of the merge base failed; those packages compare with its committed reports."
+            fi
             touch ../base-build.done
           ' > base-build.log 2>&1 || touch base-build.failed &
           echo "started=true" >> "$GITHUB_OUTPUT"
@@ -1308,8 +1426,10 @@ jobs:
           EOF
 
       # Advisory API changes (architecture:public-component-api INV24): each
-      # published package's report from this build, compared with the reports
-      # committed at the merge base (read with git, no API calls). It reads the
+      # published package's report from this build, compared with the merge
+      # base's surface (Main's record of it, else the base built above, else
+      # the reports committed there, read with git). A committed report that
+      # differs from this build is one stale line, not rows. It reads the
       # dists built above and never fails the job; api-changes.json goes into
       # the pr-analysis artifact. With no merge base there is nothing to compare.
       # A head cut before cli.mjs existed cannot run the next step;
@@ -1327,7 +1447,22 @@ jobs:
         run: |
           BASE_SHA=$(.github/scripts/merge-base.sh "$BASE_REF" 'the API changes' || true)
           [ -n "$BASE_SHA" ] || exit 0
-          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA"
+          # Main's surface of the merge base, else the base built above for its
+          # sizes, reported here. A head that predates the built surface
+          # compares committed reports.
+          SURFACE=()
+          if grep -q -- "'--base-surface'" scripts/api-report/cli.mjs; then
+            if [ -f .api-surface-base/surface.json ]; then
+              SURFACE=(--base-surface .api-surface-base --base-record main)
+            elif [ -f base-build.done ] && [ -d .size-base ]; then
+              node scripts/api-report/cli.mjs --surface .api-surface-build --root .size-base \
+                || echo "::notice::The merge base's API surface was not written; the API changes compare with its committed reports."
+              if [ -f .api-surface-build/surface.json ]; then
+                SURFACE=(--base-surface .api-surface-build --base-record build)
+              fi
+            fi
+          fi
+          node scripts/api-report/cli.mjs --changes --base "$BASE_SHA" "${SURFACE[@]}"
 
       - name: Upload analysis artifact
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && (github.event_name == 'pull_request' || inputs.operation == 'release-check')
@@ -1347,8 +1482,8 @@ jobs:
   # ~1.5 minutes sooner. The build and release-check joins require this job,
   # so a type error still fails both.
   typecheck:
-    needs: [admission]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
+    needs: [room, admission]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
@@ -1415,8 +1550,8 @@ jobs:
   # gate passes. A skipped build-storybook job (a draft) skips this gate too;
   # a fork pull request without `ci:run` still reports here.
   build:
-    needs: [build-storybook, typecheck]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
+    needs: [room, build-storybook, typecheck]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || needs.room.outputs.full == 'true' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
     runs-on: ubuntu-slim
     permissions: {}
     steps:
@@ -1425,6 +1560,12 @@ jobs:
         run: |
           echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
           exit 1
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Assert parallel builds succeeded
         run: |
           echo "build-storybook: ${{ needs.build-storybook.result }}"
@@ -1907,8 +2048,8 @@ jobs:
           delete-merged: true
 
   pr-interaction:
-    needs: [admission, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    needs: [room, admission, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2025,8 +2166,8 @@ jobs:
   # required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
-    needs: [admission, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    needs: [room, admission, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2050,7 +2191,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform)|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer)|packages/core/src/privateAttributes/hapticSwitch\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement)|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2828,6 +2969,8 @@ jobs:
         id: rtl
         if: (steps.rtl-scope.outputs.should_run == 'true') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
         continue-on-error: true
+        env:
+          PARTS: ${{ matrix.parts }}
         run: |
           PACKAGE=${{ matrix.package }}
           COMPONENTS="${{ steps.rtl-scope.outputs.components }}"
@@ -2837,7 +2980,7 @@ jobs:
             FILTER_ARGS=(--filter "$FILTER")
           fi
           SHARD_ARGS=()
-          if [ "${{ matrix.parts }}" -gt 1 ]; then
+          if [ "$PARTS" -gt 1 ]; then
             SHARD_ARGS=(--shard "${{ matrix.part }}/${{ matrix.parts }}" --shard-output "rtl-shard-${{ matrix.part }}.json")
           fi
           echo "Auditing $PACKAGE components: $COMPONENTS"
@@ -2851,6 +2994,8 @@ jobs:
 
       - name: Require completed RTL shard report
         if: always() && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
+        env:
+          PARTS: ${{ matrix.parts }}
         run: |
           SCOPE_OUTCOME="${{ steps.rtl-scope.outcome }}"
           SHOULD_RUN="${{ steps.rtl-scope.outputs.should_run }}"
@@ -2864,7 +3009,7 @@ jobs:
               echo "Applicable RTL audit did not run: $AUDIT_OUTCOME"
               exit 1
             fi
-            if [ "${{ matrix.parts }}" -gt 1 ]; then
+            if [ "$PARTS" -gt 1 ]; then
               # A part writes cards only; pr-rtl-merge checks the joined report.
               test -s "rtl-shard-${{ matrix.part }}.json"
             else

@@ -30,7 +30,8 @@ describe('docsite-test', () => {
     expect(jobs['docsite-data']).toBeUndefined();
     expect(jobs['docsite-browser']).toBeUndefined();
     // Only CI's run admission, which never skips (ci-admission.test.mjs).
-    expect(owner.needs).toEqual(['admission']);
+    // room tells it when CI is full (ci-admission.test.mjs).
+    expect(owner.needs).toEqual(['room', 'admission']);
     expect(owner['continue-on-error']).toBeUndefined();
     // A required context keeps only the draft skip in its condition; an
     // outside contributor's run stops at the first step with the reason.
@@ -43,7 +44,9 @@ describe('docsite-test', () => {
     expect(owner.steps[0].name).toBe(
       'Require a branch in this repository or the ci:run label',
     );
-    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(2);
+    // After the FR17 gate and the CI-is-full stop (ci-admission.test.mjs).
+    expect(owner.steps[1].name).toBe('Stop when CI is full');
+    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(3);
 
     const builds = owner.steps.filter(s =>
       /pnpm -F @astryxdesign\/docsite build/.test(s.run ?? ''),

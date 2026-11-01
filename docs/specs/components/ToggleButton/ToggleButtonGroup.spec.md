@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/ToggleButton/__tests__/ToggleButton.a11y.test.tsx,
     packages/core/src/ToggleButton/__tests__/ToggleButton.a11y.chromium.spec.ts,
     packages/core/src/Layer/layerScopedContext.test.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:buttons]
@@ -174,6 +175,7 @@ No design record governs ToggleButtonGroup. Its root carries the
 | FR8, FR9 (size and disabled) | Evidence gap: no test of member Tab order, or of size and disabled scoping at a layer                                                                                           | —                                                       | —                                                                                                                                                                                | `audit:ToggleButtonGroup/accessibility` |
 | FR7 (size), ORD2, PR1        | Evidence gap: no test asserts the group size default, member size precedence, or that the group adds no listeners beyond the press tracking `family:action-groups` FR5 gives it | —                                                       | —                                                                                                                                                                                | `audit:ToggleButtonGroup/behavior`      |
 | AR2                          | `ToggleButton.a11y.test.tsx` and `ToggleButton.a11y.chromium.spec.ts` operable and focusable facts for the single- and multiple-group states                                    | Group members                                           | A group member that is not operable or that Tab does not reach fails.                                                                                                            | `audit:ToggleButtonGroup/accessibility` |
+| RTL relation                 | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `ToggleButton / Group single`                                                                          | Two adjacent toggle buttons; LTR and RTL                | An earlier button that is not at the inline start of the next fails D2.                                                                                                          | `audit:ToggleButtonGroup/i18n-rtl`      |
 
 ## Current-state impact
 
