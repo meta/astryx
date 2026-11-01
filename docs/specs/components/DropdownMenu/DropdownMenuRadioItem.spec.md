@@ -128,14 +128,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State          | Required invariant                                                        | Allowed variation                                              |
-| -------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Checked        | `aria-checked=true`; the marker shows its checked dot.                    | Content, size, theme, and mode.                                |
-| Unchecked      | `aria-checked=false`; the marker shows an empty circle.                   | Content, size, theme, and mode.                                |
-| Focused        | The row holds focus.                                                      | Pointer hover or keyboard arrival; focus paint is the AR4 gap. |
-| Disabled       | `aria-disabled=true`, no tab stop, half opacity, and no activation.       | Checked or unchecked value.                                    |
-| Coarse pointer | The marker sits at the inline end of the row.                             | Direction mirrors the placement.                               |
-| RTL / narrow   | Content and marker follow logical order with no horizontal page overflow. | Parent menu placement and width.                               |
+| State          | Required invariant                                                        | Allowed variation                                      |
+| -------------- | ------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Checked        | `aria-checked=true`; the marker shows its checked dot.                    | Content, size, theme, and mode.                        |
+| Unchecked      | `aria-checked=false`; the marker shows an empty circle.                   | Content, size, theme, and mode.                        |
+| Focused        | The row holds focus.                                                      | Pointer hover or keyboard arrival; focus paint is AR4. |
+| Disabled       | `aria-disabled=true`, no tab stop, half opacity, and no activation.       | Checked or unchecked value.                            |
+| Coarse pointer | The marker sits at the inline end of the row.                             | Direction mirrors the placement.                       |
+| RTL / narrow   | Content and marker follow logical order with no horizontal page overflow. | Parent menu placement and width.                       |
 
 ### Transformation and precedence order
 
