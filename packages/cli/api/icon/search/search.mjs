@@ -12,10 +12,12 @@
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {loadIconSets} from '../_adapter.mjs';
-import {rankIcons, setsNamed, unusableSet} from '../_records.mjs';
-
-/** The lowest score of a whole-word or word-start match. */
-const WORD_SCORE = 60;
+import {
+  answeringMatches,
+  rankIcons,
+  setsNamed,
+  unusableSet,
+} from '../_records.mjs';
 
 /**
  * Every icon of one set, by id: `--set <name> --all-icons`, so an author can read
@@ -75,11 +77,10 @@ export async function iconSearch(query, {cwd, set, limit}) {
     if (searched.length === 0) throw unusableSet(sets, withdrawn, set);
   }
   const ranked = rankIcons(searched, query);
-  // A partial match (`pin` inside `shopping`) answers only when nothing
-  // matches a whole word or a word start.
-  const matches = ranked.some(each => each.score >= WORD_SCORE)
-    ? ranked.filter(each => each.score >= WORD_SCORE)
-    : ranked;
+  // A word start (`start` for `star`) answers only when nothing matches a
+  // whole word, and a partial match (`pin` inside `shopping`) only when
+  // nothing matches a whole word or a word start.
+  const matches = answeringMatches(ranked);
   return {
     type: 'icon.search',
     data: {

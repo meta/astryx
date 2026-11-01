@@ -18,7 +18,8 @@ export const doc = {
       name: 'name',
       param: 'name',
       required: true,
-      description: 'The definition name, in camelCase (rocketLaunch)',
+      description:
+        'The definition name, in camelCase (rocketLaunch) or kebab-case (rocket-launch)',
     },
   ],
   options: [

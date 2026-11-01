@@ -721,19 +721,302 @@ export function modulePrefix(file, options) {
 }
 
 /**
+ * How a module names its icons: the library prefix every icon export shares
+ * ({@link modulePrefix}) and the look words its names end in
+ * ({@link lookPositions}), read from its icon exports once.
+ * @param {string} file
+ * @param {{adapter?: boolean}} [options]
+ * @returns {{prefix: string[], positions: Array<Set<string>>}}
+ */
+export function moduleNaming(file, options) {
+  const candidates = iconCandidates(file, options);
+  const prefix = libraryPrefix(prefixNames(candidates));
+  const positions = lookPositions(
+    candidates.map(each => iconNaming(each.name, prefix).id),
+  );
+  return {prefix, positions};
+}
+
+/**
+ * An export's id and set name ({@link iconNaming}) without the look words
+ * its library's names end in ({@link lookPositions}):
+ * `XOutline24WGHT500Icon` is `x`, `XIcon`.
+ * @param {string} name
+ * @param {{prefix: string[], positions: Array<Set<string>>}} naming
+ * @returns {{id: string, name: string}}
+ */
+export function iconNamingWithoutLook(name, {prefix, positions}) {
+  const named = iconNaming(name, prefix);
+  const {base} = splitLook(named.id.split('-'), positions);
+  if (base.length === named.id.split('-').length) return named;
+  const pascal = base
+    .map(word => word[0].toUpperCase() + word.slice(1))
+    .join('');
+  return {id: base.join('-'), name: iconExportName(pascal)};
+}
+
+/**
+ * Reports the progress of reading a large library while `fn` runs: a line
+ * before its exports are read and one with what was found. The CLI prints
+ * them on stderr in text mode; nothing else hears them.
+ * @template T
+ * @param {(line: string) => void} report
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withLibraryProgress(report, fn) {
+  return libraryProgress.run(report, fn);
+}
+
+/** @type {AsyncLocalStorage<(line: string) => void>} */
+const libraryProgress = new AsyncLocalStorage();
+
+/** A library with at least this many exports reports its reading. */
+const PROGRESS_FROM = 1000;
+
+/** Fewer icons than this never show a library's look positions. */
+const LOOK_MIN_ICONS = 20;
+
+/** More words than this in one trailing position are glyph names. */
+const LOOK_MAX_VALUES = 12;
+
+/**
+ * The trailing words a library encodes its looks with: a style, a size, a
+ * weight (`XOutline24WGHT500Icon` is `x` in the `outline`, `24`, `wght500`
+ * look). A trailing position is a look position when, across at least
+ * {@link LOOK_MIN_ICONS} icons, at most {@link LOOK_MAX_VALUES} words fill
+ * it, each on at least 5% of the icons and together on at least 90%; the
+ * positions are read from the end while they hold. Glyph names never meet
+ * that bar (`trash-2` and `clock-10` are a few icons each), so a library
+ * that encodes no looks has none. Reads each id once per position and
+ * keeps only counts.
+ * @param {string[]} ids every icon's id
+ * @returns {Array<Set<string>>} the look positions, the last word first
+ */
+export function lookPositions(ids) {
+  if (ids.length < LOOK_MIN_ICONS) return [];
+  /** @type {Array<Set<string>>} */
+  const positions = [];
+  const least = Math.max(2, Math.ceil(ids.length * 0.05));
+  while (positions.length < 4) {
+    /** @type {Map<string, number>} */
+    const counts = new Map();
+    for (const id of ids) {
+      const words = id.split('-');
+      const {base} = splitLook(words, positions);
+      if (base.length < 2 || base.length < words.length - positions.length) {
+        continue;
+      }
+      const last = /** @type {string} */ (base.at(-1));
+      counts.set(last, (counts.get(last) ?? 0) + 1);
+    }
+    const values = [...counts].filter(([, count]) => count >= least);
+    if (values.length === 0 || values.length > LOOK_MAX_VALUES) break;
+    const covered = values.reduce((sum, [, count]) => sum + count, 0);
+    if (covered < ids.length * 0.9) break;
+    positions.push(new Set(values.map(([value]) => value)));
+  }
+  return positions;
+}
+
+/**
+ * An id's glyph words and its look words, by {@link lookPositions}:
+ * `x-outline-24-wght500` is `x` with `[wght500, 24, outline]`, null where
+ * the id has no look word.
+ * @param {string[]} words
+ * @param {Array<Set<string>>} positions
+ * @returns {{base: string[], look: Array<string | null>}}
+ */
+export function splitLook(words, positions) {
+  let end = words.length;
+  /** @type {Array<string | null>} */
+  const look = positions.map(() => null);
+  for (const [index, position] of positions.entries()) {
+    const last = words[end - 1];
+    if (end < 2 || last == null || !position.has(last)) break;
+    look[index] = last;
+    end--;
+  }
+  return {base: end === words.length ? words : words.slice(0, end), look};
+}
+
+/** Style words a library's default look is usually named by. */
+const DEFAULT_STYLE_WORDS = ['default', 'regular', 'outline', 'outlined'];
+
+/**
+ * The word each look position prefers: a word of `prefer` it has (the set's
+ * default variant), else a usual default style word, else the middle of a
+ * series of numbered words (`wght300` … `wght700` gives `wght500`), else
+ * its first word in order.
+ * @param {Array<Set<string>>} positions
+ * @param {string[]} [prefer]
+ * @returns {string[]}
+ */
+export function preferredLook(positions, prefer = []) {
+  const wanted = prefer.map(word => word.toLowerCase());
+  return positions.map(position => {
+    const values = [...position].sort();
+    const chosen =
+      wanted.find(word => position.has(word)) ??
+      DEFAULT_STYLE_WORDS.find(word => position.has(word));
+    if (chosen) return chosen;
+    const numbered = values.map(value => /^([a-z]*)(\d+)$/u.exec(value));
+    const lead = numbered[0]?.[1];
+    if (
+      values.length > 1 &&
+      numbered.every(match => match != null && match[1] === lead)
+    ) {
+      const series = values
+        .map((value, index) => ({
+          value,
+          n: Number(/** @type {RegExpExecArray} */ (numbered[index])[2]),
+        }))
+        .sort((a, b) => a.n - b.n);
+      return series[Math.floor((series.length - 1) / 2)].value;
+    }
+    return values[0];
+  });
+}
+
+/**
+ * One icon a library gives.
+ * @typedef {object} LibraryIcon
+ * @property {string} export the library export it reads
+ * @property {string} id
+ * @property {string} name the name the set exports it as
+ * @property {boolean} adapt
+ * @property {string[]} aliases the ids of the other names the library
+ *   exports the icon as, leaving out the library's own name (`lucide-trash`)
+ * @property {Array<string | null>} [look] in a library that encodes looks:
+ *   this export's look words by position, the last word first
+ * @property {string[]} [looks] in a library that encodes looks: every
+ *   export that draws the glyph, this one included
+ */
+
+/**
+ * The words a library's looks are named by, and the look a set takes from
+ * it: what {@link libraryIcons} found, for the receipt.
+ * @typedef {object} LibraryLookSummary
+ * @property {string[][]} positions each position's words, sorted, the last
+ *   word of a name first
+ * @property {string[]} preferred the word taken in each position
+ * @property {number} exports how many exports draw the icons
+ */
+
+/**
  * Every icon a whole library exports, for wrapping it at once: one entry per
  * component (and, with an adapter, per data export), read by its `…Icon`
  * export when it has one (an alias of the same value is recorded once), with
  * its id and the name the set exports it as from the name, the library
  * prefix left out ({@link libraryPrefix}).
+ *
+ * A library that encodes looks in its export names ({@link lookPositions})
+ * gives one icon per glyph: the look {@link preferredLook} prefers, its id
+ * and name without the look words (`XOutline24WGHT500Icon` is `x`,
+ * `XIcon`), and its `looks`, every export that draws the glyph.
  * @param {string} file
- * @param {{adapter?: boolean, exclude?: string[]}} [options] `adapter`:
- *   whether the set declares one; `exclude`: export names that are not icons
- * @returns {Array<{export: string, id: string, name: string, adapt: boolean, aliases: string[]}>}
- *   `aliases`: the ids of the other names the library exports the icon as,
- *   leaving out the library's own name (`lucide-trash`)
+ * @param {{adapter?: boolean, exclude?: string[], prefer?: string[], module?: string, summary?: (summary: LibraryLookSummary) => void}} [options]
+ *   `adapter`: whether the set declares one; `exclude`: export names that
+ *   are not icons; `prefer`: look words to prefer (the set's default
+ *   variant); `module`: the module as the author named it, for progress;
+ *   `summary`: hears the looks found, when the library has any
+ * @returns {LibraryIcon[]}
  */
 export function libraryIcons(file, options = {}) {
+  const report = libraryProgress.getStore();
+  const exportCount = report ? followedExportNames(file).length : 0;
+  const loud = report != null && exportCount >= PROGRESS_FROM;
+  const label = options.module ?? path.basename(file);
+  if (loud) report(`Reading ${exportCount} exports of ${label}...`);
+  const all = everyLibraryIcon(file, options);
+  const grouped = libraryLooks(all, options.prefer);
+  if (grouped.positions.length > 0) {
+    options.summary?.({
+      positions: grouped.positions.map(position => [...position].sort()),
+      preferred: grouped.preferred,
+      exports: all.length,
+    });
+  }
+  if (loud) {
+    report(
+      grouped.icons.length === all.length
+        ? `Found ${grouped.icons.length} icons in ${label}.`
+        : `Found ${grouped.icons.length} icons in ${label}, drawn by ${all.length} exports in their looks.`,
+    );
+  }
+  return grouped.icons;
+}
+
+/**
+ * The library's icons grouped by glyph when its export names encode looks
+ * ({@link libraryIcons}), with the look positions and the words preferred.
+ * Without look positions the icons are returned as they are.
+ * @param {LibraryIcon[]} all every icon, one per export
+ * @param {string[]} [prefer]
+ * @returns {{icons: LibraryIcon[], positions: Array<Set<string>>, preferred: string[]}}
+ */
+export function libraryLooks(all, prefer = []) {
+  const positions = lookPositions(all.map(icon => icon.id));
+  if (positions.length === 0) return {icons: all, positions, preferred: []};
+  const preferred = preferredLook(positions, prefer);
+  // How far a look is from the preferred one, as a sortable key: the
+  // position first in the name (the style) counts most.
+  const distance = (/** @type {Array<string | null>} */ look) => {
+    let key = '';
+    for (let index = look.length - 1; index >= 0; index--) {
+      key += look[index] === preferred[index] ? '0' : '1';
+    }
+    return key;
+  };
+  /** @type {Map<string, {best: LibraryIcon, look: Array<string | null>, key: string, looks: string[]}>} */
+  const byGlyph = new Map();
+  for (const icon of all) {
+    const {base, look} = splitLook(icon.id.split('-'), positions);
+    const id = base.join('-');
+    const key = distance(look);
+    const group = byGlyph.get(id);
+    if (!group) {
+      byGlyph.set(id, {best: icon, look, key, looks: [icon.export]});
+      continue;
+    }
+    group.looks.push(icon.export);
+    if (
+      key < group.key ||
+      (key === group.key && icon.export < group.best.export)
+    ) {
+      group.best = icon;
+      group.look = look;
+      group.key = key;
+    }
+  }
+  /** @type {LibraryIcon[]} */
+  const icons = [];
+  for (const [id, {best, look, looks}] of byGlyph) {
+    const pascal = id
+      .split('-')
+      .map(word => word[0].toUpperCase() + word.slice(1))
+      .join('');
+    icons.push({
+      ...best,
+      id,
+      name: iconExportName(pascal),
+      aliases: best.aliases.filter(alias => !byGlyph.has(alias)),
+      look,
+      looks: looks.sort(),
+    });
+  }
+  icons.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return {icons, positions, preferred};
+}
+
+/**
+ * Every icon a library exports, one per export: {@link libraryIcons} before
+ * looks are grouped.
+ * @param {string} file
+ * @param {{adapter?: boolean, exclude?: string[]}} [options]
+ * @returns {LibraryIcon[]}
+ */
+export function everyLibraryIcon(file, options = {}) {
   const candidates = iconCandidates(file, options);
   /** @type {Map<string, {names: string[], adapt: boolean, scalar: string | null}>} */
   const byOrigin = new Map();
@@ -827,16 +1110,29 @@ export function iconDefinitionSource(doc) {
 }
 
 /**
- * Check a new icon definition for a set: a camelCase name no Astryx
- * definition has, a description, and at least one lower-case word.
+ * A new definition's name as written in a command: camelCase as given, or
+ * kebab-case as the docs list definitions (`ai-helper` is `aiHelper`).
+ * @param {string} name
+ */
+export function definitionNameFromInput(name) {
+  return /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+$/u.test(name)
+    ? name.replace(/-([a-z0-9])/gu, (_, c) => c.toUpperCase())
+    : name;
+}
+
+/**
+ * Check a new icon definition for a set: a camelCase name (or its kebab-case
+ * form, {@link definitionNameFromInput}) no Astryx definition has, a
+ * description, and at least one lower-case word.
  * @param {DiscoveredIconSet} set
- * @param {{name: string, description?: string, words?: string[]}} doc
+ * @param {{name: string, description?: string, words?: string[]}} given
  * @returns {{name: string, description: string, words: string[]}}
  */
-export function checkNewDefinition(set, doc) {
+export function checkNewDefinition(set, given) {
+  const doc = {...given, name: definitionNameFromInput(given.name)};
   if (!/^[a-z][a-zA-Z0-9]*$/u.test(doc.name)) {
     throw new IconSetAuthoringError(
-      `Invalid icon definition name "${doc.name}": use camelCase starting with a lower-case letter.`,
+      `Invalid icon definition name "${doc.name}": use camelCase (aiHelper) or kebab-case (ai-helper), starting with a lower-case letter.`,
       'ERR_INVALID_ARGUMENT',
     );
   }
@@ -916,8 +1212,10 @@ const GENERATED_HEADER = [
 
 /**
  * The top-level statements of a generated module, one normalized line each,
- * however the file was formatted: whitespace collapsed, no padding inside
- * braces, no trailing comma. Comments are dropped.
+ * however a formatter left the file (Prettier's line breaks, double quotes,
+ * trailing commas, semicolons between type members): whitespace collapsed,
+ * no padding inside braces or parentheses, no trailing comma or member
+ * semicolon, and single-quoted strings. Comments are dropped.
  * @param {string} text
  * @param {string} label the module's path, for the error
  * @returns {string[]}
@@ -939,10 +1237,29 @@ function generatedStatements(text, label) {
         /** @type {number} */ (node.end),
       )
       .replace(/\s+/gu, ' ')
-      .replace(/\{ /gu, '{')
-      .replace(/,? \}/gu, '}')
-      .replace(/,\}/gu, '}'),
+      .replace(/"((?:[^"'\\]|\\.)*)"/gu, "'$1'")
+      .replace(/([{(]) /gu, '$1')
+      .replace(/[,;]? ?([})])/gu, '$1'),
   );
+}
+
+/**
+ * Whether a generated declaration file declares what its generated module
+ * gives, statement by statement however a formatter left either file
+ * ({@link generatedStatements}); the header comment is ignored.
+ * @param {string} actual the declaration file as it is
+ * @param {string} expected {@link generatedTypesText} for the module
+ * @param {string} label the declaration file's path, for a parse error
+ */
+export function generatedTypesMatch(actual, expected, label) {
+  let have;
+  try {
+    have = generatedStatements(actual, label);
+  } catch {
+    return false;
+  }
+  const want = generatedStatements(expected, label);
+  return have.length === want.length && have.every((s, i) => s === want[i]);
 }
 
 /** The local name the generated module gives the set's adapter. */
@@ -984,9 +1301,15 @@ export function generatedModulePath(set, packageDir) {
  *   component
  */
 
-/** The props every theme-map element gets: sized to its box, hidden from assistive tech. */
+/**
+ * The props every theme-map element gets: hidden from assistive tech, and
+ * sized to its box by CSS as well as by attributes. A theme's icon sits in a
+ * box whose font size is the icon size; CSS width and height override the
+ * svg's own size attributes, so a component that writes its own (`size`
+ * 24, ignoring `width` and `height`) still draws at the box's size.
+ */
 const THEME_ELEMENT_PROPS =
-  "{'aria-hidden': true, 'width': '1em', 'height': '1em'}";
+  "{'aria-hidden': true, 'width': '1em', 'height': '1em', 'style': {'width': '1em', 'height': '1em'}}";
 
 /**
  * The declaration file beside a generated module (`x.generated.js` →
@@ -1100,46 +1423,47 @@ export function generatedModuleText(
   };
   const themeName = data.themeMap === THEME_MAP_NAME ? THEME_MAP_NAME : null;
   const lines = before == null ? [] : generatedStatements(before, generated);
+  const lineSet = new Set(lines);
   // Written once, below: the adapter's import, React's createElement, and
-  // the theme map.
-  const adapterImport = new RegExp(`\\bas ${ADAPTER_LOCAL}\\b`, 'u');
-  const dropped = [...new Set(remove)].map(
-    name =>
-      new RegExp(
-        `(?:\\bas ${name}(?:Source)?\\}|^export const ${name} = |^export \\{${name}\\} |^import ${name}Source )`,
-        'u',
-      ),
-  );
+  // the theme map. Every lookup below is by name, so a library of twenty
+  // thousand icons is written in one pass.
+  const removed = new Set(remove);
   // A re-export binds no local name, so the theme map reads each re-exported
   // icon through an import that mirrors its re-export. Those imports are
   // rewritten with the theme map.
   const themeImport = (/** @type {string} */ line) =>
     themeName != null &&
     line.startsWith('import {') &&
-    lines.includes(`export${line.slice('import'.length)}`);
-  const managed = (/** @type {string} */ line) =>
-    dropped.some(pattern => pattern.test(line)) ||
-    adapterImport.test(line) ||
-    line === REACT_IMPORT ||
-    themeImport(line) ||
-    (themeName != null && line.startsWith(`export const ${themeName} = `));
+    lineSet.has(`export${line.slice('import'.length)}`);
+  const managed = (/** @type {string} */ line) => {
+    const name = statementName(line);
+    if (name != null) {
+      if (removed.has(name)) return true;
+      if (name.endsWith('Source') && removed.has(name.slice(0, -6))) {
+        return true;
+      }
+      if (name === ADAPTER_LOCAL) return true;
+    }
+    return (
+      line === REACT_IMPORT ||
+      themeImport(line) ||
+      (themeName != null && line.startsWith(`export const ${themeName} = `))
+    );
+  };
   const imports = new Set(
     lines.filter(line => line.startsWith('import ') && !managed(line)),
   );
   const exports = new Set(
     lines.filter(line => !line.startsWith('import ') && !managed(line)),
   );
+  /** @type {Map<string, string>} each exported name → its statement */
+  const exported = new Map();
+  for (const line of exports) {
+    const name = statementName(line);
+    if (name != null && !exported.has(name)) exported.set(name, line);
+  }
   /** @param {string} name */
-  const existing = name =>
-    [...exports].find(line =>
-      // The name the module exports: after `as`, alone in braces, or a
-      // const; never the source name of another export (`TrashIcon as
-      // TrashSolidIcon` exports TrashSolidIcon).
-      new RegExp(
-        `(?:\\bas\\s+${name}\\s*\\}|^export\\s+\\{\\s*${name}\\s*\\}|^export const\\s+${name}\\b)`,
-        'u',
-      ).test(line),
-    );
+  const existing = name => exported.get(name);
   for (const icon of icons) {
     const specifier = specifierOf(icon.from);
     /** @type {string[]} */
@@ -1172,7 +1496,10 @@ export function generatedModuleText(
       continue;
     }
     for (const line of wantImports) imports.add(line);
-    for (const line of want) exports.add(line);
+    for (const line of want) {
+      exports.add(line);
+      exported.set(icon.name, line);
+    }
   }
   const needsAdapter = [...exports].some(line =>
     line.includes(`= ${ADAPTER_LOCAL}(`),
@@ -1195,12 +1522,9 @@ export function generatedModuleText(
         theme.push(
           `  ${name}: createElement(${exportName}, ${THEME_ELEMENT_PROPS}),`,
         );
-        const reexport = [...exports].find(line =>
-          new RegExp(
-            `^export \\{(?:\\w+ as )?${exportName}\\} from `,
-            'u',
-          ).test(line),
-        );
+        const line = exported.get(exportName);
+        const reexport =
+          line != null && line.startsWith('export {') ? line : undefined;
         if (reexport) {
           themeImports.add(`import${reexport.slice('export'.length)}`);
         }
@@ -1233,6 +1557,25 @@ export function generatedModuleText(
       ? generatedTypesText(generatedStatements(js, generated))
       : null,
   };
+}
+
+/**
+ * The name one generated statement binds: the name an export exports
+ * (`export {A as B} from …` is `B`, `export {A} from …` is `A`, `export
+ * const A = …` is `A`), or the local name an import binds (`import {A as
+ * BSource} from …` is `BSource`, `import BSource from …` is `BSource`).
+ * Null for anything else.
+ * @param {string} line
+ * @returns {string | null}
+ */
+function statementName(line) {
+  const named =
+    /^(?:export|import) \{\s*([$\w]+)(?:\s+as\s+([$\w]+))?\s*\}/u.exec(line);
+  if (named) return named[2] ?? named[1];
+  const constant = /^export const ([$\w]+)\b/u.exec(line);
+  if (constant) return constant[1];
+  const plain = /^import ([$\w]+) from /u.exec(line);
+  return plain ? plain[1] : null;
 }
 
 /**
