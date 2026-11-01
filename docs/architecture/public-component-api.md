@@ -115,8 +115,10 @@ guidance owns the process used to propose and test APIs.
   an adaptive value that resolves per device beside explicit fixed values, named
   `'adaptive'` when it has one device resolution and `'adaptive-<target>'` when
   it has several, as `presentation` does (`spec:AST-043/DEC-1`,
-  `component:DropdownMenuSubMenu`); the default is the shipped behavior, which
-  is the adaptive value when the shipped behavior already differs by device.
+  `component:DropdownMenuSubMenu`); a new behavior prop defaults to the shipped
+  behavior, which is the adaptive value when the shipped behavior already
+  differs by device, and an existing prop's default moves only under INV16 and
+  INV9.
   Tooltip and HoverCard `triggerBehavior` (`'adaptive'`, `'hover'`, `'toggle'`)
   follow this. An `is…` or `has…` boolean names only a true on/off that has no
   third state, and `presentation` names which surface appears and, under INV16,
@@ -363,7 +365,7 @@ copy the component matrix.
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV2                    | Naming and logical-direction lint/tests                                                                                  | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
-| INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word, splits one behavior across per-input props, or defaults to anything but the shipped behavior                                                                                                                                                                                                          |
+| INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                                                              | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                                                          | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | INV11                   | Public-API admission review plus owning theming/component tests                                                          | A public semantic custom property exposes derivable or unsupported implementation detail                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -384,11 +386,13 @@ copy the component matrix.
 
 Known verification gaps:
 
-- INV2, INV3: these shipped props predate the behavior-prop rule and keep their
-  names until a minor renames them under INV9: Tooltip and HoverCard
-  `focusTrigger` and `touchTrigger`; Tooltip, HoverCard, Text, and Heading
-  `hasHoverIndication` and `hasTruncateTooltip`, which take more than two
-  states; Tooltip, HoverCard, and Popover `isEnabled`; Overlay `showOn`;
+- INV2, INV3: shipped props that predate the behavior-prop rule keep their
+  names until a minor renames them under INV9. This list is a partial
+  inventory; known deviations include Tooltip and HoverCard `focusTrigger`,
+  `touchTrigger`, and `hasHoverIndication`, and Text and Heading
+  `hasTruncateTooltip`, the last two taking more than two states; Dialog and
+  AlertDialog `isInline`; CheckboxListItem `isChecked`; `useTableTreeData`
+  `isAllExpanded`; hook forms such as `usePopover` `hasLightDismiss`; Tooltip, HoverCard, and Popover `isEnabled`; Overlay `showOn`;
   Thumbnail `showRemoveOn`; Popover `hasLightDismiss`, `hasEscapeDismiss`, and
   `isModal`; Dialog, Drawer, and BottomSheet `purpose`; Banner `isDismissable`;
   Drawer, BottomSheet, and BottomSheetSwitcher `hasScrim`; CommandPalette
