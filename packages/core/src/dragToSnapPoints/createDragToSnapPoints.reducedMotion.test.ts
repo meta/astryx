@@ -2,8 +2,9 @@
 
 /**
  * @file createDragToSnapPoints.reducedMotion.test.ts
- * @input vitest (jsdom, fake clock), the snap-point drag with the public pan
- *   replaced by a stand-in that hands its pan events to the test, Reduce
+ * @input vitest (jsdom, fake clock), the snap-point drag with its pan
+ *   (gestures/createPan.ts) replaced by a stand-in that hands its pan events
+ *   to the test, each with the input that drives it, Reduce
  *   Motion on with a fine primary pointer, a recording stand-in for
  *   Element.animate
  * @output Checks `design:reduced-motion` DR2 and DR3 for the snap-point
@@ -14,15 +15,12 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import type {
-  PanGestureEvent,
-  PanGestureOptions,
-} from '../gestures/createPanGesture';
+import type {PanEvent, PanOptions} from '../gestures/createPan';
 
-let onPan: ((event: PanGestureEvent) => void) | null = null;
+let onPan: ((event: PanEvent) => void) | null = null;
 
-vi.mock('../gestures/createPanGesture', () => ({
-  createPanGesture: (_element: Element, options: PanGestureOptions) => {
+vi.mock('../gestures/createPan', () => ({
+  createPan: (_element: Element, options: PanOptions) => {
     onPan = options.onPan;
     return {destroy: () => {}};
   },
@@ -103,24 +101,22 @@ function drawer() {
 }
 
 /**
- * A press by `pointerType` on `element`, then a drag down by `dy` released
- * at `vy` px/s: the pan reports values only, so the factory reads the
- * pointer from the press.
+ * A drag down by `dy` on `element` by `pointerType`, released at `vy` px/s:
+ * the pan says which pointer drove it.
  */
 function release(
-  element: HTMLElement,
+  _element: HTMLElement,
   dy: number,
   vy: number,
   pointerType: 'touch' | 'mouse' | 'pen',
 ): void {
-  element.dispatchEvent(
-    new PointerEvent('pointerdown', {bubbles: true, pointerType}),
-  );
-  const at = (state: PanGestureEvent['state'], y: number, v: number) =>
+  const at = (state: PanEvent['state'], y: number, v: number) =>
     onPan?.({
       state,
       translation: {x: 0, y},
+      totalTranslation: {x: 0, y},
       velocity: {x: 0, y: v},
+      input: pointerType,
     });
   at('began', 0, 0);
   at('changed', dy, 0);
