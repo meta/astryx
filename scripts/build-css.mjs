@@ -36,7 +36,7 @@ const ROOT = path.resolve(__dirname, '..');
 // Per-package build targets. Each entry defines where source lives, where the
 // stylesheet is written, and any StyleX module-resolution aliases needed for
 // cross-package theme-token imports (lab consumes @astryxdesign/core tokens).
-const TARGETS = {
+export const TARGETS = {
   core: {
     src: path.resolve(ROOT, 'packages/core/src'),
     dist: path.resolve(ROOT, 'packages/core/dist'),

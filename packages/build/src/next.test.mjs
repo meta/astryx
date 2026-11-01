@@ -22,6 +22,7 @@ import {createRequire} from 'node:module';
 
 const require = createRequire(import.meta.url);
 const {withAstryx} = require('./next.js');
+const {configSchema} = require('next/dist/server/config-schema');
 const {ResolverFactory, CachedInputFileSystem} = require('enhanced-resolve');
 
 let appDir;
@@ -378,34 +379,193 @@ describe('withAstryx', () => {
   });
 });
 
-describe('withAstryx bundler guard', () => {
+describe('withAstryx under Turbopack', () => {
+  const ASTRYX_FILE = 'node_modules/@astryxdesign/core/src/Button/Button.tsx';
+
+  beforeEach(() => {
+    process.env.TURBOPACK = '1';
+    vi.spyOn(process, 'cwd').mockReturnValue(appDir);
+  });
+
   afterEach(() => {
     delete process.env.TURBOPACK;
+    delete process.env.ASTRYX_BUILD_TURBOPACK;
     vi.restoreAllMocks();
   });
 
-  it('refuses to build a config under Turbopack', () => {
-    process.env.TURBOPACK = '1';
-    expect(() => withAstryx()).toThrow(/requires the webpack bundler/);
+  /** Whether a rule's condition admits a project-relative path. */
+  function admits(condition, file) {
+    if (condition == null) return true;
+    if (condition === 'foreign') return file.includes('node_modules/');
+    if (condition.not) return !admits(condition.not, file);
+    if (condition.all) return condition.all.every(c => admits(c, file));
+    if (condition.path instanceof RegExp) return condition.path.test(file);
+    return true;
+  }
+
+  it('routes each source entry point through a project-relative alias', () => {
+    const {resolveAlias} = withAstryx().turbopack;
+    expect(resolveAlias).toEqual({
+      '@astryxdesign/core': './node_modules/@astryxdesign/core/src/index.ts',
+      '@astryxdesign/core/AlertDialog':
+        './node_modules/@astryxdesign/core/src/AlertDialog/index.ts',
+    });
   });
 
-  it('names both ways out in the message', () => {
-    process.env.TURBOPACK = '1';
-    // The two supported routes: keep the source build and pick webpack, or drop
-    // the source build entirely and consume the pre-built package.
-    expect(() => withAstryx()).toThrow(/--webpack/);
-    expect(() => withAstryx()).toThrow(/astryx\.css/);
+  it('lets a caller alias win, exact or wildcard', () => {
+    const resolveAlias = {
+      '@astryxdesign/core': './mine.ts',
+      '@astryxdesign/core/*': './ours/*',
+    };
+    const config = withAstryx({turbopack: {resolveAlias}});
+    expect(config.turbopack.resolveAlias).toEqual(resolveAlias);
   });
 
-  it('refuses before touching the caller config', () => {
-    process.env.TURBOPACK = '1';
-    const webpack = vi.fn();
-    expect(() => withAstryx({webpack})).toThrow();
-    expect(webpack).not.toHaveBeenCalled();
+  it('compiles Astryx source with the prebuilt stylesheet options', () => {
+    const [rule] = withAstryx().turbopack.rules['*.{ts,tsx}'];
+    expect(admits(rule.condition, ASTRYX_FILE)).toBe(true);
+    expect(admits(rule.condition, 'src/app/page.tsx')).toBe(false);
+    expect(rule.as).toBe('*');
+    expect(rule.loaders).toHaveLength(1);
+    const [{loader, options}] = rule.loaders;
+    expect(loader).toBe(require.resolve('./turbopack-loader.js'));
+    expect(options).toMatchObject({
+      dev: false,
+      runtimeInjection: false,
+      genConditionalClasses: true,
+      treeshakeCompensation: true,
+    });
+    // StyleX's default `x` prefix, the one the prebuilt stylesheets use.
+    expect(options.classNamePrefix).toBeUndefined();
+    // Turbopack only passes serializable loader options.
+    expect(JSON.parse(JSON.stringify(options))).toEqual(options);
   });
 
-  it('builds normally when Turbopack is not in play', () => {
-    expect(() => withAstryx()).not.toThrow();
+  it('keeps every caller rule off Astryx source, in every rule shape', () => {
+    const appLoader = {loader: 'app-babel-loader', options: {prefix: 'p'}};
+    const config = withAstryx({
+      turbopack: {
+        rules: {
+          '*.tsx': {loaders: [appLoader], as: '*'},
+          '*.ts': {loaders: [appLoader], condition: {not: 'foreign'}},
+          '*.mdx': ['a', {loaders: [appLoader]}, {type: 'raw'}, {loader: 'b'}],
+          '*.svg': ['@svgr/webpack', 'svgo-loader'],
+          '*.{ts,tsx}': {loaders: [appLoader]},
+        },
+      },
+    });
+    expect(configSchema.safeParse(config).success).toBe(true);
+    const {rules} = config.turbopack;
+    // Next.js makes each bare loader a rule of its own, run in list order.
+    expect(rules['*.mdx'].map(r => r.loaders?.[0] ?? r.type)).toEqual([
+      'a',
+      appLoader,
+      'raw',
+      {loader: 'b'},
+    ]);
+    expect(rules['*.svg'].map(rule => rule.loaders)).toEqual([
+      ['@svgr/webpack'],
+      ['svgo-loader'],
+    ]);
+    // A caller rule under the key Astryx uses keeps its place, ahead of ours.
+    const [shared, ours] = rules['*.{ts,tsx}'];
+    expect(ours.loaders[0].loader).toBe(
+      require.resolve('./turbopack-loader.js'),
+    );
+    const callerRules = [
+      shared,
+      rules['*.tsx'],
+      rules['*.ts'],
+      ...rules['*.mdx'],
+      ...rules['*.svg'],
+    ];
+    for (const rule of callerRules) {
+      expect(admits(rule.condition, ASTRYX_FILE)).toBe(false);
+      expect(admits(rule.condition, 'src/app/page.tsx')).toBe(true);
+    }
+    expect(rules['*.tsx']).toMatchObject({loaders: [appLoader], as: '*'});
+    expect(rules['*.ts'].condition.all).toContainEqual({not: 'foreign'});
+  });
+
+  it('matches a workspace-linked package where it really lives', () => {
+    // Turbopack matches resolved paths, relative to a root that holds both.
+    const workspace = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-linked-')),
+    );
+    const core = path.join(workspace, 'packages/core');
+    const web = path.join(workspace, 'apps/web');
+    fs.mkdirSync(path.join(core, 'src'), {recursive: true});
+    fs.writeFileSync(path.join(core, 'src/index.ts'), '');
+    fs.writeFileSync(
+      path.join(core, 'package.json'),
+      JSON.stringify({exports: {'.': {source: './src/index.ts'}}}),
+    );
+    fs.mkdirSync(path.join(web, 'node_modules/@astryxdesign'), {
+      recursive: true,
+    });
+    fs.symlinkSync(core, path.join(web, 'node_modules/@astryxdesign/core'));
+    process.cwd.mockReturnValue(web);
+    try {
+      const {rules} = withAstryx({
+        turbopack: {rules: {'*.tsx': ['app-loader']}},
+      }).turbopack;
+      const [astryx] = rules['*.{ts,tsx}'];
+      for (const file of [
+        'packages/core/src/A.tsx',
+        'x/packages/core/src/A.tsx',
+      ]) {
+        expect(admits(astryx.condition, file)).toBe(true);
+        expect(admits(rules['*.tsx'][0].condition, file)).toBe(false);
+      }
+      expect(admits(astryx.condition, 'apps/web/src/page.tsx')).toBe(false);
+    } finally {
+      fs.rmSync(workspace, {recursive: true, force: true});
+    }
+  });
+
+  it("makes the webpack setup's PostCSS plugin refuse to run beside it", async () => {
+    const [run] = require('./index.js')({cwd: appDir}).plugins;
+    const css = () => run({walkAtRules() {}}, {opts: {}});
+    // Alone under Turbopack it runs, as on main.
+    await expect(css()).resolves.toBeUndefined();
+    withAstryx();
+    await expect(css()).rejects.toThrow(/next\/postcss/);
+    // Under webpack Next.js leaves TURBOPACK unset.
+    delete process.env.TURBOPACK;
+    await expect(css()).resolves.toBeUndefined();
+  });
+
+  it('finds the project from its next.config when run from elsewhere', () => {
+    // `next build <dir>` loads <dir>/next.config.js and keeps the caller's cwd.
+    process.cwd.mockReturnValue(path.dirname(appDir));
+    const config = path.join(appDir, 'next.config.js');
+    const helper = JSON.stringify(require.resolve('./next.js'));
+    fs.writeFileSync(
+      config,
+      `module.exports = require(${helper}).withAstryx();`,
+    );
+    try {
+      expect(require(config).turbopack.resolveAlias).toHaveProperty(
+        '@astryxdesign/core',
+        './node_modules/@astryxdesign/core/src/index.ts',
+      );
+    } finally {
+      fs.rmSync(config);
+    }
+  });
+
+  it('transpiles the packages and installs no webpack hook', () => {
+    const config = withAstryx({transpilePackages: ['other']});
+    expect(config.transpilePackages).toEqual(
+      expect.arrayContaining(['other', '@astryxdesign/core']),
+    );
+    expect(config.webpack).toBeUndefined();
+  });
+
+  it('leaves the turbopack config alone when no package ships source', () => {
+    process.cwd.mockReturnValue(os.tmpdir());
+    const turbopack = {rules: {'*.svg': ['@svgr/webpack']}};
+    expect(withAstryx({turbopack}).turbopack).toBe(turbopack);
   });
 });
 

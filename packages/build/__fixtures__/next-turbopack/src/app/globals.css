@@ -1,0 +1,6 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+@layer reset, astryx-base, astryx-theme;
+@import '@astryxdesign/core/reset.css';
+@astryx;
+@stylex;

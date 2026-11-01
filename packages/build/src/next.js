@@ -5,7 +5,8 @@
 /**
  * @astryxdesign/build/next
  *
- * Next.js configuration helper for Astryx source builds.
+ * Next.js configuration helper for Astryx source builds, under webpack or
+ * Turbopack.
  *
  * Usage in next.config.mjs:
  *   import {withAstryx} from '@astryxdesign/build/next';
@@ -16,59 +17,18 @@
 
 const fs = require('fs');
 const path = require('path');
+const {fileURLToPath} = require('url');
+const {
+  ASTRYX_PACKAGES,
+  findPackageDir,
+  sourcePackages,
+  stylexOptions,
+} = require('./source-stylesheet');
 
 const ASTRYX_MODULE = /[\\/]node_modules[\\/]@astryxdesign[\\/]/;
 
 const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * Every alias this helper installs lives in `nextConfig.webpack`, and Turbopack
- * never calls that hook. So `withAstryx()` under Turbopack reinstates exactly
- * the failure the aliases exist to prevent: the app resolves the library
- * through `default` to dist, whose runtime class names are disjoint from the
- * CSS the PostCSS pass compiles out of source, and the build succeeds with an
- * unstyled page and nothing logged.
- *
- * There is no configuration in which the combination does what the author
- * intended, so this refuses rather than warning — an unstyled production deploy
- * costs more than a failed build. Next sets `TURBOPACK` for both
- * `next dev --turbopack` and `next build --turbopack`, in the parent process
- * and in each build worker.
- */
-function assertWebpack() {
-  if (!process.env.TURBOPACK) {
-    return;
-  }
-  throw new Error(
-    'withAstryx() requires the webpack bundler: it configures resolution ' +
-      'through nextConfig.webpack, which Turbopack does not call, so the app ' +
-      'would resolve @astryxdesign/* to dist while the CSS is compiled from ' +
-      'source and render unstyled.\n' +
-      'Run the source build with `next build --webpack` / `next dev --webpack`, ' +
-      'or drop withAstryx() and consume the pre-built package instead — import ' +
-      "'@astryxdesign/core/astryx.css' and skip the babel and PostCSS setup.",
-  );
-}
-
-/**
- * Locate an installed package's directory by walking `node_modules` up from
- * the app, the way Node resolves a bare specifier. Returns null when the
- * package is not installed.
- */
-function findPackageDir(name, from) {
-  let dir = path.resolve(from);
-  for (;;) {
-    const candidate = path.join(dir, 'node_modules', name);
-    if (fs.existsSync(path.join(candidate, 'package.json'))) {
-      return candidate;
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) {
-      return null;
-    }
-    dir = parent;
-  }
-}
+const TURBOPACK_LOADER = require.resolve('./turbopack-loader.js');
 
 /**
  * Match a wildcard alias key such as `@astryxdesign/*` against a request. The
@@ -240,22 +200,143 @@ function aliasCoversAstryx(alias, packages) {
   return Object.keys(alias).some(key => covers(key, false));
 }
 
+const posix = file => file.split(path.sep).join('/');
+const sourceRegExp = tails =>
+  new RegExp(`(^|/)(${[...new Set(tails)].map(escapeRegExp).join('|')})/`);
+
+/**
+ * How a package's source path ends in the resolved, root-relative paths
+ * Turbopack matches rules against: from the app's closest ancestor that holds
+ * it (`packages/core/src` for a workspace link), or in `node_modules`.
+ */
+function sourceTails(pkg, cwd) {
+  const real = fs.realpathSync(pkg.srcDir);
+  let base = fs.realpathSync(cwd);
+  while (path.relative(base, real).startsWith('..')) base = path.dirname(base);
+  return [
+    `node_modules/${pkg.name}/${posix(path.relative(pkg.dir, pkg.srcDir))}`,
+    posix(path.relative(base, real)),
+  ];
+}
+
+/**
+ * Keep a caller's rule off Astryx source. Turbopack runs every rule whose glob
+ * matches, so a caller rule such as `*.tsx` running its own StyleX setup could
+ * compile Astryx a second time, with other class names than the stylesheet
+ * holds. Next.js makes each bare loader in a list a rule of its own, run in
+ * list order, so wrapping each in place keeps the order on the app's files.
+ */
+function keepOffAstryx(collection, astryxSource) {
+  const exclude = rule => ({
+    ...rule,
+    condition:
+      rule.condition == null
+        ? {not: astryxSource}
+        : {all: [{not: astryxSource}, rule.condition]},
+  });
+  const isLoader = item => typeof item === 'string' || 'loader' in item;
+  return Array.isArray(collection)
+    ? collection.map(item => exclude(isLoader(item) ? {loaders: [item]} : item))
+    : exclude(collection);
+}
+
+const ASTRYX_RULE = '*.{ts,tsx}';
+const NEXT_CONFIG = /^next\.config(\.compiled)?\.[cm]?[jt]s$/;
+
+/**
+ * The project directory, which webpack's hook gets as `context.dir` but a
+ * Turbopack config is built without. Next.js loads the config file from it
+ * without changing the working directory (`next build <dir>`), so it is that
+ * file's directory, found on the call stack, unless the working directory is
+ * inside it (a config found in an ancestor).
+ */
+function projectDir() {
+  const {prepareStackTrace, stackTraceLimit} = Error;
+  Object.assign(Error, {prepareStackTrace: (_, sites) => sites});
+  Error.stackTraceLimit = Infinity;
+  const sites = new Error().stack;
+  Object.assign(Error, {prepareStackTrace, stackTraceLimit});
+  const config = sites
+    .map(site => site.getFileName() ?? '')
+    .map(file => (file.startsWith('file:') ? fileURLToPath(file) : file))
+    .find(file => NEXT_CONFIG.test(path.basename(file)));
+  const [cwd, dir] = [process.cwd(), config && path.dirname(config)];
+  return dir && !`${cwd}${path.sep}`.startsWith(`${dir}${path.sep}`)
+    ? dir
+    : cwd;
+}
+
+/**
+ * The Turbopack half, which configures Turbopack directly because it never
+ * calls `nextConfig.webpack`. `resolveAlias` points each documented entry point
+ * at its `source` file (Turbopack matches keys exactly and takes targets
+ * relative to the project `cwd`), unless the caller aliased it. A rule per
+ * package compiles its source with the prebuilt stylesheets' StyleX options,
+ * and every caller rule is kept off that source.
+ */
+function turbopackConfig(turbopack = {}, cwd) {
+  const packages = sourcePackages(cwd);
+  if (packages.length === 0) {
+    return turbopack;
+  }
+  const callerAlias = turbopack.resolveAlias || {};
+  const claimed = Object.keys(callerAlias)
+    .filter(key => key.includes('*'))
+    .map(wildcardPattern);
+  const resolveAlias = {};
+  for (const {entries} of packages) {
+    for (const [request, file] of entries) {
+      if (request in callerAlias || claimed.some(p => p.test(request))) {
+        continue;
+      }
+      const target = posix(path.relative(cwd, file));
+      resolveAlias[request] = target.startsWith('../') ? target : `./${target}`;
+    }
+  }
+  Object.assign(resolveAlias, callerAlias);
+
+  const tails = packages.map(pkg => sourceTails(pkg, cwd));
+  const astryxSource = {path: sourceRegExp(tails.flat())};
+  const rules = {};
+  for (const [glob, collection] of Object.entries(turbopack.rules || {})) {
+    rules[glob] = keepOffAstryx(collection, astryxSource);
+  }
+  rules[ASTRYX_RULE] = [
+    ...[rules[ASTRYX_RULE] ?? []].flat(),
+    ...packages.map((pkg, i) => ({
+      condition: {path: sourceRegExp(tails[i])},
+      loaders: [
+        {loader: TURBOPACK_LOADER, options: stylexOptions(pkg, packages)},
+      ],
+      as: '*',
+    })),
+  ];
+  return {...turbopack, resolveAlias, rules};
+}
+
 /**
  * Wraps a Next.js config to enable Astryx source builds.
  * - Adds transpilePackages for @astryxdesign/* packages
- * - Sets conditionNames to resolve source exports
+ * - webpack: sets conditionNames and aliases to resolve source exports
+ * - Turbopack: see `turbopackConfig()`
  */
 function withAstryx(nextConfig = {}) {
-  assertWebpack();
-
-  const astryxPackages = [
-    '@astryxdesign/core',
-    '@astryxdesign/theme-neutral',
-    '@astryxdesign/lab',
-  ];
+  const astryxPackages = ASTRYX_PACKAGES;
 
   const existingTranspile = nextConfig.transpilePackages || [];
   const merged = Array.from(new Set([...existingTranspile, ...astryxPackages]));
+
+  // Next sets TURBOPACK whenever it bundles with Turbopack (its default since
+  // Next 16) and leaves it unset under `--webpack`.
+  if (process.env.TURBOPACK) {
+    // The webpack setup's PostCSS plugin reads this and refuses to run.
+    process.env.ASTRYX_BUILD_TURBOPACK = '1';
+    return {
+      ...nextConfig,
+      transpilePackages: merged,
+      turbopack: turbopackConfig(nextConfig.turbopack, projectDir()),
+    };
+  }
 
   const existingWebpack = nextConfig.webpack;
 

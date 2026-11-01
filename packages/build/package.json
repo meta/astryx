@@ -29,7 +29,8 @@
       "types": "./dist/vite.d.ts",
       "import": "./dist/vite.mjs"
     },
-    "./next": "./src/next.js"
+    "./next": "./src/next.js",
+    "./next/postcss": "./src/next-postcss.js"
   },
   "files": [
     "src",
@@ -68,8 +69,11 @@
     "lightningcss": "^1.32.0"
   },
   "devDependencies": {
+    "@stylexjs/postcss-plugin": "catalog:",
+    "@stylexjs/stylex": "catalog:",
     "enhanced-resolve": "^5.21.6",
-    "esbuild": "catalog:"
+    "esbuild": "catalog:",
+    "next": "16.3.6"
   },
   "peerDependenciesMeta": {
     "@stylexjs/unplugin": {

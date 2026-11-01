@@ -19,7 +19,8 @@
  * layers, which would break theme overrides. Generated replacement CSS is
  * parsed by the host PostCSS instance so consumers do not load a second copy.
  * The library pass reads no Babel config file, so the app's own Babel config
- * never transforms Astryx source; the product pass still loads it.
+ * never transforms Astryx source; the product pass still loads it. Beside
+ * withAstryx() under Turbopack, whose classes its rules never match, it throws.
  */
 
 const path = require('node:path');
@@ -178,6 +179,15 @@ function createPlugin() {
       postcssPlugin: PLUGIN_NAME,
       plugins: [
         async function (root, result) {
+          if (process.env.TURBOPACK && process.env.ASTRYX_BUILD_TURBOPACK) {
+            throw new Error(
+              'withAstryx() under Turbopack cannot run beside @astryxdesign/build/postcss, ' +
+                "the webpack setup's PostCSS plugin: its rules never match the classes " +
+                'Turbopack renders, so every Astryx component would be unstyled. Use ' +
+                "'@astryxdesign/build/next/postcss' and `@astryx;` (see the " +
+                '@astryxdesign/build README), or build with `next build --webpack`.',
+            );
+          }
           const fileName = result.opts.from;
 
           let styleXAtRule = null;
