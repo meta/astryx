@@ -1766,6 +1766,33 @@ describe('knowledge validation', () => {
       'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
       'docs/specs/components/Button/Button.swift.spec.md: verified_by path packages/native/apple/Tests/Missing.swift is not in the repository.',
     ]);
+    // It is placed like the core record it implements.
+    for (const [misplaced, message] of [
+      [
+        'docs/specs/components/Buton/Button.swift.spec.md',
+        'platform records must live at docs/specs/components/<ComponentRoot>/',
+      ],
+      [
+        'docs/specs/components/Button/Banana.swift.spec.md',
+        'platform record for Banana must match component root "Button"',
+      ],
+    ]) {
+      const misplacedPath = path.join(root, misplaced);
+      fs.mkdirSync(path.dirname(misplacedPath), {recursive: true});
+      const name = path.basename(misplaced, '.swift.spec.md');
+      fs.writeFileSync(
+        misplacedPath,
+        platformRecord({
+          id: `component:swift/${name}`,
+          platform_of: `component:${name}`,
+        }),
+      );
+      const misplacedProblems = (await validateKnowledgeRoot(root)).filter(
+        problem => problem.startsWith(misplaced),
+      );
+      expect(misplacedProblems.join('\n')).toContain(message);
+      fs.rmSync(misplacedPath);
+    }
     // Its applicability blocks are validated, since specs:for reads them.
     fs.writeFileSync(
       swift,

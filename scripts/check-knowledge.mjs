@@ -1031,6 +1031,26 @@ export function validatePlatformComponentRecords(root, {ids, repositoryFiles}) {
       );
     }
     const corePath = `${COMPONENT_SPEC_ROOT}/${componentRoot}/${publicName}.spec.md`;
+    // Placed like the core record it implements, whether or not that record
+    // exists yet.
+    const location = componentRecordLocation(root, path.join(root, corePath));
+    if (!location) {
+      problems.push(
+        `${filePath}: platform records must live at ${COMPONENT_SPEC_ROOT}/<ComponentRoot>/, where exactly one registered component package owns <ComponentRoot>.`,
+      );
+    } else if (
+      location.layout === 'flat'
+        ? !packageHasPublicComponent(root, location.packageName, publicName)
+        : publicName !== componentRoot &&
+          !componentRootDefinesPublicComponent(
+            location.componentSourcePath,
+            publicName,
+          )
+    ) {
+      problems.push(
+        `${filePath}: platform record for ${publicName} must match component root ${JSON.stringify(componentRoot)} or an exact public component entry in that root's consumer docs.`,
+      );
+    }
     if (fs.existsSync(path.join(root, corePath))) {
       const core = ids.get(coreId);
       if (!core || core.filePath.split(path.sep).join('/') !== corePath) {
