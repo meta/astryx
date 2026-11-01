@@ -394,8 +394,11 @@ interface ResizableEntry {
   readonly createdWith: CreateResizableOptions;
 }
 
-/** Where a region stands: its size as expanded, and whether it is collapsed. */
-type ResizableSelection = {size: number; isCollapsed: boolean};
+/**
+ * Where a region stands: its size as expanded (undefined while it is only the
+ * temporary basis's stand-in), and whether it is collapsed.
+ */
+type ResizableSelection = {size: number | undefined; isCollapsed: boolean};
 
 /**
  * The factory a hook holds, and one store over it for React: it follows the
@@ -550,12 +553,16 @@ function useResizableController(
         ? slot.remembered()
         : readResizableSelection(entry.resizable);
     entry?.resizable.destroy();
+    // A size shown against the temporary basis is not carried: the new
+    // factory resolves the default against the container once it measures.
     const createdWith =
       previous == null
         ? optionsRef.current
         : {
             ...optionsRef.current,
-            defaultSize: previous.size,
+            ...(previous.size === undefined
+              ? {}
+              : {defaultSize: previous.size}),
             defaultIsCollapsed: previous.isCollapsed,
           };
     const resizable = createResizable(element, createdWith);

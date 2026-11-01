@@ -283,6 +283,11 @@ interface ResizableInternals {
    */
   syncContainer(): void;
   /**
+   * Whether the size is a selection (saved, chosen, or the default resolved
+   * against a measured basis), not the temporary basis's stand-in.
+   */
+  hasSelection(): boolean;
+  /**
    * The region's side of a gesture the factory does not own: the drag and
    * keys of a ResizeHandle given the configuration object's props.
    */
@@ -302,14 +307,21 @@ export function readResizableInternals(
  * Where a region stands: its size as expanded (not the 0 it reports while
  * collapsed) and whether it is collapsed. A factory for a new handle of the
  * same region starts from it, as its `defaultSize` and `defaultIsCollapsed`.
+ * The size is undefined while it is only the default resolved against the
+ * temporary basis, before the container is measured: that is not a
+ * selection, so a new factory resolves its own default once it measures.
  */
 export function readResizableSelection(
   controller: ResizableController,
-): {size: number; isCollapsed: boolean} | undefined {
-  const snapshot = internals.get(controller)?.snapshot();
-  return snapshot == null
+): {size: number | undefined; isCollapsed: boolean} | undefined {
+  const channel = internals.get(controller);
+  const snapshot = channel?.snapshot();
+  return channel == null || snapshot == null
     ? undefined
-    : {size: snapshot.expandedSize, isCollapsed: snapshot.isCollapsed};
+    : {
+        size: channel.hasSelection() ? snapshot.expandedSize : undefined,
+        isCollapsed: snapshot.isCollapsed,
+      };
 }
 
 /** The attributes the factory writes on a handle, restored by `destroy`. */
@@ -972,6 +984,7 @@ export function createResizable(
       };
     },
     model,
+    hasSelection: () => chosenSize != null,
     syncContainer() {
       if (isDestroyed) {
         return;
