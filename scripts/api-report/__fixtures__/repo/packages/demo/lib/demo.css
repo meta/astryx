@@ -1,0 +1,8 @@
+/* --commented-out: 1; */
+:root {
+  --demo-accent: blue;
+  --_demo-private: 1px;
+}
+.astryx-chip[data-astryx-theme] {
+  --demo-gap: 4px;
+}

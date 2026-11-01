@@ -1,0 +1,7 @@
+{
+  "name": "@fixture/hidden",
+  "private": true,
+  "exports": {
+    ".": "./index.js"
+  }
+}
