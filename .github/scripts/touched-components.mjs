@@ -323,6 +323,9 @@ const RTL_SECTIONS = [
 /** A curated card's rollup, as one of the section verdicts. */
 const CURATED_VERDICT = {
   'RTL-ready': 'pass',
+  // Some dimensions hold and others do not (prev and next ordered in LTR but
+  // not mirrored in RTL): a failure.
+  partial: 'fail',
   'not-RTL': 'fail',
   ERROR: 'fail',
   'MISSING-STORY': 'fail',

@@ -394,6 +394,12 @@ describe('per-component results', () => {
     ).toEqual({result: 'fail', detail: 'RTL coverage-gap'});
     expect(rtlResult(button, [], 'failure').result).toBe('fail');
     expect(rtlResult(button, [], 'success').result).toBe('not-run');
+    // A partial curated card (some dimensions hold, others do not) fails.
+    expect(
+      rtlResult(button, [
+        {curated: {results: [{component: 'core/Button', rollup: 'partial'}]}},
+      ]).result,
+    ).toBe('fail');
     // A curated target's card counts: not-RTL fails, RTL-ready passes.
     expect(
       rtlResult(button, [

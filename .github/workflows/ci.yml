@@ -2999,8 +2999,6 @@ jobs:
             --force-full "${{ steps.scope.outputs.force_full_component_audits }}" \
             --reports-dir rtl-shard-reports
 
-  # Release-time projection only: the existing owners above do all measurement.
-  # A skipped owner or main drift must never look like passing release evidence.
   # The default pull-request check for components: accessibility and RTL for
   # only the components the change touches, on one standard runner, against
   # this pull request's Storybook build, with pr-visual's verdict for the same
@@ -3185,6 +3183,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Release-time projection only: the existing owners above do all measurement.
+  # A skipped owner or main drift must never look like passing release evidence.
   release-check:
     needs:
       [
