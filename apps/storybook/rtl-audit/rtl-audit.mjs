@@ -66,6 +66,7 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  ignoredStoryIdentities,
   orderD1StoryCandidates,
   resolveD1Applicability,
   validateStoryRtlAuditParameters,
@@ -1483,6 +1484,13 @@ async function cleanupRuntime() {
     enforced: !AUTO_ONLY && !CURATED_ONLY,
   });
   if (verifiedNaError) coverage.registryError = verifiedNaError;
+  // Story identities with no public component are not roster entries (INV5);
+  // name them so the report shows what the roster left out.
+  coverage.ignoredStoryIdentities = ignoredStoryIdentities({
+    sourceComponents,
+    storyComponents: scopedStoryRoutes.map(route => route.component),
+    filters: FILTER,
+  });
 
   const autoFails = autoResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
   // No allowlist: every not-RTL component is a surprise. The RTL migration is
@@ -1572,6 +1580,7 @@ async function cleanupRuntime() {
   console.error(`DEC : ${report.directionalDecorations.pass} pass / ${report.directionalDecorations.fail} fail / ${report.directionalDecorations.na} N-A`);
   console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
   console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+  if (coverage.ignoredStoryIdentities.length > 0) console.error(`IGN : ${coverage.ignoredStoryIdentities.length} story identities name no public component (not roster entries): ${coverage.ignoredStoryIdentities.map(entry => entry.component).join(', ')}`);
   // Non-zero exit only signals CI (which is soft/continue-on-error). Surface a
   // signal but never let it hard-block during the stability window.
   const anySignal =

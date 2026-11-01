@@ -827,14 +827,50 @@ function componentName(component) {
 }
 
 /**
- * Build the component roster for a scoped audit.
+ * Story-title identities that name no public component, such as
+ * `core/hooks-useclipboard` or `core/themes-theme`. The roster is the public
+ * components (`architecture:rtl-audit-evidence` INV5), so these are not roster
+ * entries and cannot be coverage gaps; the audit reports them, typed, rather
+ * than dropping them silently. A story identity a filter names explicitly (an
+ * umbrella surface such as `Core/Chat`) is kept, so a scoped run still
+ * resolves it.
+ */
+export function ignoredStoryIdentities({
+  sourceComponents = [],
+  storyComponents = [],
+  filters = [],
+}) {
+  const publicKeys = new Set(sourceComponents.map(c => c.toLowerCase()));
+  const normalizedFilters = filters.map(filter => filter.toLowerCase());
+  const named = component =>
+    normalizedFilters.some(
+      filter =>
+        component.toLowerCase() === filter ||
+        componentName(component) === filter,
+    );
+  return Array.from(
+    new Map(
+      storyComponents
+        .filter(c => !publicKeys.has(c.toLowerCase()) && !named(c))
+        .map(c => [c.toLowerCase(), c]),
+    ).values(),
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .map(component => ({component, reason: 'no-public-component'}));
+}
+
+/**
+ * Build the component roster for a scoped audit: the public components, plus
+ * any story identity a filter names explicitly.
  *
  * Storybook can expose an umbrella story whose name matches the PR analyzer's
  * module name even when no source component has that exact name. Chat is the
  * canonical example: the source directory contains ChatComposer, ChatMessage,
  * and related components, while Storybook also has a `Core/Chat` surface. A
  * matching story must satisfy the filter so the roster does not invent a
- * second `unknown/chat` coverage entry for the same surface.
+ * second `unknown/chat` coverage entry for the same surface. Story identities
+ * with no public component and no filter naming them are left out (see
+ * `ignoredStoryIdentities`).
  */
 export function buildAuditedComponentRoster({
   sourceComponents = [],
@@ -851,13 +887,17 @@ export function buildAuditedComponentRoster({
         !knownComponents.some(component => matchesFilter(component, filter)),
     )
     .map(filter => `unknown/${filter}`);
+  const ignored = new Set(
+    ignoredStoryIdentities({sourceComponents, storyComponents, filters}).map(
+      entry => entry.component.toLowerCase(),
+    ),
+  );
 
   return Array.from(
     new Map(
-      [...knownComponents, ...unmatchedFilters].map(component => [
-        component.toLowerCase(),
-        component,
-      ]),
+      [...knownComponents, ...unmatchedFilters]
+        .filter(component => !ignored.has(component.toLowerCase()))
+        .map(component => [component.toLowerCase(), component]),
     ).values(),
   ).filter(
     component =>

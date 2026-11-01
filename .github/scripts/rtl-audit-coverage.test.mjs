@@ -20,6 +20,7 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
+  ignoredStoryIdentities,
   orderD1StoryCandidates,
   resolveD1Applicability,
   storyIdsForComponentFilters,
@@ -602,6 +603,45 @@ describe('buildAuditedComponentRoster', () => {
         filters: ['chat'],
       }),
     ).toEqual(['core/chat']);
+  });
+
+  it('leaves out a story identity that names no public component', () => {
+    const input = {
+      sourceComponents: ['core/Button', 'core/Table'],
+      storyComponents: [
+        'core/button',
+        'core/hooks-useclipboard',
+        'core/tablesortable',
+      ],
+    };
+    // A public component keeps its entry (the story spelling, as before).
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Table',
+    ]);
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/hooks-useclipboard', reason: 'no-public-component'},
+      {component: 'core/tablesortable', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('keeps a public component with no story as a roster entry', () => {
+    expect(
+      buildAuditedComponentRoster({
+        sourceComponents: ['core/Button', 'core/LayerProvider'],
+        storyComponents: ['core/button'],
+      }),
+    ).toEqual(['core/button', 'core/LayerProvider']);
+  });
+
+  it('keeps a story identity a filter names explicitly', () => {
+    const input = {
+      sourceComponents: ['core/ChatComposer'],
+      storyComponents: ['core/chat'],
+      filters: ['chat'],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual(['core/chat']);
+    expect(ignoredStoryIdentities(input)).toEqual([]);
   });
 
   it('retains an unknown entry when neither source nor stories match', () => {
