@@ -3,16 +3,19 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:EmptyState
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, layout, theming, accessibility, testing]
 verified_by:
   [
     packages/core/src/EmptyState/EmptyState.test.tsx,
+    packages/core/src/EmptyState/EmptyState.announce.test.tsx,
+    .github/visual-baseline/manifest.json,
+    scripts/check-knowledge.mjs,
     packages/core/src/theme/themingTargets.test.ts,
     packages/core/src/docPropReferences.test.ts,
   ]
@@ -27,7 +30,7 @@ architecture:
   ]
 contributing: []
 system_specs:
-  [spec:AST-020/FR1, spec:AST-029/FR3, spec:AST-086/FR2, spec:AST-086/FR11]
+  [spec:AST-009, spec:AST-020/FR1, spec:AST-086/FR2, spec:AST-086/FR11]
 ---
 
 # EmptyState component contract
@@ -39,8 +42,8 @@ system_specs:
 | Public contract         | `EmptyState` renders a required title plus optional description, decorative icon, and caller-owned actions in one root without a live role; callers choose heading level and compact layout.     |
 | Behavior                | Null, undefined, boolean, and empty-string optional values create no slot wrapper. Rendered content follows icon, text, then actions order; compact layout reduces spacing and stacks actions.   |
 | End-user impact         | A person reaches a named empty-content message and any next action without blank gaps from shallow-empty optional values; the title fits the surrounding document outline.                       |
-| Builder impact          | Callers supply content and actions, select heading semantics, and may compose supported root props and styling. No additional setup is required.                                                 |
-| Compatibility/readiness | No live role on the root; an EmptyState that appears after load announces once (`spec:AST-086` FR2). Otherwise this draft observes shipped behavior and the scalar-slot remediation.             |
+| Builder impact          | None; the record describes shipped behavior.                                                                                                                                                     |
+| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes.                                                                                                                       |
 | Review checks           | Reject a missing heading, an informative icon hidden as decorative, a shallow-empty optional scalar that still changes layout, a dropped root prop/ref/style, or a theme target without anatomy. |
 | Governing rules         | `architecture:public-component-api` INV1 and INV5–INV9; `architecture:component-theming-surface` INV2–INV6; `architecture:component-test-sufficiency` INV1–INV7, INV10–INV11; WCAG 2.2.          |
 
@@ -53,10 +56,12 @@ context, optional decorative visual, and optional caller-owned next actions.
 
 ## Compatibility and migration
 
-- Released default preserved: no; EmptyState adds no live role to the root
-- Compatibility class: observational and additive documentation; runtime remediation removes wrappers for nullish, boolean, and empty-string optional values and removes the root's live role
+- Released default preserved: `yes` — heading level 3, default layout, no
+  live role on the root.
+- Compatibility class: records shipped behavior; no public prop, default, DOM,
+  target, or styling output changes.
 - Controlled/uncontrolled behavior: not applicable
-- Migration decision: none; an EmptyState rendered with the page announces nothing, and one that appears later announces its message once through the shared polite channel, so apps need no change (`spec:AST-086` FR2)
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
 
@@ -87,17 +92,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision. A `current` contract contains no unresolved rows.
-
-| ID  | Candidate invariant                                                                                                                                                                     | Basis                                                                                | Draft review state |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------ |
-| FR1 | The component MUST render one root containing the icon, text group, and actions in that reading order when present. The component MUST NOT add a live role or `aria-live` to the root.  | Current implementation and consumer docs; `spec:AST-086` FR2; WCAG 2.2 SC 1.3.2      | verify             |
-| FR2 | The required title MUST render at the caller-selected heading level without changing the component's visual type role.                                                                  | Current implementation, tests, and consumer docs; WCAG 2.2 SC 1.3.1 and SC 2.4.6     | verify             |
-| FR3 | Null, undefined, boolean, and empty-string optional values MUST NOT create a wrapper, layout gap, or assistive-technology node; containers that are shallowly non-empty remain wrapped. | React's direct-child rendering semantics; established public optional-slot interface | verify             |
-| FR4 | The decorative icon wrapper MUST be absent when the slot is absent and hidden from assistive technology when rendered.                                                                  | Current implementation and tests; WCAG 2.2 SC 1.1.1                                  | verify             |
-| FR5 | Root DOM/data/ARIA/event props, ref, `className`, `style`, and `xstyle` MUST reach and compose on the root.                                                                             | `architecture:public-component-api` INV5–INV8                                        | verify             |
-| FR6 | Compact layout MUST reduce component spacing and stack the actions slot while preserving content order and root semantics.                                                              | Current implementation, tests, and consumer docs                                     | verify             |
+| ID  | Invariant                                                                                                                                                                               | Basis                                                                                |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| FR1 | The component MUST render one root containing the icon, text group, and actions in that reading order when present. The component MUST NOT add a live role or `aria-live` to the root.  | Current implementation and consumer docs; `spec:AST-086` FR2; WCAG 2.2 SC 1.3.2      |
+| FR2 | The required title MUST render at the caller-selected heading level without changing the component's visual type role.                                                                  | Current implementation, tests, and consumer docs; WCAG 2.2 SC 1.3.1 and SC 2.4.6     |
+| FR3 | Null, undefined, boolean, and empty-string optional values MUST NOT create a wrapper, layout gap, or assistive-technology node; containers that are shallowly non-empty remain wrapped. | React's direct-child rendering semantics; established public optional-slot interface |
+| FR4 | The decorative icon wrapper MUST be absent when the slot is absent and hidden from assistive technology when rendered.                                                                  | Current implementation and tests; WCAG 2.2 SC 1.1.1                                  |
+| FR5 | Root DOM/data/ARIA/event props, ref, `className`, `style`, and `xstyle` MUST reach and compose on the root.                                                                             | `architecture:public-component-api` INV5–INV8                                        |
+| FR6 | Compact layout MUST reduce component spacing and stack the actions slot while preserving content order and root semantics.                                                              | Current implementation, tests, and consumer docs                                     |
 
 ### Allowed variation
 
@@ -126,8 +128,9 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ### Performance and resources
 
-- **PR1 — Render-only surface.** EmptyState owns no retained state, listener,
-  observer, timer, or external resource.
+- **PR1 — No resources of its own.** EmptyState holds no state, listener,
+  observer, or timer of its own; the shared announcement wrapper around its
+  text owns the observation that announces it (`spec:AST-086`).
 
 ## Accessibility contract
 
@@ -176,16 +179,19 @@ No current family record owns EmptyState-specific behavior.
 
 ## Verification map
 
-| Contract       | Verification                                                        | Representative states                             | Mutation or failure expectation                                      | Audit section             |
-| -------------- | ------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------- | ------------------------- |
-| FR1–FR4, AR1–3 | focused DOM tests plus required exact-head accessibility evidence   | title only, all slots, absent/shallow-empty slots | order, heading, live role, or decorative treatment regresses         | `audit:EmptyState/a11y`   |
-| FR5, ORD1      | focused root composition tests plus shared API guards               | DOM/data/event/style inputs, ref, root target     | accepted input is dropped or component semantics/styles are replaced | `audit:EmptyState/api`    |
-| FR6            | compact target/DOM tests plus required exact-head rendered evidence | default and compact, wide and narrow              | compact state, spacing, or action direction no longer applies        | `audit:EmptyState/layout` |
-| PR1            | source review                                                       | every render path                                 | a retained resource appears without a named owner                    | `audit:EmptyState/code`   |
+| Contract            | Verification                                                                                                                           | Representative states                                                                                                                 | Mutation or failure expectation                                                                                                                                                                                                                                                                           | Audit section              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| FR1, FR3, FR4, AR2  | `EmptyState.test.tsx` slot, order, decorative-icon, empty-slot, and live-role tests; stable visual baseline `core-emptystate--default` | Title only; all slots; absent and shallow-empty slots                                                                                 | A wrapper for an absent or shallow-empty slot, a changed slot order, an icon not hidden from assistive technology, or a live role on the root fails; a changed default layout comes back changed for review. Gap: no accessibility-tree check proves the hidden icon or the heading (`spec:AST-009` FR3). | `audit:EmptyState/a11y`    |
+| FR2, AR1            | `EmptyState.test.tsx` heading tests                                                                                                    | Default level 3; every level                                                                                                          | A title that is not the selected heading element fails. Gap: no check that the title keeps one type style at every heading level.                                                                                                                                                                         | `audit:EmptyState/a11y`    |
+| AR3                 | `EmptyState.announce.test.tsx`                                                                                                         | Render with the page; appear later; iframe; inside a live container; message change; server render and hydration; hidden and revealed | An announcement during load or hydration, a missing or repeated announcement when it appears or changes later, hidden text in the message, or an announcement inside a live container fails. Gap: no test asserts that focus stays where it was when EmptyState appears.                                  | `audit:EmptyState/a11y`    |
+| FR5, ORD1           | `EmptyState.test.tsx` ref, `data-testid`, and root-composition tests                                                                   | DOM, data, event, style inputs; caller role; ref                                                                                      | A dropped input, a replaced caller role, or a ref that is not a `div` fails. Gap: the ref test checks only that the ref is a `div`, not that it is the root. No test asserts that caller `xstyle` follows the component styles.                                                                           | `audit:EmptyState/api`     |
+| FR6                 | `EmptyState.test.tsx` compact and theming-target tests                                                                                 | Default and compact                                                                                                                   | A compact layout that is not reflected on the root, title, and description, or that changes slot order, fails. Gap: the reduced spacing and stacked actions have no automated check.                                                                                                                      | `audit:EmptyState/layout`  |
+| PR1                 | Source review                                                                                                                          | Every render path                                                                                                                     | Gap: no automated check fails if EmptyState adds state, a listener, or a timer of its own.                                                                                                                                                                                                                | `audit:EmptyState/code`    |
+| Theming anatomy map | `scripts/check-knowledge.mjs`; `themingTargets.test.ts`                                                                                | Consumer anatomy and current targets                                                                                                  | Missing, extra, or stale mappings fail repository validation.                                                                                                                                                                                                                                             | `audit:EmptyState/theming` |
 
 ## Decision log
 
-No component-local decision is approved in this draft.
+None recorded. The record describes shipped behavior.
 
 ## Open questions
 

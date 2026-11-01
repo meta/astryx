@@ -32,7 +32,8 @@ import {
   useClickableContainer,
 } from '../hooks/useClickableContainer';
 import {Icon} from '../Icon';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {TreeListBranches} from './TreeListBranches';
 import type {TreeListDensity, TreeListVariant} from './TreeListTypes';
@@ -379,6 +380,9 @@ export interface TreeListItemInternalProps {
 // Component
 // =============================================================================
 
+/** A plain anchor, for a disabled item whose link has no destination. */
+const DisabledAnchor = 'a';
+
 export function TreeListItem({
   id,
   label,
@@ -414,6 +418,10 @@ export function TreeListItem({
   const descriptionId = useId();
   const LinkComponent = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
+  // Disabling the item swaps the router link for a plain anchor, so React
+  // replaces it; focus on the inner link (after a pointer click) follows the
+  // swap instead of falling to the page (spec:AST-085 FR4).
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>(linkRef);
   const isInteractive = onClick != null || href != null;
 
   const handleToggle = useMemo(
@@ -596,12 +604,26 @@ export function TreeListItem({
       {startContent != null && (
         <span {...stylex.props(styles.startContent)}>{startContent}</span>
       )}
-      {href != null ? (
+      {href != null && isDisabled ? (
+        // A disabled item's anchor has no destination, so neither the row's
+        // forwarded activation nor a screen reader's click can navigate
+        // (spec:AST-085 FR2). Like a disabled Link, it keeps the link role and
+        // skips the router link component.
+        <DisabledAnchor
+          ref={anchorRef}
+          role="link"
+          aria-disabled={true}
+          aria-labelledby={labelId}
+          aria-describedby={description != null ? descriptionId : undefined}
+          tabIndex={-1}
+          {...stylex.props(styles.invisibleAnchor)}>
+          {labelAndDescription}
+        </DisabledAnchor>
+      ) : href != null ? (
         <LinkComponent
-          ref={linkRef}
+          ref={anchorRef}
           href={href}
           target={target}
-          aria-disabled={isDisabled || undefined}
           aria-labelledby={labelId}
           aria-describedby={description != null ? descriptionId : undefined}
           // Roving tabindex lives on the treeitem row; inner action is not a

@@ -31,6 +31,7 @@ import {
   within,
 } from '@testing-library/react';
 import React, {useRef} from 'react';
+import {createPortal} from 'react-dom';
 import {readFileSync} from 'node:fs';
 import {type AnnounceFn, __resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {Button} from '../Button';
@@ -840,6 +841,84 @@ describe('ToastViewport keyboard reach + focus', () => {
     });
 
     // No toasts left — focus returns to the element focused before F6.
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('restores focus after a toast reached with Tab rather than F6 is dismissed', () => {
+    renderViewport(
+      <ShowToastButton options={INFO_A} triggerLabel="Trigger A" />,
+    );
+    const trigger = screen.getByText('Trigger A');
+    trigger.focus();
+    act(() => {
+      fireEvent.click(trigger);
+    });
+    const dismiss = screen.getByRole('button', {name: 'Dismiss notification'});
+    // Tab (or a click) moves focus straight to the toast's control.
+    act(() => {
+      dismiss.focus();
+    });
+    const toastId = document
+      .querySelector('[data-toast-id]')!
+      .getAttribute('data-toast-id')!;
+
+    act(() => {
+      fireEvent.click(dismiss);
+    });
+    act(() => {
+      completeExit(toastId);
+    });
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('keeps the return target while focus visits portaled toast content', () => {
+    renderViewport(
+      <ShowToastButton
+        options={{
+          body: 'With a portal',
+          isAutoHide: false,
+          renderContent: ({body, dismiss}) => (
+            <div>
+              {body}
+              {createPortal(
+                <button type="button">Portaled</button>,
+                document.body,
+              )}
+              <Button label="Close" onClick={dismiss} />
+            </div>
+          ),
+        }}
+        triggerLabel="Trigger P"
+      />,
+    );
+    const trigger = screen.getByText('Trigger P');
+    trigger.focus();
+    act(() => {
+      fireEvent.click(trigger);
+    });
+    act(() => {
+      fireEvent.keyDown(document, {key: 'F6'});
+    });
+    // Focus visits the toast's portaled control, then comes back.
+    act(() => {
+      screen.getByRole('button', {name: 'Portaled'}).focus();
+    });
+    const close = screen.getByRole('button', {name: 'Close'});
+    act(() => {
+      close.focus();
+    });
+    const toastId = document
+      .querySelector('[data-toast-id]')!
+      .getAttribute('data-toast-id')!;
+
+    act(() => {
+      fireEvent.click(close);
+    });
+    act(() => {
+      completeExit(toastId);
+    });
+
     expect(document.activeElement).toBe(trigger);
   });
 });
@@ -2656,6 +2735,150 @@ describe('toast timer lifecycle (#3589)', () => {
       fireEvent.click(dismiss);
     });
     expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  // spec:Toast FR2/AR3: each pause condition is held on its own, so one
+  // ending never resumes the timer while another still holds.
+  function showPausableToast(onHide: () => void) {
+    renderViewport(
+      <ShowToastButton
+        options={{
+          body: 'Held',
+          autoHideDuration: 3000,
+          endContent: <Button label="Undo" />,
+          onHide,
+        }}
+        triggerLabel="Show held"
+      />,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Show held'));
+    });
+    const viewport = screen.getByRole('region', {name: 'Notifications'});
+    const card = within(viewport).getByText('Held').closest('[role="status"]');
+    if (!(card instanceof HTMLElement)) {
+      throw new Error('toast card not found');
+    }
+    return {card, action: within(card).getByRole('button', {name: 'Undo'})};
+  }
+
+  it('keeps the timer paused while focus is inside after the pointer leaves', () => {
+    vi.useFakeTimers();
+    try {
+      const onHide = vi.fn();
+      const {card, action} = showPausableToast(onHide);
+      act(() => {
+        fireEvent.mouseEnter(card);
+      });
+      act(() => {
+        action.focus();
+      });
+      act(() => {
+        fireEvent.mouseLeave(card);
+      });
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(onHide).not.toHaveBeenCalled();
+      // Focus leaving the card releases the last hold.
+      act(() => {
+        action.blur();
+      });
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the timer paused while the pointer is over it after the window regains focus', () => {
+    vi.useFakeTimers();
+    try {
+      const onHide = vi.fn();
+      const {card} = showPausableToast(onHide);
+      act(() => {
+        fireEvent.blur(window);
+      });
+      act(() => {
+        fireEvent.mouseEnter(card);
+      });
+      act(() => {
+        fireEvent.focus(window);
+      });
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(onHide).not.toHaveBeenCalled();
+      act(() => {
+        fireEvent.mouseLeave(card);
+      });
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('releases the focus hold when the focused control is removed', () => {
+    vi.useFakeTimers();
+    try {
+      const onHide = vi.fn();
+      const {card, action} = showPausableToast(onHide);
+      act(() => {
+        fireEvent.mouseEnter(card);
+      });
+      act(() => {
+        action.focus();
+      });
+      // A control that unmounts while focused fires no blur.
+      act(() => {
+        action.remove();
+      });
+      act(() => {
+        fireEvent.mouseLeave(card);
+      });
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the timer paused while focus moves between controls inside the card', () => {
+    vi.useFakeTimers();
+    try {
+      const onHide = vi.fn();
+      const {card, action} = showPausableToast(onHide);
+      const dismiss = within(card)
+        .getAllByRole('button')
+        .find(button => button !== action);
+      if (!dismiss) {
+        throw new Error('dismiss button not found');
+      }
+      act(() => {
+        action.focus();
+      });
+      act(() => {
+        vi.advanceTimersByTime(2_000);
+      });
+      act(() => {
+        dismiss.focus();
+      });
+      // Moving between the card's own controls neither restarts nor resumes
+      // the timer.
+      act(() => {
+        vi.advanceTimersByTime(60_000);
+      });
+      expect(onHide).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps a window-blur pause alive when another toast arrives', () => {

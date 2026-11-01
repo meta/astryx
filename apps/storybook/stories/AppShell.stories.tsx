@@ -510,6 +510,23 @@ export const AutoHeight: Story = {
 };
 
 /**
+ * The default fill height with more content than fits and nothing focusable
+ * in it. The main region scrolls inside the viewport-high shell; while it
+ * overflows it is a stop in the tab order, so the arrow keys and Page Up/Down
+ * can scroll it.
+ */
+export const LongContent: Story = {
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={<AppTopNav />}
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent paragraphs={20} />
+    </AppShell>
+  ),
+};
+
+/**
  * Auto height mode with Field-based inputs. Scroll the inputs under the
  * sticky header — the header must stay above the input surfaces. Field
  * contains its local stacking layers at its own surface (AST-027), so the

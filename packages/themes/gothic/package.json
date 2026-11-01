@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/theme-gothic",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "displayName": "Gothic Theme",
   "private": false,
   "description": "Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.",
@@ -52,20 +52,34 @@
     "src",
     "fonts.css",
     "fonts.css.d.ts",
-    "palette.config.json"
+    "palette.config.json",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-gothic-palette-refs.mjs --check && astryx theme build src/gothicTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.18.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.5",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.5"
+    "@astryxdesign/cli": "0.7.6"
   },
   "module": "./dist/source.mjs"
 }

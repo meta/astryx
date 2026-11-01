@@ -5,6 +5,7 @@ import {focusForLastInput, isFocusDetached} from './focusReturn';
 import {
   __resetInteractionModalityForTest,
   __startInteractionModalityTrackingForTest,
+  __trackInteractionModalityInForTest,
 } from './interactionModality';
 
 describe('isFocusDetached', () => {
@@ -115,5 +116,30 @@ describe('focusForLastInput', () => {
       focus.mock.invocationCallOrder[0] ?? 0,
     );
     expect(document.activeElement).toBe(element);
+  });
+});
+
+describe('focusForLastInput in a second document', () => {
+  it("follows the last input in the element's own document by default", () => {
+    __startInteractionModalityTrackingForTest();
+    const secondDocument = document.implementation.createHTMLDocument();
+    const release = __trackInteractionModalityInForTest(secondDocument);
+    const button = secondDocument.createElement('button');
+    secondDocument.body.appendChild(button);
+    const focus = vi.spyOn(button, 'focus');
+
+    // The page's last input was a pointer; the button's document saw a key.
+    document.dispatchEvent(new Event('pointerdown'));
+    secondDocument.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+    focusForLastInput(button);
+    expect(focus).toHaveBeenLastCalledWith();
+
+    // And the other way round: the page saw a key, the button's document a
+    // pointer, so the ring is suppressed.
+    document.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
+    secondDocument.dispatchEvent(new Event('pointerdown'));
+    focusForLastInput(button);
+    expect(focus).toHaveBeenLastCalledWith({focusVisible: false});
+    release();
   });
 });

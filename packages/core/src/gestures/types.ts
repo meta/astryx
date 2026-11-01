@@ -172,4 +172,11 @@ export interface TouchConsumer {
    * (attached above this consumer) from beginning for a touch on it.
    */
   allowsAncestorRecognizer?(recognizer: unknown): boolean;
+  /**
+   * Whether the consumer takes touches now (a disabled control does not).
+   * The host listens only while something enabled is attached
+   * (`spec:AST-094` FR24); after this changes, call `host.update(element)`.
+   * @default true
+   */
+  isEnabled?(): boolean;
 }

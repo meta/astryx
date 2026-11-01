@@ -43,7 +43,7 @@ import type {LinkComponentType} from './types';
 import {mergeProps} from '../utils';
 import {computeTargetAndRel} from './computeTargetAndRel';
 import {useInteractiveRole} from '../hooks/useInteractiveRole';
-import {themeProps} from '../utils/themeProps';
+import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -75,6 +75,14 @@ const styles = stylex.create({
     transitionProperty: 'color, text-decoration',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  // A truncating label needs a box that stops at its container: an
+  // inline-flex root otherwise grows to its whole text, so its Text never
+  // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
+  // FR4).
+  truncating: {
+    maxWidth: '100%',
+    minWidth: 0,
   },
   /**
    * Reset styles for rendering as a <button> when href is undefined.
@@ -327,6 +335,10 @@ export function Link({
   const renderAsButton =
     role === 'button' || (role === 'inert' && href == null);
 
+  // The reflected theme attributes win over a caller's same-named `data-*`, so
+  // theme targeting always sees the real value (public-component-api INV5).
+  const reflectedAttributes = themeDataAttributes({color});
+
   const sharedContent = (
     <>
       <Text
@@ -370,12 +382,14 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
         {...props}
+        {...reflectedAttributes}
         // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
         {...(isDisabled ? disabledInteractionProps(props.onKeyDown) : null)}>
         {sharedContent}
@@ -403,12 +417,14 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
         {...props}
+        {...reflectedAttributes}
         {...disabledInteractionProps(props.onKeyDown)}>
         {sharedContent}
       </a>
@@ -434,12 +450,14 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            maxLines > 0 && styles.truncating,
             xstyle,
           ),
           className,
           style,
         )}
-        {...props}>
+        {...props}
+        {...reflectedAttributes}>
         {sharedContent}
       </LinkComponent>
     );

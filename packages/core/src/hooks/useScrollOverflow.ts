@@ -10,12 +10,15 @@
  *   state
  *
  * Observes a scroll container and reports whether content overflows at the
- * start, end, or both edges. Updates on every scroll, and on a resize while
- * the container is rendered: a layout read on an element the browser is not
+ * start, end, or both edges. Updates on every scroll, and while the container
+ * is rendered on what else changes the overflow with or without the
+ * container resizing: its own size, a child's size (a slide's content
+ * growing), a child added or removed, and its class or style (a new gap or
+ * padding). A layout read on an element the browser is not
  * rendering (an ancestor with `display: none`, or a `content-visibility:
  * hidden` subtree) either answers zeros or makes the browser lay out that
- * whole hidden subtree for the answer, so a resize observation delivered for
- * a hidden container, and the measurement at registration inside one, are
+ * whole hidden subtree for the answer, so an observation delivered for a
+ * hidden container, and the measurement at registration inside one, are
  * skipped; the hook keeps its last state until the resize observation that
  * follows the reveal (one frame after it paints). A scroll is measured
  * whether or not the container is rendered: a scroll of a hidden container
@@ -53,10 +56,56 @@ function isRendered(el: HTMLElement): boolean {
 }
 
 /**
+ * Observes what changes `el`'s overflow besides its scroll: its own size,
+ * each child's size, the children added or removed, and its class or style.
+ * Returns the teardown, which ends every observation.
+ */
+function observeContent(el: HTMLElement, measure: () => void): () => void {
+  const unobserveContainer = observeResize(el, measure);
+  const unobserveChildren = new Map<Element, () => void>();
+  const followChildren = () => {
+    const children = new Set(el.children);
+    for (const [child, unobserve] of unobserveChildren) {
+      if (!children.has(child)) {
+        unobserve();
+        unobserveChildren.delete(child);
+      }
+    }
+    for (const child of children) {
+      if (!unobserveChildren.has(child)) {
+        unobserveChildren.set(child, observeResize(child, measure));
+      }
+    }
+  };
+  followChildren();
+  const mutations =
+    typeof MutationObserver === 'function'
+      ? new MutationObserver(() => {
+          followChildren();
+          measure();
+        })
+      : null;
+  mutations?.observe(el, {
+    childList: true,
+    attributes: true,
+    attributeFilter: ['class', 'style'],
+  });
+  return () => {
+    mutations?.disconnect();
+    for (const unobserve of unobserveChildren.values()) {
+      unobserve();
+    }
+    unobserveChildren.clear();
+    unobserveContainer();
+  };
+}
+
+/**
  * Tracks scroll overflow state for a horizontally scrollable container.
  *
  * Returns a ref callback to attach to the scroll container and a state
- * object that updates as the user scrolls or the container resizes.
+ * object that updates as the user scrolls, the container resizes, or its
+ * content changes.
  *
  * @example
  * ```
@@ -95,10 +144,10 @@ export function useScrollOverflow() {
     });
   }, []);
 
-  // Registration and resize: only a rendered container. A hidden one has no
-  // edges to report, and reading its layout would make the browser render
-  // the hidden subtree it sits in; the resize observation that follows the
-  // reveal measures again.
+  // Registration, resize and content changes: only a rendered container. A
+  // hidden one has no edges to report, and reading its layout would make the
+  // browser render the hidden subtree it sits in; the resize observation that
+  // follows the reveal measures again.
   const measure = useCallback(() => {
     const el = elRef.current;
     if (el && isRendered(el)) {
@@ -129,7 +178,7 @@ export function useScrollOverflow() {
 
       if (el) {
         el.addEventListener('scroll', measureOnScroll, {passive: true});
-        unobserveRef.current = observeResize(el, measure);
+        unobserveRef.current = observeContent(el, measure);
       }
     },
     [measure, measureOnScroll],

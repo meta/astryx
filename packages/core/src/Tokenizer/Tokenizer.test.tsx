@@ -28,6 +28,7 @@ import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
+import {FormLayout} from '../FormLayout/FormLayout';
 
 // Every Token render, in order, by label.
 //
@@ -1403,6 +1404,33 @@ describe('Tokenizer', () => {
     });
   });
   describe('announcements', () => {
+    it("announces Clear all politely, in the sheet's words", async () => {
+      const onChange = vi.fn();
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.tokenizer.allRemoved': 'Tout a été retiré'},
+          }}>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={onChange}
+            hasClear
+          />
+        </InternationalizationProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: /clear/i}));
+      expect(onChange).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({type: 'remove'}),
+      );
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toBe('Tout a été retiré');
+      });
+    });
+
     it('announces removal politely on Backspace with an empty input', async () => {
       const onChange = vi.fn();
       render(
@@ -1570,6 +1598,86 @@ describe('Tokenizer', () => {
       expect(form.querySelector('input[type="hidden"]')).toBeNull();
       expect(form.checkValidity()).toBe(true);
     });
+  });
+});
+
+describe('Tokenizer required state (FormLayout FR5, AR2)', () => {
+  it('exposes the resolved required state on the combobox', () => {
+    const field = (props: {
+      isRequired?: boolean;
+      isOptional?: boolean;
+      label: string;
+    }) => (
+      <Tokenizer
+        {...props}
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />
+    );
+    render(
+      <>
+        {field({label: 'Plain'})}
+        {field({label: 'Explicit', isRequired: true})}
+        <FormLayout defaultOptionality="required">
+          {field({label: 'By default'})}
+          {field({label: 'Opted out', isOptional: true})}
+        </FormLayout>
+      </>,
+    );
+    const required = (name: string) =>
+      screen
+        .getByRole('combobox', {name: new RegExp(`^${name}`)})
+        .getAttribute('aria-required');
+    expect(required('Plain')).toBeNull();
+    expect(required('Explicit')).toBe('true');
+    expect(required('By default')).toBe('true');
+    expect(required('Opted out')).toBeNull();
+  });
+});
+
+describe('Tokenizer invalid state', () => {
+  it('marks the combobox invalid for an error status only (WCAG 4.1.2)', () => {
+    const field = (
+      label: string,
+      status?: {type: 'error' | 'warning'; message: string},
+    ) => (
+      <Tokenizer
+        label={label}
+        status={status}
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />
+    );
+    render(
+      <>
+        {field('None')}
+        {field('Warned', {type: 'warning', message: 'Check this'})}
+        {field('Failed', {type: 'error', message: 'Pick one'})}
+      </>,
+    );
+    const invalid = (name: string) =>
+      screen.getByRole('combobox', {name}).getAttribute('aria-invalid');
+    expect(invalid('None')).toBeNull();
+    expect(invalid('Warned')).toBeNull();
+    expect(invalid('Failed')).toBe('true');
+  });
+
+  it("keeps a caller's own aria-invalid and aria-required when the field's own state is off", () => {
+    render(
+      <Tokenizer
+        label="Caller"
+        aria-invalid="true"
+        aria-required="true"
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+    const combobox = screen.getByRole('combobox', {name: 'Caller'});
+    expect(combobox).toHaveAttribute('aria-invalid', 'true');
+    expect(combobox).toHaveAttribute('aria-required', 'true');
   });
 });
 
@@ -2165,5 +2273,132 @@ describe('Tokenizer consumer key handler order', () => {
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
     expect(currentTarget).toBe(screen.getByRole('combobox'));
+  });
+});
+
+describe('Tokenizer caller aria-labelledby', () => {
+  it('names the input by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[]}
+          onChange={() => {}}
+          aria-labelledby="billing-heading"
+        />
+      </>,
+    );
+    expect(
+      screen.getByRole('combobox', {name: 'Members Billing'}),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('Tokenizer incremental results (spec:AST-092)', () => {
+  const ben = {id: 'u2', label: 'Ben'};
+  const benita = {id: 'u3', label: 'Benita'};
+  const benShah = {id: 'u7', label: 'Ben Shah'};
+
+  function pendingSource() {
+    let settle: (items: SearchableItem[]) => void = () => {};
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(_query, context) {
+        context?.update([ben, benita]);
+        return new Promise<SearchableItem[]>(resolve => {
+          settle = resolve;
+        });
+      },
+    };
+    return {source, settle: (items: SearchableItem[]) => settle(items)};
+  }
+
+  function optionLabels() {
+    return screen
+      .queryAllByRole('option', {hidden: true})
+      .map(option => option.textContent);
+  }
+
+  it('removes committed values from partial lists too (FR1, component:Tokenizer FR13)', async () => {
+    const {source, settle} = pendingSource();
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[benita]}
+        onChange={() => {}}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben'}});
+    });
+    expect(optionLabels()).toEqual(['Ben']);
+
+    await act(async () => {
+      settle([ben, benita, benShah]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Ben Shah']);
+  });
+
+  it('offers the create row only once a searched query settles (FR1)', async () => {
+    const {source, settle} = pendingSource();
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        hasCreate
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben s'}});
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Benita']);
+
+    await act(async () => {
+      settle([ben, benita]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Benita', 'Create "ben s"']);
+  });
+
+  it('keeps grouped rows in place and shows the create row after them when the query settles (FR1, FR2)', async () => {
+    const people = {id: 'p1', label: 'Ben', auxiliaryData: {group: 'People'}};
+    const teams = {id: 't1', label: 'Bento', auxiliaryData: {group: 'Teams'}};
+    let settle: (items: SearchableItem[]) => void = () => {};
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(_query, context) {
+        context?.update([people]);
+        return new Promise<SearchableItem[]>(resolve => {
+          settle = resolve;
+        });
+      },
+    };
+    render(
+      <Tokenizer
+        label="People"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        hasCreate
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    await act(async () => {
+      fireEvent.change(input, {target: {value: 'ben x'}});
+    });
+    expect(optionLabels()).toEqual(['Ben']);
+    await act(async () => {
+      settle([people, teams]);
+    });
+    expect(optionLabels()).toEqual(['Ben', 'Bento', 'Create "ben x"']);
   });
 });

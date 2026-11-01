@@ -130,7 +130,7 @@ const AUDITED_STORY_PREFIX = new RegExp(`^(?:${AUDITED_STORY_PREFIXES.join('|')}
 // CPU. A worker whose story fails gets a fresh page before its next story
 // (rtl-audit-pool.mjs), so one unusable page cannot fail the stories after it.
 // Defaults to 1 (serial) so the per-PR job's behaviour is unchanged while the
-// suite is still soft-gated; rtl-weekly.yml opts into 4 for the full sweep.
+// suite is still soft-gated; the CI RTL shards opt into 8.
 const CONCURRENCY = Math.max(1, Number(getArg('concurrency') || process.env.RTL_CONCURRENCY || 1));
 // D5 positional-mirror reveal: opening interaction-gated surfaces on EVERY core
 // story (1365 stories) is expensive and, at that scale, a flake/timeout risk

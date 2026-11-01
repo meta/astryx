@@ -60,6 +60,19 @@ afterEach(() => {
 });
 
 describe('Drawer', () => {
+  it('clips its panel with `clip`, not `hidden`: the panel is no scroll container', () => {
+    // `hidden` clips exactly as well, so it reads as a harmless tidy-up, but it
+    // makes the panel a scroll container, and in Chromium its overscroll
+    // containment then holds a drag on the page beside a non-modal drawer
+    // (__tests__/DrawerNonModalPageScroll.a11y.chromium.spec.ts).
+    render(
+      <Drawer isOpen onOpenChange={() => {}} label="Details" hasScrim={false}>
+        Content
+      </Drawer>,
+    );
+    expect(getComputedStyle(screen.getByRole('dialog')).overflow).toBe('clip');
+  });
+
   it('renders children when open', () => {
     render(
       <Drawer isOpen onOpenChange={() => {}} label="Host details">

@@ -791,6 +791,14 @@
     "defaultMessage": "Open menu",
     "description": "Screen-reader-only label on the `⋯` overflow-menu button embedded in a SideNav section heading. Same string as `topNav.heading.openMenu` — translations may share."
   },
+  "@astryx.slider.minimumThumb": {
+    "defaultMessage": "Minimum value",
+    "description": "Accessible name of the lower thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Minimum value, 20\". Never shown on screen."
+  },
+  "@astryx.slider.maximumThumb": {
+    "defaultMessage": "Maximum value",
+    "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."
@@ -802,6 +810,10 @@
   "@astryx.table.noData": {
     "defaultMessage": "No data",
     "description": "Fallback empty-state text in the table body when there are zero rows. Neutral tone (not error-y); consumers commonly override with something specific like \"No results\"."
+  },
+  "@astryx.table.columnResize.resizeColumn": {
+    "defaultMessage": "Resize column {label}",
+    "description": "Accessible name for a Table column-resize handle (a vertical separator between header cells). `label` is the column header's visible text, or the column key when the header has no text."
   },
   "@astryx.table.filter.allPlaceholder": {
     "defaultMessage": "All",
@@ -855,25 +867,9 @@
     "defaultMessage": "Clear sort",
     "description": "Screen-reader-only label on a column header button that will remove the current sort. \"Clear\" here means remove, not transparent. Part of the sort set."
   },
-  "@astryx.table.sort.direction.ascending": {
-    "defaultMessage": "ascending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.direction.descending": {
-    "defaultMessage": "descending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.sortBy": {
-    "defaultMessage": "Sort by {label}",
-    "description": "Aria label for a sortable Table header button when the column is unsorted. `label` is the column header text."
-  },
-  "@astryx.table.sort.sortedBy": {
-    "defaultMessage": "Sort by {label}, sorted {direction}",
-    "description": "Aria label for a sorted Table header button. `direction` is the localized direction word from @astryx.table.sort.direction.*."
-  },
-  "@astryx.table.sort.sortedByWithPriority": {
-    "defaultMessage": "Sort by {label}, sorted {direction}, priority {rank, number} of {total, number}",
-    "description": "Aria label for a sorted Table header button in multi-sort. `rank` is the 1-based position of this column in the sort order; `total` is the number of sorted columns."
+  "@astryx.table.sort.priority": {
+    "defaultMessage": "Priority {rank, number} of {total, number}",
+    "description": "Screen-reader description of a sortable Table column header button while several columns are sorted: this column's place in the sort order. The button's name is the column header text and its direction is announced from aria-sort."
   },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Dismiss notification",
@@ -1009,11 +1005,11 @@
   },
   "@astryx.dateTimeInput.timeHint12h": {
     "defaultMessage": "e.g., 2:30 PM",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 12-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 12-hour format. Gives an example of expected input format; write the example time as your locale writes 12-hour time."
   },
   "@astryx.dateTimeInput.timeHint24h": {
     "defaultMessage": "e.g., 14:30",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 24-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 24-hour format. Gives an example of expected input format; write the example time as your locale writes 24-hour time."
   },
   "@astryx.dateTimeInput.timeSuffix": {
     "defaultMessage": "{label} time",
@@ -1110,6 +1106,10 @@
   "@astryx.powersearch.placeholder": {
     "defaultMessage": "Search…",
     "description": "Grey placeholder text inside the empty PowerSearch input. Imperative verb; trailing `…` is one character."
+  },
+  "@astryx.powersearch.allFiltersRemoved": {
+    "defaultMessage": "All filters removed",
+    "description": "Screen-reader announcement after a PowerSearch field's Clear all removes every filter. Distinct from @astryx.tokenizer.allRemoved: PowerSearch words its items as filters."
   },
   "@astryx.resizable.collapsed": {
     "defaultMessage": "Collapsed",
@@ -1729,7 +1729,7 @@
   },
   "@astryx.tokenizer.allRemoved": {
     "defaultMessage": "All items removed",
-    "description": "Polite screen-reader announcement after a confirmed Clear all in a Tokenizer's bottom sheet has removed every selected item. Live-region text, never shown on screen."
+    "description": "Polite screen-reader announcement after a Tokenizer's Clear all has removed every selected item: the inline Clear all button, or a confirmed Clear all in the bottom sheet. Live-region text, never shown on screen."
   },
   "@astryx.tokenizer.selectedCount": {
     "defaultMessage": "{count, number} selected",
@@ -2158,6 +2158,10 @@
   "@astryx.comments.resolvedBy": {
     "defaultMessage": "Resolved by {name}",
     "description": "Tooltip of the Resolved text on a comment thread in a lab Comments panel. `name` is the person who resolved it."
+  },
+  "@astryx.comments.errorAnnouncement": {
+    "defaultMessage": "{title} {description}",
+    "description": "Screen-reader announcement for an error Banner in a lab Comments panel that has a title and a description, read once when the Banner appears. `title` is the Banner's title (for example `Couldn't send this comment.`) and `description` its description (for example `Retrying didn't work.`). Reorder or punctuate as the language needs."
   },
   "@astryx.comments.retryFailed": {
     "defaultMessage": "Retrying didn't work.",

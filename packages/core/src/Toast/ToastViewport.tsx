@@ -15,7 +15,6 @@
  */
 
 import {
-  isValidElement,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -28,6 +27,7 @@ import {createPortal} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
+import {getNodeText} from '../utils/getNodeText';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -171,29 +171,6 @@ const styles = stylex.create({
     overflow: 'visible',
   },
 });
-
-// Flatten a toast's rendered content (title, description, etc.) to the plain
-// text that should be spoken by a screen reader. Only text is announced —
-// interactive endContent is deliberately excluded (it is reachable via F6).
-function getNodeText(node: ReactNode): string {
-  if (node == null || typeof node === 'boolean') {
-    return '';
-  }
-  if (typeof node === 'string') {
-    return node;
-  }
-  if (typeof node === 'number') {
-    return String(node);
-  }
-  if (Array.isArray(node)) {
-    return node.map(getNodeText).filter(Boolean).join(' ');
-  }
-  if (isValidElement(node)) {
-    const {children} = node.props as {children?: ReactNode};
-    return getNodeText(children);
-  }
-  return '';
-}
 
 export interface ToastViewportProps {
   position?: ToastPosition;
@@ -365,10 +342,13 @@ export function ToastViewport({
   // Toasts dispatched since the last commit, by id: a dismiss() called
   // before the toast first renders still finds it (and its onHide).
   const pendingEntriesRef = useRef<Map<string, ToastEntry>>(new Map());
-  // The element that was focused before the user jumped into the viewport
-  // (via F6). Used to restore focus once all toasts are dismissed so focus
-  // never falls to <body>.
+  // The element that was focused before focus entered the viewport, by F6,
+  // Tab or a click. Used to restore focus once all toasts are dismissed so
+  // focus never falls to <body> (FR10).
   const prevFocusRef = useRef<HTMLElement | null>(null);
+  // The element focus last reached inside the viewport's React tree,
+  // portaled toast content included.
+  const lastFocusedWithinRef = useRef<EventTarget | null>(null);
   // When a toast is dismissed while focus lives inside it, we need to move
   // focus to a sensible neighbor after that toast unmounts. This holds the
   // id of the toast whose removal should trigger a focus handoff.
@@ -438,6 +418,7 @@ export function ToastViewport({
       ) {
         return;
       }
+      // Only text is announced; interactive endContent is reachable via F6.
       const text = getNodeText(entry.options.body);
       if (text) {
         // Error toasts map to the assertive region (role="alert"); everything
@@ -803,6 +784,21 @@ export function ToastViewport({
   const viewport = (
     <div
       ref={viewportRef}
+      onFocus={event => {
+        // Focus entering from outside, however it came, is where a dismissal
+        // of the last toast returns it. React also delivers focus inside a
+        // toast's portaled content here, so focus coming back from the last
+        // element focused within is not an entry, though it sits outside
+        // this element.
+        const from = event.relatedTarget;
+        const fromWithin =
+          from === lastFocusedWithinRef.current ||
+          (from instanceof Node && event.currentTarget.contains(from));
+        lastFocusedWithinRef.current = event.target;
+        if (from instanceof HTMLElement && !fromWithin) {
+          prevFocusRef.current = from;
+        }
+      }}
       role={hasToasts ? 'region' : undefined}
       aria-label={hasToasts ? t('@astryx.toast.viewport') : undefined}
       tabIndex={hasToasts ? -1 : undefined}

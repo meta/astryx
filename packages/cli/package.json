@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/cli",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "displayName": "CLI",
   "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
@@ -91,9 +91,23 @@
     "foundation",
     "host",
     "scripts/postinstall.mjs",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "astryx": "node clients/cli/bin/astryx.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "test": "cd ../.. && vitest run packages/cli",

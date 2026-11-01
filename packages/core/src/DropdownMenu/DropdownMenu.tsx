@@ -622,9 +622,13 @@ function DropdownMenuBottomSheet({
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
   const backLabel = t('@astryx.dropdownMenu.back');
   const buttonRef = useRef<HTMLElement>(null);
+  // The trigger, where focus returns after the sheet closes, carries the
+  // modality tracking for its document.
+  const modality = useInteractionModalityTracking();
   // The caller's `button.ref` rides along with the sheet's own trigger ref.
   const triggerRef = useMergedRefs<HTMLButtonElement>(
     buttonRef as React.Ref<HTMLButtonElement>,
+    modality.ref,
     button.ref,
   );
   const triggerId = useId();
@@ -636,7 +640,7 @@ function DropdownMenuBottomSheet({
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
+  } = useFocusReturnVisibility(modality);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previousSubmenuDepthRef = useRef(0);
   const [internalIsOpen, setInternalIsOpen] = useState(false);
@@ -651,9 +655,10 @@ function DropdownMenuBottomSheet({
     }
   }
   // The closed sheet renders nothing, so load its rows at rest: the first
-  // open shows the actions at once.
+  // open shows the actions at once. The preload's result says whether they
+  // loaded; after a failure the first open loads them.
   useEffect(() => {
-    preloadMenuBottomSheetActionList();
+    void preloadMenuBottomSheetActionList();
   }, []);
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
@@ -791,13 +796,20 @@ function DropdownMenuBottomSheet({
       {currentTitle}
     </Heading>
   );
+  // A stable ref: an inline one re-runs on every render (null, then the element).
+  const sheetModalityRef = modality.ref;
+  const sheetTriggerRef = useCallback(
+    (el: HTMLElement | null) => {
+      buttonRef.current = el;
+      sheetModalityRef(el);
+    },
+    [sheetModalityRef],
+  );
   return (
     <>
       {renderTrigger != null ? (
         renderTrigger({
-          ref: el => {
-            buttonRef.current = el;
-          },
+          ref: sheetTriggerRef,
           id: triggerId,
           onClick: handleSheetTriggerClick,
           onClickCapture: () => {},
@@ -947,14 +959,14 @@ function DropdownMenuPopover({
   const pendingControlledOpenRef = useRef(false);
   const suppressControlledRollbackHideRef = useRef(false);
 
-  useInteractionModalityTracking();
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const modality = useInteractionModalityTracking();
   const {
     isFocusRingSuppressed,
     onFocusReturnTargetFocus,
     prepareFocusReturn,
     resetFocusReturn,
-  } = useFocusReturnVisibility();
-  const contentRef = useRef<HTMLDivElement | null>(null);
+  } = useFocusReturnVisibility(modality);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
   const hasRegions = useMemo(
@@ -1590,11 +1602,41 @@ function DropdownMenuPopover({
       </>
     );
 
-  const triggerProps: DropdownMenuTriggerProps = {
-    ref: el => {
+  // Stable trigger refs. An inline ref is a new function every render, so React
+  // re-runs it on every commit (null, then the element), and each run moved the
+  // popover's anchor off the trigger and back: two inline-style writes on the
+  // trigger per render of the menu.
+  const popoverTriggerRef = popover.triggerRef;
+  // The trigger, where focus returns, also carries the modality tracking for
+  // its document.
+  const modalityRef = modality.ref;
+  const triggerRef = useCallback(
+    (el: HTMLElement | null) => {
       buttonRef.current = el;
-      popover.triggerRef(el);
+      popoverTriggerRef(el);
+      // Called with each node and with `null`, so its cleanup isn't returned
+      // (a returned cleanup would stop React's `null` call to the others).
+      modalityRef(el);
     },
+    [popoverTriggerRef, modalityRef],
+  );
+  const consumerButtonRef = button.ref;
+  const buttonTriggerRef = useCallback(
+    (el: HTMLButtonElement | null) => {
+      triggerRef(el);
+      if (typeof consumerButtonRef === 'function') {
+        consumerButtonRef(el);
+      } else if (consumerButtonRef) {
+        /* eslint-disable react-compiler/react-compiler -- ref callback: forwarding consumer ref object */
+        consumerButtonRef.current = el;
+        /* eslint-enable react-compiler/react-compiler */
+      }
+    },
+    [triggerRef, consumerButtonRef],
+  );
+
+  const triggerProps: DropdownMenuTriggerProps = {
+    ref: triggerRef,
     id: triggerId,
     onClick: handleButtonClick,
     onClickCapture: handleTriggerClickCapture,
@@ -1617,18 +1659,7 @@ function DropdownMenuPopover({
       ) : (
         <Button
           {...button}
-          ref={el => {
-            buttonRef.current = el;
-            popover.triggerRef(el);
-            const consumerRef = button.ref;
-            if (typeof consumerRef === 'function') {
-              consumerRef(el);
-            } else if (consumerRef) {
-              /* eslint-disable react-compiler/react-compiler -- ref callback: forwarding consumer ref object */
-              consumerRef.current = el;
-              /* eslint-enable react-compiler/react-compiler */
-            }
-          }}
+          ref={buttonTriggerRef}
           xstyle={[
             styles.triggerPressable,
             isOpen && styles.triggerOpen,
@@ -1699,7 +1730,7 @@ function DropdownMenuPopover({
               )?.(event);
               if (event.target === event.currentTarget) {
                 setIsMenuKeyboardFocused(
-                  getInteractionModality() === 'keyboard',
+                  getInteractionModality(event.currentTarget) === 'keyboard',
                 );
               }
             }}

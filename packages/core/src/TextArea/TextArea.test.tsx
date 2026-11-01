@@ -1288,3 +1288,30 @@ describe('TextArea theme target names', () => {
     expect(root).not.toHaveClass('astryx-textarea');
   });
 });
+
+describe('TextArea caller aria-labelledby', () => {
+  it('names the textarea by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          aria-labelledby="billing-heading"
+        />
+      </>,
+    );
+    const textarea = screen.getByRole('textbox', {name: 'Notes Billing'});
+    expect(textarea.getAttribute('aria-labelledby')?.split(' ')).toContain(
+      'billing-heading',
+    );
+  });
+
+  it('leaves a textarea named by its label element without a caller aria-labelledby', () => {
+    render(<TextArea label="Notes" value="" onChange={() => {}} />);
+    expect(screen.getByRole('textbox', {name: 'Notes'})).not.toHaveAttribute(
+      'aria-labelledby',
+    );
+  });
+});

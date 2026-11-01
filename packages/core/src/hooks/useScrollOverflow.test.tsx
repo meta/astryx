@@ -3,7 +3,8 @@
 /**
  * @file useScrollOverflow.test.tsx
  * @input Uses vitest, @testing-library/react, useScrollOverflow
- * @output Unit tests for the hook's measurement and its rendered-only gate
+ * @output Unit tests for the hook's measurement, what it observes (the
+ *   container's scroll and size, and its content), and its rendered-only gate
  * @position Testing; jsdom lays nothing out, so the scroll box is faked and
  *   `checkVisibility` is stubbed per element.
  */
@@ -18,7 +19,10 @@ import {useScrollOverflow} from './useScrollOverflow';
 let deliverResize: ((entries: ResizeObserverEntry[]) => void) | null = null;
 
 class FakeResizeObserver implements ResizeObserver {
+  /** The shared observer, so a test can read what it observes. */
+  static last: FakeResizeObserver | null = null;
   constructor(callback: ResizeObserverCallback) {
+    FakeResizeObserver.last = this;
     deliverResize = entries => callback(entries, this);
   }
   observe = vi.fn();
@@ -69,7 +73,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   deliverResize = null;
+  FakeResizeObserver.last = null;
 });
 
 describe('useScrollOverflow', () => {
@@ -197,6 +203,101 @@ describe('useScrollOverflow', () => {
 
     expect(result.current.hasOverflow).toBe(true);
     expect(totalReads(reads)).toBeGreaterThan(0);
+    unmount();
+  });
+
+  // The overflow is the content's width against the container's: it changes
+  // when the content does, with the container keeping its size.
+  it('measures again when a child is added or removed, though the container keeps its size', async () => {
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    expect(result.current.hasOverflow).toBe(false);
+
+    const child = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    await act(async () => {
+      el.append(child);
+    });
+    expect(result.current.hasOverflow).toBe(true);
+
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    await act(async () => {
+      child.remove();
+    });
+    expect(result.current.hasOverflow).toBe(false);
+    unmount();
+  });
+
+  it('measures again when a child resizes, though the container keeps its size', () => {
+    const el = document.createElement('div');
+    const child = document.createElement('div');
+    el.append(child);
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    expect(result.current.hasOverflow).toBe(false);
+
+    // The child's content grows past the container.
+    fakeScrollBox(el, {scrollWidth: 600, clientWidth: 300});
+    act(() => {
+      deliverResize?.([resizeEntry(child)]);
+    });
+    expect(result.current.hasOverflow).toBe(true);
+    unmount();
+  });
+
+  it("measures again when the container's class or style changes, as a new gap does", async () => {
+    const el = document.createElement('div');
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    expect(result.current.hasOverflow).toBe(false);
+
+    fakeScrollBox(el, {scrollWidth: 340, clientWidth: 300});
+    await act(async () => {
+      el.className = 'wider-gap';
+    });
+    expect(result.current.hasOverflow).toBe(true);
+
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    await act(async () => {
+      el.style.columnGap = '0px';
+    });
+    expect(result.current.hasOverflow).toBe(false);
+    unmount();
+  });
+
+  it('stops observing the content when the container detaches', () => {
+    const el = document.createElement('div');
+    const child = document.createElement('div');
+    el.append(child);
+    fakeScrollBox(el, {scrollWidth: 300, clientWidth: 300});
+    stubRendered(el, true);
+    const disconnect = vi.spyOn(MutationObserver.prototype, 'disconnect');
+    const {result, unmount} = renderHook(() => useScrollOverflow());
+    act(() => {
+      result.current.scrollRef(el);
+    });
+    const observer = FakeResizeObserver.last;
+    expect(observer?.observe).toHaveBeenCalledWith(child);
+
+    act(() => {
+      result.current.scrollRef(null);
+    });
+    expect(disconnect).toHaveBeenCalled();
+    expect(observer?.unobserve).toHaveBeenCalledWith(child);
+    expect(observer?.unobserve).toHaveBeenCalledWith(el);
     unmount();
   });
 

@@ -41,6 +41,10 @@ export interface SwipeGestureRecognizerOptions extends GestureRecognizerOptions<
 const SWIPE = UIKIT_SWIPE;
 
 export class SwipeGestureRecognizer extends GestureRecognizer {
+  override get kind(): GestureRecognizer['kind'] {
+    return 'swipe';
+  }
+
   directions: ReadonlyArray<SwipeDirection>;
   numberOfTouchesRequired: number;
   minimumDistance: number;
