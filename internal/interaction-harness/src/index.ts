@@ -17,6 +17,7 @@
 export * from './busy';
 export * from './curves';
 export * from './frames';
+export * from './freeze';
 export * from './math';
 export * from './output';
 export * from './scripts';
