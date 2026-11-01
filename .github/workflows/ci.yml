@@ -61,7 +61,8 @@ permissions: {}
 # Visual, accessibility and RTL owners (pr-a11y*, visual-scout, pr-visual,
 # pr-rtl*) do not run on pull request updates: they run for release-check,
 # which the Main heavy lanes workflow (main-heavy-lanes.yml) dispatches for
-# main's tip about once an hour and the release gate dispatches before a cut. A pull request
+# main's tip every three hours and before each weekday cut, and the release
+# gate dispatches before a cut. A pull request
 # opts into one suite with its label, `ci:run-visual`, `ci:run-a11y` or
 # `ci:run-rtl`, applied by someone with write access (add the label, then push
 # or close and reopen); run-labels decides. A main failure is fixed forward
@@ -2850,7 +2851,7 @@ jobs:
   # eight browser pages on its four cores (the audit waits on page loads), and
   # the stable pr-rtl join requires all five scope manifests plus a report from
   # every applicable package.
-  # The full-roster sweep is the release-check run on main about hourly.
+  # The full-roster sweep is the release-check run on main every three hours.
   #
   # Three auto dimensions: D1 icon-mirror, D5 positional-mirror, and D6
   # contextual directional decorations. Curated D2/D3/D4/D7/D8/D9 add

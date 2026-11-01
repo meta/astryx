@@ -237,7 +237,8 @@ they are separately named.
   existing finding policies. Main's heavy-lane workflow MUST dispatch that
   release-check for `main`'s tip, bound to that commit, on a push to `main` and
   on a quarter-hourly schedule, unless the tip already has one or one was
-  dispatched in the last 55 minutes (DEC-11). A check replaced while waiting,
+  dispatched in the last 175 minutes, so the quarter-hourly tick after
+  three hours dispatches (DEC-11, FR24). A check replaced while waiting,
   which never ran, does not count. A check covers every merge up to its commit,
   so every merge is covered by the next one. The dispatched checks share one
   concurrency group that cancels a running check only for a release re-check
@@ -454,6 +455,15 @@ they are separately named.
   latest re-check runs. A run whose re-run passes is a full passing check of
   that commit. A fix is a new commit and gets a full re-check.
 
+- **FR24 — Main's release-check runs every three hours, and once before each
+  weekday cut.** FR12's release-check of `main`'s tip is dispatched when none
+  started in the last 175 minutes, so about every three hours on the
+  quarter-hourly schedule, and once each weekday at about 06:30 Pacific time
+  whatever the window, unless the tip already has one, so a check finishes
+  about an hour before the 08:00 release cut. The full unit run keeps its own
+  hourly schedule (FR21), and the release cut's own exact-commit checks are
+  unchanged (DEC-19).
+
 ### Platform support
 
 - Supported feature/engine floor: GitHub pull-request and merge-group workflows
@@ -511,6 +521,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR21     | `ci-heavy-lanes.test.mjs` dispatch cases, `main-unit-run.test.mjs` over deploy.yml, `release-check-receipt.test.mjs`                               | push run; dispatched unit run; tip with the scheduler's or a person's release-check, or a person's maintenance capture; unit run cancelled, skipped or timed out; newer recheck or person's run of the tip; a person's validation of an older commit; cut commit with and without a passing unit run                                                                                                                                                                                                                                                                                                                         | a push runs the unit suites, a push cancels a unit run, a release-check comes without a unit run of its commit, an incomplete run goes unreported or waits a window, or a cut publishes without a passing unit run                                                                                                                                                                                        |
 | FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver; `vitest-shard-sequencer.test.mjs` over the recorded Node times | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces; four and six Node legs over the recorded suite, a file with no recorded time, a project other than `node`                                                                                                                                                                                                                                  | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a person's `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip, or two of the slowest Node files in one leg, a file run by no leg or by two, or a split that depends on collection order fails |
 | FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract                                             | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                              | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                           |
+| FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                            | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                    | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                |
 
 ## Decision log
 
@@ -724,6 +735,8 @@ Rejected: measuring on every pull request (noise and runner time for a signal th
 
 **Reference:** `spec:AST-030/DEC-11`
 **Decider:** `cixzhang`
+**Superseded in part by:** `spec:AST-030/DEC-19` (every three hours, with a
+pre-cut check)
 
 Dispatched on every push, main's release-check ran back to back through busy
 hours, about 65 full runs a day of roughly 165 runner-minutes each. A check
@@ -855,6 +868,23 @@ check other than a release re-check.
 Rejected: a separate lane for re-checks (`main` would run two full checks at
 once and need room for both); re-running only failed legs after a fix (a fix can
 break a leg that passed before).
+
+### DEC-19 — Main's release-check every three hours, with a pre-cut run
+
+**Reference:** `spec:AST-030/DEC-19`
+**Decider:** `cixzhang`
+
+Main's visual, accessibility and RTL check is its longest run. Checked about
+hourly, it still ran about twenty times a day, though a check covers every
+merge before it and the guardian repairs `main` forward. Every three hours
+keeps every merge covered with about a third of the runs. The weekday cut
+needs a fresh check, so one starts at about 06:30 Pacific and finishes about
+an hour before the 08:00 cut. A visual, accessibility or RTL break is then
+reported within about three and a half hours of landing. The full unit run
+keeps its own hourly schedule (FR21).
+
+Rejected: a check only at the cut (main's result would lag a whole day);
+keeping it hourly (the run is the largest share of main's runner use).
 
 ## Open questions
 

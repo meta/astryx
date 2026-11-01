@@ -288,7 +288,8 @@ component/composition contract; absent or invalid dimensions produce an error.
   report completeness and exclusion visibility remain requirements, not authority
   to suppress findings.
 - `.github/workflows/ci.yml` release-check — the full-roster audit on main's tip
-  about hourly and before a release cut (`spec:AST-030` DEC-11).
+  every three hours and before each weekday release cut (`spec:AST-030`
+  DEC-19).
 - `internal/eslint-plugin-astryx/no-physical-properties.js` — source-provable
   physical/logical declaration constraints.
 - `design:bidirectionality` — human product intent, owned separately.
