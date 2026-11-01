@@ -87,6 +87,15 @@
     }
   },
   {
+    "component": "GridSpan",
+    "storyId": "core-gridspan--span-matrix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[data-audit-case=\"numeric\"]",
+      "next": "[data-audit-grid=\"numeric\"] > :last-child"
+    }
+  },
+  {
     "component": "PowerSearch",
     "storyId": "core-powersearch--with-date-filters",
     "dims": ["D2"],
