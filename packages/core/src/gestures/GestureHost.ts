@@ -1358,7 +1358,8 @@ export class GestureHost {
     }
     for (const [element, registration] of this.registry) {
       if (
-        (mover.contains(element) || element.contains(mover)) &&
+        (containsAlongFlatTree(mover, element) ||
+          containsAlongFlatTree(element, mover)) &&
         registration.recognizers.some(
           recognizer => recognizer.isEnabled && claimsWhileMoving(recognizer),
         )

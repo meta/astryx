@@ -33,6 +33,8 @@
  * Regression fixture: gestures/__tests__/presentedHitTesting.test.ts.
  */
 
+import {parentAcrossShadow} from '../utils/flatTree';
+
 /** How far an element is drawn from where the engine hit-tests it, CSS px. */
 export interface PresentedOffset {
   readonly x: number;
@@ -108,7 +110,8 @@ export function presentedElements(): ReadonlyArray<Element> {
 
 /**
  * How far `element` is drawn from where the engine hit-tests it: its own
- * offset plus those of its moving ancestors (across shadow roots), now or at
+ * offset plus those of its moving ancestors along the flat tree (through a
+ * slot to the panel it is drawn in, and across shadow roots), now or at
  * `time` (ms on the `performance.now()` clock).
  */
 export function presentedOffsetOf(
@@ -123,7 +126,7 @@ export function presentedOffsetOf(
   for (
     let node: Node | null = element;
     node != null;
-    node = node instanceof ShadowRoot ? node.host : node.parentNode
+    node = parentAcrossShadow(node)
   ) {
     const source = node instanceof Element ? sources.get(node) : undefined;
     if (source != null) {

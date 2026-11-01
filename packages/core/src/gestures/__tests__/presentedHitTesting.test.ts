@@ -10,7 +10,10 @@
  *   its start, and its tap clicks the drawn button once (the engine's click
  *   cancelled, a late one swallowed); a finger where the sheet was but is no
  *   longer drawn reaches what is drawn there; press bounds follow the drawn
- *   box; nothing changes with the gate off or nothing moving
+ *   box, a control slotted into a moving shadow-tree panel's included; a
+ *   claiming recognizer across a shadow boundary from the moving element
+ *   keeps the document's blocking touchmove; nothing changes with the gate
+ *   off or nothing moving
  * @position Unit tests of the presented hit testing in
  *   packages/core/src/gestures/GestureHost.ts
  */
@@ -410,6 +413,79 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
       remove.mock.calls.filter(([type]) => type === 'touchmove').length,
     ).toBeGreaterThan(0);
     expect(blocking(add.mock.calls)).toBe(1);
+  });
+
+  it("gives a control slotted into a moving shadow-tree panel the panel's drawn press bounds: the walk follows the flat tree through the slot", () => {
+    document.body.innerHTML =
+      '<div id="card"><button id="slotted">Done</button></div>';
+    const card = document.getElementById('card') as HTMLElement;
+    const slotted = document.getElementById('slotted') as HTMLElement;
+    const panel = document.createElement('div');
+    panel.append(document.createElement('slot'));
+    card.attachShadow({mode: 'open'}).append(panel);
+    // The button's light-DOM parent is the card; on the flat tree it sits in
+    // the panel, through the slot.
+    expect(slotted.assignedSlot?.parentNode).toBe(panel);
+    const gestures = new GestureHost(document, {
+      clock,
+      presentedHitTesting: 'always',
+    });
+    const stop = registerPresentedOffset(panel, {
+      offset: () => ({x: 0, y: 40}),
+      resolve: () => {},
+    });
+    try {
+      expect(gestures.presentedRect(slotted)).toMatchObject({
+        top: slotted.getBoundingClientRect().top + 40,
+        bottom: slotted.getBoundingClientRect().bottom + 40,
+      });
+    } finally {
+      stop();
+    }
+  });
+
+  it('keeps the blocking touchmove for a claiming recognizer across a shadow boundary from the moving element, inside its shadow tree or around it', () => {
+    document.body.innerHTML =
+      '<div id="sheet"><div id="sheet-host"></div></div><div id="pager"></div>';
+    const sheet = document.getElementById('sheet') as HTMLElement;
+    const sheetHost = document.getElementById('sheet-host') as HTMLElement;
+    const pager = document.getElementById('pager') as HTMLElement;
+    // A pan inside an open shadow root of the moving sheet.
+    const handle = document.createElement('div');
+    sheetHost.attachShadow({mode: 'open'}).append(handle);
+    // A moving page inside an open shadow root of the pan's element.
+    const page = document.createElement('div');
+    pager.attachShadow({mode: 'open'}).append(page);
+    const add = vi.spyOn(document, 'addEventListener');
+    const blocking = () =>
+      add.mock.calls.filter(
+        ([type, , options]) =>
+          type === 'touchmove' &&
+          typeof options === 'object' &&
+          options != null &&
+          options.passive === false,
+      ).length;
+    const gestures = new GestureHost(document, {
+      clock,
+      presentedHitTesting: 'always',
+    });
+    cleanups.push(
+      gestures.attach(handle, new PanGestureRecognizer({direction: 'down'})),
+      gestures.attach(pager, new PanGestureRecognizer({direction: 'left'})),
+    );
+    expect(blocking()).toBe(0);
+    const stopSheet = registerPresentedOffset(sheet, {
+      offset: () => ({x: 0, y: 40}),
+      resolve: () => {},
+    });
+    expect(blocking()).toBe(1);
+    stopSheet();
+    const stopPage = registerPresentedOffset(page, {
+      offset: () => ({x: -60, y: 0}),
+      resolve: () => {},
+    });
+    expect(blocking()).toBe(2);
+    stopPage();
   });
 
   it('changes nothing with the gate off or nothing moving', () => {
