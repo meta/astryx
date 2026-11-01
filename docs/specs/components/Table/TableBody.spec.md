@@ -69,8 +69,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 **Does not own / non-goals**
 
-- Rows — owned by `component:TableRow`; cells — owned by `component:Table`; and
-  the caller's content.
+- Rows — owned by `component:TableRow`; cells — owned by `component:TableCell`
+  and `component:TableHeaderCell`; and the caller's content.
 - Table appearance, data mode, and plugins — owned by `component:Table`.
 
 ## Public concepts

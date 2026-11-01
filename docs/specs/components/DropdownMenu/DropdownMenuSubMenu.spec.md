@@ -162,10 +162,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   Escape; a deeper level's keys never act on its parent.
 - **AR3 — Disabled discoverability.** Whether disabled rows stay
   keyboard-discoverable is owned by `component:DropdownMenu` (its OQ1).
-- **AR4 — Focus visibility.** Keyboard focus paints only the menu overlay
-  tint, about 1.1:1 against the menu surface in the default themes, with no
-  outline, and nothing under forced colors. The shared row
-  treatment is `component:DropdownMenuItem` OQ2.
+- **AR4 — Focus visibility.** Keyboard focus draws the shared focus ring
+  inside the row, inset by the ring's own width, in every color mode, forced
+  colors included; after pointer input the row shows only the overlay tint
+  (`architecture:interaction-modality` INV1, INV3). The shared row treatment is
+  `component:DropdownMenuItem` FR8.
 
 ## Design relationships
 
@@ -202,16 +203,12 @@ No component-local visual decision is recorded.
 | FR6      | `DropdownMenuSubMenu.test.tsx` "reports each flyout open and close to onOpenChange once"                                                                                                                                                                                                                                                                                                                                                                                                                                     | Flyout open and close                      | A missing or repeated report fails. Evidence gap: the drill-in reset gap is not asserted.                                                                                     | `audit:DropdownMenuSubMenu/behavior`      |
 | FR7, FR9 | `DropdownMenuSubMenu.test.tsx` "does not open a disabled submenu", "a disabled row does not pass a click on to the caller's onClick", host-attribute and ref cases ("aria-\*, data-\* and id reach the trigger row, and the flyout stays labelled by it", "a ref reaches the trigger row", "a caller's handlers run after the row's own, and the row still opens and takes the hover focus")                                                                                                                                 | Disabled; caller handlers and attributes   | A disabled open or caller click, or a dropped attribute, ref, or handler, fails. Evidence gap: no test asserts `className`, `style`, or `xstyle` on the row.                  | `audit:DropdownMenuSubMenu/api`           |
 | FR8      | `BusyOwnerAnnouncement.test.tsx` "DropdownMenuSubMenu loading state" cases; `DropdownMenuSubMenu.test.tsx` loading-flyout cases                                                                                                                                                                                                                                                                                                                                                                                              | Loading closed and open                    | A busy start announced while closed, twice, or not at all, or an announced Spinner, fails.                                                                                    | `audit:DropdownMenuSubMenu/accessibility` |
-| AR4, PR1 | Evidence gap: no test asserts the focus paint, forced-colors focus, or the timer bounds                                                                                                                                                                                                                                                                                                                                                                                                                                      | —                                          | —                                                                                                                                                                             | `audit:DropdownMenuSubMenu/visual`        |
+| AR4, PR1 | `DropdownMenuForcedColors.test.tsx` (the row's `:focus-visible` ring and token inset); `DropdownMenuAudit.a11y.chromium.spec.ts` forced-colors frames. Evidence gap: no test asserts the timer bounds                                                                                                                                                                                                                                                                                                                        | —                                          | —                                                                                                                                                                             | `audit:DropdownMenuSubMenu/visual`        |
 
 ## Current-state impact
 
 - **Drill-in close report (FR6).** When the root menu closes a drilled-in view,
   `onOpenChange(false)` does not run (OQ1).
-- **Focus visibility (AR4).** Keyboard focus on the row shows only an
-  overlay tint about 1.1:1 against the menu surface, and no indicator in
-  forced-colors mode; the shared row treatment is
-  `component:DropdownMenuItem` OQ2.
 
 ## Decision log
 
