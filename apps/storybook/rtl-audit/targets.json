@@ -714,5 +714,43 @@
       "prev": ".astryx-codeeditor > div > div:first-child",
       "next": ".astryx-codeeditor > div > div:nth-child(2)"
     }
+  },
+  {
+    "component": "MobileTokenizer",
+    "storyId": "lab-mobiletokenizer--touch-flow",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-token:has-text(\"Design\")",
+      "next": ".astryx-token:has-text(\"Eng\")"
+    }
+  },
+  {
+    "component": "MobilePowerSearch",
+    "storyId": "lab-mobilepowersearch--touch-flow",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-token:has-text(\"Status\")",
+      "next": ".astryx-token:has-text(\"Priority\")"
+    }
+  },
+  {
+    "component": "Tour",
+    "storyId": "lab-tour--showcase",
+    "dims": ["D4"],
+    "setup": {"click": "button:has-text(\"Start tour\")"},
+    "selectors": {
+      "overlay": "[role=\"dialog\"]",
+      "overlayRoot": "button:has-text(\"Save\")"
+    }
+  },
+  {
+    "component": "TourStep",
+    "storyId": "lab-tour--showcase",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Start tour\")"},
+    "selectors": {
+      "prev": "[role=\"dialog\"] span:text-is(\"1 of 3\")",
+      "next": "[role=\"dialog\"] span:text-is(\"1 of 3\") + div button"
+    }
   }
 ]
