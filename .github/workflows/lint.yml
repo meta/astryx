@@ -169,7 +169,24 @@ jobs:
         run: |
           set -eu
           git diff --name-only --diff-filter=ACMR -z "$MERGE_SHA^1" "$MERGE_SHA" -- '*.ts' '*.tsx' '*.md' \
-            | xargs -0 -r pnpm exec prettier --check --ignore-unknown
+            > "$RUNNER_TEMP/changed-files"
+          status=0
+          xargs -0 -r ./node_modules/.bin/prettier --list-different --ignore-unknown \
+            < "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/unformatted" || status=$?
+          if [ -s "$RUNNER_TEMP/unformatted" ]; then
+            fix="pnpm exec prettier --write $(tr '\n' ' ' < "$RUNNER_TEMP/unformatted")"
+            echo 'These changed files are not formatted with the repository'"'"'s Prettier settings:'
+            sed 's/^/  /' "$RUNNER_TEMP/unformatted"
+            echo 'Format them, commit, and push again:'
+            echo "  $fix"
+            echo "::error title=Unformatted files::Run: $fix"
+            exit 1
+          fi
+          if [ "$status" -ne 0 ]; then
+            echo "::error title=Prettier failed::prettier --list-different exited with $status"
+            exit "$status"
+          fi
+          echo 'Every changed file is formatted.'
 
       # The full pass, type-aware rules over packages/core/src included, needs
       # about 1.9 GB of heap on main. Node's default limit on this 16 GB runner
