@@ -53,7 +53,7 @@ system_specs: [spec:AST-085]
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public contract         | None changes. RadioList takes `label`, `value`, `onChange`, `orientation`, `size`, `isDisabled`, `disabledMessage`, `isRequired`, `isOptional`, `status`, `htmlName`, Field props, part props, and RadioListItem children.                                    |
 | Behavior                | A Field-labelled `role="radiogroup"` of native radios sharing one name. Selecting an option calls `onChange(value)`. The group sets the item size, the disabled state, and required semantics.                                                                |
-| End-user impact         | People choose one option by pointer, touch, or the browser's arrow keys, with a predictable first Tab stop. A disabled option stays reachable by keyboard and announces as disabled; arrow keys skip an individually disabled option.                         |
+| End-user impact         | People choose one option by pointer, touch, or arrow keys, with a predictable first Tab stop. A disabled option stays reachable by keyboard and announces as disabled; arrow keys skip an individually disabled option.                                       |
 | Builder impact          | None.                                                                                                                                                                                                                                                         |
 | Compatibility/readiness | No API or default change. Disabled radios render `aria-disabled` instead of native `disabled` (`spec:AST-085` FR1, FR7), and a disabled group's radios take the generated name (FR2).                                                                         |
 | Review checks           | Reject a group without a name, radios that lose their shared name, a selection while disabled, a native `disabled` attribute, an arrow key that lands on a disabled option, a first Tab stop that lands mid-group with an empty value, or root styling props. |
@@ -97,8 +97,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - Each option's radio, naming, description, row, disabled item state, and the
   `radio-list-item` target — owned by `component:RadioListItem`.
-- Other arrow-key movement and selection between radios — the browser's native
-  radio group behavior.
+- Arrow-key movement and selection in a group with no disabled option — the
+  browser's native radio group behavior (FR4).
 - The radio indicator — owned by the Indicator registry's radio indicator.
 - Group-label and status-message presentation — owned by Field under `family:input-fields` (shared owner section) and
   `component:FieldStatus`.
@@ -152,15 +152,18 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Performance and resources
 
-- **PR1 — Entry handling.** FR4 runs only on focus events with an empty `value`
-  and adds no global listener.
+- **PR1 — Entry handling.** FR4's entry correction runs only on focus events
+  when no radio is checked, and its arrow-key handling only on key events in a
+  group with a disabled option; neither adds a global listener.
 
 ## Accessibility contract
 
 - **AR1 — Group semantics.** `role="radiogroup"` with a name, description,
   invalid and required state (FR1, FR6).
 - **AR2 — Keyboard.** Tab reaches the group once (FR4); arrow keys move and
-  select through native radio behavior and skip individually disabled options.
+  select through native radio behavior in a group with no disabled option, and
+  through RadioList, skipping individually disabled options, in a group with
+  one (FR4).
 - **AR3 — Disabled reason.** A group reason stays reachable by keyboard focus
   and assistive technology (FR5).
 
@@ -206,8 +209,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 ## Decision log
 
 - **Keyboard model (FR4).** RadioList keeps the browser's native radio arrow
-  keys and its shipped Tab entry rule; `spec:AST-085` leaves which radios a
-  composite's arrow keys visit to the composite.
+  keys in a group with no disabled option, and moves every arrow key itself,
+  through the shared list focus hook, in a group with one; its Tab entry
+  corrects focus whenever no radio is checked. `spec:AST-085` leaves which
+  radios a composite's arrow keys visit to the composite.
 - **Disabled options under arrow keys (FR4).** Arrow keys skip individually
   disabled options, which stay focusable under `spec:AST-085`, as a native radio
   group skips disabled radios. ButtonGroup FR8, Calendar's constrained days, and

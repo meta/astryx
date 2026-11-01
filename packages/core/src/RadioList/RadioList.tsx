@@ -4,7 +4,7 @@
 
 /**
  * @file RadioList.tsx
- * @input Uses React useId, useCallback, useRef, layer-scoped context, ReactNode, Field, InputStatus, isRtlElement
+ * @input Uses React useId, useCallback, useRef, layer-scoped context, ReactNode, Field, InputStatus, useInternalListFocus
  * @output Exports RadioList component, RadioListProps, RadioListContext, and the internal RadioListFormContext
  * @position Core implementation; consumed by index.ts, tested by RadioList.test.tsx
  *
@@ -39,7 +39,7 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {isRtlElement} from '../hooks/isRtlElement';
+import {useInternalListFocus} from '../hooks/useListFocus';
 
 /**
  * Size of the radio controls, matching CheckboxInput sizes.
@@ -102,26 +102,6 @@ function radiosOf(group: HTMLElement, name: string): HTMLInputElement[] {
   return Array.from(
     group.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
   ).filter(radio => radio.name === name);
-}
-
-/**
- * The step an arrow key takes through the radios, following the native radio
- * group: Down and the inline-end arrow move forward, Up and the inline-start
- * arrow back.
- */
-function arrowStep(key: string, isRtl: boolean): -1 | 0 | 1 {
-  switch (key) {
-    case 'ArrowDown':
-      return 1;
-    case 'ArrowUp':
-      return -1;
-    case 'ArrowRight':
-      return isRtl ? -1 : 1;
-    case 'ArrowLeft':
-      return isRtl ? 1 : -1;
-    default:
-      return 0;
-  }
 }
 
 const styles = stylex.create({
@@ -193,8 +173,9 @@ export interface RadioListProps extends Omit<
    * a reason, so the reason is discoverable by keyboard. Selection stays
    * blocked.
    *
-   * Use this instead of wrapping a disabled group in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled group in `Tooltip`: the reason
+   * also describes each radio, so a screen reader announces it when a radio
+   * takes focus.
    */
   disabledMessage?: string;
   /**
@@ -430,13 +411,21 @@ export function RadioList({
   /**
    * Arrow keys skip individually disabled options. The browser's radio group
    * would move onto an `aria-disabled` radio, so in a group with any disabled
-   * radio every arrow move is taken over: focus and selection go to the next
-   * available radio in the same direction, wrapping as the native group
-   * does, or stay put when there is none. Owning every move, not only the
-   * ones that would land on a disabled radio, keeps one direction rule in
-   * every engine (WebKit does not mirror horizontal arrows in right-to-left).
-   * A group with no disabled radio keeps the browser's own arrow keys.
+   * radio every arrow move goes through the shared list focus, as
+   * SegmentedControl's does: focus goes to the next available radio in the
+   * same direction (the inline-end arrow forward, mirrored in right-to-left),
+   * wrapping as the native group does, or stays put when there is none, and
+   * the radio it lands on is selected. Owning every move, not only the ones
+   * that would land on a disabled radio, keeps one direction rule in every
+   * engine (WebKit does not mirror horizontal arrows in right-to-left). A
+   * group with no disabled radio keeps the browser's own arrow keys.
    */
+  const listFocus = useInternalListFocus<HTMLDivElement>({
+    itemSelector: `input[type="radio"][name="${radioName.replace(/["\\]/g, '\\$&')}"]`,
+    orientation: 'both',
+    hasHomeEnd: false,
+    wrap: true,
+  });
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       const group = groupRef.current;
@@ -444,39 +433,24 @@ export function RadioList({
       if (
         group == null ||
         e.defaultPrevented ||
-        e.altKey ||
-        e.ctrlKey ||
-        e.metaKey ||
         !(target instanceof HTMLInputElement) ||
-        target.type !== 'radio'
+        target.type !== 'radio' ||
+        target.name !== radioName ||
+        !radiosOf(group, radioName).some(isUnavailable)
       ) {
         return;
       }
-      const step = arrowStep(e.key, isRtlElement(group));
-      if (step === 0) {
-        return;
-      }
-      const radios = radiosOf(group, radioName);
-      const index = radios.indexOf(target);
-      if (index === -1) {
-        return;
-      }
-      if (!radios.some(isUnavailable)) {
-        return;
-      }
-      const at = (offset: number) =>
-        radios[(index + offset * step + radios.length * 2) % radios.length];
-      e.preventDefault();
-      for (let offset = 1; offset < radios.length; offset += 1) {
-        const next = at(offset);
-        if (!isUnavailable(next)) {
-          next.focus();
-          next.click();
-          return;
-        }
+      listFocus.handleKeyDown(e);
+      const focused = group.ownerDocument.activeElement;
+      if (
+        focused !== target &&
+        focused instanceof HTMLInputElement &&
+        focused.type === 'radio'
+      ) {
+        focused.click();
       }
     },
-    [radioName],
+    [listFocus, radioName],
   );
 
   return (
@@ -508,6 +482,7 @@ export function RadioList({
         {...rest}
         ref={el => {
           groupRef.current = el;
+          listFocus.listRef.current = el;
           if (typeof ref === 'function') {
             ref(el);
           } else if (ref) {
