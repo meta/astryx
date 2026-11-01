@@ -2,9 +2,9 @@
 
 /**
  * @file usePressPin.calls.test.tsx
- * @input Tooltip, with usePressPin, the touch trigger hooks and
+ * @input Tooltip and HoverCard, with usePressPin, the touch trigger hooks and
  *   useLayerDismissal wrapped in call counters
- * @output Unit tests: the layer's hook makes one usePressPin call per render,
+ * @output Unit tests: each layer's hook makes one usePressPin call per render,
  *   and that call is the only path to the touch trigger
  *   (`architecture:react-component-runtime` INV16)
  * @position Beside usePressPin.test.tsx, which covers what the pin does
@@ -80,6 +80,7 @@ vi.mock('./useLayerDismissal', async importOriginal => {
 });
 
 const {Tooltip} = await import('../Tooltip/Tooltip');
+const {HoverCard} = await import('../HoverCard/HoverCard');
 
 beforeEach(() => {
   calls.pin = 0;
@@ -107,6 +108,16 @@ describe('usePressPin is each layer’s one call (react-component-runtime INV16)
       </Tooltip>,
     );
     fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
+    expectOneCallPerRender();
+  });
+
+  it('HoverCard: one usePressPin call per render, the only path to the touch trigger', () => {
+    render(
+      <HoverCard content={<p>Ada Lovelace</p>} pressTrigger="toggle">
+        <button type="button">Ada</button>
+      </HoverCard>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Ada'}));
     expectOneCallPerRender();
   });
 });

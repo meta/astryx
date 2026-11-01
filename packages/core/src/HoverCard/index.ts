@@ -15,6 +15,7 @@
 export {useHoverCard} from './useHoverCard';
 export type {
   HoverCardFocusTrigger,
+  HoverCardPressTrigger,
   HoverCardTouchTrigger,
   HoverCardOptions,
   HoverCardReturn,

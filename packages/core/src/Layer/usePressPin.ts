@@ -6,14 +6,14 @@
  * @file usePressPin.ts
  * @input A hover layer's trigger, its open state, show and hide, and its
  *   `pressTrigger` and `touchTrigger` options
- * @output usePressPin: the press toggle that pins a hover layer open
- *   (component:Tooltip FR9 and FR10), with the layer's touch trigger wired to
- *   it; isPressPinTrigger, the button test
+ * @output usePressPin: the press toggle that pins Tooltip and HoverCard open
+ *   (component:Tooltip FR9 and FR10, component:HoverCard FR9 and FR10), with
+ *   the layer's touch trigger wired to it; isPressPinTrigger, the button test
  *   it applies; isPressPinClick and stopPressPinClick, the stop at the
  *   trigger; LayerPressTrigger type (Core's own, not exported from the Layer
  *   entry point)
- * @position One call per hover layer that pins on a press, useTooltip's
- *   (`architecture:react-component-runtime` INV16): it owns the layer's touch
+ * @position Shared by useTooltip and useHoverCard, one call each
+ *   (`architecture:react-component-runtime` INV16): it owns their touch
  *   trigger (useTouchTriggerInternal), which keeps deciding taps while
  *   `pressTrigger` is `none`
  *
@@ -55,6 +55,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tooltip/useTooltip.tsx
+ * - /packages/core/src/HoverCard/useHoverCard.tsx
  * - /packages/core/src/Layer/usePressPin.test.tsx
  */
 
@@ -96,7 +97,7 @@ export function isPressPinClick(event: Event): boolean {
  * The layer component's wrapper handler: a press that pinned or closed the
  * layer stops here, after the trigger's own handlers ran, so no clickable
  * row, card, or container around the trigger receives it
- * (component:Tooltip FR9).
+ * (component:Tooltip FR9, component:HoverCard FR9).
  */
 export function stopPressPinClick(event: ReactMouseEvent): void {
   if (pressPinClicks.has(event.nativeEvent)) {

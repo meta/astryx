@@ -330,7 +330,7 @@ export function useTouchTrigger(
 
 /**
  * useTouchTrigger, plus the outside dismissal's arm a press pin uses
- * (component:Tooltip FR9).
+ * (component:Tooltip FR9, component:HoverCard FR9).
  *
  * @internal
  */

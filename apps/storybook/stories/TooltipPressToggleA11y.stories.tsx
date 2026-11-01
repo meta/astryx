@@ -2,14 +2,16 @@
 
 /**
  * @file TooltipPressToggleA11y.stories.tsx
- * @input Uses Tooltip, Button, ClickableCard and Layout from core
+ * @input Uses Tooltip, HoverCard, Button, ClickableCard and Layout from core
  * @output The fixtures the press-toggle proofs drive in a real browser: a
  *   button whose only job is its tooltip, the same trigger inside a clickable
  *   card, an anchored trigger with its own click handler inside a clickable
- *   card, and a trigger whose tooltip opens on no focus.
+ *   card, a trigger whose tooltip opens on no focus, and an unlabelled
+ *   HoverCard of two paragraphs on a button.
  * @position The reproduction path for the `pressTrigger="toggle"` cases in
  *   `packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts`
- *   (`component:Tooltip` FR9, FR10; `docs/specs/AST-009/spec.md` FR30: a
+ *   (`component:Tooltip` FR9, FR10; `component:HoverCard` FR9, FR10;
+ *   `docs/specs/AST-009/spec.md` FR30: a
  *   browser claim is checked against a checked-in story).
  *
  * SYNC: The spec navigates to these story ids by name. Nothing at compile
@@ -21,6 +23,7 @@ import {useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Button} from '@astryxdesign/core/Button';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
+import {HoverCard} from '@astryxdesign/core/HoverCard';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 
@@ -146,6 +149,31 @@ export const FocusTriggerNever: Story = {
           Next
         </Button>
       </VStack>
+    </div>
+  ),
+};
+
+/**
+ * An unlabelled card of two paragraphs on a button: a press pins it, its text
+ * is announced with the paragraphs apart, and a press on that text, which
+ * moves focus to no element, keeps it pinned.
+ */
+export const HoverCardToggle: Story = {
+  render: () => (
+    <div style={{padding: 100}}>
+      <HoverCard
+        content={
+          <>
+            <p>Ada Lovelace</p>
+            <p>Analyst, Payments</p>
+          </>
+        }
+        placement="below"
+        pressTrigger="toggle">
+        <Button label="Ada" variant="secondary">
+          Ada
+        </Button>
+      </HoverCard>
     </div>
   ),
 };
