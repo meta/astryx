@@ -602,29 +602,6 @@
     }
   },
   {
-    "component": "CommandPaletteItem",
-    "storyId": "core-commandpaletteitem--states",
-    "dims": []
-  },
-  {
-    "component": "CommandPaletteFooter",
-    "storyId": "core-commandpalettefooter--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-command-palette-footer > span:first-child",
-      "next": ".astryx-command-palette-footer > span:last-child"
-    }
-  },
-  {
-    "component": "DrawerHeader",
-    "storyId": "core-drawerheader--audit",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-drawer-header .astryx-heading",
-      "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
-    }
-  },
-  {
     "component": "ChatReactionBar",
     "storyId": "lab-chatadditions--reactions",
     "dims": ["D2"],
@@ -743,5 +720,68 @@
       "prev": "[role=\"dialog\"] span:text-is(\"1 of 3\")",
       "next": "[role=\"dialog\"] span:text-is(\"1 of 3\") + div button"
     }
+  },
+  {
+    "component": "CommandPaletteItem",
+    "storyId": "core-commandpaletteitem--states",
+    "dims": []
+  },
+  {
+    "component": "CommandPaletteFooter",
+    "storyId": "core-commandpalettefooter--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-command-palette-footer > span:first-child",
+      "next": ".astryx-command-palette-footer > span:last-child"
+    }
+  },
+  {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
+    "component": "DrawerHeader",
+    "storyId": "core-drawerheader--audit",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-drawer-header .astryx-heading",
+      "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
+    }
+  },
+  {
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": ".astryx-blockquote"
+    }
+  },
+  {
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
+    }
+  },
+  {
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
+    }
+  },
+  {
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": []
   }
 ]

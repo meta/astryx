@@ -579,6 +579,46 @@ describe('pr-touched-components routing', () => {
     expect(checkout.with?.ref).toBeUndefined();
   });
 
+  // spec:AST-030 FR12: a browser accessibility spec the change adds or
+  // modifies is caught on its own pull request, not first on main.
+  it('runs the changed browser accessibility specs, and only on a pull request that changes one', () => {
+    const find = step('Find the changed browser accessibility specs');
+    expect(find.env.FILES_PATH).toBe(
+      '${{ steps.scope.outputs.changed_files_path }}',
+    );
+    // The same spec list playwright.config.ts runs, not a copy of its globs.
+    expect(find.run).toContain(
+      'import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";',
+    );
+    expect(find.run).not.toContain('spec\\.ts');
+    const runSpecs = step('Run the changed browser accessibility specs');
+    expect(runSpecs.if).toBe(
+      "always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'",
+    );
+    expect(runSpecs.run).toBe(
+      'node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH"',
+    );
+    // A failing spec turns the job red: no continue-on-error.
+    expect(runSpecs['continue-on-error']).toBeUndefined();
+    // Bounded inside the job's 15 minutes, past the runner's own 8-minute stop.
+    expect(runSpecs['timeout-minutes']).toBe(9);
+    // Setup, Storybook and Playwright run for a spec-only change too.
+    for (const name of [
+      'Setup Node and pnpm',
+      'Download Storybook artifact',
+      'Install Playwright',
+    ]) {
+      expect(step(name).if).toBe(
+        "steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'",
+      );
+    }
+    expect(step('Upload touched-components results').with.path).toContain(
+      'pr-a11y-evidence/',
+    );
+    // Still advisory: no required context depends on this job.
+    expect(job.name).toBe('Touched components (visual, accessibility, RTL)');
+  });
+
   it('exposes the wide-change flag and count', () => {
     expect(job.outputs).toEqual({
       wide_change: '${{ steps.touched.outputs.wide_change }}',
@@ -621,12 +661,16 @@ describe('pr-touched-components routing', () => {
     expect(
       step('Skip when no component changed or the change is wide').if,
     ).toBe("steps.touched.outputs.has_components != 'true'");
-    const scopeIndex = job.steps.findIndex(
-      candidate => candidate.id === 'touched',
+    // Every later step runs for touched components, or (setup, Storybook,
+    // Playwright, the spec run and the upload) for a changed browser spec.
+    const skipIndex = job.steps.findIndex(
+      candidate =>
+        candidate.name ===
+        'Skip when no component changed or the change is wide',
     );
-    for (const candidate of job.steps.slice(scopeIndex + 2)) {
-      expect(candidate.if, candidate.name).toContain(
-        "steps.touched.outputs.has_components == 'true'",
+    for (const candidate of job.steps.slice(skipIndex + 1)) {
+      expect(candidate.if, candidate.name).toMatch(
+        /steps\.touched\.outputs\.has_components == 'true'|steps\.specs\.outputs\.has_specs == 'true'/,
       );
     }
   });
