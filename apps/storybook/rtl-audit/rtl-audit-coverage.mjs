@@ -210,67 +210,59 @@ export function componentRoutesForFilters(routes, filters) {
 /**
  * Resolve component filters to story routes through the Storybook index, not
  * the export name alone. A filter a route names selects that route. A filter
- * no route names (a sub-component whose stories live under its parent, such
- * as `core/ResizeHandle` under `Core/Resizable`) selects the stories whose
- * `componentPath` lies in its source folder, and `aliases` records the route
- * components it stands for. A filter with neither has no stories.
+ * no route names adopts its source folder's orphan stories: stories whose
+ * index `componentPath` lies in that folder and whose title names no public
+ * component (ResizeHandle adopts Core/Resizable's, which route to the
+ * non-component `core/resizable`). Adopted stories are routed to the filter's
+ * own component, so it keeps its own coverage entry and verified-N/A record.
+ * A filter with neither selects nothing and stays a coverage gap
+ * (`architecture:rtl-audit-evidence` INV5).
  * @param {{
  *   routes: {id: string, component: string}[],
  *   filters: string[],
+ *   knownComponents: string[],
  *   componentPathOf: (storyId: string) => string | undefined,
- *   folderOf: (filter: string) => {pkg: string, folder: string} | null,
+ *   ownerOf: (filter: string) => {component: string, folder: string} | null,
  * }} input
  */
 export function resolveFilterRoutes({
   routes,
   filters,
+  knownComponents,
   componentPathOf,
-  folderOf,
+  ownerOf,
 }) {
-  if (filters.length === 0) {
-    return {routes, aliases: {}, noStories: [], rosterFilters: []};
-  }
+  if (filters.length === 0) return {routes, adopted: {}};
+  const known = new Set(knownComponents.map(name => name.toLowerCase()));
   const selected = new Map();
-  const aliases = {};
-  const noStories = [];
-  const rosterFilters = [];
+  const adopted = {};
   for (const filter of filters) {
-    let mine = routes.filter(route =>
+    const direct = routes.filter(route =>
       routeMatchesComponentFilter(route, filter),
     );
-    if (mine.length > 0) {
-      rosterFilters.push(filter);
-    } else {
-      const located = folderOf(filter);
-      const prefix = located
-        ? `packages/${located.pkg}/src/${located.folder}/`
-        : null;
-      mine = prefix
-        ? routes.filter(route =>
-            (componentPathOf(route.id) ?? '')
-              .replace(/^(\.\.\/)+/, '')
-              .startsWith(prefix),
-          )
-        : [];
-      if (mine.length === 0) {
-        noStories.push(filter);
-        continue;
-      }
-      const components = [
-        ...new Set(mine.map(route => route.component)),
-      ].sort();
-      aliases[filter] = components;
-      rosterFilters.push(...components);
-    }
-    for (const route of mine)
+    for (const route of direct) {
       selected.set(`${route.component}::${route.id}`, route);
+    }
+    if (direct.length > 0) continue;
+    const owner = ownerOf(filter);
+    if (owner == null) continue;
+    const orphans = routes.filter(
+      route =>
+        !known.has(route.component.toLowerCase()) &&
+        (componentPathOf(route.id) ?? '')
+          .replace(/^(\.\.\/)+/, '')
+          .startsWith(`${owner.folder}/`),
+    );
+    if (orphans.length === 0) continue;
+    adopted[owner.component] = orphans.map(route => route.id).sort();
+    for (const {id} of orphans) {
+      selected.set(`${owner.component}::${id}`, {
+        id,
+        component: owner.component,
+      });
+    }
   }
-  return {
-    routes: [...selected.values()],
-    aliases,
-    noStories,
-    rosterFilters: [...new Set(rosterFilters)],
-  };
+  return {routes: [...selected.values()], adopted};
 }
 
 /** Story ids owned by any bare or package-qualified component filter. */

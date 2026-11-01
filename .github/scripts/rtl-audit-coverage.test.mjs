@@ -1017,56 +1017,74 @@ describe('finishFiniteAnimations', () => {
 });
 
 describe('resolveFilterRoutes (filters resolve through the Storybook index)', () => {
-  // Core/Resizable's stories route to `core/resizable` (no public component
-  // of that name); ResizeHandle, the folder's public export, has no title.
+  // Core/Resizable's stories route to `core/resizable`, which no public
+  // component is called; ResizeHandle, the folder's export, has no title.
+  // Chat's stories all route to real Chat components.
   const routes = [
     {id: 'core-resizable--horizontal-split', component: 'core/resizable'},
     {id: 'core-resizable--snap-points', component: 'core/resizable'},
     {id: 'core-button--primary', component: 'core/Button'},
+    {id: 'core-chat--layout', component: 'core/ChatLayout'},
   ];
   const componentPaths = {
     'core-resizable--horizontal-split':
       '../../packages/core/src/Resizable/index.ts',
     'core-resizable--snap-points': '../../packages/core/src/Resizable/index.ts',
     'core-button--primary': '../../packages/core/src/Button/index.ts',
+    'core-chat--layout': '../../packages/core/src/Chat/index.ts',
   };
-  const folders = {
-    'core/resizehandle': {pkg: 'core', folder: 'Resizable'},
-    'core/button': {pkg: 'core', folder: 'Button'},
+  const owners = {
+    'core/resizehandle': {
+      component: 'core/ResizeHandle',
+      folder: 'packages/core/src/Resizable',
+    },
+    'core/chatlayoutscrollbutton': {
+      component: 'core/ChatLayoutScrollButton',
+      folder: 'packages/core/src/Chat',
+    },
   };
   const resolve = filters =>
     resolveFilterRoutes({
       routes,
       filters,
+      knownComponents: [
+        'core/Button',
+        'core/ChatLayout',
+        'core/ChatLayoutScrollButton',
+        'core/ResizeHandle',
+      ],
       componentPathOf: id => componentPaths[id],
-      folderOf: filter => folders[filter] ?? null,
+      ownerOf: filter => owners[filter] ?? null,
     });
 
-  it("audits a sub-component's stories under its parent's title (ResizeHandle → Core/Resizable)", () => {
+  it("audits a sub-component's stories under its own name (ResizeHandle → Core/Resizable)", () => {
     const resolved = resolve(['core/resizehandle']);
-    expect(resolved.routes.map(route => route.id)).toEqual([
-      'core-resizable--horizontal-split',
-      'core-resizable--snap-points',
+    expect(resolved.routes).toEqual([
+      {id: 'core-resizable--horizontal-split', component: 'core/ResizeHandle'},
+      {id: 'core-resizable--snap-points', component: 'core/ResizeHandle'},
     ]);
-    expect(resolved.aliases).toEqual({'core/resizehandle': ['core/resizable']});
-    expect(resolved.noStories).toEqual([]);
-    // The coverage roster checks the stories' component, not the export.
-    expect(resolved.rosterFilters).toEqual(['core/resizable']);
+    expect(resolved.adopted).toEqual({
+      'core/ResizeHandle': [
+        'core-resizable--horizontal-split',
+        'core-resizable--snap-points',
+      ],
+    });
   });
 
-  it('keeps a filter a story title names, without aliasing it', () => {
-    const resolved = resolve(['core/button']);
-    expect(resolved.routes.map(route => route.id)).toEqual([
-      'core-button--primary',
-    ]);
-    expect(resolved.aliases).toEqual({});
-    expect(resolved.rosterFilters).toEqual(['core/button']);
+  it("never takes a sibling component's stories: a Chat member keeps its own entry", () => {
+    const resolved = resolve(['core/chatlayoutscrollbutton']);
+    expect(resolved.routes).toEqual([]);
+    expect(resolved.adopted).toEqual({});
   });
 
-  it('reports a filter with no story as having none, instead of failing the run', () => {
-    const resolved = resolve(['core/nosuchthing', 'core/button']);
-    expect(resolved.noStories).toEqual(['core/nosuchthing']);
-    expect(resolved.routes).toHaveLength(1);
+  it('keeps a filter a story title names, unchanged', () => {
+    expect(resolve(['core/button']).routes).toEqual([
+      {id: 'core-button--primary', component: 'core/Button'},
+    ]);
+  });
+
+  it('selects nothing for a filter with no story, which stays a coverage gap', () => {
+    expect(resolve(['core/nosuchthing']).routes).toEqual([]);
   });
 
   it('is the whole route list when no filter is given', () => {

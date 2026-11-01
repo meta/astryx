@@ -89,6 +89,7 @@ import {
 } from './rtl-audit-shards.mjs';
 
 const {
+  componentExportsFromBarrel,
   componentPackage,
   flatPackageComponentNames,
   nestedPackageComponentNames,
@@ -1194,22 +1195,43 @@ function matchesFilter(component) {
   return !FILTER.length || FILTER.includes(normalized) || FILTER.includes(name);
 }
 
+function readVerifiedNa() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
+    if (!Array.isArray(parsed)) throw new Error('verified-not-applicable registry must be a JSON array');
+    return {verifiedNa: parsed, verifiedNaError: null};
+  } catch (error) {
+    return {verifiedNa: [], verifiedNaError: String(error).slice(0, 200)};
+  }
+}
+
 /**
- * A filter's source folder: the package folder holding `<Name>.tsx`, for a
- * package-qualified filter (`core/resizehandle` → core, Resizable).
+ * A filter's public component and the source folder that implements it, from
+ * its package's barrel (`core/resizehandle` → core/ResizeHandle in
+ * packages/core/src/Resizable), or null.
  */
-function sourceFolderOf(filter) {
-  const [pkg, name] = filter.includes('/') ? filter.split('/') : [null, filter];
-  for (const packageName of pkg ? [pkg] : ACTIVE_PACKAGE_NAMES) {
-    const src = path.join(PROJECT_ROOT, 'packages', packageName, 'src');
-    if (!fs.existsSync(src)) continue;
-    for (const entry of fs.readdirSync(src, {withFileTypes: true})) {
-      if (!entry.isDirectory()) continue;
-      const found = fs
-        .readdirSync(path.join(src, entry.name))
-        .some(file => file.toLowerCase() === `${name}.tsx`);
-      if (found) return {pkg: packageName, folder: entry.name};
-    }
+function sourceOwnerOf(filter, publicComponentsByPackage) {
+  const [packageName, requested] = filter.includes('/')
+    ? filter.split('/')
+    : [null, filter];
+  for (const name of packageName ? [packageName] : ACTIVE_PACKAGE_NAMES) {
+    const pkg = componentPackage(name);
+    if (!pkg) continue;
+    const component = (publicComponentsByPackage[name] ?? []).find(
+      candidate => candidate.toLowerCase() === requested,
+    );
+    if (!component) continue;
+    const sourceRoot = path.join(PROJECT_ROOT, pkg.src);
+    const implementation = componentExportsFromBarrel(
+      path.join(sourceRoot, 'index.ts'),
+      sourceRoot,
+    ).get(component);
+    if (!implementation) continue;
+    const folder = path
+      .relative(PROJECT_ROOT, path.dirname(implementation))
+      .split(path.sep)
+      .join('/');
+    return {component: `${name}/${component}`, folder};
   }
   return null;
 }
@@ -1288,41 +1310,55 @@ async function cleanupRuntime() {
     targets,
     publicComponentsByPackage,
   }).filter(belongsToActivePackage);
-  // Filters resolve through the index: a sub-component whose stories live
-  // under its parent's title audits those stories (filterAliases records it).
+  // Filters resolve through the index: a sub-component whose stories carry
+  // its parent folder's non-component title (ResizeHandle under
+  // Core/Resizable) audits them under its own name.
   const resolvedFilters = resolveFilterRoutes({
     routes: storyRoutes,
     filters: FILTER,
+    knownComponents: Object.entries(publicComponentsByPackage).flatMap(
+      ([packageName, names]) => names.map(name => `${packageName}/${name}`),
+    ),
     componentPathOf: id => entries[id]?.componentPath,
-    folderOf: filter => sourceFolderOf(filter),
+    ownerOf: filter => sourceOwnerOf(filter, publicComponentsByPackage),
   });
   const scopedStoryRoutes = resolvedFilters.routes;
-  for (const filter of resolvedFilters.noStories) {
-    console.error(`NOTE ${filter}: no stories found, so RTL has nothing to render (N/A).`);
-  }
-  if (scopedStoryRoutes.length === 0) {
-    if (FILTER.length > 0 && SHARD === null) {
-      // Every filter has no story: nothing to render, which is N/A, not a crash.
-      const scope = {
-        packages: ACTIVE_PACKAGE_NAMES,
-        filters: FILTER,
-        filterAliases: {},
-        noStories: resolvedFilters.noStories,
-      };
-      fs.writeFileSync(
-        OUT,
-        `${JSON.stringify({generatedAt: new Date().toISOString(), scope}, null, 2)}\n`,
-      );
-      console.error(`WROTE ${OUT} (no stories for ${FILTER.join(',')})`);
-      return;
-    }
-    throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
+  for (const [component, storyIds] of Object.entries(resolvedFilters.adopted)) {
+    console.error(`NOTE ${component}: audits its folder's stories ${storyIds.join(', ')}`);
   }
   const auditedComponents = buildAuditedComponentRoster({
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
-    filters: resolvedFilters.rosterFilters,
+    filters: FILTER,
   });
+  if (scopedStoryRoutes.length === 0) {
+    if (FILTER.length === 0 || SHARD !== null) {
+      throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
+    }
+    // A filtered run whose components have no story renders nothing, but its
+    // components are still in scope: write the coverage report, where each
+    // reads as a coverage gap or its verified N/A (INV5), instead of crashing.
+    const {verifiedNa, verifiedNaError} = readVerifiedNa();
+    const coverage = buildComponentCoverage({components: auditedComponents, verifiedNa});
+    if (verifiedNaError) coverage.registryError = verifiedNaError;
+    fs.writeFileSync(
+      OUT,
+      `${JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          scope: {packages: ACTIVE_PACKAGE_NAMES, filters: FILTER},
+          coverage,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.error(`NOTE no stories for ${FILTER.join(',')}; WROTE ${OUT} with coverage only`);
+    console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+    process.exitCode =
+      coverage.gaps > 0 || coverage.staleVerifiedNa > 0 || coverage.registryError != null ? 1 : 0;
+    return;
+  }
 
   // The audit's plan: D1 uses one deterministic representative story per
   // component. Repository story-file/export order preserves the existing
@@ -1351,10 +1387,7 @@ async function cleanupRuntime() {
       publicComponentsByPackage,
     );
     if (!belongsToActivePackage({component, id: t.storyId})) continue;
-    const aliased = Object.values(resolvedFilters.aliases)
-      .flat()
-      .some(alias => alias.toLowerCase() === component.toLowerCase());
-    if (!matchesFilter(component) && !aliased) continue;
+    if (!matchesFilter(component)) continue;
     if (!entries[t.storyId]) {
       curatedTargets.push({t, component, missing: true});
       continue;
@@ -1518,15 +1551,7 @@ async function cleanupRuntime() {
     }
   }
 
-  let verifiedNa = [];
-  let verifiedNaError = null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
-    if (!Array.isArray(parsed)) throw new Error('verified-not-applicable registry must be a JSON array');
-    verifiedNa = parsed;
-  } catch (error) {
-    verifiedNaError = String(error).slice(0, 200);
-  }
+  const {verifiedNa, verifiedNaError} = readVerifiedNa();
 
   const coverage = buildComponentCoverage({
     components: auditedComponents,
@@ -1560,8 +1585,6 @@ async function cleanupRuntime() {
     scope: {
       packages: ACTIVE_PACKAGE_NAMES,
       filters: FILTER,
-      filterAliases: resolvedFilters.aliases,
-      noStories: resolvedFilters.noStories,
     },
     completion: {
       plannedComponentScans: new Set(scopedStoryRoutes.map(route => route.component)).size,

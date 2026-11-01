@@ -95,10 +95,6 @@ describe('checksCell', () => {
       '✓ · — · ✗',
     );
     expect(checksCell({visual: 'changed'})).toBe('✗ · — · —');
-    // A suite with no stories for the component (not-run) shows —.
-    expect(checksCell({visual: 'pass', a11y: 'pass', rtl: 'not-run'})).toBe(
-      '✓ · ✓ · —',
-    );
   });
 });
 
