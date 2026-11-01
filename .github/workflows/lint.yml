@@ -66,9 +66,12 @@ jobs:
               >> "$GITHUB_OUTPUT"
           fi
 
-      # A workflow or composite-action change runs actionlint, with shellcheck
-      # on every run: script, so a broken expression, an unknown runner label
-      # or a script that cannot work fails here instead of on every later run.
+      # A change to a workflow, a composite action or this config runs
+      # actionlint over the workflows, with shellcheck on their run: scripts,
+      # so a broken expression, an unknown runner label or a script that cannot
+      # work fails here instead of on every later run. actionlint checks a
+      # local action's metadata and inputs where a workflow uses it, not the
+      # action's own steps; ci-run-scripts-parse.test.mjs parses those.
       # Any other pull request skips it in a second. The binary is pinned by
       # version and checksum; shellcheck reports errors only, so its existing
       # warnings never block (spec:AST-030 FR11).
