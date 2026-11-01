@@ -95,29 +95,31 @@ describe('main validation dispatch', () => {
     }
   });
 
+  // The commit of #9164, from which main keeps the size records the typecheck
+  // lane writes.
+  const FLOOR = /const FLOOR = '([0-9a-f]{40})';/.exec(
+    workflow.jobs['main-commit'].steps[0].with.script,
+  )?.[1];
+
   async function resolve({
     eventName,
     sha = '',
     status = 'ahead',
-    measured = true,
+    recorded = 'ahead',
   }) {
     const calls = [];
     const github = {
       rest: {
         repos: {
-          getContent: async ({path, ref}) => {
-            expect([path, ref]).toEqual([
-              '.github/scripts/package-size.mjs',
-              sha,
-            ]);
-            if (!measured)
-              throw Object.assign(new Error('Not Found'), {status: 404});
-            return {data: {}};
-          },
           getBranch: async () => ({data: {commit: {sha: TIP}}}),
           compareCommitsWithBasehead: async ({basehead}) => {
             calls.push(basehead);
-            return {data: {status}};
+            // `<floor>...<sha>` asks whether the commit has the size records.
+            return {
+              data: {
+                status: basehead.startsWith(`${FLOOR}...`) ? recorded : status,
+              },
+            };
           },
         },
       },
@@ -155,7 +157,10 @@ describe('main validation dispatch', () => {
     async status => {
       expect(
         await resolve({eventName: 'workflow_dispatch', sha: OLDER, status}),
-      ).toEqual({sha: OLDER, calls: [`${OLDER}...${TIP}`]});
+      ).toEqual({
+        sha: OLDER,
+        calls: [`${OLDER}...${TIP}`, `${FLOOR}...${OLDER}`],
+      });
     },
   );
 
@@ -168,10 +173,43 @@ describe('main validation dispatch', () => {
     },
   );
 
-  it('refuses a commit from before the package-size measurement, naming why', async () => {
-    await expect(
-      resolve({eventName: 'workflow_dispatch', sha: OLDER, measured: false}),
-    ).rejects.toThrow('predates the package-size measurement');
+  it('refuses a commit from before the size records, naming why', async () => {
+    expect(FLOOR).toMatch(/^[0-9a-f]{40}$/);
+    // A commit between the package-size script (#9161) and the size records
+    // (#9164) is behind the floor, and is refused.
+    for (const recorded of ['behind', 'diverged']) {
+      await expect(
+        resolve({eventName: 'workflow_dispatch', sha: OLDER, recorded}),
+      ).rejects.toThrow('predates the size records');
+    }
+    expect(
+      (
+        await resolve({
+          eventName: 'workflow_dispatch',
+          sha: FLOOR,
+          recorded: 'identical',
+        })
+      ).sha,
+    ).toBe(FLOOR);
+  });
+
+  it('names a run that validates an older commit after that commit', () => {
+    const name = workflow['run-name'];
+    const evaluate = (event, sha) =>
+      Function(
+        'github',
+        'inputs',
+        'format',
+        `return (${name.replace(/^\$\{\{\s*|\s*\}\}$/g, '')});`,
+      )({event_name: event}, {sha}, (text, value) =>
+        text.replace('{0}', value),
+      );
+    expect(evaluate('workflow_dispatch', OLDER)).toBe(
+      `Main validation of ${OLDER}`,
+    );
+    // An empty name keeps GitHub's default for every other run.
+    expect(evaluate('workflow_dispatch', '')).toBe('');
+    expect(evaluate('push', undefined)).toBe('');
   });
 
   it('checks every lane, sync-exports included, out at the resolved commit', () => {
@@ -186,12 +224,16 @@ describe('main validation dispatch', () => {
     }
   });
 
-  it.each(['abc123', 'B'.repeat(40), `${OLDER} `.repeat(2)])(
-    'refuses a commit that is not a full SHA (%s)',
-    async sha => {
-      await expect(
-        resolve({eventName: 'workflow_dispatch', sha}),
-      ).rejects.toThrow('full 40-character commit SHA');
-    },
-  );
+  // Only spaces would otherwise read as no commit, yet run in a group of its own.
+  it.each([
+    'abc123',
+    'B'.repeat(40),
+    `${OLDER} `.repeat(2),
+    '   ',
+    ` ${OLDER}`,
+  ])('refuses a commit that is not a full SHA (%s)', async sha => {
+    await expect(
+      resolve({eventName: 'workflow_dispatch', sha}),
+    ).rejects.toThrow('full 40-character commit SHA');
+  });
 });

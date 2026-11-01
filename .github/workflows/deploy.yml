@@ -3,6 +3,9 @@
 # Validate every push to main. Stable docs, Storybook, and Sandbox deploy through
 # the Vercel project; this workflow preserves the post-merge test gates only.
 name: Main
+# A run that validates an older commit is named for it, so it never reads as a
+# check of main's tip; every other run keeps its default name.
+run-name: "${{ github.event_name == 'workflow_dispatch' && inputs.sha != '' && format('Main validation of {0}', inputs.sha) || '' }}"
 
 on:
   push:
@@ -53,7 +56,9 @@ jobs:
             if (context.eventName !== 'push') {
               const {data} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
               sha = data.commit.sha;
-              const requested = (context.payload.inputs?.sha ?? '').trim();
+              // Not trimmed: the concurrency group reads the raw input, so a
+              // value of only spaces must fail here, not validate the tip.
+              const requested = context.payload.inputs?.sha ?? '';
               if (requested !== '') {
                 if (!/^[0-9a-f]{40}$/.test(requested)) {
                   throw new Error(`sha must be a full 40-character commit SHA, got "${requested}".`);
@@ -65,15 +70,16 @@ jobs:
                 if (!['identical', 'ahead'].includes(comparison.status)) {
                   throw new Error(`${requested} is not in main's history.`);
                 }
-                // The typecheck lane measures package size with this script;
-                // a commit from before it cannot run that lane.
-                try {
-                  await github.rest.repos.getContent({
-                    ...context.repo, path: '.github/scripts/package-size.mjs', ref: requested,
-                  });
-                } catch (error) {
-                  if (error.status !== 404) throw error;
-                  throw new Error(`${requested} predates the package-size measurement this run's typecheck lane takes; validate a later commit.`);
+                // The typecheck lane keeps this commit's size records, which
+                // needs main's size-record scripts (the commit of #9164 and
+                // later); an older commit cannot run that lane.
+                const FLOOR = 'f0039ff70521b4f51a2a64ea15f2b687e6374482';
+                const {data: since} = await github.rest.repos.compareCommitsWithBasehead({
+                  ...context.repo,
+                  basehead: `${FLOOR}...${requested}`,
+                });
+                if (!['identical', 'ahead'].includes(since.status)) {
+                  throw new Error(`${requested} predates the size records this run's typecheck lane keeps; validate a later commit.`);
                 }
                 sha = requested;
               }
