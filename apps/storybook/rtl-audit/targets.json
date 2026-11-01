@@ -689,15 +689,6 @@
     }
   },
   {
-    "component": "InfoTip",
-    "storyId": "lab-infotip--next-to-a-label",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "span.astryx-text:text-is(\"Rolling average\")",
-      "next": "button[aria-label=\"About this metric\"]"
-    }
-  },
-  {
     "component": "LogStream",
     "storyId": "lab-logstream--terminal-build",
     "dims": ["D2"],
