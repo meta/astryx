@@ -33,6 +33,18 @@ const STORIES = [
 const RTL_LOCALE = 'lab-schedule--right-to-left-locale';
 
 let evidence: Evidence;
+
+// The stories build their events from the browser's clock, at fixed hours of
+// the browser's own day and week, and the Schedule shows them in
+// America/Los_Angeles in a 7–19 grid. Run the browser in that zone, so every
+// event lands at its hour in the week the Schedule shows, and pin the clock to
+// the week US daylight saving time ends, so this contract also covers that
+// week, whatever day it runs.
+test.use({timezoneId: 'America/Los_Angeles'});
+const PINNED_NOW = new Date('2026-11-01T10:00:00-08:00');
+test.beforeEach(async ({page}) => {
+  await page.clock.install({time: PINNED_NOW});
+});
 test.beforeAll(async () => {
   evidence = await startEvidence();
 });
