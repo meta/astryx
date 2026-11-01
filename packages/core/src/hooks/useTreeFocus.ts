@@ -17,6 +17,7 @@
 import {useCallback, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {isRtlElement} from './isRtlElement';
+import {findTypeaheadMatch, foldForTypeahead} from '../utils/typeaheadMatch';
 
 /** Keys handled by the tree keyboard model (used to gate typeahead). */
 const NAVIGATION_KEYS = new Set([
@@ -431,10 +432,12 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
         clearTimeout(state.timer);
       }
       // "aa" would match nothing; a repeat means "next match" (useTypeahead).
-      const char = e.key.toLowerCase();
+      const char = e.key;
       const isRepeatSameChar =
         state.buffer.length > 0 &&
-        state.buffer.split('').every(c => c === char);
+        state.buffer
+          .split('')
+          .every(c => foldForTypeahead(c) === foldForTypeahead(char));
       state.buffer = isRepeatSameChar ? char : state.buffer + char;
       state.timer = setTimeout(() => {
         typeaheadRef.current.buffer = '';
@@ -449,11 +452,15 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
         ...items.slice(start + offset),
         ...items.slice(0, start + offset),
       ];
-      const match = ordered.find(
-        item =>
-          !itemDisabled(item) &&
-          itemLabelText(item, matchLabelledBy).toLowerCase().startsWith(query),
+      const enabled = ordered.filter(item => !itemDisabled(item));
+      // INV17: case, accents, stroked letters and Turkish i fold away, and a
+      // typed mark prefers the exact match.
+      const matchIndex = findTypeaheadMatch(
+        enabled.map((_, i) => i),
+        i => itemLabelText(enabled[i], matchLabelledBy),
+        query,
       );
+      const match = matchIndex >= 0 ? enabled[matchIndex] : undefined;
       if (match != null) {
         e.preventDefault();
         focusItem(match);

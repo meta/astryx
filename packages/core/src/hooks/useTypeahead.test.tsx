@@ -404,14 +404,29 @@ describe('useTypeahead', () => {
       expect(nordic.onMatch).toHaveBeenLastCalledWith(1);
     });
 
-    it('follows the provider locale for letters that are separate in that language', () => {
-      const spanish = setupLabels(['Ana', 'Ñandú', 'Nora'], -1, 'es-ES');
-      spanish.api.onKeyDown(key('n'));
-      expect(spanish.onMatch).toHaveBeenLastCalledWith(2); // Nora, not Ñandú
-      const swedish = setupLabels(['Anna', 'Åsa', 'Axel'], 0, 'sv-SE');
-      swedish.api.onKeyDown(key('a'));
-      expect(swedish.onMatch).toHaveBeenLastCalledWith(2); // Axel, not Åsa
-    });
+    it.each(['en-US', 'vi-VN', 'pl-PL', 'sv-SE', 'tr-TR'])(
+      'folds the same way under the %s provider (INV17)',
+      locale => {
+        const reach = (
+          labels: ReadonlyArray<string>,
+          k: string,
+        ): number | undefined => {
+          const {onMatch, api} = setupLabels(labels, -1, locale);
+          api.onKeyDown(key(k));
+          return onMatch.mock.calls.at(-1)?.[0] as number | undefined;
+        };
+        expect(reach(['Bo', 'Åsa'], 'a')).toBe(1);
+        expect(reach(['Ana', 'Ñandú'], 'n')).toBe(1);
+        expect(reach(['Ana', 'Đào'], 'd')).toBe(1);
+        expect(reach(['Ana', 'Łódź'], 'l')).toBe(1);
+        expect(reach(['Ana', 'Ŧara'], 't')).toBe(1);
+        expect(reach(['Ana', 'Isparta'], 'ı')).toBe(1);
+        expect(reach(['Ana', 'İzmir'], 'i')).toBe(1);
+        expect(reach(['Dung', 'Đào'], 'đ')).toBe(1);
+        expect(reach(['İzmir', 'Isparta'], 'ı')).toBe(1);
+        expect(reach(['Isparta', 'İzmir'], 'İ')).toBe(1);
+      },
+    );
 
     it('keeps a combining mark typed after a letter (Thai tone mark, Devanagari anusvara)', () => {
       const typeAll = (

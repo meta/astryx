@@ -4,7 +4,8 @@
 
 /**
  * @file useTypeahead.ts
- * @input Uses React useCallback/useEffect/useRef, useCollator (provider locale)
+ * @input Uses React useCallback/useEffect/useRef, shared type-to-select
+ *   matching (utils/typeaheadMatch)
  * @output Exports useTypeahead hook for first-character (type-to-focus) search
  * @position Core hook; adds APG typeahead to menus, listboxes, and other
  *   collections. Composes with useListFocus/useGridFocus (or any collection)
@@ -14,8 +15,8 @@
  * - /packages/core/src/hooks/index.ts
  */
 
-import {useCallback, useEffect, useMemo, useRef} from 'react';
-import {useCollator} from '../i18n/useCollator';
+import {useCallback, useEffect, useRef} from 'react';
+import {findTypeaheadMatch, foldForTypeahead} from '../utils/typeaheadMatch';
 
 export interface UseTypeaheadOptions {
   /**
@@ -95,8 +96,9 @@ function isComposingKey(e: React.KeyboardEvent | KeyboardEvent): boolean {
  * First-character ("type-ahead") search for a collection.
  *
  * Buffers printable keystrokes (resetting after `resetMs` of inactivity),
- * matches items whose label starts with the buffer (ignoring case and
- * accents), and cycles from the
+ * matches items whose label starts with the buffer (ignoring case, accents,
+ * stroked letters and Turkish dotted/dotless i, the same in every locale:
+ * `architecture:internationalization` INV17), and cycles from the
  * current index — so pressing "s" repeatedly walks through the "s" items
  * instead of sticking on the first. Space is reserved for activation and is
  * only treated as typeahead while a buffer is already active.
@@ -123,15 +125,6 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
     resetMs = 750,
     isDisabled,
   } = options;
-
-  // Base-strength search collation ignores case and accents, and follows the
-  // provider locale: in Spanish "n" does not match "ñ", in Swedish "a" does
-  // not match "å".
-  const collatorOptions = useMemo<Intl.CollatorOptions>(
-    () => ({sensitivity: 'base', usage: 'search'}),
-    [],
-  );
-  const collator = useCollator(collatorOptions);
 
   const bufferRef = useRef('');
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
@@ -177,15 +170,13 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
         return false;
       }
 
-      // A lone combining mark compares equal to the empty string, so as the
-      // first key it would match every label. It is not a letter to jump to.
-      // Once a letter is buffered the mark is part of what is being typed (a
-      // Thai tone mark, a Devanagari anusvara), and the label is cut by the
-      // same count.
+      // A lone combining mark folds to nothing, so as the first key it would
+      // match every label. It is not a letter to jump to. Once a letter is
+      // buffered the mark is part of what is being typed.
       if (
         bufferRef.current.length === 0 &&
         e.key !== ' ' &&
-        collator.compare(e.key, '') === 0
+        foldForTypeahead(e.key).length === 0
       ) {
         return false;
       }
@@ -200,7 +191,9 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
       const char = e.key;
       const isRepeatSameChar =
         bufferRef.current.length > 0 &&
-        bufferRef.current.split('').every(c => collator.compare(c, char) === 0);
+        bufferRef.current
+          .split('')
+          .every(c => foldForTypeahead(c) === foldForTypeahead(char));
       const nextBuffer = isRepeatSameChar ? char : bufferRef.current + char;
       bufferRef.current = nextBuffer;
       scheduleReset();
@@ -215,37 +208,20 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
       // Once the buffer is longer it is refining a match, so the current item
       // stays in range. With nothing current there is nothing to advance past.
       const offset = hasCurrent && nextBuffer.length === 1 ? 1 : 0;
-      // The label is composed, so the buffer is too: an accent typed as its
-      // own key (a, U+0301) must count as one letter, as it does in the label.
-      const composedBuffer = nextBuffer.normalize('NFC');
-
+      const order: number[] = [];
       for (let i = 0; i < count; i++) {
         const index = (start + offset + i + count) % count;
-        if (isDisabled?.(index)) {
-          continue;
+        if (!isDisabled?.(index)) {
+          order.push(index);
         }
-        const label = labels[index];
-        if (
-          label != null &&
-          collator.compare(
-            label.trim().normalize('NFC').slice(0, composedBuffer.length),
-            composedBuffer,
-          ) === 0
-        ) {
-          onMatch(index);
-          return true;
-        }
+      }
+      const match = findTypeaheadMatch(order, i => labels[i], nextBuffer);
+      if (match >= 0) {
+        onMatch(match);
       }
       return true;
     },
-    [
-      getItemLabels,
-      onMatch,
-      getCurrentIndex,
-      scheduleReset,
-      isDisabled,
-      collator,
-    ],
+    [getItemLabels, onMatch, getCurrentIndex, scheduleReset, isDisabled],
   );
 
   return {onKeyDown, reset};

@@ -11,7 +11,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {useState} from 'react';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {cleanup, render, screen, fireEvent} from '@testing-library/react';
 import {useTreeFocus} from './useTreeFocus';
 
 interface Node {
@@ -315,6 +315,41 @@ describe('useTreeFocus activation + typeahead', () => {
     // A repeat must cycle, not extend the query to "aa" (as useTypeahead does).
     fireEvent.keyDown(tree, {key: 'a'});
     expect(screen.getByTestId('avocado')).toHaveFocus();
+  });
+
+  it('typeahead ignores accents, stroked letters and Turkish i (INV17)', () => {
+    const nodes: Node[] = [
+      {id: 'dung', label: 'Dung', level: 1},
+      {id: 'dao', label: 'Đào', level: 1},
+      {id: 'izmir', label: 'İzmir', level: 1},
+      {id: 'isparta', label: 'Isparta', level: 1},
+    ];
+    render(<Tree collapsed={nodes} />);
+    const tree = screen.getByRole('tree');
+    screen.getByTestId('dung').focus();
+
+    fireEvent.keyDown(tree, {key: 'd'});
+    expect(screen.getByTestId('dao')).toHaveFocus();
+
+    // A fresh query (the typed buffer resets on its own after a pause).
+    cleanup();
+    render(<Tree collapsed={nodes} />);
+    screen.getByTestId('dung').focus();
+    fireEvent.keyDown(screen.getByRole('tree'), {key: 'i'});
+    expect(screen.getByTestId('izmir')).toHaveFocus();
+  });
+
+  it('typeahead prefers the exact match for a typed mark (INV17)', () => {
+    const nodes: Node[] = [
+      {id: 'dung', label: 'Dung', level: 1},
+      {id: 'dao', label: 'Đào', level: 1},
+      {id: 'izmir', label: 'İzmir', level: 1},
+      {id: 'isparta', label: 'Isparta', level: 1},
+    ];
+    render(<Tree collapsed={nodes} />);
+    const tree = screen.getByRole('tree');
+    fireEvent.keyDown(tree, {key: 'đ'});
+    expect(screen.getByTestId('dao')).toHaveFocus();
   });
 
   it('typeahead searches from the top when no treeitem has focus', () => {

@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Type-to-select ignores accents when matching. Pressing `d` on a closed Selector, or in an open DropdownMenu or ContextMenu, now reaches "Đào" and pressing `a` reaches "Ánh". Before, a key typed without the mark skipped every option that starts with the marked letter, which is how Vietnamese, Spanish, French and Polish lists are usually typed. Matching uses the provider locale's search collation at base strength, so case and accents are ignored where the language treats them as the same letter (đ, ł, ø fold to d, l, o) and kept where it does not (Spanish ñ stays apart from n, Swedish å from a). A key that is only a combining mark is ignored. No API changes.
+[fix] Type-to-select ignores accents in every locale. Pressing `d` now reaches "Đào", `a` reaches "Ánh" and "Åsa", `n` reaches "Ñandú", `l` reaches "Łódź", and `i` or `ı` reaches "Isparta" and "İzmir". This applies to a closed Selector and to open DropdownMenu, ContextMenu, MultiSelector and TreeList lists, and to the public `useTypeahead` and `useTreeFocus` hooks. Before, a key typed without the mark skipped every item that starts with the marked letter. Matching ignores case, combining accents, the stroked letters đ ł ø ħ ŧ ƀ, and Turkish dotted and dotless i. It works the same way in every locale, because type-to-select is navigation, not sorting. When you type the accented letter itself, an exact match comes first. For Turkish, ı pairs with I and İ with i. A key that is only a combining mark is ignored. Sorting and search filtering are unchanged. This meets `architecture:internationalization` INV17. No API changes.
 
-@HelloOjasMutreja
+@HelloOjasMutreja @cixzhang

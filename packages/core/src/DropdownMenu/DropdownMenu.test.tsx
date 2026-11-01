@@ -937,6 +937,22 @@ describe('DropdownMenu', () => {
     ).toHaveFocus();
   });
 
+  it('typeahead reaches an accented item with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'Share'}}
+        items={[{label: 'Copy'}, {label: 'Ánh'}, {label: 'Łódź'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /Share/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'l'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Łódź', hidden: true}),
+    ).toHaveFocus();
+  });
+
   it('typeahead advances past an item that already starts with the letter', async () => {
     const user = userEvent.setup();
     render(
