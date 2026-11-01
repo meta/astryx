@@ -3,7 +3,7 @@
 /**
  * @file flatTree.ts
  * @input A DOM node
- * @output Exports parentAcrossShadow
+ * @output Exports parentAcrossShadow, and containsAlongFlatTree, which walks it
  * @position The flat-tree parent the browser scrolls and dispatches
  *   through, shared by the gesture host's native-scroll probe and the
  *   selection lock (which the press feedback controller uses without the
@@ -24,4 +24,17 @@ export function parentAcrossShadow(node: Node): Node | null {
       : node.parentNode;
   }
   return null;
+}
+
+/**
+ * Whether `node` is `ancestor` or below it along the flat tree: across an open
+ * shadow root to its host, which `Node.contains` does not follow.
+ */
+export function containsAlongFlatTree(ancestor: Node, node: Node): boolean {
+  for (let at: Node | null = node; at != null; at = parentAcrossShadow(at)) {
+    if (at === ancestor) {
+      return true;
+    }
+  }
+  return false;
 }

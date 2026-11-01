@@ -31,7 +31,8 @@
  * iOS query matches utils/touchPresentation.ts.
  */
 
-import {parentAcrossShadow} from './flatTree';
+import {containsAlongFlatTree} from './flatTree';
+import {isIosWebKit} from './touchQueries';
 
 /** What a held finger must not start on a control or a cell. */
 const SELECTION_LOCK = [
@@ -82,7 +83,7 @@ export function lockSelection(
   const set = new Set(elements);
   if (
     isSelectableControl(target) &&
-    [...set].some(element => isWithin(target, element))
+    [...set].some(element => containsAlongFlatTree(element, target))
   ) {
     set.add(target);
   }
@@ -165,23 +166,6 @@ function isSelectableControl(node: unknown): node is HTMLInputElement {
   );
 }
 
-/**
- * The query only iOS WebKit answers: it alone has the touch callout. The
- * same as utils/touchPresentation.ts's IOS_SUPPORTS_QUERY, kept here so the
- * gesture modules import nothing from React.
- */
-const IOS_SUPPORTS_QUERY = '(-webkit-touch-callout: none)';
-
-/** Whether the engine is iOS WebKit. */
-function isIosWebKit(): boolean {
-  // Not every environment has `CSS.supports` (jsdom has `CSS.escape` only).
-  return (
-    typeof CSS !== 'undefined' &&
-    typeof CSS.supports === 'function' &&
-    CSS.supports(IOS_SUPPORTS_QUERY)
-  );
-}
-
 /** Text a held finger edits: it places the caret there. */
 function isTextEntry(node: EventTarget | null): boolean {
   const element =
@@ -200,20 +184,6 @@ function isTextEntry(node: EventTarget | null): boolean {
     return TEXT_ENTRY_TYPES.has((element as HTMLInputElement).type);
   }
   return (element as HTMLElement).isContentEditable;
-}
-
-/** Whether `node` is `ancestor` or inside it, across shadow roots. */
-function isWithin(node: Node, ancestor: Element): boolean {
-  for (
-    let current: Node | null = node;
-    current != null;
-    current = parentAcrossShadow(current)
-  ) {
-    if (current === ancestor) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /** An element's inline style, when it has one (HTML and SVG elements). */
