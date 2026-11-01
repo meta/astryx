@@ -28,6 +28,20 @@ describe('internal/touch', () => {
     for (const name of ['TapGestureRecognizer', 'LongPressGestureRecognizer']) {
       expect(typeof entry[name], name).toBe('function');
     }
+    // The lab page's pieces: the host, the pan, the animator and the engine
+    // check, each the value Core imports by path.
+    expect(entry.GestureHost).toBe(
+      (await import('../gestures/GestureHost')).GestureHost,
+    );
+    expect(entry.PanGestureRecognizer).toBe(
+      (await import('../gestures/PanGestureRecognizer')).PanGestureRecognizer,
+    );
+    expect(entry.createAnimator).toBe(
+      (await import('../motion/animator')).createAnimator,
+    );
+    expect(entry.isIosWebKit).toBe(
+      (await import('../utils/touchQueries')).isIosWebKit,
+    );
     // Named re-exports only: no gathering object a component would carry
     // whole (architecture:component-style-authoring INV6).
     expect(entry).not.toHaveProperty('touchModule');
