@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Text/Heading.doc.mjs (props table, theming target)
+ * - /packages/core/src/Text/Text.doc.mjs (shared truncation and tooltip guidance)
  * - /packages/core/src/Heading/Heading.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/Heading/index.ts (exports if types change)
  * - /packages/core/src/Text/index.ts (re-exports if types change)

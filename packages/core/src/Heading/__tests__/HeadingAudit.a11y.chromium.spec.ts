@@ -380,7 +380,7 @@ for (const item of cases) {
     );
 
     // FR2, ORD1, ORD2: display types replace the level scale in order; an
-    // explicit weight is reflected and is at least the type's default.
+    // explicit bold weight is reflected and is heavier than the type's default.
     const d1 = byCase['display-1'];
     const d2 = byCase['display-2'];
     const d3 = byCase['display-3'];
@@ -399,8 +399,8 @@ for (const item of cases) {
       }
       check(dw.dataWeight === 'bold', `display-weight: data-weight`);
       check(
-        dw.fontWeight >= d2.fontWeight,
-        `display-weight: ${dw.fontWeight} lighter than display-2 ${d2.fontWeight}`,
+        dw.fontWeight > d2.fontWeight,
+        `display-weight: ${dw.fontWeight} not heavier than display-2 ${d2.fontWeight}`,
       );
       check(
         dw.fontSize === d2.fontSize,
@@ -436,6 +436,7 @@ for (const item of cases) {
     if (t2) {
       check(t2.lineClamp === '2', `truncate-2: line clamp ${t2.lineClamp}`);
       check(t2.scrollHeight > t2.clientHeight + 1, 'truncate-2: not clamped');
+      check(t2.lineHeight != null, 'truncate-2: line height not measurable');
       if (t2.lineHeight != null) {
         check(
           Math.abs(t2.geometry.height - 2 * t2.lineHeight) <= 2,
