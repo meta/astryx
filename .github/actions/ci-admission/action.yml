@@ -228,6 +228,9 @@ runs:
             // not one of them.
             let spent = looked;
             for (let look = looked + 1; ; look += 1) {
+              // A look that stops early (a low budget, a failed lookup) leaves
+              // `fits` unset, so the rest starts rather than wait on an older look.
+              core.setOutput('fits', '');
               core.setOutput('looks', String(spent + 1));
               const seen = new Set();
               let large = 0;

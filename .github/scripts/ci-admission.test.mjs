@@ -422,7 +422,11 @@ describe('ci admission', () => {
               data: {
                 workflow_runs: runs().filter(run => run.status === status),
               },
-              headers: {'x-ratelimit-remaining': String(budget)},
+              headers: {
+                'x-ratelimit-remaining': String(
+                  typeof budget === 'function' ? budget() : budget,
+                ),
+              },
             };
           },
           listJobsForWorkflowRun: async ({run_id, per_page}) => {
@@ -665,7 +669,7 @@ describe('ci admission', () => {
         phase: 'room',
         error: new Error('rate limited'),
       });
-      expect(room.outputs.fits).toBeUndefined();
+      expect(room.outputs.fits ?? '').toBe('');
     });
 
     it('carries the wait on from room: its clock, its looks and its next look', async () => {
@@ -711,6 +715,36 @@ describe('ci admission', () => {
         maxLooks: 2,
       });
       expect(spent).toMatchObject({looks: 0, calls: 0});
+    });
+
+    it('leaves fits unset when a later look stops early, so the rest starts', async () => {
+      // Room's first look finds no room for the build (far over); its second,
+      // four minutes on, meets a low budget and stops.
+      let look = 0;
+      const room = await admit({
+        active: () => {
+          look += 1;
+          return prs(7);
+        },
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 4,
+        budget: () => (look >= 2 ? 1000 : 4000),
+      });
+      expect(room.warning.at(-1)).toContain('API calls left this hour');
+      expect(room.outputs.fits).toBe('');
+      const rest = await admit({
+        active: prs(7),
+        peak: 16,
+        phase: 'rest',
+        fits: room.outputs.fits,
+        started: String(NOW),
+        looked: room.outputs.looks,
+        maxWait: 12,
+        maxLooks: 4,
+      });
+      expect(rest).toMatchObject({looks: 0, calls: 0});
     });
 
     it('looks at the end of the wait, never starts early, when room planned a look past it', async () => {
