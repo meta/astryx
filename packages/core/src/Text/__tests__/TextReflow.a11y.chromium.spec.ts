@@ -2,28 +2,28 @@
 
 /**
  * @file TextReflow.a11y.chromium.spec.ts
- * @input Storybook stories core-text--body, core-heading--level-1,
- *   core-text--single-line-truncation and core-heading--single-line-truncation
- *   at a 320 CSS px viewport, each given a long unbroken token
+ * @input Storybook stories a11y-text-reflow--untruncated, --truncated,
+ *   --command-palette-empty-text and --banner-text at a 320 CSS px viewport
  * @output Text and Heading FR3 in a real browser (spec:AST-020 FR1, WCAG 2.2
- *   1.4.10 Reflow): a token longer than its line wraps, so the page never
- *   scrolls sideways; single-line truncation still clips on one line. A control
- *   frame with `overflow-wrap: normal` forced shows the page scroll this
- *   prevents. (The truncation stories sit in a fixed 300 px box, so only the
- *   element's own clipping is checked there.) Frames go to test-results/text-reflow-evidence/.
+ *   1.4.10 Reflow): an untruncated long unbroken token wraps (`break-word`),
+ *   so the page never scrolls sideways; single-line truncation still clips on
+ *   one line; Text inside a container that wraps with `anywhere`
+ *   (CommandPaletteEmpty, Banner) keeps `anywhere` and stays inside both
+ *   inline edges. A control frame with `overflow-wrap: normal` forced shows
+ *   the page scroll the wrap prevents. Frames go to
+ *   test-results/text-reflow-evidence/.
  * @position Text and Heading FR3 browser evidence
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const TOKEN =
-  'https://example.com/releases/2026/aVeryLongUnbrokenTokenThatIsMuchWiderThanAPhone';
 const EVIDENCE = 'test-results/text-reflow-evidence';
+const WIDTH = 320;
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -34,17 +34,13 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await storybook?.close();
 });
-test.use({viewport: {width: 320, height: 640}});
+test.use({viewport: {width: WIDTH, height: 640}});
 
-/** Open a story and give its first `selector` element the long token. */
-async function openWithToken(page: Page, story: string, selector: string) {
-  await page.goto(`${storybook.origin}/iframe.html?id=${story}&viewMode=story`);
-  const target = page.locator(selector).first();
-  await expect(target).toBeVisible();
-  await target.evaluate((element, token) => {
-    element.textContent = token;
-  }, TOKEN);
-  return target;
+async function open(page: Page, story: string): Promise<void> {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=a11y-text-reflow--${story}&viewMode=story`,
+  );
+  await expect(page.getByTestId(/./).first()).toBeVisible();
 }
 
 /** How far the page scrolls sideways, in CSS px (0 = no horizontal scroll). */
@@ -56,80 +52,91 @@ async function pageOverflow(page: Page): Promise<number> {
   );
 }
 
-for (const {name, story, selector} of [
-  {name: 'Text', story: 'core-text--body', selector: '.astryx-text'},
-  {
-    name: 'Heading',
-    story: 'core-heading--level-1',
-    selector: '.astryx-heading',
-  },
-]) {
-  test(`${name}: a long unbroken token wraps at 320 px, with no page scroll`, async ({
-    page,
-  }) => {
-    const target = await openWithToken(page, story, selector);
-    expect(await target.evaluate(e => getComputedStyle(e).overflowWrap)).toBe(
-      'break-word',
-    );
-    expect(await pageOverflow(page)).toBe(0);
-    const box = await target.boundingBox();
-    expect(box && box.x + box.width).toBeLessThanOrEqual(320);
-    // It wrapped onto more than one line rather than being clipped.
-    expect(
-      await target.evaluate(e => {
-        const range = document.createRange();
-        range.selectNodeContents(e);
-        const tops = new Set(
-          Array.from(range.getClientRects(), rect => Math.round(rect.top)),
-        );
-        return tops.size;
-      }),
-    ).toBeGreaterThan(1);
-    await page.screenshot({path: `${EVIDENCE}/${name}-320-after.png`});
-
-    // Control: without the wrap, the same token scrolls the page sideways.
-    await target.evaluate(e => {
-      (e as HTMLElement).style.overflowWrap = 'normal';
-    });
-    expect(await pageOverflow(page)).toBeGreaterThan(0);
-    await page.screenshot({path: `${EVIDENCE}/${name}-320-control.png`});
+/** How many line boxes the element's text occupies. */
+async function lineCount(target: Locator): Promise<number> {
+  return target.evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return new Set(
+      Array.from(range.getClientRects(), rect => Math.round(rect.top)),
+    ).size;
   });
 }
 
-for (const {name, story, selector} of [
-  {
-    name: 'Text',
-    story: 'core-text--single-line-truncation',
-    selector: '.astryx-text',
-  },
-  {
-    name: 'Heading',
-    story: 'core-heading--single-line-truncation',
-    selector: '.astryx-heading',
-  },
+async function wrapOf(target: Locator): Promise<string> {
+  return target.evaluate(element => getComputedStyle(element).overflowWrap);
+}
+
+/** The element's box stays within both inline edges of the viewport. */
+async function expectInsideViewport(target: Locator): Promise<void> {
+  const box = await target.boundingBox();
+  if (box == null) {
+    throw new Error('the element has no box');
+  }
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width).toBeLessThanOrEqual(WIDTH);
+}
+
+test('untruncated Text and Heading wrap a long token at 320 px, with no page scroll', async ({
+  page,
+}) => {
+  await open(page, 'untruncated');
+  for (const id of ['heading', 'text-inline', 'text-block']) {
+    const target = page.getByTestId(id);
+    expect(await wrapOf(target), id).toBe('break-word');
+    expect(await lineCount(target), id).toBeGreaterThan(1);
+  }
+  await expectInsideViewport(page.getByTestId('text-block'));
+  expect(await pageOverflow(page)).toBe(0);
+  await page.screenshot({path: `${EVIDENCE}/untruncated-320.png`});
+
+  // Control: without the wrap, the same tokens scroll the page sideways.
+  await page.addStyleTag({
+    content: '[data-testid] { overflow-wrap: normal !important; }',
+  });
+  expect(await pageOverflow(page)).toBeGreaterThan(0);
+  await page.screenshot({path: `${EVIDENCE}/untruncated-320-control.png`});
+});
+
+test('single-line truncation still clips the token on one line at 320 px', async ({
+  page,
+}) => {
+  await open(page, 'truncated');
+  for (const id of ['heading', 'text']) {
+    const target = page.getByTestId(id);
+    const style = await target.evaluate(element => {
+      const computed = getComputedStyle(element);
+      return {
+        whiteSpace: computed.whiteSpace,
+        textOverflow: computed.textOverflow,
+      };
+    });
+    expect(style, id).toEqual({whiteSpace: 'nowrap', textOverflow: 'ellipsis'});
+    expect(await lineCount(target), id).toBe(1);
+    expect(
+      await target.evaluate(
+        element => element.scrollWidth > element.clientWidth,
+      ),
+      id,
+    ).toBe(true);
+  }
+  expect(await pageOverflow(page)).toBe(0);
+  await page.screenshot({path: `${EVIDENCE}/truncated-320.png`});
+});
+
+for (const {story, name} of [
+  {story: 'command-palette-empty-text', name: 'CommandPaletteEmpty'},
+  {story: 'banner-text', name: 'Banner'},
 ]) {
-  test(`${name}: single-line truncation still clips one line at 320 px`, async ({
+  test(`Text inside ${name} keeps the container's anywhere wrap at 320 px`, async ({
     page,
   }) => {
-    const target = await openWithToken(page, story, selector);
-    const style = await target.evaluate(e => {
-      const s = getComputedStyle(e);
-      return {whiteSpace: s.whiteSpace, textOverflow: s.textOverflow};
-    });
-    expect(style).toEqual({whiteSpace: 'nowrap', textOverflow: 'ellipsis'});
-    // The token stays on one clipped line inside the element.
-    expect(await target.evaluate(e => e.scrollWidth > e.clientWidth)).toBe(
-      true,
-    );
-    expect(
-      await target.evaluate(e => {
-        const range = document.createRange();
-        range.selectNodeContents(e);
-        return new Set(
-          Array.from(range.getClientRects(), rect => Math.round(rect.top)),
-        ).size;
-      }),
-    ).toBe(1);
-    await page.screenshot({path: `${EVIDENCE}/${name}-truncated-320.png`});
+    await open(page, story);
+    const target = page.getByTestId('text');
+    expect(await wrapOf(target)).toBe('anywhere');
+    expect(await lineCount(target)).toBeGreaterThan(1);
+    await expectInsideViewport(target);
+    expect(await pageOverflow(page)).toBe(0);
+    await page.screenshot({path: `${EVIDENCE}/${name}-text-320.png`});
   });
 }

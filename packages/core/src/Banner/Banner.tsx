@@ -286,6 +286,8 @@ const styles = stylex.create({
     // the flex item's min-content width and pushes the page into horizontal
     // scrolling at 320px, which is a WCAG 1.4.10 reflow failure.
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   description: {
     margin: 0,
@@ -295,6 +297,8 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-secondary'],
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   // Built-in status title, description, and icon inherit the header's on-muted
   // color. Built-in controls receive the same context on their Button element

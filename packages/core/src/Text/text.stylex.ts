@@ -233,17 +233,20 @@ export const sizeByLevelStyles = stylex.create({
 // wraps instead of overflowing, so in ordinary flow text does not force
 // horizontal scrolling at 320 CSS px (WCAG 2.2 1.4.10; Text and Heading FR3).
 // `break-word` keeps min-content, so tables and auto-sized columns lay out
-// ordinary words as before. A flex child still needs `min-width: 0` from its
-// container, and setting `overflow-wrap` here means a container's `anywhere`
-// no longer reaches this text.
+// ordinary words as before; a flex child still needs `min-width: 0` from its
+// container. A container that wraps with `anywhere` (an empty state, a toast,
+// a banner) sets the private `--_astryx-text-overflow-wrap` beside its own
+// `overflow-wrap`, so Text inside it keeps `anywhere`.
+const NON_TRUNCATED_OVERFLOW_WRAP =
+  'var(--_astryx-text-overflow-wrap, break-word)';
 export const displayStyles = stylex.create({
   inline: {
     display: 'inline',
-    overflowWrap: 'break-word',
+    overflowWrap: NON_TRUNCATED_OVERFLOW_WRAP,
   },
   block: {
     display: 'block',
-    overflowWrap: 'break-word',
+    overflowWrap: NON_TRUNCATED_OVERFLOW_WRAP,
   },
 });
 

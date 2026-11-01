@@ -11,6 +11,12 @@ import {Text} from './Text';
 import type {TextType} from './Text';
 import type {TextColor} from '../theme/types';
 
+// jsdom does not resolve var(); the browser spec checks the resolved value.
+// Untruncated text reads the private container override, else break-word.
+const DEFAULT_WRAP = 'var(--_astryx-text-overflow-wrap,break-word)';
+const wrapOf = (element: Element) =>
+  getComputedStyle(element).overflowWrap.replace(/\s/g, '');
+
 describe('Text', () => {
   describe('rendering', () => {
     it('renders without type prop (defaults to body)', () => {
@@ -237,12 +243,8 @@ describe('Text', () => {
           <Text display="block">{`${token}/block`}</Text>
         </>,
       );
-      expect(getComputedStyle(screen.getByText(token)).overflowWrap).toBe(
-        'break-word',
-      );
-      expect(
-        getComputedStyle(screen.getByText(`${token}/block`)).overflowWrap,
-      ).toBe('break-word');
+      expect(wrapOf(screen.getByText(token))).toBe(DEFAULT_WRAP);
+      expect(wrapOf(screen.getByText(`${token}/block`))).toBe(DEFAULT_WRAP);
     });
 
     it('leaves single-line truncation clipping on one line', () => {
