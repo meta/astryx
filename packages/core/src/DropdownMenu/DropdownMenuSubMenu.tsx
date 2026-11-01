@@ -1183,7 +1183,9 @@ export function DropdownMenuSubMenu(
   // on the menu element shows the ring the base style otherwise removes.
   const handleMenuFocus = (event: React.FocusEvent<HTMLDivElement>) => {
     if (hasRegions && event.target === event.currentTarget) {
-      setIsMenuKeyboardFocused(getInteractionModality() === 'keyboard');
+      setIsMenuKeyboardFocused(
+        getInteractionModality(event.currentTarget) === 'keyboard',
+      );
     }
   };
   const handleMenuBlur = (event: React.FocusEvent<HTMLDivElement>) => {

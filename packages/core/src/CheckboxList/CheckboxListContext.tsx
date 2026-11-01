@@ -28,6 +28,14 @@ export interface CheckboxListContextValue {
    * and AT-discoverable; toggling is still blocked.
    */
   hasDisabledMessage?: boolean;
+  /**
+   * The id of the group's reason tooltip while `hasDisabledMessage` is true.
+   * The reason describes the group (CheckboxList FR1) and every checkbox adds
+   * it to its own `aria-describedby` (FR9): a screen reader announces a
+   * checkbox's description when the checkbox takes focus, which it does not
+   * reliably do for a description on the group.
+   */
+  disabledMessageID?: string;
   isReadOnly: boolean;
   /**
    * Values of the items whose `changeAction` is pending. Each matching item
