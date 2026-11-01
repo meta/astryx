@@ -499,10 +499,41 @@ describe('notRunLine', () => {
           skipped('pr-a11y (full audit)'),
           skipped('pr-rtl (core)'),
         ],
-        touched: {wideChange: false, componentCount: 2, components: []},
+        touched: {
+          wideChange: false,
+          componentCount: 1,
+          components: [
+            {
+              key: 'core/A',
+              results: {visual: 'pass', a11y: 'not-run', rtl: 'not-run'},
+            },
+          ],
+        },
       }),
     ).toBe(
       'Touched components checked; add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run the full suites.\n\n',
+    );
+    // Every result not-run: never claim a check that did not happen.
+    expect(
+      notRunLine({
+        jobs: [
+          skipped('pr-rtl (core)'),
+          {name: 'Stable visual scout (1/5)', conclusion: 'success'},
+          {name: 'pr-a11y', conclusion: 'success'},
+        ],
+        touched: {
+          wideChange: false,
+          componentCount: 1,
+          components: [
+            {
+              key: 'core/A',
+              results: {visual: 'not-run', a11y: 'not-run', rtl: 'not-run'},
+            },
+          ],
+        },
+      }),
+    ).toBe(
+      'Touched components identified; checks did not run. Add `ci:run-rtl` to run it.\n\n',
     );
   });
 

@@ -483,8 +483,16 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
   // checked, so the labels run the full suites.
   if (touched?.wideChange === true)
     return `Wide change (${num(touched.componentCount)} components): add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
-  if (touched)
+  // Claim the touched check only when it produced a result.
+  const checked = (touched?.components || []).some(component =>
+    Object.values(component.results || {}).some(
+      result => result != null && result !== 'not-run',
+    ),
+  );
+  if (touched && checked)
     return `Touched components checked; add ${list} to run the full suite${labels.length === 1 ? '' : 's'}.\n\n`;
+  if (touched)
+    return `Touched components identified; checks did not run. Add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
   return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
 }
 
