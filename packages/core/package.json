@@ -824,6 +824,11 @@
       "types": "./dist/internal/touch.d.ts",
       "default": "./dist/internal/touch.js"
     },
+    "./internal/motion": {
+      "source": "./src/internal/motion.ts",
+      "types": "./dist/internal/motion.d.ts",
+      "default": "./dist/internal/motion.js"
+    },
     "./internal/tokenizer-presentation": {
       "source": "./src/internal/tokenizer-presentation.ts",
       "types": "./dist/internal/tokenizer-presentation.d.ts",

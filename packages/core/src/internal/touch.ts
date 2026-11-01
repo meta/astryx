@@ -2,7 +2,9 @@
 
 /**
  * @file touch.ts
- * @input The gesture core: the arena, the recognizers, and their geometry
+ * @input The gesture core: the arena, the recognizers, their geometry and
+ *   their React hook; the touch-presentation hook; the writing-direction
+ *   read; whether the click guard is armed
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
  *   for Lab components, re-exported by name
  * @position An internal entry reserved for Astryx's own packages:
@@ -39,3 +41,7 @@ export {
 export {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
 export {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 export {DEFAULT_ENVIRONMENT} from '../gestures/types';
+export {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+export {isRtlElement} from '../hooks/isRtlElement';
+export {isClickGuardArmed} from '../utils/clickGuard';
+export {useTouchPresentation} from '../utils/touchPresentation';

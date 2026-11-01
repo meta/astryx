@@ -174,9 +174,17 @@ describe('resolveSnapPoint', () => {
     const pkg = JSON.parse(
       fs.readFileSync(path.join(here, '../../package.json'), 'utf8'),
     ) as {exports: Record<string, unknown>};
+    // No public entry names motion. The internal entries are Astryx's own
+    // (architecture:react-component-runtime INV13), and internal/motion
+    // re-exports no release policy either.
     expect(
-      Object.keys(pkg.exports).filter(key => key.includes('motion')),
+      Object.keys(pkg.exports).filter(
+        key => key.includes('motion') && !key.startsWith('./internal/'),
+      ),
     ).toEqual([]);
+    expect(
+      fs.readFileSync(path.join(here, '../internal/motion.ts'), 'utf8'),
+    ).not.toMatch(/resolveSnapPoint/);
     const barrels = fs
       .readdirSync(here)
       .filter(name => /^index\.(ts|tsx|js|mjs)$/.test(name));
