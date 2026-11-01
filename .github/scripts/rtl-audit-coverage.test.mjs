@@ -21,6 +21,7 @@ import {
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
   glyphRendersOnBlockAxis,
+  isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   storyIdsForComponentFilters,
@@ -1009,5 +1010,27 @@ describe('glyphRendersOnBlockAxis', () => {
   it('ignores a glyph with no horizontal direction or no matrix', () => {
     expect(glyphRendersOnBlockAxis(null, quarterTurn)).toBe(false);
     expect(glyphRendersOnBlockAxis('right', undefined)).toBe(false);
+  });
+});
+
+describe('isUnchangedBlockAxisPair', () => {
+  const down = {dir: 'right', matrix: [0, 1, -1, 0]}; // rotate(90deg)
+  const up = {dir: 'right', matrix: [0, -1, 1, 0]}; // rotate(-90deg)
+  const mirroredDown = {dir: 'right', matrix: [0, 1, 1, 0]};
+  const right = {dir: 'right', matrix: [1, 0, 0, 1]};
+
+  it('leaves an expanded chevron that points down in both directions', () => {
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(down, mirroredDown)).toBe(true);
+  });
+
+  it('judges a chevron that points down in LTR and up in RTL', () => {
+    expect(isUnchangedBlockAxisPair(down, up)).toBe(false);
+  });
+
+  it('judges a pair that is horizontal on either side or missing', () => {
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, undefined)).toBe(false);
   });
 });

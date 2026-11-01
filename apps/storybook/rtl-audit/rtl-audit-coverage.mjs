@@ -520,6 +520,26 @@ export function glyphRendersOnBlockAxis(dir, matrix) {
   return Math.abs(dy) > Math.abs(dx);
 }
 
+/**
+ * Is this LTR/RTL pair one D1 leaves unjudged: a horizontal glyph that renders
+ * pointing the SAME way along the block axis in both directions (an expanded
+ * disclosure, down in both)? A glyph that points down in LTR and up in RTL
+ * changed direction, which DR5 forbids, so it stays judged.
+ */
+export function isUnchangedBlockAxisPair(ltr, rtl) {
+  if (
+    !ltr ||
+    !rtl ||
+    !glyphRendersOnBlockAxis(ltr.dir, ltr.matrix) ||
+    !glyphRendersOnBlockAxis(rtl.dir, rtl.matrix)
+  ) {
+    return false;
+  }
+  // The vertical component of each tip: positive is down in CSS.
+  const tipY = glyph => (glyph.dir === 'right' ? 1 : -1) * glyph.matrix[1];
+  return Math.sign(tipY(ltr)) === Math.sign(tipY(rtl));
+}
+
 /** Classify one stable LTR/RTL contextual-decoration pair. */
 export function classifyDirectionalDecorationPair(ltr, rtl) {
   if (!ltr || !rtl) {

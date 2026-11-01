@@ -66,7 +66,7 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
-  glyphRendersOnBlockAxis,
+  isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   validateStoryRtlAuditParameters,
@@ -774,13 +774,11 @@ async function autoD1(
       L && R && L.flip && R.flip &&
       L.matrix.every((v, i) => Math.abs(v - R.matrix[i]) < 0.01);
     // A horizontal glyph turned a quarter turn (an expanded disclosure) points
-    // up or down. Pointing along the block axis in BOTH directions, it carries
-    // no inline meaning (DR5): leaving it unmirrored is correct, so it is not
-    // judged. A mirrored one renders the same and still counts as handled.
-    const blockAxis =
-      !mirrored && !swapped && L && R &&
-      glyphRendersOnBlockAxis(L.dir, L.matrix) &&
-      glyphRendersOnBlockAxis(R.dir, R.matrix);
+    // up or down. Pointing the same way along the block axis in BOTH
+    // directions, it carries no inline meaning (DR5): leaving it unmirrored is
+    // correct, so it is not judged. One that flips between down and up is
+    // still judged; a mirrored one renders the same and counts as handled.
+    const blockAxis = !mirrored && !swapped && isUnchangedBlockAxisPair(L, R);
     if (blockAxis) {
       blockAxisOnly++;
       perIcon.push({icon: k, ltrDir: L.dir, rtlDir: R.dir, ltrMatrix: L.matrix, rtlMatrix: R.matrix, blockAxis: true});
