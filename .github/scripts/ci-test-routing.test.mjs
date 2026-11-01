@@ -779,7 +779,7 @@ describe('ci.yml interaction proofs', () => {
     // One fixed runner: out of scope, every step after the scope step skips.
     expect(KNOWN_RUNNERS.has(job['runs-on']), job['runs-on']).toBe(true);
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
-    expect(job.needs).toEqual(['admission', 'build-storybook']);
+    expect(job.needs).toEqual(['room', 'admission', 'build-storybook']);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&

@@ -190,7 +190,9 @@ describe('Node-tooling CI routing', () => {
   });
 
   it('preserves the historical joins and fails them on owned-lane failure', () => {
+    // room only tells test when CI is full (ci-admission.test.mjs).
     expect(ci.jobs.test.needs).toEqual([
+      'room',
       'release-bump',
       'test-ui',
       'test-node',
@@ -199,7 +201,11 @@ describe('Node-tooling CI routing', () => {
       'pr-interaction',
       'pr-interaction-webkit',
     ]);
-    expect(ci.jobs.build.needs).toEqual(['build-storybook', 'typecheck']);
+    expect(ci.jobs.build.needs).toEqual([
+      'room',
+      'build-storybook',
+      'typecheck',
+    ]);
     const testJoin = step(ci.jobs.test, 'Require expected test-owner outcomes');
     expect(testJoin.run).toBe('node .github/scripts/ci-test-join.mjs');
     expect(ci.jobs.test.permissions).toEqual({
