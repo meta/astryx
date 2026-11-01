@@ -22,6 +22,10 @@
  * Outside CI an already-running `next start` on the port is reused, so a
  * server started by hand works too.
  *
+ * The docs-prompt spec needs NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN and
+ * NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN set for both the build and the run (CI
+ * uses placeholder origins); without them it skips locally and fails in CI.
+ *
  * SYNC: When the docsite gains another browser-only contract, add its spec
  * under e2e/.
  */
