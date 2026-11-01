@@ -25,6 +25,13 @@ import {
 } from '../theme/tokens.stylex';
 
 /**
+ * The field-focus shadow: the inset ring a focused field paints inside its
+ * border. Status styles below keep it, so a field in a status still shows
+ * keyboard focus (`spec:AST-020` FR1, `architecture:interaction-modality`).
+ */
+const fieldFocusShadow = `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`;
+
+/**
  * Base wrapper styles shared by all input components.
  * Components apply these as a foundation and override specific properties
  * (e.g. padding, alignItems, gap) as needed.
@@ -60,7 +67,7 @@ export const inputWrapperStyles = stylex.create({
         {
           '@media (hover: hover)': `inset 0px 0px 0px 2px color-mix(in srgb, ${colorVars['--color-border-emphasized']} 30%, transparent)`,
         },
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+      ':focus-within': fieldFocusShadow,
     },
     outline: 'none',
   },
@@ -91,7 +98,8 @@ export const inputStatusBorderStyles = stylex.create({
 
 /**
  * Status hover shadow styles for input wrappers.
- * Keyed by InputStatusType.
+ * Keyed by InputStatusType. They replace the wrapper's whole `boxShadow`, so
+ * each keeps the field-focus shadow under `:focus-within`.
  */
 export const inputStatusHoverShadowStyles = stylex.create({
   warning: {
@@ -101,6 +109,7 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-warning'],
         },
+      ':focus-within': fieldFocusShadow,
     },
   },
   error: {
@@ -110,6 +119,7 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-error'],
         },
+      ':focus-within': fieldFocusShadow,
     },
   },
   success: {
@@ -119,6 +129,7 @@ export const inputStatusHoverShadowStyles = stylex.create({
         {
           '@media (hover: hover)': shadowVars['--shadow-inset-success'],
         },
+      ':focus-within': fieldFocusShadow,
     },
   },
 });
