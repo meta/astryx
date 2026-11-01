@@ -122,15 +122,17 @@ applies.
 
 ## Verification map
 
-| Contract | Verification                                                                   | Representative states              | Mutation or failure expectation                            | Audit section               |
-| -------- | ------------------------------------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------- | --------------------------- |
-| FR1, FR2 | `MediaTheme.dom.test.tsx` `off` tests                                          | `off`                              | A marker on `off`, or a missing element, fails.            | `audit:MediaTheme/behavior` |
-| FR3      | `MediaTheme.dom.test.tsx` fallback, explicit-mode, probe, and re-measure tests | `auto` unmeasured; changed surface | A wrong fallback, a leftover probe, or a stale mark fails. | `audit:MediaTheme/behavior` |
+| Contract | Verification                                                                             | Representative states  | Mutation or failure expectation                                | Audit section               |
+| -------- | ---------------------------------------------------------------------------------------- | ---------------------- | -------------------------------------------------------------- | --------------------------- |
+| FR1, FR2 | `MediaTheme.dom.test.tsx` explicit-mode marker and `off` tests                           | `dark`; `light`; `off` | A wrong marker, a marker on `off`, or a missing element fails. | `audit:MediaTheme/behavior` |
+| FR3      | `MediaTheme.dom.test.tsx` fallback, explicit-fallback, ignored-fallback, and probe tests | `auto` unmeasured      | A wrong fallback or a leftover probe fails.                    | `audit:MediaTheme/behavior` |
 
 Read from source, with no focused test yet:
 
-- FR1: `display: contents`.
-- FR2: the `dark` and `light` markers and the text color.
+- FR1: `display: contents`, and children not remounting when the mode
+  switches to or from `off`.
+- FR2: the primary text color.
+- FR3: re-measuring when the surface changes.
 
 ## Decision log
 
