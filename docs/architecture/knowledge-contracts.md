@@ -1163,12 +1163,11 @@ next schema version; and the component id pattern does not yet accept a
 language-qualified id such as `component:swift/Button`. Until all three land,
 package records under `packages/native/specs/` are checked only by review.
 `pnpm check:knowledge` checks a platform record
-(`docs/specs/components/<ComponentRoot>/<PublicName>.<language>.spec.md`) by
-the rules of its schema version, accepting its language-qualified id, and
-checks that `platform_of` names its core component and that its `verified_by`
-paths exist; it does not yet require the latest schema version. The spec-owner
-gate and `pnpm specs:for` treat a platform record like the core record beside
-it.
+(`docs/specs/components/<ComponentRoot>/<PublicName>.<language>.spec.md`) like
+every other record, accepting its language-qualified id, and also checks that
+`platform_of` names its core component and that its `verified_by` paths exist.
+The spec-owner gate and `pnpm specs:for` treat a platform record like the core
+record beside it.
 
 Current enforcement gap: no checked-in gate yet proves the open-pull-request
 search. Until one exists, the pull-request summary records the search terms,

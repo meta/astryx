@@ -1002,24 +1002,12 @@ export function discoverPlatformComponentRecords(root = DEFAULT_ROOT) {
 }
 
 /**
- * Checks a platform record with the shared record validator for its
- * schema_version, allowing its language-qualified id
- * (`component:<language>/<PublicName>`), then what only a platform record
- * has: `platform_of` naming the core component, the core record beside it
- * declaring that id, and `verified_by` paths that exist. `ids` maps every
- * other record id to its path and authority.
+ * What only a platform record has, checked after the record loop has read every
+ * id: `platform_of` names the core component, the core record beside it
+ * declares that id, and its `verified_by` paths exist. `ids` maps every record
+ * id to its path and authority.
  */
-export function validatePlatformComponentRecords(
-  root,
-  {
-    ids,
-    schemas,
-    templateVersions,
-    designApprovalOwners,
-    engineeringApprovalOwners,
-    repositoryFiles,
-  },
-) {
+export function validatePlatformComponentRecords(root, {ids, repositoryFiles}) {
   const problems = [];
   const tracked = repositoryFiles ? new Set(repositoryFiles) : null;
   for (const absolutePath of discoverPlatformComponentRecords(root)) {
@@ -1027,40 +1015,15 @@ export function validatePlatformComponentRecords(
       .relative(root, absolutePath)
       .split(path.sep)
       .join('/');
-    const {componentRoot, language, publicName} =
+    const {componentRoot, publicName} =
       classifyPlatformComponentSpecPath(filePath);
-    const document = parseKnowledgeDocument(
+    const {frontmatter} = parseKnowledgeDocument(
       fs.readFileSync(absolutePath, 'utf8'),
       filePath,
     );
-    const frontmatter = document.frontmatter;
-
-    const recordVersion = frontmatter.get('schema_version');
-    const versionedSchema = schemas.get(recordVersion);
-    if (!versionedSchema) {
-      problems.push(
-        `${filePath}: schema_version ${JSON.stringify(recordVersion)} has no schema file.`,
-      );
-      continue;
-    }
     if (frontmatter.get('kind') !== 'component') {
       problems.push(`${filePath}: a platform record must be kind: component.`);
-      continue;
     }
-    problems.push(
-      ...validateAgainstSchema(
-        document,
-        versionedSchema.schema,
-        path.relative(root, versionedSchema.schemaPath),
-        filePath,
-        false,
-        templateVersions.component,
-        designApprovalOwners,
-        engineeringApprovalOwners,
-        {idPattern: `^component:${language}/${publicName}$`},
-      ),
-    );
-
     const coreId = `component:${publicName}`;
     if (frontmatter.get('platform_of') !== coreId) {
       problems.push(
@@ -2234,10 +2197,19 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
     }
   }
 
-  for (const absolutePath of discoverKnowledgeRecords(root)) {
+  const platformRecordPaths = new Set(discoverPlatformComponentRecords(root));
+  for (const absolutePath of [
+    ...discoverKnowledgeRecords(root),
+    ...platformRecordPaths,
+  ]) {
     const filePath = path.relative(root, absolutePath);
     const content = fs.readFileSync(absolutePath, 'utf8');
     const document = parseKnowledgeDocument(content, filePath);
+    // A platform record is checked like any record, with its
+    // language-qualified id (`component:<language>/<PublicName>`).
+    const platform = platformRecordPaths.has(absolutePath)
+      ? classifyPlatformComponentSpecPath(filePath.split(path.sep).join('/'))
+      : null;
     const pathApplicability = parsePathApplicabilityBlock(content, filePath);
     problems.push(
       ...pathApplicability.problems,
@@ -2277,6 +2249,11 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
         templateVersions[document.frontmatter.get('kind')],
         designApprovalOwners,
         engineeringApprovalOwners,
+        platform
+          ? {
+              idPattern: `^component:${platform.language}/${platform.publicName}$`,
+            }
+          : {},
       ),
     );
     const authority = document.frontmatter.get('authority');
@@ -2296,7 +2273,9 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
       );
       const parsed = parseAnatomyThemingBlock(content, filePath);
       problems.push(...parsed.problems);
-      if (parsed.mapping != null) {
+      // Theme targets map a core component's anatomy; a platform record's
+      // block is parsed but has no core contract to check against.
+      if (parsed.mapping != null && !platform) {
         if (isActiveRecord) {
           delegations.push(...collectDelegations(parsed.mapping, filePath));
         }
@@ -2334,18 +2313,11 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
         });
       }
     }
-    records.push({filePath, absolutePath, document});
+    if (!platform) records.push({filePath, absolutePath, document});
   }
 
   problems.push(
-    ...validatePlatformComponentRecords(root, {
-      ids,
-      schemas,
-      templateVersions,
-      designApprovalOwners,
-      engineeringApprovalOwners,
-      repositoryFiles,
-    }),
+    ...validatePlatformComponentRecords(root, {ids, repositoryFiles}),
     ...validateComponentModuleRelationships(
       root,
       records,

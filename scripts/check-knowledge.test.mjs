@@ -1762,9 +1762,25 @@ describe('knowledge validation', () => {
     ).toEqual([
       'docs/specs/components/Button/Button.swift.spec.md: id must match "^component:swift/Button$".',
       'docs/specs/components/Button/Button.swift.spec.md: owners must be a non-empty inline list.',
+      'docs/specs/components/Button/Button.swift.spec.md: duplicate id component:Button; first declared in docs/specs/components/Button/Button.spec.md.',
       'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
       'docs/specs/components/Button/Button.swift.spec.md: verified_by path packages/native/apple/Tests/Missing.swift is not in the repository.',
     ]);
+    // Its applicability blocks are validated, since specs:for reads them.
+    fs.writeFileSync(
+      swift,
+      withReviewApplicability(platformRecord(), {'not-a-trigger': ['INV1']}) +
+        '\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": []}\n```\n',
+    );
+    const blockProblems = (await validateKnowledgeRoot(root)).filter(problem =>
+      problem.startsWith('docs/specs/components/Button/Button.swift.spec.md'),
+    );
+    expect(
+      blockProblems.some(problem => problem.includes('review-applicability')),
+    ).toBe(true);
+    expect(blockProblems).toContain(
+      'docs/specs/components/Button/Button.swift.spec.md: path-applicability:v1 requires a non-empty paths list.',
+    );
     // The shared validator's current-record rules apply, verified_by included.
     expect(
       await swiftProblems({authority: 'current', verified_by: '[]'}),
