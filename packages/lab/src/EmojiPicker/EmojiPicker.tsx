@@ -5,7 +5,7 @@
 /**
  * @file EmojiPicker.tsx
  * @input Uses React, StyleX, theme tokens, useGridFocus, useTranslator,
- *   TextInput, ScrollableArea, Text, Spinner, Icon, and the lazily loaded CLDR
+ *   TextInput, ScrollableArea, Text, LoadingMessage, Icon, and the lazily loaded CLDR
  *   emoji set (emojiData.ts)
  * @output Exports EmojiPicker, EmojiPickerProps, EmojiOption, EmojiCategory,
  *   DEFAULT_FREQUENT_EMOJIS, and a persistent search-status announcement
@@ -60,7 +60,7 @@ import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {LoadingMessage} from '../LoadingMessage';
-import {useAnnounceBusyStart} from '../useAnnounceBusyStart';
+import {useStatusAnnouncement} from '../useStatusAnnouncement';
 
 export interface EmojiOption {
   /** The emoji character, e.g. "🎉". */
@@ -407,9 +407,12 @@ export function EmojiPicker({
   ]);
   const firstMatch = sections[0]?.emojis[0];
   // The ring is silent; the picker announces its own busy start (AST-086 FR8).
-  useAnnounceBusyStart(
-    isLoading && (queryWords.length === 0 || sections.length === 0),
-    t('@astryx.emojiPicker.loading'),
+  useStatusAnnouncement(
+    isLoading && (queryWords.length === 0 || sections.length === 0)
+      ? t('@astryx.emojiPicker.loading')
+      : null,
+    'polite',
+    {skipPageLoad: true},
   );
   const noResultsMessage =
     !isLoading && queryWords.length > 0 && sections.length === 0

@@ -43,7 +43,7 @@ import type {
   ScheduleHeaderContent,
   ScheduleEventColor,
 } from './types';
-import {useAnnounceBusyStart} from '../useAnnounceBusyStart';
+import {useStatusAnnouncement} from '../useStatusAnnouncement';
 
 const DEFAULT_EVENT_CATEGORY: ScheduleCategory = {
   label: 'Event',
@@ -69,7 +69,9 @@ export function ScheduleFrame({
 }) {
   const {plugins} = useScheduleContext();
   // The ring is silent; the Schedule announces its own busy start (AST-086 FR8).
-  useAnnounceBusyStart(isLoading, 'Loading events');
+  useStatusAnnouncement(isLoading ? 'Loading events' : null, 'polite', {
+    skipPageLoad: true,
+  });
   const initialHeader: ScheduleHeaderContent = {
     startContent: null,
     centerContent: (

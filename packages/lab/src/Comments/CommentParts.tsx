@@ -7,9 +7,10 @@
  * @input Uses React, StyleX, theme tokens, and Astryx primitives (Avatar,
  *   Badge, Banner, Blockquote, Button, Card, Dialog, EmptyState, Item, Link,
  *   Section, Skeleton, Text, Thumbnail, Timestamp, Tooltip), plus Lab's
- *   loading-message and shared busy-start announcement helpers
- * @output Exports comment row parts, loading skeletons, and an edit history
- *   dialog whose busy start uses the shared in-dialog announcement channel
+ *   loading-message and shared status-announcement helpers
+ * @output Exports the presentational parts of a comment row: author name and
+ *   avatar, metadata, quoted passages, progress, clamped body, error banner,
+ *   reply rail, activity event row, edit history dialog, and loading skeletons
  * @position Internal building blocks of the Comments family
  */
 
@@ -56,7 +57,6 @@ import {
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {CommentIcon} from './icons';
-import {useStatusAnnouncement} from './useStatusAnnouncement';
 import {eventAnchorId, type AnyComment} from './utils';
 import type {
   CommentAnchor,
@@ -67,7 +67,7 @@ import type {
   CommentActivityEvent,
 } from './types';
 import {LoadingMessage} from '../LoadingMessage';
-import {useAnnounceBusyStart} from '../useAnnounceBusyStart';
+import {useStatusAnnouncement} from '../useStatusAnnouncement';
 
 /** The 28px avatar column every comment row, reply, and event aligns to. */
 export const AVATAR_SIZE = `calc(${spacingVars['--spacing-6']} + ${spacingVars['--spacing-1']})`;
@@ -297,13 +297,13 @@ export function ErrorBanner({
   const t = useTranslator();
   const bannerRef = useRef<HTMLDivElement>(null);
   useStatusAnnouncement(
-    bannerRef,
     content.isRetrying === true || content.isAnnounced === true
       ? null
       : description != null
         ? t('@astryx.comments.errorAnnouncement', {title, description})
         : title,
     'assertive',
+    {ref: bannerRef},
   );
   return (
     <Banner
@@ -496,7 +496,7 @@ export function CommentProgressStatus({progress}: {progress: CommentProgress}) {
   // The label carries no live role: it mounts already holding its text. It is
   // announced politely through the shared channel, unless the chat log around
   // it delivers it (spec:AST-086 FR2, FR4).
-  useStatusAnnouncement(labelRef, progress.label, 'polite');
+  useStatusAnnouncement(progress.label, 'polite', {ref: labelRef});
   return (
     <HStack
       gap={1}
@@ -656,7 +656,9 @@ export function CommentAvatarFrame({user}: {user: CommentUser}) {
 
 /** Runs beneath Dialog so useAnnounce reaches its modal scope (AST-086 FR14). */
 function BusyStatus({isBusy, message}: {isBusy: boolean; message: string}) {
-  useAnnounceBusyStart(isBusy, message);
+  useStatusAnnouncement(isBusy ? message : null, 'polite', {
+    skipPageLoad: true,
+  });
   return null;
 }
 
