@@ -144,6 +144,54 @@ test.describe('on a phone (coarse pointer)', () => {
     await page.getByRole('menuitem', {name: 'Folder A'}).tap();
     await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
+
+  test("a drill-in tap's touch sends no click and no mouse event to the page (spec:AST-094 FR21)", async ({
+    page,
+  }) => {
+    await mount(page);
+    const trigger = page.getByRole('button', {name: 'Actions'});
+    await trigger.tap();
+    await expect(page.getByRole('menu', {name: 'Actions'})).toBeVisible();
+
+    // What the browser sends for the next touch, logged ahead of the page's own
+    // listeners, and, for the touchend, after them (whether it was cancelled).
+    await page.evaluate(() => {
+      const log: string[] = [];
+      (window as unknown as {fr21Log: string[]}).fr21Log = log;
+      for (const type of ['pointerup', 'mousedown', 'mouseup', 'click']) {
+        window.addEventListener(
+          type,
+          event => {
+            if (event.isTrusted) {
+              log.push(type);
+            }
+          },
+          true,
+        );
+      }
+      window.addEventListener('touchend', event => {
+        if (event.isTrusted) {
+          log.push(event.defaultPrevented ? 'touchend cancelled' : 'touchend');
+        }
+      });
+    });
+    await page.getByRole('menuitem', {name: 'Move to'}).tap();
+    await expect(page.getByRole('menu', {name: 'Move to'})).toBeVisible();
+    // Past the stray-click window, so a late click would have shown by now.
+    await page.waitForTimeout(700);
+
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {fr21Log: string[]}).fr21Log,
+      ),
+    ).toEqual(['pointerup', 'touchend cancelled']);
+    await expect(shownRows(page)).toHaveText([
+      'Back to Actions',
+      'Folder A',
+      'Folder B',
+      'Archive',
+    ]);
+  });
 });
 
 test.describe('on a laptop (fine pointer)', () => {

@@ -27,6 +27,13 @@
  *   tracked release and disarms at the next pointer press or after a short
  *   window; a click with `detail === 0` (a keyboard's or a screen reader's)
  *   always passes.
+ * - A finger's tracked release, on every device, also cancels that touch's
+ *   `touchend`, so the browser sends no click and no compatibility mouse
+ *   events for it (spec:AST-094 FR21, FR43), and the swallower stands down:
+ *   nothing is left for it to swallow. A touch's click comes when the browser's tap
+ *   recognizer sends it, which a busy main thread can hold back past the
+ *   stray-click window, by when a drill-in may have put another row under
+ *   the finger; with the `touchend` cancelled no such click exists.
  * - A mouse press on the trigger opens the menu at once; a finger held on the
  *   trigger opens it after the long-press delay. The settle rule decides
  *   whether the opening gesture's release may act (see menuPressGesture.ts).
@@ -171,9 +178,66 @@ function armStrayClick(doc: Document): void {
   swallower.timer = setTimeout(disarmStrayClick, MENU_PRESS_STRAY_CLICK_MS);
 }
 
+// =============================================================================
+// A tracked finger's touchend (spec:AST-094 FR21)
+// =============================================================================
+
+interface TouchEndCanceller {
+  doc: Document;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+let touchEndCanceller: TouchEndCanceller | null = null;
+
+// Held only while armed (react-component-runtime INV5): from a finger's
+// tracked release to that touch's `touchend`.
+function disarmTouchEndCancel(): void {
+  if (touchEndCanceller == null) {
+    return;
+  }
+  const {doc, timer} = touchEndCanceller;
+  touchEndCanceller = null;
+  clearTimeout(timer);
+  doc.removeEventListener('touchend', onTouchEndCapture, true);
+  doc.removeEventListener('pointerdown', disarmTouchEndCancel, true);
+}
+
+function onTouchEndCapture(event: TouchEvent): void {
+  // A touch the browser took for a scroll ends with an uncancelable touchend,
+  // and no click follows it anyway.
+  if (event.cancelable) {
+    event.preventDefault();
+    // No click follows a cancelled touchend, so the swallower armed for this
+    // release stands down: a later click with no press behind it acts
+    // (module:DropdownMenu/useMenuPress FR5).
+    disarmStrayClick();
+  }
+  disarmTouchEndCancel();
+}
+
+/**
+ * Cancels the `touchend` of the touch whose release the model just tracked.
+ * A touch's pointer events come before its touch events, so the `touchend`
+ * that follows the release is that touch's own; the next pointer press, or the
+ * stray-click window, ends the wait.
+ */
+function armTouchEndCancel(doc: Document): void {
+  disarmTouchEndCancel();
+  doc.addEventListener('touchend', onTouchEndCapture, {
+    capture: true,
+    passive: false,
+  });
+  doc.addEventListener('pointerdown', disarmTouchEndCancel, true);
+  touchEndCanceller = {
+    doc,
+    timer: setTimeout(disarmTouchEndCancel, MENU_PRESS_STRAY_CLICK_MS),
+  };
+}
+
 /** Test-only: forget an armed swallower between cases. */
 export function __resetMenuPressForTest(): void {
   disarmStrayClick();
+  disarmTouchEndCancel();
 }
 
 // =============================================================================
@@ -548,6 +612,9 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
           // Detach before acting: the activation usually closes the menu.
           endGesture();
           armStrayClick(doc);
+          if (native?.pointerType === 'touch') {
+            armTouchEndCancel(doc);
+          }
           if (native != null) {
             activate(effect.row, native);
           }
@@ -557,6 +624,9 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
           endGesture();
           if (effect.stray) {
             armStrayClick(doc);
+            if (native?.pointerType === 'touch') {
+              armTouchEndCancel(doc);
+            }
           }
           if (effect.dismiss) {
             optionsRef.current.onDismiss?.();

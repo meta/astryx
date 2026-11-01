@@ -108,6 +108,14 @@ function Harness({
 const row = (label: string) => screen.getByRole('menuitem', {name: label});
 const touch = (pointerId = 1) => ({pointerType: 'touch', pointerId});
 const mouse = (pointerId = 1) => ({pointerType: 'mouse', pointerId, button: 0});
+const pen = (pointerId = 1) => ({pointerType: 'pen', pointerId, button: 0});
+
+/** A cancelable `touchend` at `target`, as a browser fires it after the touch's `pointerup`. */
+function fireTouchEnd(target: Element): Event {
+  const event = new Event('touchend', {bubbles: true, cancelable: true});
+  target.dispatchEvent(event);
+  return event;
+}
 
 beforeEach(() => {
   __resetMenuPressForTest();
@@ -301,6 +309,153 @@ describe('useMenuPress — one gesture, one activation', () => {
     });
     fireEvent.click(row('B'), {detail: 1});
     expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("useMenuPress — a finger's touchend (spec:AST-094 FR21)", () => {
+  // A phone or tablet (a coarse primary pointer), or a touchscreen laptop
+  // (a fine one): FR21 covers a finger on every device (spec:AST-094 FR43).
+  const stubPrimaryPointer = (kind: 'coarse' | 'fine') => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: kind === 'coarse' && query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }));
+  };
+  beforeEach(() => {
+    stubPrimaryPointer('coarse');
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("a finger's tap on a row cancels that touch's touchend, so the browser sends no click", () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerUp(row('A'), touch());
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledWith('A');
+  });
+
+  it('a finger that slides onto another row and lifts there cancels its touchend', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerMove(row('B'), touch());
+    fireEvent.pointerUp(row('B'), touch());
+    // The touch's events stay with the element it landed on.
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
+    expect(onSelect).toHaveBeenCalledWith('B');
+  });
+
+  it('a finger released outside the menu cancels its touchend, and the menu stays open', () => {
+    const onDismiss = vi.fn();
+    render(<Harness onDismiss={onDismiss} />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerMove(screen.getByTestId('outside'), touch());
+    fireEvent.pointerUp(screen.getByTestId('outside'), touch());
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('the finger that opened the menu from the trigger cancels its touchend at the lift', () => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    fireEvent.pointerDown(trigger, touch());
+    act(() => {
+      vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+    });
+    fireEvent.pointerMove(row('C'), touch());
+    fireEvent.pointerUp(row('C'), touch());
+    expect(fireTouchEnd(trigger).defaultPrevented).toBe(true);
+    expect(onSelect).toHaveBeenCalledWith('C');
+  });
+
+  it("a finger's tap on the trigger keeps its touchend: its click opens the menu", () => {
+    const onOpenChange = vi.fn();
+    render(<Harness onOpenChange={onOpenChange} />);
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    fireEvent.pointerDown(trigger, touch());
+    fireEvent.pointerUp(trigger, touch());
+    expect(fireTouchEnd(trigger).defaultPrevented).toBe(false);
+    fireEvent.click(trigger, {detail: 1});
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it('a mouse or a pen release cancels no touchend; its stray click is still swallowed', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    for (const pointer of [mouse, pen]) {
+      fireEvent.pointerDown(row('A'), pointer());
+      fireEvent.pointerUp(row('A'), pointer());
+      expect(fireTouchEnd(row('A')).defaultPrevented).toBe(false);
+      fireEvent.click(row('A'), {detail: 1});
+    }
+    expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+
+  it('a touch the browser took (pointercancel) has its touchend left alone', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerCancel(row('A'), touch());
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(false);
+  });
+
+  it('once the touchend is cancelled, the swallower stands down: a later click with no press behind it acts (module FR5)', () => {
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerUp(row('A'), touch());
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
+    // Well inside the stray-click window, a click that no tracked gesture
+    // explains, a script's say.
+    fireEvent.click(row('B'), {detail: 1});
+    expect(onSelect.mock.calls).toEqual([['A'], ['B']]);
+  });
+
+  it('where the primary pointer is fine too, a finger\u2019s tracked release cancels its touchend, and its stray click acts on nothing (spec:AST-094 FR21, FR43)', () => {
+    stubPrimaryPointer('fine');
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerMove(row('B'), touch());
+    fireEvent.pointerUp(row('B'), touch());
+    expect(fireTouchEnd(row('B')).defaultPrevented).toBe(true);
+    expect(onSelect.mock.calls).toEqual([['B']]);
+  });
+
+  it('where the primary pointer is fine too, a finger that lifts outside the menu has its touchend cancelled, and the menu stays open (spec:AST-094 FR21, FR28, FR43)', () => {
+    stubPrimaryPointer('fine');
+    const onDismiss = vi.fn();
+    render(<Harness onDismiss={onDismiss} />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerMove(screen.getByTestId('outside'), touch());
+    fireEvent.pointerUp(screen.getByTestId('outside'), touch());
+    expect(fireTouchEnd(screen.getByTestId('outside')).defaultPrevented).toBe(
+      true,
+    );
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('cancels only that touch: the next press ends the wait, and a later touchend passes', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(row('A'), touch());
+    fireEvent.pointerUp(row('A'), touch());
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(true);
+    expect(fireTouchEnd(row('A')).defaultPrevented).toBe(false);
+    fireEvent.pointerDown(row('B'), touch(2));
+    fireEvent.pointerUp(row('B'), touch(2));
+    fireEvent.pointerDown(screen.getByTestId('outside'), touch(3));
+    expect(fireTouchEnd(row('B')).defaultPrevented).toBe(false);
   });
 });
 
