@@ -2544,7 +2544,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         if (el != null && !el.matches(FOCUSABLE_SELECTOR)) {
           el.tabIndex = -1;
         }
-      }, ref),
+      }, triggerModality.ref, ref),
       id: triggerId,
       onClick: isEffectivelyReadOnly
         ? onClick
