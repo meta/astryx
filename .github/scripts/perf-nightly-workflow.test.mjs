@@ -461,6 +461,29 @@ describe('the regression issue', () => {
     );
   });
 
+  it('says no commit landed when the last good run is on the same commit', async () => {
+    const {github, context, calls} = stub();
+    await upsertRegressionIssue({
+      github,
+      context,
+      report: {
+        ...report,
+        range: null,
+        lastGood: {
+          sha: 'c'.repeat(40),
+          runId: 41,
+          date: '2026-11-01T09:30:00Z',
+        },
+      },
+    });
+    const {body} = calls.find(([kind]) => kind === 'create')[1];
+    expect(body).toContain(
+      'No commit landed since the last good run on ccccccc',
+    );
+    expect(body).toContain('/actions/runs/41');
+    expect(body).not.toContain('No earlier good nightly run');
+  });
+
   it('says so when no good run is recorded yet', async () => {
     const {github, context, calls} = stub();
     await upsertRegressionIssue({

@@ -36,8 +36,11 @@ export async function describeReport({github, context, report}) {
     '',
   ];
   if (report.range == null) {
+    const good = report.lastGood;
     lines.push(
-      'No earlier good nightly run is recorded, so there is no commit range yet.',
+      good == null
+        ? 'No earlier good nightly run is recorded, so there is no commit range yet.'
+        : `No commit landed since the last good run on ${good.sha.slice(0, 7)} ([run](https://github.com/${owner}/${repo}/actions/runs/${good.runId})): the code is the same, so the change comes from the runner.`,
     );
     return lines.join('\n');
   }
