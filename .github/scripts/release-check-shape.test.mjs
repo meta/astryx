@@ -344,7 +344,7 @@ describe('release re-check trigger', () => {
     expect(lastCalls.reruns).toEqual([]);
   });
 
-  it('marks a re-check run with a step, leaving run names as they are', () => {
+  it('marks a re-check run with a step, not a run name', () => {
     const mark = (job, condition) => {
       const step = job.steps.find(
         item => item.name === 'Mark a release re-check',
@@ -358,6 +358,8 @@ describe('release re-check trigger', () => {
       "github.event_name == 'workflow_dispatch' && inputs.recheck",
     );
     expect(ci['run-name']).toBeUndefined();
-    expect(main['run-name']).toBeUndefined();
+    // Main names only a run that validates an older commit (FR22); a
+    // re-check names none, so it keeps the default name.
+    expect(main['run-name']).not.toContain('recheck');
   });
 });
