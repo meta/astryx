@@ -623,5 +623,96 @@
       "prev": ".astryx-drawer-header .astryx-heading",
       "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
     }
+  },
+  {
+    "component": "ChatReactionBar",
+    "storyId": "lab-chatadditions--reactions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-reaction-bar button:has-text(\"\ud83c\udf89\")",
+      "next": ".astryx-chat-reaction-bar button:has-text(\"\ud83d\udc40\")"
+    }
+  },
+  {
+    "component": "ChatUnreadDivider",
+    "storyId": "lab-chatadditions--typing-and-unread",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-unread-divider > span:first-child",
+      "next": ".astryx-chat-unread-divider span:text-is(\"New\")"
+    }
+  },
+  {
+    "component": "ChatTypingIndicator",
+    "storyId": "lab-chatadditions--typing-and-unread",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-typing-indicator > span:first-child",
+      "next": ".astryx-chat-typing-indicator span:has-text(\"Ana and 2 others\")"
+    }
+  },
+  {
+    "component": "ChatEmojiPicker",
+    "storyId": "lab-chatadditions--emoji-picker",
+    "dims": ["D2"],
+    "setup": {"click": "#storybook-root button >> nth=0"},
+    "selectors": {
+      "prev": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(1)",
+      "next": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(2)"
+    }
+  },
+  {
+    "component": "Stat",
+    "storyId": "lab-stat--showcase",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span:text-is(\"$1.28M\")",
+      "next": "span:text-is(\"$1.28M\") + span"
+    }
+  },
+  {
+    "component": "TransferList",
+    "storyId": "lab-transferlist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-transfer-list-panel >> nth=0",
+      "next": ".astryx-transfer-list-panel >> nth=1"
+    }
+  },
+  {
+    "component": "TransferListSelector",
+    "storyId": "lab-transferlistselector--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-complex-selector button span:text-is(\"3 visible fields\")",
+      "next": ".astryx-complex-selector-indicator-icon"
+    }
+  },
+  {
+    "component": "InfoTip",
+    "storyId": "lab-infotip--next-to-a-label",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span.astryx-text:text-is(\"Rolling average\")",
+      "next": "button[aria-label=\"About this metric\"]"
+    }
+  },
+  {
+    "component": "LogStream",
+    "storyId": "lab-logstream--terminal-build",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span:text-is(\"12:04:38.207\")",
+      "next": "span:text-is(\"12:04:38.207\") + span"
+    }
+  },
+  {
+    "component": "CodeEditor",
+    "storyId": "lab-codeeditor--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-codeeditor > div > div:first-child",
+      "next": ".astryx-codeeditor > div > div:nth-child(2)"
+    }
   }
 ]
