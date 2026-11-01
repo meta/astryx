@@ -12,7 +12,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createAnimator} from './animator';
+import {createMotionAnimator} from './animator';
 import {coast} from './coast';
 import {resolveMotion} from './resolveMotion';
 import {solveSpring, toSpring} from './spring';
@@ -93,7 +93,7 @@ describe('resolveMotion while the per-role tables stay internal (DEC-15)', () =>
 describe('the animator', () => {
   it("plays the table's spring even where a scope sets the role's variable", () => {
     const child = scoped({'--motion-springs-settle': '0.8s 0.3'});
-    const animator = createAnimator(child, {now: () => 0});
+    const animator = createMotionAnimator(child, {now: () => 0});
     animator.set({y: 300});
     animator.animate({y: 0}, {spring: springs.settle}, {at: 0});
     const table = solveSpring(toSpring(springs.settle), {from: 300, to: 0});
@@ -104,7 +104,7 @@ describe('the animator', () => {
   });
   it('a coast plays the table edge spring whatever a scope sets: scroll.bounce is no role', () => {
     const child = scoped({'--motion-scroll-bounce': '0.8s 0.3'});
-    const animator = createAnimator(child, {now: () => 0});
+    const animator = createMotionAnimator(child, {now: () => 0});
     animator.set({x: 60});
     // Released past the edge: straight back on the edge spring.
     animator.decay(
