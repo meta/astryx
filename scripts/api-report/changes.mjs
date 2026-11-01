@@ -214,9 +214,30 @@ export function computeChanges(packages) {
 // The pull request comment has a size limit; a wide change lists its first rows.
 const MAX_ROWS = 150;
 
-const code = s => `\`${s.replace(/`/g, "'").replace(/\|/g, '\\|')}\``;
-const where = r => [r.entry, r.section, r.item].filter(Boolean).join(' · ');
-const short = pkg => pkg.replace(/^@astryxdesign\//, '');
+/**
+ * Literal text as a code span, for every string the report renders: no link
+ * (GitHub autolinks a bare URL in plain text), no markup, no HTML. The pull
+ * request's own build writes these strings and the comment is public. A pipe
+ * is escaped so a table cell stays one cell; the fence is longer than any
+ * backtick run inside.
+ */
+const code = value => {
+  const text = String(value ?? '')
+    .replace(/\s*[\r\n]+\s*/g, ' ')
+    .replace(/\|/g, '\\|');
+  if (text.trim() === '') return '';
+  const longest = Math.max(
+    0,
+    ...(text.match(/`+/g) || []).map(run => run.length),
+  );
+  const fence = '`'.repeat(longest + 1);
+  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
+  return `${fence}${pad}${text}${pad}${fence}`;
+};
+const count = value => (Number.isFinite(Number(value)) ? Number(value) : 0);
+const where = r =>
+  code([r.entry, r.section, r.item].filter(Boolean).join(' · '));
+const short = pkg => code(String(pkg ?? '').replace(/^@astryxdesign\//, ''));
 
 /**
  * The advisory API changes for the pull request report: one visible summary
@@ -225,21 +246,28 @@ const short = pkg => pkg.replace(/^@astryxdesign\//, '');
  * @returns {string} empty when nothing changed and every report is current
  */
 export function renderChanges(changes) {
-  const touched = changes.filter(
-    c => c.rows.length || c.stale || c.missing || c.baseline,
-  );
+  const touched = (Array.isArray(changes) ? changes : [])
+    .map(c => ({...c, rows: Array.isArray(c?.rows) ? c.rows : []}))
+    .filter(
+      c =>
+        c.rows.length ||
+        c.stale === true ||
+        c.missing === true ||
+        c.baseline === true,
+    );
   if (!touched.length) return '';
   const parts = touched.map(c => {
-    if (c.baseline && !c.missing)
+    if (c.baseline === true && c.missing !== true)
       return `${short(c.pkg)} new report${c.stale ? ' (stale: run `pnpm api:report`)' : ''}`;
     const counts = c.rows.length
-      ? ` +${c.counts.added} · ~${c.counts.changed} · −${c.counts.removed}`
+      ? ` +${count(c.counts?.added)} · ~${count(c.counts?.changed)} · −${count(c.counts?.removed)}`
       : ' no changes';
-    const note = c.missing
-      ? ' (report not committed: run `pnpm api:report`)'
-      : c.stale
-        ? ' (report stale: run `pnpm api:report`)'
-        : '';
+    const note =
+      c.missing === true
+        ? ' (report not committed: run `pnpm api:report`)'
+        : c.stale === true
+          ? ' (report stale: run `pnpm api:report`)'
+          : '';
     return `${short(c.pkg)}${counts}${note}`;
   });
   const rows = touched.flatMap(c =>
@@ -257,7 +285,7 @@ export function renderChanges(changes) {
         const sign =
           r.change === 'added' ? '+' : r.change === 'removed' ? '−' : '~';
         const sig =
-          r.change === 'changed'
+          r.change === 'changed' && r.before != null
             ? `${code(r.before)} → ${code(r.line)}`
             : code(r.line);
         return `| ${sign} | ${r.pkg} | ${where(r)} | ${sig} | ${code(r.usage)} |`;

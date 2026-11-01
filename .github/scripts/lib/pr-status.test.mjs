@@ -363,6 +363,7 @@ describe('packagesLine', () => {
 describe('apiChangesLine', () => {
   const pkg = (name, rows, extra = {}) => ({
     pkg: `@astryxdesign/${name}`,
+    baseline: false,
     stale: false,
     missing: false,
     counts: {
@@ -380,20 +381,19 @@ describe('apiChangesLine', () => {
     item,
     member: null,
     line: `${item} line`,
-    usage: '',
+    usage: `<${item.split(' ').at(-1)} />`,
     ...extra,
   });
 
-  it('puts the counts on one line and the rows in a closed disclosure', () => {
+  it("renders with the API report step's own renderer: counts on one line, rows with usage in a closed disclosure", () => {
     const out = apiChangesLine({
       version: 1,
       packages: [
         pkg(
           'core',
           [
-            row('added', 'component AppShell', {member: 'density'}),
+            row('added', 'component AppShell'),
             row('changed', 'component Button', {
-              member: 'size',
               before: "size = 'md'",
               line: "size = 'sm'",
             }),
@@ -403,59 +403,40 @@ describe('apiChangesLine', () => {
         ),
         pkg('lab', []),
         pkg('richtext', [], {missing: true}),
+        pkg('charts', [], {baseline: true}),
       ],
     });
-    expect(out).toMatch(
-      /^\*\*API changes:\*\* core \+1 · ~1 · −1 \(report stale: run `pnpm api:report`\); richtext no changes \(report not committed: run `pnpm api:report`\)\n\n<details>\n<summary>3 API changes<\/summary>/,
+    expect(out.split('\n')[0]).toBe(
+      '**API changes:** `core` +1 · ~1 · −1 (report stale: run `pnpm api:report`); `richtext` no changes (report not committed: run `pnpm api:report`); `charts` new report',
     );
     expect(out).toContain(
-      '| core | added | `component AppShell` · `density` | `component AppShell line` |',
+      '<details><summary>3 API changes (advisory)</summary>',
     );
+    expect(out).toContain('| Package | Where | Signature | Usage |');
     expect(out).toContain(
-      "| core | changed | `component Button` · `size` | `size = 'md'` → `size = 'sm'` |",
+      "| ~ | `core` | `. · Components · component Button` | `size = 'md'` → `size = 'sm'` | `<Button />` |",
     );
-    expect(out).not.toContain('lab');
+    expect(out).not.toContain('`lab`');
+    expect(out.endsWith('</details>\n\n')).toBe(true);
   });
 
   it('renders every string from the file as a code span: no HTML, markup or link', () => {
     const out = apiChangesLine({
       packages: [
-        pkg('core', [
+        pkg('www.evil.example', [
           row('added', '<img src=x onerror=alert(1)>', {
-            line: 'a | b [link](https://evil.example) www.evil.example `tick`',
+            line: 'a | b [link](https://evil.example) `tick`',
+            usage: 'https://evil.example',
           }),
         ]),
       ],
     });
-    expect(out).toContain('`<img src=x onerror=alert(1)>`');
-    expect(out).toContain(
-      '`` a \\| b [link](https://evil.example) www.evil.example `tick` ``',
-    );
-    // Every item and declaration cell is a code span, so nothing autolinks.
-    const cells = out
-      .split('\n')
-      .filter(line => line.startsWith('| core |'))
-      .flatMap(line =>
-        line
-          .split(/(?<!\\)\|/)
-          .slice(3, 5)
-          .map(cell => cell.trim()),
-      );
-    expect(cells.every(cell => /^`+[\s\S]*`+$/.test(cell))).toBe(true);
-  });
-
-  it('says a package whose merge base has no report has a new report', () => {
-    expect(
-      apiChangesLine({
-        version: 1,
-        packages: [
-          pkg('core', [], {baseline: true, stale: true}),
-          pkg('lab', [], {baseline: true}),
-        ],
-      }),
-    ).toBe(
-      '**API changes:** core new report (stale: run `pnpm api:report`); lab new report\n\n',
-    );
+    expect(out).toContain('**API changes:** `www.evil.example` +1');
+    expect(out).toContain('`` a \\| b [link](https://evil.example) `tick` ``');
+    expect(out).toContain('`https://evil.example` |');
+    // Outside code spans, no URL, tag or link syntax remains.
+    const outside = out.replace(/(`+)[\s\S]*?\1/g, '');
+    expect(outside).not.toMatch(/https?:|www\.|<img|\]\(/);
   });
 
   it('prompts for a report that neither the merge base nor the head commits', () => {
@@ -465,15 +446,15 @@ describe('apiChangesLine', () => {
         packages: [pkg('core', [], {baseline: true, missing: true})],
       }),
     ).toBe(
-      '**API changes:** core no changes (report not committed: run `pnpm api:report`)\n\n',
+      '**API changes:** `core` no changes (report not committed: run `pnpm api:report`)\n\n',
     );
   });
 
   it('lists at most 150 rows and counts the rest', () => {
     const rows = Array.from({length: 160}, (_, i) => row('added', `item ${i}`));
     const out = apiChangesLine({packages: [pkg('core', rows)]});
-    expect(out.match(/^\| core \| added \|/gm)).toHaveLength(150);
-    expect(out).toContain('…and 10 more.');
+    expect(out.match(/^\| \+ \| `core` \|/gm)).toHaveLength(150);
+    expect(out).toContain('…and 10 more;');
   });
 
   it('is absent when no package has a change or a report to refresh, or without a file', () => {

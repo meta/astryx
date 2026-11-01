@@ -452,99 +452,19 @@ function notRunLine({jobs, a11yReport, visualVerdict}) {
   return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
 }
 
-/** API rows listed in the API changes section before the rest are counted. */
-const API_ROW_LIMIT = 150;
-const API_CHANGE_MARK = {added: '+', changed: '~', removed: '−'};
+// The API report step's own renderer (scripts/api-report/changes.mjs), so
+// the PR report and `pnpm api:report` show API changes one way.
+const {renderChanges} = require('../../../scripts/api-report/changes.mjs');
 
 /**
- * API changes (the API report step's api-changes.json): one visible line with
- * each package's added · changed · removed counts, a stale or missing
- * report, or a new report (no report at the merge base), then the rows in
- * one closed disclosure. Every string from the file
- * is rendered as literal text. Nothing when no package has a change or a
- * report to refresh.
+ * API changes (the API report step's api-changes.json): one visible line per
+ * package, the rows in one closed disclosure; nothing when no package has a
+ * change or a report to refresh.
  */
-/**
- * One table cell of literal text as a code span: no link (GitHub autolinks a
- * bare URL in plain text), no markup, no HTML. A pipe is escaped so the cell
- * stays one cell; the fence is longer than any backtick run inside.
- */
-function codeCell(value) {
-  const text = String(value ?? '')
-    .replace(/\s*[\r\n]+\s*/g, ' ')
-    .replace(/\|/g, '\\|');
-  if (text.trim() === '') return '';
-  const longest = Math.max(
-    0,
-    ...(text.match(/`+/g) || []).map(run => run.length),
-  );
-  const fence = '`'.repeat(longest + 1);
-  const pad = text.startsWith('`') || text.endsWith('`') ? ' ' : '';
-  return `${fence}${pad}${text}${pad}${fence}`;
-}
-
 function apiChangesLine(report) {
   if (!report || !Array.isArray(report.packages)) return '';
-  const short = name =>
-    inline(String(name ?? '').replace(/^@astryxdesign\//, ''));
-  const segments = [];
-  const rows = [];
-  for (const entry of report.packages) {
-    const entryRows = Array.isArray(entry.rows) ? entry.rows : [];
-    // The merge base has no committed report for this package: nothing to
-    // compare, so its report is new (unless the head commits none either,
-    // which the prompt below covers).
-    if (entry.baseline === true && entry.missing !== true) {
-      segments.push(
-        `${short(entry.pkg)} new report${entry.stale === true ? ' (stale: run `pnpm api:report`)' : ''}`,
-      );
-      continue;
-    }
-    if (
-      entryRows.length === 0 &&
-      entry.stale !== true &&
-      entry.missing !== true
-    )
-      continue;
-    const counts = ['added', 'changed', 'removed']
-      .map(kind => [kind, num(entry.counts?.[kind])])
-      .filter(([, count]) => count > 0)
-      .map(([kind, count]) => `${API_CHANGE_MARK[kind]}${count}`);
-    const note =
-      entry.missing === true
-        ? ' (report not committed: run `pnpm api:report`)'
-        : entry.stale === true
-          ? ' (report stale: run `pnpm api:report`)'
-          : '';
-    segments.push(
-      `${short(entry.pkg)} ${counts.length > 0 ? counts.join(' · ') : 'no changes'}${note}`,
-    );
-    for (const row of entryRows) rows.push({pkg: entry.pkg, ...row});
-  }
-  if (segments.length === 0) return '';
-  let out = `**API changes:** ${segments.join('; ')}\n\n`;
-  if (rows.length > 0) {
-    const shown = rows.slice(0, API_ROW_LIMIT);
-    const line = row => {
-      const kind = Object.hasOwn(API_CHANGE_MARK, row.change)
-        ? row.change
-        : 'changed';
-      const item = [row.item, row.member].filter(
-        value => value != null && value !== '',
-      );
-      const declaration =
-        kind === 'changed' && row.before != null
-          ? `${codeCell(row.before)} → ${codeCell(row.line)}`
-          : codeCell(row.line);
-      return `| ${short(row.pkg)} | ${kind} | ${item.map(codeCell).join(' · ')} | ${declaration} |`;
-    };
-    out += `<details>\n<summary>${num(rows.length)} API change${rows.length === 1 ? '' : 's'}</summary>\n\n| Package | Change | Item | Declaration |\n|---|---|---|---|\n${shown.map(line).join('\n')}\n\n${
-      rows.length > shown.length
-        ? `…and ${num(rows.length - shown.length)} more.\n\n`
-        : ''
-    }</details>\n\n`;
-  }
-  return out;
+  const out = renderChanges(report.packages);
+  return out ? `${out}\n` : '';
 }
 
 /** The compact report body, between the heading and the footer. */
