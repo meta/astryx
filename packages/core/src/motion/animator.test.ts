@@ -902,6 +902,40 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       expect(started).toBe(false);
     });
 
+    it('a late first frame that leaves the start unread: a read and a retarget take the curve from that frame at the latest', async () => {
+      // The first frame comes 70 ms after the call, late behind other work
+      // with no block of the page's own, and the page still has no start to
+      // read: the compositor has the call moving by then.
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      clock = 1170;
+      expect(animator.get('x')).toBeCloseTo(curve.value(0.1), 9);
+      animator.animate({x: 400}, {spring: springs.settle});
+      const retarget = live('translate').at(-1) as Recorded;
+      expect(sampleAt(retarget, 'translate', 1170)[0]).toBeCloseTo(
+        curve.value(0.1),
+        1,
+      );
+    });
+
+    it('a late first frame that leaves the start unread: the browser\u2019s start, once read, still decides', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      // The browser started it at 1060 and tells the page now.
+      animation.commit(1060);
+      await Promise.resolve();
+      await Promise.resolve();
+      clock = 1170;
+      expect(animator.get('x')).toBeCloseTo(curve.value(0.11), 9);
+    });
+
     it('a call the page pauses before its first frame waits for its start', async () => {
       // A harness or a page that pauses the animation: nothing starts it at
       // the commit, so nothing sets a start for it either.
