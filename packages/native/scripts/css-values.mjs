@@ -8,8 +8,8 @@
  *   shadow layers. A conversion that loses something records a note; a value
  *   with no static form throws CssValueError.
  * @position The value half of the Swift theme generator spec
- *   (specs/swift/library/theme-generator.md, G7). It reads CSS only;
- *   swift-ios-theme.mjs decides what an error does to the run.
+ *   (specs/swift/library/theme-generator.md, G7 and G15). It reads CSS only;
+ *   swift-ios-theme.mjs decides what a note or an error does to the run.
  *
  * SYNC: When modified, update this header and G7 in the theme generator spec.
  */

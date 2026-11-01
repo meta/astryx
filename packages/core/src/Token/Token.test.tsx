@@ -456,6 +456,78 @@ describe('Token accessibility', () => {
   });
 });
 
+describe('Token link onClick', () => {
+  // jsdom does not implement navigation, so a native listener stops it. React
+  // handlers still run for the click.
+  function stopNavigation(link: HTMLElement) {
+    link.addEventListener('click', e => e.preventDefault());
+  }
+
+  it('calls a caller onClick once when a link token is clicked', () => {
+    const handleClick = vi.fn();
+    render(<Token label="Tag" href="/test" onClick={handleClick} />);
+    const link = screen.getByRole('link', {name: 'Tag'});
+    stopNavigation(link);
+
+    fireEvent.click(link);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+    expect(link).toHaveAttribute('href', '/test');
+  });
+
+  it('calls a caller onClick once when the link of a removable token is clicked', () => {
+    const handleClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={() => {}}
+      />,
+    );
+    const link = screen.getByRole('link', {name: 'Tag'});
+    stopNavigation(link);
+
+    fireEvent.click(link);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls a caller onClick once when the surface of a removable token is clicked', () => {
+    const handleClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={() => {}}
+        data-testid="token"
+      />,
+    );
+    stopNavigation(screen.getByRole('link', {name: 'Tag'}));
+
+    // The surface click is delegated to the link; it must not run twice.
+    fireEvent.click(screen.getByTestId('token'));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call a caller onClick when the remove button is clicked', () => {
+    const handleClick = vi.fn();
+    const handleRemove = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        href="/test"
+        onClick={handleClick}
+        onRemove={handleRemove}
+      />,
+    );
+    stopNavigation(screen.getByRole('link', {name: 'Tag'}));
+
+    fireEvent.click(screen.getByRole('button', {name: 'Remove Tag'}));
+    expect(handleRemove).toHaveBeenCalledTimes(1);
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+});
+
 describe('Token link with remove button', () => {
   it('does not nest the remove button inside the link', () => {
     render(<Token label="Tag" href="/test" onRemove={() => {}} />);

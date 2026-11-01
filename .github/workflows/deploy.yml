@@ -88,6 +88,12 @@ jobs:
             }
             core.setOutput('sha', sha);
 
+      # Marks a release re-check, so the re-check workflow can tell its runs
+      # from main's hourly check of the same commit.
+      - name: Mark a release re-check
+        if: github.event_name == 'workflow_dispatch' && inputs.recheck
+        run: echo 'Release re-check'
+
       # A `main` full check waits for room under CI's ceiling before its legs
       # start (spec:AST-030 FR16, DEC-16); every other job here needs this one.
       # `peak` is the most jobs this run holds at once (ci-admission.test.mjs).

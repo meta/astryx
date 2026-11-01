@@ -87,6 +87,15 @@
     }
   },
   {
+    "component": "GridSpan",
+    "storyId": "core-gridspan--span-matrix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[data-audit-case=\"rows\"]",
+      "next": "[data-audit-grid=\"rows\"] > :nth-child(4)"
+    }
+  },
+  {
     "component": "PowerSearch",
     "storyId": "core-powersearch--with-date-filters",
     "dims": ["D2"],
@@ -604,6 +613,15 @@
     "selectors": {
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
+    }
+  },
+  {
+    "component": "DrawerHeader",
+    "storyId": "core-drawerheader--audit",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-drawer-header .astryx-heading",
+      "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
     }
   },
   {
