@@ -82,7 +82,43 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
+  # Admits the whole run under CI's ceiling of about ninety concurrent jobs
+  # (spec:AST-030 FR16, DEC-16). Every job here needs this one, directly or
+  # through the jobs it needs. Like every other job it skips for a draft or an
+  # unlabelled fork, which run no CI (FR17); the required contexts still report
+  # through their own status rules. Otherwise it never fails, so each job's own
+  # condition decides exactly as before. `peak` is the most jobs a run holds at once: a
+  # release-check's from its legs, a pull request's from its measured most plus
+  # the suites its labels opt into (ci-admission.test.mjs). A pull request
+  # waits at most twelve minutes, inside the fifteen-minute job budget.
+  admission:
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-slim
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Check out the admission action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/ci-admission
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Wait for room under the CI ceiling
+        uses: ./.ci-admission/.github/actions/ci-admission
+        continue-on-error: true
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
+        with:
+          peak: ${{ github.event_name == 'workflow_dispatch' && 36 || 16 }}
+          main: ${{ github.event_name == 'workflow_dispatch' }}
+          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
+          max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
+
   maintenance-request:
+    needs: [admission]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'capture'
     runs-on: ubuntu-slim
     steps:
@@ -99,6 +135,7 @@ jobs:
   # Pull requests never run it: a release-branch pull request validates its
   # own bump in release-bump, and every test job decides its own scope.
   release-authority:
+    needs: [admission]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
     runs-on: ubuntu-slim
     permissions:
@@ -196,6 +233,7 @@ jobs:
   # Generated-only version PR lane. It validates release bookkeeping in a few
   # minutes; the merged branch head receives one full visual/a11y/RTL projection.
   release-bump:
+    needs: [admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && startsWith(github.base_ref, 'release/v')) }}
     runs-on: 2-core-ubuntu-arm
     timeout-minutes: 15
@@ -261,6 +299,7 @@ jobs:
 
   release-merge-back:
     name: release-merge-back
+    needs: [admission]
     # Only a release merge-back branch has anything for this job to validate,
     # so every other pull request skips it before the full-history checkout
     # below (minutes on a larger runner). The step after the checkout still
@@ -359,7 +398,8 @@ jobs:
   # only the production build has the opaque-origin sandbox at all. The
   # spec-only lane validates spec records here, where it always has.
   docsite-test:
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v')) }}
+    needs: [admission]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
     # The Next.js production build uses every core it gets.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -493,6 +533,7 @@ jobs:
   # build-storybook + typecheck below.
   test-ui:
     name: test-ui (${{ matrix.shard }}/${{ strategy.job-total }})
+    needs: [admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch') }}
     # One runner ran the whole UI project in ~16 minutes and set the PR's wall
     # time. Vitest's --shard gives each leg an equal share of the files; the
@@ -607,6 +648,7 @@ jobs:
 
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
+    needs: [admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch') }}
     # One runner ran the Node project in ~12 minutes. Vitest's --shard splits
     # the files across the legs; `test` joins them.
@@ -700,6 +742,7 @@ jobs:
   # test-native-swift runs on macOS only then. It reads the same scope step as
   # every test job; anything undecidable picks macOS.
   native-swift-runner:
+    needs: [admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch') }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
@@ -757,6 +800,7 @@ jobs:
   # docsite-only change.
   test-registry-e2e:
     name: test-registry-e2e (${{ matrix.leg }})
+    needs: [admission]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
     # The preview and hidden production registries are generated and verified
     # independently, so each gets its own leg (~9 minutes in one job).
@@ -885,6 +929,7 @@ jobs:
   # own terms. The decision script comes from the merge commit's trusted
   # sparse checkout, and a lookup that fails denies the suite.
   run-labels:
+    needs: [admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
@@ -918,6 +963,7 @@ jobs:
             await decideRunLabels({github, context, core});
 
   build-storybook:
+    needs: [admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
@@ -1276,6 +1322,7 @@ jobs:
   # ~1.5 minutes sooner. The build and release-check joins require this job,
   # so a type error still fails both.
   typecheck:
+    needs: [admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
@@ -2086,6 +2133,7 @@ jobs:
   # package ownership explicit; the historical `test` join above projects its
   # result. Until runtime:build has a specialized route, broad CI dispatches it.
   test-build:
+    needs: [admission]
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch')
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
@@ -3036,10 +3084,23 @@ jobs:
         with:
           component-audit: 'true'
 
+      # The tested merge commit, as pr-visual checks out: a branch that
+      # predates this check has none of its scripts at its own head.
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          persist-credentials: false
+
+      # The accessibility baseline is read from the head, which built the
+      # Storybook this job audits: a branch behind a main fix that dropped a
+      # baseline entry would otherwise report that entry as new.
+      - name: Check out the head's accessibility baseline
+        uses: actions/checkout@v7
+        with:
           ref: ${{ github.event.pull_request.head.sha }}
+          path: .head-baseline
+          sparse-checkout: .github/a11y-baseline.json
+          sparse-checkout-cone-mode: false
           persist-credentials: false
 
       # A spec-only, docsite-only or tooling-only change has no analysis; it
@@ -3164,7 +3225,7 @@ jobs:
             --visual-job "$VISUAL_JOB" \
             --baseline-manifest .github/visual-baseline/manifest.json \
             --a11y a11y-report.json \
-            --a11y-baseline .github/a11y-baseline.json \
+            --a11y-baseline .head-baseline/.github/a11y-baseline.json \
             --a11y-step "$A11Y_STEP" \
             --rtl-dir rtl-reports \
             --rtl-step "$RTL_STEP" \

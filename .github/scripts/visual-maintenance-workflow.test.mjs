@@ -103,7 +103,9 @@ describe('CI baseline maintenance routing', () => {
 
   it('does not run non-maintenance CI jobs for capture', () => {
     for (const [name, job] of Object.entries(workflow.jobs)) {
-      if (['maintenance-request', 'pr-visual'].includes(name)) continue;
+      // admission admits every run, a capture's included (ci-admission.test.mjs).
+      if (['maintenance-request', 'pr-visual', 'admission'].includes(name))
+        continue;
       expect(
         runs(job, {operation: 'capture', needs: dependencies(job)}),
         name,
