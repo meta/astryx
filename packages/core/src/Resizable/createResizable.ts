@@ -4,12 +4,13 @@
  * @file createResizable.ts
  * @input A handle element, or null for a region with no handle yet, and the
  *   region's options
- * @output createResizable; readInitialResizableState for the hook's first
- *   render; createResizableAs and the internal channel for the hooks
- * @position The Resizable family's factory, internal to the package. Its
- *   input is resizeGesture.ts. Both forms of useResizable and ResizeHandle,
- *   over a `resizable` prop or bound to its element, drive it. Importing it
- *   does no DOM work
+ * @output createResizable; readInitialResizableState, createResizableAs and
+ *   the internal channel for the hooks
+ * @position The Resizable family's public factory. Its input is
+ *   resizeGesture.ts; both forms of useResizable and ResizeHandle drive it.
+ *   Importing it does no DOM work
+ *
+ * SYNC: When modified, update /packages/core/src/Resizable/createResizable.doc.mjs
  */
 
 import {registerEnglishFallback} from '../i18n/englishFallback';
@@ -115,8 +116,9 @@ export interface CreateResizableOptions {
   isDisabled?: boolean;
   /**
    * A plain element's accessible name, when it has none of its own. Without
-   * it, useResizable gives the message catalog's translation, and the bare
-   * factory the catalog's English message. A ResizeHandle takes its own
+   * it, useResizable gives the provider's translation of the catalog message,
+   * and the bare factory, used outside a provider, the shipped English one
+   * (`architecture:internationalization` INV3). A ResizeHandle takes its own
    * `label` prop.
    * @default 'Resize handle'
    */

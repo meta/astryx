@@ -2988,6 +2988,7 @@ function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
+function createResizable: (handle: HTMLElement | null, options?: CreateResizableOptions) => ResizableController
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
 function decodeMarkdownCharacterReferences: (text: string) => string
@@ -5062,6 +5063,15 @@ interface ResizableConfig
   minWidth?: number = 180
   onCollapseChange?: (isCollapsed: boolean) => void
   onWidthChange?: (width: number) => void
+interface ResizableController
+  collapse: () => void
+  destroy: () => void
+  expand: () => void
+  isCollapsed: boolean
+  resize: (size: number) => void
+  size: number
+  subscribe: (listener: () => void) => () => void
+  update: (options: CreateResizableOptions) => void
 type ResizablePercentSize = { type: 'percent'; value: number } & ({ min: PixelWidth; max?: never } | { min?: never; max: PixelWidth })
 interface ResizableProps
   _collapsedSize: number
@@ -8332,7 +8342,9 @@ RadioListSize (.)
 ### Also exported from an earlier entry point
 
 ```text
+CreateResizableOptions (.)
 ResizableConfig (.)
+ResizableController (.)
 ResizablePercentSize (.)
 ResizableProps (.)
 ResizableRegion (.)
@@ -8343,6 +8355,7 @@ ResizeHandleProps (.)
 UseResizableMultiConfig (.)
 UseResizableResult (.)
 UseResizableSingleConfig (.)
+createResizable (.)
 percent (.)
 useResizable (.)
 ```
