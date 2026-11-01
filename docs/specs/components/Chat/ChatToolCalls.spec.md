@@ -38,15 +38,15 @@ system_specs: [spec:AST-009, spec:AST-029]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                      |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `ChatToolCalls` with required `calls` (each with `name`, optional `status`, `target`, `node`, `duration`, `additions`, `deletions`, `stats`, `errorMessage`, `resultDetail`, and `key`), optional `label`, `isExpanded`, `defaultIsExpanded`, `onExpandedChange`, and root div props and ref. |
-| Behavior                | No calls render nothing; one call renders directly; multiple calls expose a disclosure whose collapsed surface shows the latest call and whose expanded surface shows every call.                                                                                                             |
-| End-user impact         | Readers see what tools an assistant ran and whether each is pending, running, done, or failed; a group of calls collapses to its latest call and keeps hidden rows out of keyboard and screen-reader navigation.                                                                              |
-| Builder impact          | None.                                                                                                                                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact; two owner questions stay open.                                                                                                                                                         |
-| Review checks           | Reject ignored labels, focusable descendants inside a collapsed group, lost keyboard activation, unreadable supporting text, dropped root inputs, or changed call ordering/defaults.                                                                                                          |
-| Governing rules         | `architecture:public-component-api/INV5–INV6, INV8–INV9`; `architecture:interaction-modality`; `spec:AST-009/FR7`; WCAG 2.2 SC 1.4.3 and 2.4.7.                                                                                                                                               |
+| Area                    | Contract                                                                                                                                                                                                                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `ChatToolCalls` with required `calls` (each with `name`, optional `status`, `target`, `node`, `duration`, `additions`, `deletions`, `stats`, `errorMessage`, `resultDetail`, `data`, and `key`), optional `label`, `isExpanded`, `defaultIsExpanded`, `onExpandedChange`, and root div props and ref. |
+| Behavior                | No calls render nothing; one call renders directly; multiple calls expose a disclosure whose collapsed surface shows the latest call and whose expanded surface shows every call.                                                                                                                     |
+| End-user impact         | Readers see what tools an assistant ran and whether each is pending, running, done, or failed; a group of calls collapses to its latest call and keeps hidden rows out of keyboard and screen-reader navigation.                                                                                      |
+| Builder impact          | None.                                                                                                                                                                                                                                                                                                 |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact; two owner questions stay open.                                                                                                                                                                 |
+| Review checks           | Reject ignored labels, focusable descendants inside a collapsed group, lost keyboard activation, unreadable supporting text, dropped root inputs, or changed call ordering/defaults.                                                                                                                  |
+| Governing rules         | `architecture:public-component-api/INV5–INV6, INV8–INV9`; `architecture:interaction-modality`; `spec:AST-009/FR7`; WCAG 2.2 SC 1.4.3 and 2.4.7.                                                                                                                                                       |
 
 This table is a review projection; the body below is authoritative.
 
@@ -145,8 +145,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **AR1 — Disclosure operation.** Group and detail disclosures expose `aria-expanded`, operate with pointer, Enter, and Space, and use the shared visible focus ring.
 - **AR2 — Collapsed ownership.** Collapsed group content is inert; hidden detail content is unmounted.
-- **AR3 — Status meaning.** Every status exposes translated visually hidden text. Complete and error also use distinct semantic marks; pending and running share the same subtle spinner (OQ1). Error messages are exposed to assistive technology and echoed in the status icon's hover tooltip.
-- **AR4 — Static evidence.** Focus appearance, keyboard behavior, inertness, color contrast, and DOM relationships use unit, axe, and real-browser evidence under `spec:AST-009/FR7`; this record makes no announcement claim.
+- **AR3 — Status meaning.** Every status exposes translated visually hidden text. Complete and error also use distinct semantic marks; pending and running share the same subtle spinner (OQ1). Error messages are exposed to assistive technology and, on call rows, echoed in the status icon's hover tooltip.
+- **AR4 — Static evidence.** Focus appearance, keyboard behavior, inertness, and DOM relationships use unit and Storybook play-function evidence under `spec:AST-009/FR7`; this record makes no announcement claim.
 
 ## Design relationships
 
@@ -176,22 +176,24 @@ block is optional during migration, so the map is deferred.
 
 ## Verification map
 
-| Contract     | Verification                                                                                      | Representative states                      | Mutation or failure expectation                                            | Audit section                       |
-| ------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------- | ----------------------------------- |
-| FR1          | `ChatToolCalls.test.tsx` empty, single, latest-call surface, collapsed default, and toggle tests  | empty; single; grouped                     | A rendered empty root, group chrome on one call, or a wrong surface fails. | `audit:ChatToolCalls/behavior`      |
-| FR2          | `ChatToolCalls.test.tsx` "renders the public custom group label when expanded"                    | supplied label                             | An ignored label fails.                                                    | `audit:ChatToolCalls/behavior`      |
-| FR3, AR2     | `ChatToolCalls.test.tsx` "removes collapsed call rows from keyboard and accessibility navigation" | collapsed; expanded                        | An operable collapsed row fails.                                           | `audit:ChatToolCalls/accessibility` |
-| FR4, AR1     | `ChatToolCalls.test.tsx` focus-ring, disclosure-semantics, and `aria-controls` tests              | group header; detail row                   | A missing ring, expansion state, or controls reference fails.              | `audit:ChatToolCalls/accessibility` |
-| AR3          | `ChatToolCalls.test.tsx` status-mark, status-name, and error-message tests                        | each status; error with and without detail | A missing status text, mark, or error text fails.                          | `audit:ChatToolCalls/accessibility` |
-| FR6          | `ChatToolCalls.test.tsx` "forwards the root ref and supported DOM props"                          | single root                                | A dropped ref or prop fails.                                               | `audit:ChatToolCalls/public-api`    |
-| RTL relation | `apps/storybook/rtl-audit/verified-not-applicable.json`                                           | all stories                                | —                                                                          | `audit:ChatToolCalls/i18n-rtl`      |
+| Contract     | Verification                                                                                                                                   | Representative states                      | Mutation or failure expectation                                            | Audit section                       |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------- | ----------------------------------- |
+| FR1          | `ChatToolCalls.test.tsx` empty, single, collapsed default, toggle, and "includes the latest status in a collapsed group accessible name" tests | empty; single; grouped                     | A rendered empty root, group chrome on one call, or a wrong surface fails. | `audit:ChatToolCalls/behavior`      |
+| FR2          | `ChatToolCalls.test.tsx` "renders the public custom group label when expanded"                                                                 | supplied label                             | An ignored label fails.                                                    | `audit:ChatToolCalls/behavior`      |
+| FR3, AR2     | `ChatToolCalls.test.tsx` "removes collapsed call rows from keyboard and accessibility navigation"                                              | collapsed; expanded                        | An operable collapsed row fails.                                           | `audit:ChatToolCalls/accessibility` |
+| FR4, AR1     | `ChatToolCalls.test.tsx` focus-ring, disclosure-semantics, and `aria-controls` tests                                                           | group header; detail row                   | A missing ring, expansion state, or controls reference fails.              | `audit:ChatToolCalls/accessibility` |
+| AR3          | `ChatToolCalls.test.tsx` status-mark, status-name, and error-message tests                                                                     | each status; error with and without detail | A missing status text, mark, or error text fails.                          | `audit:ChatToolCalls/accessibility` |
+| FR6          | `ChatToolCalls.test.tsx` "forwards the root ref and supported DOM props"                                                                       | single root                                | A dropped ref or prop fails.                                               | `audit:ChatToolCalls/public-api`    |
+| FR4, AR4     | `ChatToolCalls.stories.tsx` `FocusedGroupedDetail` and `Narrow` play functions                                                                 | focused grouped detail; 320 CSS px         | A thinner or detached focus ring, or horizontal overflow, fails.           | `audit:ChatToolCalls/accessibility` |
+| RTL relation | `apps/storybook/rtl-audit/verified-not-applicable.json`                                                                                        | all stories                                | —                                                                          | `audit:ChatToolCalls/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 
 - FR1: caller order in the expanded list.
+- FR2: the translated-count fallback when `label` is omitted.
 - FR4: Enter and Space activation.
 - FR5: the secondary foreground on supporting text.
-- FR6: `className`, `style`, and `xstyle` composition, and the target.
+- FR6: `xstyle` composition.
 - PR1–PR2: no Effect or external resource, and no mutation of caller data.
 
 ## Decision log
