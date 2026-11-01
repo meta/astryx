@@ -337,3 +337,23 @@ describe('stable and canary publication authority', () => {
     expect(parity).toContain('verify-published.mjs --version "$VERSION"');
   });
 });
+
+describe('stable publish requires the cut commit release-check (spec:AST-030 FR12, DEC-11)', () => {
+  it('checks the marker cut commit before anything is built or published', () => {
+    const names = stable.steps.map(candidate => candidate.name);
+    const guard = names.indexOf(
+      'Require a passing release-check at the exact cut commit',
+    );
+    expect(guard).toBeGreaterThan(
+      names.indexOf('Validate marked release branch, tag commit, and plan'),
+    );
+    expect(guard).toBeLessThan(names.indexOf('Build all packages'));
+    expect(guard).toBeLessThan(names.indexOf('Publish changed packages'));
+    const script = stable.steps[guard].with.script;
+    expect(script).toContain('scripts/release/release-check-receipt.mjs');
+    expect(script).toContain('.release/active.json');
+    expect(script).toContain('requireReleaseCheck(');
+    expect(stable.steps[guard]['continue-on-error']).toBeUndefined();
+    expect(stable.permissions.actions).toBe('read');
+  });
+});

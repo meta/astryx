@@ -63,8 +63,15 @@ describe('PR report and deployment workflow contracts', () => {
       );
       expect(value.jobs[job].concurrency['cancel-in-progress']).toBe(false);
     }
-    expect(value.jobs.comment.needs).toBe('resolve');
-    expect(value.jobs.comment.permissions.deployments).toBeUndefined();
+    expect(value.jobs.comment.needs).toEqual(['resolve', 'frames']);
+    expect(value.jobs.frames.concurrency.group).toBe(
+      'pr-frames-${{ needs.resolve.outputs.pr_number }}',
+    );
+    // The comment job reads this head's preview state once; no job runs on a
+    // deployment event, and none waits for one.
+    expect(value.jobs.comment.permissions.deployments).toBe('read');
+    // It writes no repository contents.
+    expect(value.jobs.comment.permissions.contents).toBeUndefined();
     expect(workflow('pr-comment.yml')).toContain(
       'validateAnalysisMetadata(metadata, {',
     );
@@ -74,7 +81,7 @@ describe('PR report and deployment workflow contracts', () => {
     const value = workflow('pr-comment.yml');
     const reconcile = value.slice(
       value.indexOf('  spec-only-reconcile:'),
-      value.indexOf('  comment:'),
+      value.indexOf('  frames:'),
     );
     expect(reconcile).toContain('reconcilePrComment');
     expect(reconcile).toContain('createIfMissing: false');
@@ -137,8 +144,12 @@ describe('PR report and deployment workflow contracts', () => {
       'utf8',
     );
     expect(reconciler).toContain('branchPreviewOrigin(identity)');
-    expect(reconciler).toContain('`${previewOrigin}/storybook/`');
-    expect(reconciler).toContain('`${previewOrigin}/sandbox/`');
+    const status = fs.readFileSync(
+      path.join(ROOT, '.github/scripts/lib/pr-status.js'),
+      'utf8',
+    );
+    expect(status).toContain('[Storybook](${origin}/storybook/)');
+    expect(status).toContain('[Sandbox](${origin}/sandbox/)');
   });
 
   it('publishes only the static compatibility landing to GitHub Pages', () => {

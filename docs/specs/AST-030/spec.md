@@ -73,8 +73,8 @@ they are separately named.
 - Define compatibility semantics or release-pair delta classes. Those belong to
   [`spec:AST-017`](../AST-017/spec.md); this record routes their checks and owns the
   exact-main release-check execution boundary.
-- Remove required check names (other than retiring the `spec-owner-approval`
-  mirror, FR15), branch protection, merge-queue coverage, or owner approval of
+- Remove required check names (other than dropping
+  `spec-owner-approval` from them, FR15), branch protection, merge-queue coverage, or owner approval of
   spec content.
 - Infer safety from file extensions, directory names, or the absence of a known
   risky path.
@@ -210,11 +210,14 @@ they are separately named.
   later commits remain next-release input. A rewrite or divergence that removes
   the checked SHA from current `main` history invalidates the receipt.
   This replaces constituent-PR-only release gating, not the canonical checks'
-  existing finding policies. A main-push workflow MUST dispatch that
-  release-check for every push to `main`, bound to the pushed commit; the
-  dispatched checks share one concurrency group that never cancels a running
-  check: at most one runs and one waits, and a burst of pushes is checked once,
-  at its newest commit. A commit `main` has already moved past leaves its check
+  existing finding policies. Main's heavy-lane workflow MUST dispatch that
+  release-check for `main`'s tip, bound to that commit, on a push to `main` and
+  on a quarter-hourly schedule, unless the tip already has one or one was
+  dispatched in the last 55 minutes (DEC-11). A check replaced while waiting,
+  which never ran, does not count. A check covers every merge up to its commit,
+  so every merge is covered by the next one. The dispatched checks share one
+  concurrency group that never cancels a running check: at most one runs and
+  one waits. A push whose commit `main` has already moved past leaves its check
   to the newer push. That release-check run is main's result, and a failure is
   fixed forward by an atomic pull request. Main's own fast
   checks still run for every push. Release checks MUST NOT capture
@@ -261,8 +264,7 @@ they are separately named.
   relevant on that trigger (`paths:`), and those paths name what the workflow
   reads or runs, never everything; a merge-group entry, which cannot filter by
   path, keeps running. A workflow that reports a required context (`build`,
-  `test`, `docsite-test`, `lint`, `review-required`, and the
-  `spec-owner-approval` mirror while it is required, FR15)
+  `test`, `docsite-test`, `lint`, `review-required`)
   starts on every pull request and is never path-filtered: the trusted
   classifier's positive surfaces (FR1–FR5) choose the work inside it, and a job
   whose suite does not apply reports success without running it (FR7). A push
@@ -275,8 +277,9 @@ they are separately named.
   review workflow (`review-signal.yml`) and `review-clear.yml` publish
   `review-required`, which carries both the code review and spec-owner approval
   (`architecture:knowledge-contracts` DEC-14); no other workflow publishes a
-  review or spec context. `spec-owner-approval` is published only as a mirror of
-  the spec half while branch protection still requires it. The spec-owner job
+  review or spec context. `spec-owner-approval` carries the spec-owner job's decision,
+  which the other writers of `review-required` read; it is not a required
+  check. The spec-owner job
   evaluates pull-request, review, and owner-command comment events, runs
   without cancel-in-progress, and publishes a terminal state for the head it
   read. It skips fork review events, whose tokens are read-only; fork approvals
@@ -487,6 +490,8 @@ retroactive status as release evidence.
 
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
+**Superseded in part by:** `spec:AST-030/DEC-11` (main is checked about hourly,
+not on every push)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
@@ -547,11 +552,32 @@ required context (its check would never report).
 The spec-owner gate and the review gate read the same pull-request events, so
 they run in one workflow, and a contributor reads one review gate:
 `review-required` names whichever review is still missing, code first.
-`spec-owner-approval` remains a mirror until branch protection stops requiring
-it, so the merge rules change only when an administrator removes it.
+`spec-owner-approval` stays as the spec-owner job's decision record, which the
+other writers read; it is not a required check, so a contributor waits on
+`review-required` alone.
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+### DEC-11 — Main's release-check runs about once an hour
+
+**Reference:** `spec:AST-030/DEC-11`
+**Decider:** `cixzhang`
+
+Dispatched on every push, main's release-check ran back to back through busy
+hours, about 65 full runs a day of roughly 165 runner-minutes each. A check
+covers every merge up to its commit, so one check about an hour keeps every
+merge covered with about a third of the runs. A push after a quiet hour is
+checked at once; in a burst, the next check starts at most 55 minutes after
+the last one, plus up to 15 minutes for the schedule to notice, so a failing
+merge is reported within about two hours of landing instead of about one and a
+quarter. A release cut dispatches its own exact-commit check, which this does
+not affect.
+
+Rejected: waiting for main to be quiet for some minutes (busy hours never go
+quiet, so the check would starve); holding a runner to wait out each push (it
+is billed while it waits); a daily check (main's result would lag a whole
+day).
 
 ### DEC-14 — Agent lanes run the heavy suites when ready and before merge
 
