@@ -111,8 +111,17 @@ standard width map.
 - **INV6 — Provider consumers avoid document observation.** `useTheme` under a
   provider reads context directly. Shared document observers exist only for
   no-provider consumers and are disconnected when unused.
-- **INV7 — System mode follows the platform.** `system` resolves to the active
-  light/dark preference without writing a forced mode to `<html>`.
+- **INV7 — The mode is typed, and system follows the platform.** `Theme`'s
+  `mode` is typed exactly `'light' | 'dark' | 'system'`; those are its only
+  valid values, and `'system'` is the default. `system` resolves to the active
+  light/dark preference without writing a forced mode to `<html>`. Any other
+  runtime value, such as a stale stored preference or an untyped caller's
+  string, is treated as `system`: the root provider writes no forced mode to
+  `<html>`, and consumers resolve it through the platform preference.
+  `useTheme().mode` is always the resolved `'light'` or `'dark'`, never
+  `system` and never the raw value. (Known implementation gap: a provider given
+  a value outside the three still reflects it unchanged as its own wrapper's
+  `data-theme` attribute; no style or consumer reads that attribute.)
 - **INV8 — Media surfaces do not replace the theme.** `MediaTheme` changes local
   surface tokens and optional surface-specific component rules. It keeps the
   active theme and does not remount children when switched off.
@@ -165,12 +174,13 @@ which component parts are public theme targets.
 
 ## Verification
 
-| Invariant        | Evidence                                  | Failure signal                                                                                     |
-| ---------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| INV1, INV2, INV3 | `Theme.test.tsx` and portal/root fixtures | A nested provider changes `<html>`, or portal content cannot find the root theme                   |
-| INV4, INV5       | Runtime injection and cleanup tests       | A built theme injects CSS, duplicate providers duplicate CSS, or one unmount removes shared styles |
-| INV6, INV7       | `useTheme.test.tsx`                       | Provider consumers observe the DOM, fallback observers leak, or system mode resolves incorrectly   |
-| INV8             | `MediaTheme.dom.test.tsx`                 | Surface mode replaces the theme, loses parent component rules, or remounts children                |
-| INV9             | Runtime/build compiler comparison         | Provider-mounted CSS differs from built CSS for the same theme                                     |
-| INV10            | `AppShell.test.tsx`                       | A named point ignores the nearest theme or treats equality as mobile                               |
-| INV11            | SSR and hydration icon fixtures           | A server-rendered icon differs from the hydrated icon for the same theme                           |
+| Invariant        | Evidence                                                                                                                                     | Failure signal                                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV2, INV3 | `Theme.test.tsx` and portal/root fixtures                                                                                                    | A nested provider changes `<html>`, or portal content cannot find the root theme                                                 |
+| INV4, INV5       | Runtime injection and cleanup tests                                                                                                          | A built theme injects CSS, duplicate providers duplicate CSS, or one unmount removes shared styles                               |
+| INV6             | `useTheme.test.tsx`                                                                                                                          | Provider consumers observe the DOM, or fallback observers leak                                                                   |
+| INV7             | `useTheme.test.tsx` system-mode cases and "modes outside light\|dark\|system" cases, each value under a light and a dark platform preference | System mode resolves incorrectly, or `useTheme().mode` returns anything but `'light'` or `'dark'`, such as the raw unknown value |
+| INV8             | `MediaTheme.dom.test.tsx`                                                                                                                    | Surface mode replaces the theme, loses parent component rules, or remounts children                                              |
+| INV9             | Runtime/build compiler comparison                                                                                                            | Provider-mounted CSS differs from built CSS for the same theme                                                                   |
+| INV10            | `AppShell.test.tsx`                                                                                                                          | A named point ignores the nearest theme or treats equality as mobile                                                             |
+| INV11            | SSR and hydration icon fixtures                                                                                                              | A server-rendered icon differs from the hydrated icon for the same theme                                                         |
