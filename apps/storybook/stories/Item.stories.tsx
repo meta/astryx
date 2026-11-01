@@ -1,6 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Item.stories.tsx
+ * @input Item and composing rows, including numbered/bulleted marker anatomy
+ * @output Reusable row examples and before/after DOM-count browser fixtures
+ * @position Storybook examples and Item/List regression evidence
+ */
+
 import {useState, type ReactNode} from 'react';
+import {Button} from '@astryxdesign/core/Button';
 import * as stylex from '@stylexjs/stylex';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect} from 'storybook/test';
@@ -15,6 +23,13 @@ import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {StatusDot} from '@astryxdesign/core/StatusDot';
 
 const storyStyles = stylex.create({
+  markerAnatomy: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 16,
+    width: 320,
+    maxWidth: '100%',
+  },
   iconCircle: {
     display: 'flex',
     alignItems: 'center',
@@ -50,6 +65,64 @@ const meta: Meta<typeof Item> = {
 
 export default meta;
 type Story = StoryObj<typeof Item>;
+
+/** Numbered rows alone need the two-column marker/content grouping. */
+export const MarkerAnatomy: Story = {
+  tags: ['!autodocs'],
+  render: function MarkerAnatomyStory() {
+    const [isOpen, setOpen] = useState(false);
+    const slots = {
+      startContent: <span data-anatomy-slot="start">S</span>,
+      label: (
+        <span data-anatomy-slot="label">
+          A row label that can wrap naturally
+        </span>
+      ),
+      description: 'Secondary description',
+      endContent: <span data-anatomy-slot="end">E</span>,
+      align: 'first-line' as const,
+    };
+    const marker = <span data-anatomy-slot="marker">•</span>;
+    return (
+      <div data-marker-anatomy {...stylex.props(storyStyles.markerAnatomy)}>
+        <div data-marker-case="numbered">
+          <List listStyle="decimal" start={99}>
+            <ListItem {...slots} />
+          </List>
+        </div>
+        <div data-marker-case="bulleted">
+          <List listStyle="disc">
+            <ListItem {...slots} isSelected />
+          </List>
+        </div>
+        <div data-marker-case="marked-item">
+          <Item {...slots} marker={marker} />
+        </div>
+        <div data-marker-case="unmarked-item">
+          <Item {...slots} />
+        </div>
+        <Button
+          label="Toggle marker menu"
+          onClick={() => setOpen(value => !value)}
+        />
+        {isOpen && (
+          <div
+            role="menu"
+            aria-label="Marker anatomy menu"
+            data-marker-case="menu">
+            <Item
+              {...slots}
+              marker={marker}
+              role="menuitem"
+              tabIndex={0}
+              onClick={() => {}}
+            />
+          </div>
+        )}
+      </div>
+    );
+  },
+};
 
 /** Basic item with all slots populated. */
 export const Default: Story = {

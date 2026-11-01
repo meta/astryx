@@ -193,22 +193,22 @@ const overrides = stylex.create({
             [
               'Next.js',
               'Next.js + theme CSS',
-              '[apps/example-nextjs](https://github.com/facebook/astryx/tree/main/apps/example-nextjs)',
+              '[apps/example-nextjs](https://github.com/meta/astryx/tree/main/apps/example-nextjs)',
             ],
             [
               'Next.js + StyleX',
               'Next.js + StyleX for custom styles',
-              '[apps/example-nextjs-stylex](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-stylex)',
+              '[apps/example-nextjs-stylex](https://github.com/meta/astryx/tree/main/apps/example-nextjs-stylex)',
             ],
             [
               'Next.js + Tailwind',
               'Next.js + Tailwind bridge',
-              '[apps/example-nextjs-tailwind](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-tailwind)',
+              '[apps/example-nextjs-tailwind](https://github.com/meta/astryx/tree/main/apps/example-nextjs-tailwind)',
             ],
             [
               'Vite + Tailwind',
               'Vite + Tailwind bridge',
-              '[apps/example-vite-tailwind](https://github.com/facebook/astryx/tree/main/apps/example-vite-tailwind)',
+              '[apps/example-vite-tailwind](https://github.com/meta/astryx/tree/main/apps/example-vite-tailwind)',
             ],
           ],
         },
@@ -216,7 +216,7 @@ const overrides = stylex.create({
           type: 'code',
           lang: 'bash',
           label: 'Clone and run an example',
-          code: `git clone https://github.com/facebook/astryx.git
+          code: `git clone https://github.com/meta/astryx.git
 cd astryx/apps/example-nextjs
 {@pm install}
 {@pm run dev}`,

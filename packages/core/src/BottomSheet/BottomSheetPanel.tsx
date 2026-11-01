@@ -48,7 +48,8 @@ import {
   sizeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -205,11 +206,11 @@ const styles = stylex.create({
    * 90% off in 163ms -- the travel is over before the eye has followed it, and
    * the rest of the duration moves pixels already below the fold.
    *
-   * An exit accelerates instead: away from rest, gathering speed, quickest as
-   * it leaves the screen. The curve is deliberately gentle rather than a hard
-   * `ease-in` -- it is moving within ~50ms, so the close reads as one
-   * departure rather than a hesitation and a snap. The duration is the
-   * entrance's own band, so only the curve differs between the two
+   * An exit accelerates instead (`--ease-exit`): away from rest, gathering
+   * speed, quickest as it leaves the screen. The curve is deliberately gentle
+   * rather than a hard `ease-in` -- it is moving within ~50ms, so the close
+   * reads as one departure rather than a hesitation and a snap. The duration
+   * is the entrance's own band, so only the curve differs between the two
    * directions; a shorter band leaves too little visible travel once a theme
    * scales the motion scale down (neutral's medium is 300ms against 410ms).
    */
@@ -224,7 +225,13 @@ const styles = stylex.create({
       default: null,
       [REDUCED_MOTION_COARSE]: 0,
     },
-    transitionTimingFunction: 'cubic-bezier(0.3, 0, 0.6, 0.6)',
+    // A pointer presentation closes on the theme's exit curve (spec:AST-090
+    // FR12). A touch presentation keeps its own curve, which the exit tokens
+    // do not change.
+    transitionTimingFunction: {
+      default: easeVars['--ease-exit'],
+      '@media (pointer: coarse)': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
+    },
   },
   /**
    * An exit that cross-fades on a pointer the media query does not cover: a

@@ -4,13 +4,17 @@
 
 /**
  * @file MobileNavToggle.tsx
- * @input Uses React, Button, Icon, AppShell mobile context
+ * @input Uses React, Button, Icon, AppShell mobile context; forwards host props
+ *   to the Button
  * @output Exports MobileNavToggle component
  * @position Standalone toggle button; can be placed anywhere in the AppShell tree.
  *
  * Hamburger button that opens/closes the mobile nav drawer.
  * Reads from AppShell mobile context — renders nothing above the mobile breakpoint.
  * Can be placed anywhere in the component tree (TopNav, content area, custom toolbar, etc.).
+ * Host attributes and DOM handlers reach the button; its `aria-expanded` and
+ * `aria-controls` stay component-owned, and a caller `onClick` runs after the
+ * toggle.
  */
 
 import React, {type ReactNode} from 'react';
@@ -19,10 +23,11 @@ import {Icon} from '../Icon';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import type {BaseProps} from '../BaseProps';
 import {useTranslator} from '../i18n';
+import {composeEventHandlers} from '../utils';
 
-export interface MobileNavToggleProps extends Pick<
-  BaseProps,
-  'xstyle' | 'className' | 'style'
+export interface MobileNavToggleProps extends Omit<
+  BaseProps<HTMLButtonElement>,
+  'aria-expanded' | 'aria-controls'
 > {
   ref?: React.Ref<HTMLButtonElement>;
   /**
@@ -66,6 +71,8 @@ export function MobileNavToggle({
   xstyle,
   className,
   style,
+  onClick,
+  ...rest
 }: MobileNavToggleProps) {
   const t = useTranslator();
   const label = labelFromProps ?? t('@astryx.mobileNav.toggle.open');
@@ -84,11 +91,12 @@ export function MobileNavToggle({
 
   return (
     <Button
+      {...rest}
       ref={ref}
       variant="ghost"
       label={label}
       icon={children ?? <Icon icon="menu" color="inherit" />}
-      onClick={toggleMobileNav}
+      onClick={composeEventHandlers(toggleMobileNav, onClick)}
       aria-expanded={isMobileNavOpen}
       aria-controls={mobileNavId || undefined}
       data-testid={testId ?? 'mobile-nav-toggle'}

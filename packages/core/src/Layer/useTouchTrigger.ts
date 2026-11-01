@@ -39,10 +39,7 @@
 
 import {useCallback, useEffect, useRef, type RefObject} from 'react';
 import {currentGesture} from './gestureCounter';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 
 /**
  * How a hover layer behaves on a touch pointer.
@@ -61,7 +58,7 @@ export type LayerTouchTrigger = 'auto' | 'tap' | 'none';
  * does, on a device where `(hover: hover)` matches — and only becomes a tap
  * once it lands. See `handlePointerEnter`.
  */
-const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
+export const TOUCH_POINTER_TYPES = new Set(['touch', 'pen']);
 
 /**
  * ARIA roles that make an element do something when activated. An explicit
@@ -252,7 +249,7 @@ export function useTouchTrigger(
   // waiting. The next press, a cancel, the tap itself or unmounting calls it.
   const forgetPendingTapRef = useRef<(() => void) | null>(null);
 
-  useInteractionModalityTracking();
+  const readModality = useInteractionModalityTrackingFor(triggerRef);
 
   const disarmOutsideDismiss = useCallback(() => {
     isTapOpenRef.current = false;
@@ -307,8 +304,8 @@ export function useTouchTrigger(
   useEffect(() => () => forgetPendingTapRef.current?.(), []);
 
   const isTouchInteraction = useCallback(
-    () => isTouchPointerRef.current && getInteractionModality() === 'pointer',
-    [],
+    () => isTouchPointerRef.current && readModality() === 'pointer',
+    [readModality],
   );
 
   const handlePointerEnter = useCallback((event: PointerEvent) => {

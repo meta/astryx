@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:CollapsibleGroup
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang, imdreamrunner]
 review_triggers: [public-api, behavior, layout, accessibility, theming]
 verified_by:
@@ -17,6 +17,8 @@ verified_by:
     packages/core/src/Collapsible/__tests__/Collapsible.a11y.test.tsx,
     packages/core/src/Collapsible/__tests__/Collapsible.a11y.chromium.spec.ts,
     packages/core/src/Collapsible/__tests__/CollapsibleGroup.a11y.chromium.spec.ts,
+    packages/core/src/Collapsible/__tests__/CollapsibleGroup.a11y.test.tsx,
+    packages/core/src/Collapsible/__tests__/CollapsibleGroupAccordion.a11y.chromium.spec.ts,
     packages/core/src/theme/themingTargets.test.ts,
     apps/storybook/stories/CollapsibleGroup.stories.tsx,
   ]
@@ -31,7 +33,7 @@ architecture:
     architecture:component-test-sufficiency,
   ]
 contributing: [contributing:api-conventions]
-system_specs: [spec:AST-029]
+system_specs: [spec:AST-029, spec:AST-085]
 ---
 
 # CollapsibleGroup component contract
@@ -44,11 +46,11 @@ system_specs: [spec:AST-029]
 | Behavior                | Direct children with a `value` read group state; opening an item replaces or extends the open-value set according to mode. The group renders no wrapper unless divider chrome is enabled.                                       |
 | End-user impact         | People can reveal one section or several sections without disclosure state drifting between sibling rows; divided groups keep one coherent visual and directional treatment.                                                    |
 | Builder impact          | Builders choose state ownership and selection mode, give participating items stable values, and may opt into divided-row presentation.                                                                                          |
-| Compatibility/readiness | Released DOM output, props, defaults, targets, and migration promises are unchanged. An unchanged controlled string preserves the coordination broadcast identity instead of rerendering every consumer.                        |
+| Compatibility/readiness | Records shipped behavior; no public change. Three implementation gaps, listed under Current-state impact.                                                                                                                       |
 | Review checks           | Reject lost single/multiple coordination, controlled state that mutates internally, uncontrolled state that stops updating, presentation leakage into nested disclosures, or a wrapper appearing when dividers are absent.      |
 | Governing rules         | `component:Collapsible/FR7–FR9,DEC-2`; `architecture:public-component-api/INV1,INV5–INV9`; `architecture:react-component-runtime/INV1,INV8–INV9`; `architecture:component-theming-surface/INV3–INV7`.                           |
 
-This table is a review projection; the body below is authoritative only after owner approval.
+This table is a review projection; the body below is authoritative.
 
 ## Intent
 
@@ -57,11 +59,28 @@ Coordinate a set of disclosure items so their open state follows one group owner
 ## Compatibility and migration
 
 - Released default preserved: yes
-- Compatibility class: compatible runtime efficiency correction; no DOM output, public type, default, target, export, or migration change
+- Compatibility class: records shipped behavior; no public change
 - Controlled/uncontrolled behavior: unchanged
 - Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **A disabled header leaves the Tab order.** A disabled direct item's header
+  carries `aria-disabled` but drops out of the Tab order, so a keyboard user
+  cannot reach it to learn why it is unavailable. `spec:AST-085` FR1 keeps a
+  disabled control focusable; the header is owned by `component:Collapsible`.
+- **Equal values can rebuild the coordination context.** An equal new
+  controlled array, or a new `onChange` such as an inline handler, rebuilds the
+  coordination context on every parent render, so memoized direct items
+  re-render. `architecture:react-component-runtime` INV9 keeps an unchanged
+  payload from broadcasting a new identity (FR7).
+- **The accordion binding runs adopted rows as advisory.** The binding runs
+  the header-to-header Tab step, single-mode sibling collapse, and no
+  arrow-key movement as advisory rows, so
+  a regression there does not fail the binding lane. `spec:AST-020` FR9 makes
+  an adopted expectation required once this record adopts it (AR4).
 
 ## Ownership boundary
 
@@ -90,15 +109,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                   | Basis                                                                                             | Draft review state |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------ |
-| FR1 | In `single` mode, toggling a closed direct item MUST replace the open-value set with that item, and toggling the open item MUST clear the set.                                                        | shipped source, consumer docs, and focused interaction tests                                      | verify             |
-| FR2 | In `multiple` mode, toggling a direct item MUST add or remove only that value while preserving the state of other values.                                                                             | shipped source, consumer docs, and focused interaction tests                                      | verify             |
-| FR3 | Supplying `value` MUST keep state caller-owned and report requested changes through `onChange`; omitting it MUST keep state internal after initialization from `defaultValue`.                        | `architecture:react-component-runtime/INV1,INV8`; shipped controlled and uncontrolled tests       | verify             |
-| FR4 | A direct `Collapsible` with a `value` MUST use group coordination; an item without a value MUST retain standalone ownership.                                                                          | shipped hook behavior and focused group/standalone tests                                          | verify             |
-| FR5 | With `hasDividers=false`, the group MUST add no DOM wrapper. With dividers enabled it MUST render one wrapper that receives documented root props and the `collapsible-group` target.                 | `architecture:public-component-api/INV5–INV8`; `architecture:component-theming-surface/INV3–INV7` | verify             |
-| FR6 | Density, divider, and chevron defaults MUST reach direct items without leaking through a direct item's revealed content into nested independent disclosures.                                          | `component:Collapsible/FR7–FR8,DEC-2`; focused nesting tests                                      | settled            |
-| FR7 | Presentation context identity MUST remain stable while divider, density, and chevron inputs are unchanged; coordination identity MUST change only when the open-value behavior it broadcasts changes. | `architecture:react-component-runtime/INV9`; memoized source and interaction tests                | verify             |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                 | Basis                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| FR1 | In `single` mode, toggling a closed direct item MUST replace the open-value set with that item, and toggling the open item MUST clear the set.                                                                                                                                                                                                                                                                            | shipped source, consumer docs, and focused interaction tests                                      |
+| FR2 | In `multiple` mode, toggling a direct item MUST add or remove only that value while preserving the state of other values.                                                                                                                                                                                                                                                                                                 | shipped source, consumer docs, and focused interaction tests                                      |
+| FR3 | Supplying `value` MUST keep state caller-owned and report requested changes through `onChange`; omitting it MUST keep state internal after initialization from `defaultValue`.                                                                                                                                                                                                                                            | `architecture:react-component-runtime/INV1,INV8`; shipped controlled and uncontrolled tests       |
+| FR4 | A direct `Collapsible` with a `value` MUST use group coordination; an item without a value MUST retain standalone ownership.                                                                                                                                                                                                                                                                                              | shipped hook behavior and focused group/standalone tests                                          |
+| FR5 | With `hasDividers=false`, the group MUST add no DOM wrapper. With dividers enabled it MUST render one wrapper that receives documented root props and the `collapsible-group` target.                                                                                                                                                                                                                                     | `architecture:public-component-api/INV5–INV8`; `architecture:component-theming-surface/INV3–INV7` |
+| FR6 | Density, divider, and chevron defaults MUST reach direct items without leaking through a direct item's revealed content into nested independent disclosures.                                                                                                                                                                                                                                                              | `component:Collapsible/FR7–FR8,DEC-2`; focused nesting tests                                      |
+| FR7 | Presentation context identity MUST remain stable while divider, density, and chevron inputs are unchanged; coordination identity MUST stay stable across a rerender with an unchanged controlled string, the same controlled array reference, or unchanged internal state, with the same `type` and `onChange`. Implementation gap: an equal new controlled array or a new `onChange` rebuilds it (Current-state impact). | `architecture:react-component-runtime/INV9`; memoized source and interaction tests                |
 
 ### Allowed variation
 
@@ -126,14 +145,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 ### Performance and resources
 
 - **PR1 — Render-owned coordination.** The group derives output from props, state, and context and owns no Effect, listener, observer, timer, request, subscription, or imperative browser resource.
-- **PR2 — Stable broadcasts.** Memoized context values prevent unchanged semantic payloads from broadcasting new identities to direct consumers.
+- **PR2 — Stable broadcasts.** Memoized context values keep the identities FR7 names stable for direct consumers.
 
 ## Accessibility contract
 
 - **AR1 — Child semantics remain primary.** Group coordination MUST preserve each Collapsible button's accessible name, `aria-expanded`, `aria-controls`, controlled region, and keyboard activation.
 - **AR2 — Presentation adds no competing interaction.** The divider wrapper MUST NOT add a role, focus target, accessible name, or keyboard behavior.
 - **AR3 — Direction stays with Collapsible.** Group chevron defaults MUST preserve `component:Collapsible/AR1–AR3`, including the inward leading cue under LTR and RTL.
-- **AR4 — The group adopts the APG Accordion pattern's required parts** (`spec:AST-020/FR15`): each direct item's header is a `button` whose accessible name is the item's title, with `aria-expanded` reflecting its panel, `aria-controls` naming the panel it reveals, and `aria-disabled` when it cannot be toggled; every enabled header sits in the page Tab order and Enter or Space toggles its panel, in `single` mode collapsing the sibling that was open; a disabled header carries `aria-disabled`, drops out of the Tab order, and cannot be toggled. Not adopted: a heading element around each header (this record requires none; the caller's document structure supplies headings), the optional `region` role on panels, and arrow-key or Home/End movement between headers — the group is a set of independent disclosures, not one composite control.
+- **AR4 — The group adopts the APG Accordion pattern's required parts** (`spec:AST-020/FR15`): each direct item's header is a `button` whose accessible name is the item's title, with `aria-expanded` reflecting its panel, `aria-controls` naming the panel it reveals, and `aria-disabled` when it cannot be toggled; every enabled header sits in the page Tab order and Enter or Space toggles its panel, in `single` mode collapsing the sibling that was open; a disabled header carries `aria-disabled` and cannot be toggled, apart from the Tab-order gap (Current-state impact). Not adopted: a heading element around each header (this record requires none; the caller's document structure supplies headings), the optional `region` role on panels, and arrow-key or Home/End movement between headers — the group is a set of independent disclosures, not one composite control.
 
 ## Design relationships
 
@@ -142,7 +161,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Group container  | Optional divider chrome visually associates sibling disclosures as a set. | observed shipped representation | aggregate container | FR5–FR6, AR2       |
 | Direct item      | Density and chevron defaults remain consistent across sibling rows.       | `component:Collapsible/FR7–FR8` | disclosure row      | FR6, AR3           |
 
-No current design record prescribes exact CollapsibleGroup pixels. This observational draft records the shipped divided and plain relationships without deciding new visual direction.
+No current design record prescribes exact CollapsibleGroup pixels. This record covers the shipped divided and plain relationships without deciding new visual direction.
 
 ### Theming anatomy
 
@@ -160,7 +179,7 @@ No current design record prescribes exact CollapsibleGroup pixels. This observat
 }
 ```
 
-The Group container is CollapsibleGroup's conditional aggregate wrapper. The other anatomy rows remain owned by `component:Collapsible`; they are repeated in this observational subcomponent map only because the released consumer anatomy and target inventory are shared. Trigger, content, chevron, open state, disabled state, density padding, and per-item dividers remain with Collapsible's contract.
+The Group container is CollapsibleGroup's conditional aggregate wrapper. The other anatomy rows remain owned by `component:Collapsible`; they are repeated in this subcomponent map only because the released consumer anatomy and target inventory are shared. Trigger, content, chevron, open state, disabled state, density padding, and per-item dividers remain with Collapsible's contract.
 
 ## Family and system relationships
 
@@ -172,14 +191,23 @@ The Group container is CollapsibleGroup's conditional aggregate wrapper. The oth
 
 ## Verification map
 
-| Contract               | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Representative states                                                                            | Mutation or failure expectation                                                                                                                 | Audit section                          |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| FR1–FR4, ORD1          | `CollapsibleGroup.test.tsx`; `useCollapsible.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                       | single/multiple; controlled/uncontrolled; valued/unvalued                                        | A sibling stays open in single mode, closes in multiple mode, controlled state mutates internally, or an unvalued item loses local state.       | `audit:CollapsibleGroup/behavior`      |
-| FR5–FR6, ORD2–ORD3     | `CollapsibleGroup.test.tsx`; `Collapsible.test.tsx`; `themingTargets.test.ts`                                                                                                                                                                                                                                                                                                                                                                                | plain/divided; each density; group/item/nested position                                          | Wrapper/target reachability changes, defaults stop reaching direct items, or presentation leaks into nested content.                            | `audit:CollapsibleGroup/theming`       |
-| AR4                    | `Collapsible.test.tsx` (disabled trigger: `aria-disabled`, out of the Tab order, no toggle); `CollapsibleGroup.test.tsx` (single/multiple coordination, `aria-expanded`, Enter activation); `Collapsible.a11y.test.tsx` and `Collapsible.a11y.chromium.spec.ts` (disclosure semantics, Space, Tab reachability for a lone item); grouped Tab order, Space in a group, and no arrow-key movement under the Accordion contract (`internal/a11y-spec`, pending) | single/multiple; open/closed; a disabled item, open or closed; Tab order; Enter/Space round trip | A header loses its button role, name, `aria-expanded`, or `aria-controls`; Enter or Space stops toggling; arrow keys move focus between headers | `audit:CollapsibleGroup/accessibility` |
-| AR1–AR3                | DOM and Chromium accessibility suites; component-owned Storybook fixture; RTL audit                                                                                                                                                                                                                                                                                                                                                                          | open/closed; single/multiple; leading/trailing; LTR/RTL                                          | Disclosure semantics diverge from state, the wrapper becomes interactive, or leading direction stops mirroring.                                 | `audit:CollapsibleGroup/accessibility` |
-| PR1–PR2, FR7           | source review plus context and interaction tests                                                                                                                                                                                                                                                                                                                                                                                                             | unchanged and changed state/presentation inputs                                                  | An Effect/resource appears, unchanged payload broadcasts a new identity, or changed group behavior fails to reach consumers.                    | `audit:CollapsibleGroup/code-health`   |
-| Consumer documentation | CLI component projection, docs checks, and `CollapsibleGroup.stories.tsx`                                                                                                                                                                                                                                                                                                                                                                                    | every public concept and representative composition                                              | A released prop/default is undiscoverable or the owned browser route loses representative state coverage.                                       | `audit:CollapsibleGroup/docs`          |
+| Contract               | Verification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Representative states                                                                            | Mutation or failure expectation                                                                                                                 | Audit section                          |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| FR1–FR4, ORD1          | `CollapsibleGroup.test.tsx`; `useCollapsible.test.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | single/multiple; controlled/uncontrolled; valued/unvalued                                        | A sibling stays open in single mode, closes in multiple mode, controlled state mutates internally, or an unvalued item loses local state.       | `audit:CollapsibleGroup/behavior`      |
+| FR5–FR6, ORD2–ORD3     | `CollapsibleGroup.test.tsx`; `Collapsible.test.tsx`; `themingTargets.test.ts`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | plain/divided; each density; group/item/nested position                                          | Wrapper/target reachability changes, defaults stop reaching direct items, or presentation leaks into nested content.                            | `audit:CollapsibleGroup/theming`       |
+| AR4                    | `Collapsible.test.tsx` (disabled trigger: `aria-disabled` and no toggle; its out-of-Tab-order assertion pins the gap, pending conformance); `CollapsibleGroup.test.tsx` (single/multiple coordination, `aria-expanded`, Enter activation); `Collapsible.a11y.test.tsx` and `Collapsible.a11y.chromium.spec.ts` (disclosure semantics, Space, Tab reachability for a lone item); `CollapsibleGroup.a11y.test.tsx` and `CollapsibleGroupAccordion.a11y.chromium.spec.ts` (Space on grouped headers; the header-to-header Tab step, single-mode sibling collapse, and no arrow-key movement run as advisory rows) | single/multiple; open/closed; a disabled item, open or closed; Tab order; Enter/Space round trip | A header loses its button role, name, `aria-expanded`, or `aria-controls`; Enter or Space stops toggling; arrow keys move focus between headers | `audit:CollapsibleGroup/accessibility` |
+| AR1–AR3                | DOM and Chromium accessibility suites; component-owned Storybook fixture; RTL audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | open/closed; single/multiple; leading/trailing; LTR/RTL                                          | Disclosure semantics diverge from state, the wrapper becomes interactive, or leading direction stops mirroring.                                 | `audit:CollapsibleGroup/accessibility` |
+| PR1–PR2, FR7           | source review plus context and interaction tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | unchanged and changed state/presentation inputs                                                  | An Effect/resource appears, unchanged payload broadcasts a new identity, or changed group behavior fails to reach consumers.                    | `audit:CollapsibleGroup/code-health`   |
+| Consumer documentation | CLI component projection, docs checks, and `CollapsibleGroup.stories.tsx`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | every public concept and representative composition                                              | A released prop/default is undiscoverable or the owned browser route loses representative state coverage.                                       | `audit:CollapsibleGroup/docs`          |
+
+Read from source, with no focused test yet:
+
+- AR4: no Home/End movement between headers.
+- FR7: presentation context identity staying stable while divider, density,
+  and chevron inputs are unchanged, and coordination identity across the same
+  array reference, unchanged internal state, and an equal new array; only the
+  controlled-string case is tested.
+- PR1: the group owning no Effect or browser resource.
 
 ## Decision log
 
@@ -194,7 +222,7 @@ Rejected: arrow-key movement between headers; a required heading element around 
 
 ## Open questions
 
-None. This observational draft does not broaden the released coordination modes or decide new presentation.
+None. This record does not broaden the released coordination modes or decide new presentation.
 
 ## Content boundary
 

@@ -9,6 +9,7 @@
  * SYNC: When TopNavMegaMenu changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
@@ -1128,5 +1129,25 @@ describe('TopNavMegaMenuItem pass-through props', () => {
     expect(screen.getByTestId('drawer-item').getAttribute('class')).not.toEqual(
       drawerWithout,
     );
+  });
+});
+
+describe('TopNavMegaMenu ref', () => {
+  const items = <TopNavMegaMenuItem title="Analytics" href="/analytics" />;
+
+  it('forwards its ref to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<TopNavMegaMenu ref={ref} label="Products" items={items} />);
+    expect(ref.current).toBe(screen.getByRole('button', {name: 'Products'}));
+  });
+
+  it('forwards its ref to the drawer trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu ref={ref} label="Products" items={items} />
+      </TopNavRenderContext>,
+    );
+    expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
   });
 });

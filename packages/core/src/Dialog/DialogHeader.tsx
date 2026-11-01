@@ -20,15 +20,16 @@ import {useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars, sizeVars, typeScaleVars} from '../theme/tokens.stylex';
 import {LayoutHeader} from '../Layout/LayoutHeader';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
 import {Heading} from '../Heading/Heading';
 import {Text} from '../Text/Text';
 import type {BaseProps} from '../BaseProps';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useDialogContext} from './DialogContext';
-import {useTranslator} from '../i18n';
+import {useTranslator} from '../i18n/useTranslator';
 
 const styles = stylex.create({
   container: {

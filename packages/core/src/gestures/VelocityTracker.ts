@@ -88,15 +88,22 @@ export class VelocityTracker {
    * Record a position. Timestamps must not go backwards (an older sample is
    * ignored), and a moved sample at the newest moved sample's timestamp
    * replaces it. A sample at the newest position is not motion: it changes
-   * no velocity.
+   * no velocity, unless `isMotion` says the contact moved anyway (a pinch's
+   * value holding while both fingers move, which reads as zero velocity for
+   * that interval).
    */
-  add(x: number, y: number, time: number): void {
+  add(
+    x: number,
+    y: number,
+    time: number,
+    {isMotion = false}: {isMotion?: boolean} = {},
+  ): void {
     if (this.newest != null && time < this.newest.time) {
       return;
     }
     this.newest = {x, y, time};
     const last = this.moved[this.moved.length - 1];
-    if (last != null && x === last.x && y === last.y) {
+    if (last != null && x === last.x && y === last.y && !isMotion) {
       return;
     }
     if (last != null && time === last.time) {

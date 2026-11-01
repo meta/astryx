@@ -71,7 +71,7 @@ Review should produce the smallest ideal change that can land:
 
 1. Apply current component, module, family, design, theme, architecture, and system authority to each delta.
 2. If a delta violates current authority, conform or remove it. Do not propose changing the specification merely to rescue the implementation.
-3. If a delta is unsettled but separable, remove or split it and keep reviewing the primary intent.
+3. If a delta is unsettled but separable, remove or split it and keep reviewing the primary intent, except an undeclared public API row, which goes to human review for an owner's decision rather than being removed or split (`architecture:knowledge-contracts` change coupling step 6).
 4. Propose a specification only for a surviving, intentional durable decision the team wants to pursue.
 
 A current record governs only its explicit claims inside its ownership boundary. It does not imply that the whole named component or module is fully specified.
@@ -90,7 +90,7 @@ code and evidence, and shared or cross-component rules stay in `docs/design/`.
 External contributors keep the normal contribution flow and are never asked to
 author specifications. If authority is missing, a maintainer records the owner
 ruling. A human request supplies intent, but it becomes current committed
-authority only after exact-head owner approval.
+authority only after an owner approves its content.
 
 A new visual representation, subjective direction, or interaction model remains a design decision. Put a shared decision in its own design specification; keep a durable component-local decision in the owning component/module table.
 

@@ -2,11 +2,13 @@
 
 /**
  * @file Shared RTL coverage and directional-decoration helpers.
- * @input Rendered DOM decorations, canonical package rosters, Storybook routes,
- *   curated targets, and D1/D5/D6/curated audit results.
- * @output Audited package/story routing, contextual decoration candidates,
- *   component-filter reconciliation, and per-component measured / verified-N-A /
- *   coverage-gap classifications.
+ * @input Rendered DOM decorations, canonical package rosters, Storybook routes
+ *   and source/export metadata, typed story-level applicability, curated targets,
+ *   and D1/D5/D6/curated audit results.
+ * @output Audited package/story routing, stable D1 targets, applicability and
+ *   exclusion disclosure, contextual decoration candidates, component-filter
+ *   reconciliation, and per-component measured / verified-N-A / coverage-gap
+ *   classifications.
  * @position Pure support layer for rtl-audit.mjs and its unit tests.
  */
 
@@ -19,15 +21,14 @@ export const AUDITED_STORY_PREFIXES = Object.freeze([
   ...new Set(COMPONENT_PACKAGES.flatMap(pkg => pkg.storyPrefixes)),
 ]);
 
-function packageForStoryId(
-  storyId,
-  packageNames = AUDITED_PACKAGE_NAMES,
-) {
-  return COMPONENT_PACKAGES.find(
-    pkg =>
-      packageNames.includes(pkg.name) &&
-      pkg.storyPrefixes.some(prefix => storyId.startsWith(prefix)),
-  )?.name ?? null;
+function packageForStoryId(storyId, packageNames = AUDITED_PACKAGE_NAMES) {
+  return (
+    COMPONENT_PACKAGES.find(
+      pkg =>
+        packageNames.includes(pkg.name) &&
+        pkg.storyPrefixes.some(prefix => storyId.startsWith(prefix)),
+    )?.name ?? null
+  );
 }
 
 function pascalCase(value) {
@@ -63,16 +64,19 @@ function componentsFromStoryTitle(
     (publicComponentsByPackage[packageName] ?? [])
       .filter(component => candidates.has(component))
       .map(component => `${packageName}/${component}`);
-  const namespacePackages = COMPONENT_PACKAGES
-    .filter(pkg => pkg.storyNamespaces.includes(namespace))
+  const namespacePackages = COMPONENT_PACKAGES.filter(pkg =>
+    pkg.storyNamespaces.includes(namespace),
+  )
     .map(pkg => pkg.name)
     .filter(packageName => packageName in publicComponentsByPackage);
-  const eligiblePackages = namespacePackages.length > 0
-    ? namespacePackages
-    : Object.keys(publicComponentsByPackage);
-  const preferred = preferredPackage && eligiblePackages.includes(preferredPackage)
-    ? matchesIn(preferredPackage)
-    : [];
+  const eligiblePackages =
+    namespacePackages.length > 0
+      ? namespacePackages
+      : Object.keys(publicComponentsByPackage);
+  const preferred =
+    preferredPackage && eligiblePackages.includes(preferredPackage)
+      ? matchesIn(preferredPackage)
+      : [];
   if (preferred.length > 0) return preferred;
   return eligiblePackages
     .filter(packageName => packageName !== preferredPackage)
@@ -95,8 +99,8 @@ export function componentFromStoryId(
   const exact = publicComponents.find(
     component => component.toLowerCase() === normalized,
   );
-  const fallback = exact ??
-    (publicComponents.includes('Chart') ? 'Chart' : segment);
+  const fallback =
+    exact ?? (publicComponents.includes('Chart') ? 'Chart' : segment);
   return `${packageName}/${fallback}`;
 }
 
@@ -118,9 +122,7 @@ export function componentFromTarget(
     return declared;
   }
   const packageName = packageForStoryId(target.storyId, packageNames);
-  return packageName
-    ? `${packageName}/${declared}`
-    : `unknown/${declared}`;
+  return packageName ? `${packageName}/${declared}` : `unknown/${declared}`;
 }
 
 /**
@@ -151,21 +153,18 @@ export function buildStoryComponentRoutes({
   return normalizedStories.flatMap(story => {
     const packageName = packageForStoryId(story.id, packageNames);
     const explicitComponents = aliases.get(story.id) ?? [];
-    const titleComponents = explicitComponents.length === 0
-      ? componentsFromStoryTitle(
-          story.title,
-          packageName,
-          publicComponentsByPackage,
-        )
-      : [];
+    const titleComponents =
+      explicitComponents.length === 0
+        ? componentsFromStoryTitle(
+            story.title,
+            packageName,
+            publicComponentsByPackage,
+          )
+        : [];
     const components = [...explicitComponents, ...titleComponents];
     if (components.length === 0) {
       components.push(
-        componentFromStoryId(
-          story.id,
-          packageNames,
-          publicComponentsByPackage,
-        ),
+        componentFromStoryId(story.id, packageNames, publicComponentsByPackage),
       );
     }
     return Array.from(
@@ -215,6 +214,125 @@ export function storyIdsForComponentFilters(routes, filters) {
       componentRoutesForFilters(routes, filters).map(route => route.id),
     ),
   ];
+}
+
+/**
+ * Keep D1 representative selection stable when Storybook changes index order.
+ * Story source-file and export order preserve the repository's existing choice;
+ * the story id is the deterministic fallback.
+ */
+export function orderD1StoryCandidates(candidates) {
+  return [...candidates].sort(
+    (left, right) =>
+      (left.importPath ?? '').localeCompare(right.importPath ?? '') ||
+      (left.sourceOrder ?? Number.MAX_SAFE_INTEGER) -
+        (right.sourceOrder ?? Number.MAX_SAFE_INTEGER) ||
+      left.id.localeCompare(right.id),
+  );
+}
+
+/** Build one stable D1 scan target from a component's ordered candidates. */
+export function buildD1Target(comp, candidates) {
+  const orderedCandidates = orderD1StoryCandidates(candidates);
+  if (orderedCandidates.length === 0) {
+    throw new Error(`${comp} has no D1 story candidates`);
+  }
+  return {
+    comp,
+    id: orderedCandidates[0].id,
+    candidates: orderedCandidates,
+  };
+}
+
+/**
+ * Select the first applicable D1 story while disclosing every explicit
+ * exclusion, including exclusions ordered after the selected representative.
+ */
+export function resolveD1Applicability(
+  component,
+  candidates,
+  parametersByStoryId,
+) {
+  let selectedCandidate = null;
+  const declaredExclusions = [];
+  for (const candidate of orderD1StoryCandidates(candidates)) {
+    if (!parametersByStoryId.has(candidate.id)) {
+      throw new Error(
+        `${candidate.id} resolved rtlAudit metadata was not collected`,
+      );
+    }
+    const parameters = parametersByStoryId.get(candidate.id);
+    if (parameters.D1?.applicable === false) {
+      declaredExclusions.push({
+        component,
+        storyId: candidate.id,
+        dimension: 'D1',
+        reason: parameters.D1.reason,
+      });
+    } else if (selectedCandidate == null) {
+      selectedCandidate = candidate;
+    }
+  }
+  return {selectedCandidate, declaredExclusions};
+}
+
+/**
+ * Preserve the planned D1 identity even when metadata selects another story or
+ * excludes every candidate. Keep the rendered story separately for evidence.
+ */
+export function withD1CompletionIdentity(result, plannedStoryId) {
+  const selectedStoryId = result.storyId;
+  return {
+    ...result,
+    storyId: plannedStoryId,
+    ...(selectedStoryId && selectedStoryId !== plannedStoryId
+      ? {selectedStoryId}
+      : {}),
+  };
+}
+
+const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1']);
+
+/** Validate resolved Storybook RTL-audit applicability metadata. */
+export function validateStoryRtlAuditParameters(value, storyId) {
+  if (value == null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${storyId} rtlAudit metadata must be an object`);
+  }
+
+  const result = {};
+  for (const [dimension, applicability] of Object.entries(value)) {
+    if (!STORY_RTL_AUDIT_DIMENSIONS.has(dimension)) {
+      throw new Error(`${storyId} rtlAudit has unknown dimension ${dimension}`);
+    }
+    if (
+      applicability == null ||
+      typeof applicability !== 'object' ||
+      Array.isArray(applicability) ||
+      typeof applicability.applicable !== 'boolean'
+    ) {
+      throw new Error(
+        `${storyId} rtlAudit.${dimension} must declare applicable as a boolean`,
+      );
+    }
+    const reason = applicability.reason;
+    if (reason != null && typeof reason !== 'string') {
+      throw new Error(
+        `${storyId} rtlAudit.${dimension}.reason must be a string`,
+      );
+    }
+    const trimmedReason = reason?.trim();
+    if (applicability.applicable === false && !trimmedReason) {
+      throw new Error(
+        `${storyId} rtlAudit.${dimension} applicable=false needs a non-empty reason`,
+      );
+    }
+    result[dimension] = {
+      applicable: applicability.applicable,
+      ...(trimmedReason ? {reason: trimmedReason} : {}),
+    };
+  }
+  return result;
 }
 
 /** Selected owners for which the canonical Storybook route has no story. */
@@ -608,8 +726,8 @@ export function classifyLogicalGroupedCorners(
             Number.isFinite(box.height) &&
             box.width > 0 &&
             box.height > 0 &&
-            ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].every(
-              corner => Number.isFinite(box.corners?.[corner]),
+            ['topLeft', 'topRight', 'bottomRight', 'bottomLeft'].every(corner =>
+              Number.isFinite(box.corners?.[corner]),
             ),
         ),
     ) ||
@@ -630,8 +748,7 @@ export function classifyLogicalGroupedCorners(
         : 'right';
     const oppositeSide = physicalSide === 'left' ? 'right' : 'left';
     const sideTop = physicalSide === 'left' ? 'topLeft' : 'topRight';
-    const sideBottom =
-      physicalSide === 'left' ? 'bottomLeft' : 'bottomRight';
+    const sideBottom = physicalSide === 'left' ? 'bottomLeft' : 'bottomRight';
     const oppositeTop = oppositeSide === 'left' ? 'topLeft' : 'topRight';
     const oppositeBottom =
       oppositeSide === 'left' ? 'bottomLeft' : 'bottomRight';

@@ -378,6 +378,7 @@ export function TopNavMegaMenu({
   if (renderMode === 'drawer') {
     return (
       <DrawerMegaMenu
+        ref={ref}
         label={label}
         items={items}
         featured={featured}
@@ -564,6 +565,7 @@ function DefaultMegaMenu({
 // =============================================================================
 
 function DrawerMegaMenu({
+  ref,
   label,
   items,
   featured,
@@ -572,7 +574,7 @@ function DrawerMegaMenu({
   style,
   onClick: onClickProp,
   ...rest
-}: Pick<TopNavMegaMenuProps, 'label' | 'items' | 'featured'> &
+}: Pick<TopNavMegaMenuProps, 'ref' | 'label' | 'items' | 'featured'> &
   BaseProps<HTMLButtonElement>) {
   const [isExpanded, setIsExpanded] = useState(false);
   const pressable = usePressFeedback();
@@ -582,6 +584,7 @@ function DrawerMegaMenu({
     <div {...stylex.props(styles.drawerSection)}>
       {/* Header toggle — same pattern as TopNavMenu drawer */}
       <button
+        ref={ref}
         type="button"
         {...rest}
         onClick={composeEventHandlers(onClickProp, () =>

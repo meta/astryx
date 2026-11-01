@@ -459,13 +459,20 @@ function usePopoverImplementation(
     }
   }, [layer.isOpen, hasAutoFocus, focusInitialTarget]);
 
-  // Combined ref for trigger element (layer anchor + our ref)
+  // Combined ref for trigger element (layer anchor + our ref). It is keyed on
+  // the layer's own ref, not the whole layer: the layer object changes with
+  // every new onShow or onHide, and a trigger ref that changed with it made
+  // React detach and reattach the trigger on every render. It reads nothing
+  // else from the layer, and layer.ref (useLayer's contextRef) reads only refs
+  // and its anchor name and anchor-clearance option, so nothing in it goes
+  // stale.
+  const layerRef = layer.ref;
   const triggerRef = useCallback(
     (el: HTMLElement | null) => {
       triggerElementRef.current = el;
-      layer.ref(el);
+      layerRef(el);
     },
-    [layer],
+    [layerRef],
   );
 
   // Show function with optional focus preservation

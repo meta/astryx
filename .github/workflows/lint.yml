@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
 
 permissions: {}
@@ -18,12 +19,23 @@ concurrency:
 
 jobs:
   lint:
-    runs-on: 2-core-ubuntu-arm
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
 
     steps:
+      - name: Require a branch in this repository or the ci:run label
+        if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
+        run: |
+          echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
+          exit 1
+      # Enough history for the merge commit to reach its merge base with the
+      # base branch, as ci.yml's check-scope checks out. At depth 1 the merge
+      # base is never found, and every pull request ran full lint.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 50
 
       - name: Classify changed files
         if: github.event_name == 'pull_request'
@@ -145,7 +157,7 @@ jobs:
         run: node packages/cli/scripts/generate-cli-readme.mjs --check
 
       # The full pass, type-aware rules over packages/core/src included, needs
-      # about 1.9 GB of heap on main. Node's default limit on this 8 GB runner
+      # about 1.9 GB of heap on main. Node's default limit on this 16 GB runner
       # is about 2 GB, so a pull request that adds a few percent of source can
       # run it out of memory. 4 GB keeps the pass under half the runner's RAM
       # (3.3 GB peak RSS measured) and spends less time in GC.

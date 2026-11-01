@@ -17,6 +17,7 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {TextArea} from './TextArea';
+import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
 // jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
@@ -519,6 +520,38 @@ describe('TextArea', () => {
         />,
       );
       expect(screen.getByText('5/20')).toBeInTheDocument();
+    });
+
+    it('formats the counter from the catalog with locale number formatting', () => {
+      render(
+        <InternationalizationProvider
+          locale="de-DE"
+          overrides={{
+            'de-DE': {
+              '@astryx.textArea.counter': '{count, number} von {limit, number}',
+            },
+          }}>
+          <TextArea
+            label="Bio"
+            value={'a'.repeat(62)}
+            onChange={() => {}}
+            maxLength={2000}
+          />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByText('62 von 2.000')).toBeInTheDocument();
+    });
+
+    it('formats an English counter with grouped digits', () => {
+      render(
+        <TextArea
+          label="Bio"
+          value="hi"
+          onChange={() => {}}
+          maxLength={2000}
+        />,
+      );
+      expect(screen.getByText('2/2,000')).toBeInTheDocument();
     });
 
     it('does not display counter when maxLength is not provided', () => {
@@ -1253,5 +1286,32 @@ describe('TextArea theme target names', () => {
     expect(root).not.toBeNull();
     expect(root).toHaveClass('astryx-text-area');
     expect(root).not.toHaveClass('astryx-textarea');
+  });
+});
+
+describe('TextArea caller aria-labelledby', () => {
+  it('names the textarea by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <TextArea
+          label="Notes"
+          value=""
+          onChange={() => {}}
+          aria-labelledby="billing-heading"
+        />
+      </>,
+    );
+    const textarea = screen.getByRole('textbox', {name: 'Notes Billing'});
+    expect(textarea.getAttribute('aria-labelledby')?.split(' ')).toContain(
+      'billing-heading',
+    );
+  });
+
+  it('leaves a textarea named by its label element without a caller aria-labelledby', () => {
+    render(<TextArea label="Notes" value="" onChange={() => {}} />);
+    expect(screen.getByRole('textbox', {name: 'Notes'})).not.toHaveAttribute(
+      'aria-labelledby',
+    );
   });
 });

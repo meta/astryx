@@ -2,7 +2,7 @@
 
 /**
  * @file Codemod: Migrate Dialog position left/right -> start/end
- * @see https://github.com/facebook/astryx/pull/4568
+ * @see https://github.com/meta/astryx/pull/4568
  *
  * The Dialog `position` prop's physical `left`/`right` offsets are deprecated
  * in favor of the logical `start`/`end` offsets. `start`/`end` map to

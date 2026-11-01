@@ -1453,6 +1453,28 @@ function finishReplace(replaced: Entry): void {
   replaced.replaceable?.finish();
 }
 
+/**
+ * The viewport top a panel rests at: its box without the translation it is
+ * still travelling under (an entering panel rises from below the viewport).
+ * Read from the panel itself, never from the element around it: a standalone
+ * sheet's panel sits directly in its dialog, which spans the viewport, so a
+ * parent's top is not where the panel rests.
+ */
+function restingTopOfPanel(panel: HTMLElement): number {
+  const top = panel.getBoundingClientRect().top;
+  const view = panel.ownerDocument.defaultView;
+  if (view == null || typeof view.DOMMatrixReadOnly !== 'function') {
+    return top;
+  }
+  const {transform} = view.getComputedStyle(panel);
+  if (transform === '' || transform === 'none') {
+    return top;
+  }
+  // A sheet panel only ever translates on the block axis (entrance, drag,
+  // alignment); its computed matrix's `m42` is that translation.
+  return top - new view.DOMMatrixReadOnly(transform).m42;
+}
+
 function alignmentOffsetForPanels(
   enteringPanel: HTMLElement | null,
   retainedPanel: HTMLElement | null,
@@ -1460,12 +1482,13 @@ function alignmentOffsetForPanels(
   if (enteringPanel == null || retainedPanel == null) {
     return 0;
   }
-  // The positioner is where the entering sheet will rest; the panel itself
-  // is still rising from below the viewport.
-  const enteringTop =
-    enteringPanel.parentElement?.getBoundingClientRect().top ??
-    enteringPanel.getBoundingClientRect().top;
-  return Math.max(0, enteringTop - retainedPanel.getBoundingClientRect().top);
+  // The retained panel is at rest; the entering panel is measured where its
+  // entrance will leave it.
+  return Math.max(
+    0,
+    restingTopOfPanel(enteringPanel) -
+      retainedPanel.getBoundingClientRect().top,
+  );
 }
 
 /**
