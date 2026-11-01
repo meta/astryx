@@ -15,6 +15,7 @@ verified_by:
     packages/core/src/TopNav/TopNavMenu.test.tsx,
     packages/core/src/hooks/useMenuHover.test.tsx,
     apps/storybook/stories/TopNavMenu.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families:
@@ -175,14 +176,15 @@ recorded.
 
 ## Verification map
 
-| Contract          | Verification                                                      | Representative states                                       | Mutation or failure expectation                                               | Audit section                    |
-| ----------------- | ----------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------- |
-| FR1, FR3, AR1     | `TopNavMenu.test.tsx` trigger and semantics tests                 | Closed and open                                             | A dialog wrapper or wrong popup type fails.                                   | `audit:TopNavMenu/accessibility` |
-| FR4, FR5, AR2     | `TopNavMenu.test.tsx` keyboard tests                              | Arrows, wrap, typeahead, Enter, Escape                      | Extra tab stops or lost activation fails.                                     | `audit:TopNavMenu/accessibility` |
-| FR6               | `TopNavMenu.test.tsx` pass-through and owned-handler tests        | Bar and drawer triggers                                     | A replaced built-in handler or lost prop fails.                               | `audit:TopNavMenu/behavior`      |
-| FR7, FR10, AR3    | `TopNavMenu.test.tsx` drawer tests                                | Collapsed and expanded                                      | Reachable collapsed items or a missing ring fails.                            | `audit:TopNavMenu/behavior`      |
-| Shared menu focus | `useMenuHover.test.tsx`                                           | Hover-open, click-open, Escape, Enter and Space             | Focus moved on hover, not moved in on click, or not returned on Escape fails. | `audit:TopNavMenu/accessibility` |
-| FR11              | `TopNavMenu.test.tsx` action-group suite (touch and mouse slides) | Touch and mouse slides across items; undraggable link items | Removing the adoption fails the slide tests.                                  | —                                |
+| Contract          | Verification                                                                                                  | Representative states                                       | Mutation or failure expectation                                               | Audit section                    |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------- |
+| FR1, FR3, AR1     | `TopNavMenu.test.tsx` trigger and semantics tests                                                             | Closed and open                                             | A dialog wrapper or wrong popup type fails.                                   | `audit:TopNavMenu/accessibility` |
+| FR4, FR5, AR2     | `TopNavMenu.test.tsx` keyboard tests                                                                          | Arrows, wrap, typeahead, Enter, Escape                      | Extra tab stops or lost activation fails.                                     | `audit:TopNavMenu/accessibility` |
+| FR6               | `TopNavMenu.test.tsx` pass-through and owned-handler tests                                                    | Bar and drawer triggers                                     | A replaced built-in handler or lost prop fails.                               | `audit:TopNavMenu/behavior`      |
+| FR7, FR10, AR3    | `TopNavMenu.test.tsx` drawer tests                                                                            | Collapsed and expanded                                      | Reachable collapsed items or a missing ring fails.                            | `audit:TopNavMenu/behavior`      |
+| Shared menu focus | `useMenuHover.test.tsx`                                                                                       | Hover-open, click-open, Escape, Enter and Space             | Focus moved on hover, not moved in on click, or not returned on Escape fails. | `audit:TopNavMenu/accessibility` |
+| FR11              | `TopNavMenu.test.tsx` action-group suite (touch and mouse slides)                                             | Touch and mouse slides across items; undraggable link items | Removing the adoption fails the slide tests.                                  | —                                |
+| RTL relation      | RTL audit curated D4 target (`apps/storybook/rtl-audit/targets.json`) on `TopNavMenu / Default` (menu opened) | An open start-aligned menu panel; LTR and RTL               | A panel that does not move to the mirrored side of the page in RTL fails D4.  | `audit:TopNavMenu/i18n-rtl`      |
 
 Read from source, with no focused test yet: the visually hidden close button after the menu (FR3); the native `<a>` for bar items, the icon box, and the description (FR4); the forwarded `ref`, the `top-nav-menu` target, and the bar and drawer chevrons' turn (FR1, FR7); the drawer group's clipping while it expands and its height animation (FR7); the caller `preventDefault()` cancellation (FR6); hover opening and closing with `delay` and `hideDelay` (FR2); slot alignment (FR3); FR8; FR9; and the bar trigger and item parts of FR10.
 
