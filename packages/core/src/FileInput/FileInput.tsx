@@ -594,9 +594,7 @@ export function FileInput({
     }
   }
   const triggerDescribedBy =
-    [callerDescribedBy, ariaDescribedBy]
-      .filter(Boolean)
-      .join(' ') || undefined;
+    [callerDescribedBy, ariaDescribedBy].filter(Boolean).join(' ') || undefined;
 
   const defaultPlaceholder = isMultiple
     ? t('@astryx.fileInput.placeholderMultiple')
