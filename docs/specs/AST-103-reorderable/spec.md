@@ -112,11 +112,15 @@ const {detach} = reorderable.attach(listElement, {
   `onReorder({ key, to })`, an optional `isReorderable(key)` predicate, and
   an optional `positions()`, which supplies drop positions for layouts such as a
   fanned hand or a custom grid; collections the measured layout already places
-  do not need it.
+  do not need it. An optional `feedback` chooses how a drag previews
+  its landing place: `'insertion-line'` (default) or `'shift'` (FR9).
   `positions()` returns one `{x, y}` per item, in item order: the center of
   that item's slot, in pixels from the top-left corner of the collection's
-  container box. A drag reports as `to` the slot, within the drop range, whose center is
-  nearest the dragged item's center, and a dropped item settles on that slot's center.
+  container box. A drag reports as `to` its candidate slot within the drop
+  range, and a dropped item settles on that slot's center. Under
+  `'insertion-line'` the candidate is the slot whose center is nearest the
+  dragged item's center; under `'shift'` it is the slot FR9's midpoint rule
+  picks.
   An array whose length differs from the item count is ignored, as is
   `positions` in a tree; drop positions then come from the measured layout.
   Without `positions`, drop positions come from the measured layout;
@@ -124,7 +128,7 @@ const {detach} = reorderable.attach(listElement, {
   collection's full item order (every item it was given, mounted or not). In a
   tree, `to` is `{ parent, index }`: `parent` is the new parent's key (`null`
   at the root) and `index` is the item's position among that parent's children
-  after the move (DEC-3). It carries no gesture, animation, or timing settings. An optional
+  after the move (DEC-3). Beyond `feedback`, it carries no gesture, animation, or timing settings. An optional
   `isReorderable(key)` predicate keeps a row in place: a row it rejects shows no
   handle and cannot be picked up (DEC-2). A row it rejects at either end of the
   collection also bounds the drop range: nothing drops beyond it, and a
@@ -192,9 +196,11 @@ const {detach} = reorderable.attach(listElement, {
   - Escape, or activating the handle again, leaves reorder mode and keeps
     every move, announcing "Done" with the item's position, such as "Done,
     Milk at position 3 of 5";
-  - while the item is in reorder mode, the same accent insertion line a drag
-    shows marks the item's place, moving with each move
-    (`design:ordered-collection-reordering` DR7);
+  - while the item is in reorder mode, the candidate cue a drag shows marks
+    the item's place, moving with each move
+    (`design:ordered-collection-reordering` DR7): under `'insertion-line'`
+    the accent insertion line; under `'shift'` no line, and each move slides
+    the item and the neighbours it passes into their new places (FR9);
   - while the item is in reorder mode, a hint anchored to it shows the moves
     for its axis and a Done control, with the same layer, anchoring, and
     theme roles as Core's keyboard hint, and stays until the mode ends; each
@@ -244,11 +250,13 @@ const {detach} = reorderable.attach(listElement, {
 - **FR5 — Reordering adds at most one element to a row.** The one added
   element is the handle, the interactive drag target, with its role. Its grip
   is decoration, drawn by a pseudo-element or a theme-role glyph, not by
-  elements. While a row is dragged, the source row stays in place, dimmed, and one
+  elements. While a row is dragged under `'insertion-line'`, the source row stays in place, dimmed, and one
   moving preview follows the pointer (`design:ordered-collection-reordering`):
   the preview is the one transient copy
   `architecture:component-style-authoring` INV7 allows, inert, hidden from
-  assistive technology, and removed at the drop. Reorder listeners are per
+  assistive technology, and removed at the drop. Under `'shift'` the dragged
+  row itself follows the pointer and its slot becomes the gap, with no
+  preview (FR9). Reorder listeners are per
   collection or on the document, never per row (`spec:AST-094` FR24).
 - **FR6 — Stable from the start.** `createReorderable`, its options, and a
   collection's `reorderable` prop are stable public Core API: no
@@ -256,11 +264,44 @@ const {detach} = reorderable.attach(listElement, {
   FR21 and DEC-28 apply only to an API chosen as experimental.
 - **FR7 — Admitted and documented as public API.** `reorderable` is caller
   intent no collection can derive (`spec:AST-002` FR1, DEC-1), and its
-  thresholds stay internal (`spec:AST-002` FR3). `createReorderable` has its
-  own canonical descriptor and each adopting collection's descriptor documents
-  `reorderable` (`spec:AST-039` FR1, FR3).
+  thresholds stay internal (`spec:AST-002` FR3). `feedback` is caller intent
+  as well (`spec:AST-002` FR5): a settings list and a hand of playing cards
+  can share a layout and the same items, yet the list needs a precise
+  insertion line for small drop targets and the hand needs its cards to make
+  room as physical cards do. Only the caller knows which its content is; the
+  layout and `positions()` do not tell them apart. `createReorderable` has its
+  own canonical descriptor, which documents `feedback`, and each adopting
+  collection's descriptor documents `reorderable` (`spec:AST-039` FR1, FR3).
 - **FR8 — One public shape for the job.** A collection that reorders uses
   this object and no other public reorder API.
+
+- **FR9 — Shift feedback is opt-in.** With `feedback: 'insertion-line'`, the
+  default, a drag previews its landing place as `design:ordered-collection-reordering`
+  DEC-1 states. With `feedback: 'shift'`, the neighbours slide aside live to
+  open the gap where the item will land, on `spec:AST-105` FR4's one shared
+  motion, as a compositor translate of the rows already rendered
+  (`spec:AST-094` FR5) with no added element and no insertion line; the
+  dragged item rides the pointer and, on the drop, settles into the open gap
+  with no layout jump. The midpoint rule picks the candidate: it moves from
+  the current candidate to another slot only once the dragged item's center
+  passes that slot's center, measured along the line between the two slot
+  centers, and when several slots qualify the nearest wins. In a list this is
+  a neighbour's midpoint; the same rule covers a grid and the slots
+  `positions()` supplies, such as a fanned hand. A pointer resting near a
+  boundary therefore does not make the neighbours flicker. With `positions()`,
+  the other items glide to their next slots. Each keyboard arrow move in reorder mode commits
+  as FR4 and DEC-5 state, with the shift animated and the move announced. In a
+  tree, rows shift only within the dragged row's parent; a shift never nests
+  or un-nests a row. While a drag's candidate is in another parent, no row
+  shifts and the accent insertion line marks the candidate at that parent's
+  depth; a keyboard move into or out of a parent commits as FR4 states, with
+  the rows sliding into their new places. Under Reduce Motion the neighbours
+  do not travel (`design:reduced-motion` DR1): under a coarse primary pointer
+  the gap opens as an in-place cross-fade (DR2), and otherwise the drag shows
+  the insertion line (DR3). Every pointer gets the shift, a fine
+  pointer included. The layout is measured once at pickup, with no layout
+  read after the gesture begins (`spec:AST-094` FR9), so a long or virtualized list costs
+  the same per frame as a short one.
 
 ## Current-state impact
 
@@ -281,7 +322,8 @@ const {detach} = reorderable.attach(listElement, {
 | FR4 two-dimensional | Keyboard and announcement-routing tests on a wrapping card grid, left-to-right and right-to-left                                | Left and Right across a row end; Up and Down between full rows and into a short last row; announcements with row and column; the hint's four buttons; a resize that changes the column count                                                                                                                                                                                                                                                                                                                                                                                           | a move off reading order, a mirrored direction wrong in right-to-left, a short-row move that is not clamped to its last position, a missing row or column, or a column count read from anything but layout fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | FR4a                | Keyboard, mouse, and announcement-routing tests of `start(key)`                                                                 | `start` from a context-menu item and a toolbar button; a key that is not reorderable, not mounted, or unknown; an object re-created each render; one object on two collections                                                                                                                                                                                                                                                                                                                                                                                                         | `start` that does not focus and scroll to the handle, a hint or announcement that differs from the handle's mode, a missing-key call that throws or acts, or a two-collection call without a development warning fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR4b                | Browser tests of `attach` on plain elements with a mouse, a finger, a pen, and the keyboard, and listener counts after `detach` | a drag, a cancelled drag, reorder mode, a fanned layout with `positions`, a move the app applies and one it does not, `detach` mid-drag, a server import, a page in another language, an item element with no accessible name, an item `isReorderable` rejects, a keyless item, `start(key)` on an attached item, a handle with its own `tabindex="-1"`, a container inside a modal dialog the page opens, one object attached to two containers, a pen drag on a fine and on a coarse primary pointer, a move the app applies by moving the item's element and one by re-rendering it | a missing drag, mode, or announcement on plain elements; a handle without FR4's role, pressed state, or name, one named "Reorder" alone when the item has text, or one outside the Tab order; a rejected or keyless item whose handle is a Reorder toggle or can be dragged; a `start(key)` that does not reach an attached item; a move announced before `items()` reports it, or one the app did not apply left unrefused; a drag or mode still running, or a listener, observer, hint element, handle attribute, or changed tab order left, after `detach`, strings other than the shipped English catalog's, an announcement inside a page-opened modal that reaches only the page-body channel, a move between two containers or a `start` there without the development warning, a pen drag on a fine primary pointer that waits for a hold, or one on a coarse primary pointer that starts without one,, focus not on the moved item's handle after a move, or DOM work at import fails |
-| FR5                 | Element and listener counts of a list with and without the prop                                                                 | a row at rest; a row picked up; a row dropped                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | more than one added element per row, a grip drawn with elements, a per-row listener, a second preview, a source that leaves its place, a preview left after the drop, or a preview that assistive technology reaches, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| FR5                 | Element and listener counts of a list with and without the prop                                                                 | a row at rest; a row picked up and dropped under each feedback                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | more than one added element per row, a grip drawn with elements, a per-row listener, a second preview, a source that leaves its place under `'insertion-line'`, a preview under `'shift'`, a preview left after the drop, or a preview that assistive technology reaches, fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| FR9                 | Real-browser frame tests of shift feedback with a finger, a pen, and a mouse, and keyboard tests                                | a list, a grid, a fanned hand with `positions()`, and a tree; a pointer resting near a midpoint; a drag into another parent; a drop; a cancel; each arrow move in reorder mode; Reduce Motion under a coarse and a fine pointer; a long list                                                                                                                                                                                                                                                                                                                                           | a neighbour that flickers near a midpoint, a candidate other than the midpoint rule's, an added element, an insertion line under shift outside another parent and fine-pointer Reduce Motion, a cross-fade under a fine pointer, a layout jump on the drop, a shift across parents in a tree, travel under Reduce Motion, a layout read per frame, or a changed default fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## Decision log
 
@@ -354,6 +396,18 @@ tap through the same moves; it reuses the keyboard hint's layer rather than a
 second hint pattern.
 
 Rejected: a menu of Move before and Move after.
+
+### DEC-6 — A collection can opt into shift feedback
+
+**Reference:** `spec:AST-103/DEC-6`
+**Decider:** `cixzhang`, `2026-10-28`
+
+Some collections, such as a hand of playing cards, read better when the items
+shift during the drag, as iOS does. `feedback: 'shift'` opts into that while
+the insertion line stays the default (`design:ordered-collection-reordering`
+DEC-2).
+
+Rejected: making shift the default.
 
 ## Open questions
 
