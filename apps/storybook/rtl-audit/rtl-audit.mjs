@@ -75,6 +75,7 @@ import {
   glyphRendersOnBlockAxis,
   gradeDirectionalPair,
   gradePositionedPair,
+  ignoredStoryIdentities,
   isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
@@ -99,6 +100,7 @@ import {
 const {
   componentExportsFromBarrel,
   componentPackage,
+  documentedComponentsOutsideComponentDirectories,
   flatPackageComponentNames,
   nestedPackageComponentNames,
 } = componentPackages;
@@ -1366,9 +1368,15 @@ async function cleanupRuntime() {
     try {
       const pkg = componentPackage(packageName);
       if (!pkg) throw new Error('package is missing from component registry');
+      // Documented exports outside component directories (Core's Theme
+      // family) are public too (INV5): they get roster entries and route
+      // their stories.
       const componentNames = pkg.layout === 'flat'
         ? flatPackageComponentNames(PROJECT_ROOT, pkg)
-        : nestedPackageComponentNames(PROJECT_ROOT, pkg);
+        : Array.from(new Set([
+          ...nestedPackageComponentNames(PROJECT_ROOT, pkg),
+          ...documentedComponentsOutsideComponentDirectories(PROJECT_ROOT, pkg),
+        ])).sort();
       publicComponentsByPackage[packageName] = componentNames;
       if (ACTIVE_PACKAGE_NAMES.includes(packageName)) {
         sourceComponents.push(
@@ -1644,6 +1652,13 @@ async function cleanupRuntime() {
     enforced: !AUTO_ONLY && !CURATED_ONLY,
   });
   if (verifiedNaError) coverage.registryError = verifiedNaError;
+  // Story identities with no public component are not roster entries (INV5);
+  // name them so the report shows what the roster left out.
+  coverage.ignoredStoryIdentities = ignoredStoryIdentities({
+    sourceComponents,
+    storyComponents: scopedStoryRoutes.map(route => route.component),
+    filters: FILTER,
+  });
 
   const autoFails = autoResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
   // No allowlist: every not-RTL component is a surprise. The RTL migration is
@@ -1738,6 +1753,7 @@ async function cleanupRuntime() {
   console.error(`DEC : ${report.directionalDecorations.pass} pass / ${report.directionalDecorations.fail} fail / ${report.directionalDecorations.na} N-A`);
   console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
   console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+  if (coverage.ignoredStoryIdentities.length > 0) console.error(`IGN : ${coverage.ignoredStoryIdentities.length} story identities name no public component (not roster entries): ${coverage.ignoredStoryIdentities.map(entry => entry.component).join(', ')}`);
   if (declaredD5PhysicalRegions.length > 0) console.error(`D5P : ${declaredD5PhysicalRegions.length} declared physical region(s): ${declaredD5PhysicalRegions.map(r => `${r.storyId} (${r.physical} within ${r.within})`).join('; ')}`);
   // Non-zero exit only signals CI (which is soft/continue-on-error). Surface a
   // signal but never let it hard-block during the stability window.

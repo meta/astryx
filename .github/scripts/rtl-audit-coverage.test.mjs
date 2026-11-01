@@ -29,6 +29,7 @@ import {
   finishFiniteAnimations,
   gradeDirectionalPair,
   gradePositionedPair,
+  ignoredStoryIdentities,
   orderD1StoryCandidates,
   resolveD1Applicability,
   resolveFilterRoutes,
@@ -614,6 +615,87 @@ describe('buildAuditedComponentRoster', () => {
     ).toEqual(['core/chat']);
   });
 
+  it('leaves out a story identity that names no public component', () => {
+    const input = {
+      sourceComponents: ['core/Button', 'core/Table'],
+      storyComponents: [
+        'core/button',
+        'core/hooks-useclipboard',
+        'core/tablesortable',
+      ],
+    };
+    // A public component keeps its entry (the story spelling, as before).
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Table',
+    ]);
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/hooks-useclipboard', reason: 'no-public-component'},
+      {component: 'core/tablesortable', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('keeps a documented component discovery misses, whatever its story is titled', () => {
+    // The caller passes Core's Theme and MediaTheme as package-qualified
+    // public components; a retitled or missing story cannot drop them.
+    const input = {
+      sourceComponents: [
+        'core/Button',
+        'core/Theme',
+        'core/MediaTheme',
+        'lab/CodeEditor',
+      ],
+      storyComponents: [
+        'core/button',
+        'core/appearance-theming',
+        'lab/codeeditor',
+        'lab/themes-codeeditortheme',
+      ],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Theme',
+      'core/MediaTheme',
+      'lab/codeeditor',
+    ]);
+    // Core's Theme no longer keeps a Lab story identity that ends in "theme".
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/appearance-theming', reason: 'no-public-component'},
+      {component: 'lab/themes-codeeditortheme', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('ignores nothing in a package whose public roster is empty', () => {
+    const input = {
+      sourceComponents: ['core/Button'],
+      storyComponents: ['core/button', 'lab/chart-interactions'],
+    };
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'lab/chart-interactions',
+    ]);
+  });
+
+  it('keeps a public component with no story as a roster entry', () => {
+    expect(
+      buildAuditedComponentRoster({
+        sourceComponents: ['core/Button', 'core/LayerProvider'],
+        storyComponents: ['core/button'],
+      }),
+    ).toEqual(['core/button', 'core/LayerProvider']);
+  });
+
+  it('keeps a story identity a filter names explicitly', () => {
+    const input = {
+      sourceComponents: ['core/ChatComposer'],
+      storyComponents: ['core/chat'],
+      filters: ['chat'],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual(['core/chat']);
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+  });
+
   it('retains an unknown entry when neither source nor stories match', () => {
     expect(
       buildAuditedComponentRoster({
@@ -622,6 +704,25 @@ describe('buildAuditedComponentRoster', () => {
         filters: ['missing'],
       }),
     ).toEqual(['unknown/missing']);
+  });
+});
+
+describe('documented components outside component directories', () => {
+  it('routes a Core/Themes/Theme story to the documented Theme component', () => {
+    const routes = buildStoryComponentRoutes({
+      stories: [{id: 'core-themes-theme--default', title: 'Core/Themes/Theme'}],
+      publicComponentsByPackage: {core: ['Button', 'Theme']},
+    });
+    expect(routes.map(route => route.component)).toEqual(['core/Theme']);
+  });
+
+  it('finds Core Theme-family exports that live in a lowercase directory', () => {
+    const names =
+      componentPackages.documentedComponentsOutsideComponentDirectories(
+        new URL('../..', import.meta.url).pathname,
+        componentPackages.componentPackage('core'),
+      );
+    expect(names).toEqual(expect.arrayContaining(['MediaTheme', 'Theme']));
   });
 });
 
