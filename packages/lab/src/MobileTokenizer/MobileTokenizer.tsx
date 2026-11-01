@@ -4,10 +4,8 @@
 
 /**
  * @file MobileTokenizer.tsx
- * @input Uses public @astryxdesign/core components and hooks only
- *   (BottomSheet, Button, CheckboxIndicator, Dialog, EmptyState, Field,
- *   Heading, Icon, Layout, Spinner, Stack, Text, TextInput, Token,
- *   VisuallyHidden, useAnnounce, useMergedRefs, useTooltip, useTranslator)
+ * @input Public @astryxdesign/core components and hooks, plus private Lab
+ *   mobile-sheet confirmation and search-drag dismissal owners
  * @output Exports MobileTokenizer — Lab prototype of the touch Tokenizer
  *   flow with the inline-compatible closed trigger, a searchable draft-selection
  *   sheet, persistent Clear all / Save footer, dirty-dismiss confirmation,
@@ -32,7 +30,7 @@
  * Lab deltas: the filter is a bordered TextInput (Core's PanelSearchInput is
  * not exported); row, Create, and Clear all changes stay in one draft until
  * Save; the footer stays visible while searching; dirty dismissal asks before
- * discarding; and dragging or scrolling results blurs the search so the mobile
+ * discarding; and directly dragging results blurs the search so the mobile
  * keyboard leaves without clearing the query. There is no theming/spec contract
  * yet.
  */
@@ -54,17 +52,13 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
-import {Dialog} from '@astryxdesign/core/Dialog';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {Field, inputWrapperStyles} from '@astryxdesign/core/Field';
-import {Heading} from '@astryxdesign/core/Heading';
 import {useAnnounce, useMergedRefs} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {Icon} from '@astryxdesign/core/Icon';
 import {CheckboxIndicator} from '@astryxdesign/core/Indicator';
-import {Layout, LayoutContent, LayoutFooter} from '@astryxdesign/core/Layout';
 import {Spinner} from '@astryxdesign/core/Spinner';
-import {Stack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Token} from '@astryxdesign/core/Token';
@@ -78,6 +72,8 @@ import {
   sizeVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {MobileSheetConfirmation} from '../internal/MobileSheetConfirmation';
+import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
 
 export type MobileTokenizerChange<T extends SearchableItem> =
   | {item: T; type: 'add'}
@@ -128,7 +124,6 @@ export interface MobileTokenizerProps<T extends SearchableItem> extends Omit<
 const CREATABLE_ID_PREFIX = '__xds_create__';
 const LIST_RENDER_BATCH_SIZE = 50;
 const LIST_LOAD_MORE_THRESHOLD_PX = 200;
-const LIST_TOUCH_SCROLL_THRESHOLD_PX = 8;
 
 // The inline Tokenizer's token-row inset: a token's corners (radius-1) sit
 // concentric with the field's (radius-2) when inset = radius-2 − radius-1 −
@@ -290,9 +285,6 @@ const styles = stylex.create({
     flexGrow: 1,
     flexBasis: 0,
   },
-  confirmationAction: {
-    width: '100%',
-  },
   filterRow: {
     display: 'flex',
     alignItems: 'flex-end',
@@ -322,71 +314,6 @@ const styles = stylex.create({
     paddingBlock: spacingVars['--spacing-4'],
   },
 });
-
-function TokenizerConfirmationDialog({
-  isOpen,
-  onOpenChange,
-  title,
-  description,
-  cancelLabel,
-  actionLabel,
-  onAction,
-}: {
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  title: string;
-  description: string;
-  cancelLabel: string;
-  actionLabel: string;
-  onAction: () => void;
-}) {
-  const titleId = useId();
-  const descriptionId = useId();
-  return (
-    <Dialog
-      isOpen={isOpen}
-      onOpenChange={onOpenChange}
-      purpose="info"
-      role="alertdialog"
-      aria-labelledby={titleId}
-      aria-describedby={descriptionId}
-      width={400}>
-      <Layout
-        content={
-          <LayoutContent>
-            <Heading level={2} id={titleId}>
-              {title}
-            </Heading>
-            <Text type="body" color="secondary" id={descriptionId}>
-              {description}
-            </Text>
-          </LayoutContent>
-        }
-        footer={
-          <LayoutFooter>
-            <Stack direction="vertical" gap={4} hAlign="stretch">
-              <Button
-                label={actionLabel}
-                variant="destructive"
-                size="lg"
-                onClick={onAction}
-                xstyle={styles.confirmationAction}
-              />
-              <Button
-                label={cancelLabel}
-                variant="secondary"
-                size="lg"
-                onClick={() => onOpenChange(false)}
-                data-autofocus
-                xstyle={styles.confirmationAction}
-              />
-            </Stack>
-          </LayoutFooter>
-        }
-      />
-    </Dialog>
-  );
-}
 
 export function MobileTokenizer<T extends SearchableItem>({
   label,
@@ -888,7 +815,6 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
     LIST_RENDER_BATCH_SIZE,
   );
   const lastLoadScrollHeightRef = useRef<number | null>(null);
-  const listTouchStartYRef = useRef<number | null>(null);
   // Snapshot the selection and reset the rendered window in the render that
   // opens the sheet (the sheet stays mounted through its exit, so a reopen
   // reuses this content), so the first open frame already shows
@@ -1132,28 +1058,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
   const searchLabel = t('@astryx.tokenizer.search', {label});
   const noResultsTitle =
     emptySearchResultsText ?? t('@astryx.typeahead.emptySearchResults');
-  const blurSearch = () => {
-    const focusedSearch = searchRef.current;
-    if (focusedSearch != null && document.activeElement === focusedSearch) {
-      focusedSearch.blur();
-    }
-  };
-  const handleListTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    listTouchStartYRef.current = event.touches[0]?.clientY ?? null;
-  };
-  const handleListTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
-    const startY = listTouchStartYRef.current;
-    const currentY = event.touches[0]?.clientY;
-    if (
-      startY == null ||
-      currentY == null ||
-      Math.abs(currentY - startY) < LIST_TOUCH_SCROLL_THRESHOLD_PX
-    ) {
-      return;
-    }
-    listTouchStartYRef.current = null;
-    blurSearch();
-  };
+  const listDragProps = useDismissSearchOnTouchDrag(() => [searchRef.current]);
 
   return (
     <div {...stylex.props(styles.sheetBody)}>
@@ -1202,14 +1107,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
           data-testid="mobile-tokenizer-list"
           data-rendered-count={renderedItems.length}
           data-total-count={visibleItems.length}
-          onTouchStart={handleListTouchStart}
-          onTouchMove={handleListTouchMove}
-          onTouchEnd={() => {
-            listTouchStartYRef.current = null;
-          }}
-          onTouchCancel={() => {
-            listTouchStartYRef.current = null;
-          }}
+          {...listDragProps}
           onScroll={event => {
             const list = event.currentTarget;
             const distanceFromBottom =
@@ -1347,7 +1245,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
         />
       </div>
       {isClearConfirmationOpen && (
-        <TokenizerConfirmationDialog
+        <MobileSheetConfirmation
           isOpen
           onOpenChange={next => {
             if (!next) {
@@ -1372,7 +1270,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
         />
       )}
       {isDiscardConfirmationOpen && (
-        <TokenizerConfirmationDialog
+        <MobileSheetConfirmation
           isOpen
           onOpenChange={next => {
             if (!next) {

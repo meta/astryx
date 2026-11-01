@@ -568,6 +568,7 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     );
     fireEvent.click(clearAll);
     const confirmation = screen.getByRole('alertdialog');
+    expect(confirmation).toHaveClass('astryx-alert-dialog');
     expect(confirmation).toHaveTextContent('Clear all selected items?');
     const confirmationActions = within(confirmation).getAllByRole('button');
     expect(confirmationActions.map(action => action.textContent)).toEqual([
