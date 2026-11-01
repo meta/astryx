@@ -121,7 +121,13 @@ async function check({
           const live = activeRuns().find(run => run.id === run_id);
           if (live) {
             onJobs(run_id);
-            return {data: {jobs: live.jobs.map(status => ({status}))}};
+            return {
+              data: {
+                jobs: live.jobs.map(job =>
+                  typeof job === 'string' ? {status: job} : job,
+                ),
+              },
+            };
           }
           const heavy = runs.find(run => run.id === run_id).heavy !== false;
           return {
@@ -475,6 +481,39 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
       });
       expect(counted.failed).toEqual([]);
       expect(reads.get(50)).toBe(1);
+    });
+
+    it('holds a heavy suite while a main check waits for room, even below the ceiling', async () => {
+      const MAKING_ROOM =
+        'CI is making room for a main check: runs on a later push, or at the pre-merge re-run.';
+      const admitting = {
+        status: 'in_progress',
+        steps: [
+          {name: 'Wait for room under the CI ceiling', status: 'in_progress'},
+        ],
+      };
+      const admitted = {
+        status: 'in_progress',
+        steps: [
+          {name: 'Wait for room under the CI ceiling', status: 'completed'},
+        ],
+      };
+      const held = await waited({
+        active: [runOf(60, [admitting], 'in_progress', 'workflow_dispatch')],
+      });
+      expect(held.failed).toEqual([MAKING_ROOM]);
+      // Main started its legs by the second look: the suite runs.
+      const started = await waited({
+        active: poll => [
+          runOf(
+            60,
+            [poll < 2 ? admitting : admitted],
+            'in_progress',
+            'workflow_dispatch',
+          ),
+        ],
+      });
+      expect(started.failed).toEqual([]);
     });
 
     it('runs the suite when the ceiling is rate-limited', async () => {

@@ -23,6 +23,8 @@ jobs:
   main-commit:
     runs-on: ubuntu-slim
     permissions:
+      # actions: read lets the admission step count CI's live jobs.
+      actions: read
       contents: read
     outputs:
       sha: ${{ steps.resolve.outputs.sha }}
@@ -38,6 +40,21 @@ jobs:
               sha = data.commit.sha;
             }
             core.setOutput('sha', sha);
+
+      # A `main` full check waits for room under CI's ceiling before its legs
+      # start (spec:AST-030 FR16, DEC-16). `peak` is the most jobs this run
+      # holds at once (main-admission.test.mjs).
+      - name: Check out the main admission action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/main-admission
+          path: .main-admission
+          persist-credentials: false
+
+      - name: Wait for room under the CI ceiling
+        uses: ./.main-admission/.github/actions/main-admission
+        with:
+          peak: 14
 
   # Verify package.json exports match the source tree.
   # Fails if exports are stale — run `node scripts/sync-exports.js` locally to fix.

@@ -13,9 +13,10 @@
 #   exempt from these per-author limits.
 # - Across all of CI, a heavy suite starts only while fewer than CI_CEILING
 #   jobs of any run are in progress or queued, not counting its own; otherwise
-#   it looks once more two minutes later. `main`'s full checks and release
-#   re-checks never run this, so they take what they need and pull requests
-#   get whatever is left.
+#   it looks once more two minutes later. It also waits while a `main` full
+#   check or release re-check is waiting for room (its "Wait for room under
+#   the CI ceiling" step, .github/actions/main-admission), so the jobs running
+#   now finish and `main`'s run fits.
 # - A re-run (the pre-merge restart) and a bot are exempt from every limit; a
 #   lookup that fails runs the suite.
 #
@@ -61,6 +62,8 @@ runs:
           // is shared by every job, so the ceiling never polls per job.
           const CEILING_LOOKS = 2;
           const CEILING_RECHECK_MS = 2 * 60_000;
+          // The step a `main` full check runs while it waits for room.
+          const MAIN_ADMISSION_STEP = 'Wait for room under the CI ceiling';
           const limits = [
             // Pull request numbers rise with creation, and the search returns
             // the oldest, so it holds every older one that could queue this.
@@ -113,7 +116,8 @@ runs:
 
           // Jobs of every run in progress or queued, whatever started it
           // (pull requests, `main`'s full checks, release re-checks), except
-          // this job itself. Each look reads each active run's jobs once (one
+          // this job itself, and whether a `main` run is waiting for room.
+          // Each look reads each active run's jobs once (one
           // page of 100), so a look costs two run listings plus one call per
           // run. A rate-limited look cannot decide, so the suite runs (the
           // catch below), as for any failed lookup.
@@ -123,6 +127,7 @@ runs:
               for (let look = 1; ; look += 1) {
                 const seen = new Set();
                 let active = 0;
+                let mainWaiting = false;
                 for (const status of ['in_progress', 'queued']) {
                   calls += 1;
                   const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
@@ -137,11 +142,16 @@ runs:
                     });
                     active += jobs.filter(job => job.status === 'in_progress' || job.status === 'queued').length;
                     if (run.id === context.runId) active -= 1;
+                    if (jobs.some(job => job.steps?.some(step => step.name === MAIN_ADMISSION_STEP && step.status === 'in_progress'))) {
+                      mainWaiting = true;
+                    }
                   }
                 }
-                if (active < CI_CEILING) return;
+                if (active < CI_CEILING && !mainWaiting) return;
                 if (look >= CEILING_LOOKS) {
-                  return `CI is full (${CI_CEILING} jobs running or queued): runs on a later push, or at the pre-merge re-run.`;
+                  return mainWaiting
+                    ? 'CI is making room for a main check: runs on a later push, or at the pre-merge re-run.'
+                    : `CI is full (${CI_CEILING} jobs running or queued): runs on a later push, or at the pre-merge re-run.`;
                 }
                 await new Promise(resolve => setTimeout(resolve, CEILING_RECHECK_MS));
               }

@@ -986,6 +986,25 @@ jobs:
       # The same steps as `pnpm build` and the Storybook build, overlapped: a
       # package builds once its workspace dependencies have, and Storybook once
       # the packages its story index records are built.
+      # A release-check is a `main` full check: before its wide legs start,
+      # it waits for room under CI's ceiling (spec:AST-030 FR16, DEC-16).
+      # `peak` is the most jobs a release-check holds at once: the jobs still
+      # running beside this one plus every leg that waits for it
+      # (main-admission.test.mjs).
+      - name: Check out the main admission action
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/main-admission
+          path: .main-admission
+          persist-credentials: false
+
+      - name: Wait for room under the CI ceiling
+        if: github.event_name == 'workflow_dispatch'
+        uses: ./.main-admission/.github/actions/main-admission
+        with:
+          peak: 36
+
       - name: Build packages and Storybook
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: node .github/scripts/build-packages-and-storybook.mjs
