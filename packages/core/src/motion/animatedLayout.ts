@@ -42,8 +42,10 @@
  *   new move are summed into one new glide, velocity included. Its place
  *   before the change is read on the clock of every glide that carries it,
  *   its own and its gliding ancestors' in the area (the box with each applied
- *   `translate` taken out, plus each glide's offset at its current time), so
- *   the new glide starts where the old one is drawn. Nothing
+ *   `translate` taken out, plus each glide's offset at its current time), and
+ *   so is its place after the change, where only the glides the change leaves
+ *   running remain: the new glide starts where the old one is drawn, and a
+ *   glide the change leaves running cancels out of the move. Nothing
  *   animates height, and nothing scrolls the area.
  * - A measurement no commit claims by the next frame is dropped.
  * - The changed element plays its own entrance on the same spring, started in
@@ -568,10 +570,14 @@ function isStuck(element: Element, cache: WalkCache): boolean {
 }
 
 /**
- * `rect`, a box read before a change, with every running glide that carries
- * the element put back on its glide's own clock: its own and those of its
- * ancestors inside `area` (each of them a candidate of the same change, whose
- * glide the flush retargets). A box read samples a running `translate`
+ * `rect`, a box read before a change or after it (in the flush, once the
+ * glides the change retargets have stopped), with every running glide that
+ * carries the element put back on its glide's own clock: its own and those of
+ * its ancestors inside `area`. A glide the change retargets is read on its
+ * clock before the change and is gone after it; one the change leaves running
+ * (a card inside an absolutely positioned panel, which the change takes no
+ * ancestors from) is read on the same clock in both places, so it cancels out
+ * of the move. A box read samples a running `translate`
  * wherever the engine evaluates it, and WebKit evaluates it at the moment of
  * the read, while a glide's offset, and the glide a change retargets it into,
  * run on the timeline's frame time: from the box alone, a change made `n` ms
@@ -1032,7 +1038,15 @@ function flush(batch: Batch): void {
   const nearer = (raw: number, shift: number) =>
     Math.abs(raw + shift) < Math.abs(raw) ? raw + shift : raw;
   for (const entry of entries) {
-    entry.after = entry.element.getBoundingClientRect();
+    // On the same clocks as the place before the change: only the glides this
+    // change does not retarget still run here (a card inside an absolutely
+    // positioned panel keeps its glide while the row in it moves), so each
+    // reads the same in both places and cancels out of the move.
+    entry.after = onGlideClock(
+      entry.element,
+      entry.element.getBoundingClientRect(),
+      batch.area,
+    );
     // The move is the inline-start edge's, by the container's direction (it
     // decides where the element sits): in a right-to-left container an
     // element that narrows keeps its left edge and moves its right one.

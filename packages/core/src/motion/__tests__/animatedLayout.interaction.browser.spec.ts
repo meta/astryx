@@ -668,12 +668,13 @@ test.describe('spec:AST-105 Coverage', () => {
    * row is read where it is drawn: its layout place plus every glide on it
    * and on its ancestors, each from its keyframes at its current time.
    */
-  async function nestedRetarget(page: Page, lateMs: number) {
-    await open(
-      page,
-      `<div id="area" class="area"><div id="grow" class="grow"></div>
+  async function nestedRetarget(
+    page: Page,
+    lateMs: number,
+    body = `<div id="area" class="area"><div id="grow" class="grow"></div>
         <div id="card"><div id="inner" class="grow"></div><div id="row" class="row"></div></div></div>`,
-    );
+  ) {
+    await open(page, body);
     await change(page);
     await page.waitForTimeout(100);
     return page.evaluate(
@@ -707,6 +708,7 @@ test.describe('spec:AST-105 Coverage', () => {
         await frame();
         await frame();
         const cardGlidingBefore = card.getAnimations().length > 0;
+        const cardGlide = card.getAnimations().at(-1) ?? null;
         const y1 = drawnTop(row);
         const until = performance.now() + late;
         while (performance.now() < until) {
@@ -717,6 +719,7 @@ test.describe('spec:AST-105 Coverage', () => {
         return {
           cardGlidingBefore,
           cardGlidingAfter: card.getAnimations().length > 0,
+          cardRetargeted: card.getAnimations().at(-1) !== cardGlide,
           rowGlidingAfter: row.getAnimations().length > 0,
           y1,
           y1After,
@@ -739,6 +742,29 @@ test.describe('spec:AST-105 Coverage', () => {
       const run = await nestedRetarget(page, lateMs);
       expect(run.cardGlidingBefore).toBe(true);
       expect(run.cardGlidingAfter).toBe(true);
+      expect(run.cardRetargeted).toBe(true);
+      expect(run.rowGlidingAfter).toBe(true);
+      expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
+    });
+  }
+
+  for (const lateMs of [0, 1, 9]) {
+    test(`a row inside a gliding card that keeps its glide (an absolutely positioned panel), moved by a change in the card ${lateMs} ms into its frame, starts where it is drawn`, async ({
+      page,
+    }) => {
+      // Inside an absolutely positioned panel the change takes no ancestors,
+      // so the card keeps its glide through the change while the row moves:
+      // the row's places before and after the change both carry the card's
+      // glide, and both must read it on the same clock.
+      const run = await nestedRetarget(
+        page,
+        lateMs,
+        `<div id="area" class="area"><div id="panel" style="position: absolute; inset: 0 0 auto 0"><div id="grow" class="grow"></div>
+          <div id="card"><div id="inner" class="grow"></div><div id="row" class="row"></div></div></div></div>`,
+      );
+      expect(run.cardGlidingBefore).toBe(true);
+      expect(run.cardGlidingAfter).toBe(true);
+      expect(run.cardRetargeted).toBe(false);
       expect(run.rowGlidingAfter).toBe(true);
       expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
     });
