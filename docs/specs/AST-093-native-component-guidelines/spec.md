@@ -57,7 +57,9 @@ validating, and reviewing individual native components while
   folder that mirrors its core component root (the core source directory):
   `<ComponentRoot>`, which is `<Name>` when core keeps the component in its own
   folder, so core's `Avatar/AvatarStatusDot` puts the Swift AvatarStatusDot
-  views in `Avatar/` too. Its spec is `<Name>.<language>.spec.md` in the core
+  views in `Avatar/` too. Spec lookup routes a native view to its component's
+  records by that folder, which is why the folder is part of the contract. Its
+  spec is `<Name>.<language>.spec.md` in the core
   component's folder under `docs/specs/components/`, beside the core record
   (`docs/specs/components/<ComponentRoot>/<Name>.spec.md`), as
   `architecture:knowledge-contracts` DEC-15 places every component record. Each
