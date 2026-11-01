@@ -1,259 +1,27 @@
 {
-  "apiVersion": 1,
-  "type": "search",
-  "data": {
-    "query": "icon set",
-    "matchCount": 373,
-    "results": [
-      {
-        "domain": "doc",
-        "name": "authoring/building-blocks/templates/build-the-template/template-assets/template-icons",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons use-astryx-icon",
-        "parent": "astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "icons",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs icons theme-overrides",
-        "parent": "astryx docs icons --index",
-        "mentions": [
-          "This lets you swap the icon set (e.g."
-        ]
-      },
-      {
-        "domain": "doc",
-        "name": "icons",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs icons icon-variants",
-        "parent": "astryx docs icons --index",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "theme",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "section": "<text>",
-        "title": "<text>",
-        "command": "astryx docs theme icon-sizes",
-        "parent": "astryx docs theme --index",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ToolbarTableFilter",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ToolbarTableFilter --type block",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "Icon",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/Icon",
-        "command": "astryx component Icon",
-        "mentions": []
-      },
-      {
-        "domain": "doc",
-        "name": "icons",
-        "package": "@astryxdesign/cli",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "title": "<text>",
-        "command": "astryx docs icons --index",
-        "parent": "astryx docs foundations",
-        "mentions": []
-      },
-      {
-        "domain": "component",
-        "name": "IconButton",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/IconButton",
-        "command": "astryx component IconButton",
-        "mentions": []
-      },
-      {
-        "domain": "hook",
-        "name": "useInputContainer",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/hooks",
-        "command": "astryx hook useInputContainer",
-        "mentions": []
-      },
-      {
-        "domain": "hook",
-        "name": "useInputStatusIcon",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "import": "@astryxdesign/core/hooks",
-        "command": "astryx hook useInputStatusIcon",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "BaseTypeaheadCustomSearch",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template BaseTypeaheadCustomSearch --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "BottomSheetSnapPoints",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template BottomSheetSnapPoints --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "BreadcrumbsDeepHierarchy",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template BreadcrumbsDeepHierarchy --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "BreadcrumbsWithIcons",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template BreadcrumbsWithIcons --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ButtonFloating",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ButtonFloating --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ButtonGroupShowcase",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ButtonGroupShowcase --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ButtonWithIcon",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ButtonWithIcon --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "CenterHorizontal",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template CenterHorizontal --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "CenterInsideACard",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template CenterInsideACard --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerDrawerShowcase",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerDrawerShowcase --type block",
-        "mentions": []
-      }
-    ]
-  },
+  "envelope": [
+    "apiVersion",
+    "type",
+    "data",
+    "meta"
+  ],
+  "data": [
+    "query",
+    "matchCount",
+    "results"
+  ],
   "meta": {
     "answeredBy": {
       "cli": "<version>",
       "core": "<version>",
       "copy": "project"
     }
-  }
+  },
+  "aroundMentions": [],
+  "query": "icon set",
+  "mentions": [
+    "Declares which integrations to load, where to route issue links, post-codemod hooks, local debug-log and gap-report handlers, a discover source, and experimental layout components.…",
+    "Export a compatible icon definition from a public package path, then import that path from the template.",
+    "This lets you swap the icon set (e.g."
+  ]
 }

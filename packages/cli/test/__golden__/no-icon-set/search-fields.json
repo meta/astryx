@@ -1,0 +1,102 @@
+{
+  "fields": {
+    "component": [
+      "command",
+      "description",
+      "domain",
+      "import",
+      "name",
+      "package",
+      "reason",
+      "score"
+    ],
+    "doc": [
+      "command",
+      "description",
+      "domain",
+      "name",
+      "package",
+      "parent",
+      "reason",
+      "score",
+      "section",
+      "title"
+    ],
+    "hook": [
+      "command",
+      "description",
+      "domain",
+      "import",
+      "name",
+      "package",
+      "reason",
+      "score"
+    ],
+    "template": [
+      "command",
+      "description",
+      "displayName",
+      "domain",
+      "kind",
+      "name",
+      "package",
+      "reason",
+      "score"
+    ],
+    "theme": [
+      "command",
+      "description",
+      "displayName",
+      "domain",
+      "name",
+      "package",
+      "reason",
+      "score"
+    ]
+  },
+  "labels": {
+    "component": [
+      "command",
+      "description",
+      "domain",
+      "import",
+      "name",
+      "package"
+    ],
+    "doc": [
+      "command",
+      "description",
+      "domain",
+      "name",
+      "package",
+      "parent",
+      "section",
+      "title"
+    ],
+    "hook": [
+      "command",
+      "description",
+      "domain",
+      "import",
+      "name",
+      "package"
+    ],
+    "template": [
+      "command",
+      "description",
+      "displayName",
+      "domain",
+      "kind",
+      "name",
+      "package"
+    ],
+    "theme": [
+      "command",
+      "description",
+      "displayName",
+      "domain",
+      "name",
+      "package"
+    ]
+  }
+}
