@@ -17,6 +17,7 @@ import {describe, expect, it} from 'vitest';
 
 const require = createRequire(import.meta.url);
 const {
+  DEFAULT_MAX_WAIT_MS,
   installRateLimitBackoff,
   rateLimitWaitMs,
 } = require('./rate-limit-backoff.cjs');
@@ -229,6 +230,18 @@ describe('the gate and report jobs that share the API budget wait it out', () =>
       );
       expect(script).toContain('installRateLimitBackoff({github, core})');
     }
+  });
+
+  it("gives main's dispatcher room to finish a full wait", () => {
+    const workflow = YAML.parse(
+      fs.readFileSync(
+        path.join(root, '.github/workflows/main-heavy-lanes.yml'),
+        'utf8',
+      ),
+    );
+    expect(workflow.jobs.dispatch['timeout-minutes']).toBeGreaterThan(
+      DEFAULT_MAX_WAIT_MS / 60000 + 2,
+    );
   });
 
   it('reads the helper from a trusted commit, never the pull request, without spending the budget first', () => {

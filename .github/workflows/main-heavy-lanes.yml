@@ -27,7 +27,8 @@ concurrency:
 jobs:
   dispatch:
     runs-on: ubuntu-slim
-    timeout-minutes: 5
+    # Room for the rate-limit wait (at most five minutes) and the dispatch.
+    timeout-minutes: 10
     permissions:
       actions: write
       contents: read
