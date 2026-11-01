@@ -294,6 +294,8 @@
     "/templates/DividerShowcase/",
     "/templates/DividerVariants/",
     "/templates/DividerVertical/",
+    "/templates/DragToSnapPointsCard/",
+    "/templates/DragToSnapPointsCardVanilla/",
     "/templates/DrawerForm/",
     "/templates/DrawerHeaderShowcase/",
     "/templates/DrawerHeaderSubtitleEndContent/",

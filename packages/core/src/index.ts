@@ -185,6 +185,14 @@ export {
   type AnimatorValues,
 } from './animator/createAnimator';
 
+// Settling an element on snap points (spec:AST-107 FR2): from the package
+// root only, as one API has one entry; its hook ships from './hooks'.
+export {
+  createDragToSnapPoints,
+  type DragToSnapPoints,
+  type DragToSnapPointsOptions,
+} from './dragToSnapPoints/createDragToSnapPoints';
+
 // Hooks
 export * from './hooks';
 

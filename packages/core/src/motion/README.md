@@ -7,7 +7,7 @@ source), the spring, decay, rubber-band and projection math UIKit uses, and a
 compositor animator that plays it. Nothing here is exported from the package
 entry point. Core's motion and gesture modules read the table by path;
 components read touch motion through its internal motion roles (`roles.ts`),
-so each keeps its measured value; no shipped component reads the roles yet.
+so each keeps its measured value, as the snap-point drag's settle does.
 
 ## Files
 
