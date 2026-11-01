@@ -20,11 +20,7 @@
  */
 
 import {useState, useCallback, useMemo, type ReactNode} from 'react';
-import {
-  Lightbox,
-  type LightboxProps,
-  type LightboxMedia,
-} from './Lightbox';
+import {Lightbox, type LightboxProps, type LightboxItem} from './Lightbox';
 
 type LightboxOptions = Omit<
   LightboxProps,
@@ -37,8 +33,11 @@ type LightboxOptions = Omit<
 >;
 
 export interface UseLightboxOptions extends LightboxOptions {
-  /** Media to display in the lightbox. */
-  media: LightboxMedia | LightboxMedia[];
+  /**
+   * Items to display in the lightbox — images/videos (`LightboxMedia`) or
+   * arbitrary React subtrees (`LightboxCustomItem`), which can be mixed.
+   */
+  media: LightboxItem | LightboxItem[];
 }
 
 export interface UseLightboxReturn {
@@ -87,9 +86,7 @@ export interface UseLightboxReturn {
  * {lightbox.element}
  * ```
  */
-export function useLightbox(
-  options: UseLightboxOptions,
-): UseLightboxReturn {
+export function useLightbox(options: UseLightboxOptions): UseLightboxReturn {
   const {media, ...lightboxProps} = options;
   const [isOpen, setIsOpen] = useState(false);
   const [index, setIndex] = useState(0);

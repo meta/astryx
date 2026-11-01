@@ -1,9 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Lightbox.test.tsx
+ * @input Lightbox, Slider, React Testing Library, and keyboard events
+ * @output Regression coverage for gallery navigation and custom content interaction
+ * @position Colocated Lightbox behavior tests
+ */
+
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {Profiler} from 'react';
 import {Lightbox} from './Lightbox';
+import {Slider} from '../Slider';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
 
@@ -735,6 +743,433 @@ describe('Lightbox', () => {
       expect(video).toBeInTheDocument();
       expect(video).toHaveAttribute('src', '/clip.mp4');
       expect(video).toHaveAttribute('controls');
+    });
+  });
+
+  describe('custom content', () => {
+    it('renders arbitrary React content when type is custom', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            type: 'custom',
+            label: 'Live preview',
+            content: <div data-testid="custom-body">Hello preview</div>,
+          }}
+        />,
+      );
+      expect(screen.getByTestId('custom-body')).toBeInTheDocument();
+      expect(screen.getByText('Hello preview')).toBeInTheDocument();
+    });
+
+    it('does not render an img or video for a custom item', () => {
+      const {container} = render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            type: 'custom',
+            label: 'Live preview',
+            content: <div>Body</div>,
+          }}
+        />,
+      );
+      expect(container.querySelector('img')).toBeNull();
+      expect(container.querySelector('video')).toBeNull();
+    });
+
+    it('uses the custom item label as the dialog aria-label', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            type: 'custom',
+            label: 'Dashboard template preview',
+            content: <div>Body</div>,
+          }}
+        />,
+      );
+      expect(document.querySelector('dialog')).toHaveAttribute(
+        'aria-label',
+        'Dashboard template preview',
+      );
+    });
+
+    it('renders a noninteractive ReactNode caption for a custom item', () => {
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            type: 'custom',
+            label: 'Preview',
+            content: <div>Body</div>,
+            caption: <span>Preview description</span>,
+          }}
+        />,
+      );
+      expect(screen.getByText('Preview description')).toBeInTheDocument();
+    });
+
+    it('keeps interactive controls inside custom content interactive', () => {
+      const onClick = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={{
+            type: 'custom',
+            label: 'Preview',
+            content: (
+              <button type="button" data-testid="inner" onClick={onClick}>
+                Action
+              </button>
+            ),
+          }}
+        />,
+      );
+      fireEvent.click(screen.getByTestId('inner'));
+      expect(onClick).toHaveBeenCalled();
+    });
+
+    describe('keyboard ownership', () => {
+      const controls = [
+        [
+          'text input',
+          <input key="input" aria-label="Title" data-testid="control" />,
+        ],
+        [
+          'textarea',
+          <textarea key="textarea" aria-label="Notes" data-testid="control" />,
+        ],
+        [
+          'range',
+          <input
+            key="input"
+            type="range"
+            aria-label="Volume"
+            data-testid="control"
+          />,
+        ],
+        [
+          'select',
+          <select key="select" aria-label="Size" data-testid="control">
+            <option>Small</option>
+          </select>,
+        ],
+        [
+          'button',
+          <button key="button" type="button" data-testid="control">
+            Action
+          </button>,
+        ],
+        [
+          'editable descendant',
+          <div key="editable" contentEditable suppressContentEditableWarning>
+            <span data-testid="control">Edit me</span>
+          </div>,
+        ],
+        [
+          'focusable widget',
+          <div key="widget" tabIndex={0} data-testid="control">
+            Custom keyboard surface
+          </div>,
+        ],
+      ] as const;
+
+      it.each(controls)(
+        'preserves both arrow keys inside a %s',
+        (_name, content) => {
+          const onIndexChange = vi.fn();
+          const onKeyDown = vi.fn();
+          render(
+            <Lightbox
+              isOpen
+              onOpenChange={() => {}}
+              index={1}
+              onIndexChange={onIndexChange}
+              media={[
+                {src: '/before.jpg', alt: 'Before'},
+                {
+                  type: 'custom',
+                  label: 'Editor',
+                  content: <div onKeyDown={onKeyDown}>{content}</div>,
+                },
+                {src: '/after.jpg', alt: 'After'},
+              ]}
+            />,
+          );
+          for (const key of ['ArrowLeft', 'ArrowRight']) {
+            const event = new KeyboardEvent('keydown', {
+              key,
+              bubbles: true,
+              cancelable: true,
+            });
+            fireEvent(screen.getByTestId('control'), event);
+            expect(event.defaultPrevented).toBe(false);
+          }
+          expect(onKeyDown).toHaveBeenCalledTimes(2);
+          expect(onIndexChange).not.toHaveBeenCalled();
+          expect(screen.getByText('2 / 3')).toBeInTheDocument();
+        },
+      );
+
+      it('lets a nested Slider handle arrows without changing the gallery', () => {
+        const onIndexChange = vi.fn();
+        const onChange = vi.fn();
+        render(
+          <Lightbox
+            isOpen
+            onOpenChange={() => {}}
+            index={1}
+            onIndexChange={onIndexChange}
+            media={[
+              {src: '/before.jpg', alt: 'Before'},
+              {
+                type: 'custom',
+                label: 'Editor',
+                content: (
+                  <Slider label="Volume" value={50} onChange={onChange} />
+                ),
+              },
+              {src: '/after.jpg', alt: 'After'},
+            ]}
+          />,
+        );
+        fireEvent.keyDown(screen.getByRole('slider'), {key: 'ArrowLeft'});
+        expect(onChange).toHaveBeenLastCalledWith(49);
+        fireEvent.keyDown(screen.getByRole('slider'), {key: 'ArrowRight'});
+        expect(onChange).toHaveBeenLastCalledWith(51);
+        expect(onIndexChange).not.toHaveBeenCalled();
+      });
+
+      it('lets the consumer prevent dialog-level gallery navigation', () => {
+        const onIndexChange = vi.fn();
+        render(
+          <Lightbox
+            isOpen
+            onOpenChange={() => {}}
+            onKeyDown={event => event.preventDefault()}
+            onIndexChange={onIndexChange}
+            media={[
+              {src: '/a.jpg', alt: 'A'},
+              {src: '/b.jpg', alt: 'B'},
+            ]}
+          />,
+        );
+        fireEvent.keyDown(screen.getByRole('dialog'), {key: 'ArrowRight'});
+        expect(onIndexChange).not.toHaveBeenCalled();
+      });
+
+      it('keeps both gallery shortcuts on the dialog and gallery chrome', () => {
+        const onIndexChange = vi.fn();
+        render(
+          <Lightbox
+            isOpen
+            onOpenChange={() => {}}
+            index={1}
+            onIndexChange={onIndexChange}
+            media={[
+              {src: '/before.jpg', alt: 'Before'},
+              {
+                type: 'custom',
+                label: 'Preview',
+                content: <div>Preview body</div>,
+              },
+              {src: '/after.jpg', alt: 'After'},
+            ]}
+          />,
+        );
+        for (const target of [
+          screen.getByRole('dialog'),
+          screen.getByLabelText('Next'),
+        ]) {
+          fireEvent.keyDown(target, {key: 'ArrowLeft'});
+          expect(onIndexChange).toHaveBeenLastCalledWith(0);
+          fireEvent.keyDown(target, {key: 'ArrowRight'});
+          expect(onIndexChange).toHaveBeenLastCalledWith(2);
+        }
+        expect(onIndexChange).toHaveBeenCalledTimes(4);
+      });
+    });
+
+    describe('zoom-pan gating', () => {
+      it('does not activate zoom for a custom item even when hasZoom is set', () => {
+        const {container} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            hasZoom
+            media={{
+              type: 'custom',
+              label: 'Preview',
+              content: <div data-testid="custom-body">Body</div>,
+            }}
+          />,
+        );
+        // A custom item has no image surface, so there is nothing to zoom/pan
+        // and no zoomable affordance is rendered.
+        expect(container.querySelector('img')).toBeNull();
+        expect(
+          container.querySelectorAll('[class*="imageWrapperZoomable"]').length,
+        ).toBe(0);
+        expect(screen.getByTestId('custom-body')).toBeInTheDocument();
+      });
+
+      it('still activates the zoom affordance for an image when hasZoom is set', () => {
+        const {container} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            hasZoom
+            media={{src: '/photo.jpg', alt: 'Photo'}}
+          />,
+        );
+        expect(
+          container.querySelectorAll('[class*="imageWrapperZoomable"]').length,
+        ).toBeGreaterThan(0);
+      });
+    });
+
+    describe('mixed media + custom galleries', () => {
+      const mixed = [
+        {src: '/a.jpg', alt: 'Image A'},
+        {
+          type: 'custom' as const,
+          label: 'Live preview',
+          content: <div data-testid="preview">Preview body</div>,
+        },
+        {src: '/c.mp4', alt: 'Clip C', type: 'video' as const},
+      ];
+
+      it('renders the media item at a media index', () => {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            index={0}
+          />,
+        );
+        expect(screen.getByAltText('Image A')).toBeInTheDocument();
+        expect(screen.queryByTestId('preview')).not.toBeInTheDocument();
+      });
+
+      it('renders the custom item at a custom index', () => {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            index={1}
+          />,
+        );
+        expect(screen.getByTestId('preview')).toBeInTheDocument();
+        expect(screen.queryByAltText('Image A')).not.toBeInTheDocument();
+      });
+
+      it('renders the video item at a video index', () => {
+        const {container} = render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            index={2}
+          />,
+        );
+        expect(container.querySelector('video')).toHaveAttribute(
+          'src',
+          '/c.mp4',
+        );
+      });
+
+      it('shows the gallery counter and nav across mixed kinds', () => {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            index={1}
+          />,
+        );
+        expect(screen.getByText('2 / 3')).toBeInTheDocument();
+        expect(screen.getByLabelText('Previous')).not.toBeDisabled();
+        expect(screen.getByLabelText('Next')).not.toBeDisabled();
+      });
+
+      it('navigates across kinds via arrow keys (controlled index)', () => {
+        const onIndexChange = vi.fn();
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            index={0}
+            onIndexChange={onIndexChange}
+          />,
+        );
+        const dialog = document.querySelector('dialog')!;
+        fireEvent.keyDown(dialog, {key: 'ArrowRight'});
+        expect(onIndexChange).toHaveBeenCalledWith(1);
+      });
+
+      it('navigates across kinds via the next button', () => {
+        const onIndexChange = vi.fn();
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            index={1}
+            onIndexChange={onIndexChange}
+          />,
+        );
+        fireEvent.click(screen.getByLabelText('Next'));
+        expect(onIndexChange).toHaveBeenCalledWith(2);
+      });
+    });
+
+    describe('announcements', () => {
+      const mixed = [
+        {src: '/a.jpg', alt: 'Image A'},
+        {
+          type: 'custom' as const,
+          label: 'Live preview',
+          content: <div>Body</div>,
+        },
+      ];
+
+      it('announces a custom item by its label on navigation', async () => {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            defaultIndex={0}
+          />,
+        );
+        fireEvent.click(screen.getByLabelText('Next'));
+        await waitFor(() => {
+          expect(politeRegion()).toHaveTextContent('Live preview, 2 of 2');
+        });
+      });
+
+      it('announces a media item by its alt when navigating back from a custom item', async () => {
+        render(
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={mixed}
+            defaultIndex={1}
+          />,
+        );
+        fireEvent.click(screen.getByLabelText('Previous'));
+        await waitFor(() => {
+          expect(politeRegion()).toHaveTextContent('Image A, 1 of 2');
+        });
+      });
     });
   });
 
