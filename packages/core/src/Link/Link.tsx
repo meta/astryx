@@ -54,10 +54,19 @@ import {disabledInteractionProps} from '../utils/disabledInteraction';
  * Base link styles
  */
 const styles = stylex.create({
+  // Link's text behaves as inline text: it truncates with an ancestor Text
+  // clamp and, when it wraps, shares its first and last lines with the words
+  // around it (`component:Link` FR6). Content with a block-level element (a
+  // Stack, a paragraph) gets a flex box instead, because an inline element
+  // paints no focus outline around a block child (AR5). Decided in CSS, not
+  // by reading children.
   base: {
-    display: 'inline-flex',
+    display: {
+      default: 'inline',
+      ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr))':
+        'inline-flex',
+    },
     alignItems: 'center',
-    gap: spacingVars['--spacing-0-5'],
     fontFamily: 'inherit',
     fontSize: 'inherit',
     lineHeight: 'inherit',
@@ -76,13 +85,21 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
   },
-  // A truncating label needs a box that stops at its container: an
-  // inline-flex root otherwise grows to its whole text, so its Text never
+  // Text renders a block when Link's own `maxLines` or `display` asks for
+  // one, so the root lays it out as a flex box. A truncating label's box stops
+  // at its container: it otherwise grows to its whole text, so its Text never
   // overflows and draws no ellipsis (`component:Link` FR6, `component:Text`
   // FR4).
+  blockText: {
+    display: 'inline-flex',
+  },
   truncating: {
     maxWidth: '100%',
     minWidth: 0,
+  },
+  // The external icon's space from the text, in either root display.
+  externalIcon: {
+    marginInlineStart: spacingVars['--spacing-0-5'],
   },
   /**
    * Reset styles for rendering as a <button> when href is undefined.
@@ -330,6 +347,9 @@ export function Link({
     relFromProps,
   );
 
+  // Text resolves to a block for these (`component:Text` display).
+  const hasBlockText = maxLines > 0 || display !== 'inline';
+
   // When role resolves to 'button' (no href, or context-provided),
   // render as a <button> with link styling for semantic correctness.
   const renderAsButton =
@@ -352,7 +372,15 @@ export function Link({
       </Text>
       {isExternalLink && !renderAsButton && (
         <>
-          <Icon icon="externalLink" size="xsm" color="inherit" />
+          {/* A word joiner keeps the icon on the link's last line; hidden so
+              it stays out of the accessible name. */}
+          <span aria-hidden="true">{'\u2060'}</span>
+          <Icon
+            icon="externalLink"
+            size="xsm"
+            color="inherit"
+            xstyle={styles.externalIcon}
+          />
           <VisuallyHidden>{newTabLabel}</VisuallyHidden>
         </>
       )}
@@ -382,6 +410,7 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            hasBlockText && styles.blockText,
             maxLines > 0 && styles.truncating,
             xstyle,
           ),
@@ -417,6 +446,7 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             styles.disabled,
+            hasBlockText && styles.blockText,
             maxLines > 0 && styles.truncating,
             xstyle,
           ),
@@ -450,6 +480,7 @@ export function Link({
             hasUnderline && styles.hasUnderline,
             isStandalone && styles.standalone,
             isDisabled && styles.disabled,
+            hasBlockText && styles.blockText,
             maxLines > 0 && styles.truncating,
             xstyle,
           ),

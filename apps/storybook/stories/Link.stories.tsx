@@ -3,6 +3,8 @@
 import type {Meta, StoryObj} from '@storybook/react';
 import {Link} from '@astryxdesign/core/Link';
 import {Text} from '@astryxdesign/core/Text';
+import {HStack} from '@astryxdesign/core/Layout';
+import {Icon} from '@astryxdesign/core/Icon';
 
 const meta: Meta<typeof Link> = {
   title: 'Core/Link',
@@ -161,6 +163,52 @@ export const TruncatedInConstrainedLine: Story = {
           </Link>
         </p>
       ))}
+    </div>
+  ),
+};
+
+/**
+ * A Link behaves as inline text: inside a two-line Text it clamps with the
+ * text, and a long Link in a sentence shares its first and last lines with
+ * the words around it. A Link around a layout block keeps its focus ring.
+ */
+export const InlineFlow: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 24}}>
+      <div style={{width: 260}} data-inline-flow="clamp">
+        <Text maxLines={2}>
+          <Link href="/notes/planning">
+            Quarterly planning notes for the design systems team, with every
+            decision and open question from the review
+          </Link>
+        </Text>
+      </div>
+      <div style={{width: 220}} data-inline-flow="sentence">
+        <Text display="block">
+          Written by{' '}
+          <Link href="/groups/research">
+            the Example Foundation design and research working group
+          </Link>{' '}
+          · example.com
+        </Text>
+      </div>
+      <div style={{width: 220}} data-inline-flow="external">
+        <Text display="block">
+          Read{' '}
+          <Link href="https://example.com/guide" isExternalLink>
+            the community guide to accessible link text
+          </Link>
+        </Text>
+      </div>
+      <div data-inline-flow="block-child">
+        <Link href="/projects" color="secondary">
+          <HStack gap={1} vAlign="center">
+            <Icon icon="chevronLeft" size="sm" color="inherit" />
+            Back to projects
+          </HStack>
+        </Link>
+      </div>
     </div>
   ),
 };
