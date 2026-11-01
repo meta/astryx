@@ -21,6 +21,7 @@ import {
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
   glyphRendersOnBlockAxis,
+  d1GlyphKey,
   isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
@@ -1032,5 +1033,32 @@ describe('isUnchangedBlockAxisPair', () => {
     expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
     expect(isUnchangedBlockAxisPair(down, right)).toBe(false);
     expect(isUnchangedBlockAxisPair(down, undefined)).toBe(false);
+  });
+});
+
+describe('d1GlyphKey', () => {
+  const path = 'm9 18 6-6-6-6';
+  const expanded = [0, 1, -1, 0]; // rotate(90deg): points down
+  const collapsed = [1, 0, 0, 1]; // points right, never mirrored
+
+  it('keeps an expanded and a collapsed copy of one chevron apart', () => {
+    expect(d1GlyphKey('right', path, expanded)).not.toBe(
+      d1GlyphKey('right', path, collapsed),
+    );
+  });
+
+  it('still merges repeated copies on the same axis', () => {
+    expect(d1GlyphKey('right', path, collapsed)).toBe(
+      d1GlyphKey('right', path, [1, 0, 0, 1]),
+    );
+  });
+
+  it('leaves the collapsed copy judged when it never mirrors', () => {
+    // The expanded copy is unjudged; the collapsed copy, kept separately,
+    // is still a pair D1 judges (and fails, since RTL equals LTR).
+    const down = {dir: 'right', matrix: expanded};
+    const right = {dir: 'right', matrix: collapsed};
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
   });
 });

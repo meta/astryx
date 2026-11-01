@@ -66,6 +66,8 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  d1GlyphKey,
+  glyphRendersOnBlockAxis,
   isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
@@ -367,6 +369,8 @@ async function iconPath(page, sel) {
 // Ambiguous glyphs are treated as NON-DIRECTIONAL (err toward not flagging).
 const DETECTOR = /* js */ `
 (() => {
+  const glyphRendersOnBlockAxis = ${glyphRendersOnBlockAxis.toString()};
+  const d1GlyphKey = ${d1GlyphKey.toString()};
   // Known directional path signatures (whitespace-normalized, lowercased).
   const LEFT_PATHS = new Set([
     'm15 6l-6 6 6 6',        // core defaultIcons chevronLeft
@@ -461,14 +465,15 @@ const DETECTOR = /* js */ `
     // icon has a real box and IS scanned.
     const box = svg.getBoundingClientRect();
     if (box.width < 1 || box.height < 1) continue;
-    // dedupe by (direction + path signature) so a repeated glyph (e.g. many
-    // tree rows) is reported once
-    const key = dir + '::' + dcat;
+    // dedupe by (direction + path signature + rendered axis) so a repeated
+    // glyph (e.g. many tree rows) is reported once, while an expanded copy and
+    // a collapsed copy of one chevron are both kept
+    const matrix = composedMatrixFor(svg);
+    const key = d1GlyphKey(dir, dcat, matrix);
     if (seenPaths.has(key)) continue;
     seenPaths.add(key);
     const btn = svg.closest('button,[role=button],a');
     const aria = btn ? (btn.getAttribute('aria-label') || '') : '';
-    const matrix = composedMatrixFor(svg);
     const flip =
       Math.abs(matrix[0] + 1) < 0.01 && Math.abs(matrix[1]) < 0.01 &&
       Math.abs(matrix[2]) < 0.01 && Math.abs(matrix[3] - 1) < 0.01;

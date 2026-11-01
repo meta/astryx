@@ -521,6 +521,19 @@ export function glyphRendersOnBlockAxis(dir, matrix) {
 }
 
 /**
+ * The key D1's detector dedupes glyphs by: direction, path, and the axis the
+ * glyph renders on. A repeated glyph (many tree rows) is reported once, but an
+ * expanded copy (pointing down) and a collapsed copy (pointing sideways) of
+ * the same chevron stay separate, so an unjudged expanded copy cannot hide a
+ * collapsed one that fails to mirror. Runs in the page: keep it
+ * self-contained apart from glyphRendersOnBlockAxis.
+ */
+export function d1GlyphKey(dir, pathSig, matrix) {
+  const axis = glyphRendersOnBlockAxis(dir, matrix) ? 'block' : 'inline';
+  return dir + '::' + pathSig + '::' + axis;
+}
+
+/**
  * Is this LTR/RTL pair one D1 leaves unjudged: a horizontal glyph that renders
  * pointing the SAME way along the block axis in both directions (an expanded
  * disclosure, down in both)? A glyph that points down in LTR and up in RTL
