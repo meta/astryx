@@ -6,10 +6,12 @@
  * @output Tests DropdownMenu while its on-demand touch sheet is still loading
  * @position Test file for DropdownMenu
  *
- * This file never warms the sheet, and it checks that a popover menu never
- * requests it: each test holds the sheet modules until it
- * releases them, so it exercises the path a real page takes while the sheet's
- * code is still downloading.
+ * It checks that importing DropdownMenu and opening a popover menu never
+ * request the sheet, and each test holds the sheet modules until it releases
+ * them, so it exercises the path a real page takes while the sheet's code is
+ * still downloading. The sheet modules' own code is loaded once up front, past
+ * the hold, so a test's timer covers what the menu does after the release,
+ * never a cold module load on a busy machine.
  */
 
 import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
@@ -22,17 +24,32 @@ const sheetLoad = vi.hoisted(() => {
   const gate = new Promise<void>(resolve => {
     release = resolve;
   });
-  return {gate, release: () => release(), requested: [] as string[]};
+  let announce: (name: string) => void = () => {};
+  // Settles the moment any sheet module is requested.
+  const firstRequest = new Promise<string>(resolve => {
+    announce = resolve;
+  });
+  const requested: string[] = [];
+  return {
+    gate,
+    release: () => release(),
+    requested,
+    firstRequest,
+    request(name: string) {
+      requested.push(name);
+      announce(name);
+    },
+  };
 });
 
 vi.mock('./MenuBottomSheet', async importOriginal => {
-  sheetLoad.requested.push('MenuBottomSheet');
+  sheetLoad.request('MenuBottomSheet');
   await sheetLoad.gate;
   return importOriginal();
 });
 
 vi.mock('./MenuBottomSheetActionList', async importOriginal => {
-  sheetLoad.requested.push('MenuBottomSheetActionList');
+  sheetLoad.request('MenuBottomSheetActionList');
   await sheetLoad.gate;
   return importOriginal();
 });
@@ -40,10 +57,28 @@ vi.mock('./MenuBottomSheetActionList', async importOriginal => {
 let DropdownMenu: typeof DropdownMenuComponent;
 
 // If any module the dropdown loads imported the sheet eagerly, this import
-// would wait on the held sheet and the hook would time out.
+// would wait on the held sheet forever: fail the moment a sheet module is
+// requested instead, so the check does not depend on how long the import takes
+// on a busy machine. The hook timeout is only a backstop.
 beforeAll(async () => {
-  ({DropdownMenu} = await import('./DropdownMenu'));
-}, 10000);
+  const loaded = await Promise.race([
+    import('./DropdownMenu').then(module => ({module})),
+    sheetLoad.firstRequest.then(name => ({eager: name})),
+  ]);
+  if ('eager' in loaded) {
+    throw new Error(
+      `Importing DropdownMenu requested ${loaded.eager}: the sheet must load only when a menu shows it.`,
+    );
+  }
+  ({DropdownMenu} = loaded.module);
+  // The sheet modules' own code, loaded once and untimed. `importActual` skips
+  // the mocks above, so `requested` stays empty and the hold still decides
+  // when the sheet arrives; the mocks' `importOriginal` then returns these
+  // modules. A cold load of the sheet's module graph takes seconds on a busy
+  // machine, and inside a test it would land in the wait after the release.
+  await vi.importActual('./MenuBottomSheet');
+  await vi.importActual('./MenuBottomSheetActionList');
+}, 120_000);
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
