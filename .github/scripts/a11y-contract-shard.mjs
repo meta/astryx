@@ -14,13 +14,19 @@
  *   assigns every listed file to exactly one leg, choosing the split that
  *   finishes soonest when each leg runs its files in path order on its
  *   workers, using the recorded seconds (a file with none counts as the
- *   median). The numbers only steer balance; coverage never depends on them.
+ *   median; scripts/lib/duration-split.mjs, shared with the Node legs). The
+ *   numbers only steer balance; coverage never depends on them.
  */
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {
+  assertEachOnce,
+  costOf,
+  splitByDuration,
+} from '../../scripts/lib/duration-split.mjs';
 
 const ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -57,22 +63,9 @@ export function legWall(files, seconds, workers = WORKERS) {
  * @returns {string[][]} each leg's files in path order; together exactly `files`
  */
 export function partitionFiles(files, count, recorded) {
-  const known = files
-    .map(file => recorded[file])
-    .filter(value => value > 0)
-    .sort((a, b) => a - b);
-  const median = known.length > 0 ? known[Math.floor(known.length / 2)] : 1;
-  const seconds = file => (recorded[file] > 0 ? recorded[file] : median);
-  const legs = Array.from({length: count}, () => []);
+  const seconds = costOf(files, recorded);
   // Longest first to the lightest leg, then improve by moving single files.
-  for (const file of [...files].sort(
-    (a, b) => seconds(b) - seconds(a) || a.localeCompare(b),
-  )) {
-    const sums = legs.map(leg =>
-      leg.reduce((sum, item) => sum + seconds(item), 0),
-    );
-    legs[sums.indexOf(Math.min(...sums))].push(file);
-  }
+  const legs = splitByDuration(files, count, seconds);
   const worst = () => Math.max(...legs.map(leg => legWall(leg, seconds)));
   for (let improved = true; improved;) {
     improved = false;
@@ -97,13 +90,7 @@ export function partitionFiles(files, count, recorded) {
     }
   }
   const result = legs.map(leg => [...leg].sort());
-  const assigned = result.flat();
-  if (
-    assigned.length !== files.length ||
-    new Set(assigned).size !== files.length
-  ) {
-    throw new Error('Contract shard partition lost or repeated a file.');
-  }
+  assertEachOnce(files, result, 'file');
   return result;
 }
 

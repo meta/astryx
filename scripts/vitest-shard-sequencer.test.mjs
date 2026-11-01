@@ -140,6 +140,34 @@ describe('duration-balanced Node legs', () => {
     ).toContain("command !== 'record'");
   });
 
+  it("starts each leg's slowest recorded Node file first, keeping other projects' order", async () => {
+    // The project fields Vitest's own sort reads.
+    const spec = (project, file) => ({
+      project: {
+        name: project,
+        config: {sequence: {groupOrder: 0}, isolate: true},
+      },
+      moduleId: path.join(ROOT, file),
+    });
+    const fast = slowest.slice(-3).map(file => spec('node', file));
+    const slow = slowest.slice(0, 3).map(file => spec('node', file));
+    const ui = [spec('ui', 'packages/core/src/A/A.test.tsx')];
+    const sequencer = new DurationShardSequencer({
+      config: {root: ROOT, shard: {index: 1, count: 1}},
+      cache: {
+        getFileTestResults: () => undefined,
+        getFileStats: () => undefined,
+      },
+    });
+    const order = (await sequencer.sort([...fast, ...ui, ...slow])).map(item =>
+      path.relative(ROOT, item.moduleId),
+    );
+    const nodeOrder = order.filter(file => !file.startsWith('packages/core/'));
+    expect(nodeOrder.slice(0, 3)).toEqual(slowest.slice(0, 3));
+    expect(order).toContain('packages/core/src/A/A.test.tsx');
+    expect(order).toHaveLength(7);
+  });
+
   it('is the sequencer every Vitest run uses', () => {
     const config = fs.readFileSync(path.join(ROOT, 'vitest.config.ts'), 'utf8');
     expect(config).toContain(

@@ -14,15 +14,19 @@
  *   time against about 320 s for two other legs. This assigns every file to
  *   exactly one leg, slowest first, each to the leg with the least recorded
  *   time so far, so the slowest files each take a leg of their own and the
- *   slowest single file sets the floor (spec:AST-030 FR22). A file with no
- *   recorded time counts as the median. The numbers only steer balance; which
- *   files run never depends on them. Other projects keep Vitest's split.
+ *   slowest single file sets the floor (spec:AST-030 FR22). Within a leg it
+ *   starts the slowest recorded file first, so that file never waits behind
+ *   others. A file with no recorded time counts as the median
+ *   (scripts/lib/duration-split.mjs). The numbers only steer balance; which
+ *   files run never depends on them. Other projects keep Vitest's split and
+ *   order.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {BaseSequencer} from 'vitest/node';
+import {costOf, slowestFirst, splitByDuration} from './lib/duration-split.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const DURATIONS = path.join(ROOT, 'scripts/vitest-node-durations.json');
@@ -36,27 +40,7 @@ const PROJECT = 'node';
  * @returns {string[][]} each leg's files, sorted; together exactly `files`
  */
 export function partitionByDuration(files, count, seconds) {
-  const recorded = file =>
-    Object.hasOwn(seconds, file) && Number.isFinite(seconds[file]);
-  const known = files
-    .filter(recorded)
-    .map(file => seconds[file])
-    .sort((a, b) => a - b);
-  const median = known.length > 0 ? known[Math.floor(known.length / 2)] : 1;
-  const cost = file => (recorded(file) ? seconds[file] : median);
-  const legs = Array.from({length: count}, () => ({files: [], total: 0}));
-  // Slowest first, ties by path, so every leg computes the same split from
-  // the same file list, whatever order Vitest collected it in.
-  for (const file of [...new Set(files)].sort(
-    (a, b) => cost(b) - cost(a) || a.localeCompare(b),
-  )) {
-    const leg = legs.reduce((best, item) =>
-      item.total < best.total ? item : best,
-    );
-    leg.files.push(file);
-    leg.total += cost(file);
-  }
-  return legs.map(leg => leg.files.sort());
+  return splitByDuration(files, count, costOf(files, seconds));
 }
 
 /** Recorded seconds per file, or none when the file cannot be read. */
@@ -84,11 +68,16 @@ export function recordDurations(text) {
 }
 
 export default class DurationShardSequencer extends BaseSequencer {
+  relative(spec) {
+    return path
+      .relative(this.ctx.config.root, spec.moduleId)
+      .split(path.sep)
+      .join('/');
+  }
+
   async shard(specs) {
     const {index, count} = this.ctx.config.shard;
-    const root = this.ctx.config.root;
-    const relative = spec =>
-      path.relative(root, spec.moduleId).split(path.sep).join('/');
+    const relative = spec => this.relative(spec);
     const node = specs.filter(spec => spec.project.name === PROJECT);
     const others = specs.filter(spec => spec.project.name !== PROJECT);
     const mine = new Set(
@@ -100,6 +89,31 @@ export default class DurationShardSequencer extends BaseSequencer {
       ...node.filter(spec => mine.has(relative(spec))),
       ...(others.length > 0 ? await super.shard(others) : []),
     ];
+  }
+
+  // Vitest orders files by its results cache, which a fresh CI checkout does
+  // not have, so it falls back to file size. Node files start slowest recorded
+  // first instead, in the places Vitest gave `node` files; the rest keep
+  // Vitest's order.
+  async sort(specs) {
+    const sorted = await super.sort(specs);
+    const slots = [];
+    const node = [];
+    sorted.forEach((spec, position) => {
+      if (spec.project.name !== PROJECT) return;
+      slots.push(position);
+      node.push(spec);
+    });
+    const byPath = new Map(node.map(spec => [this.relative(spec), spec]));
+    // One spec per file is the rule; anything else keeps Vitest's order.
+    if (byPath.size !== node.length) return sorted;
+    const files = [...byPath.keys()];
+    const order = slowestFirst(files, costOf(files, readDurations()));
+    const result = [...sorted];
+    order.forEach((file, i) => {
+      result[slots[i]] = byPath.get(file);
+    });
+    return result;
   }
 }
 
