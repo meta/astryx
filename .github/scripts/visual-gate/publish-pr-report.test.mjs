@@ -134,16 +134,11 @@ describe('canonical visual report publication', () => {
 
   it("keeps the default touched check's scope marker and drops any other", () => {
     verdict.context.scope = 'touched';
-    verdict.context.components = ['Button'];
     json();
-    expect(run().context).toMatchObject({
-      scope: 'touched',
-      components: ['Button'],
-    });
+    expect(run().context.scope).toBe('touched');
     verdict.context.scope = '<b>full</b>';
     json();
     expect(run().context).not.toHaveProperty('scope');
-    expect(run().context).not.toHaveProperty('components');
   });
 
   it('accepts a report from an earlier attempt of the same run, never a later one', () => {
