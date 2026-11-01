@@ -76,7 +76,33 @@ function checksOutHead(job) {
   );
 }
 
-function unguardedScripts(job) {
+/**
+ * Whether a step's own shell skips when this exact script is missing:
+ * `[ ! -f <script> ]`, or `[ ! -f "$VAR" ]` where VAR holds the script,
+ * followed by `exit 0`. Another script in the same step is not covered.
+ */
+export function skipsWhenMissing(run, script) {
+  const escaped = script.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const variables = [
+    ...run.matchAll(
+      new RegExp(
+        `^\\s*([A-Za-z_][A-Za-z0-9_]*)=["']?${escaped}["']?\\s*$`,
+        'gm',
+      ),
+    ),
+  ].map(match => match[1]);
+  const targets = [
+    escaped,
+    ...variables.flatMap(name => [`\\$${name}`, `\\$\\{${name}\\}`]),
+  ];
+  return targets.some(target =>
+    new RegExp(
+      `if \\[ ! -f "?${target}"? \\]; then[\\s\\S]*?exit 0[\\s\\S]*?fi`,
+    ).test(run),
+  );
+}
+
+export function unguardedScripts(job) {
   const scope = (job.steps ?? []).find(step =>
     String(step.uses ?? '').includes('test-scope'),
   );
@@ -90,13 +116,8 @@ function unguardedScripts(job) {
       if (condition.includes(`hashFiles('${script}') != ''`)) continue;
       // Loaded from the workflow's own commit, not the head.
       if (run.includes(`$WORKFLOW_SHA:${script}`)) continue;
-      // The step skips a head without the script on its own.
-      if (
-        /\[ ! -f "?\$?[A-Za-z0-9_]*"? \]/.test(run) &&
-        run.includes('exit 0')
-      ) {
-        continue;
-      }
+      // The step skips a head without this script on its own.
+      if (skipsWhenMissing(run, script)) continue;
       if (
         script === requiredHeadFile &&
         condition.includes('head_file_present')
@@ -157,6 +178,22 @@ describe('pull-request jobs that check out the head', () => {
         }
       }
     }
+  });
+
+  it("exempts only the script a step's own missing-file check names", () => {
+    const run = [
+      'D7_TEST=.github/scripts/d7.test.mjs',
+      'if [ ! -f "$D7_TEST" ]; then',
+      "  echo '::notice::skipped'",
+      '  exit 0',
+      'fi',
+      'node .github/scripts/other-new.mjs',
+    ].join('\n');
+    expect(skipsWhenMissing(run, '.github/scripts/d7.test.mjs')).toBe(true);
+    expect(skipsWhenMissing(run, '.github/scripts/other-new.mjs')).toBe(false);
+    expect(unguardedScripts({steps: [{name: 'Mixed step', run}]})).toEqual([
+      'Mixed step: .github/scripts/other-new.mjs',
+    ]);
   });
 
   it('catches a newer script with no guard', () => {
