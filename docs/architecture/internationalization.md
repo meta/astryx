@@ -58,11 +58,12 @@ deciding_specs: []
 {
   "scope": "global",
   "triggers": {
-    "accessibility": ["INV1", "INV1a", "INV7"],
+    "accessibility": ["INV1", "INV1a", "INV3a", "INV7"],
     "behavior": [
       "INV1",
       "INV1a",
       "INV3",
+      "INV3a",
       "INV4",
       "INV5",
       "INV7",
@@ -73,7 +74,7 @@ deciding_specs: []
     ],
     "compatibility": ["INV2", "INV9", "INV10"],
     "layout": ["INV11", "INV12"],
-    "public-api": ["INV1", "INV1a", "INV2", "INV7", "INV9", "INV10"],
+    "public-api": ["INV1", "INV1a", "INV2", "INV3a", "INV7", "INV9", "INV10"],
     "react-runtime": ["INV3", "INV4", "INV11", "INV12", "INV13"]
   }
 }
@@ -191,6 +192,13 @@ for all 30 shipped locales plus `pseudo`.
 - **INV3 — No provider is deterministic English.** Components used outside a
   provider resolve Astryx strings from the shipped English catalog, expose locale
   `en`, direction `ltr`, and do not read the browser or host locale implicitly.
+- **INV3a — Factories take a per-message option for each announced string.** A
+  public non-React factory (`architecture:public-component-api` INV22) that
+  announces Astryx text takes an optional string option for each announced
+  message; given, it replaces that message; absent, the factory announces the
+  catalog message, translated when its React wrapper runs under a provider and
+  English without one. Per-message options are the factory mechanism; the
+  external-runtime adapter (INV14) stays a separate, broader decision.
 - **INV4 — Runtime locale changes are live.** Re-rendering the provider with a new
   locale, messages, overrides, or direction updates consumers in that subtree.
   Astryx does not persist or select the application's locale.
@@ -402,6 +410,7 @@ callers remain conformance work and do not relax INV1a, INV8, INV9, or INV10.
 | INV1, INV1a, INV7  | hardcoded-string lint, catalog tests, component translation tests with a non-English provider                                                                                                                                                                                                                                                                                                                                                                                                                                   | Astryx-owned text bypasses the catalog, an announcement or count is assembled from fragments or a hand-rolled plural, or non-string output reaches visible/AT attributes                                                                                                                |
 | INV2, INV13, INV14 | export drift checks, public i18n tests, compatibility review                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | A parallel/replacement runtime lands without migration, or client hooks claim server behavior                                                                                                                                                                                           |
 | INV3–INV5          | resolver and provider rerender tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | no-provider output depends on the host, locale swaps stay stale, fallback order changes, or malformed-locale behavior is described as graceful                                                                                                                                          |
+| INV3a              | factory unit tests: the option replaces the message, and outside a provider its absence announces shipped English; wrapper tests: under a non-English provider its absence announces the translation. Evidence gap: no factory test covers a per-message option yet                                                                                                                                                                                                                                                             | a factory announces Astryx text that no option can replace, ignores a given option, or announces something other than the catalog message when the option is absent                                                                                                                     |
 | INV6               | `check:i18n-catalog`, key-format lint, and focused mutation tests                                                                                                                                                                                                                                                                                                                                                                                                                                                               | stale/malformed keys, malformed ICU, or source/translation runtime-contract drift passes CI                                                                                                                                                                                             |
 | INV15              | generator tests, `check:i18n-runtime`, package-export drift check, provider/resolver runtime-catalog tests                                                                                                                                                                                                                                                                                                                                                                                                                      | a generated module carries descriptions or is committed, a malformed entry projects instead of failing, a rich export path changes, or a `RuntimeCatalog` input is rejected or leaks a non-rich context shape                                                                           |
 | INV16              | build-plugin unit and real-build tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a rich or generated locale import fails to resolve through the standard plugin                                                                                                                                                                                                          |

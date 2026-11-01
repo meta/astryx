@@ -198,6 +198,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   `role="separator"` with an accessible name, `aria-orientation` (the axis the
   divider lies along), `aria-valuemin`, `aria-valuemax`, and `aria-valuenow` in
   pixels, `aria-valuetext` while collapsed, and `aria-disabled` when disabled.
+  `CreateResizableOptions`, which `useResizable(handleRef, options)` also
+  takes, has `collapsedLabel?: string`, announced as the Handle's
+  `aria-valuetext` while collapsed; absent, the catalog's "Collapsed"
+  (`architecture:internationalization` INV3a).
   ArrowRight and ArrowDown move the divider toward the end of its axis and
   ArrowLeft and ArrowUp toward the start, the inline arrows following the
   reading direction under RTL, with Shift for a larger step, so the pane grows
