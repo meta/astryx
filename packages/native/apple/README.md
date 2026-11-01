@@ -26,13 +26,14 @@ apple/
 │   │   │   └── Generated/ # typed tokens and every published theme, generated; do not edit
 │   │   ├── Resources/     # core's messages per locale, generated; do not edit
 │   │   ├── Localization/
-│   │   ├── Icon/          # Icon, Icon.spec.md
-│   │   ├── Avatar/        # Avatar, Avatar.spec.md
+│   │   ├── Icon/          # Icon
+│   │   ├── Avatar/        # Avatar
+│   │   ├── Item/          # Item
 │   │   ├── Text/          # Text
 │   │   ├── Heading/       # Heading
 │   │   ├── Button/        # Button
 │   │   ├── TextInput/     # TextInput
-│   │   ├── Thumbnail/     # Thumbnail, Thumbnail.spec.md
+│   │   ├── Thumbnail/     # Thumbnail
 │   │   ├── Card/          # Card
 │   │   └── Banner/        # Banner
 │   └── AstryxNative/      # contracts, wire, logic host (module AstryxNative)
@@ -45,6 +46,9 @@ apple/
     ├── Login/             # LoginTemplate, from `astryx template login`
     └── Tests/
 ```
+
+Each component's Swift spec sits beside its core spec, at
+`docs/specs/components/<ComponentRoot>/<Name>.swift.spec.md`.
 
 - **`Sources/Astryx/<Name>/`** holds one folder per component, named as in
   `packages/core/src/<Name>/`. Each view has core's component name in the
@@ -142,6 +146,17 @@ export:
 ```sh
 node packages/native/scripts/swift-ios-theme.mjs --theme ./src/acmeTheme.ts#acmeTheme --out ./Sources/Theme
 ```
+
+The generator reads the CSS forms its spec lists
+(`specs/swift/library/theme-generator.md`, G7): hex and named colors, `rgb()`,
+`hsl()`, `hwb()`, Lab, LCH, OKLab, OKLCH, `color()` in the listed spaces,
+`color-mix()`, and relative colors (wide-gamut colors kept as Display P3),
+lengths with `calc()`, and `[light, dark]` tuples. A value it can only
+approximate, such as a color outside Display P3 (clipped, as browsers draw it),
+prints a warning after the run; a value with no static form, such as
+`currentColor` or `50%`, takes core's default for that token with a warning, or
+stops the run when core has none. A form the generator does not read yet stops
+the run, saying so. Add `--strict` to fail on any warning.
 
 A theme's local tokens are not generated yet; the generator names each one it
 leaves out.

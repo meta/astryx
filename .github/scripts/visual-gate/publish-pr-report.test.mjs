@@ -132,6 +132,15 @@ describe('canonical visual report publication', () => {
     ]);
   });
 
+  it("keeps the default touched check's scope marker and drops any other", () => {
+    verdict.context.scope = 'touched';
+    json();
+    expect(run().context.scope).toBe('touched');
+    verdict.context.scope = '<b>full</b>';
+    json();
+    expect(run().context).not.toHaveProperty('scope');
+  });
+
   it('accepts a report from an earlier attempt of the same run, never a later one', () => {
     // Rerunning only the failed jobs keeps the passing visual job's artifact.
     verdict.context.runAttempt = '1';

@@ -21,6 +21,7 @@
 import {useCallback, useRef} from 'react';
 import {isRtlElement} from './isRtlElement';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {focusForLastInput} from '../utils/focusReturn';
 
 /**
  * Navigation orientation for a linear list.
@@ -127,13 +128,24 @@ export interface UseListFocusOptions {
  */
 export interface InternalListFocusOptions extends UseListFocusOptions {
   /**
-   * With `hasRovingTabIndex`, keeps one tab stop while every item is disabled:
-   * returns the elements that share it, the stop first. The hook gives the
-   * first `tabindex="0"` and the rest `tabindex="-1"`. For a group that stays
-   * focusable while disabled, so its disabled reason is reachable by keyboard.
-   * Unset (the default): no item holds the stop while every item is disabled.
+   * With `hasRovingTabIndex`, the owner places the one tab stop: returns the
+   * elements that share it, the stop first, enabled or not. After every
+   * commit and every keyboard move the hook gives the first `tabindex="0"`
+   * and the rest `tabindex="-1"`. For a group whose stop follows its own
+   * state, such as a radio group whose checked item keeps the stop even when
+   * that item, or the whole group, is disabled.
+   * Unset (the default): the first enabled item holds the stop, kept across
+   * renders, and no item holds it while every item is disabled.
    */
-  disabledTabStop?: (list: HTMLElement) => ReadonlyArray<HTMLElement>;
+  tabStopOrder?: (list: HTMLElement) => ReadonlyArray<HTMLElement>;
+  /**
+   * Moves focus with the focus the last input calls for
+   * (`architecture:interaction-modality` INV1): after a pointer press a
+   * focused item shows no keyboard ring, after a key press it does. For a list
+   * whose items draw the ring and that opens from a pointer, such as a context
+   * menu. Unset (the default): a plain `focus()`.
+   */
+  focusFollowsLastInput?: boolean;
 }
 
 /**
@@ -360,8 +372,9 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
     hasHomeEnd = true,
     hasPaging = false,
     hasRovingTabIndex = false,
-    disabledTabStop,
+    tabStopOrder,
     hasCaretGuard = false,
+    focusFollowsLastInput = false,
   } = options;
 
   const listRef = useRef<T>(null);
@@ -485,14 +498,9 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
    * enabled; otherwise promote the first enabled item (tab-stop repair).
    */
   const syncTabStops = useCallback(() => {
-    const items = getItems();
-    const enabled = items.filter(el => !isItemDisabled(el));
-    if (enabled.length === 0) {
-      const listEl = listRef.current;
-      if (listEl == null || disabledTabStop == null) {
-        return;
-      }
-      const [stop, ...others] = disabledTabStop(listEl);
+    const listEl = listRef.current;
+    if (listEl != null && tabStopOrder != null) {
+      const [stop, ...others] = tabStopOrder(listEl);
       if (stop != null) {
         setTabIndex(stop, 0);
       }
@@ -501,12 +509,17 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
       }
       return;
     }
+    const items = getItems();
+    const enabled = items.filter(el => !isItemDisabled(el));
+    if (enabled.length === 0) {
+      return;
+    }
     const current = enabled.find(el => el.getAttribute('tabindex') === '0');
     const tabbable = current ?? enabled[0];
     for (const el of items) {
       setTabIndex(el, el === tabbable ? 0 : -1);
     }
-  }, [getItems, isItemDisabled, setTabIndex, disabledTabStop]);
+  }, [getItems, isItemDisabled, setTabIndex, tabStopOrder]);
 
   // Keep the tab stop valid across renders (items added/removed, disabled
   // toggled). Runs after every commit but only when roving tabindex is on.
@@ -527,13 +540,24 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
         return;
       }
       if (hasRovingTabIndex) {
-        for (const el of items) {
+        // An owner-placed stop may sit on an element outside `items`, such as
+        // a disabled checked radio; it gives way to the target too.
+        const listEl = listRef.current;
+        const sharing =
+          listEl != null && tabStopOrder != null
+            ? [...items, ...tabStopOrder(listEl)]
+            : items;
+        for (const el of sharing) {
           setTabIndex(el, el === target ? 0 : -1);
         }
       }
-      target.focus();
+      if (focusFollowsLastInput) {
+        focusForLastInput(target);
+      } else {
+        target.focus();
+      }
     },
-    [hasRovingTabIndex, setTabIndex],
+    [hasRovingTabIndex, setTabIndex, focusFollowsLastInput, tabStopOrder],
   );
 
   /**
@@ -743,16 +767,34 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
 
       const currentIndex = getCurrentIndex();
       const items = getItems();
+      let nextFrom = currentIndex === -1 ? 0 : currentIndex + 1;
+      let prevFrom = currentIndex === -1 ? items.length - 1 : currentIndex - 1;
+      // Focus on an owner-placed stop outside `items`, such as a disabled
+      // checked radio, moves to the enabled item beside it in document order.
+      const active = document.activeElement;
+      if (
+        currentIndex === -1 &&
+        tabStopOrder != null &&
+        active != null &&
+        listRef.current?.contains(active)
+      ) {
+        const after = items.findIndex(
+          item =>
+            (active.compareDocumentPosition(item) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0,
+        );
+        nextFrom = after === -1 ? items.length : after;
+        prevFrom = nextFrom - 1;
+      }
 
       if (isNext) {
-        const from = currentIndex === -1 ? 0 : currentIndex + 1;
-        const next = findEnabledIndex(items, from, 1, wrap);
+        const next = findEnabledIndex(items, nextFrom, 1, wrap);
         if (next !== -1) {
           focusIndex(items, next);
         }
       } else if (isPrev) {
-        const from = currentIndex === -1 ? items.length - 1 : currentIndex - 1;
-        const prev = findEnabledIndex(items, from, -1, wrap);
+        const prev = findEnabledIndex(items, prevFrom, -1, wrap);
         if (prev !== -1) {
           focusIndex(items, prev);
         }
@@ -783,6 +825,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
       focusPage,
       onEscape,
       ownsEvent,
+      tabStopOrder,
     ],
   );
 

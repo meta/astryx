@@ -17,6 +17,7 @@
 import {useCallback, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {isRtlElement} from './isRtlElement';
+import {findTypeaheadMatch, nextTypeaheadBuffer} from '../utils/typeaheadMatch';
 
 /** Keys handled by the tree keyboard model (used to gate typeahead). */
 const NAVIGATION_KEYS = new Set([
@@ -427,15 +428,16 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
       currentIndex: number,
     ): void => {
       const state = typeaheadRef.current;
+      // The same buffer step as useTypeahead: a repeat means "next match", and
+      // a lone combining mark typed first is not a letter to jump to.
+      const nextBuffer = nextTypeaheadBuffer(state.buffer, e.key);
+      if (nextBuffer == null) {
+        return;
+      }
       if (state.timer != null) {
         clearTimeout(state.timer);
       }
-      // "aa" would match nothing; a repeat means "next match" (useTypeahead).
-      const char = e.key.toLowerCase();
-      const isRepeatSameChar =
-        state.buffer.length > 0 &&
-        state.buffer.split('').every(c => c === char);
-      state.buffer = isRepeatSameChar ? char : state.buffer + char;
+      state.buffer = nextBuffer;
       state.timer = setTimeout(() => {
         typeaheadRef.current.buffer = '';
       }, typeaheadResetMs) as unknown as number;
@@ -449,11 +451,15 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
         ...items.slice(start + offset),
         ...items.slice(0, start + offset),
       ];
-      const match = ordered.find(
-        item =>
-          !itemDisabled(item) &&
-          itemLabelText(item, matchLabelledBy).toLowerCase().startsWith(query),
+      const enabled = ordered.filter(item => !itemDisabled(item));
+      // INV17: case, accents, stroked letters and Turkish i fold away, and a
+      // typed mark prefers the exact match.
+      const matchIndex = findTypeaheadMatch(
+        enabled.map((_, i) => i),
+        i => itemLabelText(enabled[i], matchLabelledBy),
+        query,
       );
+      const match = matchIndex >= 0 ? enabled[matchIndex] : undefined;
       if (match != null) {
         e.preventDefault();
         focusItem(match);

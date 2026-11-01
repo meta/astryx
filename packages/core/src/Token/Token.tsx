@@ -404,6 +404,7 @@ export function Token({
         <LinkComponent
           ref={ref as React.Ref<HTMLAnchorElement>}
           href={href as string}
+          onClick={onClick}
           {...pressable}
           {...mergeProps(
             themeProps('token', {
@@ -444,6 +445,7 @@ export function Token({
         ref={ref}
         href={href as string}
         isDisabled={isDisabled}
+        onLinkClick={onClick}
         LinkComponent={LinkComponent}
         icon={icon}
         endContent={endContent}

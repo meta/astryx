@@ -25,6 +25,7 @@ import {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {isRenderable} from '../utils/isRenderable';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
@@ -241,6 +242,8 @@ export function TreeList({
   ...restProps
 }: TreeListProps) {
   const headerId = useId();
+  // A header that renders nothing names nothing, so the tree keeps its own label.
+  const hasHeader = isRenderable(header);
 
   // Expanded keys from data: recomputed whenever items change.
   const expandedKeysFromProps = useMemo(
@@ -597,7 +600,7 @@ export function TreeList({
         style,
       )}
       {...restProps}>
-      {header != null && (
+      {hasHeader && (
         <div id={headerId} {...stylex.props(styles.header)}>
           {header}
         </div>
@@ -611,8 +614,8 @@ export function TreeList({
       <ul
         ref={treeRef}
         role="tree"
-        aria-label={header != null ? undefined : ariaLabel}
-        aria-labelledby={header != null ? headerId : ariaLabelledby}
+        aria-label={hasHeader ? undefined : ariaLabel}
+        aria-labelledby={hasHeader ? headerId : ariaLabelledby}
         onFocus={handleFocus}
         {...stylex.props(styles.list)}>
         {renderItems(items, 0, [])}
