@@ -273,6 +273,11 @@ export function PanelSearchInput({
         <input
           ref={mergedInputRef}
           type="text"
+          // A search field's touch keyboard ends in a Search key and does not
+          // autocorrect, as the UIKit search bar's text field does (`.search`
+          // return key, `autocorrectionType = .no`, measured on iOS 26.2).
+          enterKeyHint="search"
+          autoCorrect="off"
           aria-label={label}
           placeholder={placeholder}
           value={value}

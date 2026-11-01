@@ -1553,6 +1553,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         autoFocus={hasAutoFocus}
         data-autofocus={hasAutoFocus || undefined}
         autoComplete="off"
+        // A search field's touch keyboard ends in a Search key and does not
+        // autocorrect, as the UIKit search bar's text field does (`.search`
+        // return key, `autocorrectionType = .no`, measured on iOS 26.2).
+        // Safari maps both attributes to those traits. The key is only a
+        // label: Enter still commits the highlighted option.
+        enterKeyHint="search"
+        autoCorrect="off"
         {...mergeProps(
           stylex.props(
             styles.input,

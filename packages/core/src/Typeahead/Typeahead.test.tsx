@@ -579,6 +579,25 @@ describe('BaseTypeahead focus-out', () => {
 });
 
 describe('Typeahead', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection', () => {
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('combobox', {name: 'Fruit'})).toHaveAttribute(
+      'enterkeyhint',
+      'search',
+    );
+    expect(screen.getByRole('combobox', {name: 'Fruit'})).toHaveAttribute(
+      'autocorrect',
+      'off',
+    );
+  });
+
   describe('out-of-order async results', () => {
     it('discards a stale response that resolves after a newer query', async () => {
       const resolvers = new Map<string, (items: SearchableItem[]) => void>();

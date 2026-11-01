@@ -78,6 +78,27 @@ describe('CommandPaletteInput', () => {
     expect(input).not.toHaveAttribute('aria-autocomplete');
   });
 
+  it('asks a touch keyboard for its Search key and no autocorrection, standalone and in a palette', () => {
+    const {unmount} = render(<CommandPaletteInput />);
+    expect(screen.getByRole('searchbox')).toHaveAttribute(
+      'enterkeyhint',
+      'search',
+    );
+    expect(screen.getByRole('searchbox')).toHaveAttribute('autocorrect', 'off');
+    unmount();
+
+    render(
+      <CommandPaletteContext value={makeContext()}>
+        <CommandPaletteInput />
+      </CommandPaletteContext>,
+    );
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'enterkeyhint',
+      'search',
+    );
+    expect(screen.getByRole('combobox')).toHaveAttribute('autocorrect', 'off');
+  });
+
   it('preserves standalone caller-owned popup semantics', () => {
     render(
       <CommandPaletteInput
