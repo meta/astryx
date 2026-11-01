@@ -23,7 +23,7 @@ import {
   findCoreDir,
   findProjectCoreDir,
 } from '../../../foundation/fs/paths.mjs';
-import {registerDoctor} from './doctor.mjs';
+import {printIntegrationCheckResponse, registerDoctor} from './doctor.mjs';
 import {expectRecordsCarry} from '../../../test-utils/text-projection.mjs';
 
 let tmpDir;
@@ -1124,7 +1124,11 @@ describe('doctor integration — command', () => {
     ]);
   });
 
-  it('components counts two docs of one name as two components, and compares a .doc.ts beside a .doc.mjs', async () => {
+  /**
+   * Two docs named AcmeTwin (a .doc.mjs and a .doc.ts) and one AcmeX doc in
+   * each of two folders, every doc naming a prop its component lacks.
+   */
+  function writeTwinDocs() {
     writeComponentIntegration('AcmeTwin');
     const dir = path.join(tmpDir, 'components');
     const doc = (/** @type {string} */ name, /** @type {string} */ prop) =>
@@ -1153,22 +1157,28 @@ describe('doctor integration — command', () => {
       );
     }
     process.chdir(tmpDir);
-    const run = async (/** @type {string[]} */ flags) => {
-      logCalls.length = 0;
-      await createProgram().parseAsync([
-        'node',
-        'astryx',
-        ...flags,
-        'doctor',
-        'integration',
-        'components',
-      ]);
-      return logCalls.join('\n');
-    };
+  }
 
-    const report = JSON.parse(await run(['--json'])).data.propDrift;
-    const output = await run([]);
+  /** Run `doctor integration components` with `flags` and return its output. */
+  async function runComponents(/** @type {string[]} */ flags) {
+    logCalls.length = 0;
+    await createProgram().parseAsync([
+      'node',
+      'astryx',
+      ...flags,
+      'doctor',
+      'integration',
+      'components',
+    ]);
+    return logCalls.join('\n');
+  }
 
+  // Each run reads every component's props with the project's TypeScript, so
+  // the JSON and the text report are checked in separate tests: one run each
+  // keeps a test well inside its time limit on a busy runner.
+  it('components counts two docs of one name as two components, and compares a .doc.ts beside a .doc.mjs', async () => {
+    writeTwinDocs();
+    const report = JSON.parse(await runComponents(['--json'])).data.propDrift;
     expect(
       report.findings
         .filter(f => f.kind === 'not_in_code')
@@ -1180,7 +1190,13 @@ describe('doctor integration — command', () => {
       'components/a/AcmeX.doc.mjs a',
       'components/b/AcmeX.doc.mjs b',
     ]);
-    expect(output).toMatch(/ in 4 of 4 component\(s\) compared /);
+  });
+
+  it('components counts those four docs as four compared components in its text report', async () => {
+    writeTwinDocs();
+    expect(await runComponents([])).toMatch(
+      / in 4 of 4 component\(s\) compared /,
+    );
   });
 
   it('components prints every field of the props comparison that JSON carries', async () => {
@@ -1222,8 +1238,15 @@ describe('doctor integration — command', () => {
       return logCalls.join('\n');
     };
 
-    const report = JSON.parse(await run(['--json'])).data.propDrift;
-    const output = await run([]);
+    // One run: comparing props starts the project's TypeScript, which takes
+    // most of a busy runner's time limit, so the text is printed from the
+    // response the JSON run returned. Without --json the command prints that
+    // same response through the same printer.
+    const response = JSON.parse(await run(['--json']));
+    const report = response.data.propDrift;
+    logCalls.length = 0;
+    printIntegrationCheckResponse(response);
+    const output = logCalls.join('\n');
 
     expect(report.findings.map(f => `${f.prop} ${f.kind}`)).toEqual([
       'elevation not_in_code',

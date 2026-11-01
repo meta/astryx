@@ -50,7 +50,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
@@ -82,6 +81,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale, useTranslator} from '../i18n';
 import type {Locale} from '../i18n/types';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 
 export type {DateRange} from '../Calendar';
 
@@ -443,7 +443,7 @@ export interface DateRangeInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -613,7 +613,7 @@ export function DateRangeInput({
 
   const fireChange = useCallback(
     (newValue: DateRange | null) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange(newValue);
@@ -624,7 +624,13 @@ export function DateRangeInput({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   const handleToggle = useCallback(() => {
@@ -639,10 +645,13 @@ export function DateRangeInput({
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
+      if (isDisabled) {
+        return;
+      }
       fireChange(range);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -813,6 +822,7 @@ export function DateRangeInput({
                 const presetRange = preset.getRange();
                 const isActive = isRangeEqual(value, presetRange);
                 const isPresetDisabled =
+                  isDisabled ||
                   !isRangeWithinSpan(presetRange, maxRangeSpan, minRangeSpan) ||
                   isDateDisabled(plainDateFromISO(presetRange.start)) ||
                   isDateDisabled(plainDateFromISO(presetRange.end));
@@ -828,6 +838,11 @@ export function DateRangeInput({
                     aria-current={isActive ? 'true' : undefined}
                     // Focusable while disabled (AR3, spec:AST-085 FR1).
                     aria-disabled={isPresetDisabled || undefined}
+                    aria-describedby={
+                      showsDisabledMessage
+                        ? disabledMessageTooltip.describedBy
+                        : undefined
+                    }
                     onClick={() => {
                       if (!isPresetDisabled) {
                         handleRangeSelect(presetRange);

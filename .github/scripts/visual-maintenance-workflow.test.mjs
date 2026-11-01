@@ -103,7 +103,9 @@ describe('CI baseline maintenance routing', () => {
 
   it('does not run non-maintenance CI jobs for capture', () => {
     for (const [name, job] of Object.entries(workflow.jobs)) {
-      if (['maintenance-request', 'pr-visual'].includes(name)) continue;
+      // admission admits every run, a capture's included (ci-admission.test.mjs).
+      if (['maintenance-request', 'pr-visual', 'admission'].includes(name))
+        continue;
       expect(
         runs(job, {operation: 'capture', needs: dependencies(job)}),
         name,
@@ -122,11 +124,16 @@ describe('CI baseline maintenance routing', () => {
   it('runs on an opted-in pull request when the maintenance guard is skipped', () => {
     const needs = dependencies(visual);
     needs['maintenance-request'].result = 'skipped';
-    const optedIn = {event: 'pull_request', needs, labels: ['ci:heavy-lanes']};
+    // run-labels decided the pull request opted into visual (ci:run-visual).
+    needs['run-labels'].outputs = {visual: 'true', a11y: 'false', rtl: 'false'};
+    const optedIn = {event: 'pull_request', needs};
     // The job decides its stable visual scope in its own steps.
     expect(runs(visual, optedIn)).toBe(true);
-    // Without the opt-in label a pull request update runs no visual owner.
-    expect(runs(visual, {event: 'pull_request', needs})).toBe(false);
+    // Without the opt-in pr-visual still runs, for its default touched check
+    // (its full check's step needs ci:run-visual; ci-heavy-lanes.test.mjs).
+    needs['run-labels'].outputs = {visual: 'false', a11y: 'true', rtl: 'true'};
+    expect(runs(visual, {event: 'pull_request', needs})).toBe(true);
+    needs['run-labels'].outputs = {visual: 'true', a11y: 'false', rtl: 'false'};
     needs['build-storybook'].result = 'failure';
     expect(runs(visual, optedIn)).toBe(false);
     expect(runs(visual, {event: 'merge_group', needs})).toBe(false);
@@ -149,7 +156,7 @@ describe('CI baseline maintenance routing', () => {
   it('isolates dispatch concurrency from PRs and does not cancel queued maintenance', () => {
     expect(workflow.concurrency.group).toContain('|| github.run_id');
     expect(workflow.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
   });
 });

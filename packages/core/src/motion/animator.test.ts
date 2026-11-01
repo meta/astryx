@@ -208,11 +208,22 @@ function setup({
   return {element, animator};
 }
 
-/** The browser commits a frame at `at`: pending animations start there. */
-async function commitFrame(at: number) {
-  for (const animation of recorded) {
-    if (animation.startTime == null && !animation.cancelled) {
-      animation.commit(at);
+/**
+ * The browser commits a frame at `at`: pending animations start there. With
+ * `startUnread`, the frame's callbacks run before the page can read those
+ * starts, as in Chromium, whose compositor starts a composited animation at
+ * the frame that commits it and tells the page that start a frame or more
+ * later.
+ */
+async function commitFrame(
+  at: number,
+  {startUnread = false}: {startUnread?: boolean} = {},
+) {
+  if (!startUnread) {
+    for (const animation of recorded) {
+      if (animation.startTime == null && !animation.cancelled) {
+        animation.commit(at);
+      }
     }
   }
   const frames = frameQueue;
@@ -458,7 +469,7 @@ describe('animate: keyframes on the compositor', () => {
     );
   });
 
-  it('looks for its end again on the next frame when the engine dates animations per frame (WebKit), not in a spin', async () => {
+  it('looks for its end again on the next frame when the engine dates animations per frame, not in a spin, and retires in that frame', async () => {
     // WebKit moves an animation's currentTime once per frame. A retire that
     // looks within a frame reads the frame's time, a fraction of a ms short of
     // the end, and a timer set to that fraction fires again before anything
@@ -491,12 +502,49 @@ describe('animate: keyframes on the compositor', () => {
       await vi.advanceTimersByTimeAsync(1);
     }
     expect(timers.mock.calls.length).toBeLessThanOrEqual(2);
-    // The next frame: the engine's time passes the end, and it retires.
+    // The next frame: the engine's time passes the end, and it retires in
+    // that frame, before it paints, with no timer run in between.
     frameTime = start + curve + 16;
     clock += 1;
-    await vi.advanceTimersByTimeAsync(17);
+    await commitFrame(clock);
     expect(animation.cancelled).toBe(true);
+    await vi.advanceTimersByTimeAsync(17);
     await expect(handle.finished).resolves.toBe(true);
+  });
+
+  it('keeps looking while the frame it looked in was dated short of the end, and retires in the frame that reaches it, before a late end timer runs', async () => {
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.settle});
+    const [animation] = live('translate');
+    await commitFrame(clock);
+    const start = animation.startTime as number;
+    const curve = Number(animation.options.duration) - END_HOLD_MS;
+    const end = start + curve;
+    // The engine dates each animation per frame, at `frameTime`.
+    let frameTime = start;
+    Object.defineProperty(animation, 'currentTime', {
+      configurable: true,
+      get: () => frameTime - start,
+    });
+    Object.defineProperty(animation, 'effect', {
+      configurable: true,
+      value: {getTiming: () => ({duration: animation.options.duration})},
+    });
+    // Inside the last frame before the end: the timer that starts the frame
+    // looks has run, the end timer has not.
+    const toLook = end - 16 - clock;
+    clock += toLook;
+    await vi.advanceTimersByTimeAsync(toLook);
+    // The frame the look runs in is dated 20 ms short of the end, before
+    // that timer was due.
+    frameTime = end - 20;
+    await commitFrame(clock);
+    expect(animation.cancelled).toBe(false);
+    // The next frame reaches the end while the end timer, late, has still
+    // not run: the frame retires it before it paints.
+    frameTime = end + 1;
+    await commitFrame(clock);
+    expect(animation.cancelled).toBe(true);
   });
 
   it('never retires an animation a sampler has paused', async () => {
@@ -713,6 +761,115 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
     } finally {
       Reflect.deleteProperty(document, 'timeline');
     }
+  });
+
+  describe('a start the page reads a frame or more after the compositor uses it (Chromium)', () => {
+    it('starts at the frame that commits it, on the page as on the compositor', async () => {
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      // The frame that commits it runs at 1016 while its start is unread.
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(animation.startTime).toBe(1016);
+      await expect(handle.started).resolves.toBe(1016);
+      clock = 1116;
+      expect(animator.get('x')).toBeCloseTo(curve.value(0.1), 9);
+    });
+
+    it('a retarget before the page reads the start starts where the screen shows it', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      // 100 ms into the curve on screen; the page still has no start to read.
+      clock = 1116;
+      animator.animate({x: 400}, {spring: springs.settle});
+      const retarget = live('translate').at(-1) as Recorded;
+      expect(retarget.startTime).toBe(1116);
+      expect(sampleAt(retarget, 'translate', 1116)[0]).toBeCloseTo(
+        curve.value(0.1),
+        1,
+      );
+    });
+
+    it('a rebase before the page reads the start keeps the value on screen', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      clock = 1116;
+      animator.rebase({x: -16});
+      const rebased = live('translate').at(-1) as Recorded;
+      // On the curve's own clock, 100 ms in, shifted by the rebase.
+      expect(rebased.startTime).not.toBeNull();
+      expect(sampleAt(rebased, 'translate', 1116)[0]).toBeCloseTo(
+        curve.value(0.1) - 16,
+        1,
+      );
+    });
+
+    it('a call made in a frame callback keeps the start the browser gives it, however late its next frame', async () => {
+      // A presented call's animations are made in its second frame's
+      // callback, so that frame commits them: the frame after it, here late
+      // behind a busy task, is not the one that starts them.
+      const {animator} = setup();
+      const handle = animator.animate(
+        {x: 300},
+        {spring: springs.settle},
+        {start: 'presented'},
+      );
+      clock = 1016;
+      await commitFrame(1016);
+      clock = 1033;
+      await commitFrame(1033);
+      const [animation] = live('translate');
+      clock = 1180;
+      await commitFrame(1180, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      let started = false;
+      void handle.started.then(() => {
+        started = true;
+      });
+      await Promise.resolve();
+      expect(started).toBe(false);
+    });
+
+    it('a call whose first frame comes after a block keeps the start the browser gives it', async () => {
+      // A block between the call and its first frame: that frame cannot tell
+      // a call made in a task from one a page's own frame callback made, so
+      // it sets no start of its own.
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      clock = 1150;
+      await commitFrame(1150, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      let started = false;
+      void handle.started.then(() => {
+        started = true;
+      });
+      await Promise.resolve();
+      expect(started).toBe(false);
+    });
+
+    it('a call the page pauses before its first frame waits for its start', async () => {
+      // A harness or a page that pauses the animation: nothing starts it at
+      // the commit, so nothing sets a start for it either.
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      animation.paused = true;
+      clock = 1016;
+      await commitFrame(1016, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      let started = false;
+      void handle.started.then(() => {
+        started = true;
+      });
+      await Promise.resolve();
+      expect(started).toBe(false);
+    });
   });
 
   it('holds its start until the browser starts it', async () => {

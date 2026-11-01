@@ -37,7 +37,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {mergeRefs} from '../utils/mergeRefs';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
-import {Field, inputWrapperStyles, type FieldStatusVariant} from '../Field';
+import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {useTranslator} from '../i18n';
@@ -64,6 +64,12 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+
+// The popup content's own block-size cap; the viewport cap is the layer
+// runtime's.
+const CONTENT_BLOCK_CAP = '480px';
 
 const styles = stylex.create({
   // The tooltip-placement status info-tip sits beside the chevron and keeps
@@ -207,7 +213,12 @@ const styles = stylex.create({
   // rotation through a single selector. The wrapper keeps only layout.
   triggerIconRotation: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    // Under reduced motion the chevron turns at once: an in-place state
+    // change moves nothing (design:reduced-motion DR1–DR3).
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
     transformOrigin: 'center',
   },
@@ -219,7 +230,14 @@ const styles = stylex.create({
   },
   content: {
     boxSizing: 'border-box',
-    maxHeight: 'min(480px, calc(100vh - 32px))',
+    // The content's own cap, under the layer runtime's viewport cap: the
+    // viewport minus its gutters and any bar the app declares through
+    // LayerProvider's `inset` (spec:AST-059 FR2, FR6), so the last rows never
+    // paint under that bar.
+    maxHeight: stylex.firstThatWorks(
+      `min(${CONTENT_BLOCK_CAP}, ${layerViewportInset.maxBlockSize})`,
+      `min(${CONTENT_BLOCK_CAP}, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflow: 'auto',
     padding: spacingVars['--spacing-3'],
   },
@@ -400,7 +418,7 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached' for input selectors; 'detached' for secondary and ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Tooltip text displayed next to the label. */
   labelTooltip?: string;
   /** Trigger and field size. */
