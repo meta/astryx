@@ -297,11 +297,14 @@ during a press so native light dismissal does not mistake them for outside
 interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
-A text field that owns a layer (a combobox's list) cannot be an invoker, so its
-layer is a manual popover. A press that starts and ends on the field's input or
-its buttons, or in the layer, is inside, judged across open shadow roots; a press that
-starts and ends anywhere else closes the layer, a scroll or pinch that starts
-outside does not, and Escape stays on the shared stack.
+A text input cannot be an invoker, so BaseTypeahead's list, which its text field
+owns, is a manual popover. A press that starts and ends on the field's input or
+its buttons, or in the list, is inside, judged across open shadow roots; a press
+that starts and ends anywhere else closes the list, a scroll or pinch that
+starts outside does not, and Escape stays on the shared stack. Implementation
+gap: DateTimeInput's time list, DateInput's calendar and ChatComposerInput's
+trigger menu are still auto popovers with native light dismiss, so a press in
+their own text input closes them.
 
 ### Current dismissal plumbing
 
