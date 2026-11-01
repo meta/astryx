@@ -1990,25 +1990,27 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
           await frame();
           read('opening');
         }
-        await new Promise<void>(resolve => {
-          requestAnimationFrame(() => {
-            read('reversed');
-            const closing = window.AnimatedLayout.reportLayoutChange(
-              layout,
-              () => content,
-            );
-            closing.measureBefore();
-            closing.animate();
-            window.AnimatedLayout.holdLayoutExit(layout, content, () => {}, {
-              edge: 'inline-end',
-            });
-            // Where the conceal starts, on its own clock, once it rides.
-            queueMicrotask(() => {
-              read('restart');
-              resolve();
-            });
-          });
+        // Closed again 120 ms into the reveal, as the page shows it then:
+        // held, so the module's reading of the item after it and this
+        // test's read the same time (a running transform is evaluated at a
+        // time of its own in WebKit).
+        window.holdAt(120);
+        read('reversed');
+        const closing = window.AnimatedLayout.reportLayoutChange(
+          layout,
+          () => content,
+        );
+        closing.measureBefore();
+        closing.animate();
+        window.AnimatedLayout.holdLayoutExit(layout, content, () => {}, {
+          edge: 'inline-end',
         });
+        await new Promise<void>(resolve => {
+          queueMicrotask(resolve);
+        });
+        // Where the conceal starts, on its own clock, once it rides.
+        read('restart');
+        window.resumeAll();
         for (let i = 0; i < 60; i++) {
           await frame();
           read('closing');
@@ -2025,6 +2027,8 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       reportSkew(shown, browserName);
       const reversed = frames.find(f => f.phase === 'reversed') as EdgeFrame;
       const restart = frames.find(f => f.phase === 'restart') as EdgeFrame;
+      expect(reversed.shown).toBeGreaterThan(5);
+      expect(reversed.shown).toBeLessThan(115);
       expect(Math.abs(restart.shown - reversed.shown)).toBeLessThan(1.5);
     });
   }
