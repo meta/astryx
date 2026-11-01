@@ -210,8 +210,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   entering, exiting, and crossing (FR12).
 - `spec:AST-057` owns swipe actions on `Item` and the rule that the element
   containing swipe-capable rows clips in the inline axis; List carries that clip
-  (FR9) and `ListItem` passes `swipeActions` and `swipeBehavior` through to
-  `Item` unchanged. Static Markdown document lists follow DEC-5's narrow exception;
+  (FR9) and `ListItem` passes `swipe` through to `Item` unchanged. Static Markdown document lists follow DEC-5's narrow exception;
   `spec:AST-061` FR11 owns their whole counters and cross-renderer indentation.
 - `spec:AST-094` owns the touch presentation gate (FR13), the press model
   (FR11), and motion roles (FR4); FR10 and FR11 apply the gate and the press
