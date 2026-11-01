@@ -2904,6 +2904,7 @@ hook usePopover: (options?: UsePopoverOptions) => UsePopoverReturn
 hook usePowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 hook usePressFeedback: () => typeof pressableProps
 hook useResizable
+  overload (handleRef: RefObject<HTMLElement | null>, options?: CreateResizableOptions) => UseResizableResult
   overload <const Config extends UseResizableSingleConfig>(config: SingleResizableArgument<Config>) => ResizableRegion
   overload <const Config extends UseResizableMultiConfig>(config: MultiResizableArgument<Config>) => Record<string, ResizableRegion>
 hook useScrollLock: (isLocked: boolean) => void
@@ -6009,6 +6010,12 @@ interface UseResizableMultiConfig
   containerRef?: RefObject<HTMLElement | null>
   direction?: ResizableDirection = 'horizontal'
   regions: Record<string, ResizableRegionConfig>
+interface UseResizableResult
+  collapse: () => void
+  expand: () => void
+  isCollapsed: boolean
+  resize: (size: number) => void
+  size: number
 type UseResizableSingleConfig = ResizableRegionConfig & UseResizableSingleOptions
 interface UseScrollableAreaOptions
   axis: ScrollAxis
@@ -8248,6 +8255,7 @@ ResizableSize (.)
 ResizeHandle (.)
 ResizeHandleProps (.)
 UseResizableMultiConfig (.)
+UseResizableResult (.)
 UseResizableSingleConfig (.)
 percent (.)
 useResizable (.)
