@@ -961,8 +961,12 @@ export function createAnimator(
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
   const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
-  /** Channels whose retire looks again at the next frame (scheduleRetire). */
-  const retireFrames = new Set<Channel>();
+  /**
+   * Animations whose retire looks again at the next frame (scheduleRetire):
+   * each its own, so one still waiting for a replaced animation does not
+   * stand in for the next.
+   */
+  const retireFrames = new Set<Animation>();
   /** The timer that starts those looks a frame before a curve's end. */
   const retireLooks = new Map<Channel, ReturnType<typeof setTimeout>>();
   const touched = new Set<Channel>();
@@ -1464,12 +1468,12 @@ export function createAnimator(
     // past its curve. The timers stay, for a page that draws no frames (a
     // hidden tab).
     const lookAtFrame = () => {
-      if (requestFrame == null || retireFrames.has(channel)) {
+      if (requestFrame == null || retireFrames.has(animation)) {
         return;
       }
-      retireFrames.add(channel);
+      retireFrames.add(animation);
       requestFrame(() => {
-        retireFrames.delete(channel);
+        retireFrames.delete(animation);
         retire(true);
       });
     };
