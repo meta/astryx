@@ -122,13 +122,15 @@ async function passedUnitRun({github, owner, repo, run}) {
 }
 
 /**
- * The commit a Main run tests: the one its name gives when it was dispatched
- * with `sha`, otherwise its event's commit (spec:AST-030 FR22).
+ * The commit a Main run names (`Main validation of <sha>`, a dispatch with
+ * `sha`), or null. A run without one tests main's tip when it starts, which
+ * can be later than its event's commit, so it is no receipt for any commit
+ * (spec:AST-030 FR21, FR22).
  */
 function testedSha(run) {
   return (
     /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ??
-    run.head_sha
+    null
   );
 }
 
@@ -145,8 +147,8 @@ export async function findUnitRun({github, owner, repo, sha}) {
     });
     return data.workflow_runs.filter(item => testedSha(item) === sha);
   };
-  // A run of main's tip carries the commit as its event's; a validation of an
-  // older commit names it, under a later event commit.
+  // The scheduler's run of main's tip names it under the same event commit; a
+  // validation of an older commit names it under a later one.
   for (const runs of [
     await list({head_sha: sha, per_page: 30}),
     await list({event: 'workflow_dispatch', per_page: 100}),

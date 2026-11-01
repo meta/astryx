@@ -36,7 +36,8 @@ function runLines() {
 
 describe('ShadCN registry CI contract', () => {
   it('runs for release-check and gates it, not every pull request', () => {
-    expect(job.needs).toBeUndefined();
+    // Only CI's run admission (ci-admission.test.mjs).
+    expect(job.needs).toEqual(['admission']);
     expect(job.if).toBe(
       "github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'",
     );

@@ -1,0 +1,190 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Admits a whole CI run under CI's ceiling of about ninety concurrent jobs
+# (spec:AST-030 FR16, DEC-16). GitHub has no repository-wide job limit to set
+# (a `concurrency` group serializes runs, it does not count jobs), so each run
+# waits for room before its jobs start:
+#
+# - ci.yml's `admission` job, which every other ci.yml job needs, and the Main
+#   workflow's `main-commit` job run this first. A step that uses this action
+#   MUST be named "Wait for room under the CI ceiling": a waiting `main` run is
+#   found by that name.
+# - A run starts once the other active runs' estimated jobs plus `peak` fit
+#   under the ceiling. Small workflows that are not admitted (one or two slim
+#   jobs a run) always count at least their measured most at once, so the room
+#   they can still take is kept free. A pull-request run (`main: false`) also
+#   waits while a
+#   `main` full check or release re-check is waiting, so `main` fits first;
+#   pull-request runs never wait for each other.
+# - It waits at most `max-wait-minutes` (fifteen for `main`, twelve for a pull
+#   request, inside its fifteen-minute job budget), looking at even intervals
+#   plus a random 0-20 s so runs that look together spread out, and then
+#   starts.
+# - Each CI or Main run counts its live jobs, read once per look. A
+#   pull-request run still waiting here counts only that waiting job, so
+#   waiting runs never hold each other back by more than they use; a waiting
+#   `main` run counts its whole peak. A run admitted in the last three minutes
+#   counts at least its planned most until its jobs appear. Every other
+#   workflow's run counts an estimate.
+# - A look costs two run listings plus one call per active CI or Main run, and
+#   a run looks at most `max-looks` times: twice for a pull request (at once and
+#   after its longest wait), every two minutes for the rare `main` run. When the
+#   repository's API budget is low, the run starts rather than spend it.
+# - A pull request that may not run CI (a draft, or a fork without `ci:run`)
+#   starts at once, so its required contexts report their failure (FR17).
+# - A failed lookup, a rate limit included, starts the run.
+
+name: CI admission
+description: Waits until a CI run's jobs fit under CI's ceiling.
+
+inputs:
+  peak:
+    description: The most jobs this run holds at once.
+    required: true
+  main:
+    description: "'true' for a main full check or release re-check, which does not wait for other main runs."
+    required: true
+  max-wait-minutes:
+    description: The longest this run waits before it starts anyway.
+    required: false
+    default: '15'
+  max-looks:
+    description: The most times this run looks for room.
+    required: false
+    default: '8'
+  label-legs:
+    description: JSON map of a pull-request label to the jobs it adds to `peak`.
+    required: false
+    default: '{}'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v9
+      env:
+        PEAK: ${{ inputs.peak }}
+        MAIN: ${{ inputs.main }}
+        LABEL_LEGS: ${{ inputs.label-legs }}
+        MAX_WAIT_MINUTES: ${{ inputs.max-wait-minutes }}
+        MAX_LOOKS: ${{ inputs.max-looks }}
+      with:
+        retries: 3
+        script: |
+          const CI_CEILING = 90;
+          // Below this many API calls left this hour, a run starts rather than
+          // spend the budget every job shares.
+          const BUDGET_FLOOR = 1500;
+          const JITTER_MS = 20_000;
+          const MAX_WAIT_MS = Number(process.env.MAX_WAIT_MINUTES || '15') * 60_000;
+          const MAX_LOOKS = Math.max(1, Number(process.env.MAX_LOOKS || '8'));
+          const LOOK_MS = MAX_LOOKS > 1 ? (MAX_WAIT_MS - JITTER_MS) / (MAX_LOOKS - 1) : MAX_WAIT_MS;
+          const STEP = 'Wait for room under the CI ceiling';
+          // The most jobs a run holds at once, by workflow: ci.yml's
+          // release-check and Main's runs (a push's fast checks or a unit run)
+          // from their `peak`
+          // (ci-admission.test.mjs), a pull-request ci.yml run from its
+          // measured most, every other workflow's run one or two slim jobs.
+          const ESTIMATE = {
+            '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 36 : 16),
+            '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
+            '.github/workflows/review-signal.yml': () => 2,
+          };
+          const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);
+          // The most jobs small, unadmitted workflows ran at once, measured
+          // over a busy evening (spec:AST-030 DEC-16).
+          const SMALL_MOST = 18;
+          const ADMITTED = ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'];
+          const admitted = run => ADMITTED.includes(run.path);
+          const LIVE = ['in_progress', 'queued', 'waiting', 'pending'];
+          const JUST_ADMITTED_MS = 3 * 60_000;
+          const isMain = run =>
+            ['push', 'schedule', 'workflow_dispatch'].includes(run.event) &&
+            ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'].includes(run.path);
+
+          let peak = Number(process.env.PEAK);
+          if (!Number.isInteger(peak) || peak < 1) {
+            throw new Error(`peak must be a positive integer, got "${process.env.PEAK}".`);
+          }
+          const main = process.env.MAIN === 'true';
+          const pr = context.payload.pull_request;
+          if (pr != null) {
+            const labels = (pr.labels ?? []).map(label => label.name);
+            const fork = pr.head?.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`;
+            if (pr.draft || (fork && !labels.includes('ci:run'))) {
+              core.info('This pull request runs no CI yet; nothing to admit.');
+              return;
+            }
+            const extra = JSON.parse(process.env.LABEL_LEGS || '{}');
+            for (const label of labels) peak += extra[label] ?? 0;
+          }
+
+          const started = Date.now();
+          let calls = 0;
+          try {
+            for (let look = 1; ; look += 1) {
+              const seen = new Set();
+              let large = 0;
+              let small = 0;
+              let mainWaiting = false;
+              for (const status of ['in_progress', 'queued']) {
+                calls += 1;
+                const {data, headers} = await github.rest.actions.listWorkflowRunsForRepo({
+                  ...context.repo, status, per_page: 100,
+                });
+                const left = Number(headers?.['x-ratelimit-remaining']);
+                if (Number.isFinite(left) && left < BUDGET_FLOOR) {
+                  core.warning(`Only ${left} API calls left this hour; starting without spending them.`);
+                  return;
+                }
+                for (const run of data.workflow_runs) {
+                  if (seen.has(run.id) || run.id === context.runId) continue;
+                  seen.add(run.id);
+                  if (!admitted(run)) {
+                    small += estimate(run);
+                    continue;
+                  }
+                  calls += 1;
+                  const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                    ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+                  });
+                  const wait = jobs
+                    .flatMap(job => job.steps ?? [])
+                    .find(step => step.name === STEP);
+                  if (wait?.status === 'in_progress') {
+                    // Still waiting for room. A pull-request run holds only
+                    // the job that waits; a `main` run holds its whole peak,
+                    // ahead of this one.
+                    if (isMain(run)) {
+                      large += estimate(run);
+                      if (!main) mainWaiting = true;
+                    } else {
+                      large += 1;
+                    }
+                    continue;
+                  }
+                  const live = jobs.filter(job => LIVE.includes(job.status)).length;
+                  const admittedAt = Date.parse(wait?.completed_at ?? '');
+                  large += Date.now() - admittedAt < JUST_ADMITTED_MS ? Math.max(live, estimate(run)) : live;
+                }
+              }
+              const others = large + Math.max(small, SMALL_MOST);
+              if (others + peak <= CI_CEILING && !mainWaiting) {
+                core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.`);
+                return;
+              }
+              // The time left decides, not the look's own API time: a slow
+              // look still waits the rest of the way for its next one.
+              const left = MAX_WAIT_MS - (Date.now() - started);
+              const wait = Math.min(LOOK_MS + Math.floor(Math.random() * JITTER_MS), left);
+              if (look >= MAX_LOOKS || wait <= 0) {
+                core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes (about ${others} other jobs${mainWaiting ? ', a main check waiting' : ''}); starting.`);
+                return;
+              }
+              core.info(`Waiting for room: about ${others} other jobs + ${peak}${mainWaiting ? ', a main check waiting' : ''}.`);
+              await new Promise(resolve => setTimeout(resolve, wait));
+            }
+          } catch (error) {
+            core.warning(`Room under the CI ceiling could not be checked (${error.message}); starting.`);
+          } finally {
+            core.info(`CI admission: ${calls} API calls.`);
+          }

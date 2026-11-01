@@ -554,6 +554,25 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       expect(calls.dispatch).toEqual([unitRun]);
     });
 
+    it("takes the scheduler's own run that raced a merge as the newest", async () => {
+      // main moved between the tip read and the dispatch: the newer run names
+      // the older tip under a later event commit, in the same group.
+      const older = 'd'.repeat(40);
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          check(5, {
+            head_sha: sha,
+            display_title: `Main validation of ${older}`,
+            status: 'in_progress',
+            conclusion: null,
+          }),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
+      expect(calls.issues).toEqual([]);
+    });
+
     it('does not count a failed run as incomplete', async () => {
       const calls = await run({
         runs: [check(20, {head_sha: sha})],

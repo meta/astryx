@@ -21,6 +21,7 @@
 import {useCallback, useRef} from 'react';
 import {isRtlElement} from './isRtlElement';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {focusForLastInput} from '../utils/focusReturn';
 
 /**
  * Navigation orientation for a linear list.
@@ -134,6 +135,14 @@ export interface InternalListFocusOptions extends UseListFocusOptions {
    * Unset (the default): no item holds the stop while every item is disabled.
    */
   disabledTabStop?: (list: HTMLElement) => ReadonlyArray<HTMLElement>;
+  /**
+   * Moves focus with the focus the last input calls for
+   * (`architecture:interaction-modality` INV1): after a pointer press a
+   * focused item shows no keyboard ring, after a key press it does. For a list
+   * whose items draw the ring and that opens from a pointer, such as a context
+   * menu. Unset (the default): a plain `focus()`.
+   */
+  focusFollowsLastInput?: boolean;
 }
 
 /**
@@ -362,6 +371,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
     hasRovingTabIndex = false,
     disabledTabStop,
     hasCaretGuard = false,
+    focusFollowsLastInput = false,
   } = options;
 
   const listRef = useRef<T>(null);
@@ -531,9 +541,13 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
           setTabIndex(el, el === target ? 0 : -1);
         }
       }
-      target.focus();
+      if (focusFollowsLastInput) {
+        focusForLastInput(target);
+      } else {
+        target.focus();
+      }
     },
-    [hasRovingTabIndex, setTabIndex],
+    [hasRovingTabIndex, setTabIndex, focusFollowsLastInput],
   );
 
   /**

@@ -136,10 +136,11 @@ jobs:
             // once and tell the guardian, after the dispatches below. A newer
             // run, such as a recheck that replaced it, leaves nothing to do.
             const INCOMPLETE = ['cancelled', 'skipped', 'timed_out', 'startup_failure', 'stale', 'action_required'];
-            // The newest run of main that may replace it: any dispatched run of
-            // main's tip, a person's included, but not a person's validation
-            // of an older commit.
-            const newest = allUnits.find(run => tested(run) === run.head_sha);
+            // The newest run in the unit-run group, which may have replaced it:
+            // every dispatched run but a person's that names a commit, which
+            // runs in a group of its own (deploy.yml).
+            const named = run => /^Main validation of /.test(run.display_title ?? '');
+            const newest = allUnits.find(run => !(named(run) && (run.triggering_actor ?? run.actor)?.login !== BOT));
             const incomplete = newest?.status === 'completed' && INCOMPLETE.includes(newest.conclusion);
             if (incomplete) unit = true;
 

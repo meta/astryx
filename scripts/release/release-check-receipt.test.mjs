@@ -28,6 +28,11 @@ const run = (id, headSha, conclusion = 'success') => ({
   html_url: `https://github.com/o/r/actions/runs/${id}`,
 });
 const join = conclusion => ({name: 'release-check', conclusion});
+/** A Main run dispatched for `sha`, as the scheduler names it. */
+const unitRunFor = (id, headSha, conclusion = 'success') => ({
+  ...run(id, headSha, conclusion),
+  display_title: `Main validation of ${headSha}`,
+});
 
 /** `runs` are newest first; `jobs` maps a run id to its jobs. */
 function fake({runs = [], units, jobs = {}} = {}) {
@@ -116,7 +121,7 @@ describe('the release-check receipt for a cut commit', () => {
     const {result, messages} = await require_({
       // NEWER passed its release-check but its unit run failed.
       runs: [run(10, NEWER), run(9, CUT, 'failure'), run(8, OTHER)],
-      units: [run(21, NEWER, 'failure'), run(20, OTHER)],
+      units: [unitRunFor(21, NEWER, 'failure'), unitRunFor(20, OTHER)],
       jobs: {
         10: [join('success')],
         9: [join('failure')],
@@ -182,7 +187,7 @@ describe('the full unit run receipt for a cut commit (spec:AST-030 FR21)', () =>
 
   it("accepts the cut commit's run where every unit leg passed", async () => {
     const {result, messages, listed} = await unit({
-      runs: [run(5, CUT)],
+      runs: [unitRunFor(5, CUT)],
       jobs: {5: legs('success')},
     });
     expect(result.id).toBe(5);
@@ -196,6 +201,14 @@ describe('the full unit run receipt for a cut commit (spec:AST-030 FR21)', () =>
       head_sha: CUT,
       per_page: 30,
     });
+  });
+
+  it('does not take an unnamed run, which tests whatever was the tip when it started', async () => {
+    const {result} = await unit({
+      runs: [run(9, CUT)],
+      jobs: {9: legs('success')},
+    });
+    expect(result).toBeNull();
   });
 
   it('takes a validation that names the cut commit, and not one that names another', async () => {
