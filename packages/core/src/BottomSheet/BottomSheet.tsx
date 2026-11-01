@@ -87,6 +87,7 @@ import {
   type RefObject,
   type ReactNode,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
@@ -423,7 +424,12 @@ function StandaloneBottomSheet({
   // state stays the consumer's; nothing here writes it.
   const host = use(BottomSheetHostContext);
   const isHostOpen = host?.isOpen ?? true;
-  const isOpen = isOpenProp && isHostOpen;
+  // A sheet open on the server renders closed until hydration, and opens in
+  // the render after it, the first one that can enter its native host: a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have (FR17).
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && isHostOpen && !isHydrating;
   // Presentation outlives the controlled prop: a closing sheet stays mounted
   // and in its native host through its exit, and only its motion completion
   // (or a replace finishing) clears it. The open flip is derived during

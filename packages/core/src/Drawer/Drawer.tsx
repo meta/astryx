@@ -60,6 +60,7 @@
  */
 
 import {useCallback, useRef, useState, type ReactNode} from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -426,7 +427,7 @@ export interface DrawerProps extends BaseProps<HTMLDialogElement> {
  * ```
  */
 export function Drawer({
-  isOpen,
+  isOpen: isOpenProp,
   onOpenChange,
   side = 'end',
   width = 400,
@@ -444,6 +445,12 @@ export function Drawer({
   ref,
   ...props
 }: DrawerProps) {
+  // A drawer open on the server renders closed until hydration, and opens in
+  // the render after it, the first one that can enter its native host: a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have (FR17).
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && !isHydrating;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const {containerRef: focusTrapRef} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen && hasScrim,
@@ -575,7 +582,7 @@ export function Drawer({
       {...safeProps}
       popover={hasScrim ? undefined : 'manual'}
       aria-label={label}
-      aria-modal={hasScrim ? 'true' : undefined}
+      aria-modal={hasScrim && !isHydrating ? 'true' : undefined}
       {...(purpose === 'required' && hasScrim
         ? {role: 'alertdialog'}
         : undefined)}
