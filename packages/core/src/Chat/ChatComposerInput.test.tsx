@@ -2108,9 +2108,20 @@ describe('ChatComposerInput trigger loading announcement (spec:AST-086)', () => 
     editable.focus();
 
     typeAtEnd(editable, '@c');
-    await nextFrame();
+    // Let the search settle and the busy frames run inside one act, so the
+    // settled state is not committed (cancelling the busy frame) before the
+    // frame runs: only applyResults' settle call keeps this silent.
+    await act(async () => {
+      await new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+    });
     typeAtEnd(editable, '@ci');
-    await nextFrame();
+    await act(async () => {
+      await new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+    });
 
     expect(screen.queryByText('Searching…')).toBeNull();
     expect(announce).not.toHaveBeenCalled();
