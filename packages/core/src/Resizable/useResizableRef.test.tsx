@@ -2,24 +2,30 @@
 
 /**
  * @file useResizableRef.test.tsx
- * @input vitest (jsdom), Testing Library, the configuration-object
- *   useResizable over a stand-in createResizable
- * @output Checks that useResizable(config) builds on createResizable
- *   (architecture:public-component-api INV22): it creates one factory with no
- *   handle, so the region's state has one copy, passes later options through
- *   update(), destroys it on unmount, and returns what the factory reports
- * @position Unit tests for the configuration-object signature of
- *   useResizable.ts
+ * @input vitest (jsdom), Testing Library, useResizable in both forms over a
+ *   stand-in createResizable
+ * @output Checks that useResizable only delegates to createResizable
+ *   (spec:AST-107 FR6; architecture:public-component-api INV22): the
+ *   ref-taking form creates the factory on the element, and the
+ *   configuration-object form creates one with no handle, so the region's
+ *   state has one copy; each passes later options through update(), destroys
+ *   it on unmount, and returns what the factory reports
+ * @position Unit tests for both signatures of useResizable.ts
  */
 
 import {act, render} from '@testing-library/react';
+import {useRef} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import type * as CreateResizableModule from './createResizable';
 import type {
   CreateResizableOptions,
   ResizableController,
 } from './createResizable';
-import type {ResizableRegion, UseResizableSingleConfig} from './useResizable';
+import type {
+  ResizableRegion,
+  UseResizableResult,
+  UseResizableSingleConfig,
+} from './useResizable';
 
 interface FakeController extends ResizableController {
   emit(): void;
@@ -73,9 +79,68 @@ vi.mock('./createResizable', async importOriginal => {
 });
 
 const {useResizable} = await import('./useResizable');
+type Region = UseResizableResult;
 
 afterEach(() => {
   created.length = 0;
+});
+
+function Split({
+  options,
+  onRegion,
+}: {
+  options: CreateResizableOptions;
+  onRegion: (region: Region) => void;
+}) {
+  const handleRef = useRef<HTMLDivElement>(null);
+  const region = useResizable(handleRef, options);
+  onRegion(region);
+  return <div ref={handleRef} data-testid="handle" />;
+}
+
+describe('useResizable(ref, options) only delegates to createResizable (spec:AST-107 FR6)', () => {
+  it('creates the factory on the element with the options it was given, updates it, and destroys it on unmount', () => {
+    const first: CreateResizableOptions = {defaultSize: 200, minSize: 100};
+    const view = render(<Split options={first} onRegion={() => {}} />);
+    expect(created).toHaveLength(1);
+    expect(created[0].element).toBe(view.getByTestId('handle'));
+    expect(created[0].options).toMatchObject(first);
+
+    const second: CreateResizableOptions = {defaultSize: 200, minSize: 150};
+    view.rerender(<Split options={second} onRegion={() => {}} />);
+    expect(created).toHaveLength(1);
+    expect(fake.update).toHaveBeenLastCalledWith(
+      expect.objectContaining(second),
+    );
+
+    view.unmount();
+    expect(fake.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns what the factory reports, and its methods call the factory', () => {
+    let region: Region | undefined;
+    render(
+      <Split
+        options={{defaultSize: 200}}
+        onRegion={next => {
+          region = next;
+        }}
+      />,
+    );
+    expect(region?.size).toBe(123);
+    act(() => {
+      fake.setState({size: 321, isCollapsed: true});
+      fake.emit();
+    });
+    expect(region?.size).toBe(321);
+    expect(region?.isCollapsed).toBe(true);
+    region?.collapse();
+    region?.expand();
+    region?.resize(250);
+    expect(fake.collapse).toHaveBeenCalledTimes(1);
+    expect(fake.expand).toHaveBeenCalledTimes(1);
+    expect(fake.resize).toHaveBeenCalledWith(250);
+  });
 });
 
 function ConfigSplit({
