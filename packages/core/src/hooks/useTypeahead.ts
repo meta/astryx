@@ -16,7 +16,7 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import {findTypeaheadMatch, foldForTypeahead} from '../utils/typeaheadMatch';
+import {findTypeaheadMatch, nextTypeaheadBuffer} from '../utils/typeaheadMatch';
 
 export interface UseTypeaheadOptions {
   /**
@@ -170,14 +170,11 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
         return false;
       }
 
-      // A lone combining mark folds to nothing, so as the first key it would
-      // match every label. It is not a letter to jump to. Once a letter is
-      // buffered the mark is part of what is being typed.
-      if (
-        bufferRef.current.length === 0 &&
-        e.key !== ' ' &&
-        foldForTypeahead(e.key).length === 0
-      ) {
+      // A lone combining mark typed first is not a letter to jump to; after
+      // a letter it is part of that letter. A repeat of the same letter
+      // cycles rather than filtering deeper (APG behavior).
+      const nextBuffer = nextTypeaheadBuffer(bufferRef.current, e.key);
+      if (nextBuffer == null) {
         return false;
       }
 
@@ -186,15 +183,6 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
         return false;
       }
 
-      // Pressing the SAME single character repeatedly cycles to the next match
-      // rather than filtering deeper (APG behavior).
-      const char = e.key;
-      const isRepeatSameChar =
-        bufferRef.current.length > 0 &&
-        bufferRef.current
-          .split('')
-          .every(c => foldForTypeahead(c) === foldForTypeahead(char));
-      const nextBuffer = isRepeatSameChar ? char : bufferRef.current + char;
       bufferRef.current = nextBuffer;
       scheduleReset();
 

@@ -11,6 +11,7 @@ import {describe, it, expect} from 'vitest';
 import {
   findTypeaheadMatch,
   foldForTypeahead,
+  nextTypeaheadBuffer,
   typeaheadPrefixMatch,
 } from './typeaheadMatch';
 
@@ -68,6 +69,25 @@ describe('typeaheadMatch (INV17)', () => {
   it('never matches on a lone combining mark', () => {
     expect(typeaheadPrefixMatch('Anna', '\u0301')).toBe(false);
     expect(foldForTypeahead('\u0301')).toBe('');
+  });
+
+  it('keeps what canonical decomposition splits off outside U+0300–U+036F', () => {
+    // A Japanese voiced mark, an Arabic hamza, a Hangul final consonant.
+    expect(first(['がく', 'かさ'], 'か')).toBe('かさ');
+    expect(first(['أحمد', 'احلام'], 'ا')).toBe('احلام');
+    expect(first(['각도', '가방'], '가')).toBe('가방');
+    expect(typeaheadPrefixMatch('Йога', 'и')).toBe(true);
+  });
+
+  it('buffers keys the same way for every path', () => {
+    // A lone combining mark typed first is not a letter to jump to.
+    expect(nextTypeaheadBuffer('', '\u0301')).toBeNull();
+    // After a letter it is part of that letter.
+    expect(nextTypeaheadBuffer('a', '\u0301')).toBe('a\u0301');
+    // The same letter again cycles; a different letter refines.
+    expect(nextTypeaheadBuffer('a', 'a')).toBe('a');
+    expect(nextTypeaheadBuffer('a', 'á')).toBe('á');
+    expect(nextTypeaheadBuffer('a', 'n')).toBe('an');
   });
 
   it('keeps marks outside U+0300–U+036F (Thai tone marks)', () => {

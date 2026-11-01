@@ -953,6 +953,22 @@ describe('DropdownMenu', () => {
     ).toHaveFocus();
   });
 
+  it('typeahead puts the exact item first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        button={{label: 'People'}}
+        items={[{label: 'Anh'}, {label: 'Dung'}, {label: 'Đào'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: /People/}));
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'đ'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Đào', hidden: true}),
+    ).toHaveFocus();
+  });
+
   it('typeahead advances past an item that already starts with the letter', async () => {
     const user = userEvent.setup();
     render(

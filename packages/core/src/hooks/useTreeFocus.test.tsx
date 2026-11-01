@@ -339,6 +339,23 @@ describe('useTreeFocus activation + typeahead', () => {
     expect(screen.getByTestId('izmir')).toHaveFocus();
   });
 
+  it('typeahead ignores a combining mark typed first, as useTypeahead does (INV17)', () => {
+    const nodes: Node[] = [
+      {id: 'anna', label: 'Anna', level: 1},
+      {id: 'ava', label: 'Ava', level: 1},
+      {id: 'bo', label: 'Bo', level: 1},
+    ];
+    render(<Tree collapsed={nodes} />);
+    const tree = screen.getByRole('tree');
+    screen.getByTestId('bo').focus();
+    fireEvent.keyDown(tree, {key: '\u0301'});
+    fireEvent.keyDown(tree, {key: 'a'});
+    expect(screen.getByTestId('anna')).toHaveFocus();
+    // The mark never entered the buffer, so a repeat cycles to the next "a".
+    fireEvent.keyDown(tree, {key: 'a'});
+    expect(screen.getByTestId('ava')).toHaveFocus();
+  });
+
   it('typeahead prefers the exact match for a typed mark (INV17)', () => {
     const nodes: Node[] = [
       {id: 'dung', label: 'Dung', level: 1},

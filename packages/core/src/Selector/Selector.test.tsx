@@ -2080,6 +2080,24 @@ describe('Selector', () => {
       expect(onChange).toHaveBeenLastCalledWith('Đào');
     });
 
+    it('puts the exact option first for a typed mark (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Name"
+          options={['Anh', 'Dung', 'Đào']}
+          value="Anh"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      await user.keyboard('đ');
+
+      expect(onChange).toHaveBeenLastCalledWith('Đào');
+    });
+
     it('cycles through options sharing a first letter on repeated presses', async () => {
       const user = userEvent.setup();
       function Harness() {

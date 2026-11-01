@@ -17,7 +17,7 @@
 import {useCallback, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {isRtlElement} from './isRtlElement';
-import {findTypeaheadMatch, foldForTypeahead} from '../utils/typeaheadMatch';
+import {findTypeaheadMatch, nextTypeaheadBuffer} from '../utils/typeaheadMatch';
 
 /** Keys handled by the tree keyboard model (used to gate typeahead). */
 const NAVIGATION_KEYS = new Set([
@@ -428,17 +428,16 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
       currentIndex: number,
     ): void => {
       const state = typeaheadRef.current;
+      // The same buffer step as useTypeahead: a repeat means "next match", and
+      // a lone combining mark typed first is not a letter to jump to.
+      const nextBuffer = nextTypeaheadBuffer(state.buffer, e.key);
+      if (nextBuffer == null) {
+        return;
+      }
       if (state.timer != null) {
         clearTimeout(state.timer);
       }
-      // "aa" would match nothing; a repeat means "next match" (useTypeahead).
-      const char = e.key;
-      const isRepeatSameChar =
-        state.buffer.length > 0 &&
-        state.buffer
-          .split('')
-          .every(c => foldForTypeahead(c) === foldForTypeahead(char));
-      state.buffer = isRepeatSameChar ? char : state.buffer + char;
+      state.buffer = nextBuffer;
       state.timer = setTimeout(() => {
         typeaheadRef.current.buffer = '';
       }, typeaheadResetMs) as unknown as number;

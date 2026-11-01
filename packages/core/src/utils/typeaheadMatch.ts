@@ -3,7 +3,8 @@
 /**
  * @file typeaheadMatch.ts
  * @input Plain strings (an item label and the letters a person typed)
- * @output foldForTypeahead, typeaheadPrefixMatch, findTypeaheadMatch
+ * @output foldForTypeahead, nextTypeaheadBuffer, typeaheadPrefixMatch,
+ *   findTypeaheadMatch
  * @position Shared type-to-select matching for useTypeahead, useTreeFocus and
  *   MultiSelector (`architecture:internationalization` INV17)
  *
@@ -41,11 +42,39 @@ const MARKED_CHARS = /[đĐłŁøØħĦŧŦƀɃıİ]/;
  * letters and ı as their base letter. Locale-independent by design.
  */
 export function foldForTypeahead(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(COMBINING_MARKS, '')
-    .replace(STROKED_CHARS, c => STROKED[c] ?? c)
-    .toLowerCase();
+  return (
+    text
+      .normalize('NFD')
+      .replace(COMBINING_MARKS, '')
+      .replace(STROKED_CHARS, c => STROKED[c] ?? c)
+      // Recompose what INV17 keeps (a Japanese voiced mark, an Arabic hamza, a
+      // Hangul final consonant), so a one-letter prefix does not skip it.
+      .normalize('NFC')
+      .toLowerCase()
+  );
+}
+
+/**
+ * The type-to-select buffer after one more key, shared by every path so they
+ * buffer the same way. Returns null when the key is not a letter to jump to: a
+ * lone combining mark typed first. Pressing the same letter again (as folded)
+ * cycles, so the buffer stays that one letter instead of growing.
+ */
+export function nextTypeaheadBuffer(
+  buffer: string,
+  key: string,
+): string | null {
+  if (
+    buffer.length === 0 &&
+    key !== ' ' &&
+    foldForTypeahead(key).length === 0
+  ) {
+    return null;
+  }
+  const isRepeatSameChar =
+    buffer.length > 0 &&
+    buffer.split('').every(c => foldForTypeahead(c) === foldForTypeahead(key));
+  return isRepeatSameChar ? key : buffer + key;
 }
 
 /**
