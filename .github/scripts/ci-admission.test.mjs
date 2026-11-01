@@ -404,31 +404,34 @@ describe('ci admission', () => {
     expect(result.calls).toBe(2 + 3 + 1 + 12);
   });
 
-  it("starts a main release-check at tonight's load within one look, which the three-minute floor held for nearly ten", async () => {
+  it("starts a main release-check at tonight's load on its second look, which the three-minute floor still held", async () => {
     // 2026-11-01 10:12Z: a release-check on main waited 579 s, its looks
     // reading 85, 83, 64, 60 and 50 other jobs + 36. Tonight's load: CI 38 and
     // Main 6 live, small workflows 5, nine stale runs. 44 + 18 + 36 = 98 is
     // over ninety, so it waits while pull-request runs yield to it; once one
-    // pull-request run's 12 jobs end, 32 + 18 + 36 = 86 fits.
+    // pull-request run's 12 jobs end, 32 + 18 + 36 = 86 fits. The runs were
+    // admitted under a minute ago, so their jobs have all appeared; the old
+    // three-minute window still counted them at their most on the second
+    // look, two minutes later, and kept the check waiting.
     const stale = Array.from({length: 9}, (_, i) => ({
       ...slim(720 + i),
       status: 'queued',
       updated_at: ago(3 * 24 * 60),
     }));
     const rest = [
-      admittedRun(92, 2, {admittedMinutesAgo: 2}),
-      admittedRun(93, 7, {admittedMinutesAgo: 1.5}),
+      admittedRun(92, 2, {admittedMinutesAgo: 0.9}),
+      admittedRun(93, 7, {admittedMinutesAgo: 0.85}),
       admittedRun(94, 9, {admittedMinutesAgo: 6.6}),
-      admittedRun(95, 8, {admittedMinutesAgo: 1}),
+      admittedRun(95, 8, {admittedMinutesAgo: 0.8}),
       admittedRun(96, 6, {
         event: 'push',
         path: '.github/workflows/deploy.yml',
-        admittedMinutesAgo: 2,
+        admittedMinutesAgo: 0.9,
       }),
       ...slims(5),
       ...stale,
     ];
-    const tonight = [admittedRun(91, 12, {admittedMinutesAgo: 2.2}), ...rest];
+    const tonight = [admittedRun(91, 12, {admittedMinutesAgo: 0.9}), ...rest];
     const result = await admit({
       active: look => (look < 2 ? tonight : rest),
       isMain: true,
