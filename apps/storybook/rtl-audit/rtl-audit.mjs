@@ -1195,6 +1195,23 @@ function matchesFilter(component) {
   return !FILTER.length || FILTER.includes(normalized) || FILTER.includes(name);
 }
 
+const storyFileSources = new Map();
+
+/** Whether a story file (an index `importPath`) uses a component by name. */
+function storyFileUses(importPath, component) {
+  if (!importPath) return false;
+  const file = path.join(PROJECT_ROOT, 'apps/storybook', importPath);
+  if (!storyFileSources.has(file)) {
+    let source = '';
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {}
+    storyFileSources.set(file, source);
+  }
+  const name = component.split('/').at(-1);
+  return new RegExp(`\\b${name}\\b`).test(storyFileSources.get(file));
+}
+
 function readVerifiedNa() {
   try {
     const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
@@ -1321,7 +1338,14 @@ async function cleanupRuntime() {
     ),
     componentPathOf: id => entries[id]?.componentPath,
     ownerOf: filter => sourceOwnerOf(filter, publicComponentsByPackage),
+    renders: (id, component) => storyFileUses(entries[id]?.importPath, component),
   });
+  // A curated target on an adopted story checks the adopting component.
+  const adoptedBy = new Map(
+    Object.entries(resolvedFilters.adopted).flatMap(([component, storyIds]) =>
+      storyIds.map(id => [id, component]),
+    ),
+  );
   const scopedStoryRoutes = resolvedFilters.routes;
   for (const [component, storyIds] of Object.entries(resolvedFilters.adopted)) {
     console.error(`NOTE ${component}: audits its folder's stories ${storyIds.join(', ')}`);
@@ -1381,11 +1405,9 @@ async function cleanupRuntime() {
   const storyTargets = scopedStoryRoutes.map(({id, component}) => ({id, comp: component}));
   const curatedTargets = [];
   for (const t of targets) {
-    const component = componentFromTarget(
-      t,
-      AUDITED_PACKAGE_NAMES,
-      publicComponentsByPackage,
-    );
+    const component =
+      adoptedBy.get(t.storyId) ??
+      componentFromTarget(t, AUDITED_PACKAGE_NAMES, publicComponentsByPackage);
     if (!belongsToActivePackage({component, id: t.storyId})) continue;
     if (!matchesFilter(component)) continue;
     if (!entries[t.storyId]) {

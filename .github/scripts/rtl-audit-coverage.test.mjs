@@ -1018,20 +1018,21 @@ describe('finishFiniteAnimations', () => {
 
 describe('resolveFilterRoutes (filters resolve through the Storybook index)', () => {
   // Core/Resizable's stories route to `core/resizable`, which no public
-  // component is called; ResizeHandle, the folder's export, has no title.
-  // Chat's stories all route to real Chat components.
+  // component is called; ResizeHandle, the folder's export, has no title and
+  // its story file renders it. Core/Chat's stories route to `core/Chat`, also
+  // no public component, and Chat.stories.tsx never renders the scroll button.
   const routes = [
     {id: 'core-resizable--horizontal-split', component: 'core/resizable'},
     {id: 'core-resizable--snap-points', component: 'core/resizable'},
     {id: 'core-button--primary', component: 'core/Button'},
-    {id: 'core-chat--layout', component: 'core/ChatLayout'},
+    {id: 'core-chat--default', component: 'core/Chat'},
   ];
   const componentPaths = {
     'core-resizable--horizontal-split':
       '../../packages/core/src/Resizable/index.ts',
     'core-resizable--snap-points': '../../packages/core/src/Resizable/index.ts',
     'core-button--primary': '../../packages/core/src/Button/index.ts',
-    'core-chat--layout': '../../packages/core/src/Chat/index.ts',
+    'core-chat--default': '../../packages/core/src/Chat/index.ts',
   };
   const owners = {
     'core/resizehandle': {
@@ -1055,6 +1056,9 @@ describe('resolveFilterRoutes (filters resolve through the Storybook index)', ()
       ],
       componentPathOf: id => componentPaths[id],
       ownerOf: filter => owners[filter] ?? null,
+      // Which story files use which component.
+      renders: (id, component) =>
+        id.startsWith('core-resizable--') && component === 'core/ResizeHandle',
     });
 
   it("audits a sub-component's stories under its own name (ResizeHandle → Core/Resizable)", () => {
@@ -1071,7 +1075,7 @@ describe('resolveFilterRoutes (filters resolve through the Storybook index)', ()
     });
   });
 
-  it("never takes a sibling component's stories: a Chat member keeps its own entry", () => {
+  it('adopts only stories that render the component: ChatLayoutScrollButton adopts none of Core/Chat', () => {
     const resolved = resolve(['core/chatlayoutscrollbutton']);
     expect(resolved.routes).toEqual([]);
     expect(resolved.adopted).toEqual({});

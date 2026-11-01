@@ -210,10 +210,11 @@ export function componentRoutesForFilters(routes, filters) {
 /**
  * Resolve component filters to story routes through the Storybook index, not
  * the export name alone. A filter a route names selects that route. A filter
- * no route names adopts its source folder's orphan stories: stories whose
- * index `componentPath` lies in that folder and whose title names no public
- * component (ResizeHandle adopts Core/Resizable's, which route to the
- * non-component `core/resizable`). Adopted stories are routed to the filter's
+ * no route names adopts its source folder's orphan stories that render it:
+ * stories whose index `componentPath` lies in that folder, whose title names
+ * no public component, and whose story file uses the component
+ * (ResizeHandle adopts Core/Resizable's; ChatLayoutScrollButton adopts none
+ * of Core/Chat's, which never render it). Adopted stories are routed to the filter's
  * own component, so it keeps its own coverage entry and verified-N/A record.
  * A filter with neither selects nothing and stays a coverage gap
  * (`architecture:rtl-audit-evidence` INV5).
@@ -223,6 +224,7 @@ export function componentRoutesForFilters(routes, filters) {
  *   knownComponents: string[],
  *   componentPathOf: (storyId: string) => string | undefined,
  *   ownerOf: (filter: string) => {component: string, folder: string} | null,
+ *   renders: (storyId: string, component: string) => boolean,
  * }} input
  */
 export function resolveFilterRoutes({
@@ -231,6 +233,7 @@ export function resolveFilterRoutes({
   knownComponents,
   componentPathOf,
   ownerOf,
+  renders,
 }) {
   if (filters.length === 0) return {routes, adopted: {}};
   const known = new Set(knownComponents.map(name => name.toLowerCase()));
@@ -251,7 +254,8 @@ export function resolveFilterRoutes({
         !known.has(route.component.toLowerCase()) &&
         (componentPathOf(route.id) ?? '')
           .replace(/^(\.\.\/)+/, '')
-          .startsWith(`${owner.folder}/`),
+          .startsWith(`${owner.folder}/`) &&
+        renders(route.id, owner.component),
     );
     if (orphans.length === 0) continue;
     adopted[owner.component] = orphans.map(route => route.id).sort();
