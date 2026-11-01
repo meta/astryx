@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: 'Full SHA of a commit in main history to validate; empty validates main tip'
+        description: "Full SHA of a commit in main's history from #9164 on to validate; empty validates main's tip"
         type: string
         required: false
       recheck:
