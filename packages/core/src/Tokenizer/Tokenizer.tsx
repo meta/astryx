@@ -51,6 +51,7 @@ import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -1378,6 +1379,7 @@ export function Tokenizer<T extends SearchableItem>({
           isTruncated ? truncatedSizeStyles[size] : sizeStyle,
           isTruncated && styles.truncatedWrapper,
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.nestedRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -1432,7 +1434,12 @@ export function Tokenizer<T extends SearchableItem>({
             minQueryLength={minQueryLength}
             emptySearchText={emptySearchText}
             isDisabled={isDisabled}
-            isFocusableDisabled={showsDisabledMessage}
+            // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
+            // unfocusedLayer mode, where the input lives in a layer a disabled
+            // field never opens; how that field takes focus is undecided.
+            isFocusableDisabled={
+              showsDisabledMessage || (isDisabled && !isLayerMode)
+            }
             hasAutoFocus={hasAutoFocus}
             inputId={inputId}
             ariaLabelledBy={fieldLabelledBy}

@@ -154,10 +154,10 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   isDisabled?: boolean;
 
   /**
-   * When disabled with a reason, keeps the input focusable via `aria-disabled`
-   * (instead of the native `disabled` attribute) and `readOnly` so an
-   * associated disabled-reason tooltip stays discoverable by keyboard and
-   * assistive technology. Query and text mutation, opening the list, and a
+   * When disabled, keeps the input focusable via `aria-disabled` (instead of
+   * the native `disabled` attribute) and `readOnly`, so the field keeps its
+   * tab stop and any disabled-reason tooltip stays discoverable by keyboard
+   * and assistive technology (`spec:AST-085` FR1). Query and text mutation, opening the list, and a
    * pick by Enter or a press are blocked, also from a list that was open
    * before this state applied; Escape or Tab still closes it. Consumers
    * (Typeahead) own the tooltip and wrapper.
@@ -799,7 +799,20 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const isDisabledRef = useRef(isDisabled);
   useIsomorphicLayoutEffect(() => {
     isDisabledRef.current = isDisabled;
-  }, [isDisabled]);
+    if (!isDisabled) {
+      return;
+    }
+    // Search work scheduled or in flight when the field became disabled is
+    // dropped: a later answer lists, announces and spins nothing
+    // (spec:AST-085 FR2). Bumping the generation fails its checks.
+    searchGenRef.current++;
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    prevSearchSourceRef.current.cancel?.();
+    setLoading(false);
+  }, [isDisabled, setLoading]);
   const showLayer = useCallback(() => {
     if (isDisabledRef.current) {
       return;

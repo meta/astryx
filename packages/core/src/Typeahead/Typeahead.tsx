@@ -68,6 +68,7 @@ import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {SizeValue} from '../utils/types';
 import type {SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
@@ -649,6 +650,7 @@ export function Typeahead<T extends SearchableItem>({
             status && !isDisabled && inputStatusHoverShadowStyles[status.type],
             status && inputStatusFocusWithinStyles[status.type],
             isDisabled && inputWrapperStyles.disabled,
+            isDisabled && inputDisabledFocusStyles.nestedRing,
             inputGroup && groupStyles.inGroup,
             controlXstyle,
           ),
@@ -709,7 +711,8 @@ export function Typeahead<T extends SearchableItem>({
                 emptySearchText={emptySearchText}
                 isDisabled={isDisabled}
                 hasAutoFocus={hasAutoFocus}
-                isFocusableDisabled={showsDisabledMessage}
+                // A disabled field keeps its tab stop (spec:AST-085 FR1).
+                isFocusableDisabled={isDisabled}
                 inputId={inputId}
                 ariaDescribedBy={
                   [ariaDescribedByProp, ariaDescribedBy]
