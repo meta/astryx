@@ -7,4 +7,14 @@
  * this file into the resolved version folder.
  */
 
-export default [];
+import migrateTouchTriggerTapToTriggerBehavior, {
+  meta as migrateTouchTriggerTapToTriggerBehaviorMeta,
+} from './migrate-touch-trigger-tap-to-trigger-behavior.mjs';
+
+export default [
+  {
+    name: 'migrate-touch-trigger-tap-to-trigger-behavior',
+    transform: migrateTouchTriggerTapToTriggerBehavior,
+    meta: migrateTouchTriggerTapToTriggerBehaviorMeta,
+  },
+];

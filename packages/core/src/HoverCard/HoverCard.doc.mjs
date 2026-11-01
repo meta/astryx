@@ -104,7 +104,7 @@ export const docs = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens. none never opens on touch. A tap-opened card is dismissed by a tap outside it. It decides only under triggerBehavior="adaptive", the default.',
+            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens; it is deprecated (DEP-0016): pass triggerBehavior="toggle" on a button trigger instead; `astryx upgrade` rewrites icon and span triggers and flags the rest. none never opens on touch. A tap-opened card is dismissed by a tap outside it. It decides only under triggerBehavior="adaptive", the default.',
           default: "'auto'",
         },
         {
@@ -296,7 +296,7 @@ export const docsZh = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开。none：触摸永不打开。轻点打开的卡片可通过点击卡片外部关闭。仅在 triggerBehavior 为 adaptive（默认）时生效。',
+            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开，已弃用（DEP-0016）：按钮触发元素请改用 triggerBehavior="toggle"；`astryx upgrade` 会改写图标和 span 触发元素，并标记其余用法。none：触摸永不打开。轻点打开的卡片可通过点击卡片外部关闭。仅在 triggerBehavior 为 adaptive（默认）时生效。',
           default: "'auto'",
         },
         {
@@ -453,7 +453,7 @@ export const docsDense = {
         hideDelay: 'Hide delay in ms.',
         focusTrigger: 'Controls when focus events trigger hover card.',
         touchTrigger:
-          'Tap behavior where there is no hover, under triggerBehavior="adaptive" only. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens; none = never on touch. Tap-opened cards close on a tap outside.',
+          'Tap behavior where there is no hover, under triggerBehavior="adaptive" only. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens (deprecated, DEP-0016: use triggerBehavior="toggle"); none = never on touch. Tap-opened cards close on a tap outside.',
         triggerBehavior:
           'adaptive (default) = hover/focus preview, a tap opens unless the trigger acts; hover = hover/focus preview, touch never opens; toggle = a click/tap/Enter/Space on a button trigger pins the card (aria-expanded, label announced once), the same press closes it, and the press stops at the trigger.',
         isEnabled: 'Enable/disable hover + focus triggers.',

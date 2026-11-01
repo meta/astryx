@@ -65,7 +65,10 @@ import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
  * How a hover layer behaves on a touch pointer.
  *
  * - `auto`: tap-to-open, unless the trigger performs an action of its own
- * - `tap`: always tap-to-open, even on a trigger that performs an action
+ * - `tap`: always tap-to-open, even on a trigger that performs an action.
+ *   Deprecated (DEP-0016): pass `triggerBehavior="toggle"` (usePressPin) on a
+ *   button trigger; `astryx upgrade` rewrites icon and span triggers and
+ *   lists the rest
  * - `none`: never open on touch
  */
 export type LayerTouchTrigger = 'auto' | 'tap' | 'none';

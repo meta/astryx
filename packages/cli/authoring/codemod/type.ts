@@ -24,7 +24,12 @@ export interface AstryxCodemodApi {
   jscodeshift: unknown;
   /** Report a statistic (no-op-friendly; provided for jscodeshift parity). */
   stats: (...args: unknown[]) => void;
-  /** Report progress (no-op-friendly; provided for jscodeshift parity). */
+  /**
+   * Report progress (no-op-friendly; provided for jscodeshift parity). Under
+   * `astryx upgrade`, a core transform that passes a `ManualMigrationRequired`
+   * (codemods/outcome.mjs) reports a manual migration the upgrade lists, while
+   * the file keeps the transform's result.
+   */
   report: (...args: unknown[]) => void;
 }
 

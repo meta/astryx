@@ -1,0 +1,8 @@
+---
+'@astryxdesign/core': patch
+'@astryxdesign/cli': patch
+---
+
+[feat] `touchTrigger="tap"` on Tooltip, HoverCard, `useTooltip` and `useHoverCard` is deprecated in favor of `triggerBehavior="toggle"` (DEP-0016); `touchTrigger` remains supported until the next minor; only `"tap"` is deprecated now. It keeps working as released, and beside `triggerBehavior="hover"` or `"toggle"`, `touchTrigger` is ignored. A `tap` call resolves to a `@deprecated` signature, so editors mark it with its replacement, and the docs name it. `astryx upgrade` rewrites static `touchTrigger="tap"` to `triggerBehavior="toggle"` on an icon or span trigger with no `role`, `tabIndex`, event handler, or spread props, and removes static `touchTrigger="auto"` where no props are spread; a rewritten trigger keeps its production behavior, tap-only opening, and in development it logs the warning that only a button trigger pins. Every other `tap` site keeps its prop with a TODO naming the manual migration, and the upgrade lists each one with its file and line among the manual migrations it cannot make: a button, a link, an element with a `role`, `tabIndex`, event handler, or spread props, a trigger whose layer repeats its own text, a `useTooltip` or `useHoverCard` options object, an element it cannot identify, a computed value, or spread props, even beside a static `triggerBehavior="toggle"`. A core codemod reports such a site by passing a `ManualMigrationRequired` to `api.report`, and still keeps its changes to the file. The table-comparison page template now uses the toggle; its modality rail becomes a button so it can pin its explanation.
+
+@vjeux

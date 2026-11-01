@@ -114,7 +114,10 @@ export interface TooltipProps {
    * - `auto`: tap opens the tooltip, unless the trigger performs an action of
    *   its own (a button, a link, a form control) — that tap belongs to the
    *   control, and a hint about a control the user just operated is noise
-   * - `tap`: tap always opens the tooltip, even on a trigger that acts
+   * - `tap`: tap always opens the tooltip, even on a trigger that acts.
+   *   Deprecated (DEP-0016): pass `triggerBehavior="toggle"` on a button trigger
+   *   instead; `astryx upgrade` rewrites icon and span triggers and lists the
+   *   rest
    * - `none`: touch never opens the tooltip
    *
    * It decides only under `triggerBehavior="adaptive"`, the default.
@@ -220,6 +223,17 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
  * </Tooltip>
  * ```
  */
+export function Tooltip(
+  props: TooltipProps & {touchTrigger?: 'auto' | 'none'},
+): ReactElement;
+/**
+ * @deprecated `touchTrigger="tap"` is deprecated (DEP-0016): pass `triggerBehavior="toggle"` on a button trigger instead; `astryx upgrade` rewrites icon and span triggers and lists the rest.
+ */
+export function Tooltip(
+  props: TooltipProps & {touchTrigger: 'tap'},
+): ReactElement;
+/** Any `TooltipProps`, such as props a wrapper forwards. */
+export function Tooltip(props: TooltipProps): ReactElement;
 export function Tooltip({
   children,
   anchorRef,
