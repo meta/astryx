@@ -193,6 +193,28 @@ describe('buildComponentTable', () => {
     expect(table).toContain('| ✗ · — · — |');
   });
 
+  it("gives a visual result only to the components pr-visual's default check compared", () => {
+    const sizes = {
+      'core/Card': {importGzipBytes: 2048, cssGzipBytes: null},
+      'core/Menu': {importGzipBytes: 1024, cssGzipBytes: null},
+    };
+    const table = buildComponentTable({
+      analysis: {
+        baseSha: 'a'.repeat(40),
+        componentSizes: sizes,
+        baseComponentSizes: sizes,
+      },
+      origin: '',
+      visualVerdict: {
+        status: 'pass',
+        changes: [],
+        context: {scope: 'touched', components: ['Card']},
+      },
+    });
+    expect(table).toMatch(/Card[^\n]*\| ✓ · — · — \|/);
+    expect(table).toMatch(/Menu[^\n]*\| — · — · — \|/);
+  });
+
   it('renders nothing when no component changed', () => {
     expect(buildComponentTable({analysis: {}, origin: ORIGIN})).toBe('');
   });
@@ -388,6 +410,33 @@ describe('notRunLine', () => {
     ).toBe(
       'Not run on this PR: add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.\n\n',
     );
+  });
+
+  it("names ci:run-visual after pr-visual's default touched check, and on a wide change", () => {
+    const jobs = [
+      {name: 'pr-visual', conclusion: 'success'},
+      {name: 'pr-a11y', conclusion: 'success'},
+      {name: 'pr-rtl', conclusion: 'success'},
+    ];
+    expect(
+      notRunLine({
+        jobs,
+        visualVerdict: {status: 'pass', context: {scope: 'touched'}},
+      }),
+    ).toBe(
+      'Visual compared only the touched components: add `ci:run-visual` to run the full suite.\n\n',
+    );
+    expect(
+      notRunLine({
+        jobs,
+        visualVerdict: {status: 'skipped', context: {scope: 'touched'}},
+      }),
+    ).toBe(
+      'Visual did not run on this wide change: add `ci:run-visual` to run the full suite.\n\n',
+    );
+    expect(
+      notRunLine({jobs, visualVerdict: {status: 'pass', context: {}}}),
+    ).toBe('');
   });
 
   it('leaves the line out when the Storybook build failed', () => {

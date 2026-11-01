@@ -484,9 +484,11 @@ history.
 Baseline capture and the reviewed pull request that
 versions an accepted candidate remain separate operations.
 
-PR accessibility, when a pull request runs it (DEC-7), is a scoped, fast check:
-audit only explicitly resolved changed component owners and retain the fast
-modal-close, theme-var, and story-play browser guards. Never widen a PR to the exhaustive accessibility sweep because a
+PR accessibility, when a pull request runs it at its opted-in scope (DEC-7), is
+a scoped, fast check: audit only explicitly resolved changed component owners
+and retain the fast modal-close, theme-var, and story-play browser guards. The
+default touched-components check (FR12) audits the touched components' stories
+without the guards, which run with the accessibility owner. Never widen a PR to the exhaustive accessibility sweep because a
 shared path changed or the component set is empty. Missing or approximate analysis
 fails the scoped check rather than silently claiming no work. Multi-component
 folders expand only to their own canonical component owners or existing umbrella
@@ -509,12 +511,16 @@ not on every push)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
-a pull request runs each only when it opts in with that suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label. Main-push checks are throttled: one runs at a time, a
+a pull request runs each at its opted-in scope only when it opts in with that
+suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label, and otherwise
+only the touched-components check (FR12). Main-push checks are throttled: one runs at a time, a
 burst of pushes collapses to its newest commit, and a running check is never
 cancelled, so every check that starts finishes.
 Pull request updates keep the fast checks and every required context, and add
-the touched-components check (FR12), which audits only what the change touches
-on one standard runner, so each update spends few runner-minutes while the full
+the touched-components check (FR12), which audits only what the change touches,
+its visual part in `pr-visual`'s default mode and its accessibility and RTL
+parts in one standard-runner job, so each update spends few runner-minutes
+while the full
 suites stay behind their labels; the
 modal-close, theme-var and story-play guards are steps of the accessibility
 owner, so they run with it, after merge or on a labelled pull request. A

@@ -3069,6 +3069,7 @@ jobs:
           path: apps/storybook/dist
 
       - name: Install Playwright
+        id: playwright
         if: steps.touched.outputs.has_components == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
@@ -3087,8 +3088,10 @@ jobs:
             --concurrency 4 \
             --components "$COMPONENTS"
 
+      # A failed accessibility audit must not skip RTL: each suite reports
+      # its own result.
       - name: RTL audit for the touched components
-        if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.rtl_packages != ''
+        if: always() && steps.playwright.outcome == 'success' && steps.touched.outputs.has_components == 'true' && steps.touched.outputs.rtl_packages != ''
         env:
           PACKAGES: ${{ steps.touched.outputs.rtl_packages }}
           OWNERS: ${{ steps.touched.outputs.rtl_owners }}

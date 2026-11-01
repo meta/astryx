@@ -418,6 +418,10 @@ describe('pr-touched-components routing', () => {
     expect(step("Download pr-visual's verdict").if).toContain(
       "needs.pr-visual.result == 'failure'",
     );
+    // A failed accessibility audit does not skip RTL.
+    expect(step('RTL audit for the touched components').if).toMatch(
+      /^always\(\) && steps\.playwright\.outcome == 'success' && /,
+    );
     const report = step('Report per-component results');
     expect(report.env.VISUAL_JOB).toBe('${{ needs.pr-visual.result }}');
     expect(report.run).toContain('--visual-job "$VISUAL_JOB"');

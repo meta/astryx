@@ -187,6 +187,12 @@ function componentRows({analysis, a11yReport, visualVerdict}) {
     keys.add(`${pkg}/${name}`);
   }
   const visualChanges = visualVerdict?.changes || [];
+  // pr-visual's default check compares only the touched components (spec:
+  // AST-030 FR12): any other component has no visual result.
+  const touchedOnly = visualVerdict?.context?.scope === 'touched';
+  const visuallyCompared = new Set(
+    touchedOnly ? visualVerdict.context.components || [] : [],
+  );
   // Main's sizes of the merge base were read (a base record or build).
   const baseMeasured =
     Boolean(analysis.baseSha) ||
@@ -202,7 +208,9 @@ function componentRows({analysis, a11yReport, visualVerdict}) {
         : 'pass'
       : null;
     const visual =
-      visualVerdict && visualVerdict.status !== 'skipped'
+      visualVerdict &&
+      visualVerdict.status !== 'skipped' &&
+      (!touchedOnly || visuallyCompared.has(name))
         ? // A run that failed compared nothing: never a pass.
           visualVerdict.status === 'failed'
           ? 'fail'
@@ -443,13 +451,21 @@ function notRunLine({jobs, a11yReport, visualVerdict}) {
     if (suite.id === 'a11y') return !a11yReport;
     return false;
   });
-  if (notRun.length === 0) return '';
+  // pr-visual's default check ran, but compared only the touched components
+  // (or nothing, for a wide change).
+  const touchedVisual =
+    visualVerdict?.context?.scope !== 'touched'
+      ? ''
+      : visualVerdict.status === 'skipped'
+        ? 'Visual did not run on this wide change: add `ci:run-visual` to run the full suite.\n\n'
+        : 'Visual compared only the touched components: add `ci:run-visual` to run the full suite.\n\n';
+  if (notRun.length === 0) return touchedVisual;
   const labels = notRun.map(suite => `\`ci:run-${suite.id}\``);
   const list =
     labels.length === 1
       ? labels[0]
       : `${labels.slice(0, -1).join(', ')} or ${labels.at(-1)}`;
-  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n${touchedVisual}`;
 }
 
 /** The compact report body, between the heading and the footer. */
