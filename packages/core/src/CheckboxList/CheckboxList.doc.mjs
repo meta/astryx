@@ -155,7 +155,7 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Whether all checkbox items are read-only. Displays the current state at full opacity but prevents interaction. Unlike isDisabled, read-only checkboxes are not visually dimmed.',
+        'Whether all checkbox items are read-only. Displays the current state at full opacity but prevents interaction, and shows no pressed feedback. Unlike isDisabled, read-only checkboxes are not visually dimmed.',
       default: 'false',
     },
     {
@@ -178,12 +178,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -242,6 +244,15 @@ export const docs = {
   },
   theming: {
     targets: [{className: 'astryx-checkbox-list'}],
+    vars: [
+      {
+        name: '--_checkbox-row-press-paint',
+        description:
+          "The touch press paint a row that owns its checkbox's press hands that checkbox's box: none at rest, and the press paint at the press's strength while the touch press controller presses that row under a coarse pointer. Set on the row by its own press arms; the box reads its nearest row's value, so a list placed in a row's content keeps its own rows' paint.",
+        default: 'none',
+        private: true,
+      },
+    ],
   },
 };
 
