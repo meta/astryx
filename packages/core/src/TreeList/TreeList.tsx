@@ -44,6 +44,7 @@ import {
   type FocusWithin,
 } from '../utils/focusReturn';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   applyLayoutChangeTransition,
   holdLayoutExit,
@@ -393,7 +394,8 @@ export function TreeList({
   // the group goes (or turns inert for its exit). It moves to the collapsing
   // row itself (AR2); focus anywhere else is not moved. Noted in the commit
   // before the DOM changes, moved from the layout effect below.
-  useInteractionModalityTracking();
+  // The tree's own document's last input decides the moved focus's ring.
+  const {ref: modalityRef} = useInteractionModalityTracking();
   const collapsingFocusRef = useRef<{focus: FocusWithin; id: string} | null>(
     null,
   );
@@ -558,6 +560,7 @@ export function TreeList({
   useLayoutEffect(() => {
     treeElementRef.current = treeRef.current;
   });
+  const mergedTreeRef = useMergedRefs(treeRef, modalityRef);
 
   const handleRootKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -673,7 +676,7 @@ export function TreeList({
         onBeforeChange={beforeExpansionChange}
       />
       <ul
-        ref={treeRef}
+        ref={mergedTreeRef}
         role="tree"
         aria-label={hasHeader ? undefined : ariaLabel}
         aria-labelledby={hasHeader ? headerId : ariaLabelledby}
