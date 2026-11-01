@@ -402,6 +402,20 @@ describe('apiChangesLine', () => {
     expect(out).not.toContain('<img');
   });
 
+  it('says a package whose merge base has no report has a new report', () => {
+    expect(
+      apiChangesLine({
+        version: 1,
+        packages: [
+          pkg('core', [], {baseline: true, stale: true}),
+          pkg('lab', [], {baseline: true}),
+        ],
+      }),
+    ).toBe(
+      '**API changes:** core new report (stale: run `pnpm api:report`); lab new report\n\n',
+    );
+  });
+
   it('lists at most 150 rows and counts the rest', () => {
     const rows = Array.from({length: 160}, (_, i) => row('added', `item ${i}`));
     const out = apiChangesLine({packages: [pkg('core', rows)]});

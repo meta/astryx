@@ -430,8 +430,9 @@ const API_CHANGE_MARK = {added: '+', changed: '~', removed: '−'};
 
 /**
  * API changes (the API report step's api-changes.json): one visible line with
- * each package's added · changed · removed counts, and a stale or missing
- * report, then the rows in one closed disclosure. Every string from the file
+ * each package's added · changed · removed counts, a stale or missing
+ * report, or a new report (no report at the merge base), then the rows in
+ * one closed disclosure. Every string from the file
  * is rendered as literal text. Nothing when no package has a change or a
  * report to refresh.
  */
@@ -443,6 +444,14 @@ function apiChangesLine(report) {
   const rows = [];
   for (const entry of report.packages) {
     const entryRows = Array.isArray(entry.rows) ? entry.rows : [];
+    // The merge base has no committed report for this package: nothing to
+    // compare, so its report is new.
+    if (entry.baseline === true) {
+      segments.push(
+        `${short(entry.pkg)} new report${entry.stale === true ? ' (stale: run `pnpm api:report`)' : ''}`,
+      );
+      continue;
+    }
     if (
       entryRows.length === 0 &&
       entry.stale !== true &&
