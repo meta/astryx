@@ -171,7 +171,9 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
   /**
    * Runs the step's script against a fake GitHub API with main at `tip`,
    * `runs` as ci.yml's dispatched runs on main and `units` as deploy.yml's,
-   * newest first. `issue` is an open guardian issue, if any.
+   * newest first. `issue` is an open guardian issue, if any, or
+   * 'unavailable' when the issue search fails. `into` receives the calls even
+   * when the script throws.
    */
   async function run({
     tip = sha,
@@ -179,15 +181,16 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
     units = [],
     issue,
     eventName = 'push',
+    into = {},
   } = {}) {
-    const calls = {
+    const calls = Object.assign(into, {
       dispatch: [],
       notices: [],
       warnings: [],
       listed: [],
       issues: [],
       comments: [],
-    };
+    });
     const github = {
       rest: {
         repos: {
@@ -215,9 +218,10 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
           createWorkflowDispatch: async args => calls.dispatch.push(args),
         },
         search: {
-          issuesAndPullRequests: async () => ({
-            data: {items: issue ? [issue] : []},
-          }),
+          issuesAndPullRequests: async () => {
+            if (issue === 'unavailable') throw new Error('search failed');
+            return {data: {items: issue ? [issue] : []}};
+          },
         },
         issues: {
           create: async args => calls.issues.push(args),
@@ -329,18 +333,35 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
   });
 
   it("brings a unit run for a person's own release-check of the tip, such as the release owner's", async () => {
+    const own = jobs =>
+      check(10, {id: 77, head_sha: sha, actor: {login: 'someone'}, jobs});
+    const releaseCheck = own([
+      {name: 'release-authority', conclusion: 'success'},
+    ]);
     const calls = await run({
-      runs: [check(10, {head_sha: sha, actor: {login: 'someone'}}), check(40)],
+      runs: [releaseCheck, check(40)],
       units: [check(30)],
     });
     // The scheduler's own release-check is inside its window.
     expect(calls.dispatch).toEqual([unitRun]);
     // A unit run already at the tip, whoever started it, is enough.
     const covered = await run({
-      runs: [check(10, {head_sha: sha, actor: {login: 'someone'}}), check(40)],
+      runs: [releaseCheck, check(40)],
       units: [check(5, {head_sha: sha, actor: {login: 'someone'}}), check(30)],
     });
     expect(covered.dispatch).toEqual([]);
+    // A maintenance capture runs no release-authority job and brings none.
+    const capture = await run({
+      runs: [
+        own([
+          {name: 'release-authority', conclusion: 'skipped'},
+          {name: 'maintenance-request', conclusion: 'success'},
+        ]),
+        check(40),
+      ],
+      units: [check(30)],
+    });
+    expect(capture.dispatch).toEqual([]);
   });
 
   it('keeps counting a check a person re-runs', async () => {
@@ -450,6 +471,18 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
       expect(calls.comments).toEqual([
         expect.objectContaining({issue_number: 42}),
       ]);
+    });
+
+    it('dispatches the next run before reporting, so a failed report loses no run', async () => {
+      const calls = {};
+      const error = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [check(20, {conclusion: 'cancelled'})],
+        issue: 'unavailable',
+        into: calls,
+      }).catch(caught => caught);
+      expect(error.message).toBe('search failed');
+      expect(calls.dispatch).toEqual([unitRun]);
     });
 
     it('leaves a run a newer one replaced, such as a recheck', async () => {
