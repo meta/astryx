@@ -631,5 +631,10 @@
       "overlay": ".astryx-overlay-scrim .astryx-stack",
       "overlayRoot": ".astryx-overlay"
     }
+  },
+  {
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": []
   }
 ]
