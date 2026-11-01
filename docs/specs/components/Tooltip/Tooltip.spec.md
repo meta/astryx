@@ -131,7 +131,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   `touchTrigger="auto"` asks only whether the trigger itself performs an action,
   so a truncated label inside a link opens its tooltip on the tap that follows
   the link. The walk ships with CLN-0024 (FR5, DEC-1).
-- **Press-to-pin is not built.** `triggerBehavior`, its toggle (FR9), the trigger
+- **Toggle pinning is not built.** `triggerBehavior`, its toggle (FR9), the trigger
   wiring and announcement (FR10), and a pinned tooltip's Escape priority
   (`spec:AST-003` FR4) are specified and not implemented, and the codemod
   DEP-0016 names does not exist yet. `touchTrigger="tap"` is the shipped way to

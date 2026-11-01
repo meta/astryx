@@ -90,7 +90,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   so a name or ID inside a clickable card opens its card on the tap that opens
   the card behind it. The walk ships with `component:Tooltip` CLN-0024 (FR5,
   DEC-1).
-- **Press-to-pin is not built.** `triggerBehavior`, its toggle (FR9), and the
+- **Toggle pinning is not built.** `triggerBehavior`, its toggle (FR9), and the
   trigger wiring and announcement (FR10) are specified and not implemented.
   `touchTrigger="tap"` is the shipped way to open on every tap.
 - **A held-closed card still opens on focus.** With `isOpen={false}`, the hover
