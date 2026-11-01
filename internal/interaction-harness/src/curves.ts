@@ -31,7 +31,9 @@ export const END_INSET_MS = 0.5;
  * Page side: records every animation the document runs, from its first frame
  * or its creation (a frame loop on the page's real requestAnimationFrame, and
  * the CSS animation and transition events), so an animation that starts and
- * ends before a test looks is still seen, with the time it finished. Each
+ * ends before a test looks is still seen, with the time it finished (from its
+ * finish event, or from a CSS run's end event when the page cancels it there
+ * before the finish event comes). Each
  * entry keeps the animation's start time too: a page that cancels a finished
  * animation (an entrance whose class is removed on `animationend`) nulls its
  * `startTime`.
@@ -41,6 +43,11 @@ function animationRecorder(): void {
   if (w.__harnessAnimations) {
     return;
   }
+  // The run a CSS animation or transition event names.
+  const cssRunName = (event: Event) =>
+    event.type.startsWith('animation')
+      ? (event as AnimationEvent).animationName
+      : (event as TransitionEvent).propertyName;
   // The page's real frames, even when a timer gate already holds its callbacks.
   const frame = (
     (
@@ -86,6 +93,45 @@ function animationRecorder(): void {
     );
     return Number(animation.startTime) - end / Math.abs(rate);
   };
+  // Dates a recorded run's finish as the engine has it now. Its start time is
+  // usually still set (the finish listener, added as the animation was made,
+  // runs before the page's own, and the end-event listener below runs in the
+  // capture phase), and the run ended where that start puts its end, through
+  // the rate. Without one, the start the recorder holds stands in, kept as
+  // the run ran (after a pause, a seek or a rate change). A run that ends as
+  // it starts (one reversed from rest) can finish before any start resolves:
+  // it then began where the finish event's timeline time `at` puts its start.
+  // Read later, the start time can say otherwise (WebKit resolves or moves it
+  // a frame later), and the finish event itself arrives late (a frame or more
+  // after a finish() call).
+  const dateFinish = (
+    entry: {
+      animation: Animation;
+      finishedAt: number | null;
+      startedAt: number | null;
+      finishStart: number | null;
+    },
+    at: number | null,
+  ) => {
+    const animation = entry.animation;
+    const end = Number(
+      (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+        .endTime ?? 0,
+    );
+    const speed = Math.abs(animation.playbackRate || 1);
+    entry.finishStart =
+      playStart(animation) ??
+      entry.startedAt ??
+      (at == null ? null : at - end / speed);
+    entry.finishedAt =
+      entry.finishStart == null
+        ? performance.now()
+        : entry.finishStart + end / speed;
+    if (entry.startedAt == null) {
+      // Cancelled before a frame read its start: back from where it ended.
+      entry.startedAt = entry.finishStart ?? entry.finishedAt - end / speed;
+    }
+  };
   const remember = (animation: Animation) => {
     const recorded = entries.get(animation);
     if (recorded != null) {
@@ -126,35 +172,8 @@ function animationRecorder(): void {
       unstarted.push(entry);
     }
     animation.addEventListener('finish', event => {
-      const end = Number(
-        (animation.effect as KeyframeEffect | null)?.getComputedTiming()
-          .endTime ?? 0,
-      );
-      const speed = Math.abs(animation.playbackRate || 1);
-      // The run as the engine has it at its finish: this listener, added as
-      // the animation was made, runs before the page's own, so its start time
-      // is usually still set, and the run ended where that start puts its
-      // end, through the rate. Without one, the start the recorder holds
-      // stands in, kept as the run ran (after a pause, a seek or a rate
-      // change): in Chromium a CSS animation or transition whose element the
-      // page removes on its end event is cancelled before this runs. A run that ends as it starts (one reversed from rest) can finish
-      // before any start resolves: it then began where the event's timeline
-      // time puts its start. Read later, the start time can say otherwise
-      // (WebKit resolves or moves it a frame later), and the event itself
-      // arrives late (a frame or more after a finish() call).
       const at = (event as AnimationPlaybackEvent).timelineTime;
-      entry.finishStart =
-        playStart(animation) ??
-        entry.startedAt ??
-        (at == null ? null : Number(at) - end / speed);
-      entry.finishedAt =
-        entry.finishStart == null
-          ? performance.now()
-          : entry.finishStart + end / speed;
-      if (entry.startedAt == null) {
-        // Cancelled before a frame read its start: back from where it ended.
-        entry.startedAt = entry.finishStart ?? entry.finishedAt - end / speed;
-      }
+      dateFinish(entry, at == null ? null : Number(at));
     });
     log.push(entry);
     if (log.length > 5000) {
@@ -187,28 +206,30 @@ function animationRecorder(): void {
   // `getAnimations()` no longer lists a finished animation that fills
   // nothing. No object is left to record, so the event is kept: a wait that
   // finds nothing names what it missed.
+  // Whether a recorded entry is the run a CSS animation or transition event
+  // is about: the same element (and pseudo-element) and name.
+  const isRunOf = (entry: {animation: Animation}, event: Event) => {
+    const effect = entry.animation.effect as KeyframeEffect | null;
+    const a = entry.animation as unknown as {
+      animationName?: string;
+      transitionProperty?: string;
+    };
+    return (
+      effect?.target === event.target &&
+      (effect?.pseudoElement || '') ===
+        ((event as AnimationEvent).pseudoElement || '') &&
+      (a.animationName ?? a.transitionProperty) === cssRunName(event)
+    );
+  };
   const onStart = (event: Event) => {
     record();
-    const target = event.target;
-    const pseudo = (event as AnimationEvent).pseudoElement || '';
-    const name =
-      event.type === 'animationstart'
-        ? (event as AnimationEvent).animationName
-        : (event as TransitionEvent).propertyName;
-    const seen = log.some(entry => {
-      const effect = entry.animation.effect as KeyframeEffect | null;
-      const a = entry.animation as unknown as {
-        animationName?: string;
-        transitionProperty?: string;
-      };
-      return (
-        effect?.target === target &&
-        (effect?.pseudoElement || '') === pseudo &&
-        (a.animationName ?? a.transitionProperty) === name
-      );
-    });
-    if (!seen) {
-      unread.push({at: performance.now(), target, type: event.type, name});
+    if (!log.some(entry => isRunOf(entry, event))) {
+      unread.push({
+        at: performance.now(),
+        target: event.target,
+        type: event.type,
+        name: cssRunName(event),
+      });
       if (unread.length > 500) {
         unread.splice(0, unread.length - 500);
       }
@@ -216,6 +237,44 @@ function animationRecorder(): void {
   };
   for (const type of ['animationstart', 'transitionrun', 'transitionstart']) {
     document.addEventListener(type, onStart, true);
+  }
+  // Whether a run stands at its end in the direction it plays: finished, or
+  // still reading `running` with its current time there, to a microsecond
+  // (Chromium read 0.00000003 ms for a reversed run at its start). Chromium
+  // can send a CSS run's end event a frame before the run itself finishes.
+  const atEnd = (animation: Animation) => {
+    if (animation.playState === 'finished') {
+      return true;
+    }
+    if (animation.playState !== 'running' || animation.currentTime == null) {
+      return false;
+    }
+    const time = Number(animation.currentTime);
+    const end = Number(
+      (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+        .endTime ?? 0,
+    );
+    return animation.playbackRate < 0 ? time <= 0.001 : time >= end - 0.001;
+  };
+  // A CSS run's end event, read before the page's own listeners (this one is
+  // on the document, in the capture phase), while the run still has its start
+  // time. A page that removes the element at its end cancels a run whose end
+  // event came before it finished, and a cancelled run never finishes: under
+  // load, a CSS exit reversed partway sent `transitionend` at current time 0,
+  // still `running`, and was cancelled a frame later with no finish event.
+  const onEnd = (event: Event) => {
+    for (const entry of log) {
+      if (
+        entry.finishedAt == null &&
+        atEnd(entry.animation) &&
+        isRunOf(entry, event)
+      ) {
+        dateFinish(entry, null);
+      }
+    }
+  };
+  for (const type of ['animationend', 'transitionend']) {
+    document.addEventListener(type, onEnd, true);
   }
   // A script animation is recorded as it is made: WebKit can start and finish
   // a short one between two frames of a fresh page.
