@@ -22,17 +22,16 @@
  * (a value below the minimum is invalid per WCAG 4.1.2) and a localized
  * "Collapsed" aria-valuetext announces the real state.
  *
- * Dragging takes pointer capture on the grab zone, so the rest of the gesture
- * is delivered to that element instead of being hit-tested against whatever
- * the cursor happens to be over. A resizable region that contains an embedded
- * frame otherwise loses the drag the moment the cursor crosses the frame: the
- * events go to the guest document, and a listener on the host window never
- * hears them again. Captured events are delivered to the capturing element,
- * so the move/up/cancel handlers live on the grab zone (as in Slider), not on
- * window.
+ * The handle's input (the pointer drag, the keys, the double-click) is the
+ * window splitter's one implementation, resizeGesture.ts, which the internal
+ * resize factory also drives. ResizeHandle forwards its React events to it,
+ * over the region its `resizable` prop describes. Dragging takes pointer
+ * capture on the grab zone, so the move, up and cancel events of the gesture
+ * are delivered there (as in Slider), even when the pointer crosses an
+ * embedded frame.
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
@@ -51,13 +50,15 @@ import {
   getEffectiveMaxPx,
   type ResizableProps,
 } from './useResizable';
+import {
+  createResizeGesture,
+  type ResizeGesture,
+  type ResizeGestureModel,
+} from './resizeGesture';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-const KEYBOARD_STEP = 10;
-const KEYBOARD_LARGE_STEP = 50;
-
 type PillPlacement = 'start' | 'end' | 'center' | 'auto';
 
 function resolveEffectiveSide(
@@ -97,21 +98,6 @@ function hitAreaBiasDir(
     return null;
   }
   return effectiveSide === 'start' ? -1 : 1;
-}
-
-/**
- * Drag feedback lives on `<body>`, not on the handle: the pointer spends the
- * drag off the handle, over whatever the panels contain, and the resize cursor
- * has to hold there. Module scope so the writes stay outside the component.
- */
-function applyBodyDragStyles(isHorizontal: boolean): void {
-  document.body.style.cursor = isHorizontal ? 'col-resize' : 'row-resize';
-  document.body.style.userSelect = 'none';
-}
-
-function clearBodyDragStyles(): void {
-  document.body.style.cursor = '';
-  document.body.style.userSelect = '';
 }
 
 const styles = stylex.create({
@@ -365,60 +351,6 @@ export interface ResizeHandleProps extends Omit<
 }
 
 /**
- * The snap point `count` points away from the region's current size in
- * `direction` (+1 grows, -1 shrinks). A point beyond `minSize` or `maxSize`
- * counts as that bound; the nearest end point serves when fewer remain, and
- * the current size when it is already there.
- */
-function adjacentSnapPoint(
-  resizable: ResizableProps,
-  direction: 1 | -1,
-  count: number,
-): number {
-  const points = [
-    ...new Set(
-      resizable._snaps.map(p =>
-        Math.min(resizable._maxSizePx, Math.max(resizable._minSizePx, p)),
-      ),
-    ),
-  ].sort((a, b) => a - b);
-  const size = resizable._size;
-  const ahead =
-    direction > 0
-      ? points.filter(p => p > size)
-      : points.filter(p => p < size).reverse();
-  if (ahead.length === 0) {
-    return size;
-  }
-  return ahead[Math.min(count, ahead.length) - 1];
-}
-
-/**
- * Collapse an open pane, or restore a collapsed one to the size it had before
- * it collapsed (APG window splitter: Enter "restores the splitter to its
- * previous position"). The hook's own collapse/expand do exactly that; a
- * hand-built `ResizableProps` (no registered controls) falls back to a resize
- * gesture to the minimum, which also cannot reopen a pane whose minimum sits below its
- * collapse threshold.
- */
-function toggleCollapse(resizable: ResizableProps): void {
-  const controls = getCollapseControls(resizable);
-  if (controls) {
-    if (resizable._isCollapsed) {
-      controls.expand();
-    } else {
-      controls.collapse();
-    }
-    return;
-  }
-  resizable._onResizeStart();
-  resizable._onResizeMove(
-    resizable._isCollapsed ? resizable._minSizePx : -resizable._size,
-  );
-  resizable._onResizeEnd();
-}
-
-/**
  * Draggable resize handle placed between resizable panels. Renders as a thin
  * divider line with a wider invisible hit area and optional pill grip indicator.
  * Supports keyboard resizing via arrow keys and WAI-ARIA separator role.
@@ -453,271 +385,144 @@ export function ResizeHandle({
   const t = useTranslator();
   const label = labelFromProps ?? t('@astryx.resizable.handle.label');
   const handleRef = useRef<HTMLDivElement>(null);
-  // The pointer that owns the in-flight drag, plus the values its deltas are
-  // measured against. A ref so moves don't re-render, and so unmount can tell
-  // a live drag from a finished one.
-  const dragRef = useRef<{
-    pointerId: number;
-    startPos: number;
-    rtl: number;
-  } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const isHorizontal = direction === 'horizontal';
   const isOverlay = positionMode === 'overlay';
-  const sign = isReversed ? -1 : 1;
+
+  // --- The region a `resizable` prop describes ---
+  // Its gesture reads the latest props at each input, so a whole drag sees
+  // the region as it is now, not as a snapshot from the press.
+  const resizableRef = useRef(resizable);
+  resizableRef.current = resizable;
+  // The region a drag in flight started on: told the gesture is over even
+  // after the prop has gone.
+  const dragRegionRef = useRef<ResizableProps | undefined>(undefined);
+  const configRef = useRef({direction, isReversed, isDisabled});
+  configRef.current = {direction, isReversed, isDisabled};
+  const [isLegacyDragging, setIsLegacyDragging] = useState(false);
+  const [legacyGesture] = useState<ResizeGesture>(() => {
+    const model: ResizeGestureModel = {
+      state() {
+        const region = resizableRef.current;
+        return {
+          size: region?._size ?? 0,
+          isCollapsed: region?._isCollapsed ?? false,
+          minPx: region?._minSizePx ?? 0,
+          maxPx: region?._maxSizePx ?? Infinity,
+          snaps: region?._snaps ?? [],
+          collapsedSize: region?._collapsedSize ?? 0,
+          collapsible: region?._collapsible ?? false,
+        };
+      },
+      start: () => {
+        dragRegionRef.current = resizableRef.current;
+        resizableRef.current?._onResizeStart();
+      },
+      move: delta => resizableRef.current?._onResizeMove(delta),
+      end: () => {
+        const region = resizableRef.current ?? dragRegionRef.current;
+        dragRegionRef.current = undefined;
+        region?._onResizeEnd();
+      },
+      // Not a resize end, but still the end of the gesture: the region froze
+      // state for the duration of the drag and has to be told it is over.
+      cancel: () => {
+        const region = resizableRef.current ?? dragRegionRef.current;
+        dragRegionRef.current = undefined;
+        region?._onResizeCancel?.();
+      },
+      // The hook's own collapse and expand restore the size before the
+      // collapse; a hand-built `ResizableProps` has none.
+      get collapse() {
+        const region = resizableRef.current;
+        return region ? getCollapseControls(region)?.collapse : undefined;
+      },
+      get expand() {
+        const region = resizableRef.current;
+        return region ? getCollapseControls(region)?.expand : undefined;
+      },
+    };
+    return createResizeGesture(
+      () => handleRef.current,
+      model,
+      () => ({
+        ...configRef.current,
+        isDisabled:
+          configRef.current.isDisabled || resizableRef.current == null,
+      }),
+      setIsLegacyDragging,
+    );
+  });
+
+  const gesture: ResizeGesture | null =
+    resizable != null ? legacyGesture : null;
+  const isDragging = isLegacyDragging;
+  const isInputDisabled = isDisabled;
+  const isCollapsed = resizable?._isCollapsed ?? false;
   const effectiveSide = resolveEffectiveSide(
     pillPlacement,
     isReversed,
-    resizable?._isCollapsed ?? false,
+    isCollapsed,
   );
   // Physical offset direction shared by the pill and the grab zone (null =
   // centered / no bias). Keeps the two positioned identically in LTR and RTL.
   const hitBiasDir = hitAreaBiasDir(effectiveSide);
-
-  const getRTLMultiplier = useCallback((): number => {
-    const el = handleRef.current;
-    if (!el) {
-      return 1;
-    }
-    return getComputedStyle(el).direction === 'rtl' ? -1 : 1;
-  }, []);
-
   const isInteracting = isHovered || isFocused;
 
-  // A handle whose axis disagrees with its hook drags along one axis while the
-  // hook measures percentage bounds on the other. `ResizableProps` is exported,
-  // so `_direction` is optional for old hand-built objects; absent means there
-  // is no hook axis to compare, not that the hook is horizontal.
+  // A handle whose axis disagrees with its region drags along one axis while
+  // the region measures percentage bounds on the other. `ResizableProps` is
+  // exported, so `_direction` is optional for old hand-built objects; absent
+  // means there is no region axis to compare, not that it is horizontal.
   const didWarnAxisRef = useRef(false);
+  const regionDirection = resizable?._direction;
   useEffect(() => {
-    const hookDirection = resizable?._direction;
-    if (
-      hookDirection != null &&
-      hookDirection !== direction &&
-      !didWarnAxisRef.current
-    ) {
+    if (didWarnAxisRef.current) {
+      return;
+    }
+    if (regionDirection != null && regionDirection !== direction) {
       didWarnAxisRef.current = true;
       devWarn(
         'ResizeHandle',
         `direction="${direction}" but its useResizable region is ` +
-          `"${hookDirection}". They must match: the hook measures one axis ` +
+          `"${regionDirection}". They must match: the hook measures one axis ` +
           'and the handle drags the other.',
       );
     }
-  }, [direction, resizable]);
+  }, [direction, regionDirection]);
 
-  // --- Pointer drag ---
-  const clearDrag = useCallback(() => {
-    dragRef.current = null;
-    setIsDragging(false);
-    clearBodyDragStyles();
-  }, []);
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isDisabled || !resizable || dragRef.current) {
-        return;
-      }
-      e.preventDefault();
-      e.stopPropagation();
-      // Take the pointer for the whole gesture. Without capture the browser
-      // re-hit-tests every move, so a frame anywhere under the drag path
-      // swallows the rest of it into the guest document.
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-      dragRef.current = {
-        pointerId: e.pointerId,
-        startPos: isHorizontal ? e.clientX : e.clientY,
-        rtl: isHorizontal ? getRTLMultiplier() : 1,
-      };
-      setIsDragging(true);
-      resizable._onResizeStart();
-      applyBodyDragStyles(isHorizontal);
-    },
-    [isDisabled, resizable, isHorizontal, getRTLMultiplier],
-  );
-
-  const handlePointerMove = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      const drag = dragRef.current;
-      if (!drag || drag.pointerId !== e.pointerId || !resizable) {
-        return;
-      }
-      const currentPos = isHorizontal ? e.clientX : e.clientY;
-      resizable._onResizeMove((currentPos - drag.startPos) * drag.rtl * sign);
-    },
-    [resizable, isHorizontal, sign],
-  );
-
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (dragRef.current?.pointerId !== e.pointerId) {
-        return;
-      }
-      clearDrag();
-      resizable?._onResizeEnd();
-    },
-    [clearDrag, resizable],
-  );
-
-  // Serves pointercancel and lostpointercapture alike: an interrupted drag
-  // ends without signalling a resize end. lostpointercapture also fires on the
-  // implicit release after every pointerup/pointercancel, by which point the
-  // drag is already cleared and this is a no-op.
-  const cancelDrag = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (dragRef.current?.pointerId !== e.pointerId) {
-        return;
-      }
-      clearDrag();
-      // Not a resize end, but still the end of the gesture: the region froze
-      // state for the duration of the drag and has to be told it is over.
-      resizable?._onResizeCancel?.();
-    },
-    [clearDrag, resizable],
-  );
-
-  // --- Keyboard ---
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent) => {
-      if (isDisabled || !resizable) {
-        return;
-      }
-      const step = e.shiftKey ? KEYBOARD_LARGE_STEP : KEYBOARD_STEP;
-      const rtl = isHorizontal ? getRTLMultiplier() : 1;
-
-      // The pane's grow direction on this key: ArrowRight/Down grow unless the
-      // layout is reversed or, on the inline axis, right-to-left.
-      const grows = (key: string) =>
-        (key === 'ArrowRight' || key === 'ArrowDown'
-          ? 1
-          : key === 'ArrowLeft' || key === 'ArrowUp'
-            ? -1
-            : 0) *
-          (isHorizontal ? rtl : 1) *
-          sign >
-        0;
-
-      switch (e.key) {
-        case 'ArrowRight':
-        case 'ArrowDown':
-        case 'ArrowLeft':
-        case 'ArrowUp': {
-          e.preventDefault();
-          if (resizable._isCollapsed) {
-            // A collapsed pane answers only the grow arrow: it opens one step
-            // above its minimum, the value the separator announces while
-            // collapsed, or at the collapse threshold when that is larger (APG
-            // window splitter: the arrow moves the separator from where it is;
-            // a bare step would stay below the threshold and leave it in
-            // place). The shrink arrow is a no-op.
-            if (grows(e.key)) {
-              resizable._onResizeStart();
-              // At least the collapse threshold, or the move would stay
-              // collapsed when the minimum sits below it.
-              resizable._onResizeMove(
-                Math.max(resizable._minSizePx + step, resizable._collapsedSize),
-              );
-              resizable._onResizeEnd();
-            }
-            break;
-          }
-          if (resizable._snaps.length > 0) {
-            // With snap points the region can rest only on a point, so a
-            // pixel step would snap straight back; the arrow moves to the
-            // adjacent point in its direction instead (Shift, two points),
-            // staying within the bounds.
-            resizable._onResizeStart();
-            resizable._onResizeMove(
-              adjacentSnapPoint(
-                resizable,
-                grows(e.key) ? 1 : -1,
-                e.shiftKey ? 2 : 1,
-              ) - resizable._size,
-            );
-            resizable._onResizeEnd();
-            break;
-          }
-          const direction =
-            e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
-          resizable._onResizeStart();
-          resizable._onResizeMove(
-            direction * step * (isHorizontal ? rtl : 1) * sign,
-          );
-          resizable._onResizeEnd();
-          break;
-        }
-        case 'Home': {
-          e.preventDefault();
-          resizable._onResizeStart();
-          resizable._onResizeMove(resizable._minSizePx - resizable._size);
-          resizable._onResizeEnd();
-          break;
-        }
-        case 'End': {
-          e.preventDefault();
-          // Only a configured maximum is the region's own limit; the reported
-          // stand-in for an unbounded region is where the pane *could* reach,
-          // not where End may safely move it (a recorded gap).
-          if (resizable._maxSizePx !== Infinity) {
-            resizable._onResizeStart();
-            resizable._onResizeMove(resizable._maxSizePx - resizable._size);
-            resizable._onResizeEnd();
-          }
-          break;
-        }
-        case 'Enter': {
-          e.preventDefault();
-          if (resizable._collapsible) {
-            toggleCollapse(resizable);
-          }
-          break;
-        }
-      }
-    },
-    [isDisabled, resizable, isHorizontal, getRTLMultiplier, sign],
-  );
-
-  // --- Double-click collapse ---
-  const handleDoubleClick = useCallback(() => {
-    if (isDisabled || !resizable || !resizable._collapsible) {
-      return;
-    }
-    toggleCollapse(resizable);
-  }, [isDisabled, resizable]);
-
-  // --- Cleanup on unmount ---
+  // --- Cleanup on unmount, or when the `resizable` prop goes ---
   // Removing the grab zone implicitly releases its captured pointer and takes
   // its listeners with it, so an in-flight drag stops driving the region on
-  // its own. The body cursor/user-select overrides are not on the element,
-  // though, so they have to be released here or they stick after the handle
-  // is gone — and the region, which outlives this handle, still has to hear
-  // that its gesture is over.
-  const cancelOnUnmountRef = useRef<(() => void) | undefined>(undefined);
-  cancelOnUnmountRef.current = resizable?._onResizeCancel;
+  // its own; a `resizable` prop that goes away takes the grab zone's handlers
+  // the same way. The body cursor/user-select overrides are not on the
+  // element, though, so they have to be released here or they stick, and the
+  // region, which outlives this handle, still has to hear that its gesture is
+  // over.
+  const hasRegion = resizable != null;
   useEffect(() => {
+    if (!hasRegion) {
+      return;
+    }
     return () => {
-      if (dragRef.current) {
-        dragRef.current = null;
-        clearBodyDragStyles();
-        cancelOnUnmountRef.current?.();
-      }
+      legacyGesture.interrupt();
     };
-  }, []);
+  }, [hasRegion, legacyGesture]);
 
   // --- ARIA ---
   // When collapsed the panel's real size (0) sits below aria-valuemin, which
   // is invalid per WCAG 4.1.2. Clamp aria-valuenow to the minimum and announce
   // the true state via aria-valuetext instead; the valuetext is removed as
   // soon as the panel expands so the numeric value reads again.
-  const isCollapsed = resizable?._isCollapsed ?? false;
-  const ariaValueNow = resizable
-    ? isCollapsed
-      ? Math.max(resizable._size, resizable._minSizePx)
-      : resizable._size
-    : undefined;
-  const ariaValueMin = resizable ? resizable._minSizePx : undefined;
+  const sizeNow = resizable?._size;
+  const minNow = resizable?._minSizePx;
+  const ariaValueNow =
+    sizeNow == null || minNow == null
+      ? undefined
+      : isCollapsed
+        ? Math.max(sizeNow, minNow)
+        : sizeNow;
+  const ariaValueMin = minNow;
   // A separator with a value needs a maximum (WAI-ARIA, APG window splitter).
   // Unbounded regions report the basis they can fill; a hand-built props
   // object without it reports only a configured maximum.
@@ -730,7 +535,9 @@ export function ResizeHandle({
       ? effectiveMax
       : undefined;
   const ariaValueText =
-    resizable && isCollapsed ? t('@astryx.resizable.collapsed') : undefined;
+    resizable != null && isCollapsed
+      ? t('@astryx.resizable.collapsed')
+      : undefined;
 
   return (
     <div
@@ -742,9 +549,13 @@ export function ResizeHandle({
       aria-valuemax={ariaValueMax}
       aria-valuetext={ariaValueText}
       aria-label={label}
-      aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : 0}
-      onDoubleClick={handleDoubleClick}
+      aria-disabled={isInputDisabled || undefined}
+      tabIndex={isInputDisabled ? -1 : 0}
+      onDoubleClick={() => {
+        if (!isInputDisabled) {
+          gesture?.doubleClick();
+        }
+      }}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       data-resizing={isDragging || undefined}
@@ -767,7 +578,7 @@ export function ResizeHandle({
             !isDragging &&
             styles.handleHover,
           !isOverlay && hasDivider && isDragging && styles.handleActive,
-          isDisabled && styles.disabled,
+          isInputDisabled && styles.disabled,
           xstyle,
         ),
         className,
@@ -780,7 +591,9 @@ export function ResizeHandle({
       // this accessibility-critical handler can't be clobbered by a passed prop.
       onKeyDown={e => {
         props.onKeyDown?.(e);
-        handleKeyDown(e);
+        if (!isInputDisabled) {
+          gesture?.keyDown(e);
+        }
       }}>
       {/* Wider invisible hit area for pointer interaction */}
       <div
@@ -798,13 +611,17 @@ export function ResizeHandle({
             : isHorizontal
               ? dynamicStyles.hitAreaOffsetX(hitBiasDir)
               : dynamicStyles.hitAreaOffsetY(hitBiasDir),
-          isDisabled && styles.disabled,
+          isInputDisabled && styles.disabled,
         )}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={cancelDrag}
-        onLostPointerCapture={cancelDrag}
+        onPointerDown={e => {
+          if (!isInputDisabled) {
+            gesture?.pointerDown(e);
+          }
+        }}
+        onPointerMove={e => gesture?.pointerMove(e)}
+        onPointerUp={e => gesture?.pointerUp(e)}
+        onPointerCancel={e => gesture?.pointerCancel(e)}
+        onLostPointerCapture={e => gesture?.pointerCancel(e)}
         onPointerEnter={() => setIsHovered(true)}
         onPointerLeave={() => {
           if (!isDragging) {
