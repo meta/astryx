@@ -399,14 +399,14 @@ const rule = {
     type: 'problem',
     docs: {
       description:
-        'Disallow hardcoded user-facing strings; route through useTranslator() instead',
+        'Disallow hardcoded user-facing strings; route through a translator (useComponentTranslator(<slice>) in core, useTranslator() elsewhere) instead',
       category: 'Best Practices',
       recommended: true,
     },
     messages: {
       hardcodedString:
         'Hardcoded user-facing string {{value}} in `{{name}}`. ' +
-        'Route through `t(\'<namespace>.<component>.<key>\')` via `useTranslator()` so it can be localized.',
+        'Route through `t(\'<namespace>.<component>.<key>\')` via `useComponentTranslator(<slice>)` (in core; `useTranslator()` elsewhere) so it can be localized.',
       hardcodedDefault:
         'Hardcoded default {{value}} for prop `{{name}}`. ' +
         'Use the alias-and-resolve pattern: `{{name}}: {{name}}FromProps` in the destructure, then ' +
@@ -416,7 +416,7 @@ const rule = {
         'Use one catalog message via the provider-bound translator instead of constructing English text.',
       hardcodedCallArg:
         'Hardcoded user-facing string {{value}} passed to `{{name}}()`. ' +
-        'Route through `t(\'<namespace>.<component>.<key>\')` via `useTranslator()` so it can be localized.',
+        'Route through `t(\'<namespace>.<component>.<key>\')` via `useComponentTranslator(<slice>)` (in core; `useTranslator()` elsewhere) so it can be localized.',
     },
     schema: [
       {

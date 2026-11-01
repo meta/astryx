@@ -177,6 +177,27 @@ describe('astryxStylex locale aliases', () => {
       path.join(corePackage, 'src/Button'),
     );
   });
+
+  it('does not route a per-namespace English slice to its source file', () => {
+    // `locales/en/<namespace>.generated.js` is the package's own: the exports
+    // map gives it a `null` target, and the alias for whole catalogs takes a
+    // single path segment, so the slice specifier never reaches
+    // `src/i18n/generated-locales/en/`.
+    const rootDir = path.join(tmpdir(), 'astryx-vite-alias');
+    const aliases = getInjectedConfig(rootDir).resolve.alias;
+    const corePackage = path.join(rootDir, 'node_modules/@astryxdesign/core');
+    const resolved = applyAlias(
+      aliases,
+      '@astryxdesign/core/locales/en/button.generated.js',
+    );
+    expect(resolved).not.toContain('generated-locales');
+    expect(resolved).not.toBe(
+      path.join(
+        corePackage,
+        'src/i18n/generated-locales/en/button.generated.ts',
+      ),
+    );
+  });
 });
 
 describe('astryxStylex optimizeDeps package discovery', () => {

@@ -188,6 +188,12 @@ const STATIC_EXPORTS = {
     types: './dist/i18n/generated-locales/*.generated.d.ts',
     default: './dist/i18n/generated-locales/*.generated.js',
   },
+  // The per-namespace English slices under generated-locales/en/ are the
+  // package's own: a core component renders with its slice through the
+  // internal useComponentTranslator. The longer pattern wins the match, so
+  // this keeps them off the public surface while `./locales/en.generated.js`
+  // and the other whole catalogs stay importable.
+  './locales/en/*': null,
 };
 
 /**

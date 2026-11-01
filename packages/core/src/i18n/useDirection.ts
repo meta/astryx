@@ -4,7 +4,7 @@
 
 /**
  * @file useDirection.ts
- * @input InternationalizationContext (via use())
+ * @input TranslationRuntimeContext (via use())
  * @output 'ltr' | 'rtl'
  * @position Client hook for reading the ambient text direction. Returns 'ltr'
  *   when called outside a provider (matches the silent-en-fallback pattern of
@@ -18,15 +18,15 @@
  * the provider's direction disagrees with the actual `<html dir>`.
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/core/src/i18n/InternationalizationContext.ts
+ * - /packages/core/src/i18n/TranslationRuntimeContext.ts
  * - /packages/core/src/i18n/getLocaleDirection.ts (server-safe counterpart)
  * - /packages/core/src/i18n/index.ts
  */
 
 import {use} from 'react';
-import {InternationalizationContext} from './InternationalizationContext';
+import {TranslationRuntimeContext} from './TranslationRuntimeContext';
 
 export function useDirection(): 'ltr' | 'rtl' {
-  const ctx = use(InternationalizationContext);
+  const ctx = use(TranslationRuntimeContext);
   return ctx.direction;
 }

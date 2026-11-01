@@ -122,7 +122,7 @@ import pseudo from '@astryxdesign/core/locales/pseudo.generated.js';
         },
         {
           type: 'prose',
-          text: 'Astryx component authors read strings with `useTranslator()` rather than hardcoding user-facing text.',
+          text: "Astryx components read their strings from the English catalog rather than hardcoding them. Your own code reads any `@astryx.*` key with `useTranslator()`:",
         },
         {
           type: 'code',
@@ -137,7 +137,7 @@ function SaveButton() {
         },
         {
           type: 'prose',
-          text: "Astryx's own strings live in `packages/core/locales/en.json`. New user-facing strings must go through `useTranslator`; this is enforced by the `@astryx/no-hardcoded-i18n-string` ESLint rule. See the AI contribution guide for the alias-and-resolve pattern used when adding new keys.",
+          text: "Astryx's own strings live in `packages/core/locales/en.json`, keyed `@astryx.<namespace>.<name>`. The contributing guide covers how a core component reads its strings, the `@astryx/no-hardcoded-i18n-string` ESLint rule and the alias-and-resolve pattern used when adding new keys.",
         },
         {
           type: 'prose',

@@ -4,7 +4,7 @@
 
 /**
  * @file useCollator.ts
- * @input InternationalizationContext (via use()), optional Intl.CollatorOptions
+ * @input TranslationRuntimeContext (via use()), optional Intl.CollatorOptions
  * @output A memoized Intl.Collator bound to the active locale
  * @position Public provider-aware string-comparison hook. Exported from the
  *   i18n barrel for components, sibling packages, and consumers that need
@@ -15,7 +15,7 @@
  * useTranslator/useDirection/useLocale fallback.
  *
  * SYNC: When modified, update:
- * - /packages/core/src/i18n/InternationalizationContext.ts
+ * - /packages/core/src/i18n/TranslationRuntimeContext.ts
  * - /packages/core/src/i18n/useLocale.ts
  * - /packages/core/src/i18n/useCollator.doc.mjs
  * - /packages/core/src/i18n/index.ts
@@ -23,7 +23,7 @@
  */
 
 import {use, useMemo} from 'react';
-import {InternationalizationContext} from './InternationalizationContext';
+import {TranslationRuntimeContext} from './TranslationRuntimeContext';
 
 /**
  * Returns an `Intl.Collator` for the active provider locale, memoized across
@@ -36,7 +36,7 @@ import {InternationalizationContext} from './InternationalizationContext';
  * ```
  */
 export function useCollator(options?: Intl.CollatorOptions): Intl.Collator {
-  const ctx = use(InternationalizationContext);
+  const ctx = use(TranslationRuntimeContext);
   return useMemo(
     () => new Intl.Collator(ctx.locale, options),
     [ctx.locale, options],

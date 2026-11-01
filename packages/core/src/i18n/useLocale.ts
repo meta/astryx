@@ -4,7 +4,7 @@
 
 /**
  * @file useLocale.ts
- * @input InternationalizationContext (via use())
+ * @input TranslationRuntimeContext (via use())
  * @output The active BCP 47 locale tag
  * @position Public provider-aware locale accessor. Exported from the i18n
  *   barrel for components, sibling packages, and consumers that must thread
@@ -18,17 +18,17 @@
  * provider-backed contract.
  *
  * SYNC: When modified, update:
- * - /packages/core/src/i18n/InternationalizationContext.ts
+ * - /packages/core/src/i18n/TranslationRuntimeContext.ts
  * - /packages/core/src/i18n/useLocale.doc.mjs
  * - /packages/core/src/i18n/index.ts
  * - /packages/core/src/i18n/__tests__/useLocale.test.tsx
  */
 
 import {use} from 'react';
-import {InternationalizationContext} from './InternationalizationContext';
+import {TranslationRuntimeContext} from './TranslationRuntimeContext';
 import type {Locale} from './types';
 
 export function useLocale(): Locale {
-  const ctx = use(InternationalizationContext);
+  const ctx = use(TranslationRuntimeContext);
   return ctx.locale;
 }

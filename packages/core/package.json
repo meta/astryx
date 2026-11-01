@@ -169,6 +169,7 @@
       "types": "./dist/i18n/generated-locales/*.generated.d.ts",
       "default": "./dist/i18n/generated-locales/*.generated.js"
     },
+    "./locales/en/*": null,
     "./AlertDialog": {
       "source": "./src/AlertDialog/index.ts",
       "types": "./dist/AlertDialog/index.d.ts",

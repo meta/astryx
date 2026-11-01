@@ -232,7 +232,12 @@ export function astryxStylex(
         resolve: {
           alias: [
             {
-              find: /^@astryxdesign\/core\/locales\/(.+)\.generated\.js$/,
+              // A whole catalog, `locales/<locale>.generated.js`. The capture
+              // takes one path segment only: the per-namespace English slices
+              // under `locales/en/<namespace>.generated.js` are the package's
+              // own (the exports map gives them a `null` target), and this
+              // alias must not reach them either.
+              find: /^@astryxdesign\/core\/locales\/([^/]+)\.generated\.js$/,
               replacement: path.join(
                 coreSourceDir,
                 'i18n/generated-locales/$1.generated.ts',
