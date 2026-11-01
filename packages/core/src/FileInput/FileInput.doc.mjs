@@ -408,7 +408,7 @@ export const docsDense = {
     placeholder: 'Placeholder when no files selected.',
     mode: "Visual mode: 'input' (compact) or 'dropzone' (drag-and-drop).",
     status: 'Validation status; colored border. Message floats below.',
-    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; use detached or tooltip (detached default from next minor).',
+    statusVariant: 'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon. Dropzone: attached unsupported; defaults to detached and resolves attached to detached.',
     labelTooltip: 'Tooltip in info icon at label end.',
   },
 };
