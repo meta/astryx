@@ -12,10 +12,9 @@
  *   `architecture:public-component-api` INV22); and readInitialResizableState,
  *   the state a region starts in, for the hook's first render
  * @position The Resizable family's factory, internal to the package; its
- *   input is resizeGesture.ts. useResizable(handleRef, options) is its thin
- *   React wrapper, and a ResizeHandle given that ref renders the factory's
- *   handle and forwards its input to it. Importing it does no DOM work, so it
- *   is safe on the server
+ *   input is resizeGesture.ts. Both forms of useResizable are its React
+ *   wrapper, and ResizeHandle drives the same input through it. Importing it
+ *   does no DOM work, so it is safe on the server
  *
  * The factory never sizes the panel: it reports the size, through
  * `onSizeChange` for an interaction and `subscribe` for every change, and the
@@ -294,6 +293,11 @@ interface ResizableInternals {
    * new options, as a React caller's commit may have swapped it.
    */
   syncContainer(): void;
+  /**
+   * The region's side of a gesture the factory does not own: the drag and
+   * keys of a ResizeHandle given the configuration object's props.
+   */
+  model: ResizeGestureModel;
 }
 
 const internals = new WeakMap<ResizableController, ResizableInternals>();
@@ -1016,6 +1020,9 @@ export function createResizable(
       // A drag in flight ends first, as cancelled, so the size it reached is
       // saved and the pointer and the body's cursor are released.
       gesture.interrupt();
+      // A gesture a ResizeHandle drove through the region's model, rather
+      // than the factory's own, ends the same way.
+      endGesture();
       isDestroyed = true;
       unbind?.();
       viewListeners.clear();
@@ -1047,6 +1054,7 @@ export function createResizable(
         snapshotListeners.delete(listener);
       };
     },
+    model,
     setCollapsedText(text) {
       if (isDestroyed || text === collapsedText) {
         return;

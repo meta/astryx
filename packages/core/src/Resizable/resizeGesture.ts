@@ -4,13 +4,13 @@
  * @file resizeGesture.ts
  * @input A handle element, a resize model (its state, and a gesture's start,
  *   move, end and cancel), and the handle's axis, reversal and disabled state
- * @output createResizeGesture: the window splitter's input in one place: a
- *   pointer drag that holds its pointer, the arrow keys, Home, End and Enter,
- *   and a double-click collapse; and the body's drag cursor. And the binding
- *   between a factory and the ResizeHandle that renders its handle
+ * @output createResizeGesture: the window splitter's input in one place, for
+ *   createResizable and ResizeHandle alike: a pointer drag that holds its
+ *   pointer, the arrow keys, Home, End and Enter, and a double-click collapse;
+ *   and the body's drag cursor
  * @position Internal to the Resizable family. createResizable listens with it
- *   on a plain element; a ResizeHandle that renders a factory's handle
- *   forwards its React events to it. No React, and no DOM work on import
+ *   on a plain element; ResizeHandle forwards its React events to it. No React,
+ *   and no DOM work on import
  */
 
 import type {ResizableDirection} from './resizableModel';
