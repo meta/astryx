@@ -282,8 +282,8 @@ component/composition contract; absent or invalid dimensions produce an error.
 - `.github/scripts/rtl-scorecard-summary.mjs` — review-facing scorecard projection;
   report completeness and exclusion visibility remain requirements, not authority
   to suppress findings.
-- `.github/workflows/ci.yml` release-check — the full-roster audit on every push
-  to main.
+- `.github/workflows/ci.yml` release-check — the full-roster audit on main's tip
+  about hourly and before a release cut (`spec:AST-030` DEC-11).
 - `internal/eslint-plugin-astryx/no-physical-properties.js` — source-provable
   physical/logical declaration constraints.
 - `design:bidirectionality` — human product intent, owned separately.

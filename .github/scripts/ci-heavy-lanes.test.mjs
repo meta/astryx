@@ -10,9 +10,15 @@
  */
 
 import fs from 'node:fs';
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
 import {ungated} from './ci-pr-gate.mjs';
+
+// The raw file host is offline here, so the dispatcher reads its rate-limit
+// helper through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
 
 const read = name =>
   yaml.parse(
@@ -137,26 +143,33 @@ describe('visual, accessibility and RTL owners', () => {
   });
 });
 
-describe('the release-check on every push to main', () => {
+describe("main's release-check, about once an hour (DEC-11)", () => {
   const job = heavy.jobs.dispatch;
   const script = job.steps[0].with.script;
 
-  it('runs on a push to main and may dispatch workflows', () => {
-    expect(heavy.on).toEqual({push: {branches: ['main']}});
+  it('runs on a push to main and on a quarter-hourly schedule, and may dispatch workflows', () => {
+    expect(heavy.on).toEqual({
+      push: {branches: ['main']},
+      schedule: [{cron: '7,22,37,52 * * * *'}],
+    });
     expect(job.permissions).toEqual({actions: 'write', contents: 'read'});
     expect(job.steps[0].env.SHA).toBe('${{ github.sha }}');
   });
 
-  it('throttles in ci.yml: the dispatched checks share one group that never cancels a running check', () => {
+  it('decides one push or tick at a time, and ci.yml never cancels a running check', () => {
+    // Two pushes deciding at once could both see no recent check.
+    expect(heavy.concurrency).toEqual({
+      group: 'main-heavy-lanes-dispatch',
+      'cancel-in-progress': false,
+    });
     // GitHub keeps one running and one pending run per group, and a newer
-    // dispatch replaces the pending one, so a burst of merges is checked once.
+    // dispatch replaces the pending one.
     expect(ci.concurrency.group).toContain(
       "(github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes')",
     );
     expect(ci.concurrency['cancel-in-progress']).toBe(
       "${{ github.event_name != 'workflow_dispatch' }}",
     );
-    expect(heavy.concurrency).toBeUndefined();
   });
 
   it("leaves Main's fast checks running for every push", () => {
@@ -164,13 +177,44 @@ describe('the release-check on every push to main', () => {
     expect(JSON.stringify(main)).not.toContain('createWorkflowDispatch');
   });
 
-  /** Runs the step's script against a fake GitHub API with main at `tip`. */
-  async function run(tip) {
-    const calls = {dispatch: [], notices: []};
+  const sha = 'a'.repeat(40);
+  const NOW = Date.parse('2026-10-31T12:00:00Z');
+  const minutesAgo = minutes => new Date(NOW - minutes * 60000).toISOString();
+  const check = (minutes, overrides = {}) => ({
+    head_sha: 'c'.repeat(40),
+    created_at: minutesAgo(minutes),
+    conclusion: 'success',
+    actor: {login: 'github-actions[bot]'},
+    status: 'completed',
+    ...overrides,
+  });
+
+  /**
+   * Runs the step's script against a fake GitHub API with main at `tip` and
+   * `runs` as ci.yml's dispatched runs on main, newest first.
+   */
+  async function run({tip = sha, runs = [], eventName = 'push'} = {}) {
+    const calls = {dispatch: [], notices: [], listed: []};
     const github = {
       rest: {
-        repos: {getBranch: async () => ({data: {commit: {sha: tip}}})},
+        repos: {
+          getBranch: async () => ({data: {commit: {sha: tip}}}),
+          getContent: async ({path}) => ({
+            data: {
+              content: fs
+                .readFileSync(new URL(`../../${path}`, import.meta.url))
+                .toString('base64'),
+            },
+          }),
+        },
         actions: {
+          listJobsForWorkflowRun: async ({run_id}) => ({
+            data: {jobs: runs.find(item => item.id === run_id)?.jobs ?? []},
+          }),
+          listWorkflowRuns: async args => {
+            calls.listed.push(args);
+            return {data: {workflow_runs: runs}};
+          },
           createWorkflowDispatch: async args => calls.dispatch.push(args),
         },
       },
@@ -180,37 +224,140 @@ describe('the release-check on every push to main', () => {
       'context',
       'core',
       'process',
+      'Date',
       `return (async () => {${script}})();`,
     );
+    const FakeDate = {now: () => NOW, parse: Date.parse};
     await body(
       github,
-      {repo: {owner: 'meta', repo: 'astryx'}},
+      {repo: {owner: 'meta', repo: 'astryx'}, eventName},
       {notice: m => calls.notices.push(m)},
       {env: {SHA: sha}},
+      FakeDate,
     );
     return calls;
   }
 
-  const sha = 'a'.repeat(40);
+  const dispatched = tip => [
+    {
+      owner: 'meta',
+      repo: 'astryx',
+      workflow_id: 'ci.yml',
+      ref: 'main',
+      inputs: {
+        operation: 'release-check',
+        'release-branch': 'main',
+        'expected-head': tip,
+      },
+    },
+  ];
 
-  it('dispatches release-check on main for the exact pushed commit', async () => {
-    expect((await run(sha)).dispatch).toEqual([
+  it("dispatches release-check for main's tip when no check started in the last 55 minutes", async () => {
+    const calls = await run({runs: [check(56), check(200)]});
+    expect(calls.dispatch).toEqual(dispatched(sha));
+    expect(calls.listed).toEqual([
       {
         owner: 'meta',
         repo: 'astryx',
         workflow_id: 'ci.yml',
-        ref: 'main',
-        inputs: {
-          operation: 'release-check',
-          'release-branch': 'main',
-          'expected-head': sha,
-        },
+        event: 'workflow_dispatch',
+        branch: 'main',
+        per_page: 30,
       },
     ]);
   });
 
+  it('dispatches for the first check there is', async () => {
+    expect((await run()).dispatch).toEqual(dispatched(sha));
+  });
+
+  it('leaves a push within 55 minutes of the last check to the next one', async () => {
+    const calls = await run({runs: [check(20)]});
+    expect(calls.dispatch).toEqual([]);
+    expect(calls.notices).toEqual([
+      'A release-check started 20 minutes ago; the next one, at most 50 minutes from now, covers aaaaaaa.',
+    ]);
+  });
+
+  it('counts a waiting or running check, but not one replaced while waiting or started by a person', async () => {
+    expect(
+      (
+        await run({
+          runs: [check(10, {status: 'in_progress', conclusion: null})],
+        })
+      ).dispatch,
+    ).toEqual([]);
+    expect(
+      (
+        await run({
+          runs: [
+            check(5, {conclusion: 'cancelled'}),
+            check(10, {actor: {login: 'someone'}}),
+          ],
+        })
+      ).dispatch,
+    ).toEqual(dispatched(sha));
+  });
+
+  it('keeps counting a check a person re-runs', async () => {
+    const calls = await run({
+      runs: [check(90, {head_sha: sha, triggering_actor: {login: 'someone'}})],
+    });
+    expect(calls.dispatch).toEqual([]);
+  });
+
+  it('counts a failed check of the tip, so a red quiet main is not checked again', async () => {
+    const calls = await run({
+      runs: [
+        check(70, {
+          id: 3,
+          head_sha: sha,
+          conclusion: 'failure',
+          jobs: [
+            {name: 'release-authority', conclusion: 'success'},
+            {name: 'pr-rtl', conclusion: 'failure'},
+          ],
+        }),
+      ],
+    });
+    expect(calls.dispatch).toEqual([]);
+  });
+
+  it('checks a tip again when its run was asked to check an older commit', async () => {
+    // A merge landed between the tip read and the dispatch: the run checked
+    // out the tip, and its release-authority job refused the older commit.
+    const mismatched = minutes =>
+      check(minutes, {
+        id: 4,
+        head_sha: sha,
+        conclusion: 'failure',
+        jobs: [{name: 'release-authority', conclusion: 'failure'}],
+      });
+    expect((await run({runs: [mismatched(70)]})).dispatch).toEqual(
+      dispatched(sha),
+    );
+    // ...but it still holds the window.
+    expect((await run({runs: [mismatched(20)]})).dispatch).toEqual([]);
+  });
+
+  it('leaves every run name as it was', () => {
+    expect(ci['run-name']).toBeUndefined();
+  });
+
+  it('does not check a tip twice', async () => {
+    const calls = await run({runs: [check(90, {head_sha: sha})]});
+    expect(calls.dispatch).toEqual([]);
+    expect(calls.notices[0]).toMatch(/already has a release-check/);
+  });
+
+  it("picks up the tip a burst left unchecked on the schedule's tick", async () => {
+    const tip = 'b'.repeat(40);
+    const calls = await run({tip, eventName: 'schedule', runs: [check(60)]});
+    expect(calls.dispatch).toEqual(dispatched(tip));
+  });
+
   it('leaves a commit main has moved past to the newer push', async () => {
-    const calls = await run('b'.repeat(40));
+    const calls = await run({tip: 'b'.repeat(40)});
     expect(calls.dispatch).toEqual([]);
     expect(calls.notices[0]).toMatch(/newer push/);
   });

@@ -16,6 +16,8 @@
  */
 
 import React, {type ReactNode} from 'react';
+import {joinAriaIDs} from '../utils/inputAria';
+import {segmentDisabledProps} from '../privateAttributes/segmentDisabled.stylex';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -192,6 +194,7 @@ export function SegmentedControlItem({
   isDisabled = false,
   onClick: onClickProp,
   xstyle,
+  'aria-describedby': ariaDescribedByProp,
   ...rest
 }: SegmentedControlItemProps) {
   const pressable = usePressFeedback();
@@ -203,8 +206,11 @@ export function SegmentedControlItem({
   // segment focusable so the group's reason tooltip is keyboard-discoverable.
   // Per-item disabling (`isDisabled` on the item) always drops out of the tab
   // order. Activation stays blocked by the isItemDisabled guard in handleClick.
+  // Disabled with a reason, the selected segment keeps the Tab stop even when
+  // it is itself disabled (FR4); with no selected segment, the group places
+  // the stop (SegmentedControl FR2).
   const keepsSelectedFocusable =
-    isSelected && (ctx.hasDisabledMessage ?? false) && !isDisabled;
+    isSelected && (ctx.hasDisabledMessage ?? false);
   const size: SegmentedControlSize = ctx.size;
   const isFill = ctx.layout === 'fill';
 
@@ -235,7 +241,12 @@ export function SegmentedControlItem({
       aria-checked={isSelected}
       aria-disabled={isItemDisabled || undefined}
       aria-label={isLabelHidden ? label : undefined}
+      // A caller description, then the group's disabled reason, which
+      // describes each segment (FR7).
+      aria-describedby={joinAriaIDs(ariaDescribedByProp, ctx.disabledReasonID)}
       data-value={value}
+      // The group's fallback Tab stop skips segments disabled on their own.
+      {...segmentDisabledProps(isDisabled)}
       {...(!isSelected && !isItemDisabled ? pressable : undefined)}
       // Disabled items (including when the whole group is disabled) are not tab
       // stops — otherwise the selected segment stays keyboard-focusable but is
