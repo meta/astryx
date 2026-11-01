@@ -28,6 +28,14 @@ describe('internal/touch', () => {
     for (const name of ['TapGestureRecognizer', 'LongPressGestureRecognizer']) {
       expect(typeof entry[name], name).toBe('function');
     }
+    const hook = await import('../gestures/useGestureRecognizer');
+    const presentation = await import('../utils/touchPresentation');
+    const direction = await import('../hooks/isRtlElement');
+    const guard = await import('../utils/clickGuard');
+    expect(entry.useGestureRecognizer).toBe(hook.useGestureRecognizer);
+    expect(entry.useTouchPresentation).toBe(presentation.useTouchPresentation);
+    expect(entry.isRtlElement).toBe(direction.isRtlElement);
+    expect(entry.isClickGuardArmed).toBe(guard.isClickGuardArmed);
     // Named re-exports only: no gathering object a component would carry
     // whole (architecture:component-style-authoring INV6).
     expect(entry).not.toHaveProperty('touchModule');

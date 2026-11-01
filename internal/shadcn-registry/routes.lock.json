@@ -641,6 +641,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-search-field",
+      "path": "components/lab/search-field",
+      "aliases": []
+    },
+    {
       "name": "component-lab-stat",
       "path": "components/lab/stat",
       "aliases": []
