@@ -3,7 +3,7 @@
 
 /**
  * @description Generates the PR comment from the run's analysis results
- * @input --analysis <file> --base-stats <file> --package-size <file> --api-changes <file> --a11y <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --touched <file> --source-conclusion <conclusion> --run-url <url>
+ * @input --analysis <file> --base-stats <file> --package-size <file> --api-changes <file> --a11y <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --touched <file> --ci-impact <file> --source-conclusion <conclusion> --run-url <url>
  * @output Formatted markdown comment body to stdout, compact by design: this
  *   head's preview first, the modified components (preview links, size, lines
  *   of code, a mark per browser suite that ran; three rows visible, the rest
@@ -16,6 +16,7 @@
 const fs = require('node:fs');
 const {buildA11ySection} = require('./lib/a11y-format');
 const {buildCompactReport, notRunLine} = require('./lib/pr-status');
+const {renderCiImpact} = require('./lib/ci-impact');
 // Report-file strings render as literal inline text, report numbers as
 // numbers — the comment's structure comes only from this file's literals.
 const {COMMENT_BUDGET, fitToBudget, inline, num} = require('./lib/report-text');
@@ -71,6 +72,8 @@ const packageSize = readOptionalJson('package-size');
 const visualFrames = readOptionalJson('visual-frames');
 // The API report step's changes for this head, when it ran.
 const apiChanges = readOptionalJson('api-changes');
+// A CI change's impact on runner usage and time to green (ci-impact.js).
+const ciImpact = readOptionalJson('ci-impact');
 const visualVerdict = readOptionalJson('visual');
 let a11yReport = null;
 try {
@@ -151,16 +154,19 @@ const footer = `---
 // The whole comment stays under GitHub's limit (report-text.js). The header,
 // the footer and the short status lines are never cut; the long sections
 // are, from their end, so the API rows (last in the report) go first.
-const status = `${notRun}${conclusionNote}${diffModeCaveat}${visualFailed}`;
+const status = `${notRun}${renderCiImpact(ciImpact)}${conclusionNote}${diffModeCaveat}${visualFailed}`;
 const room = COMMENT_BUDGET - header.length - footer.length - status.length;
-const a11yFitted =
-  a11yDetails.length > room / 2
-    ? fitToBudget(a11yDetails, Math.floor(room / 2))
-    : a11yDetails;
-const main = fitToBudget(
-  report || '_No component or package changed._\n\n',
-  room - a11yFitted.length,
+// The report used to end with the not-run line; the placeholder stands in
+// only when neither shows, as before.
+const mainText =
+  report || (notRun ? '' : '_No component or package changed._\n\n');
+// The accessibility details keep everything the report leaves room for, and
+// at least half of the room when the report is long.
+const a11yFitted = fitToBudget(
+  a11yDetails,
+  Math.max(Math.floor(room / 2), room - mainText.length),
 );
+const main = fitToBudget(mainText, room - a11yFitted.length);
 const body = `${header}${main}${status}${a11yFitted}${footer}`;
 
 console.log(body);

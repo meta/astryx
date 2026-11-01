@@ -196,6 +196,33 @@ describe('generate-pr-comment compact report', () => {
 });
 
 describe('comment length budget', () => {
+  it('leaves a report that already fits byte-identical, accessibility details included', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-budget-a11y-'));
+    try {
+      const file = path.join(dir, 'a11y.json');
+      const components = Object.fromEntries(
+        Array.from({length: 100}, (_, i) => [
+          `Part${i}`,
+          {
+            violations: [
+              {
+                id: `rule-${i}`,
+                impact: 'serious',
+                description: 'x'.repeat(320),
+              },
+            ],
+          },
+        ]),
+      );
+      fs.writeFileSync(file, JSON.stringify({components}));
+      const out = runComment(baseAnalysis, ['--a11y', file]);
+      expect(out).toContain('rule-99');
+      expect(out).not.toMatch(/did not fit/);
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
   it("keeps a report with 150 long API rows under GitHub's comment limit", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-budget-'));
     try {
