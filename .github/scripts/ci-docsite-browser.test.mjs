@@ -30,8 +30,9 @@ describe('docsite-test', () => {
     expect(jobs['docsite-data']).toBeUndefined();
     expect(jobs['docsite-browser']).toBeUndefined();
     // Only CI's run admission, which never skips (ci-admission.test.mjs).
-    // room tells it when CI is full (ci-admission.test.mjs).
-    expect(owner.needs).toEqual(['room', 'admission']);
+    // room tells it when CI is full (ci-admission.test.mjs); heavy-ci whether
+    // an agent push deferred it (spec:AST-030 FR20).
+    expect(owner.needs).toEqual(['room', 'admission', 'heavy-ci']);
     expect(owner['continue-on-error']).toBeUndefined();
     // A required context keeps only the draft skip in its condition; an
     // outside contributor's run stops at the first step with the reason.
@@ -46,7 +47,9 @@ describe('docsite-test', () => {
     );
     // After the FR17 gate and the CI-is-full stop (ci-admission.test.mjs).
     expect(owner.steps[1].name).toBe('Stop when CI is full');
-    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(3);
+    // Then an agent push's deferral (spec:AST-030 FR20), then the scope.
+    expect(owner.steps[2].name).toBe('Heavy CI deferred');
+    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(4);
 
     const builds = owner.steps.filter(s =>
       /pnpm -F @astryxdesign\/docsite build/.test(s.run ?? ''),

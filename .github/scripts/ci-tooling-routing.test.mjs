@@ -193,6 +193,7 @@ describe('Node-tooling CI routing', () => {
     // room only tells test when CI is full (ci-admission.test.mjs).
     expect(ci.jobs.test.needs).toEqual([
       'room',
+      'heavy-ci',
       'release-bump',
       'test-ui',
       'test-node',
@@ -203,6 +204,7 @@ describe('Node-tooling CI routing', () => {
     ]);
     expect(ci.jobs.build.needs).toEqual([
       'room',
+      'heavy-ci',
       'build-storybook',
       'typecheck',
     ]);

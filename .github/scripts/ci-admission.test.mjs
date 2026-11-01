@@ -67,14 +67,20 @@ describe('where runs wait', () => {
       expect(room.outputs[key]).toBe(`\${{ steps.room.outputs.${key} }}`);
     // Every job but the Storybook build reaches admission, directly or through
     // the jobs it needs, never only through the build.
+    // heavy-ci, the agent-push deferral decision (spec:AST-030 FR20), is one
+    // slim job beside admission that the build needs.
     const BESIDE = 'build-storybook';
-    expect(needsOf(ci.jobs[BESIDE])).toEqual(['room']);
+    const DEFERRAL = 'heavy-ci';
+    expect(needsOf(ci.jobs[BESIDE])).toEqual(['room', DEFERRAL]);
+    expect(needsOf(ci.jobs[DEFERRAL])).toEqual(['room']);
     const reaches = id =>
       needsOf(ci.jobs[id]).some(
-        need => need === 'admission' || (need !== BESIDE && reaches(need)),
+        need =>
+          need === 'admission' ||
+          (need !== BESIDE && need !== DEFERRAL && reaches(need)),
       );
     for (const id of Object.keys(ci.jobs)) {
-      if (!['room', 'admission', 'ci-full', BESIDE].includes(id))
+      if (!['room', 'admission', 'ci-full', BESIDE, DEFERRAL].includes(id))
         expect(reaches(id), id).toBe(true);
     }
   });
@@ -237,8 +243,12 @@ describe('peaks', () => {
     const closure = new Set();
     const visit = name => {
       for (const need of needsOf(ci.jobs[name])) {
+        // heavy-ci decides an agent push's deferral and skips for a
+        // release-check (spec:AST-030 FR20).
         if (
-          ['maintenance-request', 'room', 'admission'].includes(need) ||
+          ['maintenance-request', 'room', 'admission', 'heavy-ci'].includes(
+            need,
+          ) ||
           closure.has(need)
         )
           continue;
@@ -299,9 +309,10 @@ describe('peaks', () => {
   });
 
   it('gives a pull request a peak that covers every job it starts at once', () => {
-    // The jobs that need only the waits start together the moment admission
-    // ends; the Storybook build may still be running then.
-    const waits = ['room', 'admission'];
+    // The jobs that need only the waits (and heavy-ci, the deferral decision
+    // that runs only for an agent push; spec:AST-030 FR20) start together the
+    // moment admission ends; the Storybook build may still be running then.
+    const waits = ['room', 'admission', 'heavy-ci'];
     const first = Object.keys(ci.jobs).filter(
       name =>
         !waits.includes(name) &&
