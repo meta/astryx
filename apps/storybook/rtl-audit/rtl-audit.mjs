@@ -66,6 +66,7 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  finishFiniteAnimations,
   ignoredStoryIdentities,
   orderD1StoryCandidates,
   resolveD1Applicability,
@@ -235,6 +236,12 @@ async function settle(page) {
       content:
         '*,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important;animation-delay:0s!important;caret-color:transparent!important}',
     })
+    .catch(() => {});
+  // Transitions a story started before the style above (an entrance on mount)
+  // keep their own duration: finish them so both directions measure the
+  // resting layout.
+  await page
+    .evaluate(`(${finishFiniteAnimations.toString()})(document)`)
     .catch(() => {});
   await page.waitForTimeout(200);
 }

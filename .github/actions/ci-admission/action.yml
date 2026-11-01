@@ -23,9 +23,10 @@
 # - Each CI or Main run counts its live jobs, read once per look. A
 #   pull-request run still waiting here counts only that waiting job, so
 #   waiting runs never hold each other back by more than they use; a waiting
-#   `main` run counts its whole peak. A run admitted in the last three minutes
-#   counts at least its planned most until its jobs appear. Every other
-#   workflow's run counts an estimate.
+#   `main` run counts its whole peak. A run admitted in the last 45 seconds,
+#   before its jobs appear, counts at least its planned most. Every other
+#   workflow's run counts an estimate. A run not updated in two hours is a
+#   stale record GitHub still lists as active, and counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
 #   after its longest wait), every two minutes for the rare `main` run. When the
@@ -84,7 +85,7 @@ runs:
           // (ci-admission.test.mjs), a pull-request ci.yml run from its
           // measured most, every other workflow's run one or two slim jobs.
           const ESTIMATE = {
-            '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 36 : 16),
+            '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 37 : 16),
             '.github/workflows/deploy.yml': () => 14,
             '.github/workflows/review-signal.yml': () => 2,
           };
@@ -95,7 +96,13 @@ runs:
           const ADMITTED = ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'];
           const admitted = run => ADMITTED.includes(run.path);
           const LIVE = ['in_progress', 'queued', 'waiting', 'pending'];
-          const JUST_ADMITTED_MS = 3 * 60_000;
+          // A run's jobs appear within seconds of its admission; until then it
+          // counts at its planned most.
+          const JUST_ADMITTED_MS = 45_000;
+          // GitHub keeps listing some long-finished runs as queued; a run not
+          // updated in this long holds no runner.
+          const STALE_MS = 2 * 60 * 60_000;
+          const short = run => (run.path ?? '').replace(/^.*\//, '').replace(/\.ya?ml$/, '');
           const isMain = run =>
             ['push', 'schedule', 'workflow_dispatch'].includes(run.event) &&
             ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'].includes(run.path);
@@ -125,6 +132,10 @@ runs:
               let large = 0;
               let small = 0;
               let mainWaiting = false;
+              // What each run counted, logged on every look.
+              const counted = [];
+              const smallBy = {};
+              let stale = 0;
               for (const status of ['in_progress', 'queued']) {
                 calls += 1;
                 const {data, headers} = await github.rest.actions.listWorkflowRunsForRepo({
@@ -138,8 +149,13 @@ runs:
                 for (const run of data.workflow_runs) {
                   if (seen.has(run.id) || run.id === context.runId) continue;
                   seen.add(run.id);
+                  if (Date.now() - Date.parse(run.updated_at ?? '') > STALE_MS) {
+                    stale += 1;
+                    continue;
+                  }
                   if (!admitted(run)) {
                     small += estimate(run);
+                    smallBy[short(run)] = (smallBy[short(run)] ?? 0) + estimate(run);
                     continue;
                   }
                   calls += 1;
@@ -153,20 +169,23 @@ runs:
                     // Still waiting for room. A pull-request run holds only
                     // the job that waits; a `main` run holds its whole peak,
                     // ahead of this one.
-                    if (isMain(run)) {
-                      large += estimate(run);
-                      if (!main) mainWaiting = true;
-                    } else {
-                      large += 1;
-                    }
+                    const holds = isMain(run) ? estimate(run) : 1;
+                    if (isMain(run) && !main) mainWaiting = true;
+                    large += holds;
+                    counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);
                     continue;
                   }
                   const live = jobs.filter(job => LIVE.includes(job.status)).length;
                   const admittedAt = Date.parse(wait?.completed_at ?? '');
-                  large += Date.now() - admittedAt < JUST_ADMITTED_MS ? Math.max(live, estimate(run)) : live;
+                  const fresh = Date.now() - admittedAt < JUST_ADMITTED_MS;
+                  const holds = fresh ? Math.max(live, estimate(run)) : live;
+                  large += holds;
+                  counted.push(`${short(run)} ${run.id} ${run.event}: ${holds}${fresh && holds > live ? ` (admitted just now, ${live} live)` : ' live'}`);
                 }
               }
               const others = large + Math.max(small, SMALL_MOST);
+              const smallList = Object.entries(smallBy).map(([name, count]) => `${name} ${count}`).join(', ');
+              core.info(`Look ${look}: ${counted.join('; ') || 'no CI or Main runs'}. Small workflows ${small}${smallList ? ` (${smallList})` : ''}, counted as ${Math.max(small, SMALL_MOST)}.${stale ? ` Ignored ${stale} stale run${stale === 1 ? '' : 's'}.` : ''}`);
               if (others + peak <= CI_CEILING && !mainWaiting) {
                 core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.`);
                 return;

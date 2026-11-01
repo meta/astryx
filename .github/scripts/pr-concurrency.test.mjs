@@ -59,6 +59,8 @@ describe('pull-request workflow concurrency', () => {
           true,
           "${{ github.event_name == 'pull_request' }}",
           "${{ github.event_name != 'workflow_dispatch' }}",
+          // ci.yml: a release re-check also takes main's lane (spec:AST-030 FR23).
+          "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
         ],
         `${name} does not cancel superseded pull-request runs`,
       ).toContain(concurrency['cancel-in-progress']);

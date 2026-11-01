@@ -500,6 +500,32 @@ function isMirrorOf(rtl, ltr) {
   return expected.every((value, index) => Math.abs(value - rtl[index]) < 0.01);
 }
 
+/**
+ * Jump every finite animation in `doc` to its end state and return how many
+ * were finished. The audit's zero-duration style only reaches transitions and
+ * animations that start after it is injected; one a story started on mount (a
+ * drawer sliding in) keeps running, so LTR and RTL would otherwise be sampled
+ * at different points of it. Infinite animations (spinners) are left alone.
+ * Runs in the page: keep it self-contained.
+ */
+export function finishFiniteAnimations(doc) {
+  let finished = 0;
+  for (const animation of doc.getAnimations?.() ?? []) {
+    const endTime = animation.effect?.getComputedTiming?.().endTime;
+    if (!Number.isFinite(endTime)) {
+      continue;
+    }
+    try {
+      animation.finish();
+      finished++;
+    } catch {
+      // A zero-playback-rate or infinite-effect animation cannot finish;
+      // leave it.
+    }
+  }
+  return finished;
+}
+
 /** Classify one stable LTR/RTL contextual-decoration pair. */
 export function classifyDirectionalDecorationPair(ltr, rtl) {
   if (!ltr || !rtl) {

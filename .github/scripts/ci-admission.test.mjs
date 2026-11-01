@@ -16,6 +16,7 @@ import path from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import yaml from 'yaml';
+import {matrixFor} from './ci-matrix.mjs';
 import {PR_CI_GATE} from './ci-pr-gate.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -37,16 +38,7 @@ function legs(job, event = 'workflow_dispatch') {
   const matrix = job.strategy?.matrix;
   if (matrix == null) return 1;
   return Object.values(matrix)
-    .map(value => {
-      if (Array.isArray(value)) return value;
-      // A release-check's wider legs (spec:AST-030): one branch per event.
-      const split =
-        /fromJSON\(github\.event_name == 'workflow_dispatch' && '([^']*)' \|\| '([^']*)'\)/.exec(
-          String(value),
-        );
-      if (!split) return [value];
-      return JSON.parse(event === 'workflow_dispatch' ? split[1] : split[2]);
-    })
+    .map(value => matrixFor(value, event))
     .reduce((product, list) => product * list.length, 1);
 }
 
@@ -404,16 +396,100 @@ describe('ci admission', () => {
     expect(result.calls).toBe(2 + 3 + 1 + 12);
   });
 
-  it('counts live jobs, and a run admitted in the last three minutes at least at its most', async () => {
+  it("starts a main release-check at tonight's load on its second look, which the three-minute floor still held", async () => {
+    // 2026-11-01 10:12Z: a release-check on main waited 579 s, its looks
+    // reading 85, 83, 64, 60 and 50 other jobs + 36. Tonight's load: CI 38 and
+    // Main 6 live, small workflows 5, nine stale runs. 44 + 18 + 36 = 98 is
+    // over ninety, so it waits while pull-request runs yield to it; once one
+    // pull-request run's 12 jobs end, 32 + 18 + 36 = 86 fits. The runs were
+    // admitted under a minute ago, so their jobs have all appeared; the old
+    // three-minute window still counted them at their most on the second
+    // look, two minutes later, and kept the check waiting.
+    const stale = Array.from({length: 9}, (_, i) => ({
+      ...slim(720 + i),
+      status: 'queued',
+      updated_at: ago(3 * 24 * 60),
+    }));
+    const rest = [
+      admittedRun(92, 2, {admittedMinutesAgo: 0.9}),
+      admittedRun(93, 7, {admittedMinutesAgo: 0.85}),
+      admittedRun(94, 9, {admittedMinutesAgo: 6.6}),
+      admittedRun(95, 8, {admittedMinutesAgo: 0.8}),
+      admittedRun(96, 6, {
+        event: 'push',
+        path: '.github/workflows/deploy.yml',
+        admittedMinutesAgo: 0.9,
+      }),
+      ...slims(5),
+      ...stale,
+    ];
+    const tonight = [admittedRun(91, 12, {admittedMinutesAgo: 0.9}), ...rest];
+    const result = await admit({
+      active: look => (look < 2 ? tonight : rest),
+      isMain: true,
+      peak: 36,
+    });
+    expect(result.looks).toBe(2);
+    expect(result.warning).toEqual([]);
+    expect(result.info).toContain(
+      'Waiting for room: about 62 other jobs + 36.',
+    );
+    expect(result.info.at(-2)).toContain('about 50 other jobs + 36 <= 90');
+    // The second look comes about two minutes in.
+    expect(result.lookTimes[1]).toBeLessThanOrEqual(2 * 60_000 + 20_000);
+  });
+
+  it('counts live jobs, and a run admitted in the last 45 seconds at least at its most', async () => {
     // 4 x 12 live + 18 small + 13 = 79: room.
     expect((await admit({active: prs(4), peak: 13})).looks).toBe(1);
-    // A just-admitted run with 2 jobs so far counts its planned 16 (95); a long-running one, 2 (81).
-    const fresh = admittedRun(60, 2, {admittedMinutesAgo: 1});
-    const old = admittedRun(60, 2, {admittedMinutesAgo: 9});
+    // A run admitted 30 s ago with 2 jobs so far counts its planned 16 (95);
+    // one admitted a minute ago has all its jobs, and counts its 2 (81).
+    const fresh = admittedRun(60, 2, {admittedMinutesAgo: 0.5});
+    const settled = admittedRun(60, 2, {admittedMinutesAgo: 1});
     expect(
       (await admit({active: [...prs(4), fresh], peak: 13})).looks,
     ).toBeGreaterThan(1);
-    expect((await admit({active: [...prs(4), old], peak: 13})).looks).toBe(1);
+    expect((await admit({active: [...prs(4), settled], peak: 13})).looks).toBe(
+      1,
+    );
+  });
+
+  it("admits at once at tonight's load, which the three-minute floor and stale runs counted far over ninety", async () => {
+    // 2026-11-01 ~10:00Z: 49 jobs ran (CI 38, Main 6, small workflows 5)
+    // while pull-request runs waited twelve minutes, "about 81 other jobs".
+    // Runs admitted one to three minutes ago were counted at 16 or 14 though
+    // their jobs had all appeared, and GitHub still listed nine long-finished
+    // runs as queued.
+    const stale = Array.from({length: 9}, (_, i) => ({
+      ...slim(700 + i),
+      status: 'queued',
+      updated_at: ago(3 * 24 * 60),
+    }));
+    const active = [
+      admittedRun(81, 12, {admittedMinutesAgo: 2.2}),
+      admittedRun(82, 2, {admittedMinutesAgo: 2}),
+      admittedRun(83, 7, {admittedMinutesAgo: 1.5}),
+      admittedRun(84, 9, {admittedMinutesAgo: 6.6}),
+      admittedRun(85, 8, {admittedMinutesAgo: 1}),
+      admittedRun(86, 6, {
+        event: 'push',
+        path: '.github/workflows/deploy.yml',
+        admittedMinutesAgo: 2,
+      }),
+      ...slims(5),
+      ...stale,
+    ];
+    // 38 + 6 live + 18 kept for small workflows + this run's 16 = 78.
+    const result = await admit({active, peak: 16, maxWait: 12, maxLooks: 2});
+    expect(result.looks).toBe(1);
+    expect(result.warning).toEqual([]);
+    // Every look logs what each run counted, and the stale runs it ignored.
+    const look = result.info.find(line => line.startsWith('Look 1:'));
+    expect(look).toContain('ci 81 pull_request: 12 live');
+    expect(look).toContain('deploy 86 push: 6 live');
+    expect(look).toContain('Small workflows 5 (pr-comment 5), counted as 18.');
+    expect(look).toContain('Ignored 9 stale runs.');
+    expect(result.info.at(-2)).toContain('about 62 other jobs + 16 <= 90');
   });
 
   it("keeps room for small workflows' measured most", async () => {
