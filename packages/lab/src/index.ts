@@ -81,6 +81,9 @@ export {
   type TransferListSelectorProps,
 } from './TransferList';
 
+// LineClamp — clamp arbitrary content to N lines (facebook/astryx#4180)
+export {LineClamp, type LineClampProps} from './LineClamp';
+
 // Chat — experimental reasoning display
 export {
   ChatReasoning,

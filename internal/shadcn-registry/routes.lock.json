@@ -606,6 +606,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-line-clamp",
+      "path": "components/lab/line-clamp",
+      "aliases": []
+    },
+    {
       "name": "component-lab-list-input",
       "path": "components/lab/list-input",
       "aliases": []
