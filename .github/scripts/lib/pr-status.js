@@ -541,6 +541,8 @@ function buildCompactReport({
   packageSize = null,
   apiChanges = null,
   visualFrames = null,
+  // The generator places the not-run line itself, outside the length budget.
+  withNotRun = true,
 }) {
   const origin =
     preview?.state === 'ready' ? preview.url : preview?.aliasOrigin || '';
@@ -550,7 +552,7 @@ function buildCompactReport({
     touched,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict, frames: visualFrames})}${packagesLine(packageSize)}${apiChangesLine(apiChanges)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict, frames: visualFrames})}${packagesLine(packageSize)}${apiChangesLine(apiChanges)}${withNotRun ? notRunLine({jobs, a11yReport, visualVerdict, touched}) : ''}`;
 }
 
 module.exports = {
