@@ -77,10 +77,7 @@ public struct Avatar<Status: View>: View {
   /// the build with its value, and an unnamed link or button is flagged.
   private func checkInDevelopment() {
     #if DEBUG
-    if Avatar.isUnusableHref(props.href) {
-      assertionFailure(
-        "Avatar href \"\(props.href ?? "")\" is not an absolute URL an app can open; it draws without a link.")
-    }
+    astryxCheckHref(props.href, in: "Avatar")
     // The avatar's own name: a status label alone does not name a person.
     let ownName = Avatar.meaningful(props.alt) ?? Avatar.meaningful(props.name)
     if Avatar.needsNameWarning(tap: tap, isNamed: ownName != nil) {
@@ -108,11 +105,7 @@ public struct Avatar<Status: View>: View {
   }
 
   /// A non-empty `href` that is not an absolute URL, such as a web path.
-  nonisolated static func isUnusableHref(_ href: String?) -> Bool {
-    guard let href, !href.isEmpty else { return false }
-    guard let url = URL(string: href) else { return true }
-    return url.scheme == nil
-  }
+  nonisolated static func isUnusableHref(_ href: String?) -> Bool { astryxIsUnusableHref(href) }
 
   /// The picture as a link with `href`, a button with only `onClick`, or a
   /// static image (Swift component API, A4). All three draw the same.

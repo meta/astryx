@@ -1153,19 +1153,26 @@ needs its own spec location.
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                               | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
 | INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                      | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
-| INV27, DEC-13        | `scripts/check-knowledge.test.mjs` and `pnpm check:knowledge`                                                                                                                          | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
+| INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
 | DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge` | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
 `docs/pr-assets/` ignore prevents accidental staging; it is not a blocking CI
 check and does not prevent force-added evidence elsewhere.
 
-Current enforcement gap: discovery does not yet read record candidates outside
-`docs/` and themes; component records have no `platform_of` field until the
-next schema version; and the component id pattern does not yet accept a
-language-qualified id such as `component:swift/Button`. Until all three land,
-package records under `packages/native/specs/` are checked only by review.
-`pnpm check:knowledge` checks a platform record
+Discovery reads each package's architecture records
+(`packages/<package>/specs/…/<slug>.spec.md`): `pnpm check:knowledge` checks
+them as it checks any architecture record, plus their kind and the id their
+path gives, and the spec-owner gate treats them like records in
+`docs/architecture/`.
+
+Current enforcement gap: discovery does not yet read other record candidates
+outside `docs/`, themes, and package `specs/` records, such as Markdown under a
+`specs` directory that is not a `<slug>.spec.md`; component records have no
+`platform_of` field until the next schema version; and the component id
+pattern does not yet accept a language-qualified id such as
+`component:swift/Button`. Until all three land, those other candidates are
+checked only by review. `pnpm check:knowledge` checks a platform record
 (`docs/specs/components/<ComponentRoot>/<PublicName>.<language>.spec.md`) as it
 checks a core component record (its folder and public name, schema rules,
 applicability blocks, and id), accepting its language-qualified id, and also
