@@ -21,6 +21,7 @@ import {
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
   assertSelectorParses,
+  bindDetectorValue,
   finishFiniteAnimations,
   gradePositionedPair,
   orderD1StoryCandidates,
@@ -1099,5 +1100,22 @@ describe('assertSelectorParses', () => {
     expect(() => assertSelectorParses(doc, '[[aria-label')).toThrow(
       /rtlAudit.D5.within/,
     );
+  });
+});
+
+describe('bindDetectorValue', () => {
+  it('binds a selector containing $ patterns verbatim', () => {
+    const physical = {physical: 'chart', within: "[data-plot='q$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', physical)).toBe(
+      `run(${JSON.stringify(physical)})`,
+    );
+    const tricky = {physical: 'chart', within: "[data-plot='$&$1$$']"};
+    expect(bindDetectorValue('run(__P__)', '__P__', tricky)).toBe(
+      `run(${JSON.stringify(tricky)})`,
+    );
+  });
+
+  it('binds null when no region is declared', () => {
+    expect(bindDetectorValue('run(__P__)', '__P__', null)).toBe('run(null)');
   });
 });

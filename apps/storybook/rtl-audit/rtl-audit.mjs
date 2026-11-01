@@ -67,6 +67,7 @@ import {
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
   assertSelectorParses,
+  bindDetectorValue,
   finishFiniteAnimations,
   gradePositionedPair,
   orderD1StoryCandidates,
@@ -613,7 +614,7 @@ async function detectPositioned(page, physical = null) {
       `(${assertSelectorParses.toString()})(document, ${JSON.stringify(physical.within)})`,
     );
   }
-  const detector = PM_DETECTOR.replace('__RTL_PHYSICAL__', JSON.stringify(physical));
+  const detector = bindDetectorValue(PM_DETECTOR, '__RTL_PHYSICAL__', physical);
   return page.evaluate(detector).catch(() => []);
 }
 

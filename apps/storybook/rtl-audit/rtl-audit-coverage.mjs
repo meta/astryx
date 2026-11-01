@@ -571,6 +571,15 @@ export function assertSelectorParses(doc, selector) {
 }
 
 /**
+ * Bind a JSON value into an in-page detector's placeholder. A replacer
+ * function is used so `$` sequences in the value (`[data-plot='q$']`) are not
+ * read as replacement patterns.
+ */
+export function bindDetectorValue(source, placeholder, value) {
+  return source.replace(placeholder, () => JSON.stringify(value));
+}
+
+/**
  * Grade one LTR/RTL pair of D5 positioned elements. By default the RTL center
  * must mirror the LTR center about the parent's center. Under a declared
  * `chart` marker it must keep the same physical position instead, and a
