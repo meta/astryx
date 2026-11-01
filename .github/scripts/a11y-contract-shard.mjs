@@ -109,7 +109,14 @@ export function canCut(tests, source = '') {
   const paths = tests.map(test => test.titles);
   if (
     paths.some(titles =>
-      titles.some(title => title.includes('\u203A') || title !== title.trim()),
+      // A line break would split the test-list line, so the test would run
+      // in no leg.
+      titles.some(
+        title =>
+          title.includes('\u203A') ||
+          /[\r\n]/.test(title) ||
+          title !== title.trim(),
+      ),
     )
   )
     return false;

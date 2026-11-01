@@ -96,6 +96,9 @@ describe('a11y contract shards', () => {
     const odd = testsOf('packages/long.spec.ts', 40, 'a › b');
     expect(canCut(odd)).toBe(false);
     expect(canCut(testsOf('x', 3, ' padded'))).toBe(false);
+    // Playwright's test-list reader would split a title with a line break.
+    expect(canCut(testsOf('x', 3, 'two\nlines'))).toBe(false);
+    expect(canCut(testsOf('x', 3, 'two\r\nlines'))).toBe(false);
     // A test titled like a describe would select the describe's tests too.
     expect(
       canCut([

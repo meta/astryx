@@ -1430,7 +1430,7 @@ jobs:
   # Accessibility audit
   # Skipped when no components changed. Depends only on build-storybook, so it
   # starts as soon as the storybook artifact is up (~2min).
-  # The release check's full axe roster is scanned by three shard jobs and
+  # The release check's full axe roster is scanned by six shard jobs and
   # joined, with the baseline gate, in pr-a11y-audit, while pr-a11y runs the
   # browser guards beside them. Pull requests audit only their scoped owners in
   # pr-a11y itself, so neither runs there.
