@@ -18,8 +18,8 @@
 #   that message. `main` runs are never turned away.
 # - A run starts once the other active runs' estimated jobs plus `peak` fit
 #   under the ceiling. Small workflows that are not admitted (one or two slim
-#   jobs a run) always count at least their measured most at once, so the room
-#   they can still take is kept free. A pull-request run (`main: false`) also
+#   jobs a run) always count at least eighteen jobs, which covers all but their
+#   rarest bursts, so the room they can still take is kept free. A pull-request run (`main: false`) also
 #   waits while a
 #   `main` full check or release re-check is waiting, so `main` fits first;
 #   pull-request runs never wait for each other.
@@ -165,8 +165,9 @@ runs:
             '.github/workflows/review-signal.yml': () => 2,
           };
           const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);
-          // The most jobs small, unadmitted workflows ran at once, measured
-          // over a busy evening (spec:AST-030 DEC-16).
+          // Jobs always counted for small, unadmitted workflows: they peaked at
+          // twenty at once in a day's runs and rose by fourteen within two
+          // minutes in ninety-nine looks of a hundred (spec:AST-030 DEC-16).
           const SMALL_MOST = 18;
           const ADMITTED = ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'];
           const admitted = run => ADMITTED.includes(run.path);
@@ -214,8 +215,10 @@ runs:
             if (PHASE === 'rest') {
               // The next look falls where room planned it.
               const planned = Number(process.env.NEXT);
-              const next = (planned > 0 ? planned : started + Math.max(1, looked) * LOOK_MS) - Date.now();
-              if (looked >= MAX_LOOKS || next > MAX_WAIT_MS - (Date.now() - started)) {
+              // A look planned past the longest wait comes at its end instead.
+              const left = MAX_WAIT_MS - (Date.now() - started);
+              const next = Math.min((planned > 0 ? planned : started + Math.max(1, looked) * LOOK_MS) - Date.now(), left - JITTER_MS);
+              if (looked >= MAX_LOOKS || left <= 0) {
                 core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes; starting.`);
                 return;
               }

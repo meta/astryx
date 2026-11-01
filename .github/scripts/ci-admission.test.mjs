@@ -713,6 +713,29 @@ describe('ci admission', () => {
       expect(spent).toMatchObject({looks: 0, calls: 0});
     });
 
+    it('looks at the end of the wait, never starts early, when room planned a look past it', async () => {
+      // Room found the build room four minutes in, after a near look, with the
+      // run then far over; its plan of four plus twelve minutes passes the
+      // wait. The rest looks once at the end of the wait, then starts.
+      vi.useFakeTimers({now: NOW});
+      const started = NOW - 4 * 60_000;
+      const rest = await admit({
+        active: prs(7),
+        peak: 16,
+        phase: 'rest',
+        fits: 'false',
+        started: String(started),
+        looked: '1',
+        next: String(NOW + 11.67 * 60_000),
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(rest.looks).toBe(1);
+      expect(rest.lookTimes[0]).toBeGreaterThan(7 * 60_000);
+      expect(rest.lookTimes[0]).toBeLessThanOrEqual(8 * 60_000);
+      expect(rest.warning[0]).toContain('Still no room');
+    });
+
     it('plans the rest of the run four minutes on when room finds the build room and the run near it', async () => {
       // 5 x 12 + 18 = 78: the build fits; + 16 = 94 is four over, near room.
       const room = await admit({
