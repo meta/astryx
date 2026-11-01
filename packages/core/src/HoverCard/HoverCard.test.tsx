@@ -1433,3 +1433,94 @@ describe('HoverCard surface press', () => {
     expect(screen.getByRole('checkbox')).not.toBeChecked();
   });
 });
+
+describe('HoverCard triggerBehavior on every input (component:HoverCard FR5, FR9)', () => {
+  beforeEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
+  type Behavior = 'adaptive' | 'hover' | 'toggle';
+
+  /** An info-only trigger: a span, or under the toggle the button it pins. */
+  function setup(
+    triggerBehavior?: Behavior,
+    touchTrigger?: 'auto' | 'tap' | 'none',
+    trigger = triggerBehavior === 'toggle' ? 'button' : 'span',
+  ) {
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    render(
+      <HoverCard
+        content={<p>Ada Lovelace, analyst</p>}
+        delay={0}
+        onOpenChange={onOpenChange}
+        triggerBehavior={triggerBehavior}
+        touchTrigger={touchTrigger}>
+        {trigger === 'button' ? (
+          <button type="button">Ada</button>
+        ) : (
+          <span tabIndex={0}>Ada</span>
+        )}
+      </HoverCard>,
+    );
+    const opened = () => onOpenChange.mock.calls.some(([open]) => open);
+    return {trigger: screen.getByText('Ada'), opened};
+  }
+
+  /** A finger: it arrives, lands, lifts, then the click. */
+  function tap(element: HTMLElement) {
+    fireEvent.pointerEnter(element, {pointerType: 'touch'});
+    fireEvent.pointerDown(element, {pointerType: 'touch'});
+    fireEvent.pointerUp(element, {pointerType: 'touch'});
+    fireEvent.click(element);
+  }
+
+  const settle = async () =>
+    new Promise(resolve => {
+      setTimeout(resolve, 50);
+    });
+
+  describe.each([
+    ['adaptive by default', undefined, true],
+    ['adaptive', 'adaptive', true],
+    ['hover', 'hover', false],
+    ['toggle', 'toggle', true],
+  ] as const)('%s', (_, behavior, tapOpens) => {
+    it('a mouse hover previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it('focus previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      fireEvent.focusIn(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it(`a tap ${tapOpens ? 'opens' : 'never opens'} it, and only the toggle pins it`, async () => {
+      const {trigger, opened} = setup(behavior);
+      tap(trigger);
+      await settle();
+      expect(opened()).toBe(tapOpens);
+      expect(trigger.getAttribute('aria-expanded')).toBe(
+        behavior === 'toggle' ? 'true' : null,
+      );
+    });
+  });
+
+  it.each([
+    ['adaptive', 'none', 'span', 'decides: no tap opens it', false],
+    ['adaptive', 'tap', 'button', 'decides: every tap opens it', true],
+    ['hover', 'tap', 'button', 'is ignored: no tap opens it', false],
+    ['toggle', 'none', 'button', 'is ignored: a tap pins it', true],
+  ] as const)(
+    'beside triggerBehavior="%s", touchTrigger="%s" on a %s %s',
+    async (behavior, touchTrigger, trigger, _, tapOpens) => {
+      const card = setup(behavior, touchTrigger, trigger);
+      tap(card.trigger);
+      await settle();
+      expect(card.opened()).toBe(tapOpens);
+    },
+  );
+});

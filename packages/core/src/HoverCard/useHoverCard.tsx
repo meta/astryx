@@ -26,10 +26,10 @@ import {
   type LayerAlignment,
   type LayerPlacement,
 } from '../Layer/useLayer';
-import {
-  useTouchTrigger,
-  type LayerTouchTrigger,
-} from '../Layer/useTouchTrigger';
+import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {usePressPin, type LayerTriggerBehavior} from '../Layer/usePressPin';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -68,6 +68,15 @@ export type HoverCardFocusTrigger = 'auto' | 'always' | 'never';
  * Touch trigger behavior for hover cards
  */
 export type HoverCardTouchTrigger = LayerTouchTrigger;
+
+/**
+ * How the trigger opens the card: `adaptive` (the default) previews it on
+ * hover and focus and opens it on a tap unless the trigger acts; `hover`
+ * previews it on hover and focus and never opens it on touch; `toggle` pins
+ * it on a click, tap, Enter, or Space on a button trigger
+ * (component:HoverCard FR5, FR9).
+ */
+export type HoverCardTriggerBehavior = LayerTriggerBehavior;
 
 export interface HoverCardOptions {
   /**
@@ -111,9 +120,31 @@ export interface HoverCardOptions {
    * - `tap`: tap always opens the card, even on a trigger that acts
    * - `none`: touch never opens the card
    *
+   * It decides only under `triggerBehavior="adaptive"`, the default.
+   *
    * @default 'auto'
    */
   touchTrigger?: HoverCardTouchTrigger;
+
+  /**
+   * How the trigger opens the card:
+   * - `adaptive` (the default): hover and focus preview it; a tap opens it
+   *   unless the trigger performs an action of its own (`touchTrigger`
+   *   decides while it remains)
+   * - `hover`: hover and focus preview it; touch never opens it
+   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
+   *   card open and the same press closes it; hover and focus still preview
+   *   it. A pinned card stays until Escape, a second press on the trigger, a
+   *   press outside the trigger and the card, or focus leaving them. Astryx
+   *   clickable rows and cards ignore the pinning press; the `HoverCard`
+   *   component also stops it at the trigger, and a hook caller stops a plain
+   *   `onClick` ancestor itself. The trigger reports `aria-expanded` and
+   *   `aria-controls`, and the card's `label` (else its text) is announced
+   *   once when it pins. `touchTrigger` is ignored.
+   *
+   * @default 'adaptive'
+   */
+  triggerBehavior?: HoverCardTriggerBehavior;
 
   /**
    * Whether the hover card is enabled.
@@ -283,6 +314,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     hideDelay = 200,
     focusTrigger = 'auto',
     touchTrigger = 'auto',
+    triggerBehavior = 'adaptive',
     isEnabled = true,
     label,
     isOpen,
@@ -355,22 +387,51 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     hideLayer();
   }, [hideLayer]);
 
+  // A press pins the card under `triggerBehavior="toggle"` (FR9, FR10). The pin
+  // also owns the card's touch trigger, so this is the one call that wires
+  // both (`architecture:react-component-runtime` INV16).
   const {
-    isTouchPointerRef,
-    isTouchInteraction,
-    handlePointerEnter,
-    handlePointerDown: handleTouchPointerDown,
-    clearTapOpen,
-  } = useTouchTrigger({
+    isToggleTrigger,
+    isHeldOpen: isPressHeldOpen,
+    attach: attachPressPin,
+    unpin: unpinPress,
+    handleFocusLeave: handlePressFocusLeave,
+    isPinShown,
+    touch: {
+      isTouchPointerRef,
+      isTouchInteraction,
+      handlePointerEnter,
+      handlePointerDown: handleTouchPointerDown,
+      clearTapOpen,
+    },
+  } = usePressPin({
+    triggerBehavior,
     touchTrigger,
     isEnabled,
-    isControlled: isOpen !== undefined,
-    isOpen: isLayerOpen,
-    layerId: layerId,
+    isOpen,
+    isLayerOpen,
+    layerId,
     triggerRef,
+    component: 'HoverCard',
     show: showNow,
     hide: hideNow,
+    report: next => (next ? onShow?.() : onHide?.()),
+    label,
   });
+
+  // A pinned card is said once when it pins (FR10): its `label`, from the
+  // press handler (usePressPin), or else its own rendered text here
+  // (spec:AST-086 FR12).
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const contentRefs = useMergedRefs<HTMLDivElement>(
+    contentRef,
+    registerLayerSurface,
+  );
+  useAnnounceRenderedText(
+    contentRef,
+    isPinShown && (label == null || label.trim() === ''),
+    'pinned',
+  );
 
   // Schedule show with delay (suppressed when isOpen is false)
   const scheduleShow = useCallback(() => {
@@ -385,7 +446,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
   // Schedule hide with delay (suppressed when isOpen is true)
   const scheduleHide = useCallback(() => {
-    if (isOpen === true) {
+    // A pinned card stays when the pointer or focus leaves (FR9).
+    if (isOpen === true || isPressHeldOpen()) {
       return;
     }
     clearTimeouts();
@@ -395,7 +457,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
         hideLayer();
       }
     }, hideDelay);
-  }, [isOpen, clearTimeouts, hideLayer, hideDelay]);
+  }, [isOpen, isPressHeldOpen, clearTimeouts, hideLayer, hideDelay]);
 
   // Event handlers
   const handleMouseEnter = useCallback(() => {
@@ -420,9 +482,13 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   // Tap-to-open on touch; on a mouse this does nothing and hover still rules.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      // A press on a toggle trigger pins or closes through its click (FR9).
+      if (isToggleTrigger(triggerRef.current)) {
+        return;
+      }
       handleTouchPointerDown(event);
     },
-    [handleTouchPointerDown],
+    [isToggleTrigger, handleTouchPointerDown],
   );
 
   const handleFocusIn = useCallback(() => {
@@ -446,6 +512,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
   const handleFocusOut = useCallback(
     (e: FocusEvent) => {
+      // A pinned card's close on focus leaving the trigger is the pin's own:
+      // it listens on the trigger whatever `focusTrigger` is.
       // Check if focus is moving to the hover card content
       const relatedTarget = e.relatedTarget as HTMLElement | null;
       const popoverElement = document.getElementById(layerId);
@@ -499,6 +567,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     onDismiss: () => {
       clearTimeouts();
       clearTapOpen();
+      unpinPress();
       // Controlled: report and stop. The close — and the focus restore that
       // goes with it — happens in the controlled effect if and when the
       // consumer flips `isOpen`.
@@ -569,8 +638,10 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       }
 
       triggerRef.current = el;
+      attachPressPin(el);
     },
     [
+      attachPressPin,
       focusTrigger,
       handleMouseEnter,
       handleMouseLeave,
@@ -671,8 +742,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
           // FR11: a press inside the card acts only within the card. A
           // registered surface counts as something else in the shared
           // interactive-ancestor walk, so a clickable container around the
-          // trigger leaves it alone; document listeners still see it.
-          ref={registerLayerSurface}
+          // trigger leaves it alone; document listeners still see it. The
+          // pin's announcement reads the same element's text (contentRefs).
+          ref={contentRefs}
           {...stylex.props(styles.content)}
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside
@@ -705,6 +777,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
               return;
             }
 
+            // A pinned card closes when focus leaves it and the trigger.
+            if (handlePressFocusLeave(e.nativeEvent)) {
+              return;
+            }
+
             // Focus is leaving the hover card entirely
             scheduleHide();
           }}>
@@ -720,8 +797,10 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       label,
       clearTimeouts,
       scheduleHide,
+      handlePressFocusLeave,
       popoverXstyle,
       isTouchPointerRef,
+      contentRefs,
     ],
   );
 

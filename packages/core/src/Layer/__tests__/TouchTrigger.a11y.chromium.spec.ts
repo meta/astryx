@@ -323,7 +323,7 @@ test.describe('Tooltip triggerBehavior under a finger and a pen (component:Toolt
   }
 });
 
-test.describe('a pinned layer under a mouse (component:Tooltip FR9)', () => {
+test.describe('a pinned layer under a mouse (component:Tooltip FR9, component:HoverCard FR9 and FR10)', () => {
   test.use({
     hasTouch: false,
     isMobile: false,
@@ -390,5 +390,23 @@ test.describe('a pinned layer under a mouse (component:Tooltip FR9)', () => {
     await expect(page.getByRole('button', {name: 'Next'})).toBeFocused();
     await expect(layer).toHaveCount(0);
     await expect(button).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  test('a pinned unlabelled card says its paragraphs apart, and a click on its text keeps it', async ({
+    page,
+  }) => {
+    await open(page, 'a11y-tooltip-toggle-behavior--hover-card-toggle');
+    const button = page.getByRole('button', {name: 'Ada'});
+    const layer = page.locator('.astryx-hover-card:popover-open');
+    await button.click();
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('[data-astryx-live-region="polite"]')).toHaveText(
+      'Ada Lovelace Analyst, Payments',
+    );
+    await layer.getByText('Analyst, Payments').click();
+    expect(await focusIsOnBody(page)).toBe(true);
+    await expect(layer).toHaveCount(1);
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
   });
 });
