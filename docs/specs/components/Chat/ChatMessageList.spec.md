@@ -78,6 +78,8 @@ Consumer prop syntax and examples remain in `ChatMessageList.doc.mjs`.
   spacer element before the messages to push a short list down. When the list
   overflows, the collapsed spacer still leaves one row gap above the first
   message.
+  With no messages, the spacer takes the upper half of the free space, so the
+  empty state sits about three-quarters of the way down instead of centered.
   `architecture:component-style-authoring` INV7 expresses layout through styles
   on the elements a component already owns, not added elements.
 
@@ -148,14 +150,14 @@ scalar output only; it does not decide how to inspect nested children.
 
 ### Representative states
 
-| State                         | Required invariant                                    | Allowed variation                          |
-| ----------------------------- | ----------------------------------------------------- | ------------------------------------------ |
-| Two messages and a system row | Polite log with messages in source order              | Caller controls row content                |
-| Empty top-level children      | Optional centered empty state                         | An omitted empty state leaves an empty log |
-| Compact/balanced/spacious     | Different token-derived row spacing and child density | `gap` may override only row spacing        |
-| Short top/bottom list         | Bottom rests at the block end, top at the block start | Container height is caller-owned           |
-| Streaming                     | Log has `aria-busy=true`                              | Message content remains caller-owned       |
-| Top action pending            | Spinner above content while transition is pending     | Async action result is caller-owned        |
+| State                         | Required invariant                                                                                                                     | Allowed variation                          |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| Two messages and a system row | Polite log with messages in source order                                                                                               | Caller controls row content                |
+| Empty top-level children      | The optional empty state is centered in the whole list for `top`; for `bottom`, it is centered below the spacer (Current-state impact) | An omitted empty state leaves an empty log |
+| Compact/balanced/spacious     | Different token-derived row spacing and child density                                                                                  | `gap` may override only row spacing        |
+| Short top/bottom list         | Bottom rests at the block end, top at the block start                                                                                  | Container height is caller-owned           |
+| Streaming                     | Log has `aria-busy=true`                                                                                                               | Message content remains caller-owned       |
+| Top action pending            | Spinner above content while transition is pending                                                                                      | Async action result is caller-owned        |
 
 ### Performance and resources
 
@@ -200,7 +202,7 @@ migration, so the map is deferred.
 | FR2–FR3  | `ChatMessageList.test.tsx` density and gap tests                                                                                                          | densities; gap override    | Lost density reflection or a gap that changes density fails. | `audit:ChatMessageList/§2` |
 | FR2      | `ChatMessage.test.tsx` "inherits list density and lets an explicit prop override it"; `ChatMessageBubble.test.tsx` list-density case                      | child message in a list    | Density that stops reaching child messages fails.            | `audit:ChatMessageList/§2` |
 | FR7      | `ChatLayout.test.tsx` "first-fill scroll positioning" cases; `useChatNewMessages.test.tsx` "works end-to-end with ChatLayout conditional ChatMessageList" | list inside ChatLayout     | A list that stops registering its content element fails.     | `audit:ChatMessageList/§7` |
-| FR4      | `ChatMessageList.test.tsx` empty-state tests                                                                                                              | empty; numeric empty state | A missing or hidden empty state fails.                       | `audit:ChatMessageList/§4` |
+| FR4      | `ChatMessageList.test.tsx` empty-state tests                                                                                                              | empty; numeric empty state | A missing empty state, or a dropped numeric one, fails.      | `audit:ChatMessageList/§4` |
 | FR6      | `ChatMessageList.test.tsx` "loads older messages through the top sentinel and exposes pending status"                                                     | pending, settled           | A lost action or stuck spinner fails.                        | `audit:ChatMessageList/§6` |
 
 Read from source, with no focused test yet:
