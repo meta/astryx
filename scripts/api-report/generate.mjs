@@ -28,14 +28,24 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DISCOVERY = path.join(
-  SCRIPT_DIR,
-  '../../packages/cli/foundation/discovery',
-);
-const PRIVATE_ATTRIBUTE_RULE = path.join(
-  SCRIPT_DIR,
-  '../../internal/eslint-plugin-astryx/no-raw-private-attribute.js',
-);
+const THEMING_TARGETS = 'packages/cli/foundation/discovery/theming-targets.mjs';
+const PRIVATE_ATTRIBUTE_RULE =
+  'internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+
+/**
+ * A module the report reads its lists from, as the reported repository holds
+ * it: a merge base is reported with its own theming targets and public
+ * attributes. A tree without the module (a test fixture) uses this one's.
+ * @param {string} repoRoot
+ * @param {string} file
+ * @returns {string}
+ */
+const listModule = (repoRoot, file) => {
+  const own = path.join(repoRoot, file);
+  return pathToFileURL(
+    fs.existsSync(own) ? own : path.join(SCRIPT_DIR, '../..', file),
+  ).href;
+};
 
 const CODE = /\.(m|c)?(t|j)sx?$/;
 const CSS = /\.css$/;
@@ -540,7 +550,7 @@ export async function generateReport(opts) {
   if (fs.existsSync(src)) {
     // The CLI's enumeration is the one list theme authors see; reuse it.
     const {collectThemingTargets} = await import(
-      pathToFileURL(path.join(DISCOVERY, 'theming-targets.mjs')).href
+      listModule(repoRoot, THEMING_TARGETS)
     );
     for (const t of await collectThemingTargets(src)) {
       const props = [...t.props].sort(byName);
@@ -574,7 +584,7 @@ export async function generateReport(opts) {
   const haystack = built.join('\n');
   // INV23's list, as the lint rule that enforces it holds it.
   const {PUBLIC_ATTRIBUTES} = await import(
-    pathToFileURL(PRIVATE_ATTRIBUTE_RULE).href
+    listModule(repoRoot, PRIVATE_ATTRIBUTE_RULE)
   );
   const publicAttributes = [...PUBLIC_ATTRIBUTES]
     .map(name => `data-astryx-${name}`)

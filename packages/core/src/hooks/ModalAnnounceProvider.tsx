@@ -4,8 +4,8 @@
 
 /**
  * @file ModalAnnounceProvider.tsx
- * @input Uses React context, effects and the exposure and delivery
- *   internals of useAnnounce
+ * @input Uses React context, effects, the exposure and delivery internals of
+ *   useAnnounce, and the shared MutationObserver
  * @output Exports ModalAnnounceProvider, the element every Astryx component
  *   that owns a native <dialog> renders around its content
  * @position Core a11y internal (spec:AST-086 FR14). Its own module so only
@@ -32,6 +32,7 @@ import {
 } from './modalAnnounce';
 import {ModalAnnounceContext, type ModalAnnounceScope} from './useAnnounce';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
+import {observeMutations} from '../utils/sharedMutationObserver';
 
 /**
  * Rendered by every Astryx component that owns a native `<dialog>` (Dialog,
@@ -97,11 +98,11 @@ export function ModalAnnounceProvider({
     notePresented(dialog);
     let wasOpen = dialog.open;
     const end = () => {
-      presentation.disconnect();
+      stop();
       forgetPresented(dialog);
       sessionRef.current = null;
     };
-    const stop = () => presentation.disconnect();
+    const stop = () => unobserve();
     const onPresentationChange = () => {
       // The order is the top-layer order: only `open` being set moves a
       // dialog up it. A dialog turning inert or aria-hidden for its exit
@@ -126,11 +127,13 @@ export function ModalAnnounceProvider({
         end();
       }
     };
-    const presentation = new MutationObserver(onPresentationChange);
-    presentation.observe(dialog, {
-      attributes: true,
-      attributeFilter: ['open', 'inert', 'aria-hidden'],
-    });
+    // Core's shared observer watches every open modal's presentation: one
+    // observer for all of them, not one per open modal.
+    const unobserve = observeMutations(
+      dialog,
+      {attributes: true, attributeFilter: ['open', 'inert', 'aria-hidden']},
+      onPresentationChange,
+    );
     sessionRef.current = {dialog, stop};
   }, [dialogRef, isOpen]);
   useEffect(
