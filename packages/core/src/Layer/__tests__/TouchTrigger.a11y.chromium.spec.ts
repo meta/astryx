@@ -273,6 +273,56 @@ test.describe('Tooltip triggerBehavior="toggle" (component:Tooltip FR9, FR10)', 
   });
 });
 
+test.describe('Tooltip triggerBehavior under a finger and a pen (component:Tooltip FR5, FR9)', () => {
+  const STORY = 'a11y-tooltip-toggle-behavior--trigger-behaviors';
+  const LAYER = '.astryx-tooltip:popover-open';
+  const term = (page: Page, name: string) =>
+    page.getByText(name, {exact: true});
+
+  /** A tap: a finger through touch events, or a landed pen through pen-typed presses. */
+  async function tapWith(
+    page: Page,
+    finger: Finger,
+    target: Locator,
+    pointer: 'finger' | 'pen',
+  ) {
+    const [x, y] = await centerOf(target);
+    if (pointer === 'finger') {
+      await finger.down(x, y);
+      await finger.up();
+      return;
+    }
+    const cdp = await page.context().newCDPSession(page);
+    for (const type of ['mousePressed', 'mouseReleased'] as const) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x,
+        y,
+        button: 'left',
+        clickCount: 1,
+        pointerType: 'pen',
+      });
+    }
+  }
+
+  for (const pointer of ['finger', 'pen'] as const) {
+    test(`a ${pointer} tap never opens hover, opens adaptive, and pins toggle`, async ({
+      page,
+    }) => {
+      const finger = await openStory(page, STORY);
+      await tapWith(page, finger, term(page, 'Hover term'), pointer);
+      await page.waitForTimeout(300);
+      await expect(page.locator(LAYER)).toHaveCount(0);
+      await tapWith(page, finger, term(page, 'Adaptive term'), pointer);
+      await expect(page.locator(LAYER)).toHaveText('Adaptive: a tap opens it');
+      const toggle = page.getByRole('button', {name: 'Toggle term'});
+      await tapWith(page, finger, toggle, pointer);
+      await expect(page.locator(LAYER)).toHaveText('Toggle: a press pins it');
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    });
+  }
+});
+
 test.describe('a pinned layer under a mouse (component:Tooltip FR9)', () => {
   test.use({
     hasTouch: false,

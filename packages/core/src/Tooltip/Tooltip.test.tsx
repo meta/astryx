@@ -925,3 +925,104 @@ describe('Tooltip surface press', () => {
     expect(screen.getByRole('checkbox')).toBeChecked();
   });
 });
+
+describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', () => {
+  beforeEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
+  type Behavior = 'adaptive' | 'hover' | 'toggle';
+
+  /** An info-only trigger: a span, or under the toggle the button it pins. */
+  function setup(
+    triggerBehavior?: Behavior,
+    touchTrigger?: 'auto' | 'tap' | 'none',
+    trigger = triggerBehavior === 'toggle' ? 'button' : 'span',
+  ) {
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    render(
+      <Tooltip
+        content="Billed monthly"
+        delay={0}
+        onOpenChange={onOpenChange}
+        triggerBehavior={triggerBehavior}
+        touchTrigger={touchTrigger}>
+        {trigger === 'button' ? (
+          <button type="button">Billing</button>
+        ) : (
+          <span tabIndex={0}>Billing</span>
+        )}
+      </Tooltip>,
+    );
+    const opened = () => onOpenChange.mock.calls.some(([open]) => open);
+    return {trigger: screen.getByText('Billing'), opened};
+  }
+
+  /** A finger or a landed pen: down, up, then the click (a pen hovers, so no arrival). */
+  function tap(element: HTMLElement, pointerType: 'touch' | 'pen') {
+    if (pointerType === 'touch') {
+      fireEvent.pointerEnter(element, {pointerType});
+    }
+    fireEvent.pointerDown(element, {pointerType});
+    fireEvent.pointerUp(element, {pointerType});
+    fireEvent.click(element);
+  }
+
+  const settle = async () =>
+    new Promise(resolve => {
+      setTimeout(resolve, 50);
+    });
+
+  describe.each([
+    ['adaptive by default', undefined, true],
+    ['adaptive', 'adaptive', true],
+    ['hover', 'hover', false],
+    ['toggle', 'toggle', true],
+  ] as const)('%s', (_, behavior, tapOpens) => {
+    it('a mouse hover previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it('keyboard focus previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      const realMatches = trigger.matches.bind(trigger);
+      vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      fireEvent.keyDown(document, {key: 'Tab'});
+      fireEvent.focusIn(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it.each(['touch', 'pen'] as const)(
+      `a %s tap ${tapOpens ? 'opens' : 'never opens'} it, and only the toggle pins it`,
+      async pointerType => {
+        const {trigger, opened} = setup(behavior);
+        tap(trigger, pointerType);
+        await settle();
+        expect(opened()).toBe(tapOpens);
+        expect(trigger.getAttribute('aria-expanded')).toBe(
+          behavior === 'toggle' ? 'true' : null,
+        );
+      },
+    );
+  });
+
+  it.each([
+    ['adaptive', 'none', 'span', 'decides: no tap opens it', false],
+    ['adaptive', 'tap', 'button', 'decides: every tap opens it', true],
+    ['hover', 'tap', 'button', 'is ignored: no tap opens it', false],
+    ['toggle', 'none', 'button', 'is ignored: a tap pins it', true],
+  ] as const)(
+    'beside triggerBehavior="%s", touchTrigger="%s" on a %s %s',
+    async (behavior, touchTrigger, trigger, _, tapOpens) => {
+      const tip = setup(behavior, touchTrigger, trigger);
+      tap(tip.trigger, 'touch');
+      await settle();
+      expect(tip.opened()).toBe(tapOpens);
+    },
+  );
+});

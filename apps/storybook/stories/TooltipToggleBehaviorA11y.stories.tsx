@@ -6,7 +6,8 @@
  * @output The fixtures the toggle-behavior proofs drive in a real browser: a
  *   button whose only job is its tooltip, the same trigger inside a clickable
  *   card, an anchored trigger with its own click handler inside a clickable
- *   card, and a trigger whose tooltip opens on no focus.
+ *   card, a trigger whose tooltip opens on no focus, and one trigger per
+ *   `triggerBehavior` value.
  * @position The reproduction path for the `triggerBehavior="toggle"` cases in
  *   `packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts`
  *   (`component:Tooltip` FR9, FR10; `docs/specs/AST-009/spec.md` FR30: a
@@ -145,6 +146,27 @@ export const FocusTriggerNever: Story = {
         <Button label="Next" variant="secondary">
           Next
         </Button>
+      </VStack>
+    </div>
+  ),
+};
+
+/** One info-only trigger per `triggerBehavior` value: a tap opens, never opens, or pins. */
+export const TriggerBehaviors: Story = {
+  render: () => (
+    <div style={{padding: 100}}>
+      <VStack gap={4}>
+        <Tooltip content="Adaptive: a tap opens it" triggerBehavior="adaptive">
+          <span tabIndex={0}>Adaptive term</span>
+        </Tooltip>
+        <Tooltip content="Hover: touch never opens it" triggerBehavior="hover">
+          <span tabIndex={0}>Hover term</span>
+        </Tooltip>
+        <Tooltip content="Toggle: a press pins it" triggerBehavior="toggle">
+          <Button label="Toggle term" variant="secondary">
+            ?
+          </Button>
+        </Tooltip>
       </VStack>
     </div>
   ),
