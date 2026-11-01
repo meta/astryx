@@ -885,11 +885,11 @@
     "@babel/preset-typescript": "catalog:",
     "@heroicons/react": "^2.2.0",
     "@stylexjs/babel-plugin": "catalog:",
-    "@testing-library/dom": "^10.0.0",
+    "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/babel__core": "^7.20.5",
-    "tailwindcss": "^4.3.2"
+    "tailwindcss": "^4.3.3"
   },
   "dependencies": {
     "intl-messageformat": "^11.2.9"

@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@astryxdesign/a11y-spec": "workspace:*",
-    "@playwright/test": "^1.61.1",
+    "@playwright/test": "^1.64.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

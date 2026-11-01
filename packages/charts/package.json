@@ -80,6 +80,6 @@
     "@stylexjs/babel-plugin": "catalog:",
     "@testing-library/react": "catalog:",
     "@types/d3-scale": "^4.0.9",
-    "@types/d3-shape": "^3.1.8"
+    "@types/d3-shape": "^3.2.0"
   }
 }

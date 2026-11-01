@@ -56,7 +56,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.5.2",
-    "shadcn": "4.19.0",
+    "shadcn": "4.22.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   },
