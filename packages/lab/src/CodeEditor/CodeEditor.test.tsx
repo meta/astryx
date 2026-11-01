@@ -51,6 +51,16 @@ function renderEditor(value = '', props: {escapeHint?: string} = {}) {
 }
 
 describe('CodeEditor', () => {
+  it('keeps the code left-to-right inside a right-to-left page', () => {
+    render(
+      <div dir="rtl">
+        <CodeEditor label="Code" value="const a = 1;" onChange={() => {}} />
+      </div>,
+    );
+    const editor = screen.getByRole('textbox', {name: 'Code'});
+    expect(editor.closest('[dir]')).toHaveAttribute('dir', 'ltr');
+  });
+
   it('uses the label prop as the accessible name', () => {
     render(
       <CodeEditor
