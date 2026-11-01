@@ -345,6 +345,7 @@ for (const item of cases) {
           near(spanBox.width, firstTrack),
           `${id}: width ${spanBox.width} is not one track`,
         );
+        check(startEdgeMatches, `${id}: does not start at the inline start`);
       }
       if (id === 'long-content') {
         // AR2: the zero minimum width keeps shrinkable content in its track.

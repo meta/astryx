@@ -17,7 +17,9 @@ import {Grid} from './Grid';
 import {GridSpan} from './GridSpan';
 
 const spanStyles = stylex.create({
-  consumer: {opacity: 0.75},
+  // Overrides a property GridSpan's own styles set, so the consumer value
+  // survives only when xstyle merges after them.
+  consumer: {minWidth: 10},
 });
 
 /**

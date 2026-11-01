@@ -436,7 +436,7 @@
   },
   {
     "component": "core/GridSpan",
-    "reason": "GridSpan is one nonsemantic wrapper that sets grid-column and grid-row spans, a single minmax(0, 1fr) inner track, zero minimum width, and full height. Grid lines and spans resolve from the inline start in both directions, so the same declarations place it correctly in RTL; it renders no text, glyph, physical inline placement, reordered control, horizontal scroll or drag, overlay, or keyboard behavior of its own. Grid owns track construction and direction. The exact-head audit still renders RTL frames and asserts each span starts at the inline-start edge.",
+    "reason": "GridSpan is one nonsemantic wrapper that sets grid-column and grid-row spans, a single minmax(0, 1fr) inner track, zero minimum width, and full height. Grid lines and spans resolve from the inline start in both directions, so the same declarations place it correctly in RTL; it renders no text, glyph, physical inline placement, reordered control, horizontal scroll or drag, overlay, or keyboard behavior of its own. Grid owns track construction and direction. The exact-head audit still renders RTL frames and asserts that the numeric, full, row, and long-content spans start at the inline-start edge.",
     "evidence": {
       "apps/storybook/stories/GridSpan.stories.tsx": "sha256:e4c9309906c939ad18a6fe5c452d4ddc2345f64a20e091e0fbee238fba911519",
       "packages/core/src/Grid/GridSpan.tsx": "sha256:50cb567693f8b5382a43d85db6d87a737c6d9a67e6081f656f9fe9a40ff6c3dd",
