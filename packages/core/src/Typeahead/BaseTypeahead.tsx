@@ -752,6 +752,15 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
     loadingRef.current = false;
   }
+  // A field that becomes disabled stops showing a search as busy in the same
+  // render; the layout effect below drops the work itself.
+  const [disabledOfState, setDisabledOfState] = useState(isDisabled);
+  if (disabledOfState !== isDisabled) {
+    setDisabledOfState(isDisabled);
+    if (isDisabled && isLoading) {
+      setIsLoading(false);
+    }
+  }
 
   // When the search source is replaced, any in-flight load from the previous
   // source is abandoned (generation bumped above). Notify the wrapper's busy lane
@@ -811,8 +820,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       searchTimeoutRef.current = null;
     }
     prevSearchSourceRef.current.cancel?.();
-    setLoading(false);
-  }, [isDisabled, setLoading]);
+    // The busy state itself cleared in the render that disabled the field.
+    if (loadingRef.current) {
+      loadingRef.current = false;
+      onLoadingChangeRef.current?.(false);
+    }
+  }, [isDisabled]);
   const showLayer = useCallback(() => {
     if (isDisabledRef.current) {
       return;

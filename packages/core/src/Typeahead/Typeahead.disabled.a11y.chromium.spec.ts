@@ -42,7 +42,9 @@ for (const story of ['core-typeahead--disabled', 'core-tokenizer--disabled']) {
     const ring = await input.evaluate(element => {
       for (let node = element.parentElement; node; node = node.parentElement) {
         const shadow = getComputedStyle(node).boxShadow;
-        if (shadow !== 'none') return shadow;
+        if (shadow !== 'none') {
+          return shadow;
+        }
       }
       return 'none';
     });
