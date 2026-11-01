@@ -403,28 +403,35 @@ export function TreeList({
     {focus: FocusWithin; ids: string[]}
   >(
     expandedIds,
-    // Every expanded row whose group holds focus, outermost first: which of
-    // them collapsed is known only after the commit.
+    // Every expanded row whose group holds focus, outermost first, found by
+    // walking up from the focused element: which of them collapsed is known
+    // only after the commit.
     (previous: ReadonlySet<string>) => {
       const tree = treeElementRef.current;
+      const active = tree?.ownerDocument.activeElement;
+      if (tree == null || active == null || !tree.contains(active)) {
+        return null;
+      }
       let focus: FocusWithin | null = null;
       const ids: string[] = [];
-      for (const id of previous) {
-        const group = tree?.querySelector<HTMLElement>(
-          `[data-tree-id="${CSS.escape(id)}"] > [role="group"]`,
-        );
-        const noted = noteFocusWithin(group);
-        if (noted != null && group != null) {
-          focus = noted;
-          ids.push(id);
+      for (
+        let element = active.parentElement;
+        element != null && element !== tree;
+        element = element.parentElement
+      ) {
+        const id = element.parentElement?.dataset.treeId;
+        if (
+          element.getAttribute('role') === 'group' &&
+          id != null &&
+          previous.has(id)
+        ) {
+          focus = noteFocusWithin(element);
+          ids.unshift(id);
         }
       }
-      const rowOf = (id: string) =>
-        tree?.querySelector(`[data-tree-id="${CSS.escape(id)}"]`) ?? null;
-      ids.sort((a, b) => (rowOf(a)?.contains(rowOf(b)) === true ? -1 : 1));
       return focus == null ? null : {focus, ids};
     },
-    (noted: {focus: FocusWithin; ids: string[]}, expanded) => {
+    (noted, expanded) => {
       // The outermost row that collapsed: a row inside it goes with it.
       const id = noted.ids.find(candidate => !expanded.has(candidate));
       if (id == null) {
@@ -438,15 +445,10 @@ export function TreeList({
         row,
         row?.querySelector(':scope > [role="group"]') ?? null,
       );
-      // The row focus moved to holds the tree's one Tab stop; the roving pass
-      // that runs after this keeps an existing stop (AR1, AR2).
+      // The row focus moved to holds the tree's one Tab stop, unless it is
+      // disabled (AR1, AR2).
       if (moved && row != null) {
-        for (const stop of treeElementRef.current?.querySelectorAll<HTMLElement>(
-          '[role="treeitem"][tabindex="0"]',
-        ) ?? []) {
-          stop.setAttribute('tabindex', '-1');
-        }
-        row.setAttribute('tabindex', '0');
+        takeTabStop(row);
       }
     },
   );
@@ -557,7 +559,7 @@ export function TreeList({
     }
   }, [expandedIds, animatedLayout, endExit]);
 
-  const {treeRef, handleKeyDown, handleFocus} =
+  const {treeRef, handleKeyDown, handleFocus, takeTabStop} =
     useTreeFocusInternal<HTMLUListElement>({
       onToggleExpand: handleToggle,
       onActivate: activateItem,

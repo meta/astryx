@@ -1896,6 +1896,30 @@ describe('TreeList collapse focus (AR2)', () => {
     expect(row('lib')).toHaveFocus();
   });
 
+  it('moves focus to a disabled collapsing row, which leaves the Tab stop where it is', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    row('index')?.focus();
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
   it('moves no focus that is outside the collapsing branch', () => {
     const {rerender} = render(<Example isExpanded />);
     row('readme')?.focus();
