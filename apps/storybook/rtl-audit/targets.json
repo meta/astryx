@@ -631,5 +631,15 @@
       "overlay": ".astryx-resize-handle",
       "overlayRoot": ".astryx-layout"
     }
+  },
+  {
+    "component": "LayoutHeader",
+    "storyId": "core-layout--basic-card",
+    "dims": []
+  },
+  {
+    "component": "LayoutFooter",
+    "storyId": "core-layout--basic-card",
+    "dims": []
   }
 ]
