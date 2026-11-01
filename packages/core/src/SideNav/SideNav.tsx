@@ -561,10 +561,11 @@ export function SideNav({
     [],
   );
 
-  // Focus on a row the collapsed rail does not render (an item without an
-  // icon, a nested row) would fall to the page when the rail collapses. It
-  // moves instead to the rail's collapse toggle, or, with none, to the
-  // nearest row still in the rail (`component:SideNav` AR3). Rows and the
+  // Focus on something the collapsed rail does not render (an item without an
+  // icon, a nested row, a kept row's expand toggle or row actions) would fall
+  // to the page when the rail collapses. It moves instead to the rail's
+  // collapse toggle, or, with none, to the nearest control still in the rail
+  // (`component:SideNav` AR3). Rows and the
   // toggle register through their callback refs; the focused row is noted
   // in the commit before the DOM changes, and focus moves only if it fell.
   useInteractionModalityTracking();
@@ -606,11 +607,15 @@ export function SideNav({
           ? -1
           : 1,
       );
-    pendingFocusRef.current = {
-      focus,
-      rows,
-      index: rows.findIndex(row => row.contains(focus.element)),
-    };
+    // The innermost row holding focus, the last in document order: a nested
+    // row's parent holds it too.
+    let index = -1;
+    rows.forEach((row, at) => {
+      if (row.contains(focus.element)) {
+        index = at;
+      }
+    });
+    pendingFocusRef.current = {focus, rows, index};
   }, []);
   useLayoutEffect(() => {
     const pending = pendingFocusRef.current;
@@ -878,8 +883,9 @@ export function SideNav({
 }
 
 /**
- * The first focusable control of the nearest row, before the removed one, then
- * after it, that the collapsed rail still renders.
+ * The first focusable control the collapsed rail still renders, nearest the
+ * row that held focus: that row's own (a kept row whose expand toggle or row
+ * action went), then the rows before it, nearest first, then the rows after.
  */
 function nearestRenderedRow(
   rows: HTMLElement[],
@@ -888,7 +894,11 @@ function nearestRenderedRow(
   const order =
     index < 0
       ? rows
-      : [...rows.slice(0, index).reverse(), ...rows.slice(index + 1)];
+      : [
+          rows[index],
+          ...rows.slice(0, index).reverse(),
+          ...rows.slice(index + 1),
+        ];
   for (const row of order) {
     if (!row.isConnected) {
       continue;

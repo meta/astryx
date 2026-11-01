@@ -4332,6 +4332,55 @@ describe('SideNav collapse focus (AR3)', () => {
     expect(screen.getByRole('link', {name: 'Team'})).toHaveFocus();
   });
 
+  it("moves focus from a nested row to its parent's trigger, which the rail keeps, when there is no toggle", () => {
+    const nested = (isCollapsed: boolean) => (
+      <SideNav
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: () => {},
+          hasButton: false,
+        }}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem label="Settings" icon={StubIcon} collapsible>
+          <SideNavItem label="Billing" href="/settings/billing" />
+        </SideNavItem>
+      </SideNav>
+    );
+    const {rerender} = render(nested(false));
+    screen.getByRole('link', {name: 'Billing'}).focus();
+    rerender(nested(true));
+    expect(screen.queryByRole('link', {name: 'Billing'})).toBeNull();
+    expect(screen.getByRole('button', {name: 'Settings'})).toHaveFocus();
+  });
+
+  it("moves focus from a kept row's action, which the rail drops, to that row when there is no toggle", () => {
+    const withAction = (isCollapsed: boolean) => (
+      <SideNav
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: () => {},
+          hasButton: false,
+        }}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem
+          label="Project"
+          icon={StubIcon}
+          href="/project"
+          actions={
+            <button type="button" aria-label="Project actions">
+              ⋯
+            </button>
+          }
+        />
+      </SideNav>
+    );
+    const {rerender} = render(withAction(false));
+    screen.getByRole('button', {name: 'Project actions'}).focus();
+    rerender(withAction(true));
+    expect(screen.queryByRole('button', {name: 'Project actions'})).toBeNull();
+    expect(screen.getByRole('link', {name: 'Project'})).toHaveFocus();
+  });
+
   it('moves no focus when the rail expands', () => {
     const {rerender} = render(<Rail isCollapsed />);
     const toggle = screen.getByRole('button', {name: 'Expand sidebar'});
