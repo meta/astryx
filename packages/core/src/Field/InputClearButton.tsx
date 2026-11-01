@@ -18,9 +18,9 @@
 
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '../Button';
-import {Icon} from '../Icon';
-import {useTranslator} from '../i18n';
+import {Button} from '../Button/Button';
+import {Icon} from '../Icon/Icon';
+import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 
 const styles = stylex.create({

@@ -140,9 +140,9 @@ describe('ProgressBar', () => {
     expect(progressbar).toHaveAttribute('aria-valuenow', '0');
     expect(progressbar.getAttribute('aria-valuetext')).toBe('0%');
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
-    // The fill width must be a real percentage, not "NaN%".
+    // The filled share must be a real percentage, not "NaN%".
     const fill = progressbar.firstElementChild as HTMLElement;
-    expect(fill.style.width).toBe('0%');
+    expect(fill.style.getPropertyValue('--_progress-bar-fill')).toBe('0%');
   });
 
   it('treats a NaN max as an empty range instead of leaking "NaN"', () => {
@@ -653,16 +653,16 @@ describe('ProgressBar', () => {
       );
       const progressbar = screen.getByRole('progressbar');
       const fill = progressbar.firstElementChild as HTMLElement;
-      expect(fill.style.width).toBe('50%');
+      expect(fill.style.getPropertyValue('--_progress-bar-fill')).toBe('50%');
       expect(fill.classList.contains('astryx-progress-bar-mark')).toBe(false);
       expect(container.querySelectorAll(MARK)).toHaveLength(1);
     });
 
-    it('does not clip marks in determinate mode (track carries no overflow:hidden)', () => {
-      // In determinate mode the track must NOT clip, so a themed taller mark
-      // can overhang the bar. (Indeterminate mode re-adds the clip — covered
-      // separately — but marks are suppressed there, so nothing overhangs.)
-      render(
+    it('keeps marks outside the clipping track, so a themed tall mark can still overhang', () => {
+      // The track clips its fill to the rounded rail. Marks sit beside the
+      // track in its unclipped container, never inside it, so a theme that
+      // makes a mark taller than the bar still sees it overhang both edges.
+      const {container} = render(
         <ProgressBar
           value={50}
           label="Progress"
@@ -670,9 +670,36 @@ describe('ProgressBar', () => {
         />,
       );
       const progressbar = screen.getByRole('progressbar');
-      const trackClass = Array.from(progressbar.classList).find(c =>
-        c.startsWith('x'),
-      );
+      const marks = Array.from(container.querySelectorAll<HTMLElement>(MARK));
+      expect(marks).toHaveLength(1);
+      let css = '';
+      for (const sheet of Array.from(document.styleSheets)) {
+        for (const rule of Array.from(sheet.cssRules)) {
+          css += rule.cssText + '\n';
+        }
+      }
+      const clips = (el: Element) =>
+        Array.from(el.classList).some(cls =>
+          new RegExp(`\\.${cls}\\b[^{]*\\{[^}]*overflow:\\s*hidden`, 'i').test(
+            css,
+          ),
+        );
+      for (const mark of marks) {
+        expect(progressbar.contains(mark)).toBe(false);
+        // No ancestor between the mark and the bar's root clips it.
+        let node = mark.parentElement;
+        while (node != null && node !== container) {
+          expect(clips(node)).toBe(false);
+          node = node.parentElement;
+        }
+      }
+    });
+
+    it('clips the track in determinate mode (the fill slides in from the start)', () => {
+      // The determinate fill spans the whole track and is moved back by the
+      // unfilled share; the track's clip keeps the moved-out part hidden.
+      render(<ProgressBar value={30} label="Progress" />);
+      const progressbar = screen.getByRole('progressbar');
       let css = '';
       for (const sheet of Array.from(document.styleSheets)) {
         try {
@@ -683,34 +710,83 @@ describe('ProgressBar', () => {
           // ignore cross-origin sheets
         }
       }
-      css += Array.from(document.querySelectorAll('style'))
-        .map(s => s.textContent || '')
-        .join('\n');
-      // The atomic class that would set overflow:hidden must not be applied to
-      // the track. Sanity-check the bar still rendered with a StyleX class.
-      expect(trackClass).toBeDefined();
-      // No rule targeting the track's classes sets overflow:hidden. (StyleX
-      // atomic classes are unique per declaration; if overflow:hidden were on
-      // the track we'd see it applied. We assert the track element's computed
-      // intent by checking no overflow:hidden atomic is in its class list's
-      // rules — simplest robust check: the track style object omits it.)
       const trackHasOverflowHidden = Array.from(progressbar.classList).some(
-        cls => {
-          const re = new RegExp(
-            `\\.${cls}\\b[^{]*\\{[^}]*overflow:\\s*hidden`,
-            'i',
-          );
-          return re.test(css);
-        },
+        cls =>
+          new RegExp(`\\.${cls}\\b[^{]*\\{[^}]*overflow:\\s*hidden`, 'i').test(
+            css,
+          ),
       );
-      expect(trackHasOverflowHidden).toBe(false);
+      expect(trackHasOverflowHidden).toBe(true);
+    });
+
+    it('moves the determinate fill with a transform, not its width, except under forced colors', () => {
+      // A width transition lays out and repaints on the main thread every
+      // frame, so it stalls while a script runs; a transform transition runs
+      // on the compositor. The fill spans the track and its leading edge sits
+      // at the filled share, mirrored in RTL.
+      render(<ProgressBar value={30} label="Progress" />);
+      const fill = screen.getByRole('progressbar')
+        .firstElementChild as HTMLElement;
+      // The stylesheet's rules, apart and under forced colors.
+      let css = '';
+      let forcedCss = '';
+      const collect = (rules: CSSRuleList, forced: boolean) => {
+        for (const rule of Array.from(rules)) {
+          if ('cssRules' in rule && 'conditionText' in rule) {
+            collect(
+              (rule as CSSMediaRule).cssRules,
+              forced ||
+                /forced-colors:\s*active/.test(
+                  (rule as CSSMediaRule).conditionText,
+                ),
+            );
+          } else if (forced) {
+            forcedCss += rule.cssText + '\n';
+          } else {
+            css += rule.cssText + '\n';
+          }
+        }
+      };
+      for (const sheet of Array.from(document.styleSheets)) {
+        collect(sheet.cssRules, false);
+      }
+      const declarationsIn = (text: string) =>
+        Array.from(fill.classList)
+          .flatMap(cls =>
+            Array.from(
+              text.matchAll(new RegExp(`\\.${cls}\\b[^{]*\\{([^}]*)\\}`, 'g')),
+              m => m[1].trim(),
+            ),
+          )
+          .join('\n');
+      const joined = declarationsIn(css);
+      expect(fill.style.width).toBe('');
+      expect(fill.style.getPropertyValue('--_progress-bar-fill')).toBe('30%');
+      expect(joined).toMatch(/width:\s*100%/);
+      expect(joined).toMatch(/transition-property:\s*transform/);
+      expect(joined).not.toMatch(/transition-property:\s*width/);
+      expect(joined).toMatch(/will-change:\s*transform/);
+      expect(joined).toMatch(
+        /transform:\s*translateX\(calc\(var\(--_progress-bar-fill,\s*0%\) - 100%\)\)/,
+      );
+      expect(css).toMatch(
+        // The bar's own direction (`:dir(rtl)`), not any RTL ancestor.
+        /:dir\(rtl\)[^{]*\{[^}]*transform:\s*translateX\(calc\(100% - var\(--_progress-bar-fill,\s*0%\)\)\)/,
+      );
+      // Under forced colors the fill is sized to the value instead, so the
+      // track's clip never cuts its CanvasText outline (theme-tokens INV11);
+      // the Chromium spec checks the drawn outline.
+      const forced = declarationsIn(forcedCss);
+      expect(forced).toMatch(/width:\s*var\(--_progress-bar-fill,\s*0%\)/);
+      expect(forced).toMatch(/transform:\s*none/);
+      expect(forced).toMatch(/transition-property:\s*width/);
+      expect(forced).toMatch(/will-change:\s*auto/);
     });
 
     it('clips the track in indeterminate mode (the sliding fill must not escape)', () => {
       // Regression: the indeterminate fill slides from translateX -100% to
       // 250%, deliberately overshooting the track, and relies on the track
-      // clipping it to the visible window. Determinate mode drops the clip so
-      // marks can overhang — indeterminate mode must keep it.
+      // clipping it to the visible window.
       render(<ProgressBar isIndeterminate label="Loading" />);
       const progressbar = screen.getByRole('progressbar');
       let css = '';

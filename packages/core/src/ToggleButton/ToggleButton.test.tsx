@@ -656,6 +656,33 @@ describe('ToggleButtonGroup (single)', () => {
 // ToggleButtonGroup — Multiple mode
 // =============================================================================
 
+describe('ToggleButtonGroup host props (public-component-api INV5)', () => {
+  it('passes className, style, id, aria-* and data-* to the group, keeping its own role and name', () => {
+    render(
+      <ToggleButtonGroup
+        label="Alignment"
+        value={null}
+        onChange={() => {}}
+        className="toolbar-group"
+        style={{marginTop: 8}}
+        id="alignment"
+        aria-describedby="alignment-hint"
+        data-section="format"
+        // A caller role or name never replaces the group's own.
+        {...{role: 'radiogroup', 'aria-label': 'Ignored'}}>
+        <ToggleButton value="left" label="Left" />
+      </ToggleButtonGroup>,
+    );
+    const group = screen.getByRole('group', {name: 'Alignment'});
+    expect(group).toHaveClass('toolbar-group');
+    expect(group).toHaveClass('astryx-toggle-button-group');
+    expect(group).toHaveStyle({marginTop: '8px'});
+    expect(group).toHaveAttribute('id', 'alignment');
+    expect(group).toHaveAttribute('aria-describedby', 'alignment-hint');
+    expect(group).toHaveAttribute('data-section', 'format');
+  });
+});
+
 describe('ToggleButtonGroup (multiple)', () => {
   function MultipleGroup() {
     const [value, setValue] = useState<string[]>(['bold']);

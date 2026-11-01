@@ -22,9 +22,10 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, durationVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {Text} from '../Text/Text';
-import {mergeProps, mergeRefs} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {mergeRefs} from '../utils/mergeRefs';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
-import {useTranslator} from '../i18n';
+import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -337,7 +338,9 @@ const styles = stylex.create({
     // The named progressbar and the shared-channel message still convey
     // loading.
     animationDuration: {
-      default: durationVars['--duration-slow-min'],
+      // The loop reads the duration before a theme's tempo scales it
+      // (spec:AST-108 FR4).
+      default: `var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})`,
       '@media (prefers-reduced-motion: reduce)': '3s',
     },
     animationIterationCount: 'infinite',

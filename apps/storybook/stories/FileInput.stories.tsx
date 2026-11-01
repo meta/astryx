@@ -288,7 +288,8 @@ export const StatusVariantComparison: Story = {
     const [a, setA] = useState<File | File[] | null>(null);
     const [b, setB] = useState<File | File[] | null>(null);
     return (
-      <div style={{display: 'flex', flexDirection: 'column', gap: 24, width: 320}}>
+      <div
+        style={{display: 'flex', flexDirection: 'column', gap: 24, width: 320}}>
         <FileInput
           label="Attached (default)"
           value={a}
@@ -305,4 +306,163 @@ export const StatusVariantComparison: Story = {
       </div>
     );
   },
+};
+
+// Fixed files make selected states reachable without a file picker. The long
+// name is one unbroken token, as exported scans and generated reports often are.
+const AUDIT_FILES = {
+  short: new File(['audit'], 'resume.pdf', {type: 'application/pdf'}),
+  long: new File(
+    ['audit'],
+    'quarterly-financial-report-final-revised-approved-2026-q3-v12.pdf',
+    {type: 'application/pdf'},
+  ),
+} as const;
+
+const ERROR_STATUS = {
+  type: 'error',
+  message: 'File must be under 10MB',
+} as const;
+
+type AuditCase = {
+  id: string;
+  label: string;
+  mode: 'input' | 'dropzone';
+  value?: File | null;
+  status?: typeof ERROR_STATUS;
+  statusVariant?: 'attached' | 'detached' | 'tooltip';
+  isLoading?: boolean;
+};
+
+const AUDIT_CASES: AuditCase[] = [
+  {id: 'input-empty', label: 'Resume', mode: 'input'},
+  {
+    id: 'input-selected',
+    label: 'Resume',
+    mode: 'input',
+    value: AUDIT_FILES.short,
+  },
+  {
+    id: 'input-long-name',
+    label: 'Report',
+    mode: 'input',
+    value: AUDIT_FILES.long,
+  },
+  {
+    id: 'input-error-attached',
+    label: 'Resume',
+    mode: 'input',
+    status: ERROR_STATUS,
+  },
+  {
+    id: 'input-error-tooltip',
+    label: 'Resume',
+    mode: 'input',
+    status: ERROR_STATUS,
+    statusVariant: 'tooltip',
+  },
+  {
+    id: 'input-loading-error-tooltip',
+    label: 'Resume',
+    mode: 'input',
+    value: AUDIT_FILES.short,
+    status: ERROR_STATUS,
+    statusVariant: 'tooltip',
+    isLoading: true,
+  },
+  {id: 'dropzone-empty', label: 'Attachments', mode: 'dropzone'},
+  {
+    id: 'dropzone-selected',
+    label: 'Attachments',
+    mode: 'dropzone',
+    value: AUDIT_FILES.short,
+  },
+  {
+    id: 'dropzone-long-name',
+    label: 'Attachments',
+    mode: 'dropzone',
+    value: AUDIT_FILES.long,
+  },
+  {
+    id: 'dropzone-error-attached',
+    label: 'Attachments',
+    mode: 'dropzone',
+    status: ERROR_STATUS,
+  },
+  {
+    id: 'dropzone-error-detached',
+    label: 'Attachments',
+    mode: 'dropzone',
+    status: ERROR_STATUS,
+    statusVariant: 'detached',
+  },
+  {
+    id: 'dropzone-error-tooltip',
+    label: 'Attachments',
+    mode: 'dropzone',
+    status: ERROR_STATUS,
+    statusVariant: 'tooltip',
+  },
+  {
+    id: 'dropzone-selected-error-tooltip',
+    label: 'Attachments',
+    mode: 'dropzone',
+    value: AUDIT_FILES.short,
+    status: ERROR_STATUS,
+    statusVariant: 'tooltip',
+  },
+  {
+    id: 'dropzone-loading-error-tooltip',
+    label: 'Attachments',
+    mode: 'dropzone',
+    status: ERROR_STATUS,
+    statusVariant: 'tooltip',
+    isLoading: true,
+  },
+  {
+    id: 'dropzone-loading',
+    label: 'Attachments',
+    mode: 'dropzone',
+    isLoading: true,
+  },
+];
+
+function AuditCaseField({item}: {item: AuditCase}) {
+  const [value, setValue] = useState<File | File[] | null>(item.value ?? null);
+  return (
+    <div data-audit-case={item.id} style={{minWidth: 0}}>
+      <FileInput
+        label={item.label}
+        mode={item.mode}
+        value={value}
+        onChange={setValue}
+        status={item.status}
+        statusVariant={item.statusVariant}
+        isLoading={item.isLoading}
+      />
+    </div>
+  );
+}
+
+/**
+ * Every mode in its empty, selected, long-name, status, and loading states,
+ * including each status placement, for the component audit. The disabled
+ * states keep their own stories.
+ */
+export const AuditMatrix: Story = {
+  render: () => (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))',
+        gap: 24,
+        width: '100%',
+        padding: 16,
+        boxSizing: 'border-box',
+      }}>
+      {AUDIT_CASES.map(item => (
+        <AuditCaseField key={item.id} item={item} />
+      ))}
+    </div>
+  ),
 };

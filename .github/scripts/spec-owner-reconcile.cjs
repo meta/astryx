@@ -8,22 +8,28 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {classifyChanges} = require('./change-scope.cjs');
 const {
-  DECISION_STATUS_PREFIX,
   GATE_STATUS_CONTEXT,
-  READY_STATUS_PREFIX,
+  approvedDescription,
+  fingerprintSpecContent,
+  mirrorDescription,
+  parseOwnerCommandTarget,
   canonicalRunUrl,
-  decisionStatusDescription,
   describeOwnerCommandProblem,
   newestGateRun,
-  parseOwnerCommand,
-  parseDecisionStatuses,
   parseOwnerCommandIntent,
-  parseOwnerDecisionDispatch,
+  parseAuthority,
+  parseKind,
   parseOwnerFile,
-  parseReadyAttestations,
   requiredApprovalGroups,
   resolveOwnerDecision,
 } = require('./spec-owner-decision.cjs');
+const {
+  REVIEW_GATE_CONTEXT,
+  SPEC_WAITING_TEXT,
+  composeReviewGate,
+  readCodeGate,
+  readSpecGate,
+} = require('./review-signal-decision.cjs');
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 function isCommandComment(eventName, payload) {
@@ -49,21 +55,9 @@ function labelNames(pr) {
   return new Set(pr.labels.map(label => label.name));
 }
 
-function ownerCommandHelpMarker(headSha) {
-  return `<!-- spec-owner-command-help:${headSha} -->`;
-}
-
-function ownerCommandHelpBody({verb, headSha, problem}) {
-  return [
-    ownerCommandHelpMarker(headSha),
-    `That \`/${verb}-spec\` comment did not change \`${GATE_STATUS_CONTEXT}\`: ${problem}.`,
-    '',
-    'The gate only accepts the exact current head, so post this instead:',
-    '',
-    `    /${verb}-spec ${headSha}`,
-    '',
-    'A new commit invalidates the command, so repeat it after any push.',
-  ].join('\n');
+function isSpecPath(filePath) {
+  const scope = classifyChanges([{filename: filePath}]);
+  return scope.touchesKnowledgeRecords || scope.touchesDesignAssets;
 }
 
 function isSettled(pr) {
@@ -102,43 +96,16 @@ async function reconcileSpecOwnerGate({
     return;
   }
 
-  // A review app may relay an owner's decision as a repository dispatch. It
-  // decides the gate exactly like that owner's exact-head command, so it is
-  // held to the same eligibility before any API work.
-  let relayedDecision = null;
-  if (context.eventName === 'repository_dispatch') {
-    const relayed = parseOwnerDecisionDispatch(context.payload, {
-      appLogin: env.SPEC_DECISION_APP,
-    });
-    if (relayed.problem) {
-      core.info(`Ignoring a relayed owner decision: ${relayed.problem}.`);
-      return;
-    }
-    if (!allOwners.has(relayed.decision.owner)) {
-      core.info(
-        'Ignoring a relayed decision for someone outside the eligible owners.',
-      );
-      return;
-    }
-    relayedDecision = relayed.decision;
-  }
-
   const pullNumber = Number(
     context.payload.pull_request?.number ??
       context.payload.issue?.number ??
-      context.payload.inputs?.pr ??
-      relayedDecision?.pr,
+      context.payload.inputs?.pr,
   );
   if (!pullNumber) {
     throw new Error('Could not resolve a pull request number.');
   }
 
   const runId = BigInt(String(context.runId));
-  // A boolean workflow_dispatch input arrives as a real boolean; a string
-  // input arrives as text. Only an explicit true opts in.
-  const backfillOnly =
-    context.eventName === 'workflow_dispatch' &&
-    String(context.payload.inputs?.backfill ?? 'false') === 'true';
   const runUrl = canonicalRunUrl(
     repository,
     String(context.runId),
@@ -170,7 +137,7 @@ async function reconcileSpecOwnerGate({
     description,
     targetUrl = runUrl,
   }) {
-    await github.rest.repos.createCommitStatus({
+    const {data} = await github.rest.repos.createCommitStatus({
       owner,
       repo,
       sha,
@@ -179,6 +146,7 @@ async function reconcileSpecOwnerGate({
       description: description.slice(0, 140),
       target_url: targetUrl,
     });
+    return data;
   }
 
   async function newestRun(headSha) {
@@ -235,6 +203,7 @@ async function reconcileSpecOwnerGate({
         description: newest.status.description,
         targetUrl: newest.status.target_url,
       });
+      await publishReviewGate(headSha, readSpecGate([newest.status]));
     }
     core.info(
       `Run ${context.runId} yielded to newer run ${newest.runId.toString()}.`,
@@ -247,24 +216,25 @@ async function reconcileSpecOwnerGate({
     return newest === null || newest.runId <= runId;
   }
 
-  async function currentPullForRun(headSha) {
-    const current = await getPullRequest();
-    if (current.head.sha !== headSha) return null;
-    if (isSettled(current)) return null;
-    if (!(await isCurrentRun(headSha))) return null;
-    return current;
-  }
-
-  async function setFinalStatus(headSha, state, description) {
+  // The owners whose approval decided the gate, once the decision is known.
+  let approvedBy = [];
+  /** Publish the mirror, then the review gate composed with code review. */
+  async function setFinalStatus(headSha, state, text, missing = null) {
+    const approvers = state === 'success' ? approvedBy : [];
     if (!(await isPublishable(headSha))) return false;
     await createStatus({
       sha: headSha,
       context: GATE_STATUS_CONTEXT,
       state,
-      description,
+      description: mirrorDescription({state, missing, approvers}),
+    });
+    if (await restoreNewerStatus(headSha)) return false;
+    await publishReviewGate(headSha, {
+      satisfied: state === 'success',
+      text: state === 'success' && approvers.length === 0 ? null : text,
     });
     // The write cannot be undone, so verify what it landed on. A success that
-    // raced a merge is reported loudly and stops this run before auto-merge.
+    // raced a merge is reported loudly.
     const after = await getPullRequest();
     if (isSettled(after) || after.head.sha !== headSha) {
       core.warning(
@@ -275,7 +245,9 @@ async function reconcileSpecOwnerGate({
     return !(await restoreNewerStatus(headSha));
   }
 
-  async function removeLabel(name) {
+  async function removeLabel(name, pr = null) {
+    // A pull request read in this run that lacks the label needs no call.
+    if (pr && !(pr.labels ?? []).some(label => label?.name === name)) return;
     try {
       await github.rest.issues.removeLabel({
         owner,
@@ -315,23 +287,6 @@ async function reconcileSpecOwnerGate({
     }
   }
 
-  async function disableAutoMerge(pr, {requireOwnership = true} = {}) {
-    if (requireOwnership && !labelNames(pr).has(env.AUTO_MERGE_LABEL)) {
-      return;
-    }
-    if (pr.auto_merge) {
-      await github.graphql(
-        `mutation($id: ID!) {
-          disablePullRequestAutoMerge(input: {pullRequestId: $id}) {
-            pullRequest { number }
-          }
-        }`,
-        {id: pr.node_id},
-      );
-    }
-    await removeLabel(env.AUTO_MERGE_LABEL);
-  }
-
   async function readText(fullName, ref, filePath) {
     const [repoOwner, repoName] = fullName.split('/');
     try {
@@ -353,32 +308,204 @@ async function reconcileSpecOwnerGate({
     }
   }
 
+  /** A spec path's text at `ref`, or null when the path is absent there. */
+  async function readSpecContent(fullName, ref, filePath) {
+    const [repoOwner, repoName] = fullName.split('/');
+    try {
+      const {data} = await github.rest.repos.getContent({
+        owner: repoOwner,
+        repo: repoName,
+        path: filePath,
+        ref,
+      });
+      if (Array.isArray(data)) return null;
+      if (data.content == null) return `blob:${data.sha}`;
+      // Only Markdown is read as text; other assets hash as their bytes.
+      return filePath.endsWith('.md')
+        ? Buffer.from(data.content, 'base64').toString('utf8')
+        : `base64:${data.content.replace(/\s/g, '')}`;
+    } catch (error) {
+      if (error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  /** Details notes: the newest approval of other content; a revocation. */
+  function ownerActNotes({
+    reviews: ownerReviews,
+    comments: allComments,
+    owners: eligible,
+    approvesCurrentContent,
+  }) {
+    const stale = ownerReviews
+      .filter(
+        review =>
+          review.state === 'APPROVED' &&
+          !approvesCurrentContent(review.commit_id),
+      )
+      .map(review => review.submitted_at);
+    // Comments arrive oldest first, so the last act per owner wins.
+    const lastAct = new Map();
+    for (const comment of allComments) {
+      const login = comment.user?.login?.toLowerCase() ?? '';
+      const target =
+        eligible.has(login) && parseOwnerCommandTarget(comment.body);
+      if (!target) continue;
+      if (target.approved && !approvesCurrentContent(target.sha)) {
+        stale.push(comment.created_at);
+      }
+      lastAct.set(login, {owner: login, ...target, at: comment.created_at});
+    }
+    const revokedBy =
+      [...lastAct.values()]
+        .filter(act => !act.approved)
+        .sort((x, y) => Date.parse(y.at) - Date.parse(x.at))[0] ?? null;
+    return {
+      staleApprovalAt: stale.filter(Boolean).sort().at(-1) ?? null,
+      revokedBy,
+    };
+  }
+
+  /** The gate's details: the run summary its statuses link to. */
+  async function writeDetails({
+    statusText,
+    headSha,
+    approvalRequired,
+    approved: isApproved,
+    records: changedRecords,
+    currentContent,
+    notes,
+    commandProblem,
+  }) {
+    if (typeof core.summary?.addRaw !== 'function') return;
+    const groupFor = record => {
+      const current =
+        parseAuthority(record.headContent, record.path) === 'current' ||
+        parseAuthority(record.baseContent, record.previousPath) === 'current';
+      if (!current) return 'none (draft)';
+      const kind = parseKind(
+        record.headContent ?? record.baseContent,
+        record.path,
+      );
+      return kind === 'design' || kind === 'theme'
+        ? 'design or eng owner'
+        : 'eng owner';
+    };
+    const rows = changedRecords.map(record => {
+      const text = record.headContent ?? record.baseContent ?? '';
+      const id = text.match(/^id:\s*(.+)$/m)?.[1]?.trim() ?? record.path;
+      const title = text.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? '';
+      const before =
+        record.baseContent == null
+          ? 'new'
+          : (parseAuthority(record.baseContent, record.previousPath) ?? '?');
+      const after =
+        record.headContent == null
+          ? 'removed'
+          : (parseAuthority(record.headContent, record.path) ?? '?');
+      const change = before === after ? after : `${before} → ${after}`;
+      return `| \`${id}\` | ${title} | ${change} | ${groupFor(record)} |`;
+    });
+    // `<sha>` in the status text is literal, not markup.
+    const lines = [`### ${statusText.replace(/</g, '&lt;')}`, ''];
+    if (!isApproved && notes.revokedBy) {
+      lines.push(
+        `Approval revoked by @${notes.revokedBy.owner} at ${notes.revokedBy.at}.`,
+        '',
+      );
+    } else if (!isApproved && notes.staleApprovalAt) {
+      lines.push(
+        `Spec changed after approval at ${notes.staleApprovalAt}; approve the current head again.`,
+        '',
+      );
+    }
+    if (commandProblem) {
+      lines.push(`Your owner command decided nothing: ${commandProblem}.`, '');
+    }
+    if (approvalRequired && !isApproved) {
+      lines.push(
+        'Approve the current spec text with a comment on the pull request:',
+        '',
+        '```',
+        `/approve-spec ${headSha}`,
+        '```',
+        '',
+      );
+    }
+    lines.push(
+      '| Record | Title | Authority | Needs approval from |',
+      '| --- | --- | --- | --- |',
+      ...rows,
+      '',
+      '<details><summary>Changed spec paths and content fingerprint</summary>',
+      '',
+      ...Object.keys(currentContent.files).map(filePath => `- \`${filePath}\``),
+      '',
+      `Fingerprint \`${currentContent.fingerprint}\`. An approval of any commit with this fingerprint counts, so commits that leave these paths' text unchanged (other paths, merges from main, rebases, the draft → current flip) keep it.`,
+      '',
+      '</details>',
+    );
+    try {
+      await core.summary.addRaw(lines.join('\n')).write();
+    } catch (error) {
+      core.warning(`Could not write the gate details: ${error.message}`);
+    }
+  }
+
+  /** Compose the review gate; with no code half yet, review-signal does. */
+  async function publishReviewGate(headSha, spec) {
+    // If another job writes between this read and write, compose again, so a
+    // withdrawn code review is never overwritten with success.
+    const written = new Set();
+    const othersNewest = statuses =>
+      statuses.find(
+        status =>
+          status.context === REVIEW_GATE_CONTEXT && !written.has(status.id),
+      ) ?? null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const live = await listStatuses(headSha);
+      const basis = othersNewest(live);
+      const code = readCodeGate(live.filter(status => !written.has(status.id)));
+      if (!code) return;
+      const gate = composeReviewGate({
+        codeGated: code.gated,
+        codeDescription: code.description,
+        spec,
+      });
+      // The details link names the spec decision run: a newer one on yield,
+      // whether the gate it restores waits or succeeds.
+      const targetUrl = gate.target_url ?? spec?.url ?? runUrl;
+      const current = live.find(
+        status => status.context === REVIEW_GATE_CONTEXT,
+      );
+      if (
+        current?.state === gate.state &&
+        current?.description === gate.description &&
+        current?.target_url === targetUrl
+      ) {
+        return;
+      }
+      if (!(await isLiveHeadWritable(headSha))) return;
+      const status = await createStatus({
+        sha: headSha,
+        context: REVIEW_GATE_CONTEXT,
+        state: gate.state,
+        description: gate.description,
+        targetUrl,
+      });
+      if (status?.id != null) written.add(status.id);
+      if (othersNewest(await listStatuses(headSha))?.id === basis?.id) return;
+    }
+  }
+
   async function fetchSnapshot() {
     const before = await getPullRequest();
     const headSha = before.head.sha;
-    const [files, reviews, comments, timeline, statuses] = await Promise.all([
+    const [files, statuses] = await Promise.all([
       github.paginate(github.rest.pulls.listFiles, {
         owner,
         repo,
         pull_number: pullNumber,
-        per_page: 100,
-      }),
-      github.paginate(github.rest.pulls.listReviews, {
-        owner,
-        repo,
-        pull_number: pullNumber,
-        per_page: 100,
-      }),
-      github.paginate(github.rest.issues.listComments, {
-        owner,
-        repo,
-        issue_number: pullNumber,
-        per_page: 100,
-      }),
-      github.paginate(github.rest.issues.listEventsForTimeline, {
-        owner,
-        repo,
-        issue_number: pullNumber,
         per_page: 100,
       }),
       listStatuses(headSha),
@@ -387,6 +514,21 @@ async function reconcileSpecOwnerGate({
     if (after.head.sha !== headSha) return null;
 
     const scope = classifyChanges(files, {expectedCount: after.changed_files});
+    // Owner reviews, commands and dismissals only decide a change to
+    // knowledge records; every other pull request skips those reads, which
+    // spend the repository's shared API budget on each event. The head is
+    // confirmed again after them, below.
+    const list = (method, target) =>
+      scope.touchesKnowledgeRecords
+        ? github.paginate(method, {owner, repo, ...target, per_page: 100})
+        : Promise.resolve([]);
+    const [reviews, comments, timeline] = await Promise.all([
+      list(github.rest.pulls.listReviews, {pull_number: pullNumber}),
+      list(github.rest.issues.listComments, {issue_number: pullNumber}),
+      list(github.rest.issues.listEventsForTimeline, {
+        issue_number: pullNumber,
+      }),
+    ]);
     const knowledgeChanges = files.filter(
       file =>
         scope.complete &&
@@ -436,7 +578,89 @@ async function reconcileSpecOwnerGate({
     };
   }
 
-  const initialPr = await getPullRequest();
+  /**
+   * A head that changes no knowledge record has one decision, whatever any
+   * owner says: "No knowledge records changed." It depends only on the head's
+   * files, so it is written once per head and later events read it back
+   * instead of reconciling (two reads when the event carries the full pull
+   * request). Returns whether it decided the head, and the live pull request
+   * when it had to read one, so the full reconcile does not read it again.
+   */
+  async function decideHeadWithoutRecords() {
+    const eventPr = context.payload.pull_request;
+    const livePr =
+      eventPr?.changed_files == null ? await getPullRequest() : null;
+    const pr = livePr ?? eventPr;
+    const undecided = {done: false, livePr};
+    if (isSettled(pr)) return undecided;
+    const files = await github.paginate(github.rest.pulls.listFiles, {
+      owner,
+      repo,
+      pull_number: pullNumber,
+      per_page: 100,
+    });
+    const scope = classifyChanges(files, {expectedCount: pr.changed_files});
+    if (!scope.complete || scope.touchesKnowledgeRecords) return undecided;
+
+    const headSha = pr.head.sha;
+    const decided = {satisfied: true, text: null};
+    const statuses = await listStatuses(headSha);
+    const spec = readSpecGate(statuses);
+    const isDecided =
+      spec.known &&
+      spec.satisfied &&
+      newestGateRun(statuses, repository)?.status.description ===
+        mirrorDescription({state: 'success'});
+    const code = readCodeGate(statuses);
+    const gate =
+      code &&
+      composeReviewGate({
+        codeGated: code.gated,
+        codeDescription: code.description,
+        spec: decided,
+      });
+    const current = statuses.find(
+      status => status.context === REVIEW_GATE_CONTEXT,
+    );
+    const isGateCurrent =
+      !gate ||
+      (current?.state === gate.state &&
+        current?.description === gate.description);
+    if (labelNames(pr).has(env.REVIEW_LABEL)) {
+      await removeLabel(env.REVIEW_LABEL);
+    }
+    if (isDecided && isGateCurrent) {
+      core.info('This head already carries its decision: no records changed.');
+      return {done: true};
+    }
+    if (!(await isLiveHeadWritable(headSha))) return {done: true};
+    if (!isDecided) {
+      await createStatus({
+        sha: headSha,
+        context: GATE_STATUS_CONTEXT,
+        state: 'success',
+        description: mirrorDescription({state: 'success'}),
+      });
+    }
+    // The details link names the run that decided this head.
+    await publishReviewGate(
+      headSha,
+      isDecided ? {...decided, url: spec.url} : decided,
+    );
+    return {done: true};
+  }
+
+  // A failed fast path falls through to the full reconcile, which writes the
+  // waiting review gate before anything else can fail.
+  let fastPath = {done: false, livePr: null};
+  try {
+    fastPath = await decideHeadWithoutRecords();
+  } catch (error) {
+    core.warning(`Falling back to the full reconcile: ${error.message}`);
+  }
+  if (fastPath.done) return;
+
+  const initialPr = fastPath.livePr ?? (await getPullRequest());
   // Nothing about a merged or closed head is still being decided. Reconciling
   // one can only publish a decision that arrives after the merge it claims to
   // gate, so stop before writing any status.
@@ -453,68 +677,14 @@ async function reconcileSpecOwnerGate({
     state: 'pending',
     description: `Reconciling exact head ${initialHead.slice(0, 7)}.`,
   });
+  // The spec half is unknown until this run decides it, so the review gate
+  // waits meanwhile: a run that fails part-way (after a /revoke-spec, say)
+  // leaves it pending, never an earlier success. Written before the yield
+  // check, like the mirror, so a newer run's decision is restored over it.
+  await publishReviewGate(initialHead, readSpecGate([]));
   if (await restoreNewerStatus(initialHead)) return;
 
-  const actor = context.actor?.toLowerCase();
-  const eventHead = context.payload.pull_request?.head?.sha;
-  const eventTime = context.payload.pull_request?.updated_at;
-  // Only a DESIGNOWNER author may self-attest a head, and only for the design
-  // approval group (.github/DESIGNOWNERS). An engineering owner marking their
-  // own pull request ready is not an approval by anyone else.
-  if (
-    context.eventName === 'pull_request_target' &&
-    context.payload.action === 'ready_for_review' &&
-    actor &&
-    actor === initialPr.user.login.toLowerCase() &&
-    designOwners.includes(actor) &&
-    eventHead === initialHead &&
-    eventTime &&
-    !Number.isNaN(Date.parse(eventTime))
-  ) {
-    await createStatus({
-      sha: initialHead,
-      context: `${READY_STATUS_PREFIX}${actor}`,
-      state: 'success',
-      description: `Owner ready at ${new Date(eventTime).toISOString()}.`,
-    });
-  }
-
-  if (relayedDecision && relayedDecision.headSha !== initialHead) {
-    core.info(
-      `The relayed decision names ${relayedDecision.headSha.slice(0, 7)}, which is not the current head; it decides nothing.`,
-    );
-  } else if (relayedDecision) {
-    await createStatus({
-      sha: initialHead,
-      context: `${DECISION_STATUS_PREFIX}${relayedDecision.owner}`,
-      state: relayedDecision.approved ? 'success' : 'failure',
-      description: decisionStatusDescription({
-        approved: relayedDecision.approved,
-        at: now().toISOString(),
-        requestKey: relayedDecision.requestKey,
-      }),
-    });
-    if (!relayedDecision.approved) await disableAutoMerge(initialPr);
-  }
-
   const commentAuthor = context.payload.comment?.user?.login?.toLowerCase();
-  const reviewAuthor = context.payload.review?.user?.login?.toLowerCase();
-  const explicitRevoke =
-    context.eventName === 'issue_comment' &&
-    commentAuthor &&
-    allOwners.has(commentAuthor) &&
-    parseOwnerCommand(context.payload.comment.body ?? '', initialHead) ===
-      false;
-  const currentReviewDismissal =
-    context.eventName === 'pull_request_review' &&
-    context.payload.action === 'dismissed' &&
-    reviewAuthor &&
-    allOwners.has(reviewAuthor) &&
-    context.payload.review.commit_id === initialHead;
-  if (explicitRevoke || currentReviewDismissal) {
-    await disableAutoMerge(initialPr);
-  }
-
   const snapshot = await fetchSnapshot();
   if (snapshot === null || snapshot.pr.head.sha !== initialHead) {
     core.info(
@@ -529,33 +699,16 @@ async function reconcileSpecOwnerGate({
 
   const {pr, scope, records, reviews, comments, timeline, statuses} = snapshot;
 
-  // A near-miss owner command used to do nothing at all, so an owner could
-  // believe they had approved a head the gate never read. Answer it once per
-  // head with the exact command instead of leaving it silent.
-  if (context.eventName === 'issue_comment' && commentAuthor) {
-    const intent = parseOwnerCommandIntent(context.payload.comment?.body);
-    const problem = describeOwnerCommandProblem(intent, initialHead);
-    const marker = ownerCommandHelpMarker(initialHead);
-    if (problem && !comments.some(entry => entry.body?.includes(marker))) {
-      await github.rest.issues.createComment({
-        owner,
-        repo,
-        issue_number: pullNumber,
-        body: ownerCommandHelpBody({
-          verb: intent.verb,
-          headSha: initialHead,
-          problem,
-        }),
-      });
-      core.info(
-        `Answered an inexact ${intent.verb} command on ${initialHead}.`,
-      );
-    }
-  }
+  // A malformed owner command decides nothing; the details say why.
+  const commandProblem =
+    context.eventName === 'issue_comment' && commentAuthor
+      ? describeOwnerCommandProblem(
+          parseOwnerCommandIntent(context.payload.comment?.body),
+        )
+      : null;
 
   if (!scope.touchesKnowledgeRecords) {
-    await disableAutoMerge(pr);
-    await removeLabel(env.REVIEW_LABEL);
+    await removeLabel(env.REVIEW_LABEL, pr);
     await setFinalStatus(
       initialHead,
       'success',
@@ -582,35 +735,103 @@ async function reconcileSpecOwnerGate({
   }
   const designApprovers = [...new Set([...engineeringOwners, ...designOwners])];
   const themeApprovers = [...new Set([...engineeringOwners, ...designOwners])];
-  const readyAttestations = parseReadyAttestations(statuses, {
-    repository,
-    headSha: initialHead,
-    owners: designOwners,
+
+  // --- The spec content an approval binds (DEC-14). ---
+  const specPaths = [
+    ...new Set(
+      snapshot.files.flatMap(file =>
+        [file.filename, file.previous_filename].filter(
+          filePath => filePath && isSpecPath(filePath),
+        ),
+      ),
+    ),
+  ].sort();
+  const textCache = new Map();
+  function specText(sha, filePath) {
+    const key = `${sha.toLowerCase()}\0${filePath}`;
+    if (!textCache.has(key)) {
+      textCache.set(
+        key,
+        readSpecContent(pr.head.repo.full_name, sha, filePath),
+      );
+    }
+    return textCache.get(key);
+  }
+  async function fingerprintAt(sha, paths) {
+    const entries = await Promise.all(
+      paths.map(async filePath => ({
+        path: filePath,
+        content: await specText(sha, filePath),
+      })),
+    );
+    return fingerprintSpecContent(entries);
+  }
+  // An approved commit's spec paths join the head's, so dropping an approved
+  // change no longer matches. A failed comparison matches nothing.
+  async function specPathsAt(sha) {
+    const {data} = await github.rest.repos.compareCommitsWithBasehead({
+      owner,
+      repo,
+      basehead: `${pr.base.sha}...${sha}`,
+    });
+    return (data.files ?? []).flatMap(file =>
+      [file.filename, file.previous_filename].filter(
+        filePath => filePath && isSpecPath(filePath),
+      ),
+    );
+  }
+  async function hasCurrentContent(sha) {
+    try {
+      const paths = [
+        ...new Set([...specPaths, ...(await specPathsAt(sha))]),
+      ].sort();
+      const [atHead, atSha] = await Promise.all([
+        fingerprintAt(initialHead, paths),
+        fingerprintAt(sha, paths),
+      ]);
+      return atHead.fingerprint === atSha.fingerprint;
+    } catch (error) {
+      core.warning(`Could not compare ${sha.slice(0, 7)}: ${error.message}`);
+      return false;
+    }
+  }
+  const currentContent = await fingerprintAt(initialHead, specPaths);
+  // Only commits an eligible owner named, by review or command, are read.
+  const authorLogin = pr.user.login.toLowerCase();
+  const ownerReviews = reviews.filter(review => {
+    const login = review.user?.login?.toLowerCase();
+    // GitHub refuses an author's approving review; never count one anyway.
+    return login && login !== authorLogin && allOwners.has(login);
   });
-  const relayedDecisions = parseDecisionStatuses(statuses, {
-    repository,
-    headSha: initialHead,
-    owners: [...allOwners],
-  });
+  const namedShas = new Set([
+    ...ownerReviews.map(review => review.commit_id?.toLowerCase()),
+    ...comments
+      .filter(comment =>
+        allOwners.has(comment.user?.login?.toLowerCase() ?? ''),
+      )
+      .map(comment => parseOwnerCommandTarget(comment.body)?.sha),
+  ]);
+  const sameContent = new Set([initialHead.toLowerCase()]);
+  for (const sha of [...namedShas].filter(Boolean)) {
+    if (!sameContent.has(sha) && (await hasCurrentContent(sha))) {
+      sameContent.add(sha);
+    }
+  }
+  const approvesCurrentContent = sha =>
+    sha != null && sameContent.has(sha.toLowerCase());
+
   const decisionInput = {
-    reviews,
+    reviews: ownerReviews,
     comments,
-    relayedDecisions,
     dismissalEvents: timeline,
     headSha: initialHead,
+    approvesCurrentContent,
   };
-  // A ready-for-review attestation is the design group's own self-attestation
-  // path. It is not evidence for the non-design or theme groups, which stay on
-  // real exact-head reviews and commands.
   const specDecision = requiredGroups.spec
     ? resolveOwnerDecision({...decisionInput, owners: engineeringOwners})
     : {approved: true, owner: null};
   const designDecision = requiredGroups.design
-    ? resolveOwnerDecision({
-        ...decisionInput,
-        readyAttestations,
-        owners: designApprovers,
-      })
+    ? resolveOwnerDecision({...decisionInput, owners: designApprovers})
     : {approved: true, owner: null};
   const themeDecision = requiredGroups.theme
     ? resolveOwnerDecision({...decisionInput, owners: themeApprovers})
@@ -624,22 +845,39 @@ async function reconcileSpecOwnerGate({
   ]
     .filter(Boolean)
     .filter((ownerName, index, owners) => owners.indexOf(ownerName) === index);
-  const requiredOwnerDescription = [
-    requiredGroups.spec
-      ? `an engineering owner (${engineeringOwners.join(',')})`
-      : null,
-    requiredGroups.design
-      ? `a design approver (${designApprovers.join(',')})`
-      : null,
-    requiredGroups.theme
-      ? `a theme approver (${themeApprovers.join(',')})`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(' and ');
+  const missingGroups = {
+    spec: !specDecision.approved,
+    design: !designDecision.approved,
+    theme: !themeDecision.approved,
+    heldBy: [specDecision, designDecision, themeDecision].find(
+      decision => decision.approved === false && decision.source === 'review',
+    )?.owner,
+  };
+  const statusText =
+    ownerApprovalRequired && !approved
+      ? missingGroups.heldBy
+        ? SPEC_WAITING_TEXT.held(missingGroups.heldBy)
+        : SPEC_WAITING_TEXT[missingGroups.spec ? 'eng' : 'design']
+      : ownerApprovalRequired
+        ? approvedDescription(approvingOwners)
+        : 'Draft-only knowledge change; owner approval is not required.';
+  await writeDetails({
+    statusText,
+    headSha: initialHead,
+    approvalRequired: ownerApprovalRequired,
+    approved,
+    records,
+    currentContent,
+    notes: ownerActNotes({
+      reviews: ownerReviews,
+      comments,
+      owners: allOwners,
+      approvesCurrentContent,
+    }),
+    commandProblem,
+  });
 
   if (ownerApprovalRequired && !approved) {
-    await disableAutoMerge(pr);
     if (!(await isCurrentRun(initialHead))) return;
     await ensureLabel(
       pr,
@@ -647,16 +885,11 @@ async function reconcileSpecOwnerGate({
       'd4c5f9',
       'Current knowledge records await owner approval',
     );
-    await setFinalStatus(
-      initialHead,
-      'pending',
-      `Waiting for ${requiredOwnerDescription} on ${initialHead.slice(0, 7)}.`,
-    );
+    await setFinalStatus(initialHead, 'pending', statusText, missingGroups);
     return;
   }
 
   if (pr.draft) {
-    await disableAutoMerge(pr);
     if (!(await isCurrentRun(initialHead))) return;
     await removeLabel(env.REVIEW_LABEL);
     await setFinalStatus(
@@ -667,87 +900,12 @@ async function reconcileSpecOwnerGate({
     return;
   }
 
-  const successDescription = ownerApprovalRequired
-    ? `Approved by ${approvingOwners
-        .map(name => `@${name}`)
-        .join(' and ')} for ${initialHead.slice(0, 7)}.`
-    : 'Draft-only knowledge change; owner approval is not required.';
+  const successDescription = statusText;
+  approvedBy = ownerApprovalRequired ? approvingOwners : [];
 
-  if (!scope.specOnly) {
-    await disableAutoMerge(pr);
-    if (!(await isCurrentRun(initialHead))) return;
-    await removeLabel(env.REVIEW_LABEL);
-    await setFinalStatus(initialHead, 'success', successDescription);
-    return;
-  }
-
-  // Owner approval is the gate decision; auto-merge is an optional convenience.
-  // Publish the truthful terminal status first so an integration permission
-  // failure cannot leave an approved head stuck on "Reconciling".
-  if (!(await setFinalStatus(initialHead, 'success', successDescription))) {
-    return;
-  }
+  if (!(await isCurrentRun(initialHead))) return;
   await removeLabel(env.REVIEW_LABEL);
-
-  // A backfill exists to give an old head its missing status before the
-  // context becomes required. Landing the pull request is a separate decision
-  // its author has not asked this run to make.
-  if (backfillOnly) {
-    core.info('Backfill run: published the gate status without auto-merge.');
-    return;
-  }
-
-  let enabledAutoMergeByThisRun = false;
-  if (!pr.auto_merge) {
-    const beforeEnable = await currentPullForRun(initialHead);
-    if (beforeEnable === null || beforeEnable.auto_merge) return;
-    await ensureLabel(
-      beforeEnable,
-      env.AUTO_MERGE_LABEL,
-      'bfdadc',
-      'Auto-merge was enabled by the spec owner gate',
-    );
-    const afterLabel = await currentPullForRun(initialHead);
-    if (afterLabel === null || afterLabel.auto_merge) return;
-    try {
-      await github.graphql(
-        `mutation($id: ID!, $oid: GitObjectID!) {
-          enablePullRequestAutoMerge(input: {
-            pullRequestId: $id,
-            mergeMethod: SQUASH,
-            expectedHeadOid: $oid
-          }) {
-            pullRequest { number }
-          }
-        }`,
-        {id: pr.node_id, oid: initialHead},
-      );
-      enabledAutoMergeByThisRun = true;
-      core.info(`Enabled squash auto-merge for spec-only PR #${pullNumber}.`);
-    } catch (error) {
-      // Leave the conservative ownership marker intact. The failure may be an
-      // ambiguous response after a successful enable, or a newer run for the
-      // same or a newer head may already be using the global marker. A stale
-      // marker with auto-merge off is harmless: later reconciliation observes the real PR
-      // state and can retry or remove it without racing a newer owner.
-      core.warning(`Could not enable auto-merge: ${error.message}`);
-      return;
-    }
-  }
-
-  if (enabledAutoMergeByThisRun) {
-    const afterEnable = await newestRun(initialHead);
-    if (
-      afterEnable !== null &&
-      afterEnable.runId > runId &&
-      afterEnable.status.state !== 'success'
-    ) {
-      await disableAutoMerge(await getPullRequest(), {
-        requireOwnership: false,
-      });
-      return;
-    }
-  }
+  await setFinalStatus(initialHead, 'success', successDescription);
 }
 
 module.exports = {isCommandComment, reconcileSpecOwnerGate};

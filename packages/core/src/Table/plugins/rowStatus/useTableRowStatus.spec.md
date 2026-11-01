@@ -48,7 +48,7 @@ and MUST follow this contract when implemented.
   boundary plus restoration of stable behavior before the next stable release.
 - Migration decision: no stable-consumer codemod and no required stable-consumer
   edit. Canary consumers that intentionally adopted the implicit semantic glyph
-  from [#5671](https://github.com/facebook/astryx/pull/5671) migrate manually from
+  from [#5671](https://github.com/meta/astryx/pull/5671) migrate manually from
   `{color: 'error', label}` to `{status: 'error', label}`.
 
 Stable `0.5.2` already defines `{color, label}` as a caller-painted dot and
@@ -97,7 +97,7 @@ package-version Changeset.
 - A public `variant` or `presentation` prop, extensible variant map, reflected
   variant data attribute, or row-status theme selector axis.
 - No `table-row-status` target is approved by this contract.
-  [#5754](https://github.com/facebook/astryx/pull/5754) remains outside this
+  [#5754](https://github.com/meta/astryx/pull/5754) remains outside this
   contract and is held for a separate AST-002 proposal proving a theme-author
   need, painter placement, and exact guarantees.
 
@@ -307,7 +307,7 @@ axis or data-attribute guarantee.
 **Direction owner:** cixzhang, 2026-09-01
 
 Stable `0.5.2` custom-marker behavior is preserved without a codemod. The canary
-behavior introduced by [#5671](https://github.com/facebook/astryx/pull/5671), where
+behavior introduced by [#5671](https://github.com/meta/astryx/pull/5671), where
 semantic-looking `color` values choose icons, must be reverted before stable.
 Canary adopters of that implicit glyph migrate manually to `status`.
 
@@ -324,7 +324,7 @@ The semantic interface uses Icon's existing target, registry, and theme-owned
 artwork and tone. This contract records generated anatomy but does not add
 `table-row-status`, `presentation`, `variant`, or an equivalent selector surface.
 
-Owner direction holds [#5754](https://github.com/facebook/astryx/pull/5754)
+Owner direction holds [#5754](https://github.com/meta/astryx/pull/5754)
 as written. A future direct target requires separate AST-002 review after painter
 placement, theme-author need, and exact property guarantees are settled.
 

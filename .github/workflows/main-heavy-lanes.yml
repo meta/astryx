@@ -1,0 +1,117 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Visual, accessibility and RTL run on main, not on every pull request update
+# (spec:AST-030 FR12, DEC-7): this workflow dispatches ci.yml's canonical
+# release-check on main's tip; that run is main's visual/a11y/RTL result, and a
+# failure is fixed forward. A check covers every merge up to its commit, so
+# main is checked about once an hour (DEC-11): a push dispatches at once when
+# no check has started in the last 55 minutes, and a quarter-hourly schedule
+# picks up the tip a burst of merges left unchecked. Main's own fast checks
+# (deploy.yml) still run for every push. The release gate's exact-commit
+# release-check before a cut is dispatched separately and is unchanged.
+name: Main heavy lanes
+
+on:
+  push:
+    branches: ['main']
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+
+permissions: {}
+
+# One decision at a time, so two pushes cannot both see no recent check.
+concurrency:
+  group: main-heavy-lanes-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-slim
+    # Room for the rate-limit wait (at most five minutes) and the dispatch.
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch the visual, accessibility and RTL release-check for main's tip
+        uses: actions/github-script@v9
+        env:
+          SHA: ${{ github.sha }}
+        with:
+          script: |
+            // Wait out the repository's shared API rate limit, with the helper
+            // read from this workflow's own trusted commit (no checkout). The
+            // raw file host spends none of that budget; the API is the fallback.
+            {
+              const helperPath = '.github/scripts/lib/rate-limit-backoff.cjs';
+              let helperSource;
+              try {
+                const response = await fetch(`https://raw.githubusercontent.com/${context.repo.owner}/${context.repo.repo}/${context.sha}/${helperPath}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                helperSource = await response.text();
+              } catch {
+                const {data: helper} = await github.rest.repos.getContent({...context.repo, ref: context.sha, path: helperPath});
+                helperSource = Buffer.from(helper.content, 'base64').toString('utf8');
+              }
+              const helperModule = {exports: {}};
+              new Function('module', 'exports', 'require', helperSource)(
+                helperModule, helperModule.exports,
+                () => { throw new Error('rate-limit-backoff.cjs must stay dependency-free'); },
+              );
+              helperModule.exports.installRateLimitBackoff({github, core});
+            }
+            // A check starts at most once in this window; the schedule's
+            // quarter-hour cadence adds up to 15 minutes to it.
+            const WINDOW_MINUTES = 55;
+            const {data: branch} = await github.rest.repos.getBranch({...context.repo, branch: 'main'});
+            const tip = branch.commit.sha;
+            if (context.eventName === 'push' && tip !== process.env.SHA) {
+              core.notice(`main moved past ${process.env.SHA.slice(0, 7)}; the newer push's check covers it.`);
+              return;
+            }
+            // This workflow's checks: ci.yml runs dispatched on main by the
+            // workflow token, which stays a run's actor when a person re-runs
+            // it. A cancelled one was replaced while waiting and never ran.
+            const {data} = await github.rest.actions.listWorkflowRuns({
+              ...context.repo, workflow_id: 'ci.yml', event: 'workflow_dispatch', branch: 'main', per_page: 30,
+            });
+            const checks = data.workflow_runs.filter(run =>
+              run.actor?.login === 'github-actions[bot]' && run.conclusion !== 'cancelled');
+            // A run that checked out a newer commit than it was asked to check
+            // (a merge landed between the tip read and the dispatch) fails its
+            // release-authority job and is no check of that commit; it still
+            // holds the window. Any other run at the tip, failed included, is.
+            const authorityRefused = async run => {
+              const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+              });
+              return jobs.some(job => job.name === 'release-authority' && job.conclusion === 'failure');
+            };
+            let checked = false;
+            for (const run of checks.filter(item => item.head_sha === tip)) {
+              if (run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) {
+                checked = true;
+                break;
+              }
+            }
+            if (checked) {
+              core.notice(`main's tip ${tip.slice(0, 7)} already has a release-check.`);
+              return;
+            }
+            const latest = checks.map(run => Date.parse(run.created_at)).sort((a, b) => b - a)[0];
+            const minutes = latest == null ? Infinity : (Date.now() - latest) / 60000;
+            if (minutes < WINDOW_MINUTES) {
+              core.notice(`A release-check started ${Math.floor(minutes)} minutes ago; the next one, at most ${WINDOW_MINUTES - Math.floor(minutes) + 15} minutes from now, covers ${tip.slice(0, 7)}.`);
+              return;
+            }
+            // ci.yml queues these dispatches in one group (one running, one
+            // waiting; a newer one replaces the waiting one). A merge landing
+            // between the tip read above and this call makes the run check out
+            // the newer commit and fail its exact-head check; the next
+            // dispatch checks that commit.
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo,
+              workflow_id: 'ci.yml',
+              ref: 'main',
+              inputs: {operation: 'release-check', 'release-branch': 'main', 'expected-head': tip},
+            });

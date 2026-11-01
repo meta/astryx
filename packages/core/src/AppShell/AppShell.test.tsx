@@ -860,7 +860,7 @@ describe('AppShell', () => {
     expect(observeSpy).toHaveBeenCalled();
   });
 
-  it('does not set up ResizeObserver in fill mode', () => {
+  it('does not observe the header in fill mode', () => {
     const observeSpy = vi.fn();
     vi.stubGlobal(
       'ResizeObserver',
@@ -878,7 +878,13 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    expect(observeSpy).not.toHaveBeenCalled();
+    // Only the header offset needs measuring for sticky positioning, which
+    // fill mode does not use. (Main is measured for keyboard access.)
+    const observed = new Set<unknown>();
+    for (const call of observeSpy.mock.calls) {
+      observed.add(call[0]);
+    }
+    expect(observed.has(screen.getByRole('banner'))).toBe(false);
   });
 
   // ===========================================================================
@@ -1144,5 +1150,161 @@ describe('AppShell', () => {
     expect(
       JSON.parse(screen.getByTestId('probe').textContent).isMobileNavOpen,
     ).toBe(true);
+  });
+});
+
+describe('AppShell main keyboard access', () => {
+  let frames: FrameRequestCallback[];
+
+  beforeEach(() => {
+    frames = [];
+    vi.stubGlobal(
+      'requestAnimationFrame',
+      vi.fn((callback: FrameRequestCallback) => {
+        frames.push(callback);
+        return frames.length;
+      }),
+    );
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    // jsdom does not expand LayoutContent's `overflow` into its longhands.
+    const nativeGetComputedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const computed = nativeGetComputedStyle(element, pseudo);
+        return new Proxy(computed, {
+          // eslint-disable-next-line @typescript-eslint/promise-function-async -- Proxy traps must remain synchronous
+          get(target, property) {
+            if (property === 'overflowX' || property === 'overflowY') {
+              return target.overflow || 'visible';
+            }
+            return Reflect.get(target, property, target);
+          },
+        });
+      },
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+  });
+
+  function setMainGeometry(main: HTMLElement, scrollHeight: number) {
+    for (const [key, value] of [
+      ['clientWidth', 800],
+      ['scrollWidth', 800],
+      ['clientHeight', 300],
+      ['scrollHeight', scrollHeight],
+      ['scrollTop', 0],
+      ['scrollLeft', 0],
+    ] as const) {
+      Object.defineProperty(main, key, {
+        configurable: true,
+        value,
+        writable: true,
+      });
+    }
+  }
+
+  function remeasure() {
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    act(() => {
+      const pending = frames.splice(0);
+      pending.forEach(callback => callback(performance.now()));
+    });
+  }
+
+  it('makes main a keyboard stop while it scrolls overflowing content, and a skip target again once it fits', () => {
+    render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const main = screen.getByRole('main');
+    expect(main).toHaveAttribute('tabindex', '-1');
+
+    setMainGeometry(main, 1200);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '0');
+
+    setMainGeometry(main, 300);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('observes main only with fill, where it can become a keyboard stop', () => {
+    const observed: Element[] = [];
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(public callback: ResizeObserverCallback) {}
+        observe(target: Element) {
+          observed.push(target);
+        }
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const inMain = (main: HTMLElement) =>
+      observed.filter(target => target === main || main.contains(target));
+
+    const {unmount} = render(
+      <AppShell height="auto" topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(inMain(screen.getByRole('main'))).toEqual([]);
+    unmount();
+
+    render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(inMain(screen.getByRole('main')).length).toBeGreaterThan(0);
+  });
+
+  it('stops observing main when the shell switches to auto, and measures it again back in fill', () => {
+    const {rerender} = render(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const main = screen.getByRole('main');
+    setMainGeometry(main, 1200);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '0');
+
+    rerender(
+      <AppShell height="auto" topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+    remeasure();
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '-1');
+
+    // Back in fill, main is measured as it attaches, with no other signal.
+    rerender(
+      <AppShell topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    expect(screen.getByRole('main')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('never makes main a keyboard stop when the page scrolls instead (auto)', () => {
+    render(
+      <AppShell height="auto" topNav={<div>Nav</div>}>
+        <p>Long content</p>
+      </AppShell>,
+    );
+    const main = screen.getByRole('main');
+
+    setMainGeometry(main, 1200);
+    remeasure();
+    expect(main).toHaveAttribute('tabindex', '-1');
   });
 });

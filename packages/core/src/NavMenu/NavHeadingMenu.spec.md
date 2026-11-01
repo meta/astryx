@@ -44,7 +44,7 @@ system_specs: [spec:AST-005/DEC-1, spec:AST-020, spec:AST-085]
 | Behavior                | A `role="menu"` list of `menuitem` rows inside a heading popover, with arrow, Home, End, typeahead, Enter, Space, and Escape support. Selecting an enabled item runs it and, where the host heading supplies a close action, closes the heading menu.                 |
 | End-user impact         | Users switch products or accounts from the heading menu by pointer or keyboard; disabled rows are skipped by keyboard and typeahead.                                                                                                                                  |
 | Builder impact          | None.                                                                                                                                                                                                                                                                 |
-| Compatibility/readiness | Records shipped behavior; no public change. Six implementation gaps (see Current-state impact).                                                                                                                                                                       |
+| Compatibility/readiness | Records shipped behavior; no public change. Five implementation gaps (see Current-state impact).                                                                                                                                                                       |
 | Review checks           | Reject losing `menu`/`menuitem` roles to caller props, keyboard focus landing on a disabled item, or a caller `onKeyDown` that silently disables the keyboard model.                                                                                                  |
 | Governing rules         | `family:navigation-destinations` FR7; `architecture:interaction-modality`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                                                    |
 
@@ -81,10 +81,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   `role="menu"` sits directly inside the heading's own `role="menu"` wrapper.
   WAI-ARIA 1.2 allows a `menu` to own only `menuitem`-family items and groups,
   so assistive technology meets a menu nested in a menu.
-- **Inside a heading, arrow keys move twice.** Inside SideNavHeading or
-  TopNavHeading, the heading's own list handler also moves focus over every
-  `menuitem`, so one ArrowDown moves two items, and in a two-item menu ArrowDown
-  never moves focus. The APG menu pattern moves focus one item per arrow press.
 - **The menu has no name of its own.** NavHeadingMenu's `menu` carries no
   accessible name unless the caller passes `aria-label`; inside a heading only
   the heading's wrapper `menu` is named. The APG menu pattern, which

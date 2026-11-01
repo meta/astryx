@@ -139,7 +139,7 @@ test('desktop search stays exposed across hydration at exactly 768px', async ({
     );
     expect(await search.boundingBox()).toEqual(initialBox);
 
-    const banner = page.getByRole('alert').filter({hasText: 'unreleased docs'});
+    const banner = page.getByRole('region', {name: 'Documentation notice'});
     if (await banner.count()) {
       await banner.getByRole('button', {name: /^Dismiss/}).click();
       await expect(banner).toHaveCount(0);

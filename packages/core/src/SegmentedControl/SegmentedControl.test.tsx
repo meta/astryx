@@ -16,6 +16,7 @@ import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {hasPressedArm} from '../__tests__/pressState';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {SegmentedControl} from './SegmentedControl';
 import {SegmentedControlItem} from './SegmentedControlItem';
 import {
@@ -562,6 +563,90 @@ describe('SegmentedControl disabled state', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
+  it("does not run a caller's onClick on a disabled segment", async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+    const handleChange = vi.fn();
+
+    render(
+      <SegmentedControl value="grid" onChange={handleChange} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem
+          value="list"
+          label="List"
+          isDisabled
+          onClick={handleClick}
+        />
+      </SegmentedControl>,
+    );
+
+    await user.click(screen.getByRole('radio', {name: 'List'}));
+    expect(handleClick).not.toHaveBeenCalled();
+    expect(handleChange).not.toHaveBeenCalled();
+  });
+
+  it("does not run a caller's onClick when the whole group is disabled", async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        isDisabled>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" onClick={handleClick} />
+      </SegmentedControl>,
+    );
+
+    await user.click(screen.getByRole('radio', {name: 'List'}));
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it("does not run a caller's onClick on a focusable disabled segment", async () => {
+    // A group disabled with a reason keeps its selected segment in the tab
+    // order, so Enter and Space can reach it and synthesize a click.
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+
+    render(
+      <SegmentedControl
+        value="grid"
+        onChange={() => {}}
+        label="View mode"
+        isDisabled
+        disabledMessage="Choose a project to switch views">
+        <SegmentedControlItem value="grid" label="Grid" onClick={handleClick} />
+        <SegmentedControlItem value="list" label="List" />
+      </SegmentedControl>,
+    );
+
+    const selected = screen.getByRole('radio', {name: 'Grid'});
+    selected.focus();
+    expect(selected).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it("still runs a caller's onClick on an enabled segment", async () => {
+    const user = userEvent.setup({pointerEventsCheck: 0});
+    const handleClick = vi.fn();
+    const handleChange = vi.fn();
+
+    render(
+      <SegmentedControl value="grid" onChange={handleChange} label="View mode">
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" onClick={handleClick} />
+      </SegmentedControl>,
+    );
+
+    await user.click(screen.getByRole('radio', {name: 'List'}));
+    expect(handleClick).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith('list');
+  });
+
   it('skips disabled items during keyboard navigation', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();
@@ -584,6 +669,11 @@ describe('SegmentedControl disabled state', () => {
 
   describe('disabledMessage', () => {
     const h = {hidden: true} as const;
+
+    // The input modality is document-global; each case starts without one.
+    beforeEach(() => {
+      __resetInteractionModalityForTest();
+    });
 
     function renderControl(props?: {onChange?: (v: string) => void}) {
       return render(
@@ -649,6 +739,127 @@ describe('SegmentedControl disabled state', () => {
       renderControl({onChange});
       const list = screen.getByRole('radio', {name: 'List', hidden: true});
       fireEvent.click(list);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    // spec:AST-085 FR5: the reason describes the segment that has focus.
+    it('describes the focused segment with the reason', async () => {
+      const user = userEvent.setup();
+      renderControl();
+      await user.tab();
+      const grid = screen.getByRole('radio', {name: 'Grid'});
+      expect(grid).toHaveFocus();
+      expect(grid).toHaveAccessibleDescription(
+        'Choose a project to switch views',
+      );
+      expect(
+        screen.getByRole('radio', {name: 'List'}),
+      ).toHaveAccessibleDescription('Choose a project to switch views');
+    });
+
+    it('keeps a caller description ahead of the reason', () => {
+      render(
+        <>
+          <span id="grid-hint">Shows thumbnails</span>
+          <SegmentedControl
+            value="grid"
+            onChange={() => {}}
+            label="View mode"
+            isDisabled
+            disabledMessage="Choose a project to switch views">
+            <SegmentedControlItem
+              value="grid"
+              label="Grid"
+              aria-describedby="grid-hint"
+            />
+          </SegmentedControl>
+        </>,
+      );
+      expect(
+        screen.getByRole('radio', {name: 'Grid'}),
+      ).toHaveAccessibleDescription(
+        'Shows thumbnails Choose a project to switch views',
+      );
+    });
+
+    it('adds no reason to the segments of a control that is not disabled', () => {
+      render(
+        <SegmentedControl
+          value="grid"
+          onChange={() => {}}
+          label="View mode"
+          disabledMessage="Choose a project to switch views">
+          <SegmentedControlItem value="grid" label="Grid" />
+        </SegmentedControl>,
+      );
+      expect(screen.getByRole('radio', {name: 'Grid'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
+    // FR7: the control keeps one Tab stop while disabled with a reason, even
+    // when no enabled segment is selected.
+    it.each([
+      ['the value matches no segment', 'none', undefined, 'Grid'],
+      ['the selected segment is itself disabled', 'grid', 'grid', 'Grid'],
+      [
+        'the value matches no segment and the first is itself disabled',
+        'none',
+        'grid',
+        'List',
+      ],
+    ] as const)(
+      'keeps one Tab stop when %s',
+      async (_case, value, disabledSegment, expectedStop) => {
+        const user = userEvent.setup();
+        render(
+          <>
+            <button type="button">Before</button>
+            <SegmentedControl
+              value={value}
+              onChange={() => {}}
+              label="View mode"
+              isDisabled
+              disabledMessage="Choose a project to switch views">
+              <SegmentedControlItem
+                value="grid"
+                label="Grid"
+                isDisabled={disabledSegment === 'grid'}
+              />
+              <SegmentedControlItem value="list" label="List" />
+            </SegmentedControl>
+            <button type="button">After</button>
+          </>,
+        );
+        const stops = screen
+          .getAllByRole('radio')
+          .filter(radio => radio.tabIndex === 0);
+        expect(stops.map(radio => radio.textContent)).toEqual([expectedStop]);
+        await user.tab();
+        expect(screen.getByRole('button', {name: 'Before'})).toHaveFocus();
+        await user.tab();
+        const stop = screen.getByRole('radio', {name: expectedStop});
+        expect(stop).toHaveFocus();
+        expect(stop).toHaveAccessibleDescription(
+          'Choose a project to switch views',
+        );
+        await user.tab();
+        expect(screen.getByRole('button', {name: 'After'})).toHaveFocus();
+      },
+    );
+
+    it('opens the reason on a tap and selects nothing', async () => {
+      const onChange = vi.fn();
+      renderControl({onChange});
+      const tooltip = screen.getByRole('tooltip', h);
+      const list = screen.getByRole('radio', {name: 'List'});
+      // A tap, in the order a browser dispatches it.
+      fireEvent.pointerEnter(list, {pointerType: 'touch'});
+      fireEvent.pointerDown(list, {pointerType: 'touch'});
+      fireEvent.pointerUp(list, {pointerType: 'touch'});
+      fireEvent.mouseEnter(list);
+      fireEvent.click(list);
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
       expect(onChange).not.toHaveBeenCalled();
     });
   });

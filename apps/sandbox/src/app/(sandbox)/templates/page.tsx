@@ -101,7 +101,7 @@ const CATEGORY_STATUS_VARIANTS: Record<
 };
 
 const AUDIT_PANEL_ID = 'template-audit-details';
-const REPO_URL = 'https://github.com/facebook/astryx';
+const REPO_URL = 'https://github.com/meta/astryx';
 const INTERACTIVE_ROW_DESCENDANT =
   'a, button, input, select, textarea, [role="button"], [role="link"], ' +
   '[role="checkbox"], [role="menu"], [role="menuitem"], ' +

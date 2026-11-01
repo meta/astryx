@@ -130,7 +130,7 @@ const a = <div {...stylex.props(styles.offset)}><Tooltip label="x" /></div>;`,
 
   invalid: [
     // The motivating case: an RTL mirror on a display wrapper instead of the
-    // Icon (facebook/astryx#4752).
+    // Icon (meta/astryx#4752).
     {
       code: `${setup} const a = <span {...stylex.props(styles.mirror)}><Icon icon="chevronsLeft" /></span>;`,
       errors: [

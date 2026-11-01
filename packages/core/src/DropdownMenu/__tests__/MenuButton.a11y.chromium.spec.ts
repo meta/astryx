@@ -107,18 +107,30 @@ async function runState(
   });
 }
 
-test('every menu-button expectation is exercised by a DropdownMenu or MoreMenu state', async ({
-  page,
-}) => {
-  const cdp = await page.context().newCDPSession(page);
+// Checking coverage runs every state again, which on a loaded runner nears
+// the per-test timeout as one test. It runs as one serial part per state,
+// sharing their results, then one check over all of them.
+test.describe('every menu-button expectation is exercised by a DropdownMenu or MoreMenu state', () => {
+  test.describe.configure({mode: 'serial'});
   const results: BindingResult[] = [];
+
   for (const state of MENU_BUTTON_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
+    test(`runs ${state.id}`, async ({page}) => {
+      const cdp = await page.context().newCDPSession(page);
+      results.push(await runState(page, cdp, state));
+    });
   }
-  expect(neverExercised(results)).toEqual([]);
-  expect(unmatchedKnownFailures(MENU_BUTTON_KNOWN_FAILURES, results)).toEqual(
-    [],
-  );
+
+  test('no expectation is left unexercised', () => {
+    // Every part ran in this worker; this test alone proves nothing.
+    expect(results.map(result => result.state).sort()).toEqual(
+      MENU_BUTTON_BINDING_STATES.map(state => state.id).sort(),
+    );
+    expect(neverExercised(results)).toEqual([]);
+    expect(unmatchedKnownFailures(MENU_BUTTON_KNOWN_FAILURES, results)).toEqual(
+      [],
+    );
+  });
 });
 
 for (const state of MENU_BUTTON_BINDING_STATES) {

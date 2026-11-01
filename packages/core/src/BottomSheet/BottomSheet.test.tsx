@@ -1045,6 +1045,52 @@ describe('BottomSheet', () => {
   });
 
   describe('swipe to dismiss', () => {
+    it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the pointer (FR6, FR7)", () => {
+      const onInnerOpenChange = vi.fn();
+      const onOuterOpenChange = vi.fn();
+      render(
+        <BottomSheet isOpen onOpenChange={onOuterOpenChange} label="Outer">
+          Outer content
+          <BottomSheet isOpen onOpenChange={onInnerOpenChange} label="Inner">
+            Inner content
+          </BottomSheet>
+        </BottomSheet>,
+      );
+      const dialogs = screen.getAllByRole('dialog', {hidden: true});
+      expect(dialogs).toHaveLength(2);
+      const [outerDialog, innerDialog] = dialogs;
+      // The inner sheet's dialog is rendered inside the outer sheet's body,
+      // so its events bubble through the outer body's gesture listeners.
+      expect(outerDialog.contains(innerDialog)).toBe(true);
+      const outerPanel = outerDialog.querySelector<HTMLElement>(
+        ':scope > .astryx-bottom-sheet',
+      )!;
+      const outerBody = outerPanel.querySelector<HTMLElement>(
+        ':scope > :not([aria-hidden])',
+      )!;
+      const innerHandle = innerDialog.querySelector<HTMLElement>(
+        '.astryx-bottom-sheet > [aria-hidden="true"]',
+      )!;
+      // `setPointerCapture` is a prototype stub here, so record who captures.
+      const captured: Element[] = [];
+      const capture = vi
+        .spyOn(Element.prototype, 'setPointerCapture')
+        .mockImplementation(function (this: Element) {
+          captured.push(this);
+        });
+      drag(innerHandle, [{y: 0}, {y: 40}, {y: 120}], 'touch');
+      capture.mockRestore();
+      // The inner sheet's own drag ran to its dismissal.
+      expect(onInnerOpenChange).toHaveBeenCalledWith(false);
+      // The covered host saw the same pointer bubble up and did nothing with
+      // it: no drag of its own (its panel keeps its resting transform) and no
+      // pointer capture, which would have cancelled the inner handle's drag.
+      expect(onOuterOpenChange).not.toHaveBeenCalled();
+      expect(captured).toContain(innerHandle);
+      expect(captured).not.toContain(outerBody);
+      expect(outerPanel.style.transform).toBe('');
+    });
+
     it('requests close when dragged past the dismiss threshold', () => {
       const onOpenChange = vi.fn();
       render(

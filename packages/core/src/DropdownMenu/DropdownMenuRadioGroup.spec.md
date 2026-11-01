@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:DropdownMenuRadioGroup
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, accessibility, theming, testing]
 verified_by:
@@ -15,7 +15,6 @@ verified_by:
     packages/core/src/DropdownMenu/DropdownMenuSelectable.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
     packages/core/src/DropdownMenu/__tests__/Menu.a11y.test.tsx,
-    apps/storybook/stories/DropdownMenuRadioGroup.stories.tsx,
     apps/storybook/rtl-audit/verified-not-applicable.json,
     scripts/check-knowledge.mjs,
   ]
@@ -29,22 +28,22 @@ architecture:
     architecture:interaction-modality,
   ]
 contributing: []
-system_specs: [spec:AST-020, spec:AST-029]
+system_specs: [spec:AST-020]
 ---
 
 # DropdownMenuRadioGroup component contract
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | One controlled, named single-selection group of `DropdownMenuRadioItem` children with value, change callback, close policy, root inputs, and an explicit React 19 ref.                            |
-| Behavior                | The group supplies selection and close-policy context; radio items emit values; the parent DropdownMenu owns keyboard navigation and menu lifecycle.                                              |
-| End-user impact         | Assistive technology encounters one named group with exactly one current choice when a value matches, while pointer and keyboard selection stay aligned.                                          |
-| Builder impact          | Keep the value controlled, provide a stable accessible label, and place only DropdownMenuRadioItem options inside the group.                                                                      |
-| Compatibility/readiness | Patch-compatible additive `ref` prop on the existing group root. Existing runtime behavior, exports, defaults, and theme surfaces remain unchanged; authority stays `draft` until owner approval. |
-| Review checks           | Reject unnamed groups, local selection state, dropped root inputs, a second keyboard owner, or a close policy that bypasses the controlled callback.                                              |
-| Governing rules         | WAI-ARIA menu pattern; `architecture:public-component-api/INV5–INV9`; `architecture:component-test-sufficiency/INV1–INV7`; `spec:AST-020/FR1,FR2,FR6`.                                            |
+| Area                    | Contract                                                                                                                                                 |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | One controlled, named single-selection group of `DropdownMenuRadioItem` children with value, change callback, close policy, root inputs, and a ref.      |
+| Behavior                | The group supplies selection and close-policy context; radio items emit values; the parent DropdownMenu owns keyboard navigation and menu lifecycle.     |
+| End-user impact         | Assistive technology encounters one named group with exactly one current choice when a value matches, while pointer and keyboard selection stay aligned. |
+| Builder impact          | Keep the value controlled, provide a stable accessible label, and place only DropdownMenuRadioItem options inside the group.                             |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change.                                                                                                |
+| Review checks           | Reject unnamed groups, local selection state, dropped root inputs, a second keyboard owner, or a close policy that bypasses the controlled callback.     |
+| Governing rules         | `spec:AST-020`; `architecture:public-component-api/INV5–INV9`; `architecture:component-test-sufficiency/INV1–INV7`; `spec:AST-020/FR1,FR2,FR6`.          |
 
 This table is a review projection; the body below is authoritative.
 
@@ -60,8 +59,8 @@ and menu open/close lifecycle.
 ## Compatibility and migration
 
 - Released default preserved: yes (`hasCloseOnSelect=true`).
-- Compatibility class: additive patch; declares and forwards the React 19 `ref`
-  prop to the existing group root without changing existing behavior.
+- Compatibility class: records shipped behavior; no public prop, default,
+  export, or DOM change.
 - Controlled behavior: `value` is caller-owned and `onChange` is the only commit path.
 - Migration decision: none.
 
@@ -98,17 +97,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-Draft requirements identify their basis so observed code is not mistaken for an
-intentional decision.
-
-| ID  | Candidate invariant                                                                                                                                                          | Basis                                                       | Draft review state |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------ |
-| FR1 | The root MUST expose `role="group"` and a non-empty accessible name. The required `label` supplies `aria-label`; caller `aria-labelledby` MAY reference visible text.        | WAI-ARIA menu pattern; released source/docs                 | verify             |
-| FR2 | The group MUST remain controlled. It MUST compare each radio item's value with caller `value` and MUST emit a selected child value only through caller `onChange`.           | Released public API and focused tests                       | verify             |
-| FR3 | `hasCloseOnSelect` MUST default to true. When false, successful selection MUST update through `onChange` while the parent menu remains open.                                 | Released behavior and focused tests                         | verify             |
-| FR4 | DropdownMenu MUST remain the only keyboard owner. The group adds no tab stop, key handler, typeahead, or click synthesis; it only provides context to child rows.            | `architecture:interaction-modality`; parent tests           | verify             |
-| FR5 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` MUST reach or compose on the group root without replacing the owned role or `aria-label`.    | `architecture:public-component-api/INV5–INV9`; source/tests | verify             |
-| FR6 | The wrapper MUST remain a logical column whose tokenized gap matches the surrounding menu's item rhythm; it MUST NOT add component-specific directional paint or navigation. | Current source; token and bidirectionality rules            | verify             |
+| ID  | Invariant                                                                                                                                                                              | Basis                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| FR1 | The root exposes `role="group"` and a non-empty accessible name. The required `label` supplies `aria-label`; a caller `aria-labelledby` may reference visible text.                    | `spec:AST-020`; current source and tests                     |
+| FR2 | The group is controlled. It compares each radio item's value with caller `value` and emits a selected child value only through caller `onChange`; a radio item outside a group throws. | Current public API and tests                                 |
+| FR3 | `hasCloseOnSelect` defaults to true. When false, a selection updates through `onChange` while the parent menu stays open.                                                              | Current behavior and tests                                   |
+| FR4 | DropdownMenu is the only keyboard owner. The group adds no tab stop, key handler, typeahead, or click synthesis; it only provides context to child rows.                               | `architecture:interaction-modality`; parent tests            |
+| FR5 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the group root without replacing the owned role or `aria-label`.                   | `architecture:public-component-api` INV5–INV9; current tests |
+| FR6 | The wrapper is a logical column whose tokenized gap matches the surrounding menu's item rhythm; it adds no component-specific directional paint or navigation.                         | Current source                                               |
 
 ### Allowed variation
 
@@ -157,7 +153,7 @@ intentional decision.
 | Selected child   | One child reflects caller value through `aria-checked`.          | DropdownMenuRadioItem              | prominent      | FR2, AR2           |
 | Direction/narrow | Child order and gap hold without physical-direction assumptions. | Bidirectionality and parent layout | structural     | FR6                |
 
-No new component-local visual decision is settled by this draft.
+No component-local visual decision is recorded.
 
 ## Family and system relationships
 
@@ -165,19 +161,21 @@ No new component-local visual decision is settled by this draft.
 - `architecture:component-test-sufficiency` owns proportionate observable evidence.
 - `architecture:interaction-modality` and DropdownMenu own keyboard behavior.
 - `spec:AST-020` supplies WCAG/APG adoption and evidence-layer boundaries.
-- `spec:AST-029` keeps this observational draft separate from the audit receipt.
 
 ## Verification map
 
-| Contract       | Verification                                                                   | Representative states                | Mutation or failure expectation                                                           | Audit section                               |
-| -------------- | ------------------------------------------------------------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------- | ------------------------------------------- |
-| FR1–FR4, AR1–3 | `DropdownMenuSelectable.test.tsx`; reusable Menu contracts; scoped axe         | matching, none, close, retained-open | An unnamed group, wrong checked row, skipped callback, unwanted close, or key owner fails | `audit:DropdownMenuRadioGroup/§1,§4,§6`     |
-| FR5            | root/ref/handler tests; lint and typecheck                                     | ref, host attributes, class/style    | An accepted input is dropped or overrides the owned role/name                             | `audit:DropdownMenuRadioGroup/§3`           |
-| FR6            | source-hashed RTL N/A receipt plus exact-head Neutral/Butter/RTL/narrow frames | LTR, RTL, 320px, light/dark          | Physical direction, lost tokenized gap, collapsed geometry, or horizontal overflow fails  | `audit:DropdownMenuRadioGroup/§2,§5,§9,§10` |
+| Contract      | Verification                                                                                                                                                                                                    | Representative states                                | Mutation or failure expectation                                                                                                              | Audit section                                |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| FR1, AR1      | `DropdownMenuSelectable.test.tsx` "names and composes the group root when no value matches"                                                                                                                     | Label and caller `aria-labelledby`                   | A missing group role, `aria-label`, or caller `aria-labelledby` fails.                                                                       | `audit:DropdownMenuRadioGroup/semantics`     |
+| FR2           | `DropdownMenuSelectable.test.tsx` "calls onChange with the selected value", "names and composes the group root when no value matches" (no item checked), and "throws when a radio item is used outside a group" | Matching and no matching value; item outside a group | A wrong checked row, a selection that skips `onChange`, or an item that works outside a group fails.                                         | `audit:DropdownMenuRadioGroup/behavior`      |
+| FR3           | `DropdownMenuSelectable.test.tsx` "keeps the menu open while controlled selection updates when requested"                                                                                                       | `hasCloseOnSelect={false}`                           | A close despite the opt-out fails. Evidence gap: no test here asserts the default close after a selection.                                   | `audit:DropdownMenuRadioGroup/behavior`      |
+| FR4, AR2, AR3 | `DropdownMenu.test.tsx` "arrow navigation reaches consumer-rendered menuitemradio and menuitemcheckbox items" and "activates a focused menuitemradio with Enter and a menuitemcheckbox with Space"              | Arrow keys and Enter on radio rows                   | A radio row the arrows skip or Enter does not activate fails. Evidence gap: no test asserts that the group adds no tab stop or key handler.  | `audit:DropdownMenuRadioGroup/accessibility` |
+| FR5           | `DropdownMenuSelectable.test.tsx` "names and composes the group root when no value matches"                                                                                                                     | Ref, host attribute, class, style, handler           | A dropped ref, attribute, class, style, or handler, or a replaced role or label, fails. Evidence gap: no test asserts `xstyle` on the group. | `audit:DropdownMenuRadioGroup/api`           |
+| FR6, PR1      | `apps/storybook/rtl-audit/verified-not-applicable.json` DropdownMenuRadioGroup entry. Evidence gap: no test asserts the column gap or the absence of lifecycle resources                                        | LTR and RTL                                          | A changed source hash fails the receipt.                                                                                                     | `audit:DropdownMenuRadioGroup/layout`        |
 
 ## Decision log
 
-None. This draft records current facts and introduces no product decision.
+No component-local decision.
 
 ## Open questions
 
@@ -186,5 +184,4 @@ None.
 ## Content boundary
 
 This file does not duplicate consumer prop tables/examples, current audit scores,
-screenshot matrices, implementation steps, or parent/item contracts. The audit
-pull request owns the closed run evidence required by `spec:AST-029/FR5`.
+screenshot matrices, implementation steps, or parent/item contracts. It links to their owners.

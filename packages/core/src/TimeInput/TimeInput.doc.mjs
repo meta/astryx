@@ -31,7 +31,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale: 12-hour with AM/PM for US-centric UIs, 24-hour for international or technical contexts.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: true,
@@ -206,8 +206,8 @@ export const docs = {
       name: 'hourFormat',
       type: "'12h' | '24h'",
       description:
-        "Controls the display format. '12h' shows AM/PM (e.g. '2:30 PM'); '24h' uses 24-hour notation (e.g. '14:30').",
-      default: "'12h'",
+        "Controls the display format. '12h' shows the locale's day period (e.g. '2:30 PM', '오후 2:30'); '24h' uses 24-hour notation (e.g. '14:30'). When unset, follows the InternationalizationProvider locale's hour cycle: en-US reads 12-hour, en-GB and de-DE read 24-hour. To honor a person's own preference, pass it on the locale tag (e.g. 'en-US-u-hc-h23') rather than per field.",
+      default: "the locale's hour cycle",
     },
     {
       name: 'increment',
@@ -387,8 +387,8 @@ export const docsZh = {
       name: 'hourFormat',
       type: "'12h' | '24h'",
       description:
-        "控制显示格式。'12h' 显示 AM/PM（例如 '2:30 PM'）；'24h' 使用 24 小时制（例如 '14:30'）。",
-      default: "'12h'",
+        "控制显示格式。'12h' 使用区域设置的上午/下午用语（例如 '2:30 PM'、'오후 2:30'）；'24h' 使用 24 小时制（例如 '14:30'）。未设置时遵循 InternationalizationProvider 区域设置的小时制：en-US 为 12 小时制，en-GB 和 de-DE 为 24 小时制。要遵循用户自己的偏好，请在区域标签中传入（例如 'en-US-u-hc-h23'），而不是逐个字段设置。",
+      default: '区域设置的小时制',
     },
     {
       name: 'increment',
@@ -476,7 +476,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale: 12-hour with AM/PM for US-centric UIs, 24-hour for international or technical contexts.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: true,
@@ -565,7 +565,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Choose hour format (12h/24h) to match locale: 12h for US, 24h for international.',
+          "Leave hourFormat unset to follow the provider locale's hour cycle; put a person's 12/24h preference on the locale tag (en-US-u-hc-h23), not on each field.",
       },
       {
         guidance: true,
@@ -624,7 +624,7 @@ export const docsDense = {
     hasSeconds: 'Includes seconds in display+parsing.',
     hasClear: 'Shows clear button when value set+not disabled.',
     hourFormat:
-      "Display format. '12h' shows AM/PM; '24h' uses 24-hour notation.",
+      "Display format. '12h' shows the locale's day period; '24h' uses 24-hour notation. Unset follows the provider locale's hour cycle (a -u-hc- tag carries a user preference).",
     increment:
       'Minutes to add/subtract on arrow up/down. Whole minutes only; a fractional value leaves the time unchanged.',
     presentation:

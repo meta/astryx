@@ -1,0 +1,123 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Holds a heavy suite back when its pull request's author is over a limit
+# (spec:AST-030 FR16). A heavy job runs this right after its checkout and a
+# "Heavy suite runs" step right after it; a held job fails here with the
+# reason, so it never passes a required join untested.
+#
+# - One author's suites run for their fifteen oldest open non-draft pull
+#   requests, and for at most a hundred heavy runs a UTC day.
+# - The shared agent login counts each branch prefix as an author, with that
+#   login also held to its five oldest pull requests and forty runs a day.
+# - An engineering owner (.github/ENGOWNERS, read from the base commit), a
+#   re-run (the pre-merge restart) and a bot are exempt; a lookup that fails
+#   runs the suite.
+#
+# Each limit is one entry in `limits`, checked in order.
+
+name: Heavy-suite caps
+description: Fails a heavy job whose pull request's author is over a limit.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v9
+      with:
+        retries: 3
+        script: |
+          const pr = context.payload.pull_request;
+          if (context.eventName !== 'pull_request' || pr == null) return;
+          if (Number(process.env.GITHUB_RUN_ATTEMPT ?? '1') !== 1) return;
+          const login = pr.user.login;
+          if (login.endsWith('[bot]')) return;
+
+          // Agent lanes share one login: each branch prefix counts as an author.
+          const shared = ['cixzhang'].includes(login);
+          const lane = ref => (shared ? ref.split('/')[0] : '');
+          const mine = ref => lane(ref) === lane(pr.head.ref);
+          let open;
+          const openPullRequests = async () =>
+            (open ??= (
+              await github.graphql(
+                'query($q: String!) { search(query: $q, type: ISSUE, first: 100) { nodes { ... on PullRequest { number headRefName headRepository { nameWithOwner } } } } }',
+                {q: `repo:${context.repo.owner}/${context.repo.repo} is:pr is:open draft:false author:${login} sort:created-asc`},
+              )
+            ).search.nodes);
+
+          // An author's oldest open non-draft pull requests that run heavy suites.
+          const OLDEST = 15;
+          // An author's heavy runs a UTC day.
+          const DAILY = 100;
+          const limits = [
+            // Pull request numbers rise with creation, and the search returns
+            // the oldest, so it holds every older one that could queue this.
+            async function oldestPullRequests() {
+              const nodes = await openPullRequests();
+              const older = list => list.filter(p => p.number < pr.number).length;
+              if (older(nodes.filter(p => mine(p.headRefName))) >= OLDEST) {
+                return `Queued behind your ${OLDEST} oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.`;
+              }
+              if (shared && older(nodes) >= 5) {
+                return "Queued behind the shared login's 5 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.";
+              }
+            },
+            // A heavy run is a run on one of those pull requests whose heavy job
+            // ran its suite, as its "Heavy suite runs" step records. A run is a
+            // pull request's by its branch and that branch's repository.
+            async function dailyHeavyRuns() {
+              const nodes = await openPullRequests();
+              const key = (repo, branch) => `${repo}:${branch}`;
+              const oldest = new Map([
+                [key(pr.head.repo.full_name, pr.head.ref), pr.head.ref],
+                ...[...nodes.filter(p => mine(p.headRefName)).slice(0, OLDEST), ...(shared ? nodes.slice(0, 5) : [])].map(p => [
+                  key(p.headRepository?.nameWithOwner, p.headRefName),
+                  p.headRefName,
+                ]),
+              ]);
+              let laneHeavy = 0;
+              let loginHeavy = 0;
+              for (const [owner, branch] of oldest) {
+                const {data} = await github.rest.actions.listWorkflowRuns({
+                  ...context.repo, workflow_id: 'ci.yml', event: 'pull_request', branch,
+                  created: `>=${new Date().toISOString().slice(0, 10)}`, per_page: 100,
+                });
+                for (const run of data.workflow_runs) {
+                  if (key(run.head_repository?.full_name, run.head_branch) !== owner) continue;
+                  if (run.id === context.runId || run.conclusion === 'cancelled') continue;
+                  const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                    ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+                  });
+                  if (!jobs.some(job => job.steps?.some(step => step.name === 'Heavy suite runs' && step.conclusion === 'success'))) continue;
+                  loginHeavy += 1;
+                  if (mine(run.head_branch)) laneHeavy += 1;
+                }
+              }
+              if (laneHeavy >= DAILY || (shared && loginHeavy >= 40)) {
+                return 'Daily heavy-run cap reached, runs tomorrow or at pre-merge.';
+              }
+            },
+          ];
+
+          try {
+            // Engineering owners are exempt. The roster is read from the base
+            // commit, so a pull request cannot add its own author, and parsed
+            // like the spec-owner gate's: `#` comments out the rest of a line.
+            const {data: roster} = await github.rest.repos.getContent({
+              ...context.repo, path: '.github/ENGOWNERS', ref: pr.base.sha,
+            });
+            const owners = Buffer.from(roster.content, 'base64').toString('utf8')
+              .split('\n').map(line => line.replace(/#.*/, ''))
+              .flatMap(line => line.match(/@[\w-]+/g) ?? [])
+              .map(handle => handle.slice(1).toLowerCase());
+            if (owners.includes(login.toLowerCase())) return;
+
+            for (const limit of limits) {
+              const held = await limit();
+              if (held) {
+                core.setFailed(held);
+                return;
+              }
+            }
+          } catch (error) {
+            core.warning(`Per-author caps could not be checked (${error.message}); running the heavy suite.`);
+          }

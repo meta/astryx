@@ -29,6 +29,7 @@ import {
   afterEach,
 } from 'vitest';
 import {
+  act,
   render,
   screen,
   fireEvent,
@@ -275,6 +276,81 @@ function weekdayRow(): HTMLElement {
   }
   return row as HTMLElement;
 }
+
+describe('DateInput — open-sheet disablement', () => {
+  it('blocks selection after the open sheet becomes disabled, retaining value and focus', () => {
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const props = {initial: '2026-02-21' as const, onChange, changeAction};
+    withLayout(() => {
+      const {rerender} = render(<Controlled {...props} />);
+      fireEvent.click(field());
+      const day = within(pane('February 2026')).getByRole('button', {
+        name: /February 22, 2026/,
+      });
+      act(() => day.focus());
+      rerender(<Controlled {...props} isDisabled />);
+      expect(day).toHaveFocus();
+      fireEvent.click(day);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(field()).toHaveValue('February 21, 2026');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+      expect(day).toHaveFocus();
+      expect(
+        document.querySelector('[data-title="month-year"]'),
+      ).toHaveTextContent('February 2026');
+
+      rerender(<Controlled {...props} />);
+      fireEvent.click(day);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-02-22');
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith('2026-02-22');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+
+  it('blocks disabled reset but preserves busy-only month navigation', () => {
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const props = {initial: '2026-02-21' as const, onChange, changeAction};
+    withLayout(() => {
+      const {rerender} = render(<Controlled {...props} />);
+      fireEvent.click(field());
+      const reset = screen.getByRole('button', {name: 'Reset'});
+      act(() => reset.focus());
+      rerender(<Controlled {...props} isDisabled />);
+      expect(reset).toHaveFocus();
+      fireEvent.click(reset);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(field()).toHaveValue('February 21, 2026');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+      expect(reset).toHaveFocus();
+      expect(
+        document.querySelector('[data-title="month-year"]'),
+      ).toHaveTextContent('February 2026');
+
+      rerender(<Controlled {...props} isLoading />);
+      fireEvent.click(reset);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(field()).toHaveValue('February 21, 2026');
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+      expect(reset).toHaveFocus();
+      expect(
+        document.querySelector('[data-title="month-year"]'),
+      ).toHaveTextContent('March 2026');
+
+      rerender(<Controlled {...props} />);
+      fireEvent.click(reset);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(undefined);
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith(undefined);
+      expect(field()).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Which surface, and why
@@ -2247,6 +2323,50 @@ describe('DateInput — a mouse can drag a wheel', () => {
       el.dispatchEvent(new Event('scrollend'));
       expect(el.style.scrollSnapType).toBe('');
     });
+  });
+
+  /**
+   * Every `scrollTop` the drag assigns ends in its own `scrollend` in
+   * Chromium, and the hand can rest with the button still down. Neither is
+   * rest: the month the wheel lands on commits at the release, as it does
+   * when a finger lifts.
+   */
+  it('commits nothing while a mouse drag holds the wheel, and commits at the release', () => {
+    vi.useFakeTimers();
+    try {
+      // A year of months, so May is reachable (the default range ends in April).
+      renderAndOpen(
+        <Controlled initial="2026-03-21" min="2026-01-01" max="2026-12-31" />,
+      );
+      fireEvent.click(title());
+      withWheelLayout(() => {
+        const el = wheel();
+        trackable(el);
+        // March, the committed month, sits under the band.
+        el.scrollTop = 2 * 28;
+        const selected = () =>
+          el.querySelector('[aria-selected="true"]')?.textContent;
+        el.dispatchEvent(pointer('pointerdown', {y: 200}));
+        // Two rows on: May is under the band.
+        el.dispatchEvent(pointer('pointermove', {y: 144}));
+        fireEvent.scroll(el);
+        el.dispatchEvent(new Event('scrollend'));
+        act(() => {
+          vi.advanceTimersByTime(SCROLL_QUIET_MS * 2);
+        });
+        expect(selected()).toBe('March');
+        expect(title()).toHaveTextContent('March 2026');
+
+        el.dispatchEvent(pointer('pointerup', {y: 144}));
+        act(() => {
+          vi.advanceTimersByTime(SCROLL_QUIET_MS * 2);
+        });
+        expect(selected()).toBe('May');
+        expect(title()).toHaveTextContent('May 2026');
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /**

@@ -149,7 +149,7 @@ const AST_021_PRESERVE_BEHAVIOR: AstryxRecord = {
   clause: 'FR7',
   requirement:
     'Existing behavior is preserved unless a separate change authorizes it.',
-  url: 'https://github.com/facebook/astryx/blob/9fdb3819f91b3642b46319f21f4d99f95bc14f16/docs/specs/AST-021/spec.md#L85-L89',
+  url: 'https://github.com/meta/astryx/blob/9fdb3819f91b3642b46319f21f4d99f95bc14f16/docs/specs/AST-021/spec.md#L85-L89',
 };
 
 /**

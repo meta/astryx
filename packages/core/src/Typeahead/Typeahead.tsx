@@ -64,6 +64,7 @@ import {
   isImeKeyEvent,
   mergeProps,
 } from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import {TrailingKeyDownContext} from './trailingKeyDown';
 import {
   type FieldInputBaseProps,
@@ -76,6 +77,7 @@ import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
 export type {
   InputStatus as TypeaheadStatus,
   InputStatusType as TypeaheadStatusType,
@@ -422,8 +424,10 @@ export function Typeahead<T extends SearchableItem>({
   controlStyle,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TypeaheadProps<T>) {
+  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {rest, container} = useFieldInputStyling('Typeahead', restProps, {
     containerXstyle,
     containerClassName,
@@ -434,6 +438,8 @@ export function Typeahead<T extends SearchableItem>({
   const generatedInputId = useId();
   const inputId = idProp ?? generatedInputId;
   const inputLabelId = useId();
+  const fieldLabelId = useId();
+  const tokenValueId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
   const inputGroup = useInputGroup();
@@ -615,6 +621,13 @@ export function Typeahead<T extends SearchableItem>({
     inputGroup,
   );
 
+  // A caller aria-labelledby names the input together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const inputLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelId, ariaLabelledByProp)
+      : ariaLabelledBy;
+
   const sizeStyle = wrapperSizeStyles[size];
 
   const typeaheadContent = (
@@ -659,14 +672,33 @@ export function Typeahead<T extends SearchableItem>({
         <BusyIndicatorLaneProvider value={busyLane}>
           <div {...stylex.props(styles.contentLane)}>
             {showToken && (
-              <Token
-                ref={tokenRef}
-                label={value.label}
-                size={size}
-                onClick={handleEnterEditMode}
-                isDisabled={isDisabled}
-                xstyle={styles.tokenOverlay}
-              />
+              <>
+                {/* The token's button is the field's Tab stop while a value
+                    shows, so it is named as the input is (the field label,
+                    with a caller aria-labelledby) plus the value, and
+                    described like the input (input-fields FR10; WCAG 2.4.6,
+                    4.1.2). */}
+                <span id={tokenValueId} hidden>
+                  {value.label}
+                </span>
+                <Token
+                  ref={tokenRef}
+                  label={value.label}
+                  size={size}
+                  onClick={handleEnterEditMode}
+                  isDisabled={isDisabled}
+                  aria-labelledby={joinAriaIDs(
+                    inputLabelledBy ?? fieldLabelId,
+                    tokenValueId,
+                  )}
+                  aria-describedby={
+                    [ariaDescribedByProp, ariaDescribedBy]
+                      .filter(Boolean)
+                      .join(' ') || undefined
+                  }
+                  xstyle={styles.tokenOverlay}
+                />
+              </>
             )}
             <TrailingKeyDownContext value={onKeyDown}>
               <BaseTypeahead
@@ -690,7 +722,15 @@ export function Typeahead<T extends SearchableItem>({
                     .filter(Boolean)
                     .join(' ') || undefined
                 }
-                ariaLabelledBy={ariaLabelledBy}
+                ariaLabelledBy={inputLabelledBy}
+                // The resolved required state reaches the combobox, also when a
+                // FormLayout default hides the visible marker (component:FormLayout
+                // FR5, AR2).
+                aria-required={isEffectivelyRequired || rest['aria-required']}
+                // An error status is exposed on the combobox as on every other field
+                // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
+                // aria-required / aria-invalid still applies.
+                aria-invalid={status?.type === 'error' || rest['aria-invalid']}
                 onChangeQuery={onChangeQuery}
                 onOpenChange={onOpenChange}
                 debounceMs={debounceMs}
@@ -741,6 +781,8 @@ export function Typeahead<T extends SearchableItem>({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={inputId}
+      // Always set: the value token's name references the field label.
+      labelID={fieldLabelId}
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

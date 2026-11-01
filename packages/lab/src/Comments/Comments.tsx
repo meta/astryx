@@ -44,6 +44,7 @@ import {
   ErrorBanner,
 } from './CommentParts';
 import {CommentRow, THREAD_DIVIDERS, type ThreadDivider} from './CommentRow';
+import {useStatusAnnouncement} from './useStatusAnnouncement';
 import {
   CommentsContextProvider,
   useCommentsController,
@@ -249,6 +250,20 @@ export function Comments({
   const loadingOlderRef = useRef(false);
   const loadOlderButtonRef = useRef<HTMLButtonElement>(null);
   const olderRetryRef = useRef<HTMLButtonElement>(null);
+  // The load-failure Banner carries no live role: it mounts already holding
+  // its text. It is announced once, assertively, through the shared channel
+  // (spec:AST-086 FR2, FR5).
+  const loadErrorRef = useRef<HTMLDivElement>(null);
+  useStatusAnnouncement(
+    loadErrorRef,
+    loadError != null
+      ? t('@astryx.comments.errorAnnouncement', {
+          title: t('@astryx.comments.loadFailed'),
+          description: loadError,
+        })
+      : null,
+    'assertive',
+  );
   const rootRef = useRef<HTMLElement | null>(null);
   const setRootRef = useCallback(
     (element: HTMLElement | null) => {
@@ -571,8 +586,8 @@ export function Comments({
         )}>
         {loadError != null && (
           <Banner
+            ref={loadErrorRef}
             status="error"
-            role="alert"
             title={t('@astryx.comments.loadFailed')}
             description={loadError}
             container="section"

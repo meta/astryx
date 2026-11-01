@@ -45,7 +45,7 @@ surface. The component owns the standard trigger-to-surface composition;
 and rendering contract for custom compositions.
 
 This contract records the behavior present after
-[PR #5373](https://github.com/facebook/astryx/pull/5373), the Popover target
+[PR #5373](https://github.com/meta/astryx/pull/5373), the Popover target
 direction settled by Cindy Zhang on 2026-08-31, the focus/opening correction
 approved by Cindy Zhang on 2026-09-07, and the move of viewport fitting to the
 layer runtime decided by Cindy Zhang on 2026-10-03 (`spec:AST-059`). Public API signatures and release status

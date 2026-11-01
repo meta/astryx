@@ -492,6 +492,33 @@ describe('SideNavHeading', () => {
       );
     });
 
+    it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <SideNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="One" onClick={() => {}} />
+              <NavHeadingMenuItem label="Two" onClick={() => {}} />
+              <NavHeadingMenuItem label="Three" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      const item = (name: string) =>
+        screen.getByRole('menuitem', {name, hidden: true});
+      item('One').focus();
+      fireEvent.keyDown(item('One'), {key: 'ArrowDown'});
+      expect(item('Two')).toHaveFocus();
+      fireEvent.keyDown(item('Two'), {key: 'ArrowDown'});
+      expect(item('Three')).toHaveFocus();
+      fireEvent.keyDown(item('Three'), {key: 'ArrowUp'});
+      expect(item('Two')).toHaveFocus();
+    });
+
     it('closes when a mouse pressed on a NavHeadingMenu item is released outside the menu (useMenuPress FR3)', async () => {
       __resetMenuPressForTest();
       const user = userEvent.setup();
@@ -937,10 +964,71 @@ describe('SideNavItem', () => {
     expect(button).not.toHaveAttribute('aria-current');
   });
 
-  it('disables the button when isDisabled', () => {
+  // spec:AST-085 FR1, FR2: a disabled item stays focusable but is inert.
+  it('keeps a disabled item focusable and exposes aria-disabled', () => {
     render(<SideNavItem label="Dashboard" isDisabled />);
-    const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    button.focus();
+    expect(button).toHaveFocus();
+  });
+
+  it('does not run onClick on a disabled item from a click, Enter or Space', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    render(<SideNavItem label="Dashboard" onClick={handleClick} isDisabled />);
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    fireEvent.click(button);
+    button.focus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('renders a disabled item with href as a focusable button that does not navigate', () => {
+    const handleClick = vi.fn();
+    render(
+      <SideNavItem
+        label="Dashboard"
+        href="/dashboard"
+        onClick={handleClick}
+        isDisabled
+      />,
+    );
+    expect(screen.queryByRole('link')).toBeNull();
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).not.toHaveAttribute('href');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(button);
+    expect(handleClick).not.toHaveBeenCalled();
+  });
+
+  it('exposes aria-disabled on the primary of a disabled split row', () => {
+    render(
+      <SideNavItem label="Settings" href="/settings" collapsible isDisabled>
+        <SideNavItem label="General" href="/settings/general" />
+      </SideNavItem>,
+    );
+    const primary = screen.getByRole('button', {name: 'Settings'});
+    expect(primary).not.toHaveAttribute('disabled');
+    expect(primary).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('keeps focus on an item that becomes disabled while focused', () => {
+    const item = (isDisabled: boolean) => (
+      <SideNavItem
+        label="Dashboard"
+        onClick={() => {}}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(item(false));
+    const button = screen.getByRole('button', {name: 'Dashboard'});
+    button.focus();
+    rerender(item(true));
+    expect(screen.getByRole('button', {name: 'Dashboard'})).toHaveFocus();
   });
 
   it('calls onClick handler', async () => {
@@ -2420,6 +2508,18 @@ describe('SideNavItem — mobile drawer close-on-activate', () => {
     expect(closeMobileNav).not.toHaveBeenCalled();
   });
 
+  it('does not close the mobile nav when a disabled item is activated', async () => {
+    const user = userEvent.setup();
+    const {closeMobileNav} = renderInDrawer(
+      <SideNavItem label="Home" href="/" isDisabled data-testid="item" />,
+    );
+    const item = screen.getByTestId('item');
+    fireEvent.click(item);
+    item.focus();
+    await user.keyboard('{Enter}');
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
   it('does not close the mobile nav when a row action is clicked', async () => {
     const user = userEvent.setup();
     const onActionClick = vi.fn();
@@ -2468,7 +2568,7 @@ describe('SideNav keyboard operation', () => {
     expect(screen.getByRole('button', {name: 'Settings'})).toHaveFocus();
   });
 
-  it('skips a disabled item in the tab order', async () => {
+  it('keeps a disabled item in the tab order', async () => {
     const user = userEvent.setup();
     render(
       <SideNav>
@@ -2480,6 +2580,8 @@ describe('SideNav keyboard operation', () => {
 
     await user.tab();
     expect(screen.getByRole('button', {name: 'Dashboard'})).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('button', {name: 'Archived'})).toHaveFocus();
     await user.tab();
     expect(screen.getByRole('button', {name: 'Settings'})).toHaveFocus();
   });
@@ -3972,6 +4074,51 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
       vi.advanceTimersByTime(200);
     });
     expect(spy.mock.contexts).toContain(layer);
+  });
+
+  it('describes a disabled rail item on the control that takes focus', async () => {
+    // spec:AST-085 FR5: the disabled control keeps its tab stop, so the label
+    // tooltip has to describe it, not the row around it.
+    renderRail(
+      <SideNavItem
+        label="Analytics (Coming Soon)"
+        icon={StubIcon}
+        href="/analytics"
+        isDisabled
+      />,
+    );
+    await act(async () => {});
+    const button = screen.getByRole('button', {
+      name: 'Analytics (Coming Soon)',
+    });
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(railTooltipFor(button)).toHaveTextContent('Analytics (Coming Soon)');
+    expect(button.parentElement).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('shows a disabled rail item its label when Tab focuses it', async () => {
+    // The row listens for the tooltip, but it is not focusable itself, so it
+    // has to hear the focus that bubbles up from the control.
+    const user = userEvent.setup();
+    const spy = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    showPopover = spy;
+    renderRail(
+      <SideNavItem
+        label="Analytics (Coming Soon)"
+        icon={StubIcon}
+        href="/analytics"
+        isDisabled
+      />,
+    );
+    await act(async () => {});
+    const button = screen.getByRole('button', {
+      name: 'Analytics (Coming Soon)',
+    });
+
+    await user.tab();
+    expect(button).toHaveFocus();
+    expect(spy.mock.contexts).toContain(railTooltipFor(button));
   });
 
   it('describes the link once a disabled item is enabled in the rail', () => {

@@ -5,7 +5,7 @@
 /**
  * @file NumberInput.tsx
  * @input Uses React, useId, useState, useMemo, useCallback, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps
+ * @output Exports NumberInput component, NumberInputProps; optional steppers are hidden on coarse pointers
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -29,6 +29,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -100,7 +101,10 @@ const styles = stylex.create({
     paddingInlineEnd: padInlineEnd,
   },
   wrapperWithNumberSteppers: {
-    paddingInlineEnd: 0,
+    paddingInlineEnd: {
+      default: 0,
+      '@media (pointer: coarse)': padInlineEnd,
+    },
   },
   input: {
     display: 'block',
@@ -142,7 +146,12 @@ const styles = stylex.create({
   },
   numberSteppers: {
     alignSelf: 'stretch',
-    display: 'flex',
+    // These compact buttons are a fine-pointer affordance. Touch users can
+    // enter a value directly; keyboard stepping remains available.
+    display: {
+      default: 'flex',
+      '@media (pointer: coarse)': 'none',
+    },
     flexDirection: 'column',
     flexShrink: 0,
     width: spacingVars['--spacing-4'],
@@ -385,6 +394,8 @@ interface NumberInputPropsBase extends Omit<
   isWheelEnabled?: boolean;
   /**
    * Whether to show increment and decrement buttons at the end of the input.
+   * The buttons are hidden on coarse pointers (such as touch screens).
+   * Direct text entry and keyboard stepping remain available.
    * @default false
    */
   hasNumberSteppers?: boolean;
@@ -708,12 +719,34 @@ export function NumberInput({
   );
 
   // Handle focus
+  // Tab into the field selects its text so typing replaces it. With
+  // `formatValue` the text at rest differs from the editable text, and putting
+  // the editable text in the input after focus collapses that selection to the
+  // end, so typing would append. When focus arrives with the text selected,
+  // the focus handler commits the swap and selects the swapped-in text itself:
+  // the work one event causes stays in its handler
+  // (architecture:react-component-runtime/INV2).
   const handleFocus = useCallback(
     (e: FocusEvent<HTMLInputElement>) => {
+      const input = e.currentTarget;
+      const editableText =
+        pendingInput ??
+        (value == null ? '' : formatEditableNumber(value, locale));
+      const shouldReselect =
+        input.value.length > 0 &&
+        input.value !== editableText &&
+        input.selectionStart === 0 &&
+        input.selectionEnd === input.value.length;
       setIsFocused(true);
       onFocus?.(e);
+      if (shouldReselect) {
+        // Commit the swap now, so the editable text is in the input to select.
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the editable text must be in the input before the focus event selects it
+        flushSync(() => {});
+        input.setSelectionRange(0, input.value.length);
+      }
     },
-    [onFocus],
+    [onFocus, pendingInput, value, locale],
   );
 
   const commitPendingInput = useCallback(

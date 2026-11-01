@@ -29,7 +29,13 @@
  * For toggle selection, use SelectableCard.
  */
 
-import {type ReactNode, type MouseEvent, useRef, type Ref} from 'react';
+import {
+  type ReactNode,
+  type MouseEvent,
+  useCallback,
+  useRef,
+  type Ref,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -327,6 +333,41 @@ export function ClickableCard({
   const pressable = usePressFeedback();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const interactiveRef = useRef<HTMLElement | null>(null);
+  const restoreFocusRef = useRef(false);
+  // The isDisabled value of the link that just detached: a link card that
+  // flips it replaces its hidden link (router component and plain anchor),
+  // and only that replacement takes focus back.
+  const detachedDisabledRef = useRef<boolean | null>(null);
+
+  // A focused link remounts when isDisabled changes: the replacement takes
+  // focus back, without scrolling, if focus fell to the page. Any other
+  // detach and attach (a hidden Activity or Suspense boundary revealed
+  // again) leaves focus where the person put it.
+  const setInteractiveRef = useCallback(
+    (node: HTMLElement | null) => {
+      if (node == null) {
+        const previous = interactiveRef.current;
+        restoreFocusRef.current =
+          previous != null && previous === previous.ownerDocument.activeElement;
+        detachedDisabledRef.current = isDisabled;
+        interactiveRef.current = null;
+        return;
+      }
+      interactiveRef.current = node;
+      const isFlip =
+        detachedDisabledRef.current != null &&
+        detachedDisabledRef.current !== isDisabled;
+      const active = node.ownerDocument.activeElement;
+      const hasFallen = active == null || active === node.ownerDocument.body;
+      if (restoreFocusRef.current && isFlip && hasFallen) {
+        node.focus({preventScroll: true});
+      }
+      restoreFocusRef.current = false;
+      detachedDisabledRef.current = null;
+    },
+    [isDisabled],
+  );
+
   const LinkComponent = useLinkComponent();
 
   const {onClick, onMouseUp} = useClickableContainer({
@@ -346,6 +387,9 @@ export function ClickableCard({
     : onMouseUp;
 
   const isLink = href != null;
+
+  // Disabled links have no href, so bypass the router and render an anchor.
+  const LinkRoot = isDisabled ? 'a' : LinkComponent;
 
   // Only the `default` variant has a visible border. Card draws a transparent
   // 1px border on every other variant purely to avoid layout jitter; we drop
@@ -385,8 +429,8 @@ export function ClickableCard({
       onMouseUp={!isDisabled ? handleMouseUp : undefined}
       {...props}>
       {isLink ? (
-        <LinkComponent
-          ref={interactiveRef as React.Ref<HTMLAnchorElement>}
+        <LinkRoot
+          ref={setInteractiveRef}
           href={isDisabled ? undefined : href}
           target={isDisabled ? undefined : target}
           role={isDisabled ? 'link' : undefined}
@@ -399,7 +443,7 @@ export function ClickableCard({
         />
       ) : (
         <button
-          ref={interactiveRef as React.Ref<HTMLButtonElement>}
+          ref={setInteractiveRef}
           type="button"
           aria-label={label}
           aria-disabled={isDisabled || undefined}

@@ -161,6 +161,34 @@ export const focusOutlineStyles = stylex.create({
     },
   },
   /**
+   * Like {@link focusOutlineStyles.focusWithin}, but only for a direct child
+   * with `role="combobox"` — for a control box that paints the ring for its
+   * combobox trigger while sibling controls inside it (a status info-tip, a
+   * clear button) ring themselves. One focus move, one ring
+   * (architecture:interaction-modality INV3).
+   */
+  focusWithinCombobox: {
+    outlineWidth: {
+      default: '0',
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineWidth,
+    },
+    outlineStyle: {
+      default: 'none',
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineStyle,
+    },
+    outlineColor: {
+      default: null,
+      ':has(> [role="combobox"]:focus-visible)':
+        focusOutlineLonghands.outlineColor,
+    },
+    outlineOffset: {
+      default: '0',
+      ':has(> [role="combobox"]:focus-visible)': FOCUS_OUTLINE_OFFSET,
+    },
+  },
+  /**
    * Draws no ring, and keeps the UA's own off — for an element whose ring an
    * ancestor paints.
    *

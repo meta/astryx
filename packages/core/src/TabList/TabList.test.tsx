@@ -9,8 +9,9 @@
  * SYNC: When TabList components change, update tests to match new behavior
  */
 
+import {useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
 import userEvent from '@testing-library/user-event';
 import {
@@ -933,8 +934,10 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
       hidden: true,
     });
 
-    fireEvent.keyDown(menu, {key: 'ArrowDown'});
-    expect(analytics).toHaveFocus();
+    // Opening moves focus to the first item a frame later (APG menu-button
+    // focus-on-open): wait for it, since a key pressed before that frame
+    // starts from no item and one pressed after it starts from the first.
+    await waitFor(() => expect(analytics).toHaveFocus());
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(reports).toHaveFocus();
@@ -963,7 +966,8 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
       hidden: true,
     });
 
-    fireEvent.keyDown(menu, {key: 'ArrowDown'}); // focus analytics
+    // Focus lands on the first item a frame after opening (see above).
+    await waitFor(() => expect(analytics).toHaveFocus());
     fireEvent.keyDown(menu, {key: 'ArrowDown'}); // focus reports
 
     // The tab stop follows focus, so it is still a single stop after moving.
@@ -1235,6 +1239,56 @@ describe('TabList overflow (scroll)', () => {
     );
 
     expect(scrollBy).not.toHaveBeenCalled();
+  });
+
+  it('measures a pressed tab after the press, in the next frame, and still shows it whole', async () => {
+    function Controlled() {
+      const [value, setValue] = useState('a');
+      return (
+        <TabList value={value} onChange={setValue}>
+          <Tab value="a" label="Alpha" />
+          <Tab value="b" label="Beta" />
+          <Tab value="c" label="Gamma" />
+        </TabList>
+      );
+    }
+    const {container} = render(<Controlled />);
+    const strip = container.querySelector<HTMLElement>(STRIP);
+    const tab = container.querySelector<HTMLElement>('[data-tab-value="c"]');
+    if (!strip || !tab) {
+      throw new Error('no tab strip');
+    }
+    const scrollBy = vi.fn();
+    strip.scrollBy = scrollBy;
+    const stripRect = vi.fn(
+      () => ({left: 0, right: 300, width: 300}) as DOMRect,
+    );
+    strip.getBoundingClientRect = stripRect;
+    tab.getBoundingClientRect = () =>
+      ({left: 240, right: 320, width: 80}) as DOMRect;
+
+    // Pressing a tab focuses it first, and focusing it reveals it.
+    fireEvent.focus(tab);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    expect(scrollBy.mock.calls[0][0].left).toBe(20);
+    const readsBeforePress = stripRect.mock.calls.length;
+
+    // The selection itself reads no geometry inside the press...
+    fireEvent.click(tab);
+    expect(tab).toHaveAttribute('aria-current', 'true');
+    expect(stripRect.mock.calls.length).toBe(readsBeforePress);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+
+    // ...and the next frame measures the selected tab, now wider, so it still
+    // ends fully inside the strip.
+    tab.getBoundingClientRect = () =>
+      ({left: 220, right: 306, width: 86}) as DOMRect;
+    await act(
+      async () =>
+        new Promise<void>(resolve => requestAnimationFrame(() => resolve())),
+    );
+    expect(scrollBy).toHaveBeenCalledTimes(2);
+    expect(scrollBy.mock.calls[1][0].left).toBe(6);
   });
 
   it('reveals on a selection change, not on an unrelated overflow change', () => {
