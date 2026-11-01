@@ -10,7 +10,7 @@
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
- * - /packages/core/src/Selector/Selector.spec.md
+ * - /docs/specs/components/Selector/Selector.spec.md
  * - /packages/core/src/Selector/Selector.doc.mjs
  * - /packages/core/src/Selector/Selector.test.tsx
  * - /packages/core/src/Selector/index.ts

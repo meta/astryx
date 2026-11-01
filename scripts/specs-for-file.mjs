@@ -33,6 +33,7 @@ const require = createRequire(import.meta.url);
 const {componentPackage} = require('./component-packages.cjs');
 const {
   classifyComponentKnowledgePath,
+  locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -146,6 +147,7 @@ export function loadKnowledgeIndex(root = DEFAULT_ROOT) {
       authority: frontmatter.get('authority'),
       frontmatter,
       classified: classifyComponentKnowledgePath(filePath),
+      located: locateComponentKnowledgePath(root, filePath),
       pathPatterns: asList(
         parsePathApplicabilityBlock(content, filePath).config?.paths,
       ).filter(pattern => typeof pattern === 'string'),
@@ -259,9 +261,8 @@ function placementMatches(index, filePath, location) {
       }
       continue;
     }
-    const {classified} = record;
+    const {classified, located} = record;
     if (!classified) continue;
-    const recordDirectory = path.posix.dirname(record.path);
     const recordStem = classified.publicName;
 
     if (classified.kind === 'module' && stem === recordStem) {
@@ -281,19 +282,21 @@ function placementMatches(index, filePath, location) {
       }
     }
 
+    // Every other placement compares the record's code: a record sits under
+    // docs/specs/components/ and mirrors the source directory it governs.
+    if (!located) continue;
+    const recordDirectory = located.codeDirectory;
+
     if (
       !location ||
-      classified.packageName !== location.packageName ||
-      classified.componentRoot !== location.componentRoot
+      located.packageName !== location.packageName ||
+      located.componentRoot !== location.componentRoot
     ) {
       continue;
     }
 
-    if (classified.kind === 'component') {
-      if (
-        classified.layout === 'flat' ||
-        recordStem === location.componentRoot
-      ) {
+    if (located.kind === 'component') {
+      if (located.layout === 'flat' || recordStem === location.componentRoot) {
         matches.push({
           record,
           via: 'placement',
@@ -320,8 +323,8 @@ function placementMatches(index, filePath, location) {
     const siblingsInDirectory = index.records.some(
       other =>
         other !== record &&
-        path.posix.dirname(other.path) === recordDirectory &&
-        other.classified?.kind === 'module',
+        other.located?.codeDirectory === recordDirectory &&
+        other.located?.kind === 'module',
     );
     if (
       !siblingsInDirectory &&
