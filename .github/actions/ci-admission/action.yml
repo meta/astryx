@@ -1,0 +1,135 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+
+# Admits a whole CI run under CI's ceiling of about ninety concurrent jobs
+# (spec:AST-030 FR16, DEC-16). GitHub has no repository-wide job limit to set
+# (a `concurrency` group serializes runs, it does not count jobs), so each run
+# waits for room before its jobs start:
+#
+# - ci.yml's `admission` job, which every other ci.yml job needs, and the Main
+#   workflow's `main-commit` job run this first. A step that uses this action
+#   MUST be named "Wait for room under the CI ceiling": a waiting `main` run is
+#   found by that name.
+# - A run starts once the other active runs' estimated jobs plus `peak` fit
+#   under the ceiling. A pull-request run (`main: false`) also waits while a
+#   `main` full check or release re-check is waiting, so `main` fits first;
+#   pull-request runs never wait for each other.
+# - It looks every two minutes, plus a random 0-20 s so runs that look together
+#   spread out, for at most `max-wait-minutes` (fifteen for `main`, twelve for
+#   a pull request, inside its fifteen-minute job budget), and then starts.
+# - Each look costs two API calls: the in-progress and the queued runs. Only
+#   while a `main` run is active does a pull-request run read that run's jobs.
+# - A pull request that may not run CI (a draft, or a fork without `ci:run`)
+#   starts at once, so its required contexts report their failure (FR17).
+# - A failed lookup, a rate limit included, starts the run.
+
+name: CI admission
+description: Waits until a CI run's jobs fit under CI's ceiling.
+
+inputs:
+  peak:
+    description: The most jobs this run holds at once.
+    required: true
+  main:
+    description: "'true' for a main full check or release re-check, which does not wait for other main runs."
+    required: true
+  max-wait-minutes:
+    description: The longest this run waits before it starts anyway.
+    required: false
+    default: '15'
+  label-legs:
+    description: JSON map of a pull-request label to the jobs it adds to `peak`.
+    required: false
+    default: '{}'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/github-script@v9
+      env:
+        PEAK: ${{ inputs.peak }}
+        MAIN: ${{ inputs.main }}
+        LABEL_LEGS: ${{ inputs.label-legs }}
+        MAX_WAIT_MINUTES: ${{ inputs.max-wait-minutes }}
+      with:
+        retries: 3
+        script: |
+          const CI_CEILING = 90;
+          const LOOK_MS = 2 * 60_000;
+          const JITTER_MS = 20_000;
+          const MAX_WAIT_MS = Number(process.env.MAX_WAIT_MINUTES || '15') * 60_000;
+          const STEP = 'Wait for room under the CI ceiling';
+          // The jobs an active run holds at once, by workflow: ci.yml's
+          // release-check and Main's unit run from their `peak`
+          // (ci-admission.test.mjs), a pull-request ci.yml run from its
+          // measured most, every other workflow's run one or two slim jobs.
+          const ESTIMATE = {
+            '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 36 : 12),
+            '.github/workflows/deploy.yml': () => 14,
+            '.github/workflows/review-signal.yml': () => 2,
+          };
+          const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);
+          const isMain = run =>
+            ['push', 'schedule', 'workflow_dispatch'].includes(run.event) &&
+            ['.github/workflows/ci.yml', '.github/workflows/deploy.yml'].includes(run.path);
+
+          let peak = Number(process.env.PEAK);
+          if (!Number.isInteger(peak) || peak < 1) {
+            throw new Error(`peak must be a positive integer, got "${process.env.PEAK}".`);
+          }
+          const main = process.env.MAIN === 'true';
+          const pr = context.payload.pull_request;
+          if (pr != null) {
+            const labels = (pr.labels ?? []).map(label => label.name);
+            const fork = pr.head?.repo?.full_name !== `${context.repo.owner}/${context.repo.repo}`;
+            if (pr.draft || (fork && !labels.includes('ci:run'))) {
+              core.info('This pull request runs no CI yet; nothing to admit.');
+              return;
+            }
+            const extra = JSON.parse(process.env.LABEL_LEGS || '{}');
+            for (const label of labels) peak += extra[label] ?? 0;
+          }
+
+          const started = Date.now();
+          let calls = 0;
+          try {
+            for (let look = 1; ; look += 1) {
+              const seen = new Set();
+              let others = 0;
+              let mainWaiting = false;
+              for (const status of ['in_progress', 'queued']) {
+                calls += 1;
+                const {data} = await github.rest.actions.listWorkflowRunsForRepo({
+                  ...context.repo, status, per_page: 100,
+                });
+                for (const run of data.workflow_runs) {
+                  if (seen.has(run.id) || run.id === context.runId) continue;
+                  seen.add(run.id);
+                  others += estimate(run);
+                  if (!main && !mainWaiting && isMain(run)) {
+                    calls += 1;
+                    const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
+                      ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
+                    });
+                    mainWaiting = jobs.some(job =>
+                      job.steps?.some(step => step.name === STEP && step.status === 'in_progress'),
+                    );
+                  }
+                }
+              }
+              if (others + peak <= CI_CEILING && !mainWaiting) {
+                core.info(`Room under the CI ceiling: about ${others} other jobs + ${peak} <= ${CI_CEILING}.`);
+                return;
+              }
+              const wait = LOOK_MS + Math.floor(Math.random() * JITTER_MS);
+              if (Date.now() - started + wait > MAX_WAIT_MS) {
+                core.warning(`Still no room after ${MAX_WAIT_MS / 60_000} minutes (about ${others} other jobs${mainWaiting ? ', a main check waiting' : ''}); starting.`);
+                return;
+              }
+              core.info(`Waiting for room: about ${others} other jobs + ${peak}${mainWaiting ? ', a main check waiting' : ''}.`);
+              await new Promise(resolve => setTimeout(resolve, wait));
+            }
+          } catch (error) {
+            core.warning(`Room under the CI ceiling could not be checked (${error.message}); starting.`);
+          } finally {
+            core.info(`CI admission: ${calls} API calls.`);
+          }

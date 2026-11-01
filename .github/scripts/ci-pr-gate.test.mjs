@@ -159,6 +159,10 @@ describe('pull-request CI gate (spec:AST-030 FR17)', () => {
       ]);
       for (const [id, job] of Object.entries(value.jobs)) {
         const condition = String(job.if ?? '');
+        // CI's run admission does no work for a pull request that may not
+        // run CI and must never skip, so the jobs it gates decide by their
+        // own conditions (ci-admission.test.mjs).
+        if (name === 'ci.yml' && id === 'admission') continue;
         if (REQUIRED[name]?.includes(id)) {
           // Skips only a draft. For an unlabelled fork it starts even when every
           // job it needs skipped, and its first step fails with the reason.

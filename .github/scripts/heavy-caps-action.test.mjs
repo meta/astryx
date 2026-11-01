@@ -1,16 +1,15 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Per-author caps and the CI ceiling on heavy suites
- * (.github/actions/heavy-caps, spec:AST-030 FR16, DEC-16). These cases run the
- * action's real script, as actions/github-script runs it, against a stubbed
- * GitHub API.
+ * @file Per-author caps on heavy suites (.github/actions/heavy-caps,
+ * spec:AST-030 FR16). These cases run the action's real script, as
+ * actions/github-script runs it, against a stubbed GitHub API.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {afterEach, describe, expect, it, vi} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
 const root = path.resolve(import.meta.dirname, '../..');
@@ -33,8 +32,6 @@ const QUEUED =
 const BACKSTOP =
   "Queued behind the shared login's 5 oldest PRs: runs on a push once it is among them, or at the pre-merge re-run.";
 const CAPPED = 'Daily heavy-run cap reached, runs tomorrow or at pre-merge.';
-const CI_CEILING = Number(/const CI_CEILING = (\d+);/.exec(script)[1]);
-const FULL = `CI is full (${CI_CEILING} jobs running or queued): runs on a later push, or at the pre-merge re-run.`;
 const ENGOWNERS =
   '# Engineering owners\n# @commented-out\n\n@owner-one @Owner-Two # was @trailing-comment\n';
 
@@ -62,19 +59,9 @@ async function check({
   runs = [],
   attempt = '1',
   engowners = ENGOWNERS,
-  // Every run in progress or queued, of any event, with its jobs' statuses;
-  // a function gets the poll number, so room can free up while waiting.
-  active = [],
-  onJobs = () => {},
 } = {}) {
-  let polls = 0;
-  const activeRuns = () => {
-    if (active instanceof Error) throw active;
-    return typeof active === 'function' ? active(polls) : active;
-  };
   const messages = {failed: [], warning: []};
   const core = {
-    info: () => {},
     setFailed: message => messages.failed.push(message),
     warning: message => messages.warning.push(message),
   };
@@ -83,10 +70,6 @@ async function check({
     graphql: async () => {
       if (open instanceof Error) throw open;
       return {search: {nodes: open}};
-    },
-    paginate: async (method, params) => {
-      const {data} = await method(params);
-      return data.workflow_runs ?? data.jobs;
     },
     rest: {
       repos: {
@@ -99,17 +82,6 @@ async function check({
         },
       },
       actions: {
-        // The ceiling counts runs of every event, not only pull requests.
-        listWorkflowRunsForRepo: async ({status, event}) => {
-          if (event !== undefined)
-            throw new Error(`counted only ${event} runs toward the ceiling`);
-          if (status === 'in_progress') polls += 1;
-          return {
-            data: {
-              workflow_runs: activeRuns().filter(run => run.status === status),
-            },
-          };
-        },
         // Today's ci.yml runs on a branch name, from any repository.
         listWorkflowRuns: async ({branch}) => ({
           data: {workflow_runs: runs.filter(run => run.head_branch === branch)},
@@ -118,17 +90,6 @@ async function check({
         // heavy job ran its suite has a successful marker step.
         listJobsForWorkflowRun: async ({run_id, per_page = 30}) => {
           if (per_page < 100) throw new Error('read one default page of jobs');
-          const live = activeRuns().find(run => run.id === run_id);
-          if (live) {
-            onJobs(run_id);
-            return {
-              data: {
-                jobs: live.jobs.map(job =>
-                  typeof job === 'string' ? {status: job} : job,
-                ),
-              },
-            };
-          }
           const heavy = runs.find(run => run.id === run_id).heavy !== false;
           return {
             data: {
@@ -388,162 +349,6 @@ describe('per-author caps on heavy suites (spec:AST-030 FR16)', () => {
     const failed = await check({open: new Error('rate limited')});
     expect(failed.failed).toEqual([]);
     expect(failed.warning[0]).toContain('running the heavy suite');
-  });
-
-  describe('CI ceiling', () => {
-    afterEach(() => vi.useRealTimers());
-    const runOf = (
-      id,
-      jobs,
-      status = 'in_progress',
-      event = 'pull_request',
-    ) => ({
-      id,
-      status,
-      event,
-      jobs,
-    });
-    const busy = count => Array.from({length: count}, () => 'in_progress');
-    /** Runs the check with fake timers, letting its two-minute re-check pass. */
-    async function waited(options) {
-      vi.useFakeTimers();
-      const result = check({open: [me], ...options});
-      await vi.advanceTimersByTimeAsync(6 * 60_000);
-      return result;
-    }
-
-    it('holds a heavy suite at the ceiling once the wait ends', async () => {
-      const full = await waited({active: [runOf(50, busy(CI_CEILING))]});
-      expect(full.failed).toEqual([FULL]);
-      const room = await waited({active: [runOf(50, busy(CI_CEILING - 1))]});
-      expect(room.failed).toEqual([]);
-    });
-
-    it("counts main's full checks and release re-checks, so pull requests get what main leaves", async () => {
-      const main = await waited({
-        active: [
-          runOf(50, busy(CI_CEILING - 40)),
-          runOf(60, busy(30), 'in_progress', 'workflow_dispatch'),
-          runOf(61, busy(10), 'in_progress', 'push'),
-        ],
-      });
-      expect(main.failed).toEqual([FULL]);
-      // When main is idle, pull requests may use the whole ceiling.
-      const idle = await waited({active: [runOf(50, busy(CI_CEILING - 1))]});
-      expect(idle.failed).toEqual([]);
-    });
-
-    it('counts queued runs and queued jobs, not finished ones, and not its own job', async () => {
-      const queued = await waited({
-        active: [
-          runOf(50, [...busy(CI_CEILING - 10), 'completed', 'completed']),
-          runOf(
-            51,
-            ['queued', 'queued', 'queued', 'queued', 'queued'],
-            'queued',
-          ),
-          runOf(52, [...busy(2), 'queued', 'queued', 'queued']),
-        ],
-      });
-      expect(queued.failed).toEqual([FULL]);
-      // This job is one of its run's in-progress jobs and takes no room.
-      const own = await waited({active: [runOf(1, busy(CI_CEILING))]});
-      expect(own.failed).toEqual([]);
-    });
-
-    it('looks twice at most, two minutes apart, and starts when room frees by the second look', async () => {
-      const freed = await waited({
-        active: poll => [
-          runOf(50, busy(poll < 2 ? CI_CEILING : CI_CEILING - 1)),
-        ],
-      });
-      expect(freed.failed).toEqual([]);
-      let looks = 0;
-      const full = await waited({
-        active: poll => {
-          looks = Math.max(looks, poll);
-          return [runOf(50, busy(CI_CEILING))];
-        },
-      });
-      expect(full.failed).toEqual([FULL]);
-      expect(looks).toBe(2);
-    });
-
-    it('reads each active run once per look', async () => {
-      const reads = new Map();
-      const counted = await waited({
-        active: [
-          runOf(50, busy(CI_CEILING - 1)),
-          // A run listed as both in progress and queued is still one run.
-          {...runOf(50, busy(CI_CEILING - 1)), status: 'queued'},
-        ],
-        onJobs: id => reads.set(id, (reads.get(id) ?? 0) + 1),
-      });
-      expect(counted.failed).toEqual([]);
-      expect(reads.get(50)).toBe(1);
-    });
-
-    it('holds a heavy suite while a main check waits for room, even below the ceiling', async () => {
-      const MAKING_ROOM =
-        'CI is making room for a main check: runs on a later push, or at the pre-merge re-run.';
-      const admitting = {
-        status: 'in_progress',
-        steps: [
-          {name: 'Wait for room under the CI ceiling', status: 'in_progress'},
-        ],
-      };
-      const admitted = {
-        status: 'in_progress',
-        steps: [
-          {name: 'Wait for room under the CI ceiling', status: 'completed'},
-        ],
-      };
-      const held = await waited({
-        active: [runOf(60, [admitting], 'in_progress', 'workflow_dispatch')],
-      });
-      expect(held.failed).toEqual([MAKING_ROOM]);
-      // Main started its legs by the second look: the suite runs.
-      const started = await waited({
-        active: poll => [
-          runOf(
-            60,
-            [poll < 2 ? admitting : admitted],
-            'in_progress',
-            'workflow_dispatch',
-          ),
-        ],
-      });
-      expect(started.failed).toEqual([]);
-    });
-
-    it('runs the suite when the ceiling is rate-limited', async () => {
-      const limited = await waited({
-        active: new Error('API rate limit exceeded'),
-      });
-      expect(limited.failed).toEqual([]);
-      expect(limited.warning[0]).toContain('running the heavy suite');
-    });
-
-    it('holds an engineering owner too, but exempts the pre-merge re-run', async () => {
-      const owner = await waited({
-        context: pullRequestContext({user: {login: 'owner-one'}}),
-        active: [runOf(50, busy(CI_CEILING))],
-      });
-      expect(owner.failed).toEqual([FULL]);
-      const rerun = await waited({
-        attempt: '2',
-        active: [runOf(50, busy(CI_CEILING + 20))],
-      });
-      expect(rerun.failed).toEqual([]);
-    });
-
-    it('checks the ceiling only after the per-author limits pass', async () => {
-      const queued = await waited({
-        open: [...older15(), me],
-        active: [runOf(50, busy(CI_CEILING))],
-      });
-      expect(queued.failed).toEqual([QUEUED]);
-    });
   });
 
   it('loads every local action from the merge commit, never from a checkout of the pull request head', () => {
