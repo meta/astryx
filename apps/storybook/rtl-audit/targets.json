@@ -605,5 +605,31 @@
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
     }
+  },
+  {
+    "component": "LayoutContent",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": ".astryx-layout-content"
+    }
+  },
+  {
+    "component": "LayoutPanel",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-layout-panel",
+      "next": ".astryx-layout-content"
+    }
+  },
+  {
+    "component": "ResizeHandle",
+    "storyId": "core-resizable--horizontal-split",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-resize-handle",
+      "overlayRoot": ".astryx-layout"
+    }
   }
 ]

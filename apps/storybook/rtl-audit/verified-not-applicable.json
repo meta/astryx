@@ -433,5 +433,13 @@
       "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
       "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
     }
+  },
+  {
+    "component": "core/LayoutFooter",
+    "reason": "LayoutFooter owns a shell with a block-start border and an inner box whose inline padding and margins are equal logical pairs (the Layout's outer padding, and a centered content width), so nothing it draws differs between its inline edges. It owns no glyph, physical position, order, scroll, drag, overlay or keyboard behavior; its caller-supplied content keeps its own RTL ownership."
+  },
+  {
+    "component": "core/LayoutHeader",
+    "reason": "LayoutHeader owns a shell with a block-end border and an inner box whose inline padding and margins are equal logical pairs (the Layout's outer padding, and a centered content width), so nothing it draws differs between its inline edges. It owns no glyph, physical position, order, scroll, drag, overlay or keyboard behavior; its caller-supplied content keeps its own RTL ownership."
   }
 ]
