@@ -519,7 +519,8 @@ export function finishFiniteAnimations(doc) {
       animation.finish();
       finished++;
     } catch {
-      // A paused or zero-playback-rate animation cannot finish; leave it.
+      // A zero-playback-rate or infinite-effect animation cannot finish;
+      // leave it.
     }
   }
   return finished;
