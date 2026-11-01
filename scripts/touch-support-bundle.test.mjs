@@ -118,7 +118,31 @@ function filesUnder(dir, pattern) {
  * gives a component its gesture adds that component's import, and each import
  * that reaches it, with a comment naming the gesture.
  */
-const GESTURE_USERS = new Set([]);
+const GESTURE_USERS = new Set([
+  // useScrollLock's page hold, and the imports that reach it.
+  'hooks: useScrollLock',
+  'AlertDialog',
+  'BottomSheet',
+  'CommandPalette',
+  'ContextMenu',
+  'DateInput',
+  'DateTimeInput',
+  'Dialog',
+  'Drawer',
+  'DropdownMenu',
+  'Layer',
+  'Lightbox',
+  'Markdown',
+  'MoreMenu',
+  'MultiSelector',
+  'Pagination',
+  'Popover',
+  'PowerSearch',
+  'Selector',
+  'Table',
+  'TimeInput',
+  'Tokenizer',
+]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
 const NEVER_GESTURE_USERS = ['Button', 'TextInput'];
