@@ -4273,3 +4273,287 @@ describe('SideNavItem collapsed-from-mount rail tooltip', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 });
+
+// =============================================================================
+// Collapse with focus on a row the rail does not render (AR3)
+// =============================================================================
+
+describe('SideNav collapse focus (AR3)', () => {
+  function Rail({
+    isCollapsed,
+    hasButton = true,
+  }: {
+    isCollapsed: boolean;
+    hasButton?: boolean;
+  }) {
+    return (
+      <>
+        <SideNav
+          collapsible={{isCollapsed, onCollapsedChange: () => {}, hasButton}}>
+          <SideNavSection title="Main">
+            <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+            <SideNavItem label="Reports" href="/reports" />
+            <SideNavItem label="Team" icon={StubIcon} href="/team" />
+          </SideNavSection>
+        </SideNav>
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+
+  it('moves focus from a row the collapsed rail removes to the collapse toggle', () => {
+    const {rerender} = render(<Rail isCollapsed={false} />);
+    screen.getByRole('link', {name: 'Reports'}).focus();
+    rerender(<Rail isCollapsed />);
+    expect(screen.queryByRole('link', {name: 'Reports'})).toBeNull();
+    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+  });
+
+  it('moves focus to the nearest row still in the rail when there is no toggle', () => {
+    const {rerender} = render(<Rail isCollapsed={false} hasButton={false} />);
+    screen.getByRole('link', {name: 'Reports'}).focus();
+    rerender(<Rail isCollapsed hasButton={false} />);
+    expect(screen.getByRole('link', {name: 'Dashboard'})).toHaveFocus();
+  });
+
+  it('moves no focus that is outside the removed rows', () => {
+    const {rerender} = render(<Rail isCollapsed={false} />);
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+    rerender(<Rail isCollapsed />);
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('moves no focus from a row the collapsed rail keeps', () => {
+    const {rerender} = render(<Rail isCollapsed={false} />);
+    const team = screen.getByRole('link', {name: 'Team'});
+    team.focus();
+    rerender(<Rail isCollapsed />);
+    expect(screen.getByRole('link', {name: 'Team'})).toHaveFocus();
+  });
+
+  it("moves focus from a nested row to its parent's trigger, which the rail keeps, when there is no toggle", () => {
+    const nested = (isCollapsed: boolean) => (
+      <SideNav
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: () => {},
+          hasButton: false,
+        }}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem label="Settings" icon={StubIcon} collapsible>
+          <SideNavItem label="Billing" href="/settings/billing" />
+        </SideNavItem>
+      </SideNav>
+    );
+    const {rerender} = render(nested(false));
+    screen.getByRole('link', {name: 'Billing'}).focus();
+    rerender(nested(true));
+    expect(screen.queryByRole('link', {name: 'Billing'})).toBeNull();
+    expect(screen.getByRole('button', {name: 'Settings'})).toHaveFocus();
+  });
+
+  it("moves focus from a kept row's action, which the rail drops, to that row when there is no toggle", () => {
+    const withAction = (isCollapsed: boolean) => (
+      <SideNav
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: () => {},
+          hasButton: false,
+        }}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem
+          label="Project"
+          icon={StubIcon}
+          href="/project"
+          actions={
+            <button type="button" aria-label="Project actions">
+              ⋯
+            </button>
+          }
+        />
+      </SideNav>
+    );
+    const {rerender} = render(withAction(false));
+    screen.getByRole('button', {name: 'Project actions'}).focus();
+    rerender(withAction(true));
+    expect(screen.queryByRole('button', {name: 'Project actions'})).toBeNull();
+    expect(screen.getByRole('link', {name: 'Project'})).toHaveFocus();
+  });
+
+  it('moves focus to the nearest kept row in a resizable SideNav with no toggle, whose nav remounts as it collapses', () => {
+    const resizable = (isCollapsed: boolean) => (
+      <SideNav
+        resizable
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: () => {},
+          hasButton: false,
+        }}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem label="Reports" href="/reports" />
+        <SideNavItem label="Team" icon={StubIcon} href="/team" />
+      </SideNav>
+    );
+    const {rerender} = render(resizable(false));
+    screen.getByRole('link', {name: 'Reports'}).focus();
+    rerender(resizable(true));
+    expect(screen.getByRole('link', {name: 'Dashboard'})).toHaveFocus();
+  });
+
+  it('keeps focus on a kept row whose link the collapsed rail replaces, even with a toggle', () => {
+    const withAction = (isCollapsed: boolean) => (
+      <SideNav collapsible={{isCollapsed, onCollapsedChange: () => {}}}>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem
+          label="Project"
+          icon={StubIcon}
+          href="/project"
+          actions={
+            <button type="button" aria-label="Project actions">
+              ⋯
+            </button>
+          }
+        />
+      </SideNav>
+    );
+    const {rerender} = render(withAction(false));
+    screen.getByRole('link', {name: 'Project'}).focus();
+    rerender(withAction(true));
+    expect(screen.getByRole('link', {name: 'Project'})).toHaveFocus();
+  });
+
+  it('keeps focus on a footer control or the toggle that a resizable collapse re-renders', () => {
+    const resizable = (isCollapsed: boolean) => (
+      <SideNav
+        resizable
+        collapsible={{isCollapsed, onCollapsedChange: () => {}}}
+        footerIcons={
+          <button type="button" aria-label="Help">
+            ?
+          </button>
+        }>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        <SideNavItem label="Reports" href="/reports" />
+      </SideNav>
+    );
+    const {rerender} = render(resizable(false));
+    screen.getByRole('button', {name: 'Help'}).focus();
+    rerender(resizable(true));
+    expect(screen.getByRole('button', {name: 'Help'})).toHaveFocus();
+    rerender(resizable(false));
+    screen.getByRole('button', {name: 'Collapse sidebar'}).focus();
+    rerender(resizable(true));
+    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+  });
+
+  it.each([
+    {
+      toggle: true,
+      lands: () => screen.getByRole('button', {name: 'Expand sidebar'}),
+    },
+    {toggle: false, lands: () => screen.getByRole('link', {name: 'Dashboard'})},
+  ])(
+    'moves focus from the resize handle that Enter collapses, toggle $toggle',
+    async ({toggle, lands}) => {
+      const user = userEvent.setup();
+      render(
+        <SideNav resizable collapsible={{hasButton: toggle}}>
+          <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+          <SideNavItem label="Reports" href="/reports" />
+        </SideNav>,
+      );
+      screen.getByTestId('astryx-sidenav-resize-handle').focus();
+      await user.keyboard('{Enter}');
+      expect(screen.queryByTestId('astryx-sidenav-resize-handle')).toBeNull();
+      expect(lands()).toHaveFocus();
+    },
+  );
+
+  it.each([
+    {
+      toggle: true,
+      lands: () => screen.getByRole('button', {name: 'Expand sidebar'}),
+    },
+    {toggle: false, lands: () => screen.getByRole('link', {name: 'Dashboard'})},
+  ])(
+    'moves focus from an icon-less heading link the collapse removes, never to the control that takes its place, toggle $toggle',
+    ({toggle, lands}) => {
+      const rail = (isCollapsed: boolean) => (
+        <SideNav
+          collapsible={{
+            isCollapsed,
+            onCollapsedChange: () => {},
+            hasButton: toggle,
+          }}
+          header={<SideNavHeading heading="My App" headingHref="/" />}
+          topContent={<button type="button">New project</button>}
+          footer={<a href="/help">Help</a>}>
+          <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+        </SideNav>
+      );
+      const {rerender} = render(rail(false));
+      screen.getByRole('link', {name: 'My App'}).focus();
+      rerender(rail(true));
+      expect(screen.queryByRole('link', {name: 'My App'})).toBeNull();
+      expect(lands()).toHaveFocus();
+    },
+  );
+
+  it('moves focus from a heading link the collapse renames (its subheading dropped) to the toggle in a resizable SideNav', () => {
+    const rail = (isCollapsed: boolean) => (
+      <SideNav
+        resizable
+        collapsible={{isCollapsed, onCollapsedChange: () => {}}}
+        header={
+          <SideNavHeading
+            icon={<span>A</span>}
+            heading="Acme"
+            subheading="Workspace"
+            headingHref="/"
+          />
+        }>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+      </SideNav>
+    );
+    const {rerender} = render(rail(false));
+    const heading = screen
+      .getAllByRole('link')
+      .find(link => link.getAttribute('href') === '/');
+    heading?.focus();
+    expect(heading).toHaveFocus();
+    rerender(rail(true));
+    expect(screen.getByRole('button', {name: 'Expand sidebar'})).toHaveFocus();
+  });
+
+  it('keeps focus on a heading link the resizable collapse re-renders under the same accessible name, aria-hidden icon text left out', () => {
+    const rail = (isCollapsed: boolean) => (
+      <SideNav
+        resizable
+        collapsible={{isCollapsed, onCollapsedChange: () => {}}}
+        header={
+          <SideNavHeading
+            icon={<span aria-hidden="true">A</span>}
+            heading="Acme"
+            headingHref="/"
+          />
+        }>
+        <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
+      </SideNav>
+    );
+    const {rerender} = render(rail(false));
+    screen.getByRole('link', {name: 'Acme'}).focus();
+    rerender(rail(true));
+    expect(screen.getByRole('link', {name: 'Acme'})).toHaveFocus();
+  });
+
+  it('moves no focus when the rail expands', () => {
+    const {rerender} = render(<Rail isCollapsed />);
+    const toggle = screen.getByRole('button', {name: 'Expand sidebar'});
+    toggle.focus();
+    rerender(<Rail isCollapsed={false} />);
+    expect(
+      screen.getByRole('button', {name: 'Collapse sidebar'}),
+    ).toHaveFocus();
+  });
+});

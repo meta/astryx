@@ -71,7 +71,8 @@ jobs:
             }
             // This workflow's checks: ci.yml runs dispatched on main by the
             // workflow token, which stays a run's actor when a person re-runs
-            // it. A cancelled one was replaced while waiting and never ran.
+            // it. A cancelled one was replaced while waiting, or stopped by a
+            // release re-check of main's tip, which is itself a full check.
             const {data} = await github.rest.actions.listWorkflowRuns({
               ...context.repo, workflow_id: 'ci.yml', event: 'workflow_dispatch', branch: 'main', per_page: 30,
             });
