@@ -61,6 +61,23 @@ describe('CodeEditor', () => {
     expect(editor.closest('[dir]')).toHaveAttribute('dir', 'ltr');
   });
 
+  it('lets the placeholder take its own text direction', () => {
+    render(
+      <div dir="rtl">
+        <CodeEditor
+          label="Code"
+          value=""
+          onChange={() => {}}
+          placeholder="اكتب الكود هنا..."
+        />
+      </div>,
+    );
+    expect(screen.getByText('اكتب الكود هنا...')).toHaveAttribute(
+      'dir',
+      'auto',
+    );
+  });
+
   it('uses the label prop as the accessible name', () => {
     render(
       <CodeEditor

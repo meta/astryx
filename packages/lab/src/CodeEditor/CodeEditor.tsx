@@ -576,7 +576,9 @@ export function CodeEditor({
         )}
         <div style={{position: 'relative', flex: 1}}>
           {showPlaceholder && (
-            <div {...stylex.props(styles.placeholder, sizeStyle)}>
+            // The placeholder is prose, not code: it takes its own text's
+            // direction, so an Arabic or Hebrew hint still reads correctly.
+            <div dir="auto" {...stylex.props(styles.placeholder, sizeStyle)}>
               {placeholder}
             </div>
           )}
