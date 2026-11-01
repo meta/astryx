@@ -24,8 +24,9 @@ import {useCallback, useLayoutEffect, useRef} from 'react';
  * Pass the returned callback as `LayoutChangeSnapshot`'s `onBeforeChange`
  * (with `value` as its `value`). `note` receives the value being left and
  * returns what `move` needs, or `null` when there is nothing to move; `move`
- * receives that and the new value once the change has committed. Both are
- * read when called, so they may close over the latest render.
+ * receives that and the new value once the change has committed. `move` is
+ * the latest render's. `note` runs before this commit's effects, so it is the
+ * previous committed render's: read refs or the DOM in it, not props.
  */
 export function useFocusLeavingChange<V, N>(
   value: V,
