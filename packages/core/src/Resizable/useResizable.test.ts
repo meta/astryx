@@ -1558,6 +1558,23 @@ describe('useResizable percentage configuration (AST-010)', () => {
       expect(result.current.props._maxSizePx).toBe(399);
     });
 
+    it('follows a container swapped behind the ref with a configuration object kept across renders', () => {
+      // A module constant or a memoized object: no new options reach the
+      // region when the element behind its ref changes.
+      const first = makeSized(398);
+      const second = makeSized(798);
+      const containerRef: {current: HTMLElement | null} = {current: first};
+      const config = {containerRef, defaultSize: 150, maxSize: '50%'} as const;
+      const {result, rerender} = renderHook(() => useResizable(config));
+      expect(result.current.props._maxSizePx).toBe(199);
+
+      act(() => {
+        containerRef.current = second;
+      });
+      rerender();
+      expect(result.current.props._maxSizePx).toBe(399);
+    });
+
     it('stops observing the element it left behind', () => {
       const first = makeSized(398);
       const second = makeSized(798);
