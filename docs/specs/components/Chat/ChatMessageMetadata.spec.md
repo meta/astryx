@@ -182,12 +182,13 @@ No component-local design decision is recorded.
 
 | Contract      | Verification                                                                                                                                                                  | Representative states                          | Mutation or failure expectation                                                    | Audit section                          |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------- |
-| FR1–FR2       | `ChatMessageMetadata.test.tsx` separator, empty-row, and numeric-zero tests                                                                                                   | empty scalar; zero; timestamp, footer, status  | A stray separator, a blank row, or a hidden zero fails.                            | `audit:ChatMessageMetadata/behavior`   |
+| FR1–FR2       | `ChatMessageMetadata.test.tsx` separator, empty-row, and numeric-zero tests; `ChatMessageMetadata.a11y.chromium.spec.ts` `narrow-overflow` and `status-*` cases               | empty scalar; zero; timestamp, footer, status  | A stray separator, a blank row, or a hidden zero fails.                            | `audit:ChatMessageMetadata/behavior`   |
 | FR5           | `ChatMessageMetadata.test.tsx` `forwards rest props (data-*, aria-*, id) to the root element`                                                                                 | data and id props                              | A dropped prop fails.                                                              | `audit:ChatMessageMetadata/public-api` |
 | FR3, FR4, FR6 | `ChatMessageMetadata.a11y.chromium.spec.ts` status and RTL sender-ordering tests; `ChatMessageBubble.test.tsx` "renders status" and "renders timestamp and status on one row" | each status; user and assistant in LTR and RTL | A wrong sender order, a missing caption or title, or a dropped status label fails. | `audit:ChatMessageMetadata/behavior`   |
 
 Read from source, with no focused test yet:
 
+- FR2: the separator before `status` after an empty scalar slot.
 - FR3, AV3: the forward row for `system` and standalone use.
 - FR4: each status's icon, the error color, and the sending pulse and its
   reduced-motion suppression.
