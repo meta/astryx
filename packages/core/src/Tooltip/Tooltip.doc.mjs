@@ -84,8 +84,15 @@ export const docs = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens; use it for an info icon rendered as a button, whose only job is to reveal the tooltip. none never opens on touch.',
+            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens. none never opens on touch. Ignored under pressTrigger="toggle".',
           default: "'auto'",
+        },
+        {
+          name: 'pressTrigger',
+          type: "'none' | 'toggle'",
+          description:
+            'Whether a press on the trigger pins the tooltip open. none leaves taps to touchTrigger. toggle, on a button trigger: a click, a tap, Enter, or Space pins the tooltip and the same press closes it, while hover and keyboard focus still preview it. A pinned tooltip stays until Escape, a second press, a press outside, or focus leaving, and the press stops at the trigger, so a clickable row or card around it does not activate (with anchorRef, the anchored trigger still runs its own onClick, Astryx clickable rows and cards ignore the press, and a plain onClick element around the anchor receives it unless that onClick stops it). The trigger reports aria-expanded and aria-controls, and the text is announced once when it pins. Use it for an info icon or any button whose only job is revealing the tooltip.',
+          default: "'none'",
         },
         {
           name: 'isEnabled',
@@ -130,7 +137,7 @@ export const docs = {
     bestPractices: [
       {guidance: true, description: 'Keep tooltip content concise: aim for under 140 characters of plain text.'},
       {guidance: true, description: 'Add a tooltip to icon-only buttons and controls that lack a visible label.'},
-      {guidance: true, description: 'Set touchTrigger to tap when the trigger is a button whose only job is revealing the tooltip, such as an info icon: touch has no hover, and auto keeps the tap for triggers that perform an action.'},
+      {guidance: true, description: 'Set pressTrigger to toggle when the trigger is a button whose only job is revealing the tooltip, such as an info icon: a click, a tap, Enter, or Space pins it, and the press stops at the trigger.'},
       {guidance: false, description: 'Place interactive elements like links or buttons inside a tooltip; use HoverCard or Popover instead.'},
       {guidance: false, description: 'Use tooltips for essential information that users must see to complete a task.'},
     ],
@@ -197,8 +204,15 @@ export const docsZh = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开——适用于以按钮形式呈现、唯一作用就是显示工具提示的信息图标。none：触摸永不打开。',
+            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开。none：触摸永不打开。pressTrigger="toggle" 时忽略此项。',
           default: "'auto'",
+        },
+        {
+          name: 'pressTrigger',
+          type: "'none' | 'toggle'",
+          description:
+            '按下触发元素是否将工具提示固定打开。none：不固定，轻点由 touchTrigger 决定。toggle（仅限按钮触发元素）：单击、轻点、Enter 或空格键固定打开，再按一次关闭；悬停和键盘聚焦仍会预览。固定后，直到按 Escape、再次按下、在外部按下或焦点移出才关闭；这次按下止于触发元素，外层可点击的行或卡片不会被激活（使用 anchorRef 时，锚定元素自身的 onClick 仍会运行，Astryx 的可点击行和卡片会忽略这次按下，锚定元素外层普通的 onClick 元素仍会收到，除非锚定元素的 onClick 阻止它）。触发元素会报告 aria-expanded 和 aria-controls，固定时朗读一次文本。适用于信息图标等唯一作用就是显示工具提示的按钮。',
+          default: "'none'",
         },
         {
           name: 'isEnabled',
@@ -238,7 +252,7 @@ export const docsZh = {
     bestPractices: [
       {guidance: true, description: 'Keep tooltip content concise: aim for under 140 characters of plain text.'},
       {guidance: true, description: 'Add a tooltip to icon-only buttons and controls that lack a visible label.'},
-      {guidance: true, description: 'Set touchTrigger to tap when the trigger is a button whose only job is revealing the tooltip, such as an info icon: touch has no hover, and auto keeps the tap for triggers that perform an action.'},
+      {guidance: true, description: 'Set pressTrigger to toggle when the trigger is a button whose only job is revealing the tooltip, such as an info icon: a click, a tap, Enter, or Space pins it, and the press stops at the trigger.'},
       {guidance: false, description: 'Place interactive elements like links or buttons inside a tooltip; use HoverCard or Popover instead.'},
       {guidance: false, description: 'Use tooltips for essential information that users must see to complete a task.'},
     ],
@@ -255,7 +269,7 @@ export const docsDense = {
     bestPractices: [
       {guidance: true, description: 'Keep tooltip content concise: aim for under 140 characters of plain text.'},
       {guidance: true, description: 'Add a tooltip to icon-only buttons and controls that lack a visible label.'},
-      {guidance: true, description: 'Set touchTrigger to tap when the trigger is a button whose only job is revealing the tooltip, such as an info icon: touch has no hover, and auto keeps the tap for triggers that perform an action.'},
+      {guidance: true, description: 'Set pressTrigger to toggle when the trigger is a button whose only job is revealing the tooltip, such as an info icon: a click, a tap, Enter, or Space pins it, and the press stops at the trigger.'},
       {guidance: false, description: 'Place interactive elements like links or buttons inside a tooltip; use HoverCard or Popover instead.'},
       {guidance: false, description: 'Use tooltips for essential information that users must see to complete a task.'},
     ],
@@ -274,7 +288,8 @@ export const docsDense = {
         delay: 'Show delay in ms.',
         hideDelay: 'Hide delay in ms.',
         focusTrigger: 'Controls when focus events trigger tooltip.',
-        touchTrigger: 'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens (info icon rendered as a button); none = never on touch.',
+        touchTrigger: 'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens; none = never on touch.',
+        pressTrigger: 'none = no press pins; toggle = a click/tap/Enter/Space on a button trigger pins the tooltip (aria-expanded, announced once), the same press closes it, and the press stops at the trigger.',
         isEnabled: 'Enables/disables tooltip triggers.',
         onOpenChange: 'Callback when visibility changes; true=shown, false=hidden.',
         hasHoverIndication: 'Dashed underline on trigger element.',
