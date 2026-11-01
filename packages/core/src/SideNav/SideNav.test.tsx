@@ -2478,6 +2478,37 @@ describe('SideNavItem — mobile drawer close-on-activate', () => {
     expect(closeMobileNav).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    ['ctrl', {ctrlKey: true}],
+    ['meta', {metaKey: true}],
+    ['shift', {shiftKey: true}],
+    ['alt', {altKey: true}],
+  ] as const)(
+    'leaves the drawer open on a %s-click of a link item',
+    (_name, modifier) => {
+      const onClick = vi.fn();
+      const {closeMobileNav} = renderInDrawer(
+        <SideNavItem
+          label="Home"
+          href="#home"
+          onClick={onClick}
+          data-testid="item"
+        />,
+      );
+      fireEvent.click(screen.getByTestId('item'), modifier);
+      expect(onClick).toHaveBeenCalledTimes(1);
+      expect(closeMobileNav).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still closes on a modified click of an item with no href', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <SideNavItem label="Action" onClick={vi.fn()} data-testid="item" />,
+    );
+    fireEvent.click(screen.getByTestId('item'), {ctrlKey: true});
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
   it('closes the mobile nav when a button item is clicked', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

@@ -73,6 +73,7 @@ import {
 } from './SideNavCollapseContext';
 import {useSideNavRenderMode} from './SideNavRenderContext';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {themeProps} from '../utils/themeProps';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 
@@ -626,8 +627,10 @@ export function SideNavItem({
       return;
     }
     onClick?.(e);
-    // Close the mobile nav when a nav item is activated inside the drawer
-    if (isInDrawer) {
+    // Close the mobile nav when a nav item is activated inside the drawer. A
+    // modified click on a link is the browser's (a new tab), so the drawer
+    // stays open for the next one.
+    if (isInDrawer && !(href && isModifiedClick(e))) {
       closeMobileNav();
     }
   };
