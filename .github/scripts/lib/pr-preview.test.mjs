@@ -11,6 +11,7 @@ import yaml from 'yaml';
 
 import {
   branchPreviewOrigin,
+  ciHistory,
   confirmOrStandDown,
   confirmSourceRunIdentity,
   PR_ANALYSIS_MARKER,
@@ -204,6 +205,9 @@ async function reconcile({
   baseStats,
   packageSize,
   touched,
+  apiChanges,
+  extendGithub,
+  ciHistoryPath,
 } = {}) {
   const value = previewAvailable
     ? {...requested, headRepository: requested.baseRepository}
@@ -221,6 +225,11 @@ async function reconcile({
   );
   if (packageSize)
     fs.writeFileSync(packageSizePath, JSON.stringify(packageSize));
+  const apiChangesPath = path.join(
+    path.dirname(paths.analysis),
+    'api-changes.json',
+  );
+  if (apiChanges) fs.writeFileSync(apiChangesPath, JSON.stringify(apiChanges));
   const touchedPath = path.join(
     path.dirname(paths.analysis),
     'touched-components.json',
@@ -230,6 +239,7 @@ async function reconcile({
     value: githubFixtureValue,
     comments,
   });
+  extendGithub?.(github);
   const core = {info: vi.fn(), warning: vi.fn()};
   const result = await reconcilePrComment({
     github,
@@ -243,12 +253,16 @@ async function reconcile({
     metadataPath: paths.metadata,
     baseStatsPath,
     packageSizePath,
+    apiChangesPath,
     touchedPath,
     a11yPath: paths.a11y,
     visualPath: paths.visual,
     createIfMissing,
     fallbackMessage,
     execute,
+    ciHistoryPath:
+      ciHistoryPath ??
+      path.join(path.dirname(paths.analysis), 'ci-history.json'),
   });
   return {result, state, core, github, paths};
 }
@@ -570,7 +584,12 @@ describe('PR Comment keeps its outcome off main', () => {
     'comment',
     'report',
   ];
-  const OPTIONAL = new Set(['actions/download-artifact@v8']);
+  // Optional: artifact downloads a run may not have, and keeping the CI
+  // history, which is a cache.
+  const OPTIONAL = new Set([
+    'actions/download-artifact@v8',
+    'actions/upload-artifact@v7',
+  ]);
 
   it.each(LANE)('never fails the run from the %s job', name => {
     for (const step of PR_COMMENT_WORKFLOW.jobs[name].steps) {
@@ -1151,6 +1170,24 @@ describe('PR comment preview reconciliation', () => {
     },
   );
 
+  it.each([
+    ['written', true],
+    ['absent', false],
+  ])(
+    'passes the API changes from the analysis artifact when %s',
+    async (_label, written) => {
+      const seen = [];
+      await reconcile({
+        apiChanges: written ? {version: 1, packages: []} : undefined,
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--api-changes')).toBe(written);
+    },
+  );
+
   it('falls back to a safe current message when analysis rendering fails', async () => {
     const stale = {
       id: 78,
@@ -1456,5 +1493,139 @@ describe('visual frames', () => {
     );
     expect(checkout.with).toEqual({ref: 'main', 'persist-credentials': false});
     expect(jobs.comment.needs).toEqual(['resolve', 'frames']);
+  });
+});
+
+describe('CI impact in the report', () => {
+  const at = minute =>
+    new Date(Date.UTC(2026, 9, 31, 12, minute)).toISOString();
+  const workflow = text => ({content: Buffer.from(text).toString('base64')});
+  const BASE_CI =
+    'on: pull_request\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps: [{run: a}]\n';
+  const HEAD_CI = `${BASE_CI}  extra:\n    runs-on: 4-core-ubuntu\n    steps: [{run: b}]\n`;
+  const ciChange = github => {
+    github.rest.pulls.listFiles = vi.fn(async () => ({
+      data: [{filename: '.github/workflows/ci.yml'}],
+    }));
+    github.rest.repos = {
+      compareCommitsWithBasehead: vi.fn(async () => ({
+        data: {merge_base_commit: {sha: 'c'.repeat(40)}},
+      })),
+      getContent: vi.fn(async ({ref}) => ({
+        data: workflow(ref === 'c'.repeat(40) ? BASE_CI : HEAD_CI),
+      })),
+    };
+    github.rest.actions.listWorkflowRuns = vi.fn(async ({per_page}) => ({
+      data: {
+        total_count: 70,
+        workflow_runs:
+          per_page === 1
+            ? []
+            : [{id: 1, run_started_at: at(0), updated_at: at(10)}],
+      },
+    }));
+    github.rest.actions.listJobsForWorkflowRun = vi.fn(async () => ({
+      data: [
+        {
+          name: 'lint',
+          conclusion: 'success',
+          started_at: at(0),
+          completed_at: at(2),
+        },
+        {
+          name: 'extra',
+          conclusion: 'success',
+          started_at: at(0),
+          completed_at: at(3),
+        },
+      ],
+    }));
+  };
+
+  it('reaches the comment for a pull request that changes CI, with the merge base as before', async () => {
+    let seen;
+    const {github} = await reconcile({
+      extendGithub: ciChange,
+      execute: (_node, args) => {
+        seen = args;
+        const file = args[args.indexOf('--ci-impact') + 1];
+        return `## PR Analysis Report\n${fs.readFileSync(file, 'utf8')}`;
+      },
+    });
+    expect(seen).toContain('--ci-impact');
+    const impact = JSON.parse(
+      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
+    );
+    expect(impact.flags).toContain('extra moves onto a non-standard runner');
+    expect(github.rest.repos.getContent).toHaveBeenCalledWith(
+      expect.objectContaining({ref: 'c'.repeat(40)}),
+    );
+  });
+
+  it('names a composite-action-only change as not measured', async () => {
+    let seen;
+    await reconcile({
+      extendGithub: github => {
+        ciChange(github);
+        github.rest.pulls.listFiles = vi.fn(async () => ({
+          data: [{filename: '.github/actions/setup/action.yml'}],
+        }));
+      },
+      execute: (_node, args) => {
+        seen = args;
+        return '## PR Analysis Report\n';
+      },
+    });
+    const impact = JSON.parse(
+      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
+    );
+    expect(impact.unmeasuredFiles).toEqual([
+      '.github/actions/setup/action.yml',
+    ]);
+  });
+
+  it('passes no impact for a pull request that does not change CI', async () => {
+    let seen;
+    await reconcile({
+      extendGithub: github => {
+        ciChange(github);
+        github.rest.pulls.listFiles = vi.fn(async () => ({
+          data: [{filename: 'packages/core/src/Card/Card.tsx'}],
+        }));
+      },
+      execute: (_node, args) => {
+        seen = args;
+        return '## PR Analysis Report\n';
+      },
+    });
+    expect(seen).not.toContain('--ci-impact');
+  });
+});
+
+describe('CI history window', () => {
+  it('counts the seven whole days before today', async () => {
+    const calls = [];
+    const github = {
+      rest: {
+        actions: {
+          listWorkflowRuns: vi.fn(async request => {
+            calls.push(request);
+            return {data: {total_count: 7, workflow_runs: []}};
+          }),
+        },
+      },
+    };
+    const history = await ciHistory({
+      github,
+      owner: 'meta',
+      repo: 'astryx',
+      now: new Date('2026-11-01T02:00:00Z'),
+    });
+    const counted = calls.filter(call => call.per_page === 1);
+    expect(counted.map(call => call.created)).toEqual([
+      '2026-10-25..2026-10-31',
+      '2026-10-25..2026-10-31',
+    ]);
+    expect(history.runsLast7Days).toBe(14);
   });
 });

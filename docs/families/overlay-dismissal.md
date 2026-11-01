@@ -78,6 +78,16 @@ deciding_specs: []
   "scope": "global",
   "triggers": {
     "layering": ["FR1", "FR2", "FR3", "FR6"]
+  },
+  "concerns": {
+    "focus-return": {
+      "names": [
+        "focusForLastInput",
+        "isFocusDetached",
+        "useFocusReturnVisibility"
+      ],
+      "claims": ["FR9"]
+    }
   }
 }
 ```

@@ -119,12 +119,6 @@ const styles = stylex.create({
   rootScrollable: {
     overflowY: 'auto',
     overflowX: 'hidden',
-    // Hide scrollbar during programmatic scroll animation
-    // to prevent flash. Restored when animation settles.
-    scrollbarWidth: {
-      default: null,
-      ':is([data-astryx-scrolling])': 'none',
-    },
   },
 
   messageArea: {
@@ -255,6 +249,7 @@ const styles = stylex.create({
 // =============================================================================
 
 function hasVisibleContent(children: ReactNode): boolean {
+  // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- component:ChatLayout FR5 names exactly null, undefined, false and an empty array as empty children; '' and true are not
   if (children == null || children === false) {
     return false;
   }

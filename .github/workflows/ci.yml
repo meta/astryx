@@ -2041,9 +2041,27 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
 
+      # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
+      # from the CPUs the process may run on. A container's CPU quota is not
+      # that mask, so a runner that shows the host's CPUs oversubscribes the
+      # job's share. Cap llvmpipe's threads at the cgroup quota when one is
+      # set (the job's share, rounded up); without a quota the count stays
+      # nproc, llvmpipe's own default.
       - name: Run WebKit interaction proofs
         if: steps.scope.outputs.applies == 'true'
         run: |
+          LP_NUM_THREADS="$(nproc)"
+          if [ -r /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            if [ "$quota" != max ]; then
+              share=$(( (quota + period - 1) / period ))
+              if [ "$share" -lt "$LP_NUM_THREADS" ]; then
+                LP_NUM_THREADS="$share"
+              fi
+            fi
+          fi
+          export LP_NUM_THREADS
+          echo "llvmpipe threads: $LP_NUM_THREADS"
           pnpm exec playwright test \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \

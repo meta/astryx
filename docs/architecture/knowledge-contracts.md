@@ -14,6 +14,7 @@ verified_by:
   [
     scripts/check-knowledge.test.mjs,
     scripts/specs-for-file.test.mjs,
+    scripts/lib/review-diff.test.mjs,
     .github/scripts/change-scope.test.mjs,
     .github/scripts/component-design-decisions.test.mjs,
     .github/scripts/lib/classify-visual.test.mjs,
@@ -100,7 +101,8 @@ changed code or theme source
 
 A lookup can also start from any repository path. `pnpm specs:for <path>`
 lists every current record linked to that path, the system specs that decided
-those records, and the global claims the path's component triggers route. It
+those records, and the global claims the path's component triggers route; with
+`--diff`, the claims the change's concerns route come first (INV20). It
 follows only links that records and files declare:
 
 - placement: the record itself, the component, module, or theme record whose
@@ -246,12 +248,17 @@ Every record is either:
 - **INV20 — Global review routing is explicit and claim-scoped.** A cross-cutting
   baseline participates without a component backlink only when its
   `review-applicability:v1` block declares `scope: "global"` and maps a semantic
-  trigger to exact claim ids in that same record. Review loads matching current
+  trigger or a concern to exact claim ids in that same record. Review loads matching current
   global claims before narrower records, then resolves the direct component,
   module, or family owner first when it governs the delta. The marker never makes
   the whole record, adjacent claims, drafts, or proposed-head authority govern.
   Every routed match records the base authority commit, record digest, record id,
-  path, trigger, claim id, claim title, and deterministic match reason.
+  path, trigger or concern, claim id, claim title, and deterministic match
+  reason. A record that owns a shared concern MAY list it in the block's
+  `concerns` map: the shared utility's names, the code patterns that re-implement it, and
+  the claims it routes. A change whose added shipped-source lines match a
+  concern routes those claims whatever the component record's
+  `review_triggers` list, and each match names the line that matched.
 - **INV21 — Component-local visual intent stays local and durable.** The optional
   `### Design decisions` table under `## Design relationships` belongs only to
   component- or module-local appearance intent that a future redesign must
@@ -375,11 +382,31 @@ In an opted-in record, replace the example marker with
 `public-api`, `react-runtime`, `responsive`, `scrolling`, `specification`,
 `styling`, `testing`, `theming`, `tokens`, and `visual`. Every trigger has a
 non-empty list of unique claim ids, and each id resolves to an explicit numbered
-claim in that record. The checked-in validator rejects unsupported triggers,
-malformed blocks, missing or duplicate claims, and empty routing.
+claim in that record. A block may add, or carry instead of `triggers`, a
+`concerns` map (INV20). Each lower-kebab concern lists `claims` and at least one
+of `names` (identifiers of the shared utility) and `patterns` (regular
+expressions for code that re-implements it):
+
+```json
+{
+  "scope": "global",
+  "concerns": {
+    "slot-presence": {
+      "names": ["isRenderable"],
+      "patterns": ["typeof [\\w.]+ !== 'boolean'"],
+      "claims": ["INV16"]
+    }
+  }
+}
+```
+
+A concern lives in the record that owns its claims, so a claim is routed from
+one source. The checked-in validator rejects unsupported triggers, malformed
+blocks, missing or duplicate claims, invalid patterns, and empty routing.
 `scripts/review-global-baselines.mjs` requires both the exact reviewed head and
 its full base authority commit, verifies that commit is the head's `origin/main`
-merge base, and emits deterministically sorted match rows. It therefore cannot
+merge base, emits deterministically sorted match rows, and lists in
+`concernMatches` the claims whose concerns the head's added lines match. It therefore cannot
 read a proposed head as its own authority. Consumers load those rows before narrow lookup, preserve their
 provenance in a review receipt, and apply only the cited claim after the direct
 owner has been resolved.

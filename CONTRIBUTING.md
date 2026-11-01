@@ -939,6 +939,15 @@ Storybook story for anything you added or altered.
   or changes shared styles (themes, tokens, shared `.stylex.ts` files); add
   the `ci:run-*` labels for those. It is advisory: no required check waits for
   it.
+- **A pull request that changes CI states its CI impact.** When it changes a
+  workflow, a composite action or a CI script, its description carries a
+  `CI impact:` line: each changed job's runner class (standard or
+  non-standard), job-minutes per update and runner-pool usage before and
+  after, and time to green. The pull-request comment's CI impact section
+  measures these for `ci.yml` from recent runs, names other changed workflows,
+  composite actions and CI scripts as not measured, and flags a job moving onto
+  a non-standard runner, more than 10% added runner-pool usage, or more than two minutes
+  added to time to green.
 - **Pull requests from a branch in this repository run CI without the label**,
   since pushing a branch here needs write access. Maintainers who work from a
   fork either push their branches here or apply `ci:run` themselves.
