@@ -14,9 +14,7 @@ applies_to:
     apps/storybook/rtl-audit/,
     scripts/component-packages.cjs,
     .github/workflows/ci.yml,
-    .github/workflows/rtl-weekly.yml,
     .github/scripts/rtl-audit-coverage.test.mjs,
-    .github/scripts/weekly-rtl-summary.js,
     .github/scripts/rtl-join.mjs,
     .github/scripts/rtl-report-completion.mjs,
     .github/scripts/rtl-shard-scope.mjs,
@@ -27,7 +25,8 @@ verified_by:
   [
     .github/scripts/rtl-audit-coarse-hit.browser.test.mjs,
     .github/scripts/rtl-audit-coverage.test.mjs,
-    .github/scripts/weekly-rtl-summary.test.mjs,
+    .github/scripts/rtl-scorecard-failures.test.mjs,
+    .github/scripts/rtl-scorecard-summary.test.mjs,
     .github/scripts/rtl-join.test.mjs,
     .github/scripts/rtl-report-completion.test.mjs,
     .github/scripts/rtl-shard-scope.test.mjs,
@@ -150,15 +149,14 @@ Lint and rendered audit are complementary:
   discoverable icon, decoration, and positional relationships. Component-specific
   selectors are used only for semantics generic discovery cannot infer, such as
   order, scroll direction, overlay side, or touch-target ownership.
-- **INV7 — CI scope and weekly scope answer different questions.** The RTL audit
-  runs after merges to `main` (a burst of pushes is checked once, at its newest
-  commit) and before each release, at full scope; a pull
-  request runs it only with the `ci:heavy-lanes` label (spec:AST-030 FR12, DEC-7).
-  When a pull request runs it, it checks components affected by the change; it
-  may run per package, but the PR result is the join of every package scope and
-  cannot pass with one scope missing. The
-  scheduled unfiltered audit checks the full live roster and shared regressions.
-  Neither silently replaces the other.
+- **INV7 — PR scope and full-roster scope answer different questions.** The RTL
+  audit runs after merges to `main` (a burst of pushes is checked once, at its
+  newest commit) and before each release, at full scope; a pull request runs it
+  only with the `ci:run-rtl` label (spec:AST-030 FR12, DEC-7). When a pull
+  request runs it, it checks components affected by the change; it may run per
+  package, but the PR result is the join of every package scope and cannot pass
+  with one scope missing. The full-scope run checks the live roster and shared
+  regressions. Neither silently replaces the other.
 - **INV8 — Applicable evidence invalidates N/A.** A new applicable automatic or
   curated dimension MUST make an existing verified-N/A declaration stale. Source-
   and story-byte invalidation is a proposed additional closure requirement, not a
@@ -282,7 +280,8 @@ component/composition contract; absent or invalid dimensions produce an error.
 - `.github/scripts/rtl-scorecard-summary.mjs` — review-facing scorecard projection;
   report completeness and exclusion visibility remain requirements, not authority
   to suppress findings.
-- `.github/workflows/rtl-weekly.yml` — full-roster scheduled audit.
+- `.github/workflows/ci.yml` release-check — the full-roster audit on main's tip
+  about hourly and before a release cut (`spec:AST-030` DEC-11).
 - `internal/eslint-plugin-astryx/no-physical-properties.js` — source-provable
   physical/logical declaration constraints.
 - `design:bidirectionality` — human product intent, owned separately.
@@ -304,9 +303,9 @@ this record narrows the remaining decision to the options below.
 | Invariant        | Evidence                                                                                              | Failure signal                                                                                                                                                                                                                                         |
 | ---------------- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | INV1, INV2, INV6 | focused audit fixtures plus real built Storybook mutations                                            | A source-only rule claims rendered correctness, or a relationship defect stays green                                                                                                                                                                   |
-| INV3             | automatic/curated failure tests and summary tests                                                     | A known bad RTL outcome is suppressed as expected or N/A                                                                                                                                                                                               |
+| INV3             | automatic/curated failure tests and RTL scorecard tests                                               | A known bad RTL outcome is suppressed as expected or N/A                                                                                                                                                                                               |
 | INV4, INV5       | coverage fixtures with missing/no-applicable stories                                                  | A component disappears or all-N/A reports as RTL-ready                                                                                                                                                                                                 |
-| INV7             | PR workflow scope tests and weekly-summary tests                                                      | A changed component is skipped or full-roster debt is mistaken for PR-only evidence                                                                                                                                                                    |
+| INV7             | PR workflow scope tests and release-check workflow tests                                              | A changed component is skipped or full-roster debt is mistaken for PR-only evidence                                                                                                                                                                    |
 | INV8             | automatic/curated applicability tests                                                                 | A newly applicable dimension leaves a verified-N/A declaration current                                                                                                                                                                                 |
 | INV9             | red/green mutation receipts for each new dimension                                                    | A new dimension has only passing self-confirming tests                                                                                                                                                                                                 |
 | INV10            | native width/height mutation fixtures plus D7 center/hit checks in LTR/RTL, sm/md                     | An undersized native target stays green despite conforming wrapper geometry                                                                                                                                                                            |

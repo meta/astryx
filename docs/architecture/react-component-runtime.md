@@ -44,7 +44,8 @@ deciding_specs:
       "INV11",
       "INV12",
       "INV13",
-      "INV15"
+      "INV15",
+      "INV16"
     ]
   }
 }
@@ -194,11 +195,20 @@ those contracts.
   transient copy of the old content (`spec:AST-105` FR8). Two Core components hold their own handle
   for their own change: AppShell's content area and the SideNav rail, during a
   side nav collapse or expand (`component:AppShell` FR17, `component:SideNav`
-  FR6), each making its copy through the swap. The module may also play
+  FR6), each making its copy through the swap. A resize controller also holds
+  its own handle for a LayoutPanel's collapse and open, with no copy
+  (`component:Resizable` FR8). The module may also play
   caller-supplied frames on elements the page already renders, on the one
   shared motion, with no copy, releasing them when the motion ends; AppShell's
   content surface uses this to cover an expand's gap when its old wrap is not
-  copied. Neither is public
+  copied. The module also produces `spec:AST-105` FR9's edge reveal, the one
+  edge reveal in Core: Collapsible, TreeList and Table's row expansion
+  (`component:Table` FR15) use its block-end form, the SideNav rail
+  uses its inline-edge two-state form and keeps only its labels' and icons'
+  fades of its own, and a resizable LayoutPanel's pane uses it on collapse and
+  open, moving the content on its moving edge's side, the resize controller measuring the pane's box before and after its
+  collapse state commits and playing from the edge its direction names
+  (`component:Resizable` FR8, `component:LayoutPanel` FR7). None of these is public
   (`architecture:component-style-authoring` INV7). The module follows INV3
   and INV5.
 - **INV13 — One shared set of internal touch modules.** Core's touch
@@ -256,6 +266,17 @@ those contracts.
   only the final value is announced, never the values between. Number formatting stays
   with the caller. The value mode is part of the animator, adds no module, and
   is internal (`spec:AST-017` FR21).
+- **INV16 — A shared concern is extended in its owner and called once.** In
+  `@astryxdesign/core`, a concern Core already owns in a shared hook or utility
+  is extended there; a component calls it once and adds no effect, listener, or
+  tracker of its own for that concern. (Known implementation gaps include: Dialog calls
+  `useInteractionModalityTracking()` and also keeps its own Effect that tracks
+  modality in a second document; MobileNav keeps its own page scroll lock Effect
+  instead of `useScrollLock`; BottomSheet's gestures and mobile keyboard,
+  DateInput's month scroller, DropdownMenu's overflow check, Layer positioning,
+  Popover, and Table's sticky columns each keep their own `ResizeObserver`
+  beside `sharedResizeObserver`; and other Core sites keep their own
+  `MutationObserver` beside `sharedMutationObserver`.)
 
 ## Authoring guidance
 
@@ -407,3 +428,4 @@ component suite is not blanket conformance with every invariant.
 | INV12            | Source boundary check plus real-browser tests on a throttled phone profile over a 10-level by 50-sibling tree and two changes in one frame                                            | A per-frame height or layout, a walk past the area or into a subtree other than `display: contents`, an element moved twice for one frame, an added element other than a swap's one transient copy, that copy left after the swap ends, or an exported reporting function fails                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV13            | Source boundary check plus bundle analysis of a page with several touch components, and real-browser tests on a throttled phone profile, under a fine pointer, and on a hybrid device | A second copy of a touch module on one page, a component bundling its own copy of a module's primitive, an `import()` of a module in a component, a public export or doc entry for the modules, an install call or installed check in the public API, a gesture listener in a component that uses no gesture, or an idle document listener outside a press other than the one shared press controller and the one stray-click swallower, an import of `@astryxdesign/core/internal/*` outside Core and Lab, a class outside the recognizer family, an `instanceof` check on a recognizer, an internal factory with a public factory's name, or a direct module import for a job the public layer covers fails |
 | INV15            | Unit tests of the animator's value mode and real-browser proofs of its adopters                                                                                                       | A value off its motion role, a count past the component's swap size, a count or cross-fade under reduced motion with a coarse or a fine pointer, an intermediate value announced, or a public export fails                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| INV16            | Review of each Core component that handles a concern Core owns in a shared hook or utility                                                                                            | A Core component that keeps its own effect, listener, or tracker for that concern fails, whether or not it also calls the hook or utility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |

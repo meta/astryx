@@ -85,6 +85,14 @@ const BLOCK = () =>
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-public-imports-'));
+  // The fixture is a package with its own TypeScript config, scoped to its
+  // own files. Without one, the prop check reads the repository's root
+  // config, as `tsc` would for a folder inside it, and compiles every
+  // declaration in the repository for each check.
+  fs.writeFileSync(
+    path.join(dir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+  );
   write(
     'package.json',
     JSON.stringify({
@@ -282,25 +290,42 @@ describe('public imports: component doc import', () => {
     );
   });
 
-  it('lists its findings only: neither validate nor --strict counts or fails on them', async () => {
-    pkg(p => {
-      delete p.exports['./components/AcmeWidget'];
+  // One whole check per case, so each has the full test budget: the four
+  // run back to back took most of one budget alone and timed out under load.
+  describe('lists its findings only: neither validate nor --strict counts or fails on them', () => {
+    beforeEach(() => {
+      pkg(p => {
+        delete p.exports['./components/AcmeWidget'];
+      });
+      write(
+        'templates/account-card.tsx',
+        "import {X} from '../components/AcmeWidget';\nexport default function A() {\n  return <X />;\n}\n",
+      );
     });
-    write(
-      'templates/account-card.tsx',
-      "import {X} from '../components/AcmeWidget';\nexport default function A() {\n  return <X />;\n}\n",
-    );
-    const issues = await found();
-    expect(issues.length).toBeGreaterThan(2);
-    expect(issues.every(i => !('severity' in i))).toBe(true);
-    const validated = await validateLocalIntegration(dir);
-    expect(validated.issues.filter(issue => CODES.has(issue.code))).toEqual([]);
-    const plain = await integrationCheck({cwd: dir});
-    expect(plain.data.errors).toBe(0);
-    expect(plain.data.warnings).toBe(0);
-    const strict = await integrationCheck({cwd: dir, strict: true});
-    expect(strict.data.failed).toBe(false);
-    expect(strict.data.failures).toEqual([]);
+
+    it('validate lists them as notes, with no severity, and counts none as an issue', async () => {
+      const validated = await validateLocalIntegration(dir);
+      const notes = (validated.notes ?? []).filter(note =>
+        CODES.has(note.code),
+      );
+      expect(notes.length).toBeGreaterThan(2);
+      expect(notes.every(note => !('severity' in note))).toBe(true);
+      expect(validated.issues.filter(issue => CODES.has(issue.code))).toEqual(
+        [],
+      );
+    });
+
+    it('the integration check counts none of them', async () => {
+      const plain = await integrationCheck({cwd: dir});
+      expect(plain.data.errors).toBe(0);
+      expect(plain.data.warnings).toBe(0);
+    });
+
+    it('--strict fails on none of them', async () => {
+      const strict = await integrationCheck({cwd: dir, strict: true});
+      expect(strict.data.failed).toBe(false);
+      expect(strict.data.failures).toEqual([]);
+    });
   });
 
   it('flags a require-only condition', async () => {

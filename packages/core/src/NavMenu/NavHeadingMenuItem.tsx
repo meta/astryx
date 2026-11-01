@@ -12,7 +12,7 @@
  * - /packages/core/src/NavMenu/index.ts
  */
 
-import React, {useCallback, useRef, type ReactNode} from 'react';
+import React, {useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {renderIconSlot, type IconType} from '../Icon';
 import {Text} from '../Text';
@@ -23,7 +23,8 @@ import {
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, mergeRefs} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
 import {useNavHeadingMenuContext} from './NavMenuContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -156,43 +157,8 @@ export function NavHeadingMenuItem({
   const Element = href ? (isDisabled ? 'a' : LinkComponent) : 'div';
 
   // The element type above changes when `isDisabled` flips, so React replaces
-  // the row. Carry focus over to the replacement when the outgoing node held it
-  // (spec:AST-085 FR4). The ref cleanup runs before the old node is removed, so
-  // `activeElement` is still readable there. Only a different node replacing a
-  // removed one takes focus, and only if focus has fallen to the page: React
-  // also detaches and re-attaches the same node (for example when an <Activity>
-  // boundary hides and reveals the row), and neither case may pull focus back
-  // after the person has moved elsewhere.
-  const focusedNodeRef = useRef<HTMLElement | null>(null);
-  const itemRef = useCallback(
-    (node: HTMLElement | null) => {
-      if (node === null) {
-        return;
-      }
-      const outgoing = focusedNodeRef.current;
-      focusedNodeRef.current = null;
-      // Focus only follows the swap when it has fallen to the page. If the
-      // person moved focus elsewhere in the meantime (for example while an
-      // <Activity> boundary kept the row hidden), leave it alone.
-      const focusFell =
-        document.activeElement === null ||
-        document.activeElement === document.body;
-      if (
-        outgoing !== null &&
-        outgoing !== node &&
-        !outgoing.isConnected &&
-        focusFell
-      ) {
-        node.focus();
-      }
-      const release = mergeRefs<HTMLElement>(ref)(node);
-      return () => {
-        focusedNodeRef.current = document.activeElement === node ? node : null;
-        release?.();
-      };
-    },
-    [ref],
-  );
+  // the row; focus follows to the replacement (spec:AST-085 FR4).
+  const itemRef = useFocusAcrossSwap<HTMLElement>(ref);
 
   return (
     <Element

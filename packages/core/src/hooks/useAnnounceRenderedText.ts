@@ -7,7 +7,7 @@
  * @input A ref to a rendered element, whether it is showing, and a token that
  *   marks a new occasion to speak
  * @output Announces that element's own rendered text through the persistent
- *   polite live region
+ *   polite live region, or through the announcer the owner passes
  * @position Core a11y hook; mirrors on-screen content into the shared live
  *   region by reading the DOM
  *
@@ -44,7 +44,11 @@
  */
 
 import {useEffect, useRef, useState, type RefObject} from 'react';
-import {useAnnounce, type AnnouncePoliteness} from './useAnnounce';
+import {
+  useAnnounce,
+  type AnnounceFn,
+  type AnnouncePoliteness,
+} from './useAnnounce';
 import {useIsHydrating} from './useIsHydrating';
 
 const LIVE_CONTAINER =
@@ -89,6 +93,14 @@ export interface AnnounceRenderedTextOptions {
    * every other message polite (`spec:AST-086` FR5). Defaults to polite.
    */
   politeness?: AnnouncePoliteness;
+  /**
+   * The owner's announcer to speak through, when the rendered text states
+   * the next value of a state that announcer states: a picker's empty-panel
+   * message goes through its search's `hasReplace` instance, so the two
+   * replace each other while not yet exposed (`spec:AST-086` FR13).
+   * Defaults to this hook's own instance.
+   */
+  announce?: AnnounceFn;
 }
 
 /** The rendered text an assistive technology would read from `element`. */
@@ -128,9 +140,11 @@ export function useAnnounceRenderedText(
   {
     skipFirstRender = false,
     politeness = 'polite',
+    announce: ownerAnnounce,
   }: AnnounceRenderedTextOptions = {},
 ): void {
-  const announce = useAnnounce();
+  const ownAnnounce = useAnnounce();
+  const announce = ownerAnnounce ?? ownAnnounce;
   const spokenRef = useRef<string | null>(null);
   const isHydrating = useIsHydrating();
   // Captured once: an owner rendered before the document finished loading, or

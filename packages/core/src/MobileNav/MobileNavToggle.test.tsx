@@ -22,6 +22,7 @@ import {
 import {render, screen, fireEvent} from '@testing-library/react';
 import {AppShell} from '../AppShell/AppShell';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
+import {MobileNavToggle, type MobileNavToggleProps} from './MobileNavToggle';
 
 // jsdom doesn't implement showModal/close on <dialog>, so we mock them
 beforeAll(() => {
@@ -112,5 +113,67 @@ describe('MobileNavToggle ARIA wiring', () => {
     expect(target).not.toBeNull();
     expect(target).toBe(screen.getAllByRole('dialog', {hidden: true})[0]);
     expect(target?.tagName).toBe('DIALOG');
+  });
+});
+
+describe('MobileNavToggle host attributes', () => {
+  // architecture:public-component-api INV5 and INV7: host attributes and
+  // handlers reach the button; FR11's toggle and ARIA wiring stay owned.
+  function ShellWithToggle(props: MobileNavToggleProps) {
+    return (
+      <AppShell
+        sideNav={
+          <SideNav>
+            <SideNavSection title="Test" isHeaderHidden>
+              <SideNavItem label="Home" />
+            </SideNavSection>
+          </SideNav>
+        }
+        mobileNav={{breakpoint: 'md'}}>
+        <MobileNavToggle {...props} />
+      </AppShell>
+    );
+  }
+
+  it('forwards data, ARIA and id attributes to the button', () => {
+    render(
+      <ShellWithToggle
+        data-testid="page-menu"
+        data-analytics-id="open-nav"
+        id="page-menu-toggle"
+        aria-describedby="nav-hint"
+      />,
+    );
+    const toggle = screen.getByTestId('page-menu');
+    expect(toggle.tagName).toBe('BUTTON');
+    expect(toggle).toHaveAttribute('data-analytics-id', 'open-nav');
+    expect(toggle).toHaveAttribute('id', 'page-menu-toggle');
+    expect(toggle).toHaveAttribute('aria-describedby', 'nav-hint');
+  });
+
+  it('keeps its own aria-expanded and aria-controls over a caller value', () => {
+    render(
+      <ShellWithToggle
+        data-testid="page-menu"
+        aria-expanded="true"
+        aria-controls="elsewhere"
+      />,
+    );
+    const toggle = screen.getByTestId('page-menu');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const controls = toggle.getAttribute('aria-controls');
+    expect(controls).not.toBe('elsewhere');
+    expect(document.getElementById(controls!)?.tagName).toBe('DIALOG');
+  });
+
+  it('runs a caller onClick after the toggle, which a preventDefault does not cancel', () => {
+    const onClick = vi.fn((event: {preventDefault: () => void}) => {
+      event.preventDefault();
+    });
+    render(<ShellWithToggle data-testid="page-menu" onClick={onClick} />);
+    const toggle = screen.getByTestId('page-menu');
+    fireEvent.click(toggle);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 });

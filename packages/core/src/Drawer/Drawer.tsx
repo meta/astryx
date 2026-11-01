@@ -52,6 +52,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Drawer/Drawer.doc.mjs (props table, features, usage)
  * - /packages/core/src/Drawer/Drawer.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Drawer/__tests__/DrawerNonModalPageScroll.a11y.chromium.spec.ts (the page beside a non-modal drawer scrolls)
  * - /packages/core/src/Drawer/Drawer.spec.md (component contract)
  * - /packages/core/src/Drawer/index.ts (exports if types change)
  * - /packages/cli/assets/templates/blocks/components/Drawer/ (showcase blocks)
@@ -121,8 +122,13 @@ const styles = stylex.create({
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
     boxShadow: shadowVars['--shadow-high'],
-    overflow: 'hidden',
-    overscrollBehavior: 'contain',
+    // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
+    // Chromium then holds a finger's drag on the page beside an open
+    // non-modal drawer in that container's overscroll containment, so the
+    // page stops scrolling. `clip` clips the off-screen panel the same way
+    // without a scroll container (MobileNav's dialog does the same). The
+    // content area keeps its own scrolling and containment.
+    overflow: 'clip',
     outline: 'none',
     // Full-height side panel, pinned across the block axis.
     insetBlockStart: 0,
@@ -496,6 +502,11 @@ export function Drawer({
   // same top-most/IME rules as the shared Escape listener.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
       event.preventDefault();
       if (shouldDismissOnCloseRequest() && allowEscape) {
         handleDismiss();

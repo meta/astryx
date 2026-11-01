@@ -69,14 +69,18 @@ import {
   overlayPaddingReset,
 } from '../Layout/padding.stylex';
 import type {SpacingStep} from '../utils/types';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {devWarn} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
+  getInteractionModality,
+  trackInteractionModalityIn,
+  useInteractionModalityTracking,
+} from '../utils/interactionModality';
 import {focusForLastInput} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
@@ -91,8 +95,11 @@ function getDialogDirection(
   distance = 16,
 ): {x: number; y: number} {
   const rect = triggerEl.getBoundingClientRect();
-  const dx = rect.left + rect.width / 2 - window.innerWidth / 2;
-  const dy = rect.top + rect.height / 2 - window.innerHeight / 2;
+  // The trigger's own window: its rect is measured in that window's viewport,
+  // which is not the page's when the dialog renders into a second document.
+  const view = triggerEl.ownerDocument.defaultView ?? window;
+  const dx = rect.left + rect.width / 2 - view.innerWidth / 2;
+  const dy = rect.top + rect.height / 2 - view.innerHeight / 2;
   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
   return {
     x: Math.round((dx / dist) * distance),
@@ -534,6 +541,18 @@ export function Dialog({
 
   useInteractionModalityTracking();
 
+  // Input in a second document (a same-origin iframe, a Document
+  // Picture-in-Picture window) never reaches the page's listeners, so the
+  // dialog's own document keeps its own last input for the focus return while
+  // this Dialog is mounted, from before it opens until it unmounts.
+  useEffect(() => {
+    const ownerDocument = dialogRef.current?.ownerDocument;
+    if (ownerDocument == null || ownerDocument === document) {
+      return undefined;
+    }
+    return trackInteractionModalityIn(ownerDocument);
+  }, [isInline]);
+
   // This runs in a layout effect so the capture lands before any descendant's
   // passive mount effect: all layout effects run before any passive effect,
   // while a child's passive effect runs before this parent's passive effect.
@@ -545,7 +564,15 @@ export function Dialog({
     if (isInline || !isOpen) {
       return;
     }
-    triggerElementRef.current = document.activeElement as HTMLElement | null;
+    // The dialog's own document while it holds focus: an app can render a
+    // dialog into a second document (a same-origin iframe, a Document
+    // Picture-in-Picture window) through a portal, and a control there that
+    // opens it is focused in that document, which the page's document reports
+    // only as the iframe element, or not at all. A control in the page that
+    // opens such a dialog leaves focus in the page.
+    const dialogDocument = dialogRef.current?.ownerDocument ?? document;
+    const doc = dialogDocument.hasFocus() ? dialogDocument : document;
+    triggerElementRef.current = doc.activeElement as HTMLElement | null;
   }, [isOpen, isInline]);
 
   // Derive dismissal behavior from purpose
@@ -567,7 +594,7 @@ export function Dialog({
       // captured by the layout effect above, before any descendant effect
       // could move focus.
       const trigger = triggerElementRef.current;
-      if (trigger && trigger !== document.body) {
+      if (trigger && trigger !== trigger.ownerDocument.body) {
         const dir = getDialogDirection(trigger);
         dialog.style.setProperty('--dialog-dir-x', `${dir.x}px`);
         dialog.style.setProperty('--dialog-dir-y', `${dir.y}px`);
@@ -591,9 +618,15 @@ export function Dialog({
       if (dialog.open) {
         dialog.close();
       }
-      // Return focus to the element that opened the dialog
-      if (triggerElementRef.current) {
-        focusForLastInput(triggerElementRef.current);
+      // Return focus to the element that opened the dialog, with the ring
+      // the last input in that element's own document calls for.
+      const trigger = triggerElementRef.current;
+      if (trigger) {
+        focusForLastInput(
+          trigger,
+          undefined,
+          getInteractionModality(trigger.ownerDocument),
+        );
       }
       triggerElementRef.current = null;
     }

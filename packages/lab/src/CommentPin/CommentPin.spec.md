@@ -156,18 +156,18 @@ intentional decision. A `current` contract contains no unresolved rows.
 
 ### Representative states
 
-| State                    | Required invariant                                                                      | Allowed variation                                            |
-| ------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Single                   | first participant Avatar; no visible count; an accent dot after it when unread          | identity, selected/dimmed/resolved/disabled state, placement |
-| Grouped, one identity    | one Avatar plus total thread count                                                      | count and states                                             |
-| Grouped, two or three    | every distinct participant Avatar plus total thread count                               | ordered identities, count, and states                        |
-| Grouped, more than three | first two distinct Avatars, an ellipsis overflow circle, and total thread count         | ordered identities and states                                |
-| Unread                   | accent dot after the total, or after the participant on a single marker                 | other states                                                 |
-| Sizes                    | 28, 32, or 36px tall with 22, 24, or 28px circles and the same inset on every side      | every other state                                            |
-| Selected                 | active accent treatment preserves Avatar and count legibility and wins over dimming     | theme paint                                                  |
-| Dimmed                   | lower opacity identifies a non-selected sibling without disabling activation            | disabled may also apply                                      |
-| Resolved                 | renders nothing unless selected; selected, it takes the selected treatment              | disabled may also apply                                      |
-| Disabled                 | native disabled button does not activate and is removed from the sequential focus order | selected representation remains visible                      |
+| State                    | Required invariant                                                                                                                                                                                                         | Allowed variation                                                        |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Single                   | first participant Avatar; no visible count; an accent dot after it when unread                                                                                                                                             | identity, selected/dimmed/resolved/disabled state, placement             |
+| Grouped, one identity    | one Avatar plus total thread count                                                                                                                                                                                         | count and states                                                         |
+| Grouped, two or three    | every distinct participant Avatar plus total thread count                                                                                                                                                                  | ordered identities, count, and states                                    |
+| Grouped, more than three | first two distinct Avatars, an ellipsis overflow circle, and total thread count                                                                                                                                            | ordered identities and states                                            |
+| Unread                   | accent dot after the total, or after the participant on a single marker                                                                                                                                                    | other states                                                             |
+| Sizes                    | 28, 32, or 36px tall with 22, 24, or 28px circles and the same inset on every side                                                                                                                                         | every other state                                                        |
+| Selected                 | active accent treatment preserves Avatar and count legibility and wins over dimming                                                                                                                                        | theme paint                                                              |
+| Dimmed                   | lower opacity identifies a non-selected sibling without disabling activation                                                                                                                                               | disabled may also apply                                                  |
+| Resolved                 | renders nothing unless selected; selected, it takes the selected treatment                                                                                                                                                 | disabled may also apply                                                  |
+| Disabled                 | an aria-disabled button does not activate but keeps its tab stop, so keyboard and screen-reader users reach it and hear it is unavailable; an unselected disabled pin paints GrayText color and border under forced colors | selected representation remains visible, keeping its Highlight treatment |
 
 ### Transformation and precedence order
 
@@ -203,7 +203,8 @@ durable constraints and their verification target.
 ## Accessibility contract
 
 - **AR1 — Action.** The root is one native `button type="button"` named by the
-  required `label`; `isDisabled` uses native disabled behavior.
+  required `label`; `isDisabled` exposes `aria-disabled="true"` and blocks every
+  activation path while the pin keeps its tab stop (`spec:AST-085`).
 - **AR2 — Selection.** `isSelected` is exposed through `aria-pressed`, one solid
   2px accent outline outside the pin, and a forced-colors Highlight treatment;
   the outline hugs the pin while the shared focus-visible outline sits farther

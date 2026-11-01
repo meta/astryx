@@ -1,0 +1,7 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/* The app's own custom properties, declared in its own stylesheet. */
+:root {
+  --xl: 4px;
+  --xlarge: 24px;
+}

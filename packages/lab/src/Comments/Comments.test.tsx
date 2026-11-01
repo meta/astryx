@@ -24,6 +24,24 @@ import {
 // jsdom has no layout, so the measuring OverflowList is replaced by one that
 // collapses exactly the comment actions a test names.
 const overflowControl = vi.hoisted(() => ({collapsed: new Set<string>()}));
+const announce = vi.hoisted(() => vi.fn());
+// Records each announcement and still speaks it through the real channel, which
+// other tests here read back.
+vi.mock('@astryxdesign/core/hooks', async importOriginal => {
+  const actual =
+    await importOriginal<typeof import('@astryxdesign/core/hooks')>();
+  return {
+    ...actual,
+    useAnnounce: () => {
+      const speak = actual.useAnnounce();
+      return (message: string, politeness?: 'polite' | 'assertive') => {
+        announce(message, politeness);
+        speak(message, politeness);
+      };
+    },
+  };
+});
+
 vi.mock('@astryxdesign/core/OverflowList', async () => {
   const React = await import('react');
   type Item = {
@@ -82,12 +100,6 @@ import type {
   CommentUser,
 } from './types';
 
-// The page's shared live regions are not the component's error Banner.
-const errorBanner = () =>
-  screen
-    .queryAllByRole('alert')
-    .find(element => !element.hasAttribute('data-astryx-live-region'));
-
 const VIEWER: CommentUser = {id: 'avery', name: 'Avery Kim'};
 const OTHER: CommentUser = {id: 'maya', name: 'Maya Chen'};
 const AGENT: CommentUser = {
@@ -132,6 +144,15 @@ const COMMENTS: readonly CommentThreadData[] = [
     ],
   },
 ];
+
+/** An inline failure Banner by its data attribute; it carries no live role. */
+function bannerByData(attribute: string): HTMLElement {
+  const banner = document.querySelector<HTMLElement>(`[${attribute}]`);
+  if (banner == null) {
+    throw new Error(`No Banner with ${attribute}`);
+  }
+  return banner;
+}
 
 /** A plain composer standing in for the contenteditable one. */
 function TestComposer(props: CommentComposerRenderProps) {
@@ -267,6 +288,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
+  announce.mockClear();
   overflowControl.collapsed = new Set();
   writeText.mockReset();
   writeText.mockResolvedValue(undefined);
@@ -392,9 +414,10 @@ describe('Comments rendering', () => {
     );
     const article = articleByAuthor('Release Assistant');
     expect(within(article).getByText('Agent')).toBeTruthy();
-    expect(within(article).getByRole('status').textContent).toBe(
-      'Checking the rollout…',
-    );
+    // The label carries no live role; the chat log around it delivers it.
+    const progressLabel = within(article).getByText('Checking the rollout…');
+    expect(progressLabel).not.toHaveAttribute('role');
+    expect(within(article).queryByRole('status')).toBeNull();
     expect(
       within(article).getByRole('link', {name: 'Open session'}),
     ).toBeTruthy();
@@ -906,12 +929,13 @@ describe('Comments threads', () => {
       }),
     );
     await flush();
-    const banner = errorBanner()!;
+    const banner = bannerByData('data-comment-action-error');
+    expect(banner).not.toHaveAttribute('role');
     expect(banner.textContent).toContain("Your reaction couldn't be saved.");
     await click(within(banner).getByRole('button', {name: 'Retry'}));
     await flush();
     expect(onReact).toHaveBeenCalledTimes(2);
-    expect(errorBanner()).toBeUndefined();
+    expect(document.querySelector('[data-comment-action-error]')).toBeNull();
   });
 
   it('copies a link to the comment', async () => {
@@ -1005,7 +1029,8 @@ describe('Comments threads', () => {
         />
       </Sized>,
     );
-    const banner = errorBanner()!;
+    const banner = bannerByData('data-comment-delivery-error');
+    expect(banner).not.toHaveAttribute('role');
     expect(banner.textContent).toContain("Couldn't post this comment.");
     await click(within(banner).getByRole('button', {name: 'Retry'}));
     await flush();
@@ -1028,7 +1053,8 @@ describe('Comments threads', () => {
     );
     await click(screen.getByRole('button', {name: 'Load earlier comments'}));
     await flush();
-    const banner = errorBanner()!;
+    const banner = bannerByData('data-comments-older-error');
+    expect(banner).not.toHaveAttribute('role');
     expect(banner.textContent).toContain("Earlier comments couldn't load");
     await click(within(banner).getByRole('button', {name: 'Retry'}));
     await flush();
@@ -1250,6 +1276,133 @@ describe('Comments keyboard and focus', () => {
     ).toHaveFocus();
   });
 
+  it('announces a failed delete once when no chat log wraps the row', async () => {
+    const onDelete = vi.fn().mockRejectedValue(new Error('offline'));
+    render(
+      <Sized>
+        <Comments
+          layout="embedded"
+          comments={COMMENTS}
+          currentUser={OTHER}
+          onDelete={onDelete}
+          selectedThreadId="root-1"
+          onSelectedThreadChange={vi.fn()}
+        />
+      </Sized>,
+    );
+    await click(
+      within(articleByAuthor('Maya Chen')).getByRole('button', {
+        name: "Actions for Maya Chen's comment",
+      }),
+    );
+    await flush();
+    await click(menuItem('Delete'));
+    const dialog = document.querySelector('dialog[open]');
+    if (!(dialog instanceof HTMLDialogElement)) {
+      throw new Error('Delete confirmation not found');
+    }
+    announce.mockClear();
+    await click(within(dialog).getByRole('button', {name: 'Delete'}));
+    await flush();
+    await nextFrame();
+
+    // The dialog owns the announcement; the row's stored failure is silent.
+    const deleteAnnouncements = announce.mock.calls.filter(([message]) =>
+      /couldn't be deleted/.test(message),
+    );
+    expect(deleteAnnouncements).toEqual([
+      ["This comment couldn't be deleted. Try again.", 'assertive'],
+    ]);
+  });
+
+  it('announces a failed delete once when onDelete throws synchronously', async () => {
+    const onDelete = vi.fn(() => {
+      throw new Error('offline');
+    });
+    render(
+      <Sized>
+        <Comments
+          layout="embedded"
+          comments={COMMENTS}
+          currentUser={OTHER}
+          onDelete={onDelete}
+          selectedThreadId="root-1"
+          onSelectedThreadChange={vi.fn()}
+        />
+      </Sized>,
+    );
+    await click(
+      within(articleByAuthor('Maya Chen')).getByRole('button', {
+        name: "Actions for Maya Chen's comment",
+      }),
+    );
+    await flush();
+    await click(menuItem('Delete'));
+    const dialog = document.querySelector('dialog[open]');
+    if (!(dialog instanceof HTMLDialogElement)) {
+      throw new Error('Delete confirmation not found');
+    }
+    announce.mockClear();
+    await click(within(dialog).getByRole('button', {name: 'Delete'}));
+    await flush();
+    await nextFrame();
+
+    // The dialog owns the announcement; the row's stored failure is silent.
+    const deleteAnnouncements = announce.mock.calls.filter(([message]) =>
+      /couldn't be deleted/.test(message),
+    );
+    expect(deleteAnnouncements).toEqual([
+      ["This comment couldn't be deleted. Try again.", 'assertive'],
+    ]);
+  });
+
+  it('announces a failed delete of a failed post once', async () => {
+    const onDelete = vi.fn().mockRejectedValue(new Error('offline'));
+    render(
+      <Sized>
+        <Comments
+          layout="embedded"
+          comments={[
+            {
+              id: 'failed',
+              author: VIEWER,
+              body: 'Kept text',
+              createdAt: '2026-09-30T19:00:00Z',
+              status: 'error',
+              errorMessage: "Couldn't post this comment.",
+            },
+          ]}
+          currentUser={VIEWER}
+          onDelete={onDelete}
+        />
+      </Sized>,
+    );
+    await click(
+      within(articleByAuthor('Avery Kim')).getByRole('button', {
+        name: "Actions for Avery Kim's comment",
+      }),
+    );
+    await flush();
+    await click(menuItem('Delete'));
+    const dialog = document.querySelector('dialog[open]');
+    if (!(dialog instanceof HTMLDialogElement)) {
+      throw new Error('Delete confirmation not found');
+    }
+    announce.mockClear();
+    await click(within(dialog).getByRole('button', {name: 'Delete'}));
+    await flush();
+    await nextFrame();
+
+    // The dialog owns the announcement; the failed post's Banner shows the
+    // failure as its description without saying it a second time.
+    const deleteAnnouncements = announce.mock.calls.filter(([message]) =>
+      /couldn't be deleted/.test(message),
+    );
+    expect(deleteAnnouncements).toEqual([
+      ["This comment couldn't be deleted. Try again.", 'assertive'],
+    ]);
+  });
+
   it('moves focus to the thread after deleting a reply, and announces a failure once', async () => {
     const onDelete = vi
       .fn()
@@ -1328,5 +1481,178 @@ describe('Comments keyboard and focus', () => {
     expect(
       screen.getByRole('button', {name: 'Load earlier comments'}),
     ).toHaveFocus();
+  });
+});
+
+describe('Comments status announcements (spec:AST-086)', () => {
+  const FAILED_COMMENT = {
+    id: 'failed',
+    author: VIEWER,
+    body: 'Kept text',
+    createdAt: '2026-09-30T19:00:00Z',
+    status: 'error' as const,
+    errorMessage: "Couldn't post this comment.",
+  };
+
+  it('announces a load failure once, assertively, and the Banner has no live role', async () => {
+    const {rerender} = render(
+      <Sized>
+        <Comments comments={[]} loadError="Server unreachable" />
+      </Sized>,
+    );
+    await flush();
+    // Only the shared channel's own region is an alert; the Banner is not.
+    expect(
+      document.querySelectorAll(
+        '[role="alert"]:not([data-astryx-live-region])',
+      ),
+    ).toHaveLength(0);
+    expect(screen.getByText('Server unreachable')).toBeTruthy();
+    expect(announce.mock.calls).toEqual([
+      ["Comments couldn't load Server unreachable", 'assertive'],
+    ]);
+
+    rerender(
+      <Sized>
+        <Comments comments={[]} loadError="Server unreachable" />
+      </Sized>,
+    );
+    await flush();
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an in-timeline failure to the chat log', async () => {
+    render(
+      <Sized>
+        <Comments comments={[FAILED_COMMENT]} currentUser={VIEWER} />
+      </Sized>,
+    );
+    const banner = bannerByData('data-comment-delivery-error');
+    expect(banner.closest('[role="log"]')).not.toBeNull();
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('announces a failure itself when no chat log wraps it', async () => {
+    render(
+      <Sized>
+        <Comments
+          layout="embedded"
+          comments={[FAILED_COMMENT]}
+          currentUser={VIEWER}
+        />
+      </Sized>,
+    );
+    const banner = bannerByData('data-comment-delivery-error');
+    expect(banner.closest('[role="log"]')).toBeNull();
+    expect(announce.mock.calls).toEqual([
+      [expect.stringContaining("Couldn't post this comment."), 'assertive'],
+    ]);
+  });
+
+  it('does not repeat a failure when a retry starts, and announces each failed retry', async () => {
+    const onRetryComment = vi.fn().mockRejectedValue(new Error('offline'));
+    render(
+      <Sized>
+        <Comments
+          layout="embedded"
+          comments={[FAILED_COMMENT]}
+          currentUser={VIEWER}
+          onRetryComment={onRetryComment}
+        />
+      </Sized>,
+    );
+    await flush();
+    const first = ["Couldn't post this comment.", 'assertive'];
+    const failed = [
+      "Couldn't post this comment. Retrying didn't work.",
+      'assertive',
+    ];
+    expect(announce.mock.calls).toEqual([first]);
+
+    const banner = () => bannerByData('data-comment-delivery-error');
+    const retry = () => within(banner()).getByRole('button', {name: 'Retry'});
+    await click(retry());
+    await flush();
+    expect(announce.mock.calls).toEqual([first, failed]);
+
+    // Starting a retry says nothing; its failure, a new occasion, speaks.
+    await click(retry());
+    await flush();
+    expect(announce.mock.calls).toEqual([first, failed, failed]);
+  });
+
+  it('does not repeat a failure when an unrelated post settles', async () => {
+    let finishPost!: () => void;
+    const onSubmit = vi.fn(() => new Promise<void>(r => (finishPost = r)));
+    render(
+      <Sized>
+        <Comments
+          layout="embedded"
+          comments={[FAILED_COMMENT]}
+          currentUser={VIEWER}
+          onSubmit={onSubmit}
+          renderComposer={renderComposer}
+        />
+      </Sized>,
+    );
+    const composer = screen.getByRole('region', {name: 'New comment'});
+    await click(within(composer).getByText('Set draft'));
+    await click(within(composer).getByText('Submit composer'));
+    await act(async () => finishPost());
+    await flush();
+    expect(announce.mock.calls).toEqual([
+      ["Couldn't post this comment.", 'assertive'],
+    ]);
+  });
+
+  it('announces a comment still being written, politely, outside a chat log', async () => {
+    render(
+      <Sized>
+        <Comments
+          layout="embedded"
+          comments={[
+            {
+              id: 'agent',
+              author: AGENT,
+              body: '',
+              createdAt: '2026-09-30T19:00:00Z',
+              progress: {label: 'Checking the rollout…'},
+            },
+          ]}
+          currentUser={VIEWER}
+        />
+      </Sized>,
+    );
+    await flush();
+    expect(announce.mock.calls).toEqual([['Checking the rollout…', 'polite']]);
+  });
+
+  it('delivers a history failure through an alert slot that exists before the Banner', async () => {
+    let rejectVersions!: (error: Error) => void;
+    const loadVersions = vi.fn(
+      () => new Promise<never>((_, reject) => (rejectVersions = reject)),
+    );
+    render(
+      <Sized>
+        <Comments comments={COMMENTS} loadVersions={loadVersions} />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'View edit history'}));
+    await flush();
+    // While the history loads, the slot is already mounted, and empty.
+    const slot = document.querySelector<HTMLElement>('dialog [role="alert"]');
+    if (slot == null) {
+      throw new Error('History alert slot not found while loading');
+    }
+    expect(slot.textContent).toBe('');
+
+    await act(async () => {
+      rejectVersions(new Error('nope'));
+    });
+    await flush();
+    // The failure lands in that slot; the Banner has no live role of its own.
+    expect(document.querySelector('dialog [role="alert"]')).toBe(slot);
+    expect(slot.textContent).toContain("Edit history couldn't load");
+    expect(slot.querySelector('[role]')).toBeNull();
   });
 });

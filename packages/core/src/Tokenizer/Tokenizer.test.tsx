@@ -28,6 +28,7 @@ import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import type * as TokenModule from '../Token';
+import {FormLayout} from '../FormLayout/FormLayout';
 
 // Every Token render, in order, by label.
 //
@@ -723,6 +724,54 @@ describe('Tokenizer', () => {
       bootstrap: () => [],
     };
 
+    it('labels the inline create row from the catalog, following the locale', async () => {
+      const overrides = {
+        de: {'@astryx.tokenizer.create': '„{value}“ erstellen'},
+      };
+      const {rerender} = render(
+        <InternationalizationProvider locale="de" overrides={overrides}>
+          <Tokenizer
+            label="Obst"
+            searchSource={emptySource}
+            value={[]}
+            onChange={() => {}}
+            hasCreate
+            debounceMs={0}
+          />
+        </InternationalizationProvider>,
+      );
+      await act(async () => {
+        fireEvent.change(screen.getByRole('combobox'), {
+          target: {value: 'Kiwi'},
+        });
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      expect(screen.getByText('„Kiwi“ erstellen')).toBeInTheDocument();
+      expect(screen.queryByText('Create "Kiwi"')).not.toBeInTheDocument();
+
+      rerender(
+        <InternationalizationProvider locale="en" overrides={overrides}>
+          <Tokenizer
+            label="Obst"
+            searchSource={emptySource}
+            value={[]}
+            onChange={() => {}}
+            hasCreate
+            debounceMs={0}
+          />
+        </InternationalizationProvider>,
+      );
+      // The row is derived per query, so the next query takes the new locale.
+      await act(async () => {
+        fireEvent.change(screen.getByRole('combobox'), {
+          target: {value: 'Kiwis'},
+        });
+      });
+      expect(await screen.findByText('Create "Kiwis"')).toBeInTheDocument();
+    });
+
     it('still offers Create below minQueryLength, and does not search', async () => {
       // The threshold exists to avoid a fetch too broad to be worth making.
       // Creating costs no fetch, so a field that can create `QA` should not
@@ -1355,6 +1404,33 @@ describe('Tokenizer', () => {
     });
   });
   describe('announcements', () => {
+    it("announces Clear all politely, in the sheet's words", async () => {
+      const onChange = vi.fn();
+      render(
+        <InternationalizationProvider
+          locale="fr"
+          overrides={{
+            fr: {'@astryx.tokenizer.allRemoved': 'Tout a été retiré'},
+          }}>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={onChange}
+            hasClear
+          />
+        </InternationalizationProvider>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: /clear/i}));
+      expect(onChange).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({type: 'remove'}),
+      );
+      await waitFor(() => {
+        expect(politeRegion()?.textContent).toBe('Tout a été retiré');
+      });
+    });
+
     it('announces removal politely on Backspace with an empty input', async () => {
       const onChange = vi.fn();
       render(
@@ -1522,6 +1598,86 @@ describe('Tokenizer', () => {
       expect(form.querySelector('input[type="hidden"]')).toBeNull();
       expect(form.checkValidity()).toBe(true);
     });
+  });
+});
+
+describe('Tokenizer required state (FormLayout FR5, AR2)', () => {
+  it('exposes the resolved required state on the combobox', () => {
+    const field = (props: {
+      isRequired?: boolean;
+      isOptional?: boolean;
+      label: string;
+    }) => (
+      <Tokenizer
+        {...props}
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />
+    );
+    render(
+      <>
+        {field({label: 'Plain'})}
+        {field({label: 'Explicit', isRequired: true})}
+        <FormLayout defaultOptionality="required">
+          {field({label: 'By default'})}
+          {field({label: 'Opted out', isOptional: true})}
+        </FormLayout>
+      </>,
+    );
+    const required = (name: string) =>
+      screen
+        .getByRole('combobox', {name: new RegExp(`^${name}`)})
+        .getAttribute('aria-required');
+    expect(required('Plain')).toBeNull();
+    expect(required('Explicit')).toBe('true');
+    expect(required('By default')).toBe('true');
+    expect(required('Opted out')).toBeNull();
+  });
+});
+
+describe('Tokenizer invalid state', () => {
+  it('marks the combobox invalid for an error status only (WCAG 4.1.2)', () => {
+    const field = (
+      label: string,
+      status?: {type: 'error' | 'warning'; message: string},
+    ) => (
+      <Tokenizer
+        label={label}
+        status={status}
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />
+    );
+    render(
+      <>
+        {field('None')}
+        {field('Warned', {type: 'warning', message: 'Check this'})}
+        {field('Failed', {type: 'error', message: 'Pick one'})}
+      </>,
+    );
+    const invalid = (name: string) =>
+      screen.getByRole('combobox', {name}).getAttribute('aria-invalid');
+    expect(invalid('None')).toBeNull();
+    expect(invalid('Warned')).toBeNull();
+    expect(invalid('Failed')).toBe('true');
+  });
+
+  it("keeps a caller's own aria-invalid and aria-required when the field's own state is off", () => {
+    render(
+      <Tokenizer
+        label="Caller"
+        aria-invalid="true"
+        aria-required="true"
+        searchSource={userSource}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+    const combobox = screen.getByRole('combobox', {name: 'Caller'});
+    expect(combobox).toHaveAttribute('aria-invalid', 'true');
+    expect(combobox).toHaveAttribute('aria-required', 'true');
   });
 });
 
@@ -2117,5 +2273,25 @@ describe('Tokenizer consumer key handler order', () => {
     });
     expect(onKeyDown).toHaveBeenCalledOnce();
     expect(currentTarget).toBe(screen.getByRole('combobox'));
+  });
+});
+
+describe('Tokenizer caller aria-labelledby', () => {
+  it('names the input by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[]}
+          onChange={() => {}}
+          aria-labelledby="billing-heading"
+        />
+      </>,
+    );
+    expect(
+      screen.getByRole('combobox', {name: 'Members Billing'}),
+    ).toBeInTheDocument();
   });
 });

@@ -32,8 +32,8 @@ import {
   enclosingModalDialog,
   takeJoinedAnnouncement,
   useAnnounce,
-  withdrawFromModalPending,
   withdrawPendingAnnouncement,
+  type WithdrawAnnouncement,
 } from './useAnnounce';
 
 export function useBusyAnnouncement(
@@ -47,11 +47,9 @@ export function useBusyAnnouncement(
   // This busy start's share of the shared channel's pending text, until it
   // settles.
   const channelMessageRef = useRef<object | null>(null);
-  // Or its write inside a modal's container, until it settles.
-  const modalMessageRef = useRef<{
-    dialog: HTMLDialogElement;
-    message: string;
-  } | null>(null);
+  // Or how to take back its write inside a modal, wherever the modal moves
+  // it, until it settles.
+  const modalMessageRef = useRef<WithdrawAnnouncement | null>(null);
   useEffect(() => {
     if (!isBusy) {
       hasAnnouncedRef.current = false;
@@ -74,8 +72,7 @@ export function useBusyAnnouncement(
       // nearest Astryx modal around this hook's caller.
       const dialog = enclosingModalDialog(elementRef.current);
       if (dialog != null) {
-        announceInModal(dialog, message);
-        modalMessageRef.current = {dialog, message};
+        modalMessageRef.current = announceInModal(dialog, message);
       } else {
         announce(message, 'polite');
         channelMessageRef.current = takeJoinedAnnouncement();
@@ -102,9 +99,9 @@ export function useBusyAnnouncement(
       channelMessageRef.current = null;
     }
     if (modalMessageRef.current != null) {
-      const {dialog, message} = modalMessageRef.current;
-      withdrawFromModalPending(dialog, message, 'polite');
+      const withdraw = modalMessageRef.current;
       modalMessageRef.current = null;
+      withdraw();
     }
   }, []);
 }

@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/theme-matcha",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "private": false,
   "description": "Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.",
   "author": "Meta Open Source",
@@ -51,7 +51,20 @@
     "src",
     "fonts.css",
     "fonts.css.d.ts",
-    "palette.config.json"
+    "palette.config.json",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
     "build": "node ../../../scripts/clean-dist.mjs && node ../../../scripts/generate-matcha-palette-refs.mjs --check && astryx theme build src/matchaTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
@@ -60,11 +73,11 @@
     "lucide-react": "^1.18.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.5",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.5"
+    "@astryxdesign/cli": "0.7.6"
   },
   "module": "./dist/source.mjs"
 }

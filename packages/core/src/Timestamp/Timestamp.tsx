@@ -443,7 +443,10 @@ export function Timestamp({
         // before rendering — but keep the guard local: an empty aria-label
         // must be omitted entirely (not rendered as aria-label="") so AT
         // falls back to reading the visible <time> content.
-        {...(isRelativeFormat(effectiveFormat) && ariaLabelText !== ''
+        // A caller's own name wins (`component:Timestamp` FR5).
+        {...(isRelativeFormat(effectiveFormat) &&
+        ariaLabelText !== '' &&
+        rest['aria-label'] == null
           ? {'aria-label': ariaLabelText}
           : {})}
         // The hover card is anchored here with focusTrigger="always", which
@@ -454,7 +457,8 @@ export function Timestamp({
         // gratuitous tab stops otherwise. The card carries its own
         // dashed-underline hover indication as the affordance, so the anchor
         // needs no separate focus outline.
-        {...(showTooltip ? {tabIndex: 0} : {})}>
+        // A caller's own tabIndex wins (`component:Timestamp` FR9).
+        {...(showTooltip && rest.tabIndex == null ? {tabIndex: 0} : {})}>
         {displayText}
       </time>
     </Text>

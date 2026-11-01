@@ -30,7 +30,7 @@ import {
   paddingBlockStartStyles,
   paddingBlockEndStyles,
 } from '../Layout/padding.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 
 const overflowStyles = stylex.create({

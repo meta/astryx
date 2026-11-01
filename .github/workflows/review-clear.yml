@@ -172,6 +172,7 @@ jobs:
             let codeWithdrawn = false;
             let gateOwned = false;
             let appClearedStatus = false;
+            let shownSatisfied = false;
             try {
               const reviews = await github.paginate(github.rest.pulls.listReviews, {
                 owner, repo, pull_number: prNumber, per_page: 100,
@@ -190,23 +191,20 @@ jobs:
                 github.rest.repos.listCommitStatusesForRef,
                 {owner, repo, ref: headSha, per_page: 100},
               );
-              const latestGateStatus = statuses.find(
-                (status) => status.context === 'review-required',
-              );
-              const trustedStatus =
-                latestGateStatus?.creator?.login === 'github-actions[bot]';
-              const description = latestGateStatus?.description || '';
-              appClearedStatus =
-                trustedStatus &&
-                latestGateStatus.state === 'success' &&
-                description === APP_CLEARED;
+              // The newest status that names the code review, read past spec
+              // waits and spec-approval prefixes.
+              const code = decision.readCodeGate(statuses, {latest: false});
+              const description = code?.description || '';
+              appClearedStatus = code?.gated === false && description === APP_CLEARED;
+              // An owned gate showing code review satisfied (a clear, or a spec
+              // wait or approval over one) stays so only while approvals hold.
+              shownSatisfied = decision.readCodeGate(statuses)?.gated === false;
               const statusOwnsGate =
-                trustedStatus &&
-                ((latestGateStatus.state === 'pending' &&
+                code != null &&
+                ((code.gated &&
                   (description.startsWith('Waiting on code review:') ||
                     description === 'Waiting on code review after approval withdrawal.')) ||
-                  (latestGateStatus.state === 'success' &&
-                    (description === OWNER_CLEARED || appClearedStatus)));
+                  (!code.gated && (description === OWNER_CLEARED || appClearedStatus)));
               gateOwned =
                 full.labels.some((label) => label.name === CODE) || statusOwnsGate;
             } catch (e) {
@@ -222,7 +220,7 @@ jobs:
             // still approves this head. If it no longer does — the author lost
             // write access, the permission could not be read, or REVIEW_APP was
             // unset — restore the pending gate (fail closed).
-            if (!codeApproved && appClearedStatus) codeWithdrawn = true;
+            if (!codeApproved && (appClearedStatus || shownSatisfied)) codeWithdrawn = true;
             if (!codeApproved && !codeWithdrawn) {
               core.info(`PR #${prNumber}: no effective review-state change; leaving gate as-is.`);
               return;
@@ -240,14 +238,43 @@ jobs:
             }
             const labels = current.labels.map((l) => l.name);
 
+            // One review gate (DEC-14): code review leads; success needs both.
+            async function publishReviewGate(codeGated, codeDescription) {
+              // Write, then read the spec half once more: the spec-owner job
+              // writes its half before it reads this one, so one of the two
+              // always sees the other's latest write.
+              let gate = null;
+              for (let pass = 0; pass < 2; pass++) {
+                let statuses = [];
+                try {
+                  statuses = await github.paginate(github.rest.repos.listCommitStatusesForRef, {
+                    owner, repo, ref: headSha, per_page: 100,
+                  });
+                } catch (e) {
+                  core.warning(`Could not read the spec decision: ${e.message}`);
+                }
+                const next = decision.composeReviewGate({
+                  codeGated,
+                  codeDescription,
+                  spec: decision.readSpecGate(statuses),
+                });
+                if (gate && next.state === gate.state && next.description === gate.description) break;
+                gate = next;
+                await github.rest.repos.createCommitStatus({
+                  owner, repo, sha: headSha,
+                  context: 'review-required',
+                  state: gate.state,
+                  description: gate.description,
+                  target_url: gate.target_url,
+                });
+              }
+              return gate;
+            }
+
             if (codeWithdrawn) {
               // The commit status is the hard gate; publish it before the advisory
               // label. If this POST fails, throw without any label-only mutation.
-              await github.rest.repos.createCommitStatus({
-                owner, repo, sha: headSha, context: 'review-required',
-                state: 'pending',
-                description: 'Waiting on code review after approval withdrawal.',
-              });
+              await publishReviewGate(true, 'Waiting on code review after approval withdrawal.');
               core.info(`review-required status → pending on #${prNumber}.`);
               if (!labels.includes(CODE)) {
                 await github.rest.issues.addLabels({
@@ -268,11 +295,7 @@ jobs:
                 core.warning(`Could not remove ${CODE} (may already be gone): ${e.message}`);
               }
             }
-            await github.rest.repos.createCommitStatus({
-              owner, repo, sha: headSha, context: 'review-required',
-              state: 'success',
-              description: codeApprovedBy === 'review-app' ? APP_CLEARED : OWNER_CLEARED,
-            });
+            await publishReviewGate(false, codeApprovedBy === 'review-app' ? APP_CLEARED : OWNER_CLEARED);
             core.info(`review-required status → success on #${prNumber}.`);
             // Neutralize stale check-run(s) of the same name so the rollup isn't
             // dragged to failure by a pre-status action_required leftover.

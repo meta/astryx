@@ -4,7 +4,11 @@
 
 /**
  * @file Markdown.tsx
- * @input Markdown string, canonical AST, optional plugins and custom renderers
+ * @input Markdown string, canonical AST, optional plugins and custom renderers;
+ *   static document lists permit outside counter paint through ordered and
+ *   unordered ancestors. Flow-task
+ *   bodies use per-item first-line markers; paragraph-only task lists retain
+ *   their CheckboxList representation.
  * @output Exports Markdown component, MarkdownProps, and renderer contracts
  * @position Core implementation; renders markdown as Astryx components
  */
@@ -587,8 +591,20 @@ const styles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
   },
+  // Static Markdown lists never host swipe actions. Let outside counter ink
+  // paint through both ordered and unordered ancestors; general List and
+  // swipe-capable rows retain their own inline clip (component:List FR9).
   blockIndent: {
     marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
+    overflowInline: 'visible',
+  },
+  // Numbered document lists keep their ordinary text inset regardless of
+  // counter width, matching RichText's native outside markers (AST-061 FR11).
+  // These rows have no swipe actions: unlike general List, their outside ink
+  // may paint past the gutter instead of being clipped at a finite threshold.
+  markerGutter: {
+    marginInlineStart: `calc(-1 * (${spacingVars['--spacing-2']} + ${spacingVars['--spacing-4']}))`,
+    paddingInlineStart: spacingVars['--spacing-4'],
   },
   // HR
   hr: {
@@ -1686,10 +1702,16 @@ function renderBlock(
       );
     }
     case 'list': {
-      // Detect task lists: all items have a checked state
+      // Preserve the released CheckboxList representation for paragraph-only
+      // pure task lists. Flow/nested task bodies use the shared per-item marker
+      // path below, which owns first-line placement and static outside paint.
       const isTaskList =
         node.children.length > 0 &&
-        node.children.every(item => item.checked != null);
+        node.children.every(
+          item =>
+            item.checked != null &&
+            item.children.every(block => block.type === 'paragraph'),
+        );
 
       if (isTaskList) {
         // Extract labels from task items — render as rich inline content
@@ -1803,7 +1825,7 @@ function renderBlock(
             listStyle={node.ordered ? 'decimal' : 'disc'}
             density="compact"
             start={node.ordered ? node.start : undefined}
-            xstyle={styles.blockIndent}>
+            xstyle={[styles.blockIndent, node.ordered && styles.markerGutter]}>
             {node.children.map((item, i) => {
               const firstChild = item.children[0];
               const isInline =
@@ -1855,7 +1877,7 @@ function renderBlock(
                 </>
               );
 
-              // A task item beside plain items keeps its own checked state
+              // Each task item on this shared list path keeps its checked state
               // (FR23): it shows a read-only checkbox where its marker
               // would be, named by its text.
               const firstParagraph = item.children.find(
@@ -1888,7 +1910,8 @@ function renderBlock(
                       listDepth % 3
                     ]
                   }
-                  task={task}>
+                  task={task}
+                  hasMarkerGutter={node.ordered}>
                   <ListItem
                     label={label}
                     {...(recordsSourceLines

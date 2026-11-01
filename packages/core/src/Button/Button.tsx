@@ -43,8 +43,8 @@ import {
   shadowVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {Spinner} from '../Spinner';
-import {VisuallyHidden} from '../VisuallyHidden';
+import {Spinner} from '../Spinner/Spinner';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 
@@ -57,7 +57,7 @@ import {
   groupStyles as inputGroupStyles,
   inputGroupItemProps,
 } from '../InputGroup/groupStyles';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -65,7 +65,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
+import {useTranslator} from '../i18n/useTranslator';
 import type {ButtonVariantMap} from './index';
 
 /**

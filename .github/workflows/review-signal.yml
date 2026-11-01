@@ -56,7 +56,10 @@
 # trusted workflow SHA; the visual classifier comes from the PR base ref. It reads
 # eng/design owner lists from repository VARIABLES (vars.ENGOWNERS /
 # vars.DESIGNOWNERS) — no checkout and no execution of PR-controlled code.
-# Do not add checkout or build steps here.
+# Do not add checkout or build steps to the flag job.
+#
+# ONE REVIEW GATE (spec:AST-030 FR15): "review-required" carries code review and
+# the spec half the spec-owner job decides (DEC-14) from the trusted default branch.
 
 name: Review signal
 
@@ -66,30 +69,34 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   pull_request_review:
     types: [submitted, dismissed]
+  # Owner commands for the spec-owner job. The job-level filter skips every
+  # other comment before a runner starts.
+  issue_comment:
+    types: [created]
   # Manual re-trigger. The App only auto-runs on the PR events above, so if it
   # ever misses one (e.g. the workflow was added after a PR was opened, leaving
   # the required "review-required" check stuck as Expected/pending), this is the
-  # recovery lever. Leave `pr` blank to re-flag EVERY open PR (backfill); pass a
-  # number to re-flag just that one.
+  # recovery lever. Leave `pr` blank to re-flag EVERY open, non-draft PR
+  # (backfill); pass a number to re-flag just that one. A backfill too large for
+  # one job splits with `batch` k/n (PRs whose number mod n is k-1).
   workflow_dispatch:
     inputs:
       pr:
-        description: 'PR number to re-flag (blank = all open PRs)'
+        description: 'PR number to re-flag (blank = every open, non-draft PR)'
+        required: false
+        type: string
+      batch:
+        description: 'With a blank pr: re-flag only PRs whose number mod n is k-1 (k/n, e.g. 2/4)'
         required: false
         type: string
 
 permissions: {}
 
-concurrency:
-  # One group per PR for the event/single-dispatch paths; a run-scoped group for
-  # the backfill-all dispatch so it is never cancelled by an unrelated re-run.
-  group: review-signal-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
-  cancel-in-progress: true
-
 env:
   CODE_LABEL: 'needs:code-review'
   DESIGN_LABEL: 'needs:design-review'
   COMMUNITY_LABEL: 'community'
+  REVIEW_LABEL: needs:spec-owner-review
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -101,6 +108,11 @@ jobs:
       || github.event_name == 'workflow_dispatch'
     name: Flag review signals
     runs-on: ubuntu-slim
+    # Per PR (run-scoped for backfill-all). Only this job cancels: a cancelled
+    # spec-owner reconcile could leave its head without a terminal status.
+    concurrency:
+      group: review-signal-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+      cancel-in-progress: true
     permissions:
       pull-requests: write
       contents: read
@@ -136,22 +148,66 @@ jobs:
                 });
                 prs = [data];
               } else {
-                prs = await github.paginate(github.rest.pulls.list, {
+                const open = await github.paginate(github.rest.pulls.list, {
                   owner, repo, state: 'open', per_page: 100,
                 });
-                core.info(`Backfill: re-flagging ${prs.length} open PR(s).`);
+                // A draft is re-flagged when it becomes ready
+                // (ready_for_review), so a backfill skips it.
+                const ready = open.filter(listed => !listed.draft);
+                // A shard keys on the PR number, so it stays the same set
+                // while PRs open and close between dispatches.
+                const batch = (context.payload.inputs.batch || '').trim();
+                prs = ready;
+                if (batch) {
+                  const match = /^(\d+)\/(\d+)$/.exec(batch);
+                  const [k, n] = match ? [Number(match[1]), Number(match[2])] : [0, 0];
+                  if (!(n >= 1 && k >= 1 && k <= n)) {
+                    core.setFailed(`batch must be k/n with 1 <= k <= n; got "${batch}".`);
+                    return;
+                  }
+                  prs = ready.filter(listed => listed.number % n === k - 1);
+                }
+                core.info(
+                  `Backfill${batch ? ` ${batch}` : ''}: re-flagging ${prs.length} of ` +
+                    `${open.length} open PR(s); ${open.length - ready.length} draft(s) skipped.`,
+                );
               }
             } else {
               prs = [context.payload.pull_request];
             }
 
             let hadError = false;
-            for (const pr of prs) {
+            const isBackfill = prs.length > 1 ||
+              (context.eventName === 'workflow_dispatch' &&
+                !(context.payload.inputs.pr || '').trim());
+            for (const [index, listed] of prs.entries()) {
+              if (isBackfill) {
+                // A backfill makes several calls per PR on the job token's
+                // hourly budget. Stop with headroom left for PR events
+                // (reading /rate_limit costs nothing).
+                const {data: limits} = await github.rest.rateLimit.get();
+                const {remaining, limit, reset} = limits.resources.core;
+                if (remaining < Math.min(1500, Math.floor(limit / 3))) {
+                  core.setFailed(
+                    `Backfill stopped before PR #${listed.number} (${prs.length - index} left): ` +
+                      `${remaining} of ${limit} API requests remain until ` +
+                      `${new Date(reset * 1000).toISOString()}; re-run after the reset.`,
+                  );
+                  return;
+                }
+              }
               try {
+                // The list endpoint omits changed_files, which the file check
+                // below needs, so a backfill reads each PR in full.
+                const pr = listed.changed_files == null
+                  ? (await github.rest.pulls.get({
+                      owner, repo, pull_number: listed.number,
+                    })).data
+                  : listed;
                 await flagOne(pr);
               } catch (e) {
                 hadError = true;
-                core.warning(`Failed to flag PR #${pr.number}: ${e.message}`);
+                core.warning(`Failed to flag PR #${listed.number}: ${e.message}`);
               }
             }
             if (hadError) core.setFailed('One or more PRs failed to flag; see warnings.');
@@ -193,31 +249,6 @@ jobs:
             const authorIsEng = engOwners.includes(author);
             const authorIsDesign = designOwners.includes(author);
 
-            // Bot PRs: no gate, no community label. Set the check to success so
-            // a required "review-required" doesn't block them, drop any stray
-            // gate/community labels, and stop.
-            if (authorIsBot) {
-              core.info(`@${author} is a bot — exempt from review gates.`);
-              const current = pr.labels.map((l) => l.name);
-              for (const name of [CODE, DESIGN, COMMUNITY]) {
-                if (current.includes(name)) {
-                  try {
-                    await github.rest.issues.removeLabel({
-                      owner, repo, issue_number: pr.number, name,
-                    });
-                  } catch (e) {
-                    core.warning(`Could not remove ${name}: ${e.message}`);
-                  }
-                }
-              }
-              await github.rest.repos.createCommitStatus({
-                owner, repo, sha: pr.head.sha,
-                context: 'review-required', state: 'success',
-                description: 'Automated (bot) PR — exempt from review gates.',
-              });
-              return;
-            }
-
             // Match the trusted workflow version: an older PR base can predate
             // this helper even though the running workflow requires it.
             const { data: reviewDecisionFile } = await github.rest.repos.getContent({
@@ -235,6 +266,61 @@ jobs:
               () => { throw new Error('review-signal-decision.cjs must stay dependency-free'); },
             );
             const reviewDecision = reviewDecisionModule.exports;
+
+            // One review gate (DEC-14): code review leads; success needs both.
+            async function publishReviewGate(codeGated, codeDescription) {
+              // Write, then read the spec half once more: the spec-owner job
+              // writes its half before it reads this one, so one of the two
+              // always sees the other's latest write.
+              let gate = null;
+              for (let pass = 0; pass < 2; pass++) {
+                let statuses = [];
+                try {
+                  statuses = await github.paginate(github.rest.repos.listCommitStatusesForRef, {
+                    owner, repo, ref: pr.head.sha, per_page: 100,
+                  });
+                } catch (e) {
+                  core.warning(`Could not read the spec decision: ${e.message}`);
+                }
+                const next = reviewDecision.composeReviewGate({
+                  codeGated,
+                  codeDescription,
+                  spec: reviewDecision.readSpecGate(statuses),
+                });
+                if (gate && next.state === gate.state && next.description === gate.description) break;
+                gate = next;
+                await github.rest.repos.createCommitStatus({
+                  owner, repo, sha: pr.head.sha,
+                  context: 'review-required',
+                  state: gate.state,
+                  description: gate.description,
+                  target_url: gate.target_url,
+                });
+              }
+              return gate;
+            }
+
+            // Bot PRs: no gate, no community label. Set the check to success so
+            // a required "review-required" doesn't block them, drop any stray
+            // gate/community labels, and stop.
+            if (authorIsBot) {
+              core.info(`@${author} is a bot — exempt from review gates.`);
+              const current = pr.labels.map((l) => l.name);
+              for (const name of [CODE, DESIGN, COMMUNITY]) {
+                if (current.includes(name)) {
+                  try {
+                    await github.rest.issues.removeLabel({
+                      owner, repo, issue_number: pr.number, name,
+                    });
+                  } catch (e) {
+                    core.warning(`Could not remove ${name}: ${e.message}`);
+                  }
+                }
+              }
+              await publishReviewGate(false, 'Automated (bot) PR — exempt from code review.');
+              return;
+            }
+
 
             // --- Changed files. ---
             const allFiles = await github.paginate(github.rest.pulls.listFiles, {
@@ -608,15 +694,8 @@ jobs:
                 : codeHighRisk && codeApproved
                   ? 'Cleared by code-owner approval.'
                   : 'No code review required.';
-            await github.rest.repos.createCommitStatus({
-              owner,
-              repo,
-              sha: pr.head.sha,
-              context: 'review-required',
-              state: codeGated ? 'pending' : 'success',
-              description: gateDescription,
-            });
-            core.info(`review-required status: ${codeGated ? 'pending' : 'success'}`);
+            const gate = await publishReviewGate(codeGated, gateDescription);
+            core.info(`review-required status: ${gate.state}`);
             // Neutralize any stale "review-required" CHECK RUN left over from the
             // pre-status gate. Such a leftover (conclusion action_required) drags
             // the status rollup to FAILURE even though we now gate via a commit
@@ -652,3 +731,41 @@ jobs:
     steps:
       - name: Note review state change
         run: echo "Review state changed; review-clear will reconcile the code gate."
+
+  # Spec owner gate: reconcile the spec half for one pull request.
+  spec-owner:
+    # Fork reviews (read-only tokens) are skipped; owners use the command. The
+    # reconciler orders concurrent runs itself: no concurrency group.
+    if: >-
+      (github.event_name != 'pull_request_review' ||
+       github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name != 'issue_comment' ||
+       (github.event.issue.pull_request != null &&
+        (startsWith(github.event.comment.body, '/approve-spec') ||
+         startsWith(github.event.comment.body, '/revoke-spec')))) &&
+      (github.event_name != 'workflow_dispatch' || github.event.inputs.pr != '')
+    name: Spec owner gate
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    steps:
+      # Every privileged event checks out the trusted default branch. Never
+      # execute the PR merge ref or PR-controlled helpers with write permissions.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Reconcile owner gate
+        uses: actions/github-script@v9
+        with:
+          retries: 3
+          script: |
+            const path = require('node:path');
+            const {reconcileSpecOwnerGate} = require(path.join(
+              process.env.GITHUB_WORKSPACE,
+              '.github/scripts/spec-owner-reconcile.cjs',
+            ));
+            await reconcileSpecOwnerGate({github, context, core});
