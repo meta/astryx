@@ -15,6 +15,7 @@ import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {MoreMenu} from './MoreMenu';
 import {DropdownMenu} from '../DropdownMenu/DropdownMenu';
+import {Item} from '../Item/Item';
 import {warmMenuBottomSheet} from '../DropdownMenu/__tests__/warmMenuBottomSheet';
 
 // DropdownMenu's touch sheet is loaded lazily; resolve it once up front.
@@ -363,5 +364,26 @@ describe('MoreMenu', () => {
         'position-area: self-block-start span-self-inline-end',
       );
     });
+  });
+});
+
+describe('MoreMenu in a clickable Item', () => {
+  it('a click on a menu row does not run the Item onClick', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onEdit = vi.fn();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={onClick}
+        endContent={<MoreMenu items={[{label: 'Edit', onClick: onEdit}]} />}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'More options'}));
+    await user.click(
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
+    );
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onClick).not.toHaveBeenCalled();
   });
 });
