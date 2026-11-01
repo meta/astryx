@@ -22,13 +22,13 @@
     "@astryxdesign/theme-stone": "*",
     "@astryxdesign/theme-y2k": "*",
     "@astryxdesign/vega": "*",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "recharts": "^3.9.2",
-    "unplugin": "^3.0.0",
-    "vega": "^6.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "recharts": "^3.10.1",
+    "unplugin": "^3.4.0",
+    "vega": "^6.4.0",
     "vega-datasets": "^3.2.1",
-    "vega-lite": "^6.4.3"
+    "vega-lite": "^6.5.0"
   },
   "devDependencies": {
     "@astryxdesign/build": "*",

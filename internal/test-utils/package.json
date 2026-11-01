@@ -8,6 +8,6 @@
   "dependencies": {
     "@testing-library/jest-dom": "catalog:",
     "@testing-library/react": "catalog:",
-    "@testing-library/user-event": "^14.5.0"
+    "@testing-library/user-event": "^14.6.8"
   }
 }
