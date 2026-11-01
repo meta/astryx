@@ -343,9 +343,20 @@ export interface AnimatorOptions {
    * `spec:AST-057` FR2): a `<length>` in px, or a plain `<number>`. The
    * property is registered as inherited so it interpolates, and it animates
    * on the main thread, not the compositor; every other channel renders as
-   * usual.
+   * usual. A `companion` is a second custom property drawn from x by its
+   * `map` in the same keyframes and writes: one animation, one start, so it
+   * follows x through every retarget and Reduce Motion plan and cannot
+   * drift from it.
    */
-  customProperty?: {name: string; syntax: '<length>' | '<number>'};
+  customProperty?: {
+    name: string;
+    syntax: '<length>' | '<number>';
+    companion?: {
+      name: string;
+      syntax: '<length>' | '<number>';
+      map: (x: number) => number;
+    };
+  };
 }
 
 /**
@@ -1005,9 +1016,20 @@ export function createMotionAnimator(
         };
   const pseudoElement = options.pseudoElement;
   const customProperty = options.customProperty;
+  const companion = customProperty?.companion;
   if (customProperty != null) {
     registerCustomProperty(customProperty.name, customProperty.syntax);
   }
+  if (companion != null) {
+    registerCustomProperty(companion.name, companion.syntax);
+  }
+  /** The companion's text for x. */
+  const companionText = (x: number): string =>
+    companion == null
+      ? ''
+      : companion.syntax === '<number>'
+        ? `${round(companion.map(x), 5)}`
+        : `${round(companion.map(x), 3)}px`;
   /** Whether a channel renders into the custom property. */
   const isCustom = (channel: Channel) =>
     customProperty != null && channel === 'translate';
@@ -1026,6 +1048,17 @@ export function createMotionAnimator(
     isCustom(channel)
       ? `${round(value('x'), customUnit === '' ? 5 : 3)}${customUnit}`
       : format(channel, value);
+  /** A keyframe's properties for a channel: the companion rides x's. */
+  const frameOf = (
+    channel: Channel,
+    value: (property: MotionProperty) => number,
+  ): Record<string, string> =>
+    isCustom(channel) && companion != null
+      ? {
+          [cssName(channel)]: textOf(channel, value),
+          [companion.name]: companionText(value('x')),
+        }
+      : {[cssName(channel)]: textOf(channel, value)};
   /** What the channel's inline value is at identity. */
   const identityOf = (channel: Channel): string =>
     isCustom(channel) ? `0${customUnit}` : IDENTITY_TEXT[channel];
@@ -1258,6 +1291,12 @@ export function createMotionAnimator(
     if (target.style.getPropertyValue(cssName(channel)) !== text) {
       target.style.setProperty(cssName(channel), text);
     }
+    if (isCustom(channel) && companion != null) {
+      const companionValue = companionText(value('x'));
+      if (target.style.getPropertyValue(companion.name) !== companionValue) {
+        target.style.setProperty(companion.name, companionValue);
+      }
+    }
     if (release && text === identityOf(channel)) {
       // Identity leaves the element when nothing else would move it.
       releaseIdentity(channel);
@@ -1479,20 +1518,15 @@ export function createMotionAnimator(
       if (jumpTimes.has(t)) {
         keyframes.push({
           offset,
-          [cssName(channel)]: textOf(channel, p => valueBefore(p, t)),
+          ...frameOf(channel, p => valueBefore(p, t)),
         });
       }
       keyframes.push({
         offset,
-        [cssName(channel)]: textOf(channel, p =>
-          t >= end ? finalValue(p) : curveAt(p, t),
-        ),
+        ...frameOf(channel, p => (t >= end ? finalValue(p) : curveAt(p, t))),
       });
     }
-    keyframes.push({
-      offset: 1,
-      [cssName(channel)]: textOf(channel, finalValue),
-    });
+    keyframes.push({offset: 1, ...frameOf(channel, finalValue)});
     // A custom property animates on the main thread: nothing to promote.
     if (!isCustom(channel)) {
       promote(channel);

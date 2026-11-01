@@ -213,3 +213,175 @@ describe('createSnapDrag (the options only Core passes)', () => {
     expect(snap.snapPoints()).toEqual([-50, 0]);
   });
 });
+
+describe('createSnapDrag: a settle that passes an offset calls back (internal)', () => {
+  /** Runs animation frames on the fake clock. */
+  const frames = async (ms: number) => {
+    await vi.advanceTimersByTimeAsync(ms);
+  };
+
+  it('calls back once, on the first frame whose presented value has passed the offset', async () => {
+    const node = element();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-200, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+    });
+    const call = vi.fn();
+    const handle = snap.settleTo(0, {
+      onPass: {offset: -150, direction: -1, call},
+    });
+    expect(handle).not.toBeNull();
+    // Not before the curve gets there.
+    await frames(16);
+    const passedAt = (() => {
+      for (let t = 0; t <= 3000; t += 1) {
+        if ((handle?.value('x', performance.now() + t) ?? 0) <= -150) {
+          return t;
+        }
+      }
+      return Number.NaN;
+    })();
+    expect(passedAt).toBeGreaterThan(16);
+    expect(call).not.toHaveBeenCalled();
+    await frames(3000);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls back on the next frame when the element is past the offset already', async () => {
+    const node = element();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-200, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+    });
+    snap.settleTo(0);
+    await frames(3000);
+    const call = vi.fn();
+    snap.settleTo(0, {onPass: {offset: -150, direction: -1, call}});
+    expect(call).not.toHaveBeenCalled();
+    await frames(20);
+    expect(call).toHaveBeenCalledTimes(1);
+  });
+
+  it('never calls back for a settle that lands short, one another settle replaces, or one a destroy ends', async () => {
+    const node = element();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-200, -100, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+    });
+    const short = vi.fn();
+    snap.settleTo(1, {onPass: {offset: -150, direction: -1, call: short}});
+    await frames(3000);
+    expect(short).not.toHaveBeenCalled();
+    const replaced = vi.fn();
+    snap.settleTo(0, {onPass: {offset: -190, direction: -1, call: replaced}});
+    await frames(16);
+    snap.settleTo(2);
+    await frames(3000);
+    expect(replaced).not.toHaveBeenCalled();
+    const destroyed = vi.fn();
+    snap.settleTo(0, {onPass: {offset: -50, direction: -1, call: destroyed}});
+    snap.destroy();
+    await frames(3000);
+    expect(destroyed).not.toHaveBeenCalled();
+  });
+
+  it('never calls back for a settle a drag catches', async () => {
+    const node = element();
+    const snap = createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-200, 0],
+      onSettle: () => {},
+      customProperty: PROPERTY,
+    });
+    const call = vi.fn();
+    snap.settleTo(0, {onPass: {offset: -190, direction: -1, call}});
+    await frames(16);
+    pan('began', 0);
+    pan('changed', 10);
+    await frames(3000);
+    expect(call).not.toHaveBeenCalled();
+  });
+});
+
+describe('createSnapDrag: a companion drawn from the travel (internal)', () => {
+  const COMPANION = {
+    name: '--test-companion',
+    syntax: '<number>' as const,
+    map: (x: number) => Math.min(1, Math.max(0, -x / 100)),
+  };
+
+  it('writes the companion with the travel, one for one', () => {
+    const node = element();
+    createSnapDrag(node, {
+      axis: 'x',
+      snapPoints: [-200, 0],
+      onSettle: () => {},
+      customProperty: {...PROPERTY, companion: COMPANION},
+    });
+    pan('began', 0);
+    pan('changed', -40);
+    expect(travel(node)).toBe('-40px');
+    expect(node.style.getPropertyValue(COMPANION.name)).toBe('0.4');
+    pan('changed', -150);
+    expect(node.style.getPropertyValue(COMPANION.name)).toBe('1');
+  });
+
+  it('settles the companion with the travel in the same animation keyframes', async () => {
+    const recorded: Keyframe[][] = [];
+    const original = Element.prototype.animate as unknown;
+    Object.defineProperty(Element.prototype, 'animate', {
+      configurable: true,
+      value(this: Element, keyframes: Keyframe[]) {
+        recorded.push(keyframes);
+        return {
+          cancel() {},
+          finished: Promise.resolve(),
+          ready: Promise.resolve(),
+          startTime: null,
+          playState: 'running',
+          effect: {getTiming: () => ({duration: 0})},
+          addEventListener() {},
+          removeEventListener() {},
+        };
+      },
+    });
+    try {
+      const node = element();
+      const snap = createSnapDrag(node, {
+        axis: 'x',
+        snapPoints: [-200, 0],
+        onSettle: () => {},
+        customProperty: {...PROPERTY, companion: COMPANION},
+      });
+      snap.settleTo(0);
+      const travelKeyframes = recorded.find(frames =>
+        frames.some(frame => frame[PROPERTY.name as keyof Keyframe] != null),
+      );
+      expect(travelKeyframes).toBeDefined();
+      // Every keyframe carries both, the companion drawn from that
+      // keyframe's travel.
+      for (const frame of travelKeyframes ?? []) {
+        const x = parseFloat(String(frame[PROPERTY.name as keyof Keyframe]));
+        expect(Number(frame[COMPANION.name as keyof Keyframe])).toBeCloseTo(
+          COMPANION.map(x),
+          4,
+        );
+      }
+    } finally {
+      if (original == null) {
+        delete (Element.prototype as {animate?: unknown}).animate;
+      } else {
+        Object.defineProperty(Element.prototype, 'animate', {
+          configurable: true,
+          value: original,
+        });
+      }
+    }
+  });
+});
