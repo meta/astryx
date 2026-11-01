@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-10-26
+approved_at: 2026-11-01
 owners: [cixzhang]
 applies_to: [packages/native/]
 verified_by:
