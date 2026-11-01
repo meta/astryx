@@ -57,6 +57,8 @@ import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {observeResize} from '../utils/sharedResizeObserver';
+import {observeMutations} from '../utils/sharedMutationObserver';
 
 const styles = stylex.create({
   // Base reset for all layers
@@ -1621,10 +1623,15 @@ function useLayerImplementation(
     const dialog = anchor.closest('dialog');
     let cancelSettleWait: () => void = () => {};
     let resolved = false;
+    // The shared observers (INV16) hand back an unsubscribe for this
+    // registration only, so the teardown does not touch other observers of the
+    // same element.
+    let stopResize: () => void = () => {};
+    let stopMutations: () => void = () => {};
     const release = () => {
-      observer.disconnect();
+      stopResize();
       intersection?.disconnect();
-      mutations?.disconnect();
+      stopMutations();
       dialog?.removeEventListener('toggle', check);
     };
     const resolve = () => {
@@ -1642,25 +1649,25 @@ function useLayerImplementation(
         resolve();
       }
     }
-    const observer = new ResizeObserver(check);
     const intersection =
       typeof IntersectionObserver === 'undefined'
         ? null
         : new IntersectionObserver(check);
-    const mutations =
-      dialog && typeof MutationObserver !== 'undefined'
-        ? new MutationObserver(check)
-        : null;
-    observer.observe(anchor);
+    stopResize = observeResize(anchor, check);
     if (!resolved) {
       intersection?.observe(anchor);
       if (dialog) {
-        mutations?.observe(dialog, {
-          attributes: true,
-          attributeFilter: ['open'],
-        });
+        stopMutations = observeMutations(
+          dialog,
+          {attributes: true, attributeFilter: ['open']},
+          check,
+        );
         dialog.addEventListener('toggle', check);
       }
+    } else {
+      // The registration itself resolved the wait before its unsubscribe
+      // existed, so release it now.
+      release();
     }
     pendingAnchorWaitRef.current = () => {
       resolved = true;
