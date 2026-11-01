@@ -202,32 +202,52 @@ export const InlineFlow: Story = {
         </Text>
       </div>
       <div data-inline-flow="block-child">
-        <Link href="/projects" color="secondary">
-          <HStack gap={1} vAlign="center">
-            <Icon icon="chevronLeft" size="sm" color="inherit" />
-            Back to projects
-          </HStack>
-        </Link>
+        <Text display="block">
+          <Link href="/projects" color="secondary">
+            <HStack gap={1} vAlign="center">
+              <Icon icon="chevronLeft" size="sm" color="inherit" />
+              Back to projects
+            </HStack>
+          </Link>
+        </Text>
       </div>
       <div style={{width: 220}} data-inline-flow="clamped-text-child">
-        <Link href="/notes/planning">
-          <Text maxLines={1}>
-            Quarterly planning notes for the design systems team
-          </Text>
-        </Link>
+        <Text display="block">
+          <Link href="/notes/planning">
+            <Text maxLines={1}>
+              Quarterly planning notes for the design systems team
+            </Text>
+          </Link>
+        </Text>
       </div>
       <div data-inline-flow="block-text-child">
-        <Link href="/notes/planning">
-          <Text display="block">Planning notes</Text>
-        </Link>
+        <Text display="block">
+          <Link href="/notes/planning">
+            <Text display="block">Planning notes</Text>
+          </Link>
+        </Text>
+      </div>
+      <div data-inline-flow="img-child">
+        <Text display="block">
+          <Link href="/brand">
+            <img
+              alt="Brand"
+              width={48}
+              height={24}
+              src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24'%3E%3Crect width='48' height='24' fill='%23888'/%3E%3C/svg%3E"
+            />
+          </Link>
+        </Text>
       </div>
       <div data-inline-flow="span-stack-child">
-        <Link href="/work-items" color="secondary">
-          <HStack as="span" gap={1} vAlign="center">
-            <Icon icon="chevronLeft" size="sm" color="inherit" />
-            Back to work items
-          </HStack>
-        </Link>
+        <Text display="block">
+          <Link href="/work-items" color="secondary">
+            <HStack as="span" gap={1} vAlign="center">
+              <Icon icon="chevronLeft" size="sm" color="inherit" />
+              Back to work items
+            </HStack>
+          </Link>
+        </Text>
       </div>
     </div>
   ),

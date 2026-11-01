@@ -30,7 +30,7 @@ import {
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
-import {textBlockMarker} from '../Text/textBlock.markers.stylex';
+import {textBlockMarker, textScopeMarker} from '../Text/text.markers.stylex';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,
@@ -55,21 +55,28 @@ import {disabledInteractionProps} from '../utils/disabledInteraction';
  * Base link styles
  */
 const styles = stylex.create({
-  // Link's text behaves as inline text: it truncates with an ancestor Text
-  // clamp and, when it wraps, shares its first and last lines with the words
-  // around it (`component:Link` FR6). Content with a block-level element gets
-  // a flex box instead, because an inline element paints no focus outline
-  // around a block child (AR5): a block HTML element, a Stack rendered as any
-  // element (`HStack as="span"` included), or a block Text, Link's own label
-  // included when its `maxLines` or `display` makes it one. Decided in CSS,
-  // not by reading children; a caller element made block by its own styling
-  // is not detected (FR6 records the gap).
+  // Inside running text (a Text), Link's label behaves as inline text: it
+  // truncates with an ancestor Text clamp and, when it wraps, shares its first
+  // and last lines with the words around it (`component:Link` FR6). Elsewhere,
+  // as a flex or grid item for example, the root keeps its inline-flex box, so
+  // shipped layouts do not move (an inline root there is blockified and grows
+  // to the inherited line height). Inside a Text, content with a block-level
+  // element keeps the flex box too, because an inline element paints no focus
+  // outline around a block child (AR5): a block HTML element, a replaced
+  // element (img, svg, picture, video, canvas), a Stack rendered as any
+  // element, or a block Text, Link's own label included when its `maxLines`
+  // or `display` makes it one. Decided in CSS, not by reading children; a
+  // caller element made block by its own styling is not detected (FR6
+  // records the gap).
   base: {
     display: {
-      default: 'inline',
-      ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr, .astryx-stack))':
-        'inline-flex',
-      [stylex.when.descendant(':is(*)', textBlockMarker)]: 'inline-flex',
+      default: 'inline-flex',
+      [stylex.when.ancestor(':is(*)', textScopeMarker)]: {
+        default: 'inline',
+        ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr, .astryx-stack), > :first-child > :is(img, svg, picture, video, canvas))':
+          'inline-flex',
+        [stylex.when.descendant(':is(*)', textBlockMarker)]: 'inline-flex',
+      },
     },
     alignItems: 'center',
     fontFamily: 'inherit',
@@ -106,6 +113,9 @@ const styles = stylex.create({
    * Strips all native button chrome so it looks identical to a link.
    */
   buttonReset: {
+    // A native button lays out as one box whatever its display, so the button
+    // form keeps the inline-flex box (FR6's button-form gap).
+    display: 'inline-flex',
     backgroundColor: 'transparent',
     borderStyle: 'none',
     padding: 0,

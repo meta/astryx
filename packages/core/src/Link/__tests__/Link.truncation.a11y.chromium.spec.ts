@@ -132,6 +132,7 @@ for (const slot of [
   'block-child',
   'clamped-text-child',
   'block-text-child',
+  'img-child',
   'span-stack-child',
 ] as const) {
   test(`keyboard focus paints the outline around a Link with a ${slot}`, async ({
@@ -151,10 +152,11 @@ for (const slot of [
     const measured = await link.evaluate(el => {
       const style = getComputedStyle(el);
       const box = el.getBoundingClientRect();
-      // The block child: the Stack, or the caller's block Text.
+      // The block child: the Stack, the caller's block Text, or the image.
       const child = (
         (el.querySelector('.astryx-stack') ??
-          el.querySelector('.astryx-text .astryx-text')) as HTMLElement
+          el.querySelector('.astryx-text .astryx-text') ??
+          el.querySelector('img')) as HTMLElement
       ).getBoundingClientRect();
       return {
         outlineStyle: style.outlineStyle,
@@ -172,5 +174,38 @@ for (const slot of [
     // One box around the whole block, so the outline paints around it.
     expect(measured.pieces).toBe(1);
     expect(measured.covers).toBe(true);
+  });
+}
+
+// A Link outside running text keeps its shipped box: as a flex or grid item
+// it stays as tall as its label instead of growing to the inherited line
+// height (AST-017 DEC-17).
+for (const story of ['core-sidenav--suite-header', 'lab-comments--panel']) {
+  test(`${story}: a Link that is a flex or grid item is as tall as its label`, async ({
+    page,
+  }) => {
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
+    );
+    await expect(page.locator('.astryx-link').first()).toBeVisible();
+    const grown = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('.astryx-link'))
+        .filter(link => {
+          const parent = link.parentElement;
+          return (
+            parent != null &&
+            /flex|grid/.test(getComputedStyle(parent).display) &&
+            link.firstElementChild != null
+          );
+        })
+        .map(link => ({
+          text: link.textContent?.trim().slice(0, 40),
+          link: link.getBoundingClientRect().height,
+          label: (link.firstElementChild as HTMLElement).getBoundingClientRect()
+            .height,
+        }))
+        .filter(({link, label}) => link > label + 0.5),
+    );
+    expect(grown).toEqual([]);
   });
 }

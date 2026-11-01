@@ -46,7 +46,7 @@ import {
   tabularNumbersStyle,
   truncationTooltipStyles,
 } from './text.stylex';
-import {textBlockMarker} from './textBlock.markers.stylex';
+import {textBlockMarker, textScopeMarker} from './text.markers.stylex';
 import {useTruncation} from './useTruncation';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';
@@ -295,6 +295,7 @@ export function Text({
             size && sizeStyles[size],
             defaultWeightByTypeStyles[styleType],
             weight && weightStyles[weight],
+            textScopeMarker,
             resolvedDisplay === 'block' && textBlockMarker,
             // Display: use truncation styles when maxLines > 0
             maxLines === 1
