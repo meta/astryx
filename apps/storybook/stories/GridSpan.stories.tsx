@@ -34,11 +34,15 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-background-muted'],
     borderRadius: radiusVars['--radius-element'],
   },
+  // A dashed outline keeps each span's extent visible in every theme and
+  // mode, including where the muted fill matches the page surface.
   spanned: {
     boxSizing: 'border-box',
     padding: spacingVars['--spacing-3'],
-    backgroundColor: colorVars['--color-accent-muted'],
+    backgroundColor: colorVars['--color-background-muted'],
     borderRadius: radiusVars['--radius-element'],
+    outline: `1px dashed ${colorVars['--color-border-emphasized']}`,
+    outlineOffset: -1,
   },
   tall: {
     minBlockSize: 96,
