@@ -3,6 +3,12 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe, expect, it} from 'vitest';
+// The package root is imported here, while the file is collected, rather than
+// inside the test that checks it: loading every module of core takes about
+// 15 s of transform on an idle machine, which inside a test ran against the
+// test timeout and failed on a loaded one. No timeout bounds collection.
+import * as root from '@astryxdesign/core';
+import * as resizableUtils from '@astryxdesign/core/Resizable/utils';
 import {pixel as tablePixel} from '../Table/utils';
 import {percent as barrelPercent} from './index';
 import {percent, pixel} from './utils';
@@ -37,19 +43,15 @@ describe('Resizable structured sizing helpers', () => {
     expect(values).toHaveLength(6);
   });
 
-  it('re-exports Table pixel and percent without a root collision', async () => {
-    const [module, root] = await Promise.all([
-      import('@astryxdesign/core/Resizable/utils'),
-      import('@astryxdesign/core'),
-    ]);
+  it('re-exports Table pixel and percent without a root collision', () => {
     const source = readFileSync(
       join(process.cwd(), 'packages/core/src/Resizable/utils.ts'),
       'utf8',
     );
 
     expect(pixel).toBe(tablePixel);
-    expect(module.pixel).toBe(tablePixel);
-    expect(module.percent).toBe(percent);
+    expect(resizableUtils.pixel).toBe(tablePixel);
+    expect(resizableUtils.percent).toBe(percent);
     expect(root.pixel).toBe(tablePixel);
     expect(root.percent).toBe(percent);
     expect(barrelPercent).toBe(percent);
