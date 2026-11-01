@@ -12,6 +12,58 @@ import {UIKIT_PAN, UIKIT_VELOCITY} from '../../motion/uikit/gestures';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {createHarness} from './harness';
 
+/**
+ * Swipes on a UIPickerView column (iOS 26.2 simulator, HID touches): [ms
+ * since touch-down, y in pt] per event, and the velocity UIKit handed
+ * scrollViewWillEndDragging, in offset px/s (the content moves against the
+ * finger).
+ */
+const PICKER_RELEASES = {
+  '200 pt in 50 ms': {
+    stream: [
+      [0, 368],
+      [46.48, 334.67],
+      [72.92, 201.33],
+    ],
+    release: 933.4,
+  },
+  '200 pt in 100 ms': {
+    stream: [
+      [0, 368],
+      [49.2, 351.33],
+      [65.27, 301.33],
+      [88.47, 251.33],
+      [104.68, 218],
+      [129.4, 168],
+    ],
+    release: 2114,
+  },
+  '200 pt in 200 ms': {
+    stream: [
+      [0, 368],
+      [46.01, 359.67],
+      [63.5, 334.67],
+      [81.36, 318],
+      [97.69, 301.33],
+      [120.12, 276.33],
+      [137.2, 259.67],
+      [171.83, 226.33],
+      [196.13, 201.33],
+      [212.66, 184.67],
+      [230.83, 168],
+    ],
+    release: 1016.2,
+  },
+  'a 90 pt flick': {
+    stream: [
+      [0, 353],
+      [41.5, 335],
+      [62.02, 281],
+    ],
+    release: 543.6,
+  },
+} as const;
+
 describe('PanGestureRecognizer', () => {
   it('begins past the hysteresis and leaves the threshold out of the translation', () => {
     const h = createHarness();
@@ -95,6 +147,56 @@ describe('PanGestureRecognizer', () => {
     expect(release(100 + stillness).x).toBeCloseTo(2000, 6);
     // Rested longer: no flick, where UIKit would still fling.
     expect(release(100 + stillness + 60)).toEqual({x: 0, y: 0});
+  });
+
+  it.each(Object.entries(PICKER_RELEASES))(
+    'releases a scrolling surface as UIScrollView does: %s',
+    (_, {stream, release}) => {
+      const h = createHarness();
+      const pan = new PanGestureRecognizer({
+        name: 'pan',
+        direction: 'vertical',
+      });
+      let scroll = Number.NaN;
+      pan.addListener(r => {
+        if (r.state === 'ended') {
+          scroll = -r.scrollVelocity().y;
+        }
+      });
+      const [first, ...rest] = stream;
+      const finger = h.finger(1).down(100, first[1], first[0], {
+        recognizers: [pan],
+      });
+      for (const [time, y] of rest) {
+        finger.move(100, y, time);
+      }
+      finger.up(rest[rest.length - 1][0]);
+      expect(Math.abs(scroll - release)).toBeLessThan(0.5);
+    },
+  );
+
+  it("reads a dragged surface's release as velocity(in:), not the scroll-view blend", () => {
+    const h = createHarness();
+    const pan = new PanGestureRecognizer({name: 'pan', direction: 'vertical'});
+    let drag = Number.NaN;
+    let scroll = Number.NaN;
+    pan.addListener(r => {
+      if (r.state === 'ended') {
+        drag = -r.velocity().y;
+        scroll = -r.scrollVelocity().y;
+      }
+    });
+    const [first, ...rest] = PICKER_RELEASES['200 pt in 50 ms'].stream;
+    const finger = h.finger(1).down(100, first[1], first[0], {
+      recognizers: [pan],
+    });
+    for (const [time, y] of rest) {
+      finger.move(100, y, time);
+    }
+    finger.up(rest[rest.length - 1][0]);
+    // UIPanGestureRecognizer's velocity(in:) on the same stream.
+    expect(Math.abs(drag - 1582.3)).toBeLessThan(0.5);
+    expect(Math.abs(scroll - 933.4)).toBeLessThan(0.5);
   });
 
   it('fails a drag against its direction', () => {

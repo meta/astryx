@@ -576,12 +576,12 @@ describe('BottomSheet', () => {
     expect(dialog).toHaveAttribute('aria-hidden', 'true');
     expect(dialog).not.toHaveAttribute('aria-modal');
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '0'});
-    expect(document.body.style.position).toBe('fixed');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     finishSheetExit();
 
     expect(dialog).not.toHaveAttribute('open');
-    expect(document.body.style.position).not.toBe('fixed');
+    expect(document.documentElement.style.overflow).not.toBe('hidden');
   });
 
   it('does not dismiss when the sheet surface itself is clicked', () => {
@@ -1024,7 +1024,7 @@ describe('BottomSheet', () => {
 
       expect(dialog).toHaveAttribute('open');
       expect(dialog).toHaveAttribute('inert');
-      expect(document.body.style.position).not.toBe('fixed');
+      expect(document.documentElement.style.overflow).not.toBe('hidden');
 
       finishSheetExit();
 
