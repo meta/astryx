@@ -73,10 +73,6 @@ inputs:
     description: "For 'rest': 'true' when the whole run fit on the 'room' look."
     required: false
     default: ''
-  full:
-    description: "For 'rest': 'true' when 'room' turned this pull-request run away."
-    required: false
-    default: ''
   started:
     description: "For 'rest': when 'room' started, in milliseconds since the epoch."
     required: false
@@ -108,7 +104,6 @@ runs:
       env:
         PHASE: ${{ inputs.phase }}
         FITS: ${{ inputs.fits }}
-        FULL: ${{ inputs.full }}
         STARTED: ${{ inputs.started }}
         LOOKS: ${{ inputs.looks }}
         PEAK: ${{ inputs.peak }}
@@ -180,13 +175,6 @@ runs:
           const started = PHASE === 'rest' && Number(process.env.STARTED) > 0 ? Number(process.env.STARTED) : Date.now();
           const looked = PHASE === 'rest' ? Math.max(0, Number(process.env.LOOKS) || 0) : 0;
           core.setOutput('started', String(started));
-          if (PHASE === 'rest' && process.env.FULL === 'true') {
-            // The run's `ci-full` job is cancelling it; hold its jobs back
-            // until it does, and start them only if it cannot.
-            core.warning('CI is full: this run is being stopped.');
-            await new Promise(resolve => setTimeout(resolve, Math.min(5 * 60_000, MAX_WAIT_MS)));
-            return;
-          }
           if (PHASE === 'rest' && process.env.FITS === 'true') {
             core.info('The whole run fit when its first job found room.');
             return;

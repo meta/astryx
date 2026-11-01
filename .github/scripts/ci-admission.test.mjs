@@ -89,14 +89,45 @@ describe('where runs wait', () => {
     const [stop] = job.steps;
     expect(stop['continue-on-error']).toBeUndefined();
     expect(stop.run).toContain('CI is full: re-run or push later.');
+    // It cancels the run when its token can, and fails either way.
     expect(stop.run).toContain('gh run cancel "$GITHUB_RUN_ID"');
     expect(stop.run.trim().split('\n').at(-1)).toBe('exit 1');
-    // Admission holds the run's jobs back meanwhile, and the build never starts.
-    expect(wait.with.full).toBe('${{ needs.room.outputs.full }}');
     expect(admission.permissions).toEqual({actions: 'read', contents: 'read'});
     expect(String(ci.jobs['build-storybook'].if)).toContain(
       "needs.room.outputs.full != 'true'",
     );
+  });
+
+  it("fails a fork's run that CI is full for, which cannot cancel itself, in every required context", () => {
+    const isStop = step =>
+      step.name === 'Stop when CI is full' &&
+      step.if === "needs.room.outputs.full == 'true'" &&
+      step.run.includes('CI is full: re-run or push later.') &&
+      step.run.trim().endsWith('exit 1') &&
+      step['continue-on-error'] === undefined;
+    // Admission fails first, so every job behind it without its own status
+    // rule skips.
+    expect(isStop(admission.steps[0])).toBe(true);
+    // The required contexts run, and fail with the reason before any work.
+    for (const id of ['build', 'test', 'docsite-test']) {
+      const job = ci.jobs[id];
+      expect(needsOf(job), id).toContain('room');
+      expect(job.steps[0].name, id).toBe(
+        'Require a branch in this repository or the ci:run label',
+      );
+      expect(isStop(job.steps[1]), id).toBe(true);
+    }
+    // build runs although the Storybook build it reads skipped.
+    expect(String(ci.jobs.build.if)).toContain(
+      "needs.room.outputs.full == 'true'",
+    );
+    // The jobs that would still run behind a failed admission build nothing.
+    for (const id of ['typecheck', 'pr-interaction', 'pr-interaction-webkit']) {
+      expect(needsOf(ci.jobs[id]), id).toContain('room');
+      expect(String(ci.jobs[id].if), id).toContain(
+        "needs.room.outputs.full != 'true'",
+      );
+    }
   });
 
   it('skips only with every other job, and never fails, so every job and required check decides as before', () => {
@@ -144,6 +175,7 @@ describe('where runs wait', () => {
     expect(limit(wait.with['max-looks'], 'pull_request')).toBe(2);
     expect(limit(wait.with['max-looks'], 'workflow_dispatch')).toBe(8);
     expect(admission.steps.filter(step => step !== wait)).toEqual([
+      expect.objectContaining({name: 'Stop when CI is full'}),
       expect.objectContaining({uses: 'actions/checkout@v7'}),
     ]);
     expect(ci.jobs.room.steps.filter(step => step.name !== STEP)).toEqual([

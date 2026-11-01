@@ -151,6 +151,12 @@ jobs:
       actions: read
       contents: read
     steps:
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Check out the admission action
         uses: actions/checkout@v7
         with:
@@ -165,7 +171,6 @@ jobs:
         with:
           phase: rest
           fits: ${{ needs.room.outputs.fits }}
-          full: ${{ needs.room.outputs.full }}
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
@@ -175,9 +180,10 @@ jobs:
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
 
   # Stops a pull-request run that CI is full for (room found no room and ten
-  # other pull-request runs waiting), with the reason, so it builds nothing:
-  # cancelling the run cancels admission's wait and every job behind it, and
-  # the required checks report the cancelled run, never a pass.
+  # other pull-request runs waiting), with the reason, so it builds nothing.
+  # It cancels the run when its token can. A fork's read-only token cannot;
+  # then admission fails, the jobs behind it skip, and build, test and
+  # docsite-test fail with the same reason, never skip or pass.
   ci-full:
     needs: [room]
     if: github.event_name == 'pull_request' && needs.room.outputs.full == 'true'
@@ -482,7 +488,7 @@ jobs:
   # only the production build has the opaque-origin sandbox at all. The
   # spec-only lane validates spec records here, where it always has.
   docsite-test:
-    needs: [admission]
+    needs: [room, admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled()) }}
     # The Next.js production build uses every core it gets.
     runs-on: ubuntu-latest
@@ -499,6 +505,12 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
@@ -946,6 +958,7 @@ jobs:
   test:
     needs:
       [
+        room,
         release-bump,
         test-ui,
         test-node,
@@ -968,6 +981,12 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
@@ -1415,8 +1434,8 @@ jobs:
   # ~1.5 minutes sooner. The build and release-check joins require this job,
   # so a type error still fails both.
   typecheck:
-    needs: [admission]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
+    needs: [room, admission]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
@@ -1483,8 +1502,8 @@ jobs:
   # gate passes. A skipped build-storybook job (a draft) skips this gate too;
   # a fork pull request without `ci:run` still reports here.
   build:
-    needs: [build-storybook, typecheck]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
+    needs: [room, build-storybook, typecheck]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || needs.room.outputs.full == 'true' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
     runs-on: ubuntu-slim
     permissions: {}
     steps:
@@ -1493,6 +1512,12 @@ jobs:
         run: |
           echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
           exit 1
+      - name: Stop when CI is full
+        if: needs.room.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          exit 1
+
       - name: Assert parallel builds succeeded
         run: |
           echo "build-storybook: ${{ needs.build-storybook.result }}"
@@ -1975,8 +2000,8 @@ jobs:
           delete-merged: true
 
   pr-interaction:
-    needs: [admission, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    needs: [room, admission, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2093,8 +2118,8 @@ jobs:
   # required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
-    needs: [admission, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
+    needs: [room, admission, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
