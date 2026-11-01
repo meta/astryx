@@ -3,12 +3,12 @@
 /**
  * @file main-artifact.cjs
  * @input An Octokit client, the repository, an artifact name, and the commit
- *   it must belong to
+ *   it must belong to (optional: any commit on `main`)
  * @output The id of the workflow run on `main` that uploaded that artifact for
- *   that exact commit, or null
+ *   that exact commit (or any commit, without one), or null
  * @position Shared by the CI jobs that read what Main keeps for a merge base
- *   (its package builds, its package-size measurement), so each trusts the
- *   same thing: only Main's own run on `main` for this exact commit, in this
+ *   (its size records) and the PR report's daily CI history, so each trusts
+ *   the same thing: only Main's own run on `main` for this exact commit, in this
  *   repository. A pull request's run can upload an artifact under any name.
  */
 
@@ -25,7 +25,7 @@ async function mainArtifactRunId({github, owner, repo, name, sha}) {
     candidate =>
       !candidate.expired &&
       candidate.workflow_run?.head_branch === 'main' &&
-      candidate.workflow_run?.head_sha === sha &&
+      (sha == null || candidate.workflow_run?.head_sha === sha) &&
       candidate.workflow_run?.head_repository_id ===
         candidate.workflow_run?.repository_id,
   );

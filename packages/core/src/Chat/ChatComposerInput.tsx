@@ -20,7 +20,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/ChatComposerInput.test.tsx
  * - /packages/core/src/Chat/ChatComposerInput.doc.mjs
- * - /packages/core/src/Chat/ChatComposerInput.spec.md
+ * - /docs/specs/components/Chat/ChatComposerInput.spec.md
  * - /apps/storybook/stories/ChatComposerInput.stories.tsx
  * - /packages/core/src/Chat/index.ts
  * - /apps/storybook/stories/ChatComposer.stories.tsx

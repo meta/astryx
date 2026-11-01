@@ -21,7 +21,9 @@ import {
 } from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {colorVars} from '../theme/tokens.stylex';
 import {
   createRef,
   Profiler,
@@ -86,6 +88,21 @@ afterEach(() => {
 });
 
 // Test data
+// The disabled focus ring a nested input's wrapper carries, by its StyleX class.
+const NESTED_RING = stylex
+  .props(
+    stylex.create({
+      ring: {
+        boxShadow: {
+          default: null,
+          ':has(input[aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+        },
+      },
+    }).ring,
+  )
+  .className!.split(' ')
+  .pop()!;
+
 const fruits: SearchableItem[] = [
   {id: '1', label: 'Apple'},
   {id: '2', label: 'Banana'},
@@ -1453,7 +1470,7 @@ describe('BaseTypeahead minQueryLength', () => {
     await waitFor(() => {
       expect(input).toHaveAttribute('aria-expanded', 'true');
     });
-    expect(search).toHaveBeenCalledExactlyOnceWith('App');
+    expect(search).toHaveBeenCalledExactlyOnceWith('App', expect.anything());
   });
 
   it('closes the menu again when the query falls back below the threshold', async () => {
@@ -1531,7 +1548,7 @@ describe('BaseTypeahead minQueryLength', () => {
     await waitFor(() => {
       expect(input).toHaveAttribute('aria-expanded', 'true');
     });
-    expect(search).toHaveBeenCalledExactlyOnceWith('A');
+    expect(search).toHaveBeenCalledExactlyOnceWith('A', expect.anything());
   });
 
   it('stops reporting "Loading" when the query falls below the threshold mid-search', async () => {
@@ -1669,7 +1686,7 @@ describe('BaseTypeahead hasSearched reset', () => {
 
     // Type a query that starts an asynchronous search
     fireEvent.change(input, {target: {value: 'abc'}});
-    expect(initialSource.search).toHaveBeenCalledWith('abc');
+    expect(initialSource.search).toHaveBeenCalledWith('abc', expect.anything());
 
     // Replace the search source while the search is still pending
     rerender(
@@ -2471,19 +2488,76 @@ describe('Typeahead disabledMessage', () => {
     );
   });
 
-  it('remains natively disabled when disabled without a reason', () => {
+  it('keeps its tab stop when disabled without a reason', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
     render(
-      <Typeahead
-        label="Assignee"
-        searchSource={fruitSource}
-        value={null}
-        onChange={() => {}}
-        isDisabled
-      />,
+      <>
+        <button type="button">Before</button>
+        <Typeahead
+          label="Assignee"
+          searchSource={fruitSource}
+          value={null}
+          onChange={onChange}
+          hasEntriesOnFocus
+          isDisabled
+        />
+      </>,
     );
     const input = screen.getByRole('combobox');
-    expect(input).toBeDisabled();
-    expect(input).not.toHaveAttribute('aria-disabled');
+    expect(input).not.toBeDisabled();
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    expect(input).toHaveAttribute('readonly');
+
+    screen.getByRole('button', {name: 'Before'}).focus();
+    await user.tab();
+    expect(input).toHaveFocus();
+    await user.keyboard('Apple{Enter}');
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(onChange).not.toHaveBeenCalled();
+    // jsdom cannot match :focus-visible: the field's wrapper carries the
+    // disabled focus ring's class (spec:AST-085 FR6).
+    expect(input.closest(`.${NESTED_RING}`)).not.toBeNull();
+  });
+
+  it('drops a search answer that arrives after the field became disabled', async () => {
+    let settle: (items: SearchableItem[]) => void = () => {};
+    const searchSource: SearchSource = {
+      search: async () =>
+        new Promise<SearchableItem[]>(resolve => {
+          settle = resolve;
+        }),
+      bootstrap: () => [],
+    };
+    const props = {
+      label: 'Assignee',
+      searchSource,
+      value: null,
+      onChange: () => {},
+      debounceMs: 0,
+    };
+    const {rerender} = render(<Typeahead {...props} />);
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'Ap'}});
+    await waitFor(() => {
+      expect(getBusySpinner()).toBeInTheDocument();
+    });
+
+    rerender(<Typeahead {...props} isDisabled />);
+    expect(queryBusySpinner()).not.toBeInTheDocument();
+    await act(async () => {
+      settle(fruits.slice(0, 1));
+      await Promise.resolve();
+    });
+
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      document.querySelector('[data-astryx-live-region="polite"]')
+        ?.textContent ?? '',
+    ).toBe('');
+    // The dropped query has no outcome: no empty state either.
+    expect(screen.queryByText('No results found')).not.toBeInTheDocument();
   });
 });
 

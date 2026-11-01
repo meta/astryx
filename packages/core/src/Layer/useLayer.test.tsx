@@ -175,6 +175,48 @@ function RelocatingOpenContextHostingHarness({
   );
 }
 
+/**
+ * A lazily mounted layer through the internal options path, optionally kept
+ * mounted after its first show, whose render call can move between a safe and
+ * an unsafe host.
+ */
+function KeptLazyContextHarness({
+  unsafe = false,
+  keepsMountAfterShow = true,
+  onHide,
+}: {
+  unsafe?: boolean;
+  keepsMountAfterShow?: boolean;
+  onHide?: () => void;
+}) {
+  const layer = useLayerInternal({
+    mode: 'context',
+    lazyMount: true,
+    keepsMountAfterShow,
+    onHide,
+  });
+  const renderedLayer = layer.render(
+    <button type="button">Layer action</button>,
+  );
+  return (
+    <>
+      <button type="button" ref={layer.ref} onClick={layer.show}>
+        Trigger
+      </button>
+      <button type="button" onClick={layer.hide}>
+        Close
+      </button>
+      {unsafe ? (
+        <div data-testid="unsafe-host">
+          <p>{renderedLayer}</p>
+        </div>
+      ) : (
+        <section data-testid="safe-host">{renderedLayer}</section>
+      )}
+    </>
+  );
+}
+
 describe('useLayer identity', () => {
   it('keeps the context ref and API object stable across rerenders', () => {
     const {result, rerender} = renderHook(() => useLayer({mode: 'context'}));
@@ -926,6 +968,114 @@ describe('useLayer', () => {
       });
       expect(showSpy).toHaveBeenCalledTimes(2);
       expect(onShow).toHaveBeenCalledOnce();
+    });
+
+    describe('a lazy layer kept mounted after its first show', () => {
+      const mockPopover = () => {
+        const showSpy = vi.fn(function (this: HTMLElement) {
+          this.dataset.open = 'true';
+        });
+        HTMLElement.prototype.showPopover = showSpy;
+        HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+          delete this.dataset.open;
+        });
+        return showSpy;
+      };
+
+      it('mounts only its inert marker until its first show', () => {
+        const {container} = render(<KeptLazyContextHarness />);
+
+        expect(container.querySelector('template')).not.toBeNull();
+        expect(container.querySelector('[popover]')).toBeNull();
+        expect(container).not.toHaveTextContent('Layer action');
+      });
+
+      it('stays mounted, closed, after its first hide, and its next show opens the same element at once', async () => {
+        const showSpy = mockPopover();
+        const onHide = vi.fn();
+        const {container, getByRole} = render(
+          <KeptLazyContextHarness onHide={onHide} />,
+        );
+
+        fireEvent.click(getByRole('button', {name: 'Trigger'}));
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).toHaveAttribute(
+            'data-open',
+            'true',
+          );
+        });
+        const layer = container.querySelector('[popover]');
+
+        fireEvent.click(getByRole('button', {name: 'Close'}));
+        expect(onHide).toHaveBeenCalledOnce();
+        // Still in the page, closed, so its close can play out.
+        expect(layer?.isConnected).toBe(true);
+        expect(container.querySelector('[popover]')).toBe(layer);
+        expect(layer).not.toHaveAttribute('data-open');
+
+        act(() => {
+          getByRole('button', {name: 'Trigger'}).click();
+          // Mounted: shown within the call, not after a commit.
+          expect(showSpy).toHaveBeenCalledTimes(2);
+        });
+        expect(container.querySelector('[popover]')).toBe(layer);
+        expect(layer).toHaveAttribute('data-open', 'true');
+      });
+
+      it('without the option, a lazy layer still unmounts on hide', async () => {
+        mockPopover();
+        const {container, getByRole} = render(
+          <KeptLazyContextHarness keepsMountAfterShow={false} />,
+        );
+
+        fireEvent.click(getByRole('button', {name: 'Trigger'}));
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).not.toBeNull();
+        });
+        fireEvent.click(getByRole('button', {name: 'Close'}));
+
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).toBeNull();
+        });
+        expect(container.querySelector('template')).not.toBeNull();
+      });
+
+      it('re-resolves its kept mount when its render call moves, closed, and opens there on the next show', async () => {
+        mockPopover();
+        const {container, getByRole, rerender} = render(
+          <KeptLazyContextHarness unsafe />,
+        );
+
+        fireEvent.click(getByRole('button', {name: 'Trigger'}));
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')).toHaveAttribute(
+            'data-open',
+            'true',
+          );
+        });
+        // Portaled out of the paragraph, into its host.
+        expect(container.querySelector('[popover]')?.parentElement).toBe(
+          container.querySelector('[data-testid="unsafe-host"]'),
+        );
+        fireEvent.click(getByRole('button', {name: 'Close'}));
+
+        rerender(<KeptLazyContextHarness unsafe={false} />);
+
+        await waitFor(() => {
+          expect(container.querySelector('[popover]')?.parentElement).toBe(
+            container.querySelector('[data-testid="safe-host"]'),
+          );
+        });
+        expect(container.querySelector('[popover]')).not.toHaveAttribute(
+          'data-open',
+        );
+
+        fireEvent.click(getByRole('button', {name: 'Trigger'}));
+        expect(container.querySelector('[popover]')).toHaveAttribute(
+          'data-open',
+          'true',
+        );
+      });
     });
   });
 

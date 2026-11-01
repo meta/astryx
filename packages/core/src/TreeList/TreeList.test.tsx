@@ -1641,6 +1641,38 @@ describe('TreeList', () => {
     );
   });
 
+  it('typeahead reaches an accented label with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'dung', label: 'Dung', description: 'Đà Lạt'},
+          {id: 'dao', label: 'Đào', description: 'Hà Nội'},
+          {id: 'lodz', label: 'Łódź'},
+        ]}
+      />,
+    );
+    screen.getByText('Dung').closest('li')!.focus();
+    await user.keyboard('l');
+    expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
+  });
+
+  it('typeahead puts the exact match first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'lodz', label: 'Łódź'},
+          {id: 'dung', label: 'Dung'},
+          {id: 'dao', label: 'Đào'},
+        ]}
+      />,
+    );
+    screen.getByText('Łódź').closest('li')!.focus();
+    await user.keyboard('đ');
+    expect(document.activeElement).toBe(screen.getByText('Đào').closest('li'));
+  });
+
   it('lets a consumer prevent built-in TreeList keyboard navigation while receiving root div as event.currentTarget', () => {
     let capturedCurrentTarget: Element | null = null;
     const ref = {current: null as HTMLDivElement | null};
@@ -1733,5 +1765,198 @@ describe('TreeList', () => {
     expect(document.activeElement).toBe(headerButton);
     const items = screen.getAllByRole('treeitem');
     expect(items[0]).toHaveAttribute('tabindex', '0');
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('TreeList empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])(
+    'a header of %s names nothing; the tree keeps its own label',
+    (_name, header) => {
+      render(
+        <TreeList
+          items={simpleItems}
+          header={header as ReactNode}
+          aria-label="Files"
+        />,
+      );
+      const tree = screen.getByRole('tree');
+      expect(tree).not.toHaveAttribute('aria-labelledby');
+      expect(tree).toHaveAccessibleName('Files');
+    },
+  );
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    const {container: withSlots} = render(
+      <TreeList
+        items={[
+          {
+            id: 'a',
+            label: 'Item A',
+            startContent: value as ReactNode,
+            endContent: value as ReactNode,
+          },
+        ]}
+      />,
+    );
+    const {container: without} = render(
+      <TreeList items={[{id: 'a', label: 'Item A'}]} />,
+    );
+    expect(html(withSlots)).toBe(html(without));
+  });
+
+  it('renders 0 as a header and in the start and end slots, as React does', () => {
+    render(
+      <TreeList
+        header={0}
+        items={[{id: 'a', label: 'Item A', startContent: 0, endContent: 0}]}
+      />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
+    expect(screen.getByRole('tree')).toHaveAttribute('aria-labelledby');
+  });
+});
+
+describe('TreeList collapse focus (AR2)', () => {
+  function Example({isExpanded}: {isExpanded: boolean}) {
+    return (
+      <>
+        <TreeList
+          aria-label="Files"
+          items={[
+            {id: 'readme', label: 'README.md'},
+            {
+              id: 'src',
+              label: 'src',
+              isExpanded,
+              children: [{id: 'index', label: 'index.ts'}],
+            },
+          ]}
+        />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+  const row = (id: string) =>
+    document.querySelector<HTMLElement>(`[data-tree-id="${id}"]`);
+
+  it('moves focus inside a collapsing branch to its row', () => {
+    const {rerender} = render(<Example isExpanded />);
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+    row('index')?.focus();
+    expect(row('index')).toHaveFocus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('index')).toBeNull();
+    expect(row('src')).toHaveFocus();
+    // It holds the one Tab stop, which was on README.md.
+    expect(row('src')).toHaveAttribute('tabindex', '0');
+    expect(row('readme')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves focus in a nested group to the outermost row that collapsed, and to the inner row when only it collapses', () => {
+    const Nested = ({outer, inner}: {outer: boolean; inner: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {
+            id: 'src',
+            label: 'src',
+            isExpanded: outer,
+            children: [
+              {
+                id: 'lib',
+                label: 'lib',
+                isExpanded: inner,
+                children: [{id: 'util', label: 'util.ts'}],
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer={false} inner />);
+    expect(row('src')).toHaveFocus();
+    rerender(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer inner={false} />);
+    expect(row('lib')).toHaveFocus();
+  });
+
+  it('moves focus to a disabled collapsing row, which leaves the Tab stop where it is', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    row('index')?.focus();
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('hands the Tab stop to the first enabled row when a disabled row collapses away the child that held it', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    // The keyboard path: arrowing past the disabled row onto its child gives
+    // the child the stop.
+    row('readme')?.focus();
+    fireEvent.keyDown(row('readme') as HTMLElement, {key: 'ArrowDown'});
+    expect(row('index')).toHaveFocus();
+    expect(row('index')).toHaveAttribute('tabindex', '0');
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('moves no focus that is outside the collapsing branch', () => {
+    const {rerender} = render(<Example isExpanded />);
+    row('readme')?.focus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('readme')).toHaveFocus();
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(<Example isExpanded />);
+    rerender(<Example isExpanded={false} />);
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 });

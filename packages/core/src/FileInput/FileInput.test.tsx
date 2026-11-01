@@ -17,6 +17,7 @@ import {
   createEvent,
   waitFor,
   act,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {FileInput} from './FileInput';
@@ -255,6 +256,48 @@ describe('FileInput', () => {
     const input = document.querySelector('input[type="file"]')!;
     expect(input).not.toHaveAttribute('aria-describedby');
     expect(input).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it("joins a caller's aria-describedby to the trigger's own description", () => {
+    render(
+      <>
+        <p id="hint">Up to 10 MB</p>
+        <FileInput
+          label="Report"
+          description="PDF only"
+          aria-describedby="hint"
+          value={null}
+          onChange={() => {}}
+        />
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Report'});
+    expect(trigger).toHaveAccessibleDescription('Up to 10 MB PDF only');
+  });
+
+  it("puts a caller's other aria-* props on the trigger, and keeps the ones it manages", () => {
+    render(
+      <FileInput
+        label="Report"
+        aria-details="details"
+        aria-expanded={false}
+        aria-posinset={1}
+        aria-label="Ignored"
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Report'});
+    expect(trigger).toHaveAttribute('aria-details', 'details');
+    // Booleans and numbers reach the trigger too.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-posinset', '1');
+    expect(trigger).toHaveAttribute('aria-label', 'Report');
+    // The hidden input is still aria-hidden, whatever props it takes.
+    expect(document.querySelector('input[type="file"]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
   });
 
   it('does not mention required without isRequired', () => {
@@ -1586,6 +1629,36 @@ describe('FileInput statusVariant forwarding', () => {
         />,
       );
       expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
+});
+
+// component:Tooltip FR11: the status tooltip renders inside the clickable
+// surface, so a click on its text must stay in the tooltip.
+describe('FileInput status tooltip press', () => {
+  it.each(['input', 'dropzone'] as const)(
+    'a click on the tooltip text does not open the picker in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          mode={mode}
+          value={null}
+          onChange={() => {}}
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      const openPicker = vi.spyOn(fileInputEl(), 'click');
+      fireEvent.click(
+        within(screen.getByRole('tooltip', h)).getByText(
+          'File must be under 10MB',
+        ),
+      );
+      expect(openPicker).not.toHaveBeenCalled();
+      // Positive control: a click on the surface itself still opens it.
+      fireEvent.click(screen.getByRole('button', {name: 'Upload'}));
+      expect(openPicker).toHaveBeenCalledTimes(1);
     },
   );
 });

@@ -14,7 +14,9 @@ stable package is built from an immutable release tag and published with provena
    main's scheduler dispatches one with every release-check of main's tip, a
    person's included, within about 15 minutes while that commit is still the
    tip. A release owner can also dispatch the Main workflow beside their own
-   check, which tests the same tip. Cut only from a SHA with both while it remains in current `main`
+   check with `sha` set to the checked commit, which tests exactly that
+   commit; a dispatch without `sha` tests whatever is main's tip when it
+   starts and is no receipt. Cut only from a SHA with both while it remains in current `main`
    history; the stable publish refuses a cut commit without both. A minor cut additionally requires Cindy, the release owner, to
    explicitly sign off on the exact `vX.Y.0` immediately before the branch is
    created; scheduled or standing authority never substitutes for that sign-off.

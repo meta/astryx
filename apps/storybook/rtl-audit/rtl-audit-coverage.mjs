@@ -207,6 +207,77 @@ export function componentRoutesForFilters(routes, filters) {
   );
 }
 
+/**
+ * Resolve component filters to story routes through the Storybook index, not
+ * the export name alone. A filter a route names selects that route. A filter
+ * no route names adopts its source folder's orphan stories that render it:
+ * stories whose index `componentPath` lies in that folder, whose title names
+ * no public component, and whose story file uses the component
+ * (ResizeHandle adopts Core/Resizable's; ChatLayoutScrollButton adopts none
+ * of Core/Chat's, which never render it). Adopted stories are routed to the filter's
+ * own component, so it keeps its own coverage entry and verified-N/A record.
+ * A filter with neither selects nothing and stays a coverage gap
+ * (`architecture:rtl-audit-evidence` INV5).
+ *
+ * A run with no filters (the release check's full audit) keeps every route
+ * and applies the same adoption to every known component no route names, so
+ * a full run and a filtered run audit ResizeHandle through the same stories.
+ * @param {{
+ *   routes: {id: string, component: string}[],
+ *   filters: string[],
+ *   knownComponents: string[],
+ *   componentPathOf: (storyId: string) => string | undefined,
+ *   ownerOf: (filter: string) => {component: string, folder: string} | null,
+ *   renders: (storyId: string, component: string) => boolean,
+ * }} input
+ */
+export function resolveFilterRoutes({
+  routes,
+  filters,
+  knownComponents,
+  componentPathOf,
+  ownerOf,
+  renders,
+}) {
+  const known = new Set(knownComponents.map(name => name.toLowerCase()));
+  const selected = new Map();
+  const adopted = {};
+  const keep = route => selected.set(`${route.component}::${route.id}`, route);
+  /** Route a filter's folder's orphan stories that render it to its component. */
+  const adopt = filter => {
+    const owner = ownerOf(filter);
+    if (owner == null) return;
+    const orphans = routes.filter(
+      route =>
+        !known.has(route.component.toLowerCase()) &&
+        (componentPathOf(route.id) ?? '')
+          .replace(/^(\.\.\/)+/, '')
+          .startsWith(`${owner.folder}/`) &&
+        renders(route.id, owner.component),
+    );
+    if (orphans.length === 0) return;
+    adopted[owner.component] = orphans.map(route => route.id).sort();
+    for (const {id} of orphans) keep({id, component: owner.component});
+  };
+  if (filters.length === 0) {
+    routes.forEach(keep);
+    const named = new Set(routes.map(route => route.component.toLowerCase()));
+    for (const component of knownComponents) {
+      const filter = component.toLowerCase();
+      if (!named.has(filter)) adopt(filter);
+    }
+    return {routes: [...selected.values()], adopted};
+  }
+  for (const filter of filters) {
+    const direct = routes.filter(route =>
+      routeMatchesComponentFilter(route, filter),
+    );
+    direct.forEach(keep);
+    if (direct.length === 0) adopt(filter);
+  }
+  return {routes: [...selected.values()], adopted};
+}
+
 /** Story ids owned by any bare or package-qualified component filter. */
 export function storyIdsForComponentFilters(routes, filters) {
   return [
@@ -291,7 +362,7 @@ export function withD1CompletionIdentity(result, plannedStoryId) {
   };
 }
 
-const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1']);
+const STORY_RTL_AUDIT_DIMENSIONS = new Set(['D1', 'D5']);
 
 /** Validate resolved Storybook RTL-audit applicability metadata. */
 export function validateStoryRtlAuditParameters(value, storyId) {
@@ -304,6 +375,10 @@ export function validateStoryRtlAuditParameters(value, storyId) {
   for (const [dimension, applicability] of Object.entries(value)) {
     if (!STORY_RTL_AUDIT_DIMENSIONS.has(dimension)) {
       throw new Error(`${storyId} rtlAudit has unknown dimension ${dimension}`);
+    }
+    if (dimension === 'D5') {
+      result.D5 = validatePhysicalPosition(applicability, storyId);
+      continue;
     }
     if (
       applicability == null ||
@@ -333,6 +408,67 @@ export function validateStoryRtlAuditParameters(value, storyId) {
     };
   }
   return result;
+}
+
+/**
+ * Grade a curated order (D2) or scroll-direction (D3) pair. The relationship
+ * must hold in LTR and reverse in RTL. A relationship that keeps its LTR
+ * physical order in RTL is the RTL defect these checks exist for, so it fails
+ * rather than grading `partial` (INV3); so does one already wrong in LTR.
+ */
+export function gradeDirectionalPair(ltrOk, rtlOk) {
+  return ltrOk && rtlOk ? 'pass' : 'fail';
+}
+
+// rtlAudit.D5 declares a region whose positioned elements stay physical
+// (DR5); it never turns D5 off for the story.
+function validatePhysicalPosition(value, storyId) {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${storyId} rtlAudit.D5 must be an object`);
+  }
+  if (!PHYSICAL_POSITION_MARKERS.includes(value.physical)) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.physical must be one of ${PHYSICAL_POSITION_MARKERS.join(', ')}`,
+    );
+  }
+  if (typeof value.within !== 'string' || !value.within.trim()) {
+    throw new Error(
+      `${storyId} rtlAudit.D5.within must name the plot with a non-empty selector`,
+    );
+  }
+  return {physical: value.physical, within: value.within.trim()};
+}
+
+/**
+ * Canonical order for curated RTL targets: by component, then story id
+ * (case-insensitive), keeping entries with the same key in file order. A sorted
+ * `targets.json` lets parallel pull requests add targets in different places
+ * instead of all appending at the end.
+ */
+export function compareTargets(left, right) {
+  const key = target => [
+    String(target.component).toLowerCase(),
+    String(target.storyId).toLowerCase(),
+  ];
+  const [lc, ls] = key(left);
+  const [rc, rs] = key(right);
+  return lc < rc ? -1 : lc > rc ? 1 : ls < rs ? -1 : ls > rs ? 1 : 0;
+}
+
+/** Index of the first target out of canonical order, or -1 when sorted. */
+export function firstUnsortedTarget(targets) {
+  for (let i = 1; i < targets.length; i++) {
+    if (compareTargets(targets[i - 1], targets[i]) > 0) return i;
+  }
+  return -1;
+}
+
+/** The targets in canonical order (a stable sort). */
+export function sortTargets(targets) {
+  return targets
+    .map((target, index) => ({target, index}))
+    .sort((a, b) => compareTargets(a.target, b.target) || a.index - b.index)
+    .map(({target}) => target);
 }
 
 /** Selected owners for which the canonical Storybook route has no story. */
@@ -498,6 +634,155 @@ function isMirrorOf(rtl, ltr) {
   }
   const expected = [-ltr[0], ltr[1], -ltr[2], ltr[3]];
   return expected.every((value, index) => Math.abs(value - rtl[index]) < 0.01);
+}
+
+/**
+ * Jump every finite animation in `doc` to its end state and return how many
+ * were finished. The audit's zero-duration style only reaches transitions and
+ * animations that start after it is injected; one a story started on mount (a
+ * drawer sliding in) keeps running, so LTR and RTL would otherwise be sampled
+ * at different points of it. Infinite animations (spinners) are left alone.
+ * Runs in the page: keep it self-contained.
+ */
+export function finishFiniteAnimations(doc) {
+  let finished = 0;
+  for (const animation of doc.getAnimations?.() ?? []) {
+    const endTime = animation.effect?.getComputedTiming?.().endTime;
+    if (!Number.isFinite(endTime)) {
+      continue;
+    }
+    try {
+      animation.finish();
+      finished++;
+    } catch {
+      // A zero-playback-rate or infinite-effect animation cannot finish;
+      // leave it.
+    }
+  }
+  return finished;
+}
+
+/**
+ * Declared position semantics a story's `rtlAudit.D5.physical` may name.
+ * `chart`: elements inside the declared plot sit in chart coordinates, which
+ * stay physical in RTL (`design:bidirectionality` DR5), such as a tooltip that
+ * follows a plotted bar.
+ */
+export const PHYSICAL_POSITION_MARKERS = Object.freeze(['chart']);
+
+/**
+ * Fail closed on a `rtlAudit.D5.within` selector the page cannot parse, so a
+ * typo cannot silently grade every overlay as mirrored. Runs in the page: keep
+ * it self-contained.
+ */
+export function assertSelectorParses(doc, selector) {
+  try {
+    doc.querySelector(selector);
+  } catch {
+    throw new Error(`rtlAudit.D5.within "${selector}" is not a valid selector`);
+  }
+}
+
+/**
+ * Bind a JSON value into an in-page detector's placeholder. A replacer
+ * function is used so `$` sequences in the value (`[data-plot='q$']`) are not
+ * read as replacement patterns.
+ */
+export function bindDetectorValue(source, placeholder, value) {
+  return source.replace(placeholder, () => JSON.stringify(value));
+}
+
+/**
+ * Grade one LTR/RTL pair of D5 positioned elements. By default the RTL center
+ * must mirror the LTR center about the parent's center. Under a declared
+ * `chart` marker it must keep the same physical position instead, and a
+ * mirrored chart overlay fails. An unknown marker fails closed rather than
+ * being guessed at.
+ */
+export function gradePositionedPair(ltr, rtl, tolerance) {
+  const marker = ltr.physical ?? null;
+  if (marker != null && !PHYSICAL_POSITION_MARKERS.includes(marker)) {
+    return {
+      expectation: 'invalid-marker',
+      expected: null,
+      delta: null,
+      pass: false,
+      reason: `unknown rtlAudit.D5 physical kind "${marker}"`,
+    };
+  }
+  const expectation = marker === 'chart' ? 'physical' : 'mirror';
+  const expected =
+    expectation === 'physical' ? ltr.relCenterX : ltr.parentW - ltr.relCenterX;
+  const delta = Math.abs(rtl.relCenterX - expected);
+  return {expectation, expected, delta, pass: delta <= tolerance};
+}
+
+/**
+ * Does a left- or right-pointing glyph render pointing up or down? `matrix` is
+ * the glyph's composed 2x2 transform (CSS `matrix(a, b, c, d)` order). A
+ * chevron rotated a quarter turn (a disclosure's expanded state) points along
+ * the block axis, which is direction-neutral (`design:bidirectionality` DR5),
+ * so its mirroring is not a D1 question even though its path reads as
+ * horizontal (`architecture:rtl-audit-evidence` INV12: applicability follows
+ * the glyph's semantic role, not its source shape).
+ */
+export function glyphRendersOnBlockAxis(dir, matrix) {
+  if ((dir !== 'left' && dir !== 'right') || !Array.isArray(matrix)) {
+    return false;
+  }
+  const sign = dir === 'right' ? 1 : -1;
+  // The tip's direction is the matrix applied to (±1, 0): its first column.
+  const dx = sign * matrix[0];
+  const dy = sign * matrix[1];
+  return Math.abs(dy) > Math.abs(dx);
+}
+
+/**
+ * The key D1's detector dedupes glyphs by: direction, path, and the axis the
+ * glyph renders on. A repeated glyph (many tree rows) is reported once, but an
+ * expanded copy (pointing down) and a collapsed copy (pointing sideways) of
+ * the same chevron stay separate, so an unjudged expanded copy cannot hide a
+ * collapsed one that fails to mirror. Runs in the page: keep it
+ * self-contained apart from glyphRendersOnBlockAxis.
+ */
+export function d1GlyphKey(dir, pathSig, matrix) {
+  const axis = glyphRendersOnBlockAxis(dir, matrix) ? 'block' : 'inline';
+  return dir + '::' + pathSig + '::' + axis;
+}
+
+/**
+ * The key D1 pairs an LTR glyph with its RTL counterpart by: the enclosing
+ * control's accessible label when it has one, else the glyph's position, plus
+ * the axis it renders on. A collapsed and an expanded chevron under one label
+ * (a tree toggle) are then judged as separate pairs, so an unjudged expanded
+ * copy cannot stand in for a collapsed copy that never mirrors.
+ */
+export function d1PairKey(glyph, index) {
+  const axis = glyphRendersOnBlockAxis(glyph.dir, glyph.matrix)
+    ? 'block'
+    : 'inline';
+  const label = glyph.aria && glyph.aria.trim();
+  return (label ? 'aria:' + label : 'idx:' + index) + '::' + axis;
+}
+
+/**
+ * Is this LTR/RTL pair one D1 leaves unjudged: a horizontal glyph that renders
+ * pointing the SAME way along the block axis in both directions (an expanded
+ * disclosure, down in both)? A glyph that points down in LTR and up in RTL
+ * changed direction, which DR5 forbids, so it stays judged.
+ */
+export function isUnchangedBlockAxisPair(ltr, rtl) {
+  if (
+    !ltr ||
+    !rtl ||
+    !glyphRendersOnBlockAxis(ltr.dir, ltr.matrix) ||
+    !glyphRendersOnBlockAxis(rtl.dir, rtl.matrix)
+  ) {
+    return false;
+  }
+  // The vertical component of each tip: positive is down in CSS.
+  const tipY = glyph => (glyph.dir === 'right' ? 1 : -1) * glyph.matrix[1];
+  return Math.sign(tipY(ltr)) === Math.sign(tipY(rtl));
 }
 
 /** Classify one stable LTR/RTL contextual-decoration pair. */
@@ -827,14 +1112,61 @@ function componentName(component) {
 }
 
 /**
- * Build the component roster for a scoped audit.
+ * Story-title identities that name no public component, such as
+ * `core/hooks-useclipboard` or `core/tablesortable`. The roster is the public
+ * components (`architecture:rtl-audit-evidence` INV5), so these are not roster
+ * entries and cannot be coverage gaps; the audit reports them, typed, rather
+ * than dropping them silently.
+ *
+ * Public components are `sourceComponents`, package-qualified. The caller
+ * includes documented exports that directory discovery misses (Core's `Theme`
+ * and `MediaTheme`), so they stay roster entries whatever their stories are
+ * titled. It fails closed. An identity stays a roster entry when:
+ * - a filter names it explicitly (an umbrella surface such as `Core/Chat`);
+ * - its package has no discovered public component at all, so a discovery
+ *   failure cannot hide that package's gaps.
+ */
+export function ignoredStoryIdentities({
+  sourceComponents = [],
+  storyComponents = [],
+  filters = [],
+}) {
+  const publicKeys = new Set(sourceComponents.map(c => c.toLowerCase()));
+  const packagesWithPublic = new Set(
+    sourceComponents.map(c => c.split('/')[0].toLowerCase()),
+  );
+  const normalizedFilters = filters.map(filter => filter.toLowerCase());
+  const named = component =>
+    normalizedFilters.some(
+      filter =>
+        component.toLowerCase() === filter ||
+        componentName(component) === filter,
+    );
+  const ignorable = component =>
+    !publicKeys.has(component.toLowerCase()) &&
+    packagesWithPublic.has(component.split('/')[0].toLowerCase()) &&
+    !named(component);
+  return Array.from(
+    new Map(
+      storyComponents.filter(ignorable).map(c => [c.toLowerCase(), c]),
+    ).values(),
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .map(component => ({component, reason: 'no-public-component'}));
+}
+
+/**
+ * Build the component roster for a scoped audit: the public components, plus
+ * any story identity a filter names explicitly.
  *
  * Storybook can expose an umbrella story whose name matches the PR analyzer's
  * module name even when no source component has that exact name. Chat is the
  * canonical example: the source directory contains ChatComposer, ChatMessage,
  * and related components, while Storybook also has a `Core/Chat` surface. A
  * matching story must satisfy the filter so the roster does not invent a
- * second `unknown/chat` coverage entry for the same surface.
+ * second `unknown/chat` coverage entry for the same surface. Story identities
+ * with no public component and no filter naming them are left out (see
+ * `ignoredStoryIdentities`).
  */
 export function buildAuditedComponentRoster({
   sourceComponents = [],
@@ -851,13 +1183,19 @@ export function buildAuditedComponentRoster({
         !knownComponents.some(component => matchesFilter(component, filter)),
     )
     .map(filter => `unknown/${filter}`);
+  const ignored = new Set(
+    ignoredStoryIdentities({
+      sourceComponents,
+      storyComponents,
+      filters,
+    }).map(entry => entry.component.toLowerCase()),
+  );
 
   return Array.from(
     new Map(
-      [...knownComponents, ...unmatchedFilters].map(component => [
-        component.toLowerCase(),
-        component,
-      ]),
+      [...knownComponents, ...unmatchedFilters]
+        .filter(component => !ignored.has(component.toLowerCase()))
+        .map(component => [component.toLowerCase(), component]),
     ).values(),
   ).filter(
     component =>

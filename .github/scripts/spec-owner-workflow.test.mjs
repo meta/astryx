@@ -88,7 +88,7 @@ describe('spec-only workflow contract', () => {
           encoding: 'utf8',
           env: {...process.env, GITHUB_OUTPUT: output},
           input:
-            'A\tpackages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md\n',
+            'A\tdocs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md\n',
         },
       );
       expect(result.status, result.stderr).toBe(0);
@@ -102,7 +102,7 @@ describe('spec-only workflow contract', () => {
         [path.join(classifierDir, 'change-scope.cjs')],
         {
           encoding: 'utf8',
-          input: 'A\tpackages/core/src/Button/Button.spec.md\n',
+          input: 'A\tdocs/specs/components/Button/Button.spec.md\n',
         },
       );
       expect(missingDependency.status).not.toBe(0);
@@ -223,7 +223,7 @@ describe('spec-only workflow contract', () => {
   it('fails closed when file APIs are truncated or scope classification fails', () => {
     const ci = read('.github/workflows/ci.yml');
     expect(ci).toContain(
-      `if: ${gated("${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') }}", PR_REPORT_GATE)}`,
+      `if: ${gated("${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() }}", PR_REPORT_GATE)}`,
     );
     const action = read('.github/actions/test-scope/action.yml');
     expect(action).toContain(

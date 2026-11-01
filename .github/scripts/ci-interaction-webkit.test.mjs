@@ -56,9 +56,10 @@ describe('WebKit interaction proof routing', () => {
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
     expect(webkit.if).toBe(chromium.if);
     expect(ungated(webkit.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled()",
+      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true'",
     );
-    expect(webkit.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(webkit.needs).toEqual(['room', 'admission', 'build-storybook']);
   });
 
   it('stays on a standard runner within the 15-minute budget', () => {
@@ -114,6 +115,41 @@ describe('WebKit interaction proof routing', () => {
     expect(run).toContain('--config playwright.interaction.config.ts');
     expect(run).toContain('--project webkit');
     expect(run).not.toContain('--project chromium');
+  });
+
+  it("caps llvmpipe's threads at the job's cgroup CPU quota before Playwright runs", async () => {
+    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    const setup = run.slice(0, run.indexOf('pnpm exec playwright test'));
+    expect(setup).toContain('export LP_NUM_THREADS');
+    // Run the setup against a quota file: a 2-CPU quota caps a 64-CPU view,
+    // no quota keeps nproc, and the quota never raises the count.
+    const {execFileSync} = await import('node:child_process');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-threads-'));
+    const threads = (cpuMax, cpus) => {
+      const quota = path.join(dir, 'cpu.max');
+      if (cpuMax == null) fs.rmSync(quota, {force: true});
+      else fs.writeFileSync(quota, `${cpuMax}\n`);
+      const script = `nproc() { echo ${cpus}; }\n${setup.replaceAll(
+        '/sys/fs/cgroup/cpu.max',
+        quota,
+      )}\necho "$LP_NUM_THREADS"`;
+      return execFileSync('bash', ['-c', script], {encoding: 'utf8'})
+        .trim()
+        .split('\n')
+        .at(-1);
+    };
+    try {
+      expect(threads('200000 100000', 64)).toBe('2');
+      expect(threads('150000 100000', 64)).toBe('2');
+      expect(threads('max 100000', 64)).toBe('64');
+      expect(threads(null, 4)).toBe('4');
+      expect(threads('800000 100000', 4)).toBe('4');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
   });
 
   it('runs only the specs whose code its scope covers', () => {
@@ -206,7 +242,7 @@ describe('WebKit interaction proof routing', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
-      'packages/core/src/utils/clickGuard.ts',
+      'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
       'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',
@@ -246,7 +282,7 @@ describe('WebKit interaction proof routing', () => {
         '.changeset/toast-pause-sources.md',
         'packages/core/src/Toast/Toast.tsx',
         'packages/core/src/Toast/ToastViewport.test.tsx',
-        'packages/core/src/Toast/Toast.spec.md',
+        'docs/specs/components/Toast/Toast.spec.md',
       ],
       [
         '.changeset/textarea-counter-i18n.md',

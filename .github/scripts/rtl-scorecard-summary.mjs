@@ -4,7 +4,7 @@
 /**
  * @file Markdown scorecard for one package's RTL audit report.
  * @input --report <rtl-audit-report.json> --scope <audited components label>,
- *   including any declared D1 exclusions.
+ *   including any declared D1 exclusions and D5 physical regions.
  * @output The job-summary section on stdout, with review-facing exclusion
  *   disclosure.
  * @position Shared by the pr-rtl package legs and the sharded-package merge
@@ -83,6 +83,23 @@ if (!fs.existsSync(reportPath)) {
     }
   } else {
     out.push('_No declared D1 exclusions in this audit scope._');
+  }
+  out.push('');
+  // Story-declared plots whose overlays D5 grades as physical (DR5) get the
+  // same review-facing disclosure as D1 exclusions (INV16).
+  const declaredD5PhysicalRegions = r.declaredD5PhysicalRegions ?? [];
+  out.push('### Declared D5 physical regions (human review required)');
+  out.push('');
+  if (declaredD5PhysicalRegions.length > 0) {
+    out.push('| Component | Story | Kind | Plot selector |');
+    out.push('|-----------|-------|------|---------------|');
+    for (const region of declaredD5PhysicalRegions) {
+      out.push(
+        `| ${markdownCell(region.component)} | ${markdownCell(region.storyId)} | ${markdownCell(region.physical)} | ${markdownCell(region.within)} |`,
+      );
+    }
+  } else {
+    out.push('_No declared D5 physical regions in this audit scope._');
   }
   out.push('');
   const pm = r.positionalMirror;

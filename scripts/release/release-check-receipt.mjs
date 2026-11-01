@@ -121,19 +121,41 @@ async function passedUnitRun({github, owner, repo, run}) {
   );
 }
 
-/** The passing full unit run for exactly `sha`, or null. */
+/**
+ * The commit a Main run names (`Main validation of <sha>`, a dispatch with
+ * `sha`), or null. A run without one tests main's tip when it starts, which
+ * can be later than its event's commit, so it is no receipt for any commit
+ * (spec:AST-030 FR21, FR22).
+ */
+function testedSha(run) {
+  return (
+    /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ??
+    null
+  );
+}
+
+/** The passing full unit run that tested exactly `sha`, or null. */
 export async function findUnitRun({github, owner, repo, sha}) {
-  const {data} = await github.rest.actions.listWorkflowRuns({
-    owner,
-    repo,
-    workflow_id: 'deploy.yml',
-    branch: 'main',
-    status: 'success',
-    head_sha: sha,
-    per_page: 30,
-  });
-  for (const run of data.workflow_runs.filter(item => item.head_sha === sha)) {
-    if (await passedUnitRun({github, owner, repo, run})) return run;
+  const list = async extra => {
+    const {data} = await github.rest.actions.listWorkflowRuns({
+      owner,
+      repo,
+      workflow_id: 'deploy.yml',
+      branch: 'main',
+      status: 'success',
+      ...extra,
+    });
+    return data.workflow_runs.filter(item => testedSha(item) === sha);
+  };
+  // The scheduler's run of main's tip names it under the same event commit; a
+  // validation of an older commit names it under a later one.
+  for (const runs of [
+    await list({head_sha: sha, per_page: 30}),
+    await list({event: 'workflow_dispatch', per_page: 100}),
+  ]) {
+    for (const run of runs) {
+      if (await passedUnitRun({github, owner, repo, run})) return run;
+    }
   }
   return null;
 }

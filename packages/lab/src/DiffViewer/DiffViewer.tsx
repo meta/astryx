@@ -822,6 +822,8 @@ const styles = stylex.create({
     whiteSpace: 'pre-wrap',
     wordBreak: 'normal',
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   // Row tints are a background-image layer so a pinned (sticky) cell can lay
   // them over an opaque syntax background.
@@ -960,6 +962,8 @@ const annotationStyles = stylex.create({
   content: {
     direction: {default: null, ':is([dir="rtl"] *)': 'rtl'},
     overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
     contain: 'inline-size',
   },
 });

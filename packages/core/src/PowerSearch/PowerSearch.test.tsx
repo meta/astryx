@@ -437,7 +437,7 @@ describe('PowerSearch', () => {
       expect((input as HTMLInputElement).value).toBe('');
     });
 
-    it('keeps the input natively disabled when disabled without a reason', () => {
+    it("keeps the input's tab stop when disabled without a reason", () => {
       render(
         <PowerSearch
           config={config}
@@ -446,7 +446,9 @@ describe('PowerSearch', () => {
           isDisabled
         />,
       );
-      expect(screen.getByRole('combobox')).toBeDisabled();
+      const input = screen.getByRole('combobox');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 

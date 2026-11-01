@@ -39,24 +39,21 @@ describe("main's full unit run (spec:AST-030 FR21)", () => {
   it('keeps the fast checks on every push', () => {
     for (const job of ['main-commit', 'sync-exports', 'typecheck'])
       expect(main.jobs[job].if, job).toBeUndefined();
-    expect(main.on).toMatchObject({
-      push: {branches: ['main']},
-      workflow_dispatch: null,
-    });
+    expect(main.on.push).toEqual({branches: ['main']});
+    expect(main.on.workflow_dispatch.inputs.sha).toBeDefined();
   });
 
-  it('tests the exact commit of its event', () => {
+  it('tests the exact commit a dispatch names, or the pushed one', () => {
     const script = main.jobs['main-commit'].steps[0].with.script;
-    expect(script).toContain("core.setOutput('sha', context.sha)");
-    expect(script).not.toContain('getBranch');
+    expect(script).toContain('let sha = context.sha;');
+    expect(script).toContain("context.payload.inputs?.sha ?? ''");
+    expect(script).toContain('sha = requested;');
   });
 
   it('gives the unit runs a group no push cancels', () => {
-    expect(main.concurrency).toEqual({
-      group:
-        "${{ github.event_name == 'push' && 'main-validation' || 'main-unit-tests' }}",
-      'cancel-in-progress': false,
-    });
+    expect(main.concurrency.group).toBe(
+      "${{ github.event_name == 'push' && 'main-validation' || (inputs.sha != '' && github.triggering_actor != 'github-actions[bot]' && format('main-validation-sha-{0}', github.run_id)) || 'main-unit-tests' }}",
+    );
   });
 
   describe('the join reports one pass or fail', () => {

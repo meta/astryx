@@ -51,6 +51,7 @@ import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -69,7 +70,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Token} from '../Token';
 import {Spinner} from '../Spinner';
@@ -85,7 +85,11 @@ import {
   sizeVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import type {SearchableItem, SearchSource} from '../Typeahead/types';
+import type {
+  SearchContext,
+  SearchableItem,
+  SearchSource,
+} from '../Typeahead/types';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/focusReturn';
@@ -93,6 +97,7 @@ import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 
 // Re-export status types for convenience
 export type {
@@ -194,7 +199,7 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Icon to display at the start of the input.
    * Accepts a ReactNode (e.g. `<Icon icon={SearchIcon} />`) or an SVG icon component directly.
@@ -260,7 +265,13 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
-  /** Whether the input is disabled. @default false */
+  /**
+   * Whether the input is disabled. The disabled input keeps its tab stop: it
+   * is announced as disabled (`aria-disabled`), is read-only, and opens and
+   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"` and no
+   * `disabledMessage`, the input is natively disabled and out of the tab order.
+   * @default false
+   */
   isDisabled?: boolean;
   /**
    * Explains why the tokenizer is disabled. When set together with
@@ -269,8 +280,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * reason is discoverable by keyboard and assistive technology. Input stays
    * blocked.
    *
-   * Use this instead of wrapping a disabled tokenizer in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled tokenizer in `Tooltip`, so the
+   * reason is attached to the field itself.
    */
   disabledMessage?: string;
   /** Show clear button (clears all tokens). @default false */
@@ -1098,8 +1109,16 @@ export function Tokenizer<T extends SearchableItem>({
 
   const filteredSource: SearchSource<T> = useMemo(
     () => ({
-      search: async (query: string) => {
-        const results = await searchSource.search(query);
+      // Committed values leave every list, partial or final
+      // (component:Tokenizer FR13, spec:AST-092 FR1).
+      search: async (query: string, context?: SearchContext<T>) => {
+        const results = await searchSource.search(
+          query,
+          context && {
+            update: items =>
+              context.update(items.filter(item => !selectedIds.has(item.id))),
+          },
+        );
         return results.filter(item => !selectedIds.has(item.id));
       },
       bootstrap: async () => {
@@ -1366,6 +1385,7 @@ export function Tokenizer<T extends SearchableItem>({
           isTruncated ? truncatedSizeStyles[size] : sizeStyle,
           isTruncated && styles.truncatedWrapper,
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.nestedRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -1420,7 +1440,12 @@ export function Tokenizer<T extends SearchableItem>({
             minQueryLength={minQueryLength}
             emptySearchText={emptySearchText}
             isDisabled={isDisabled}
-            isFocusableDisabled={showsDisabledMessage}
+            // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
+            // unfocusedLayer mode, where the input lives in a layer a disabled
+            // field never opens; how that field takes focus is undecided.
+            isFocusableDisabled={
+              showsDisabledMessage || (isDisabled && !isLayerMode)
+            }
             hasAutoFocus={hasAutoFocus}
             inputId={inputId}
             ariaLabelledBy={fieldLabelledBy}

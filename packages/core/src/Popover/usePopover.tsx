@@ -5,7 +5,8 @@
 /**
  * @file usePopover.tsx
  * @input Uses useLayer, useFocusTrap, React hooks
- * @output Exports the public usePopover hook with derived focus and guarded opening.
+ * @output Exports the public usePopover hook with derived focus and guarded opening,
+ *   and FALLBACK_CLOSE_SELECTOR for Popover.tsx (internal).
  * @position Higher-level layer utility; used by DatePicker, Combobox, etc.
  *
  * Combines popover layer behavior with focus trap for dialog-like popovers.
@@ -39,7 +40,11 @@ import {paddingStyles} from '../Layout/padding.stylex';
 import type {SpacingStep} from '../utils/types';
 import {stableClassName} from '../naming';
 
-const FALLBACK_CLOSE_SELECTOR = '[data-astryx-popover-fallback-close]';
+/**
+ * The fallback close button's wrapper (anchored layer) or button (sheet,
+ * Popover.tsx); initial focus skips it.
+ */
+export const FALLBACK_CLOSE_SELECTOR = '[data-astryx-popover-fallback-close]';
 
 function attemptFocus(element: HTMLElement): boolean {
   try {

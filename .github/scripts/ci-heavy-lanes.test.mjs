@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Visual, accessibility and RTL run on main, not on pull request updates.
+ * @file Full visual, accessibility and RTL suites run on main; pull request
+ *   updates check only touched components.
  * @input CI, Main and Main heavy lanes workflows, and a mocked GitHub API
  * @output Routing for the heavy owners, the required joins, and Main's
  *   release-check dispatch
@@ -32,7 +33,6 @@ const SUITE = {
   'pr-a11y-specs': 'a11y',
   'pr-a11y': 'a11y',
   'visual-scout': 'visual',
-  'pr-visual': 'visual',
   'pr-rtl-shard': 'rtl',
   'pr-rtl-merge': 'rtl',
   'pr-rtl': 'rtl',
@@ -62,6 +62,32 @@ describe('visual, accessibility and RTL owners', () => {
       expect([ci.jobs[name].needs].flat()).toContain('run-labels');
     },
   );
+
+  it('runs pr-visual on every pull request: its full check only with ci:run-visual, otherwise the default touched check', () => {
+    const visual = ci.jobs['pr-visual'];
+    const condition = ungated(visual.if);
+    expect(condition).toContain(
+      "(github.event_name == 'pull_request' &&\n  needs.build-storybook.result == 'success')",
+    );
+    expect(visual.needs).toContain('run-labels');
+    const step = name =>
+      visual.steps.find(candidate => candidate.name === name);
+    expect(step('Run the visual gate for the touched components').if).toContain(
+      "needs.run-labels.outputs.visual == 'true'",
+    );
+    expect(step('Decide the default touched visual check').if).toContain(
+      "needs.run-labels.outputs.visual != 'true'",
+    );
+    const touched = step('Visual check for the default touched components');
+    expect(touched.if).toBe(
+      "steps.touched.outputs.has_components == 'true' && steps.touched.outputs.visual_components != ''",
+    );
+    expect(touched.run).toContain('gate.mjs check');
+    expect(touched.run).toContain('--tiers component');
+    expect(touched.run).toContain('--no-scout');
+    expect(touched.run).not.toContain('--dependents');
+    expect(touched.run).not.toContain('gate.mjs release');
+  });
 
   it('decides the suites in one gate job from the trusted decision script', () => {
     const gate = ci.jobs['run-labels'];
@@ -117,7 +143,7 @@ describe('visual, accessibility and RTL owners', () => {
   });
 });
 
-describe("main's release-check every three hours and full unit run about hourly (DEC-11, FR21, FR24)", () => {
+describe("main's release-check and full unit run, about once an hour (DEC-11, FR21)", () => {
   const job = heavy.jobs.dispatch;
   const script = job.steps[0].with.script;
 
@@ -134,7 +160,7 @@ describe("main's release-check every three hours and full unit run about hourly 
     expect(job.steps[0].env.SHA).toBe('${{ github.sha }}');
   });
 
-  it('decides one push or tick at a time, and ci.yml never cancels a running check', () => {
+  it('decides one push or tick at a time, and ci.yml cancels a running check only for a release re-check', () => {
     // Two pushes deciding at once could both see no recent check.
     expect(heavy.concurrency).toEqual({
       group: 'main-heavy-lanes-dispatch',
@@ -146,7 +172,7 @@ describe("main's release-check every three hours and full unit run about hourly 
       "(github.event_name == 'workflow_dispatch' && github.triggering_actor == 'github-actions[bot]' && 'main-heavy-lanes')",
     );
     expect(ci.concurrency['cancel-in-progress']).toBe(
-      "${{ github.event_name != 'workflow_dispatch' }}",
+      "${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}",
     );
   });
 
@@ -160,6 +186,13 @@ describe("main's release-check every three hours and full unit run about hourly 
   const NOW = Date.parse('2026-10-31T12:00:00Z');
   const minutesAgo = (minutes, now = NOW) =>
     new Date(now - minutes * 60000).toISOString();
+  // A unit run that names main's tip, as the scheduler dispatches it (FR21).
+  const unitAt = (minutes, overrides = {}) =>
+    check(minutes, {
+      head_sha: sha,
+      display_title: `Main validation of ${sha}`,
+      ...overrides,
+    });
   const check = (minutes, overrides = {}) => ({
     head_sha: 'c'.repeat(40),
     created_at: minutesAgo(minutes),
@@ -183,8 +216,8 @@ describe("main's release-check every three hours and full unit run about hourly 
     units = [],
     issue,
     eventName = 'push',
-    now = NOW,
     into = {},
+    now = NOW,
   } = {}) {
     const calls = Object.assign(into, {
       dispatch: [],
@@ -269,12 +302,15 @@ describe("main's release-check every three hours and full unit run about hourly 
       'expected-head': tip,
     },
   });
-  const unitRun = {
+  // A unit run names the commit it tests (FR21, FR22).
+  const unitRunOf = tip => ({
     owner: 'meta',
     repo: 'astryx',
     workflow_id: 'deploy.yml',
     ref: 'main',
-  };
+    inputs: {sha: tip},
+  });
+  const unitRun = unitRunOf(sha);
 
   it("dispatches a release-check and a full unit run for main's tip when their windows have passed", async () => {
     const calls = await run({
@@ -340,7 +376,7 @@ describe("main's release-check every three hours and full unit run about hourly 
     );
 
     it('starts once a day', async () => {
-      // Started at 06:32 today.
+      // One started at 06:32 today.
       const calls = await run({
         now: MONDAY_0637,
         runs: [at(MONDAY_0637, 5)],
@@ -353,7 +389,12 @@ describe("main's release-check every three hours and full unit run about hourly 
       const calls = await run({
         now: MONDAY_0637,
         runs: [at(MONDAY_0637, 90, {head_sha: sha})],
-        units: [at(MONDAY_0637, 20, {head_sha: sha})],
+        units: [
+          at(MONDAY_0637, 20, {
+            head_sha: sha,
+            display_title: `Main validation of ${sha}`,
+          }),
+        ],
       });
       expect(calls.dispatch).toEqual([]);
     });
@@ -375,7 +416,7 @@ describe("main's release-check every three hours and full unit run about hourly 
     // A unit run already at the tip is enough.
     const covered = await run({
       runs: [check(180)],
-      units: [check(30, {head_sha: sha})],
+      units: [unitAt(30)],
     });
     expect(covered.dispatch).toEqual([releaseCheck(sha)]);
   });
@@ -410,12 +451,26 @@ describe("main's release-check every three hours and full unit run about hourly 
     });
     // The scheduler's own release-check is inside its window.
     expect(calls.dispatch).toEqual([unitRun]);
-    // A unit run already at the tip, whoever started it, is enough.
+    // A run that names the tip, whoever started it, is enough.
     const covered = await run({
+      runs: [releaseCheck, check(40)],
+      units: [
+        check(5, {
+          head_sha: sha,
+          actor: {login: 'someone'},
+          display_title: `Main validation of ${sha}`,
+        }),
+        check(30),
+      ],
+    });
+    expect(covered.dispatch).toEqual([]);
+    // An unnamed run at the tip tests whatever was the tip when it started,
+    // so it is no receipt, and the named run still goes out (FR21).
+    const unnamed = await run({
       runs: [releaseCheck, check(40)],
       units: [check(5, {head_sha: sha, actor: {login: 'someone'}}), check(30)],
     });
-    expect(covered.dispatch).toEqual([]);
+    expect(unnamed.dispatch).toEqual([unitRun]);
     // A maintenance capture runs no release-authority job and brings none.
     const capture = await run({
       runs: [
@@ -430,10 +485,24 @@ describe("main's release-check every three hours and full unit run about hourly 
     expect(capture.dispatch).toEqual([]);
   });
 
+  it('reads the commit a unit run names exactly as the release receipt does', () => {
+    const NAME = '/^Main validation of ([0-9a-f]{40})$/';
+    expect(JSON.stringify(heavy)).toContain(JSON.stringify(NAME).slice(1, -1));
+    expect(
+      fs.readFileSync(
+        new URL(
+          '../../scripts/release/release-check-receipt.mjs',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    ).toContain(NAME);
+  });
+
   it('keeps counting a check a person re-runs', async () => {
     const calls = await run({
       runs: [check(90, {head_sha: sha, triggering_actor: {login: 'someone'}})],
-      units: [check(90, {head_sha: sha})],
+      units: [unitAt(90)],
     });
     expect(calls.dispatch).toEqual([]);
   });
@@ -451,7 +520,7 @@ describe("main's release-check every three hours and full unit run about hourly 
           ],
         }),
       ],
-      units: [check(70, {head_sha: sha, conclusion: 'failure'})],
+      units: [unitAt(70, {conclusion: 'failure'})],
     });
     expect(calls.dispatch).toEqual([]);
   });
@@ -467,17 +536,11 @@ describe("main's release-check every three hours and full unit run about hourly 
         jobs: [{name: 'release-authority', conclusion: 'failure'}],
       });
     expect(
-      (
-        await run({
-          runs: [mismatched(180)],
-          units: [check(70, {head_sha: sha})],
-        })
-      ).dispatch,
+      (await run({runs: [mismatched(180)], units: [unitAt(70)]})).dispatch,
     ).toEqual([releaseCheck(sha)]);
     // ...but it still holds the window.
     expect(
-      (await run({runs: [mismatched(20)], units: [check(20, {head_sha: sha})]}))
-        .dispatch,
+      (await run({runs: [mismatched(20)], units: [unitAt(20)]})).dispatch,
     ).toEqual([]);
   });
 
@@ -488,7 +551,7 @@ describe("main's release-check every three hours and full unit run about hourly 
   it('does not check a tip twice', async () => {
     const calls = await run({
       runs: [check(90, {head_sha: sha})],
-      units: [check(90, {head_sha: sha})],
+      units: [unitAt(90)],
     });
     expect(calls.dispatch).toEqual([]);
     expect(calls.notices[0]).toMatch(/already has a release-check/);
@@ -502,7 +565,7 @@ describe("main's release-check every three hours and full unit run about hourly 
       runs: [check(180)],
       units: [check(60)],
     });
-    expect(calls.dispatch).toEqual([releaseCheck(tip), unitRun]);
+    expect(calls.dispatch).toEqual([releaseCheck(tip), unitRunOf(tip)]);
   });
 
   it('leaves a commit main has moved past to the newer push', async () => {
@@ -543,6 +606,30 @@ describe("main's release-check every three hours and full unit run about hourly 
       ]);
     });
 
+    it.each(['skipped', 'timed_out', 'startup_failure'])(
+      "runs the tip again and reports it when the scheduler's own run of the tip ended %s",
+      async conclusion => {
+        // No merge landed: the run names the tip itself.
+        const calls = await run({
+          runs: [check(20, {head_sha: sha})],
+          units: [unitAt(20, {conclusion})],
+        });
+        expect(calls.dispatch).toEqual([unitRun]);
+        expect(calls.issues).toEqual([
+          expect.objectContaining({owner: 'meta', repo: 'astryx', title}),
+        ]);
+      },
+    );
+
+    it('counts a failed run of the tip as its unit run, without a report', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [unitAt(20, {conclusion: 'failure'})],
+      });
+      expect(calls.dispatch).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
+
     it('dispatches the next run before reporting, so a failed report loses no run', async () => {
       const calls = {};
       const error = await run({
@@ -564,6 +651,65 @@ describe("main's release-check every three hours and full unit run about hourly 
         ],
       });
       expect(calls.dispatch).toEqual([]);
+      expect(calls.issues).toEqual([]);
+    });
+
+    it("leaves a run that a person's newer run of main's tip replaced", async () => {
+      // Reported as nothing: a newer run took the group. An unnamed run is no
+      // receipt, so the named run of the tip still goes out (FR21).
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          check(5, {head_sha: sha, actor: {login: 'someone'}}),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
+      expect(calls.issues).toEqual([]);
+      expect(calls.dispatch).toEqual([unitRun]);
+      // A person's run that names the tip is the receipt itself.
+      const named = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          unitAt(5, {actor: {login: 'someone'}}),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
+      expect(named.issues).toEqual([]);
+      expect(named.dispatch).toEqual([]);
+    });
+
+    it('still runs the next one when the newer run only validated an older commit', async () => {
+      const older = 'd'.repeat(40);
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          check(5, {
+            head_sha: sha,
+            actor: {login: 'someone'},
+            display_title: `Main validation of ${older}`,
+          }),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
+      expect(calls.dispatch).toEqual([unitRun]);
+    });
+
+    it("takes the scheduler's own run that raced a merge as the newest", async () => {
+      // main moved between the tip read and the dispatch: the newer run names
+      // the older tip under a later event commit, in the same group.
+      const older = 'd'.repeat(40);
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [
+          check(5, {
+            head_sha: sha,
+            display_title: `Main validation of ${older}`,
+            status: 'in_progress',
+            conclusion: null,
+          }),
+          check(20, {conclusion: 'cancelled'}),
+        ],
+      });
       expect(calls.issues).toEqual([]);
     });
 

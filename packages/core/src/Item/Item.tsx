@@ -48,6 +48,7 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
+import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
@@ -56,7 +57,10 @@ import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useClickableContainer} from '../hooks/useClickableContainer';
+import {
+  innermostInteractive,
+  useClickableContainer,
+} from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -718,7 +722,7 @@ export function Item({
 
   // Inline rows are one line by definition, so the description always
   // ellipsizes there — a ReactNode description cannot wrap the row open.
-  const isInline = layout === 'inline' && description != null;
+  const isInline = layout === 'inline' && hasRenderableDescription;
 
   const descriptionTruncateStyle =
     descriptionLines != null
@@ -742,9 +746,9 @@ export function Item({
         )}>
         {label}
       </span>
-      {description != null && (
+      {hasRenderableDescription && (
         <span
-          id={hasRenderableDescription ? descriptionID : undefined}
+          id={descriptionID}
           {...stylex.props(
             styles.description,
             isInline && styles.inlineDescription,
@@ -764,7 +768,12 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
+    if (
+      target.closest('button, a, input, select, textarea') ||
+      // A press inside an open Tooltip or HoverCard belongs to it
+      // (component:Tooltip FR11, component:HoverCard FR11).
+      innermostInteractive(target, e.currentTarget, isLayerSurface) != null
+    ) {
       return;
     }
     onClick?.(e);
@@ -772,7 +781,7 @@ export function Item({
 
   const content = (
     <>
-      {startContent != null && (
+      {isRenderable(startContent) && (
         <span
           {...stylex.props(
             styles.startContent,
@@ -830,7 +839,7 @@ export function Item({
         </span>
       )}
 
-      {endContent != null && (
+      {isRenderable(endContent) && (
         <span
           {...stylex.props(
             styles.endContent,
