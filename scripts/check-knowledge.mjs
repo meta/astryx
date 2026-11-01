@@ -1002,14 +1002,23 @@ export function discoverPlatformComponentRecords(root = DEFAULT_ROOT) {
 }
 
 /**
- * Checks a platform record's frontmatter until the schema carries
- * `platform_of`: its kind, its language-qualified id, the core component it
- * names, its owners, its authority and approval, the `verified_by` paths it
- * cites. `ids` maps every other record id to its path and authority.
+ * Checks a platform record with the shared record validator for its
+ * schema_version, allowing its language-qualified id
+ * (`component:<language>/<PublicName>`), then what only a platform record
+ * has: `platform_of` naming the core component, the core record beside it
+ * declaring that id, and `verified_by` paths that exist. `ids` maps every
+ * other record id to its path and authority.
  */
 export function validatePlatformComponentRecords(
   root,
-  {ids, schema, engineeringApprovalOwners, repositoryFiles},
+  {
+    ids,
+    schemas,
+    templateVersions,
+    designApprovalOwners,
+    engineeringApprovalOwners,
+    repositoryFiles,
+  },
 ) {
   const problems = [];
   const tracked = repositoryFiles ? new Set(repositoryFiles) : null;
@@ -1024,18 +1033,34 @@ export function validatePlatformComponentRecords(
       fs.readFileSync(absolutePath, 'utf8'),
       filePath,
     );
-    problems.push(...(document.problems ?? []));
     const frontmatter = document.frontmatter;
 
+    const recordVersion = frontmatter.get('schema_version');
+    const versionedSchema = schemas.get(recordVersion);
+    if (!versionedSchema) {
+      problems.push(
+        `${filePath}: schema_version ${JSON.stringify(recordVersion)} has no schema file.`,
+      );
+      continue;
+    }
     if (frontmatter.get('kind') !== 'component') {
       problems.push(`${filePath}: a platform record must be kind: component.`);
+      continue;
     }
-    const expectedId = `component:${language}/${publicName}`;
-    if (frontmatter.get('id') !== expectedId) {
-      problems.push(
-        `${filePath}: a platform record's id must be ${expectedId}.`,
-      );
-    }
+    problems.push(
+      ...validateAgainstSchema(
+        document,
+        versionedSchema.schema,
+        path.relative(root, versionedSchema.schemaPath),
+        filePath,
+        false,
+        templateVersions.component,
+        designApprovalOwners,
+        engineeringApprovalOwners,
+        {idPattern: `^component:${language}/${publicName}$`},
+      ),
+    );
+
     const coreId = `component:${publicName}`;
     if (frontmatter.get('platform_of') !== coreId) {
       problems.push(
@@ -1051,42 +1076,6 @@ export function validatePlatformComponentRecords(
         );
       }
     }
-    const owners = frontmatter.get('owners');
-    if (!Array.isArray(owners) || owners.length === 0) {
-      problems.push(`${filePath}: owners must be a non-empty inline list.`);
-    }
-
-    const authority = frontmatter.get('authority');
-    if (!schema.authorities.includes(authority)) {
-      problems.push(
-        `${filePath}: authority must be ${schema.authorities.join(', ')}.`,
-      );
-    }
-    if (authority === 'current') {
-      if (!engineeringApprovalOwners.includes(frontmatter.get('approved_by'))) {
-        problems.push(
-          `${filePath}: current records require approved_by to name an authorized owner.`,
-        );
-      }
-      const approvedAt = frontmatter.get('approved_at');
-      if (
-        typeof approvedAt !== 'string' ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(approvedAt)
-      ) {
-        problems.push(
-          `${filePath}: current records require approved_at as YYYY-MM-DD.`,
-        );
-      }
-    }
-    if (authority === 'archived') {
-      const reason = frontmatter.get('archive_reason');
-      if (!schema.archiveReasons.includes(reason)) {
-        problems.push(
-          `${filePath}: archived records require archive_reason (${schema.archiveReasons.join(', ')}).`,
-        );
-      }
-    }
-
     const verifiedBy = frontmatter.get('verified_by');
     for (const entry of Array.isArray(verifiedBy) ? verifiedBy : []) {
       const cited = String(entry).replace(/\/+$/, '');
@@ -1887,6 +1876,7 @@ function validateAgainstSchema(
   currentTemplateVersion,
   designApprovalOwners = [],
   engineeringApprovalOwners = [],
+  {idPattern = null} = {},
 ) {
   const problems = [...document.problems];
   const {frontmatter, sections} = document;
@@ -1965,12 +1955,13 @@ function validateAgainstSchema(
   }
 
   const id = frontmatter.get('id');
+  const expectedIdPattern = idPattern ?? kindSchema.idPattern;
   if (
-    kindSchema.idPattern &&
-    (typeof id !== 'string' || !new RegExp(kindSchema.idPattern).test(id))
+    expectedIdPattern &&
+    (typeof id !== 'string' || !new RegExp(expectedIdPattern).test(id))
   ) {
     problems.push(
-      `${filePath}: id must match ${JSON.stringify(kindSchema.idPattern)}.`,
+      `${filePath}: id must match ${JSON.stringify(expectedIdPattern)}.`,
     );
   }
 
@@ -2349,7 +2340,9 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
   problems.push(
     ...validatePlatformComponentRecords(root, {
       ids,
-      schema,
+      schemas,
+      templateVersions,
+      designApprovalOwners,
       engineeringApprovalOwners,
       repositoryFiles,
     }),

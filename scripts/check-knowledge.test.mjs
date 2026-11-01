@@ -155,27 +155,21 @@ function componentRecord(overrides = {}) {
 }
 
 function platformRecord(overrides = {}) {
-  const values = {
-    schema_version: '3',
-    template_version: '7',
-    kind: 'component',
+  return componentRecord({
     id: 'component:swift/Button',
     platform_of: 'component:Button',
-    authority: 'draft',
-    archive_reason: 'null',
-    superseded_by: 'null',
-    approved_by: 'null',
-    approved_at: 'null',
-    owners: '[owner]',
-    review_triggers: '[behavior]',
-    verified_by: '[]',
-    system_specs: '[]',
+    verified_by: '[packages/native/apple/Tests/AstryxTests/ButtonTests.swift]',
     ...overrides,
-  };
-  const frontmatter = Object.entries(values)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join('\n');
-  return `---\n${frontmatter}\n---\n\n# Button in Swift\n\n## Intent\n\nBody.\n`;
+  });
+}
+
+function writeSwiftTest(root) {
+  const swiftTest = path.join(
+    root,
+    'packages/native/apple/Tests/AstryxTests/ButtonTests.swift',
+  );
+  fs.mkdirSync(path.dirname(swiftTest), {recursive: true});
+  fs.writeFileSync(swiftTest, '');
 }
 
 function moduleRecord(overrides = {}) {
@@ -1721,6 +1715,7 @@ describe('knowledge validation', () => {
       componentRecord(),
     );
     const folder = path.join(root, 'docs/specs/components/Button');
+    writeSwiftTest(root);
     fs.writeFileSync(
       path.join(folder, 'Button.swift.spec.md'),
       platformRecord(),
@@ -1737,13 +1732,14 @@ describe('knowledge validation', () => {
     ).toHaveLength(2);
   });
 
-  it('checks a platform record against the core component it implements', async () => {
+  it('checks a platform record with the shared validator and against its core component', async () => {
     const root = fixtureRoot();
     fs.mkdirSync(path.join(root, 'packages/core/src/Button'));
     fs.writeFileSync(
       recordPath(path.join(root, 'packages/core/src/Button/Button.spec.md')),
       componentRecord(),
     );
+    writeSwiftTest(root);
     const swift = path.join(
       root,
       'docs/specs/components/Button/Button.swift.spec.md',
@@ -1764,15 +1760,21 @@ describe('knowledge validation', () => {
         verified_by: '[packages/native/apple/Tests/Missing.swift]',
       }),
     ).toEqual([
-      "docs/specs/components/Button/Button.swift.spec.md: a platform record's id must be component:swift/Button.",
-      'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
+      'docs/specs/components/Button/Button.swift.spec.md: id must match "^component:swift/Button$".',
       'docs/specs/components/Button/Button.swift.spec.md: owners must be a non-empty inline list.',
+      'docs/specs/components/Button/Button.swift.spec.md: platform_of must name the core component, component:Button.',
       'docs/specs/components/Button/Button.swift.spec.md: verified_by path packages/native/apple/Tests/Missing.swift is not in the repository.',
     ]);
-    expect(await swiftProblems({authority: 'current'})).toEqual([
-      'docs/specs/components/Button/Button.swift.spec.md: current records require approved_by to name an authorized owner.',
-      'docs/specs/components/Button/Button.swift.spec.md: current records require approved_at as YYYY-MM-DD.',
-    ]);
+    // The shared validator's current-record rules apply, verified_by included.
+    expect(
+      await swiftProblems({authority: 'current', verified_by: '[]'}),
+    ).toEqual(
+      expect.arrayContaining([
+        'docs/specs/components/Button/Button.swift.spec.md: current records require non-empty verified_by.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_by to name an authorized owner.',
+        'docs/specs/components/Button/Button.swift.spec.md: current records require approved_at as YYYY-MM-DD.',
+      ]),
+    );
     expect(
       await swiftProblems({
         authority: 'current',
