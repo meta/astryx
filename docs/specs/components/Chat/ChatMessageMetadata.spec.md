@@ -45,7 +45,7 @@ system_specs: [spec:AST-029]
 | End-user impact         | Readers see a compact line of time, extra details, and delivery status in reading order, with a dot only between items that show something and a caption beside each status icon.                                   |
 | Builder impact          | None.                                                                                                                                                                                                               |
 | Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact; two owner questions stay open.                                                                               |
-| Review checks           | Reject a lost visible zero, stranded separator, omitted translated status label, dropped root passthrough, or claim that a static DOM attribute proves an AT announcement.                                          |
+| Review checks           | Reject a lost visible zero, stranded separator, omitted translated status caption or title, dropped root passthrough, or claim that a static DOM attribute proves an AT announcement.                               |
 | Governing rules         | `architecture:public-component-api/INV1, INV3, INV5–INV9`; `architecture:component-test-sufficiency/INV1–INV7`; `spec:AST-029/FR2–FR5`.                                                                             |
 
 This table is a review projection; the body below is authoritative. Consumer
