@@ -24,15 +24,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `SelectorOption` is exported beside Selector and takes `label` (required), `icon`, `description`, `layout` (`stacked` by default, or `inline`), `endContent`, `xstyle`, `className`, and `style`. |
-| Behavior                | Renders one Item row of an optional icon, the label, an optional description, and optional end content, with the row's own padding and corner radius removed so its host row lays it out.         |
-| End-user impact         | People see custom Selector options and the selected value in the same row shape as built-in options, and a long label ellipsizes instead of overflowing a narrow popover.                         |
-| Builder impact          | Builders return it from `renderOption` or `renderValue` to keep the `selector-option` target and the shared row layout while choosing the content.                                                |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The missing `ref` and DOM props are listed under Current-state impact.                                                                  |
-| Review checks           | Reject a dropped icon, description, or end content, a layout that ignores the caller outside an InputGroup or stays stacked inside one, or a lost `selector-option` target.                       |
-| Governing rules         | `architecture:component-theming-surface`; `architecture:public-component-api` INV5, INV8; `component:Item` for the row it composes.                                                               |
+| Area                    | Contract                                                                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `SelectorOption` is exported beside Selector and takes `label` (required), `icon`, `description`, `layout` (`stacked` by default, or `inline`), `endContent`, `xstyle`, `className`, and `style`.       |
+| Behavior                | Renders one Item row of an optional icon, the label, an optional description, and optional end content, with the row's own padding and corner radius removed so its host row lays it out.               |
+| End-user impact         | People see custom Selector options and the selected value in the same row shape as built-in options, and a long string label ellipsizes instead of overflowing a narrow popover.                        |
+| Builder impact          | Builders return it from `renderOption` or `renderValue` to keep the `selector-option` target and the shared row layout while choosing the content.                                                      |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The missing `ref` and DOM props are listed under Current-state impact.                                                                        |
+| Review checks           | Reject a dropped icon, description, or end content, a layout that ignores the caller outside an InputGroup or stays stacked as a Selector trigger value inside one, or a lost `selector-option` target. |
+| Governing rules         | `architecture:component-theming-surface`; `architecture:public-component-api` INV5, INV8; `component:Item` for the row it composes.                                                                     |
 
 This table is a review projection; the body below is authoritative.
 
@@ -71,11 +71,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept     | Closed values or states | Meaning                                                                                                                              | Availability by variant/orientation                      |
-| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
-| layout      | `stacked`, `inline`     | `stacked` puts the description on its own line; `inline` keeps label and description on one line.                                    | Caller's choice, except inside an InputGroup (`inline`). |
-| icon        | absent, present         | A semantic icon name or icon component renders as a small secondary Icon before the label; other ReactNode content renders as given. | Every layout.                                            |
-| end content | absent, present         | Caller content after the label and description.                                                                                      | Every layout.                                            |
+| Concept     | Closed values or states | Meaning                                                                                                                              | Availability by variant/orientation                                                  |
+| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| layout      | `stacked`, `inline`     | `stacked` puts the description on its own line; `inline` keeps label and description on one line.                                    | Caller's choice, except as a Selector trigger value inside an InputGroup (`inline`). |
+| icon        | absent, present         | A semantic icon name or icon component renders as a small secondary Icon before the label; other ReactNode content renders as given. | Every layout.                                                                        |
+| end content | absent, present         | Caller content after the label and description.                                                                                      | Every layout.                                                                        |
 
 ## Behavioral and layout contract
 
@@ -94,12 +94,12 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State                  | Required invariant                           | Allowed variation |
-| ---------------------- | -------------------------------------------- | ----------------- |
-| Option, stacked        | Description below the label.                 | Content.          |
-| Option, inline         | Label and description on one line.           | Content.          |
-| Value in an InputGroup | `inline`, whatever the caller passed.        | Content.          |
-| With end content       | End content after the label and description. | Content.          |
+| State                          | Required invariant                           | Allowed variation |
+| ------------------------------ | -------------------------------------------- | ----------------- |
+| Option, stacked                | Description below the label.                 | Content.          |
+| Option, inline                 | Label and description on one line.           | Content.          |
+| Trigger value in an InputGroup | `inline`, whatever the caller passed.        | Content.          |
+| With end content               | End content after the label and description. | Content.          |
 
 ### Transformation and precedence order
 
