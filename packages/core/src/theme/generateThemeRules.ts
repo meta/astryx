@@ -42,6 +42,7 @@ import {
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
+import {readerTextSizeEntries} from './dynamicType';
 
 /**
  * Theme @scope selectors.
@@ -981,7 +982,14 @@ function tokenBlock(
   tokenEntries: [string, string][] = Object.entries(source.tokens),
 ): string | null {
   const declarations = [
-    joinDeclarations(tokenEntries, `${location}tokens`, sink),
+    // Every font size follows the reader's text size where the root Theme
+    // gives the page its scales (see dynamicType.ts); elsewhere each scale is
+    // 1, so the values are the theme's own.
+    joinDeclarations(
+      readerTextSizeEntries(tokenEntries),
+      `${location}tokens`,
+      sink,
+    ),
     joinDeclarations(
       Object.entries(source.localTokens ?? {}),
       `${location}localTokens`,
@@ -1691,8 +1699,10 @@ export function generateOnMediaCSS(
       ...statusRoleDefaults,
     ];
     if (tokenEntries.length > 0) {
+      // The surface re-declares font sizes the way a theme's root does, so they
+      // keep following the reader's text size there (see dynamicType.ts).
       const declarations = joinDeclarations(
-        tokenEntries,
+        readerTextSizeEntries(tokenEntries),
         `${location}tokens`,
         sink,
       );

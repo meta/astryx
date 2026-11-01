@@ -6,6 +6,7 @@ import React from 'react';
 import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
 import type * as DefineThemeModule from './defineTheme';
+import {dynamicTypeScaleRule} from './dynamicType';
 
 const {generateThemeCSSSpy} = vi.hoisted(() => ({
   generateThemeCSSSpy: vi.fn(),
@@ -333,5 +334,97 @@ describe('Theme', () => {
       .join('\n');
     expect(injected).toContain('@layer reset, astryx-base, astryx-theme;');
     expect(injected).not.toContain(':root {');
+  });
+  // The gate is the capability alone, never a platform idiom (one touch
+  // behavior on every touch device): a touch callout without
+  // `font: -apple-system-body` reads nothing.
+  it('reads no text size where the engine has no font: -apple-system-body', () => {
+    vi.stubGlobal('CSS', {
+      supports: vi.fn(
+        (property: string) => property === '-webkit-touch-callout',
+      ),
+    });
+    try {
+      render(
+        <Theme theme={testTheme}>
+          <span>web</span>
+        </Theme>,
+      );
+      expect(
+        document.querySelector('[data-astryx-text-size-probe]'),
+      ).toBeNull();
+      expect(
+        document.querySelector('style[data-astryx-text-size-scales]'),
+      ).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps the page on the reader text size wherever the engine provides it, from the root Theme only, with nothing on <html>', () => {
+    // The capability and nothing else: no touch callout.
+    vi.stubGlobal('CSS', {
+      supports: vi.fn(
+        (property: string, value?: string) =>
+          property === 'font' && value === '-apple-system-body',
+      ),
+    });
+    class FakeSheet {
+      text = '';
+      replaceSync(text: string) {
+        this.text = text;
+      }
+    }
+    vi.stubGlobal('CSSStyleSheet', FakeSheet);
+    Object.defineProperty(document, 'adoptedStyleSheets', {
+      configurable: true,
+      writable: true,
+      value: [],
+    });
+    const adoptedText = () =>
+      (document.adoptedStyleSheets as unknown as FakeSheet[])
+        .map(sheet => sheet.text)
+        .join('');
+    const real = window.getComputedStyle.bind(window);
+    const computed = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation(element =>
+        element instanceof HTMLElement &&
+        element.hasAttribute('data-astryx-text-size-probe')
+          ? ({fontSize: '33px'} as CSSStyleDeclaration)
+          : real(element),
+      );
+    const before = document.documentElement.getAttributeNames();
+    try {
+      const {unmount} = render(
+        <Theme theme={testTheme}>
+          <Theme theme={altTheme}>
+            <span>nested</span>
+          </Theme>
+        </Theme>,
+      );
+      // Body at 33px is the second accessibility size; its scales reach the
+      // page through an adopted stylesheet, from the root Theme alone.
+      expect(adoptedText()).toBe(dynamicTypeScaleRule('ax2'));
+      expect(
+        document.querySelectorAll('[data-astryx-text-size-probe]'),
+      ).toHaveLength(1);
+      expect(
+        document.documentElement
+          .getAttributeNames()
+          .filter(name => name.includes('text-size')),
+      ).toEqual([]);
+
+      unmount();
+      expect(adoptedText()).toBe('');
+      expect(
+        document.querySelector('[data-astryx-text-size-probe]'),
+      ).toBeNull();
+      expect(document.documentElement.getAttributeNames()).toEqual(before);
+    } finally {
+      vi.unstubAllGlobals();
+      computed.mockRestore();
+      delete (document as {adoptedStyleSheets?: unknown}).adoptedStyleSheets;
+    }
   });
 });
