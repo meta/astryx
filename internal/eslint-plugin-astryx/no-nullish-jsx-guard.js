@@ -68,7 +68,7 @@
  *     are not flagged — the guarded branch is not a JSX element.
  */
 
-import path from 'node:path';
+import {baselineAllowance} from './rule-baseline.mjs';
 
 /**
  * Where the repository config enforces the rule with its baseline; the
@@ -383,23 +383,9 @@ const rule = {
       return {};
     }
     const sourceCode = context.sourceCode ?? context.getSourceCode();
-    const options = context.options[0] ?? {};
-    const root = options.root ?? context.cwd;
-    const relative = path.relative(root, filename).split(path.sep).join('/');
     // Each listed value allows as many checks as it is listed; the next one
     // is reported.
-    const allowance = new Map();
-    for (const value of options.baseline?.[relative] ?? []) {
-      allowance.set(value, (allowance.get(value) ?? 0) + 1);
-    }
-    function isAllowed(valueText) {
-      const left = allowance.get(valueText) ?? 0;
-      if (left === 0) {
-        return false;
-      }
-      allowance.set(valueText, left - 1);
-      return true;
-    }
+    const isAllowed = baselineAllowance(context);
 
     function reportHandRolled(chain, value) {
       const valueText = sourceCode.getText(value);
