@@ -66,6 +66,35 @@ jobs:
               >> "$GITHUB_OUTPUT"
           fi
 
+      # A workflow or composite-action change runs actionlint, with shellcheck
+      # on every run: script, so a broken expression, an unknown runner label
+      # or a script that cannot work fails here instead of on every later run.
+      # Any other pull request skips it in a second. The binary is pinned by
+      # version and checksum; shellcheck reports errors only, so its existing
+      # warnings never block (spec:AST-030 FR11).
+      - name: Lint changed workflows (actionlint)
+        if: github.event_name == 'pull_request'
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 325e971b6ba9bfa504672e29be93c24981eeb1c07576d730e9f7c8805afff0c6
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          MERGE_BASE=$(git merge-base HEAD "origin/$BASE_REF" 2>/dev/null || echo "")
+          if [ -n "$MERGE_BASE" ] && git diff --quiet "$MERGE_BASE"...HEAD -- .github/workflows .github/actions .github/actionlint.yaml; then
+            echo "No workflow or composite action changed; actionlint skipped."
+            exit 0
+          fi
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends shellcheck >/dev/null
+          fi
+          command -v shellcheck >/dev/null || { echo "::error::shellcheck is not installed."; exit 1; }
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -fsSL -o "$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_arm64.tar.gz"
+          echo "$ACTIONLINT_SHA256  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          SHELLCHECK_OPTS=--severity=error "$RUNNER_TEMP/actionlint" -color -shellcheck=shellcheck -pyflakes=
+
       # Merge-back carries exact published release-branch outputs into main under
       # trusted validation (spec:AST-017 FR50). Detect its branch contract so
       # required lint can route it to the stronger validator.
