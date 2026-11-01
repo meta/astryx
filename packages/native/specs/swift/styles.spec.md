@@ -107,8 +107,8 @@ effect here. The checks under Verification prove the record stays current.
 ## Current state
 
 - The `Astryx` product in `packages/native/apple` holds the SwiftUI views
-  Avatar, AvatarStatusDot, Banner, Button, Card, Heading, Icon, Text,
-  TextInput, and Thumbnail. Button draws
+  Avatar, AvatarStatusDot, Banner, Button, Card, Heading, Icon, Item,
+  Text, TextInput, and Thumbnail. Button draws
   through an internal button style; no public Astryx style for SwiftUI's own
   controls exists yet.
 

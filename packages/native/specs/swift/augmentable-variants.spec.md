@@ -96,8 +96,10 @@ effect here. The checks under Verification prove the record stays current.
 
 ## Owning code
 
+- `packages/native/src/contract/` — the contract generator, which emits each augmentable prop as an open, string-backed type.
+- `packages/native/apple/Sources/AstryxNative/Generated/` — the generated variant types.
 - `packages/native/scripts/` — the theme generator, which extends each augmentable type with a theme's own variants.
-- `packages/native/apple/Sources/Astryx/` — the string-backed variant types and the views that draw them.
+- `packages/native/apple/Sources/Astryx/` — the views that draw them.
 
 ## Deciding specs
 
