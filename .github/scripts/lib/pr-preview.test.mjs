@@ -1141,6 +1141,24 @@ describe('PR comment preview reconciliation', () => {
   );
 
   it.each([
+    ['the exact head', HEAD, true],
+    ['another head', 'b'.repeat(40), false],
+  ])(
+    'passes the touched-components report only when it names %s',
+    async (_label, headSha, used) => {
+      const seen = [];
+      await reconcile({
+        touched: {headSha, components: []},
+        execute: (_node, args) => {
+          seen.push(args);
+          return '## PR Analysis Report\n';
+        },
+      });
+      expect(seen[0].includes('--touched')).toBe(used);
+    },
+  );
+
+  it.each([
     ['written', true],
     ['absent', false],
   ])(

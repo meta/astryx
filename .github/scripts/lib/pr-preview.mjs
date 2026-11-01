@@ -619,6 +619,7 @@ export async function reconcilePrComment({
   visualPath = 'trusted-visual/verdict.json',
   createIfMissing = true,
   fallbackMessage,
+  touchedPath = 'touched-components/touched-components.json',
   generator = GENERATOR,
   execute = execFileSync,
 }) {
@@ -714,6 +715,14 @@ export async function reconcilePrComment({
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
       ...(framesPath ? ['--visual-frames', framesPath] : []),
+      ...(trustedHeadReport({
+        reportPath: touchedPath,
+        label: 'touched-components report',
+        identity,
+        core,
+      })
+        ? ['--touched', touchedPath]
+        : []),
       ...(preview ? ['--preview', previewPath] : []),
       ...(jobs ? ['--jobs', jobsPath] : []),
       '--source-conclusion',

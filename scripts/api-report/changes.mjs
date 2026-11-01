@@ -271,7 +271,7 @@ export function renderChanges(changes) {
     return `${short(c.pkg)}${counts}${note}`;
   });
   const rows = touched.flatMap(c =>
-    c.rows.map(r => ({pkg: short(c.pkg), ...r})),
+    c.rows.map(r => ({...r, pkg: short(c.pkg)})),
   );
   const L = [`**API changes:** ${parts.join('; ')}`];
   if (rows.length) {

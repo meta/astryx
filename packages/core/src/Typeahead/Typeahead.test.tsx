@@ -1453,7 +1453,7 @@ describe('BaseTypeahead minQueryLength', () => {
     await waitFor(() => {
       expect(input).toHaveAttribute('aria-expanded', 'true');
     });
-    expect(search).toHaveBeenCalledExactlyOnceWith('App');
+    expect(search).toHaveBeenCalledExactlyOnceWith('App', expect.anything());
   });
 
   it('closes the menu again when the query falls back below the threshold', async () => {
@@ -1531,7 +1531,7 @@ describe('BaseTypeahead minQueryLength', () => {
     await waitFor(() => {
       expect(input).toHaveAttribute('aria-expanded', 'true');
     });
-    expect(search).toHaveBeenCalledExactlyOnceWith('A');
+    expect(search).toHaveBeenCalledExactlyOnceWith('A', expect.anything());
   });
 
   it('stops reporting "Loading" when the query falls below the threshold mid-search', async () => {
@@ -1669,7 +1669,7 @@ describe('BaseTypeahead hasSearched reset', () => {
 
     // Type a query that starts an asynchronous search
     fireEvent.change(input, {target: {value: 'abc'}});
-    expect(initialSource.search).toHaveBeenCalledWith('abc');
+    expect(initialSource.search).toHaveBeenCalledWith('abc', expect.anything());
 
     // Replace the search source while the search is still pending
     rerender(
