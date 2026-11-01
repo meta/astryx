@@ -6,39 +6,37 @@
  * @file useResizable.ts
  * @input Resize configuration (defaultSize, minSize, maxSize, snaps), with
  *   removed pixel-bound aliases rejected even through assembled objects, and
- *   collapse configuration (collapsible,
- *   defaultIsCollapsed, isCollapsed)
- * @output Hook return: size, isCollapsed, collapse/expand/resize methods, props for handle
+ *   collapse configuration (collapsible, defaultIsCollapsed, isCollapsed)
+ * @output Hook return: size, isCollapsed, collapse/expand/resize methods, props
+ *   for handle. The region is the internal resize factory's (createResizable),
+ *   with no handle of its own, so its state has one copy; a change reports in
+ *   the commit that onCollapseChange's own state lands in, a controlled
+ *   `isCollapsed` included (component:Resizable FR8)
  * @position Public hook; consumed by layout components via `resizable` prop
  */
 
 import {
   useCallback,
-  useEffect,
+  useReducer,
   useRef,
   useState,
   useSyncExternalStore,
   type RefObject,
 } from 'react';
-import {observeResize} from '../utils/sharedResizeObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {devWarn} from '../utils/devWarning';
 import type {SizeValue} from '../utils/types';
 import type {ResizableSize} from './utils';
 import {
+  createResizable,
+  readInitialResizableState,
+  readResizableInternals,
+  readResizableSelection,
+  type CreateResizableOptions,
+  type ResizableController,
+  type ResizableSnapshot,
+} from './createResizable';
+import {
   DEFAULT_COLLAPSED_SIZE,
-  DEFAULT_MIN,
-  DEFAULT_SIZE_FALLBACK,
-  RESIZABLE_SIZE_GUIDANCE,
-  SERVER_BASIS,
-  clampSize,
-  dependsOnBasis,
-  loadPersistedState,
-  measureContentBox,
-  parseSize,
-  persistState,
-  resolveBound,
-  type PersistedResizableState,
   type ResizableDirection,
 } from './resizableModel';
 
@@ -211,633 +209,70 @@ export interface ResizableProps {
   _isResizableProps: true;
 }
 
-/** A store that never changes on its own; the snapshot is re-read on render. */
-const noopSubscribe = () => () => {};
-
-// The window snapshots are module functions, so their identity is stable:
-// React re-reads a snapshot after the commit whenever getSnapshot is a new
-// function, and a window size read after the DOM changed forces a layout of
-// the whole page. With these, the window is read during render only.
-
-/** The viewport width, the basis without a container. */
-function readViewportBasis(): number {
-  return typeof window === 'undefined' ? SERVER_BASIS : window.innerWidth;
-}
-
-function readServerBasis(): number {
-  return SERVER_BASIS;
-}
-
-/** The window's extent along a horizontal hook's axis. */
-function readWindowWidth(): number | null {
-  return typeof window === 'undefined' ? null : window.innerWidth;
-}
-
-/** The window's extent along a vertical hook's axis. */
-function readWindowHeight(): number | null {
-  return typeof window === 'undefined' ? null : window.innerHeight;
-}
-
-function readNoWindowExtent(): null {
-  return null;
-}
 // =============================================================================
-// Single-region hook
+// Single-region hook: the configuration object, on the factory
 // =============================================================================
 
+/** No handle: the configuration object's region is driven through its props. */
+const NO_HANDLE: RefObject<HTMLElement | null> = {current: null};
+
+const EMPTY_SNAPS: number[] = [];
+
+/**
+ * The configuration-object form: createResizable with no handle of its own,
+ * so the region's state has one copy, the factory's (spec:AST-107 FR6;
+ * `architecture:public-component-api` INV22). The props it returns carry what
+ * the factory reports, and a ResizeHandle given them drives the factory's
+ * region through them.
+ */
 function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
-  const {
-    defaultSize,
-    minSize,
-    maxSize,
-    containerRef,
-    direction = 'horizontal',
-    collapsible = false,
-    collapsedSize = DEFAULT_COLLAPSED_SIZE,
-    snaps: configuredSnaps,
-    autoSaveId,
-    defaultIsCollapsed,
-    isCollapsed: controlledIsCollapsed,
-    onSizeChange,
-    onCollapseChange,
-  } = config;
-  const emptySnapsRef = useRef<number[]>([]);
-  const snaps = configuredSnaps ?? emptySnapsRef.current;
-
-  const rawMin = minSize;
-  const rawMax = maxSize;
-
-  const parsedDefault = parseSize(defaultSize);
-  const parsedMin = parseSize(minSize);
-  const parsedMax = parseSize(maxSize);
-  const hasContainer = containerRef != null;
-  const persisted = autoSaveId ? loadPersistedState(autoSaveId) : null;
-  const initialDefaultRef = useRef<{px: number; isFinal: boolean} | null>(null);
-  const [, setDefaultBasisCleanupTick] = useState(0);
-
-  const defaultDependsOnBasis = dependsOnBasis(parsedDefault);
-  const boundsDependOnBasis =
-    dependsOnBasis(parsedMin) || dependsOnBasis(parsedMax);
-  // A default needs a live container only until its initial pixel choice is
-  // final. A persisted pixel choice wins without measuring the unused default.
-  // Bounds are different: percentages keep following the basis so they can
-  // re-clamp the selected pixel size.
-  const defaultNeedsInitialBasis =
-    persisted?.size == null &&
-    defaultDependsOnBasis &&
-    initialDefaultRef.current?.isFinal !== true;
-  const observeContainerBasis =
-    hasContainer && (boundsDependOnBasis || defaultNeedsInitialBasis);
-  const observeViewportBasis = !hasContainer && boundsDependOnBasis;
-
-  // The container basis, read through the shared observer. `useSyncExternalStore`
-  // rather than an effect: the store IS the measurement, so there is no render
-  // that paints before the basis is known and no `setState` in an effect.
-  //
-  // The subscription depends on the ELEMENT, not on the ref object. A ref is
-  // stable across an element swap, so `containerRef.current` can become a
-  // different node — a remount behind the same ref, a conditional branch, a
-  // portal moving — without any input to this hook changing. Keyed on the ref,
-  // the old detached node stayed observed (and a detached node measures 0,
-  // which is how a replacement zeroed the bounds) and the new one was never
-  // observed at all.
-  const containerElementRef = useRef<HTMLElement | null>(null);
-  // DOM ref changes are invisible to React. This state is only a version tick
-  // while basis observation is active; the element itself lives in a ref so it
-  // can be released without adding a cleanup render.
-  const [, setContainerElementVersion] = useState(0);
-  const containerBasisRef = useRef<number | null>(null);
-  const containerElement = observeContainerBasis
-    ? containerElementRef.current
-    : null;
-
-  // Follow the ref only while some configuration needs its basis. A numeric-only
-  // region never reads the ref. Once observation stops, drop both the element
-  // and its measurement without a state update; a later percentage starts from
-  // the ref's then-current element and a fresh basis.
-  useIsomorphicLayoutEffect(() => {
-    if (!observeContainerBasis) {
-      containerElementRef.current = null;
-      containerBasisRef.current = null;
-      return;
-    }
-    const element = containerRef?.current ?? null;
-    if (element !== containerElementRef.current) {
-      containerBasisRef.current = null;
-      containerElementRef.current = element;
-      setContainerElementVersion(version => version + 1);
-    }
-  });
-
-  const subscribeToContainer = useCallback(
-    (onStoreChange: () => void) => {
-      if (
-        !observeContainerBasis ||
-        containerElement == null ||
-        containerElement !== containerRef?.current
-      ) {
-        return () => {};
-      }
-      // Unsubscribe by callback: several regions share one container, and any
-      // number of unrelated hooks may observe the same node.
-      return observeResize(containerElement, entry => {
-        containerBasisRef.current = measureContentBox(
-          containerElement,
-          direction,
-          entry,
-        );
-        onStoreChange();
-      });
-    },
-    [containerElement, observeContainerBasis, direction, containerRef],
-  );
-  const readContainerBasis = useCallback(() => {
-    if (!observeContainerBasis || containerElement == null) {
-      // An inactive subscription owns no current measurement. Clearing this is
-      // important when a percentage bound is added later: the first active
-      // render must measure the container as it is now, not clamp against the
-      // last basis seen by a default-only subscription.
-      containerBasisRef.current = null;
-      return null;
-    }
-    // Cached in a ref so the snapshot is referentially stable between resizes;
-    // returning a fresh measurement every call would loop the store.
-    if (containerBasisRef.current == null) {
-      containerBasisRef.current = measureContentBox(
-        containerElement,
-        direction,
-      );
-    }
-    return containerBasisRef.current;
-  }, [containerElement, observeContainerBasis, direction]);
-  const containerBasis = useSyncExternalStore(
-    subscribeToContainer,
-    readContainerBasis,
-    () => null,
-  );
-
-  // The viewport basis is always readable synchronously. Percentage-dependent
-  // BOUNDS subscribe to later resizes (FR6); a default reads the initial
-  // snapshot only, because it becomes a pixel choice immediately.
-  const subscribeToViewport = useCallback(
-    (onStoreChange: () => void) => {
-      if (
-        hasContainer ||
-        !observeViewportBasis ||
-        typeof window === 'undefined'
-      ) {
-        return () => {};
-      }
-      window.addEventListener('resize', onStoreChange);
-      return () => window.removeEventListener('resize', onStoreChange);
-    },
-    [hasContainer, observeViewportBasis],
-  );
-  const viewportBasis = useSyncExternalStore(
-    subscribeToViewport,
-    readViewportBasis,
-    readServerBasis,
-  );
-
-  // The window's extent along the hook's axis, for the REPORTED maximum of an
-  // unbounded region (never for clamping). Read through the same store shape
-  // so a server-rendered handle hydrates with no maximum and gains the real
-  // one on the first client render, instead of a hydration mismatch. It takes
-  // no resize subscription: an unbounded pixel region observes nothing
-  // (component:Resizable Performance and resources).
-  const windowExtent = useSyncExternalStore(
-    noopSubscribe,
-    direction === 'vertical' ? readWindowHeight : readWindowWidth,
-    readNoWindowExtent,
-  );
-
-  // With a container, its content box is the basis; without one, the released
-  // viewport basis. Before a supplied container has been measured — the first
-  // render, the server, and any moment it is display:none or detached — the
-  // deterministic 1200px stands in, and the first real measurement replaces it.
-  //
-  // A zero measurement is not a measurement. A hidden or detached container
-  // reports 0, and resolving `'50%'` against it produced a real maximum of 0:
-  // the panel collapsed and, with `autoSaveId`, that 0 was written over a
-  // perfectly good saved width. Treating 0 as unmeasured keeps the temporary
-  // basis until the container is actually laid out (AST-010 Platform support).
-  const needsContainerBasis = observeContainerBasis;
-  const hasPositiveMeasurement = containerBasis != null && containerBasis > 0;
-  const liveBasis = hasContainer
-    ? hasPositiveMeasurement
-      ? containerBasis
-      : SERVER_BASIS
-    : viewportBasis;
-  const isBasisMeasured = needsContainerBasis ? hasPositiveMeasurement : true;
-
-  // One stable basis per gesture. A container that resizes mid-drag would
-  // otherwise move the bound under the pointer; the new basis applies once the
-  // gesture ends.
-  const gestureBasisRef = useRef<number | null>(null);
-  // Only forces the render that ends a gesture: it releases the frozen basis,
-  // and its commit writes the size the gesture settled on.
-  const [gestureTick, setGestureTick] = useState(0);
-  void gestureTick;
-  const basis = gestureBasisRef.current ?? liveBasis;
-  // The frozen basis also marks a gesture in flight, from `_onResizeStart`
-  // until `_onResizeEnd` or `_onResizeCancel`.
-  const isGestureActive = gestureBasisRef.current != null;
-
-  const didWarnMinRef = useRef(false);
-  const didWarnMaxRef = useRef(false);
-  const didWarnDefaultRef = useRef(false);
-  const didWarnInvertedRef = useRef(false);
-
-  // Bounds re-resolve from the live basis on every render — that is the whole
-  // point of a percentage bound — and clamp the pixel selection below.
-  const resolvedMin = resolveBound(
-    rawMin,
-    parsedMin,
-    basis,
-    DEFAULT_MIN,
-    'minSize',
-    RESIZABLE_SIZE_GUIDANCE,
-    didWarnMinRef,
-  );
-  const resolvedMax = resolveBound(
-    rawMax,
-    parsedMax,
-    basis,
-    Infinity,
-    'maxSize',
-    RESIZABLE_SIZE_GUIDANCE,
-    didWarnMaxRef,
-  );
-
-  // A basis-dependent default is resolved ONCE into a pixel size. Latched in a
-  // ref (React's sanctioned lazy-init shape) rather than recomputed, because a
-  // default that kept tracking its basis would be a second, responsive sizing
-  // mode — the thing this API deliberately does not have.
-  //
-  // Not final while a supplied container is still unmeasured: that render used
-  // the temporary 1200px stand-in, and the first real measurement replaces it.
-  // Once final, a default-only subscription is removed. The correction is not a
-  // user interaction, so it neither persists the placeholder nor fires
-  // `onSizeChange`.
-  if (initialDefaultRef.current == null || !initialDefaultRef.current.isFinal) {
-    initialDefaultRef.current = {
-      px: resolveBound(
-        defaultSize,
-        parsedDefault,
-        basis,
-        DEFAULT_SIZE_FALLBACK,
-        'defaultSize',
-        RESIZABLE_SIZE_GUIDANCE,
-        didWarnDefaultRef,
-      ),
-      isFinal: isBasisMeasured,
-    };
-  }
-  const initialDefaultPx = initialDefaultRef.current.px;
-
-  // The size the user has settled on, or null while a container-relative
-  // default is still waiting for its first positive measurement. Once that
-  // basis is real, the default becomes an ordinary pixel selection — including
-  // any clamp applied at initialization. Leaving it represented by `null`
-  // allowed the raw default to be re-read later: 321px first clamped to 200px
-  // in a 400px container, then revived to 321px when the container grew.
-  //
-  // Initialized outright whenever the basis is already real on the first
-  // render — every pixel-only configuration, and the no-container percentage
-  // path. Only a supplied container needs a measurement that does not exist
-  // until after commit, so only it starts null. Initializing lazily in all
-  // cases cost every legacy pixel-only mount a second render pass, because the
-  // adjustment below then had to run on the first render to fill the value in.
-  const [chosenSize, setChosenSize] = useState<number | null>(() => {
-    if (persisted?.size != null) {
-      return persisted.size;
-    }
-    return isBasisMeasured
-      ? clampSize(initialDefaultPx, resolvedMin, resolvedMax, snaps)
-      : null;
-  });
-
-  if (
-    hasContainer &&
-    !boundsDependOnBasis &&
-    isBasisMeasured &&
-    defaultNeedsInitialBasis &&
-    chosenSize != null
-  ) {
-    // A programmatic resize may have selected pixels while the container was
-    // still unmeasured, so chosenSize can already be non-null here. Force the
-    // render that re-evaluates and removes the now-finished default subscription.
-    setDefaultBasisCleanupTick(tick => tick + 1);
-  }
-
-  if (isBasisMeasured && chosenSize == null) {
-    // The supplied container has now been measured, so the selection latched
-    // against the temporary basis is replaced by one against the real one.
-    // Render-phase adjustment is deliberate: React re-runs this render before
-    // paint, so the corrected selection, paint, persistence, and ARIA all see
-    // the same pixel value. It fires no interaction callback.
-    setChosenSize(clampSize(initialDefaultPx, resolvedMin, resolvedMax, snaps));
-  }
-
-  // A re-resolved bound clamps the SELECTION, not just the paint. Deriving
-  // alone was not enough: the stored choice survived, so a container that
-  // shrank and grew again revived the pre-clamp size — measured 320px
-  // reviving to 560px. The clamp has to be committed to be permanent.
-  //
-  // Adjusting state during render (React's documented shape for "a prop
-  // changed, so state must follow") rather than in an effect: React re-runs
-  // this render before painting, so nothing shows at the stale size, and no
-  // interaction callback fires for what is only a layout correction (FR10).
-  //
-  // Held until the basis is final. Before a supplied container is measured the
-  // bounds come from the temporary 1200px stand-in, and committing against
-  // that would move a persisted size to fit a basis that was never real.
-  const [committedBounds, setCommittedBounds] = useState({
-    min: resolvedMin,
-    max: resolvedMax,
-  });
-  if (
-    isBasisMeasured &&
-    gestureBasisRef.current == null &&
-    (committedBounds.min !== resolvedMin || committedBounds.max !== resolvedMax)
-  ) {
-    setCommittedBounds({min: resolvedMin, max: resolvedMax});
-    setChosenSize(current =>
-      current == null
-        ? null
-        : clampSize(current, resolvedMin, resolvedMax, snaps),
-    );
-  }
-
-  // Derived for paint, so the clamp above and the rendered size agree on the
-  // very render that observes a new basis.
-  const size = clampSize(
-    chosenSize ?? initialDefaultPx,
-    resolvedMin,
-    resolvedMax,
-    snaps,
-  );
-  const [uncontrolledIsCollapsed, setUncontrolledIsCollapsed] = useState(
-    () => persisted?.isCollapsed ?? defaultIsCollapsed ?? false,
-  );
-
-  const isControlled = controlledIsCollapsed !== undefined;
-  const isCollapsed =
-    collapsible &&
-    (isControlled ? controlledIsCollapsed : uncontrolledIsCollapsed);
-  const dragStartSizeRef = useRef(size);
-
-  // Mirrors isCollapsed so the callbacks below read the live value instead of
-  // the one their last render captured. Two cases reach them from a stale
-  // closure: two imperative calls in one tick, and a drag — ResizeHandle
-  // registers its pointermove listener once at pointer down, so a whole
-  // gesture runs against one props snapshot.
-  const isCollapsedRef = useRef(isCollapsed);
-  isCollapsedRef.current = isCollapsed;
-
-  // Controlled callers own the state; collapse() and a drag past the
-  // threshold report through onCollapseChange and change nothing here.
-  const setCollapsed = useCallback(
-    (value: boolean) => {
-      if (!isControlled) {
-        isCollapsedRef.current = value;
-        setUncontrolledIsCollapsed(value);
-      }
-    },
-    [isControlled],
-  );
-
-  useEffect(() => {
-    if (resolvedMin > resolvedMax && !didWarnInvertedRef.current) {
-      didWarnInvertedRef.current = true;
-      devWarn(
-        'useResizable',
-        `the resolved minimum (${resolvedMin}px) is above the resolved ` +
-          `maximum (${resolvedMax}px). The maximum wins, as it always has.`,
-      );
-    }
-  }, [resolvedMin, resolvedMax]);
-
-  // The size a gesture in flight has reached, for a region that unmounts
-  // before the gesture ends.
-  const pendingWriteRef = useRef<{
-    key: string;
-    state: PersistedResizableState;
-  } | null>(null);
-
-  useEffect(() => {
-    // Synchronizes the `autoSaveId` entry in localStorage with the size.
-    // Nothing is written while the basis is still the temporary stand-in. The
-    // size on such a render is a placeholder, and persisting it overwrites the
-    // real saved size with a value derived from a basis that was never real
-    // (AST-010 Platform support, FR9).
-    if (!autoSaveId || !isBasisMeasured) {
-      pendingWriteRef.current = null;
-      return;
-    }
-    // Nor while a gesture is in flight. A drag commits a new size on every
-    // pointer move, and each write reaches every other open document of the
-    // origin as a `storage` event.
-    if (isGestureActive) {
-      pendingWriteRef.current = {key: autoSaveId, state: {size, isCollapsed}};
-      return;
-    }
-    // A gesture's one write happens here, in the commit that applies its
-    // release, not in the handler that ended it: this render is the first to
-    // know the final size. A basis that changed mid-gesture applies only at
-    // the release and can re-clamp the size (AST-010 FR7), and a move the
-    // release arrived before renders together with it. The handler sees
-    // neither.
-    pendingWriteRef.current = null;
-    persistState(autoSaveId, {size, isCollapsed});
-  }, [size, isCollapsed, autoSaveId, isBasisMeasured, isGestureActive]);
-
-  // A region that unmounts mid-gesture never commits a release, so the size
-  // the gesture reached is written on the way out.
-  useEffect(
-    () => () => {
-      const pending = pendingWriteRef.current;
-      pendingWriteRef.current = null;
-      if (pending != null) {
-        persistState(pending.key, pending.state);
-      }
-    },
-    [],
-  );
-
-  const collapse = useCallback(() => {
-    // The already-collapsed guard keeps a repeated call from re-notifying a
-    // transition that already happened.
-    if (!collapsible || isCollapsedRef.current) {
-      return;
-    }
-    setCollapsed(true);
-    onCollapseChange?.(true);
-    onSizeChange?.(0);
-  }, [collapsible, setCollapsed, onCollapseChange, onSizeChange]);
-
-  const expand = useCallback(() => {
-    const wasCollapsed = isCollapsedRef.current;
-    setCollapsed(false);
-    if (wasCollapsed) {
-      onCollapseChange?.(false);
-    }
-    onSizeChange?.(size);
-  }, [setCollapsed, size, onCollapseChange, onSizeChange]);
-
-  const resize = useCallback(
-    (newSize: number) => {
-      // An invalid programmatic size repairs nothing — it must not replace a
-      // legal selection with NaN, which would then reach paint, storage and
-      // `aria-valuenow`.
-      if (!Number.isFinite(newSize) || newSize < 0) {
-        devWarn(
-          'useResizable',
-          `resize(${String(newSize)}) is not a pixel size. Keeping the ` +
-            'current size. Percentages configure the hook; they are not a ' +
-            'programmatic input.',
-        );
-        return;
-      }
-      const clamped = clampSize(newSize, resolvedMin, resolvedMax, snaps);
-      const wasCollapsed = isCollapsedRef.current;
-      setChosenSize(clamped);
-      setCollapsed(false);
-      // Resizing out of the collapsed state is an implicit expand — notify
-      // like the drag path does when it crosses back over the threshold.
-      if (wasCollapsed) {
-        onCollapseChange?.(false);
-      }
-      onSizeChange?.(clamped);
-    },
-    [
-      resolvedMin,
-      resolvedMax,
-      snaps,
-      setCollapsed,
-      onCollapseChange,
-      onSizeChange,
-    ],
-  );
-
+  const {getResizable, size, isCollapsed, snapshot, collapse, expand, resize} =
+    useResizableController(NO_HANDLE, config);
+  // The region's side of the handle's gesture, read at each input, so a whole
+  // drag reaches the factory as it is now.
+  const model = useCallback(() => {
+    const current = getResizable();
+    return current == null ? undefined : readResizableInternals(current)?.model;
+  }, [getResizable]);
   const onResizeStart = useCallback(() => {
-    // Freeze the basis for the whole gesture so a container resizing mid-drag
-    // cannot move the bound out from under the pointer.
-    gestureBasisRef.current = liveBasis;
-    dragStartSizeRef.current = isCollapsedRef.current ? 0 : size;
-  }, [size, liveBasis]);
-
+    model()?.start();
+  }, [model]);
   const onResizeMove = useCallback(
     (delta: number) => {
-      const raw = dragStartSizeRef.current + delta;
-      if (collapsible && raw < collapsedSize) {
-        if (!isCollapsedRef.current) {
-          setCollapsed(true);
-          onCollapseChange?.(true);
-          onSizeChange?.(0);
-        }
-        return;
-      }
-      if (isCollapsedRef.current && raw >= collapsedSize) {
-        setCollapsed(false);
-        onCollapseChange?.(false);
-      }
-      const clamped = clampSize(raw, resolvedMin, resolvedMax, snaps);
-      setChosenSize(clamped);
-      onSizeChange?.(clamped);
+      model()?.move(delta);
     },
-    [
-      collapsible,
-      collapsedSize,
-      setCollapsed,
-      resolvedMin,
-      resolvedMax,
-      snaps,
-      onSizeChange,
-      onCollapseChange,
-    ],
+    [model],
   );
-
-  // Releasing the frozen basis needs a render to apply whatever the basis
-  // became during the gesture; that render's commit writes the final size.
-  const releaseGestureBasis = useCallback(() => {
-    if (gestureBasisRef.current != null) {
-      gestureBasisRef.current = null;
-      setGestureTick(tick => tick + 1);
-    }
-  }, []);
-
   const onResizeEnd = useCallback(() => {
-    // Sizes are already committed during move; the basis is held, and the
-    // commit that releases it writes the final size to storage.
-    releaseGestureBasis();
-  }, [releaseGestureBasis]);
-
-  // A gesture that is cancelled rather than completed — pointercancel, a lost
-  // capture, a handle unmounted mid-drag — is still over. It does not signal a
-  // resize end (that is #5297's contract, and the sizes were committed during
-  // move anyway), but the basis it froze has to come back, or every later
-  // percentage bound stays pinned to the container size at grab time, and the
-  // size it reached has to reach storage.
-  const onResizeCancel = releaseGestureBasis;
-
-  // The maximum a handle REPORTS (End uses only a configured maximum). A
-  // configured maximum wins. Otherwise a measured extent stands in — the
-  // container's content box while a percentage bound already observes it, or
-  // the window's extent along the axis — and never drops below the current size, so
-  // `aria-valuenow` can never exceed `aria-valuemax` (a saved, default, or
-  // pre-resize size may already be larger than the window). An unobserved
-  // container reports nothing: measuring it would add an observer to an
-  // atomic pixel path.
-  const measuredBasisForMax = hasContainer
-    ? hasPositiveMeasurement && observeContainerBasis
-      ? containerBasis
-      : null
-    : windowExtent;
-  // Never below the announced value either: a collapsed pane announces the
-  // resolved minimum as its value, so the stand-in floors there as well, and
-  // `aria-valuemax` can never fall under `aria-valuemin`.
-  const effectiveMaxPx =
-    resolvedMax !== Infinity
-      ? resolvedMax
-      : measuredBasisForMax == null
-        ? undefined
-        : Math.max(measuredBasisForMax, isCollapsed ? resolvedMin : size);
+    model()?.end();
+  }, [model]);
+  const onResizeCancel = useCallback(() => {
+    model()?.cancel();
+  }, [model]);
 
   const props: ResizableProps = {
-    _size: isCollapsed ? 0 : size,
+    _size: size,
     _isCollapsed: isCollapsed,
     _onResizeStart: onResizeStart,
     _onResizeMove: onResizeMove,
     _onResizeEnd: onResizeEnd,
     _onResizeCancel: onResizeCancel,
-    _minSizePx: resolvedMin,
-    _maxSizePx: resolvedMax,
-    _snaps: snaps,
-    _collapsedSize: collapsedSize,
-    _collapsible: collapsible,
-    _direction: direction,
+    _minSizePx: snapshot.minPx,
+    _maxSizePx: snapshot.maxPx,
+    _snaps: config.snaps ?? EMPTY_SNAPS,
+    _collapsedSize: config.collapsedSize ?? DEFAULT_COLLAPSED_SIZE,
+    _collapsible: config.collapsible ?? false,
+    _direction: config.direction ?? 'horizontal',
     _isResizableProps: true,
   };
   collapseControls.set(props, {collapse, expand});
-  // Without a configured maximum the basis stands in — only when it is a
-  // real measurement (an observed container, or the window), never the
-  // temporary 1200px placeholder (component:Resizable Performance: atomic
-  // pixel paths add no observer, so an unobserved container stays unknown).
-  // The released no-container basis is the window WIDTH on both axes; a
-  // vertical region's reported maximum reads the window height instead.
-  if (effectiveMaxPx != null) {
-    effectiveMaxima.set(props, effectiveMaxPx);
+  // Without a configured maximum a measured extent stands in, only once it
+  // is a real measurement (an observed container, or the window).
+  if (snapshot.effectiveMaxPx != null) {
+    effectiveMaxima.set(props, snapshot.effectiveMaxPx);
   }
 
-  return {
-    size: isCollapsed ? 0 : size,
-    isCollapsed,
-    collapse,
-    expand,
-    resize,
-    props,
-  };
+  return {size, isCollapsed, collapse, expand, resize, props};
 }
 
 // =============================================================================
@@ -948,6 +383,251 @@ type MultiResizableArgument<Config extends UseResizableMultiConfig> =
         };
       }
     : never;
+
+// =============================================================================
+// The resize factory in React
+// =============================================================================
+
+interface ResizableEntry {
+  readonly element: HTMLElement | null;
+  readonly resizable: ResizableController;
+  readonly createdWith: CreateResizableOptions;
+}
+
+/** Where a region stands: its size as expanded, and whether it is collapsed. */
+type ResizableSelection = {size: number; isCollapsed: boolean};
+
+/**
+ * The factory a hook holds, and one store over it for React: it follows the
+ * factory the slot holds now, and reads the snapshot it reports, or the state
+ * the region starts in before there is one. A reading equal in every part to
+ * the last one is the last one, so a mount that settles where it started
+ * renders once. While it holds no factory (its component hidden by an
+ * `<Activity>`) it keeps the last reading, and where the region stood, for
+ * the next factory to start from.
+ */
+interface ResizableSlot {
+  get(): ResizableEntry | null;
+  set(next: ResizableEntry | null): void;
+  /** Where the region stood when the slot last let go of a factory. */
+  remembered(): ResizableSelection | undefined;
+  subscribe(listener: () => void): () => void;
+  read(): ResizableSnapshot;
+}
+
+function sameSnapshot(a: ResizableSnapshot, b: ResizableSnapshot): boolean {
+  return (
+    a.size === b.size &&
+    a.isCollapsed === b.isCollapsed &&
+    a.expandedSize === b.expandedSize &&
+    a.minPx === b.minPx &&
+    a.maxPx === b.maxPx &&
+    a.effectiveMaxPx === b.effectiveMaxPx
+  );
+}
+
+function createSlot(initial: ResizableSnapshot): ResizableSlot {
+  let current: ResizableEntry | null = null;
+  let last: ResizableSnapshot = initial;
+  let selection: ResizableSelection | undefined;
+  const listeners = new Set<() => void>();
+  let stopFactory: (() => void) | null = null;
+  const notify = () => {
+    for (const listener of [...listeners]) {
+      listener();
+    }
+  };
+  const follow = () => {
+    stopFactory?.();
+    stopFactory = null;
+    if (current != null && listeners.size > 0) {
+      const {resizable} = current;
+      const channel = readResizableInternals(resizable);
+      stopFactory =
+        channel != null
+          ? channel.subscribeSnapshot(notify)
+          : resizable.subscribe(notify);
+    }
+  };
+  return {
+    get: () => current,
+    set(next) {
+      if (current != null && next == null) {
+        selection = readResizableSelection(current.resizable) ?? selection;
+      }
+      current = next;
+      follow();
+      notify();
+    },
+    remembered: () => selection,
+    subscribe(listener) {
+      listeners.add(listener);
+      if (listeners.size === 1) {
+        follow();
+      }
+      return () => {
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          stopFactory?.();
+          stopFactory = null;
+        }
+      };
+    },
+    read() {
+      if (current == null) {
+        return last;
+      }
+      const {resizable} = current;
+      // A stand-in controller without the internal channel reports only its
+      // size and collapse state.
+      const next = readResizableInternals(resizable)?.snapshot() ?? {
+        ...initial,
+        size: resizable.size,
+        isCollapsed: resizable.isCollapsed,
+        expandedSize: resizable.size,
+      };
+      if (!sameSnapshot(last, next)) {
+        last = next;
+      }
+      return last;
+    },
+  };
+}
+
+/** What the hook renders from its factory. */
+interface ResizableReading {
+  /** The region's size in px, 0 while collapsed. */
+  readonly size: number;
+  readonly isCollapsed: boolean;
+  readonly collapse: () => void;
+  readonly expand: () => void;
+  readonly resize: (size: number) => void;
+  /** The bounds the handle announces, and the size as expanded. */
+  readonly snapshot: ResizableSnapshot;
+  /** The factory the region has now: null before its first commit. */
+  readonly getResizable: () => ResizableController | null;
+}
+
+/**
+ * createResizable in React, with nothing of its own (spec:AST-107 FR6): it
+ * creates the factory as it mounts, on the element behind `ref` (null while
+ * there is none), passes later options through `update`, destroys it as it
+ * unmounts, and returns what the factory reports. Before its first commit (the
+ * server, the first render, a hydrating render) it returns the state the
+ * factory starts in.
+ *
+ * A controlled `isCollapsed` is read from the options in the render that
+ * passes it, before `update` reaches the factory, so the size and collapse
+ * state a parent renders land in the same commit as the state its
+ * `onCollapseChange` set (component:Resizable FR8).
+ */
+function useResizableController(
+  ref: RefObject<HTMLElement | null>,
+  options: CreateResizableOptions,
+): ResizableReading {
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+  const [slot] = useState(() => createSlot(readInitialResizableState(options)));
+  const [serverInitial] = useState(() =>
+    readInitialResizableState(options, 'server'),
+  );
+  // The factory follows the element behind the ref. A ref is stable across an
+  // element swap, so its current node is compared after every commit (the
+  // configuration-object form passes no handle, NO_HANDLE). When the element
+  // goes away the factory on it goes too, with its listeners and attributes,
+  // and a factory with no handle keeps the region answering collapse, expand
+  // and resize; a new element gets a new factory. Each new factory starts
+  // where the region stood: the old factory's selection, or, after an
+  // `<Activity>` hid this component, the one the slot remembered.
+  const follow = useCallback(() => {
+    const element = ref.current;
+    const entry = slot.get();
+    if (entry != null && entry.element === element) {
+      return;
+    }
+    const previous =
+      entry == null
+        ? slot.remembered()
+        : readResizableSelection(entry.resizable);
+    entry?.resizable.destroy();
+    const createdWith =
+      previous == null
+        ? optionsRef.current
+        : {
+            ...optionsRef.current,
+            defaultSize: previous.size,
+            defaultIsCollapsed: previous.isCollapsed,
+          };
+    const resizable = createResizable(element, createdWith);
+    slot.set({element, resizable, createdWith});
+  }, [ref, slot]);
+  useIsomorphicLayoutEffect(() => {
+    follow();
+  });
+  // Unmounting, or hidden by an `<Activity>`: the factory goes, and the slot
+  // remembers where the region stood, so a reveal starts there.
+  useIsomorphicLayoutEffect(
+    () => () => {
+      const entry = slot.get();
+      slot.set(null);
+      entry?.resizable.destroy();
+    },
+    [slot],
+  );
+  useIsomorphicLayoutEffect(() => {
+    const entry = slot.get();
+    if (entry != null && options !== entry.createdWith) {
+      entry.resizable.update(options);
+    }
+  }, [slot, options]);
+  // A container swapped behind `containerRef` with the same options: the
+  // factory follows it at each commit, as it follows new options.
+  useIsomorphicLayoutEffect(() => {
+    const entry = slot.get();
+    if (entry != null) {
+      readResizableInternals(entry.resizable)?.syncContainer();
+    }
+  });
+
+  const snapshot = useSyncExternalStore(
+    slot.subscribe,
+    slot.read,
+    () => serverInitial,
+  );
+  // React subscribes to the slot again when an `<Activity>` shows this
+  // component, but does not read it again, and the factory made for the
+  // reveal reports in that same commit: render again with what it reports.
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  useIsomorphicLayoutEffect(() => {
+    if (slot.read() !== snapshot) {
+      rerender();
+    }
+  });
+  const isControlled = options.isCollapsed !== undefined;
+  const isCollapsed = isControlled
+    ? (options.collapsible ?? false) && Boolean(options.isCollapsed)
+    : snapshot.isCollapsed;
+  const size = isControlled
+    ? isCollapsed
+      ? 0
+      : snapshot.expandedSize
+    : snapshot.size;
+
+  const getResizable = useCallback(() => slot.get()?.resizable ?? null, [slot]);
+  const collapse = useCallback(() => {
+    getResizable()?.collapse();
+  }, [getResizable]);
+  const expand = useCallback(() => {
+    getResizable()?.expand();
+  }, [getResizable]);
+  const resize = useCallback(
+    (next: number) => {
+      getResizable()?.resize(next);
+    },
+    [getResizable],
+  );
+  return {snapshot, getResizable, size, isCollapsed, collapse, expand, resize};
+}
 
 export function useResizable<const Config extends UseResizableSingleConfig>(
   config: SingleResizableArgument<Config>,

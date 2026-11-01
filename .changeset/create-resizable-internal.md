@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] An internal `createResizable` factory makes a plain element a window splitter that resizes a region, without React, through the same size model as `useResizable`. It is not exported. No behavior changes.
+[chore] The configuration-object `useResizable` and `ResizeHandle`'s `resizable` path go through one internal resize factory and one input module, through the same size model as before, so the region's state and the handle's input each have one implementation. No behavior changes.
 
 @vjeux

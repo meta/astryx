@@ -9,10 +9,12 @@
  * @output createResizable(handle, options) → {size, isCollapsed, collapse,
  *   expand, resize, update, subscribe, destroy}: a resizable region driven by
  *   a window-splitter handle, with no React (spec:AST-107 FR6;
- *   `architecture:public-component-api` INV22)
+ *   `architecture:public-component-api` INV22); and readInitialResizableState,
+ *   the state a region starts in, for the hook's first render
  * @position The Resizable family's factory, internal to the package; its
- *   input is resizeGesture.ts. Importing it does no DOM work, so it is safe
- *   on the server
+ *   input is resizeGesture.ts. The configuration-object useResizable is its
+ *   React wrapper, and ResizeHandle's `resizable` path drives the same input.
+ *   Importing it does no DOM work, so it is safe on the server
  *
  * The factory never sizes the panel: it reports the size, through
  * `onSizeChange` for an interaction and `subscribe` for every change, and the
@@ -156,6 +158,160 @@ function readWindowExtent(direction: ResizableDirection): number | null {
   return direction === 'vertical' ? window.innerHeight : window.innerWidth;
 }
 
+/** A warning already given, so a resolution repeated silently stays quiet. */
+const QUIET = {current: true};
+
+/**
+ * The state a region with `options` starts in, before its handle exists: the
+ * server's render and a hook's first render. A container is not measured
+ * yet, so a percentage of it resolves against the deterministic 1200px basis
+ * until the factory measures it. `'server'` reads the state the server
+ * rendered, for a render that hydrates it: the 1200px basis for a viewport
+ * percentage too, and nothing saved.
+ */
+export function readInitialResizableState(
+  options: CreateResizableOptions = {},
+  environment: 'client' | 'server' = 'client',
+): ResizableSnapshot {
+  const {
+    defaultSize,
+    minSize,
+    maxSize,
+    containerRef,
+    collapsible = false,
+    snaps = [],
+    autoSaveId,
+    defaultIsCollapsed,
+    isCollapsed: controlled,
+  } = options;
+  const isServer = environment === 'server';
+  const persisted =
+    autoSaveId && !isServer ? loadPersistedState(autoSaveId) : null;
+  const parsedDefault = parseSize(defaultSize);
+  const parsedMin = parseSize(minSize);
+  const parsedMax = parseSize(maxSize);
+  const hasContainer = containerRef != null;
+  const needsContainer =
+    hasContainer &&
+    (dependsOnBasis(parsedMin) ||
+      dependsOnBasis(parsedMax) ||
+      (persisted?.size == null && dependsOnBasis(parsedDefault)));
+  const basis = hasContainer || isServer ? SERVER_BASIS : readViewportBasis();
+  const min = resolveBound(
+    minSize,
+    parsedMin,
+    basis,
+    DEFAULT_MIN,
+    'minSize',
+    RESIZABLE_SIZE_GUIDANCE,
+    QUIET,
+  );
+  const max = resolveBound(
+    maxSize,
+    parsedMax,
+    basis,
+    Infinity,
+    'maxSize',
+    RESIZABLE_SIZE_GUIDANCE,
+    QUIET,
+  );
+  const defaultPx = resolveBound(
+    defaultSize,
+    parsedDefault,
+    basis,
+    DEFAULT_SIZE_FALLBACK,
+    'defaultSize',
+    RESIZABLE_SIZE_GUIDANCE,
+    QUIET,
+  );
+  const chosen =
+    persisted?.size ??
+    (needsContainer ? null : clampSize(defaultPx, min, max, snaps));
+  const size = clampSize(chosen ?? defaultPx, min, max, snaps);
+  const isCollapsed =
+    collapsible &&
+    (controlled !== undefined
+      ? controlled
+      : (persisted?.isCollapsed ?? defaultIsCollapsed ?? false));
+  // A container is not measured yet; without one the window's extent stands
+  // in for a missing maximum, as the factory reports it.
+  const windowExtent =
+    hasContainer || isServer
+      ? null
+      : readWindowExtent(options.direction ?? 'horizontal');
+  return {
+    size: isCollapsed ? 0 : size,
+    isCollapsed,
+    expandedSize: size,
+    minPx: min,
+    maxPx: max,
+    effectiveMaxPx:
+      max !== Infinity
+        ? max
+        : windowExtent == null
+          ? undefined
+          : Math.max(windowExtent, isCollapsed ? min : size),
+  };
+}
+
+/**
+ * What a React form of the region renders, replaced as a whole whenever any
+ * part changes: the size (0 while collapsed), the collapse state, the size as
+ * expanded, and the bounds the handle announces.
+ */
+export interface ResizableSnapshot {
+  readonly size: number;
+  readonly isCollapsed: boolean;
+  readonly expandedSize: number;
+  readonly minPx: number;
+  readonly maxPx: number;
+  /** The maximum the handle reports: a configured one, or a measured extent. */
+  readonly effectiveMaxPx: number | undefined;
+}
+
+/**
+ * The package's own channel into a factory, for useResizable: kept off the
+ * exported ResizableController, so it adds no public member.
+ */
+interface ResizableInternals {
+  snapshot(): ResizableSnapshot;
+  /** Calls `listener` after every change to the snapshot. */
+  subscribeSnapshot(listener: () => void): () => void;
+  /**
+   * Follows the element behind `containerRef` when it has changed without
+   * new options, as a React caller's commit may have swapped it.
+   */
+  syncContainer(): void;
+  /**
+   * The region's side of a gesture the factory does not own: the drag and
+   * keys of a ResizeHandle given the configuration object's props.
+   */
+  model: ResizeGestureModel;
+}
+
+const internals = new WeakMap<ResizableController, ResizableInternals>();
+
+/** The factory's internal channel, or undefined for anything else. */
+export function readResizableInternals(
+  controller: ResizableController,
+): ResizableInternals | undefined {
+  return internals.get(controller);
+}
+
+/**
+ * Where a region stands: its size as expanded (not the 0 it reports while
+ * collapsed) and whether it is collapsed. A factory for a new handle of the
+ * same region starts from it, as its `defaultSize` and `defaultIsCollapsed`.
+ */
+export function readResizableSelection(
+  controller: ResizableController,
+): {size: number; isCollapsed: boolean} | undefined {
+  const snapshot = internals.get(controller)?.snapshot();
+  return snapshot == null
+    ? undefined
+    : {size: snapshot.expandedSize, isCollapsed: snapshot.isCollapsed};
+}
+
 /** The attributes the factory writes on a handle, restored by `destroy`. */
 const MANAGED_ATTRIBUTES = [
   'role',
@@ -257,6 +413,8 @@ export function createResizable(
   let notified: {size: number; isCollapsed: boolean} | null = null;
   let written: {key: string; size: number; isCollapsed: boolean} | null = null;
   let mustWrite = false;
+  let snapshot: ResizableSnapshot | null = null;
+  const snapshotListeners = new Set<() => void>();
 
   const direction = (): ResizableDirection => opts.direction ?? 'horizontal';
   const collapsible = (): boolean => opts.collapsible ?? false;
@@ -458,6 +616,22 @@ export function createResizable(
       size: derived.isCollapsed ? 0 : derived.size,
       isCollapsed: derived.isCollapsed,
     };
+    const next: ResizableSnapshot = {
+      size: reported.size,
+      isCollapsed: reported.isCollapsed,
+      expandedSize: derived.size,
+      minPx: derived.min,
+      maxPx: derived.max,
+      effectiveMaxPx: derived.effectiveMax,
+    };
+    const isSnapshotChanged =
+      snapshot == null ||
+      (Object.keys(next) as (keyof ResizableSnapshot)[]).some(
+        key => snapshot?.[key] !== next[key],
+      );
+    if (isSnapshotChanged) {
+      snapshot = next;
+    }
     if (
       notified == null ||
       notified.size !== reported.size ||
@@ -469,6 +643,11 @@ export function createResizable(
         for (const listener of [...listeners]) {
           listener();
         }
+      }
+    }
+    if (isSnapshotChanged) {
+      for (const listener of [...snapshotListeners]) {
+        listener();
       }
     }
   }
@@ -760,6 +939,9 @@ export function createResizable(
       // A drag in flight ends first, as cancelled, so the size it reached is
       // saved and the pointer and the body's cursor are released.
       gesture.interrupt();
+      // A gesture a ResizeHandle drove through the region's model, rather
+      // than the factory's own, ends the same way.
+      endGesture();
       isDestroyed = true;
       drivenHandle?.removeEventListener('pointerdown', onPointerDown);
       drivenHandle?.removeEventListener('pointermove', onPointerMove);
@@ -778,7 +960,29 @@ export function createResizable(
         setAttribute(name, value);
       }
       listeners.clear();
+      snapshotListeners.clear();
     },
   };
+  internals.set(controller, {
+    snapshot: () => snapshot as ResizableSnapshot,
+    subscribeSnapshot(listener) {
+      snapshotListeners.add(listener);
+      return () => {
+        snapshotListeners.delete(listener);
+      };
+    },
+    model,
+    syncContainer() {
+      if (isDestroyed) {
+        return;
+      }
+      const element = observation().container
+        ? (opts.containerRef?.current ?? null)
+        : null;
+      if (element !== containerElement) {
+        commit();
+      }
+    },
+  });
   return controller;
 }
