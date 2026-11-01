@@ -218,7 +218,7 @@ describe('ButtonGroup', () => {
   // trailing selector's shape (layer-skipping, never `:last-child`), and the
   // DOM tests assert MEMBERSHIP: which element is the group's last member,
   // with the layer pieces after it. Which corners actually round is checked in
-  // Chromium and WebKit by ButtonGroupCorners.interaction.browser.spec.ts
+  // a real browser by ButtonGroupCorners.interaction.browser.spec.ts
   // (ButtonGroup FR3).
   // ===========================================================================
   describe('trailing radius (#2508)', () => {

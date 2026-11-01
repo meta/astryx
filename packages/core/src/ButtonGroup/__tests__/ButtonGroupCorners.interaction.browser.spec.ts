@@ -2,18 +2,19 @@
 
 /**
  * @file ButtonGroupCorners.interaction.browser.spec.ts
- * @input Storybook story a11y-buttongroup-corners--shapes, in Chromium and
- *   WebKit
- * @output ButtonGroup FR3 in real browsers: in every member shape, only the
+ * @input Storybook story a11y-buttongroup-corners--shapes
+ * @output ButtonGroup FR3 in a real browser: in every member shape, only the
  *   group's last member (the last sibling that is not a popover, template or
  *   dialog) rounds its trailing corners, and an InputGroup button addon
  *   rounds its trailing corners only when no member follows it. Plus the
- *   cost contract from #9281: with the group rules on the page, inserting
- *   thousands of children into one container stays linear (WebKit
- *   re-evaluated the old sibling-relative `:has()` rule per sibling on every
- *   insertion)
- * @position ButtonGroup FR3 and InputGroup end-cap evidence; the jsdom tests
- *   assert membership only, since jsdom never receives these rules
+ *   cost of the group rules themselves: filling one container takes about as
+ *   long with them on the page as with them removed (the old sibling-relative
+ *   `:has()` rule made WebKit re-evaluate every earlier sibling on each
+ *   insertion). Other rules on the page cost the same in both measurements,
+ *   so only the group rules are measured
+ * @position ButtonGroup FR3 and InputGroup end-cap evidence, run in the
+ *   Chromium interaction lane; the jsdom tests assert membership only, since
+ *   jsdom never receives these rules
  */
 
 import {expect, test, type Page} from '@playwright/test';
@@ -88,6 +89,9 @@ test('only the last member rounds its trailing corners, in every shape', async (
   });
 });
 
+/** The group last-member predicate's skip list, in both its old and new form. */
+const GROUP_RULE_MARK = ':not([popover]):not(template):not(dialog)';
+
 /**
  * Inserts `count` closed popovers into one rendered container, reading layout
  * every 50 insertions as a page that renders as it fills does; returns the
@@ -114,26 +118,50 @@ async function insertionMs(page: Page, count: number): Promise<number> {
   }, count);
 }
 
-test('filling one container stays linear with the group rules on the page', async ({
-  page,
-}) => {
+/** Removes every stylesheet rule that carries the group predicate; returns how many. */
+async function removeGroupRules(page: Page): Promise<number> {
+  return page.evaluate(mark => {
+    let removed = 0;
+    for (const sheet of Array.from(document.styleSheets)) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (let index = rules.length - 1; index >= 0; index -= 1) {
+        const rule = rules[index];
+        if (rule instanceof CSSStyleRule && rule.selectorText.includes(mark)) {
+          sheet.deleteRule(index);
+          removed += 1;
+        }
+      }
+    }
+    return removed;
+  }, GROUP_RULE_MARK);
+}
+
+test('the group rules add no cost to filling a container', async ({page}) => {
   await openShapes(page);
-  const median = async (count: number) => {
+  const count = 8_000;
+  const median = async () => {
     const runs = [];
     for (let run = 0; run < 3; run += 1) {
       runs.push(await insertionMs(page, count));
     }
     return runs.sort((a, b) => a - b)[1];
   };
-  const small = await median(2_000);
-  const large = await median(8_000);
+  // Warm up, so neither measurement pays for the first run.
+  await insertionMs(page, count);
+  const withRules = await median();
+  expect(await removeGroupRules(page)).toBeGreaterThan(0);
+  const withoutRules = await median();
   test.info().annotations.push({
     type: 'insertion-ms',
-    description: `2,000: ${small.toFixed(1)} ms; 8,000: ${large.toFixed(1)} ms`,
+    description: `${count} popovers: ${withRules.toFixed(1)} ms with the group rules, ${withoutRules.toFixed(1)} ms without`,
   });
-  // Four times the children: linear cost is about four times the time, and
-  // the old rule's quadratic cost about sixteen (#9281 measured 45 ms at
-  // 2,000 and 1,152 ms at 10,000 in WebKit). The floor keeps a run too fast
-  // to time from failing on noise.
-  expect(large).toBeLessThan(Math.max(small, 5) * 9);
+  // The old rule more than doubled this in WebKit at 8,000 (#9281 measured
+  // 45 ms at 2,000 and 1,152 ms at 10,000 against 10 ms without it); the
+  // slack absorbs timing noise on a shared runner.
+  expect(withRules).toBeLessThan(withoutRules * 1.5 + 25);
 });

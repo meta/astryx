@@ -44,7 +44,7 @@ afterEach(() => {
 // `getComputedStyle`, which every role-and-name query calls, and a group
 // member between two popovers did not match. So jsdom never receives that
 // rule (ButtonGroup FR3); ButtonGroupCorners.interaction.browser.spec.ts checks
-// group corners in Chromium and WebKit, and jsdom tests assert group
+// group corners in a real browser, and jsdom tests assert group
 // membership only. Other `of S` rules, such as Table's zebra striping, still
 // reach jsdom.
 const GROUP_LAST_MEMBER = ':nth-last-child(1 of ';

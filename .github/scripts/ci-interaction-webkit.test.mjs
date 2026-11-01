@@ -163,7 +163,6 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
       'packages/core/src/motion/__tests__/animator.interaction',
-      'packages/core/src/ButtonGroup/__tests__/ButtonGroupCorners.interaction',
       'internal/interaction-harness/',
     ];
     for (const target of targets) {
@@ -226,10 +225,6 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
       'packages/core/src/hooks/usePressFeedback.ts',
-      // The group last-member rules and their WebKit cost contract (#9281).
-      'packages/core/src/Button/Button.tsx',
-      'packages/core/src/InputGroup/groupStyles.ts',
-      'packages/core/src/ButtonGroup/ButtonGroup.tsx',
       'internal/interaction-harness/src/webInput.ts',
       'playwright.interaction.config.ts',
       // Shared setup, as pr-interaction keeps (spec:AST-030 FR13): a
@@ -251,8 +246,6 @@ describe('WebKit interaction proof routing', () => {
   it('skips for everything else, including components the Chromium proofs cover', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
-      'packages/core/src/Button/Button.test.tsx',
-      'packages/core/src/InputGroup/InputGroup.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
       'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
