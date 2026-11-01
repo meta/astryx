@@ -558,6 +558,26 @@ describe('notRunLine', () => {
     );
   });
 
+  it('names the shared styles that made a change wide', () => {
+    expect(
+      notRunLine({
+        jobs: [
+          skipped('Stable visual scout (1/5)'),
+          skipped('pr-a11y (full audit)'),
+          skipped('pr-rtl (core)'),
+        ],
+        touched: {
+          wideChange: true,
+          componentCount: 0,
+          components: [],
+          foundations: ['packages/core/src/theme/tokens.stylex.ts'],
+        },
+      }),
+    ).toBe(
+      'Wide change (shared styles: packages/core/src/theme/tokens.stylex.ts): add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run them.\n\n',
+    );
+  });
+
   it('leaves the line out when the Storybook build failed', () => {
     expect(
       notRunLine({

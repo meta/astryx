@@ -485,8 +485,23 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
   // Too wide for the touched-components check: it says so, and names only
   // the suites that did not run. A narrower change's touched components were
   // checked, so the labels run the full suites.
-  if (touched?.wideChange === true)
-    return `Wide change (${num(touched.componentCount)} components): add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+  if (touched?.wideChange === true) {
+    // A shared-style change is wide whatever its component count; #9178
+    // records why in `foundations`.
+    const foundations = Array.isArray(touched.foundations)
+      ? touched.foundations.filter(Boolean)
+      : [];
+    const why =
+      foundations.length > 0
+        ? `Wide change (shared styles: ${foundations
+            .slice(0, 3)
+            .map(inline)
+            .join(
+              ', ',
+            )}${foundations.length > 3 ? `, and ${foundations.length - 3} more` : ''})`
+        : `Wide change (${num(touched.componentCount)} components)`;
+    return `${why}: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+  }
   // Claim the touched check only when it produced a result.
   const checked = (touched?.components || []).some(component =>
     Object.values(component.results || {}).some(
