@@ -29,8 +29,9 @@ describe('docsite-test', () => {
   it('is one job that builds the docsite once and runs both suites on it', () => {
     expect(jobs['docsite-data']).toBeUndefined();
     expect(jobs['docsite-browser']).toBeUndefined();
-    // It needs only the heavy-suite deferral (spec:AST-030 FR20).
-    expect(owner.needs).toEqual(['heavy-ci']);
+    // CI's run admission, which never skips (ci-admission.test.mjs), and the
+    // heavy-suite deferral (spec:AST-030 FR20).
+    expect(owner.needs).toEqual(['admission', 'heavy-ci']);
     expect(owner['continue-on-error']).toBeUndefined();
     // A required context keeps only the draft skip in its condition; an
     // outside contributor's run stops at the first step with the reason.

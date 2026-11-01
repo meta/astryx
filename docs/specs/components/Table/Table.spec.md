@@ -113,6 +113,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - TableHeader, TableBody, TableFooter, and TableRow element contracts;
   `component:TableHeader`, `component:TableBody`, `component:TableFooter`, and
   `component:TableRow` own them.
+- TableCell, TableHeaderCell, and TableSelectionToolbar contracts;
+  `component:TableCell`, `component:TableHeaderCell`, and
+  `component:TableSelectionToolbar` own them.
 
 ## Public concepts
 
