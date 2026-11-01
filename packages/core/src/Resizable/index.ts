@@ -19,6 +19,7 @@ export type {
   ResizableConfig,
   UseResizableSingleConfig,
   UseResizableMultiConfig,
+  UseResizableResult,
 } from './useResizable';
 
 export {ResizeHandle} from './ResizeHandle';
