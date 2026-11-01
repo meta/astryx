@@ -30,7 +30,7 @@ import {
 import {Icon} from '../Icon';
 import {Tooltip} from '../Tooltip';
 import {Text} from '../Text';
-import {textBlockMarker} from '../Text/text.stylex';
+import {textBlockMarker} from '../Text/textBlock.markers.stylex';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {
   TextType,

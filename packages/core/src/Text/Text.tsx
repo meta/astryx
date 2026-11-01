@@ -45,8 +45,8 @@ import {
   decorationStyles,
   tabularNumbersStyle,
   truncationTooltipStyles,
-  textBlockMarker,
 } from './text.stylex';
+import {textBlockMarker} from './textBlock.markers.stylex';
 import {useTruncation} from './useTruncation';
 import type {LayerPlacement} from '../Layer';
 import {mergeProps} from '../utils/mergeProps';

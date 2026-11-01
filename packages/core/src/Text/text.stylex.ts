@@ -229,15 +229,6 @@ export const sizeByLevelStyles = stylex.create({
 // Display Styles
 // =============================================================================
 
-/**
- * Marks a Text that renders as a block (`display="block"`, a line clamp, or
- * capsize), so an ancestor can lay itself out around a block child: a Link
- * keeps a flex box, and with it a painted focus ring, around one
- * (`component:Link` FR6, AR5).
- */
-export const textBlockMarker: ReturnType<typeof stylex.defineMarker> =
-  stylex.defineMarker();
-
 export const displayStyles = stylex.create({
   inline: {
     display: 'inline',
