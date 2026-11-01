@@ -1137,7 +1137,7 @@ jobs:
             # packages depend on them. Another package builds only when the
             # pull request changes its source. A published package the base
             # leaves unbuilt is reported from the head build only when none of
-            # its report inputs changed (the API report CLI's SHARED_INPUTS);
+            # its report inputs changed (SHARED_INPUTS in the API report CLI);
             # otherwise from its committed report.
             pnpm -F @astryxdesign/build build
             pnpm -F @astryxdesign/core build
@@ -1152,7 +1152,7 @@ jobs:
                 done
                 # The CLI publishes declarations generated from its JSDoc.
                 git diff --quiet "$BASE_SHA" "$HEAD_SHA" -- packages/cli || pnpm -F @astryxdesign/cli sync:api-types
-              } || echo "Building the merge base's published packages failed; those packages compare with its committed reports."
+              } || echo "Building the published packages of the merge base failed; those packages compare with its committed reports."
             fi
             touch ../base-build.done
           ' > base-build.log 2>&1 || touch base-build.failed &
