@@ -9,10 +9,13 @@
  * @output createResizable(handle, options) → {size, isCollapsed, collapse,
  *   expand, resize, update, subscribe, destroy}: a resizable region driven by
  *   a window-splitter handle, with no React (spec:AST-107 FR6;
- *   `architecture:public-component-api` INV22)
+ *   `architecture:public-component-api` INV22); and readInitialResizableState,
+ *   the state a region starts in, for the hook's first render
  * @position The Resizable family's factory, internal to the package; its
- *   input is resizeGesture.ts. Importing it does no DOM work, so it is safe
- *   on the server
+ *   input is resizeGesture.ts. useResizable(handleRef, options) is its thin
+ *   React wrapper, and a ResizeHandle given that ref renders the factory's
+ *   handle and forwards its input to it. Importing it does no DOM work, so it
+ *   is safe on the server
  *
  * The factory never sizes the panel: it reports the size, through
  * `onSizeChange` for an interaction and `subscribe` for every change, and the
@@ -40,16 +43,22 @@ import {
   type ResizableDirection,
 } from './resizableModel';
 import {
+  bindResizeHandle,
   createResizeGesture,
+  isClaimedResizeHandle,
   type ResizeGesture,
   type ResizeGestureModel,
   type ResizeGestureState,
+  type ResizeHandleBinding,
+  type ResizeHandleConfig,
+  type ResizeHandleView,
 } from './resizeGesture';
 import type {ResizableSize} from './utils';
 
 /**
- * The catalog's messages for the handle: its name when no other is given, and
- * what it announces while collapsed (the shipped English messages).
+ * The catalog's messages for a plain handle: its name when no other is given,
+ * and what it announces while collapsed. The bare factory uses the shipped
+ * English messages; useResizable gives the provider's translation instead.
  */
 const LABEL_KEY = '@astryx.resizable.handle.label';
 const COLLAPSED_LABEL_KEY = '@astryx.resizable.collapsed';
@@ -96,19 +105,23 @@ export interface CreateResizableOptions {
   onCollapseChange?: (isCollapsed: boolean) => void;
   /**
    * The handle sits after the panel it resizes (the panel is at the end), so
-   * a drag toward the start grows it.
+   * a drag toward the start grows it. On a ResizeHandle, its own
+   * `isReversed` prop does the same: either one reverses the handle.
    * @default false
    */
   isReversed?: boolean;
   /**
-   * Ignores pointer and keyboard input and says so; the handle keeps its tab
-   * stop.
+   * Ignores pointer and keyboard input and says so; a plain element keeps its
+   * tab stop. On a ResizeHandle, its own `isDisabled` prop does the same:
+   * either one disables the handle.
    * @default false
    */
   isDisabled?: boolean;
   /**
-   * The handle's accessible name, when the element has none of its own.
-   * Without it, the message catalog's English message names it.
+   * A plain element's accessible name, when it has none of its own. Without
+   * it, useResizable gives the message catalog's translation, and the bare
+   * factory the catalog's English message. A ResizeHandle takes its own
+   * `label` prop.
    * @default 'Resize handle'
    */
   label?: string;
@@ -150,6 +163,160 @@ function readWindowExtent(direction: ResizableDirection): number | null {
     return null;
   }
   return direction === 'vertical' ? window.innerHeight : window.innerWidth;
+}
+
+/** A warning already given, so a resolution repeated silently stays quiet. */
+const QUIET = {current: true};
+
+/**
+ * The state a region with `options` starts in, before its handle exists: the
+ * server's render and a hook's first render. A container is not measured
+ * yet, so a percentage of it resolves against the deterministic 1200px basis
+ * until the factory measures it. `'server'` reads the state the server
+ * rendered, for a render that hydrates it: the 1200px basis for a viewport
+ * percentage too, and nothing saved.
+ */
+export function readInitialResizableState(
+  options: CreateResizableOptions = {},
+  environment: 'client' | 'server' = 'client',
+): ResizableSnapshot {
+  const {
+    defaultSize,
+    minSize,
+    maxSize,
+    containerRef,
+    collapsible = false,
+    snaps = [],
+    autoSaveId,
+    defaultIsCollapsed,
+    isCollapsed: controlled,
+  } = options;
+  const isServer = environment === 'server';
+  const persisted =
+    autoSaveId && !isServer ? loadPersistedState(autoSaveId) : null;
+  const parsedDefault = parseSize(defaultSize);
+  const parsedMin = parseSize(minSize);
+  const parsedMax = parseSize(maxSize);
+  const hasContainer = containerRef != null;
+  const needsContainer =
+    hasContainer &&
+    (dependsOnBasis(parsedMin) ||
+      dependsOnBasis(parsedMax) ||
+      (persisted?.size == null && dependsOnBasis(parsedDefault)));
+  const basis = hasContainer || isServer ? SERVER_BASIS : readViewportBasis();
+  const min = resolveBound(
+    minSize,
+    parsedMin,
+    basis,
+    DEFAULT_MIN,
+    'minSize',
+    RESIZABLE_SIZE_GUIDANCE,
+    QUIET,
+  );
+  const max = resolveBound(
+    maxSize,
+    parsedMax,
+    basis,
+    Infinity,
+    'maxSize',
+    RESIZABLE_SIZE_GUIDANCE,
+    QUIET,
+  );
+  const defaultPx = resolveBound(
+    defaultSize,
+    parsedDefault,
+    basis,
+    DEFAULT_SIZE_FALLBACK,
+    'defaultSize',
+    RESIZABLE_SIZE_GUIDANCE,
+    QUIET,
+  );
+  const chosen =
+    persisted?.size ??
+    (needsContainer ? null : clampSize(defaultPx, min, max, snaps));
+  const size = clampSize(chosen ?? defaultPx, min, max, snaps);
+  const isCollapsed =
+    collapsible &&
+    (controlled !== undefined
+      ? controlled
+      : (persisted?.isCollapsed ?? defaultIsCollapsed ?? false));
+  // A container is not measured yet; without one the window's extent stands
+  // in for a missing maximum, as the factory reports it.
+  const windowExtent =
+    hasContainer || isServer
+      ? null
+      : readWindowExtent(options.direction ?? 'horizontal');
+  return {
+    size: isCollapsed ? 0 : size,
+    isCollapsed,
+    expandedSize: size,
+    minPx: min,
+    maxPx: max,
+    effectiveMaxPx:
+      max !== Infinity
+        ? max
+        : windowExtent == null
+          ? undefined
+          : Math.max(windowExtent, isCollapsed ? min : size),
+  };
+}
+
+/**
+ * What a React form of the region renders, replaced as a whole whenever any
+ * part changes: the size (0 while collapsed), the collapse state, the size as
+ * expanded, and the bounds the handle announces.
+ */
+export interface ResizableSnapshot {
+  readonly size: number;
+  readonly isCollapsed: boolean;
+  readonly expandedSize: number;
+  readonly minPx: number;
+  readonly maxPx: number;
+  /** The maximum the handle reports: a configured one, or a measured extent. */
+  readonly effectiveMaxPx: number | undefined;
+}
+
+/**
+ * The package's own channel into a factory, for useResizable: kept off the
+ * exported ResizableController, so it adds no public member.
+ */
+interface ResizableInternals {
+  snapshot(): ResizableSnapshot;
+  /** Calls `listener` after every change to the snapshot. */
+  subscribeSnapshot(listener: () => void): () => void;
+  /**
+   * What a plain handle announces while collapsed: the provider's
+   * translation of the catalog message, or undefined for the English one.
+   */
+  setCollapsedText(text: string | undefined): void;
+  /**
+   * Follows the element behind `containerRef` when it has changed without
+   * new options, as a React caller's commit may have swapped it.
+   */
+  syncContainer(): void;
+}
+
+const internals = new WeakMap<ResizableController, ResizableInternals>();
+
+/** The factory's internal channel, or undefined for anything else. */
+export function readResizableInternals(
+  controller: ResizableController,
+): ResizableInternals | undefined {
+  return internals.get(controller);
+}
+
+/**
+ * Where a region stands: its size as expanded (not the 0 it reports while
+ * collapsed) and whether it is collapsed. A factory for a new handle of the
+ * same region starts from it, as its `defaultSize` and `defaultIsCollapsed`.
+ */
+export function readResizableSelection(
+  controller: ResizableController,
+): {size: number; isCollapsed: boolean} | undefined {
+  const snapshot = internals.get(controller)?.snapshot();
+  return snapshot == null
+    ? undefined
+    : {size: snapshot.expandedSize, isCollapsed: snapshot.isCollapsed};
 }
 
 /** The attributes the factory writes on a handle, restored by `destroy`. */
@@ -203,10 +370,23 @@ export function createResizable(
   let opts = options;
   let isDestroyed = false;
   const listeners = new Set<() => void>();
-  // The element the factory drives: its listeners and attributes.
-  const drivenHandle = handle;
-  const isReversed = (): boolean => opts.isReversed ?? false;
-  const isDisabled = (): boolean => opts.isDisabled ?? false;
+  // A handle ResizeHandle renders: the component renders the separator's
+  // attributes and forwards its events, so the factory adds neither.
+  const isRenderedByResizeHandle =
+    handle != null && isClaimedResizeHandle(handle);
+  // A plain element the factory drives itself: its listeners and attributes.
+  const drivenHandle = isRenderedByResizeHandle ? null : handle;
+  let isDragging = false;
+  let collapsedText: string | undefined;
+  let view: ResizeHandleView | null = null;
+  const viewListeners = new Set<() => void>();
+  // The ResizeHandle's own isReversed and isDisabled, while it renders the
+  // handle: either it or the options reverses or disables the handle.
+  let handleConfig: ResizeHandleConfig | null = null;
+  const isReversed = (): boolean =>
+    (opts.isReversed ?? false) || (handleConfig?.isReversed ?? false);
+  const isDisabled = (): boolean =>
+    (opts.isDisabled ?? false) || (handleConfig?.isDisabled ?? false);
   const didWarn = {
     min: {current: false},
     max: {current: false},
@@ -253,6 +433,8 @@ export function createResizable(
   let notified: {size: number; isCollapsed: boolean} | null = null;
   let written: {key: string; size: number; isCollapsed: boolean} | null = null;
   let mustWrite = false;
+  let snapshot: ResizableSnapshot | null = null;
+  const snapshotListeners = new Set<() => void>();
 
   const direction = (): ResizableDirection => opts.direction ?? 'horizontal';
   const collapsible = (): boolean => opts.collapsible ?? false;
@@ -449,11 +631,28 @@ export function createResizable(
     if (drivenHandle != null) {
       announce();
     }
+    refreshView();
     persist();
     const reported = {
       size: derived.isCollapsed ? 0 : derived.size,
       isCollapsed: derived.isCollapsed,
     };
+    const next: ResizableSnapshot = {
+      size: reported.size,
+      isCollapsed: reported.isCollapsed,
+      expandedSize: derived.size,
+      minPx: derived.min,
+      maxPx: derived.max,
+      effectiveMaxPx: derived.effectiveMax,
+    };
+    const isSnapshotChanged =
+      snapshot == null ||
+      (Object.keys(next) as (keyof ResizableSnapshot)[]).some(
+        key => snapshot?.[key] !== next[key],
+      );
+    if (isSnapshotChanged) {
+      snapshot = next;
+    }
     if (
       notified == null ||
       notified.size !== reported.size ||
@@ -465,6 +664,11 @@ export function createResizable(
         for (const listener of [...listeners]) {
           listener();
         }
+      }
+    }
+    if (isSnapshotChanged) {
+      for (const listener of [...snapshotListeners]) {
+        listener();
       }
     }
   }
@@ -489,6 +693,35 @@ export function createResizable(
       mustWrite = false;
       written = next;
       persistState(key, {size: next.size, isCollapsed: next.isCollapsed});
+    }
+  }
+
+  /** The view a ResizeHandle renders, replaced only when it changes. */
+  function refreshView(): void {
+    if (!isRenderedByResizeHandle) {
+      return;
+    }
+    const next: ResizeHandleView = {
+      size: derived.isCollapsed ? 0 : derived.size,
+      isCollapsed: derived.isCollapsed,
+      minPx: derived.min,
+      effectiveMaxPx: derived.effectiveMax,
+      isDragging,
+      direction: direction(),
+      isReversed: isReversed(),
+      isDisabled: isDisabled(),
+    };
+    if (
+      view != null &&
+      (Object.keys(next) as (keyof ResizeHandleView)[]).every(
+        key => view?.[key] === next[key],
+      )
+    ) {
+      return;
+    }
+    view = next;
+    for (const listener of [...viewListeners]) {
+      listener();
     }
   }
 
@@ -542,7 +775,7 @@ export function createResizable(
     );
     setAttribute(
       'aria-valuetext',
-      isCollapsed ? enCatalog[COLLAPSED_LABEL_KEY] : null,
+      isCollapsed ? (collapsedText ?? enCatalog[COLLAPSED_LABEL_KEY]) : null,
     );
     setAttribute('aria-disabled', isDisabled() ? 'true' : null);
   }
@@ -687,7 +920,12 @@ export function createResizable(
       isDisabled: isDisabled(),
     }),
     dragging => {
-      setAttribute('data-resizing', dragging ? '' : null);
+      isDragging = dragging;
+      if (isRenderedByResizeHandle) {
+        refreshView();
+      } else {
+        setAttribute('data-resizing', dragging ? '' : null);
+      }
     },
   );
 
@@ -721,6 +959,28 @@ export function createResizable(
   }
 
   commit();
+
+  const binding: ResizeHandleBinding = {
+    gesture,
+    read: () => view as ResizeHandleView,
+    configure(config) {
+      if (isDestroyed) {
+        return;
+      }
+      handleConfig = config;
+      refreshView();
+    },
+    subscribe(listener) {
+      viewListeners.add(listener);
+      return () => {
+        viewListeners.delete(listener);
+      };
+    },
+  };
+  const unbind =
+    handle != null && isRenderedByResizeHandle
+      ? bindResizeHandle(handle, binding)
+      : null;
 
   const controller: ResizableController = {
     get size() {
@@ -757,6 +1017,8 @@ export function createResizable(
       // saved and the pointer and the body's cursor are released.
       gesture.interrupt();
       isDestroyed = true;
+      unbind?.();
+      viewListeners.clear();
       drivenHandle?.removeEventListener('pointerdown', onPointerDown);
       drivenHandle?.removeEventListener('pointermove', onPointerMove);
       drivenHandle?.removeEventListener('pointerup', onPointerUp);
@@ -774,7 +1036,37 @@ export function createResizable(
         setAttribute(name, value);
       }
       listeners.clear();
+      snapshotListeners.clear();
     },
   };
+  internals.set(controller, {
+    snapshot: () => snapshot as ResizableSnapshot,
+    subscribeSnapshot(listener) {
+      snapshotListeners.add(listener);
+      return () => {
+        snapshotListeners.delete(listener);
+      };
+    },
+    setCollapsedText(text) {
+      if (isDestroyed || text === collapsedText) {
+        return;
+      }
+      collapsedText = text;
+      if (drivenHandle != null) {
+        announce();
+      }
+    },
+    syncContainer() {
+      if (isDestroyed) {
+        return;
+      }
+      const element = observation().container
+        ? (opts.containerRef?.current ?? null)
+        : null;
+      if (element !== containerElement) {
+        commit();
+      }
+    },
+  });
   return controller;
 }

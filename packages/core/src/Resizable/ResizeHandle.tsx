@@ -30,9 +30,20 @@
  * hears them again. Captured events are delivered to the capturing element,
  * so the move/up/cancel handlers live on the grab zone (as in Slider), not on
  * window.
+ *
+ * Given the ref of `useResizable(handleRef, options)`, it renders the region of
+ * the createResizable bound to its element instead, and forwards its React
+ * events to that factory's input (resizeGesture.ts).
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useReducer,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
@@ -51,10 +62,18 @@ import {
   getEffectiveMaxPx,
   type ResizableProps,
 } from './useResizable';
+import {
+  claimResizeHandle,
+  createResizeHandleClaim,
+  notifyHandleRef,
+  releaseResizeHandle,
+} from './resizeGesture';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useDevWarning} from '../hooks/useDevWarning';
 const KEYBOARD_STEP = 10;
 const KEYBOARD_LARGE_STEP = 50;
 
@@ -461,16 +480,98 @@ export function ResizeHandle({
     startPos: number;
     rtl: number;
   } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [isLegacyDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
   const isHorizontal = direction === 'horizontal';
   const isOverlay = positionMode === 'overlay';
   const sign = isReversed ? -1 : 1;
+
+  // --- The createResizable that useResizable(handleRef) attached here ---
+  const [claim] = useState(createResizeHandleClaim);
+  const claimedElementRef = useRef<HTMLDivElement | null>(null);
+  // A callback ref, so the hook holding the ref this handle is given hears of
+  // the element as it attaches and lets go, without its own component
+  // rendering: a handle a child mounts, unmounts, or hides and shows in its
+  // own `<Activity>` is bound and unbound at once. It runs after the caller's
+  // ref is set (see the merged refs below).
+  const claimRef = useCallback(
+    (element: HTMLDivElement | null) => {
+      const previous = claimedElementRef.current;
+      if (previous === element) {
+        return;
+      }
+      if (previous != null) {
+        releaseResizeHandle(previous, claim);
+      }
+      claimedElementRef.current = element;
+      if (element != null) {
+        claimResizeHandle(element, claim);
+      }
+      notifyHandleRef(ref);
+    },
+    [claim, ref],
+  );
+  const binding = useSyncExternalStore(claim.subscribe, claim.get, () => null);
+  const subscribeToBinding = useCallback(
+    (listener: () => void) => binding?.subscribe(listener) ?? (() => {}),
+    [binding],
+  );
+  const bound = useSyncExternalStore(
+    subscribeToBinding,
+    () => binding?.read() ?? null,
+    () => null,
+  );
+  // React subscribes to these stores in the passive phase, after the hook has
+  // bound its factory in its own layout effect, and does not read them again
+  // when an `<Activity>` shows this handle. This subscription is live from the
+  // layout phase: a factory bound in the commit that mounts or shows the
+  // handle, and what it reports, render before paint.
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  useIsomorphicLayoutEffect(() => {
+    let stopView = claim.get()?.subscribe(rerender) ?? null;
+    const stopClaim = claim.subscribe(() => {
+      stopView?.();
+      stopView = claim.get()?.subscribe(rerender) ?? null;
+      rerender();
+    });
+    if (claim.get() != null) {
+      rerender();
+    }
+    return () => {
+      stopClaim();
+      stopView?.();
+    };
+  }, [claim]);
+  // A `resizable` prop wins over a bound factory: it is the region the caller
+  // named on this element.
+  const view = resizable != null ? null : bound;
+  // The bound factory's input, which this handle forwards its events to.
+  const gesture = view != null ? (binding?.gesture ?? null) : null;
+  // The handle's own isReversed and isDisabled apply to the region it renders
+  // (with the region's own options: either one reverses or disables it).
+  useIsomorphicLayoutEffect(() => {
+    if (resizable != null || binding == null) {
+      return;
+    }
+    binding.configure({isReversed, isDisabled});
+    return () => {
+      binding.configure(null);
+    };
+  }, [binding, resizable, isReversed, isDisabled]);
+  useDevWarning(
+    'ResizeHandle',
+    'has a `resizable` prop and a useResizable(handleRef) region at once. ' +
+      'The `resizable` prop wins; pass one of them.',
+    resizable != null && binding != null,
+  );
+  const isDragging = view?.isDragging ?? isLegacyDragging;
+  const isInputDisabled = isDisabled || !!view?.isDisabled;
+  const isCollapsed = resizable?._isCollapsed ?? view?.isCollapsed ?? false;
   const effectiveSide = resolveEffectiveSide(
     pillPlacement,
-    isReversed,
-    resizable?._isCollapsed ?? false,
+    view?.isReversed ?? isReversed,
+    isCollapsed,
   );
   // Physical offset direction shared by the pill and the grab zone (null =
   // centered / no bias). Keeps the two positioned identically in LTR and RTL.
@@ -491,8 +592,8 @@ export function ResizeHandle({
   // so `_direction` is optional for old hand-built objects; absent means there
   // is no hook axis to compare, not that the hook is horizontal.
   const didWarnAxisRef = useRef(false);
+  const hookDirection = resizable?._direction ?? view?.direction;
   useEffect(() => {
-    const hookDirection = resizable?._direction;
     if (
       hookDirection != null &&
       hookDirection !== direction &&
@@ -506,7 +607,7 @@ export function ResizeHandle({
           'and the handle drags the other.',
       );
     }
-  }, [direction, resizable]);
+  }, [direction, hookDirection]);
 
   // --- Pointer drag ---
   const clearDrag = useCallback(() => {
@@ -696,6 +797,8 @@ export function ResizeHandle({
   // that its gesture is over.
   const cancelOnUnmountRef = useRef<(() => void) | undefined>(undefined);
   cancelOnUnmountRef.current = resizable?._onResizeCancel;
+  const gestureRef = useRef(gesture);
+  gestureRef.current = gesture;
   useEffect(() => {
     return () => {
       if (dragRef.current) {
@@ -703,6 +806,8 @@ export function ResizeHandle({
         clearBodyDragStyles();
         cancelOnUnmountRef.current?.();
       }
+      // A bound factory's drag ends the same way, in the factory's input.
+      gestureRef.current?.interrupt();
     };
   }, []);
 
@@ -711,30 +816,34 @@ export function ResizeHandle({
   // is invalid per WCAG 4.1.2. Clamp aria-valuenow to the minimum and announce
   // the true state via aria-valuetext instead; the valuetext is removed as
   // soon as the panel expands so the numeric value reads again.
-  const isCollapsed = resizable?._isCollapsed ?? false;
-  const ariaValueNow = resizable
-    ? isCollapsed
-      ? Math.max(resizable._size, resizable._minSizePx)
-      : resizable._size
-    : undefined;
-  const ariaValueMin = resizable ? resizable._minSizePx : undefined;
+  const sizeNow = resizable?._size ?? view?.size;
+  const minNow = resizable?._minSizePx ?? view?.minPx;
+  const ariaValueNow =
+    sizeNow == null || minNow == null
+      ? undefined
+      : isCollapsed
+        ? Math.max(sizeNow, minNow)
+        : sizeNow;
+  const ariaValueMin = minNow;
   // A separator with a value needs a maximum (WAI-ARIA, APG window splitter).
   // Unbounded regions report the basis they can fill; a hand-built props
   // object without it reports only a configured maximum.
   const effectiveMax = resizable
     ? (getEffectiveMaxPx(resizable) ??
       (resizable._maxSizePx !== Infinity ? resizable._maxSizePx : undefined))
-    : undefined;
+    : view?.effectiveMaxPx;
   const ariaValueMax =
     effectiveMax != null && Number.isFinite(effectiveMax)
       ? effectiveMax
       : undefined;
   const ariaValueText =
-    resizable && isCollapsed ? t('@astryx.resizable.collapsed') : undefined;
+    (resizable != null || view != null) && isCollapsed
+      ? t('@astryx.resizable.collapsed')
+      : undefined;
 
   return (
     <div
-      ref={useMergedRefs(ref, handleRef)}
+      ref={useMergedRefs(ref, handleRef, claimRef)}
       role="separator"
       aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
       aria-valuenow={ariaValueNow}
@@ -742,9 +851,15 @@ export function ResizeHandle({
       aria-valuemax={ariaValueMax}
       aria-valuetext={ariaValueText}
       aria-label={label}
-      aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : 0}
-      onDoubleClick={handleDoubleClick}
+      aria-disabled={isInputDisabled || undefined}
+      tabIndex={isInputDisabled ? -1 : 0}
+      onDoubleClick={() => {
+        if (gesture == null) {
+          handleDoubleClick();
+        } else if (!isInputDisabled) {
+          gesture.doubleClick();
+        }
+      }}
       onFocus={() => setIsFocused(true)}
       onBlur={() => setIsFocused(false)}
       data-resizing={isDragging || undefined}
@@ -767,7 +882,7 @@ export function ResizeHandle({
             !isDragging &&
             styles.handleHover,
           !isOverlay && hasDivider && isDragging && styles.handleActive,
-          isDisabled && styles.disabled,
+          isInputDisabled && styles.disabled,
           xstyle,
         ),
         className,
@@ -780,7 +895,11 @@ export function ResizeHandle({
       // this accessibility-critical handler can't be clobbered by a passed prop.
       onKeyDown={e => {
         props.onKeyDown?.(e);
-        handleKeyDown(e);
+        if (gesture == null) {
+          handleKeyDown(e);
+        } else if (!isInputDisabled) {
+          gesture.keyDown(e);
+        }
       }}>
       {/* Wider invisible hit area for pointer interaction */}
       <div
@@ -798,13 +917,43 @@ export function ResizeHandle({
             : isHorizontal
               ? dynamicStyles.hitAreaOffsetX(hitBiasDir)
               : dynamicStyles.hitAreaOffsetY(hitBiasDir),
-          isDisabled && styles.disabled,
+          isInputDisabled && styles.disabled,
         )}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={cancelDrag}
-        onLostPointerCapture={cancelDrag}
+        onPointerDown={e => {
+          if (gesture == null) {
+            handlePointerDown(e);
+          } else if (!isInputDisabled) {
+            gesture.pointerDown(e);
+          }
+        }}
+        onPointerMove={e => {
+          if (gesture == null) {
+            handlePointerMove(e);
+          } else {
+            gesture.pointerMove(e);
+          }
+        }}
+        onPointerUp={e => {
+          if (gesture == null) {
+            handlePointerUp(e);
+          } else {
+            gesture.pointerUp(e);
+          }
+        }}
+        onPointerCancel={e => {
+          if (gesture == null) {
+            cancelDrag(e);
+          } else {
+            gesture.pointerCancel(e);
+          }
+        }}
+        onLostPointerCapture={e => {
+          if (gesture == null) {
+            cancelDrag(e);
+          } else {
+            gesture.pointerCancel(e);
+          }
+        }}
         onPointerEnter={() => setIsHovered(true)}
         onPointerLeave={() => {
           if (!isDragging) {
