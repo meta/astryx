@@ -4487,7 +4487,8 @@ describe('SideNav collapse focus (AR3)', () => {
             hasButton: toggle,
           }}
           header={<SideNavHeading heading="My App" headingHref="/" />}
-          topContent={<button type="button">New project</button>}>
+          topContent={<button type="button">New project</button>}
+          footer={<a href="/help">Help</a>}>
           <SideNavItem label="Dashboard" icon={StubIcon} href="/dashboard" />
         </SideNav>
       );
