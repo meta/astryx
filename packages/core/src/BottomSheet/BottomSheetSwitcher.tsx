@@ -350,7 +350,11 @@ export function BottomSheetSwitcher({
   // settled, with no entry motion; the first change of step animates as
   // usual (spec:AST-013 FR13). It latches on the flow's own request: a host
   // sheet hydrating reads as closed to a flow inside it.
-  const settledSheet = useSettledOpen(activeSheetProp, activeSheet, null);
+  const [settledSheet, releaseSettledSheet] = useSettledOpen(
+    activeSheetProp,
+    activeSheet,
+    null,
+  );
   // Every sheet host applies the switcher's dialog surface to its own dialog.
   const dialogProps = useShallowStable<BottomSheetSwitcherDialogProps>({
     ...restDialogProps,
@@ -1049,6 +1053,7 @@ export function BottomSheetSwitcher({
     () => ({
       activeSheet,
       settledSheet,
+      releaseSettledSheet,
       hasScrim,
       onActiveSheetChange,
       getSheetPhase,
@@ -1091,6 +1096,7 @@ export function BottomSheetSwitcher({
       registerSheetDialog,
       registerSheetElement,
       registerSheetPurpose,
+      releaseSettledSheet,
       settledSheet,
       stackView,
     ],

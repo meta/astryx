@@ -463,7 +463,8 @@ export function Drawer({
   // A drawer open on the server was present on page load, so it opens settled,
   // with no slide-in; its later opens and closes animate as usual
   // (spec:AST-013 FR13).
-  const opensSettled = useSettledOpen(isOpenProp, isOpen, false) && isOpen;
+  const [settledOpen] = useSettledOpen(isOpenProp, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const {containerRef: focusTrapRef} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen && hasScrim,

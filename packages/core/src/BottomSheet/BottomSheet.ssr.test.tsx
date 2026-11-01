@@ -11,6 +11,7 @@
  */
 
 import {act} from 'react';
+import {fireEvent} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createRoot, hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
@@ -150,6 +151,37 @@ describe('BottomSheet: open on the server (FR17)', () => {
         ).transitionDuration,
       ).toBe('.01s');
     }
+    await act(async () => root.unmount());
+  });
+
+  it('releases the settled transition once the settled entry ends, so a drag settles with its usual glide', async () => {
+    const panelDuration = (container: HTMLElement) =>
+      getComputedStyle(
+        container.querySelector('.astryx-bottom-sheet') as HTMLElement,
+      ).transitionDuration;
+    // A client-opened sheet's usual transition.
+    const client = document.createElement('div');
+    document.body.appendChild(client);
+    const clientRoot = createRoot(client);
+    await act(async () => clientRoot.render(tree(true)));
+    const usual = panelDuration(client);
+    await act(async () => clientRoot.unmount());
+
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(tree(true));
+    document.body.appendChild(container);
+    let root!: ReturnType<typeof hydrateRoot>;
+    await act(async () => {
+      root = hydrateRoot(container, tree(true));
+    });
+    expect(panelDuration(container)).toBe('.01s');
+    // The settled rise ends; the sheet stays open with its usual transition.
+    fireEvent.transitionEnd(
+      container.querySelector('.astryx-bottom-sheet') as HTMLElement,
+      {propertyName: 'transform'},
+    );
+    expect(container.querySelector('dialog')).toHaveAttribute('open');
+    expect(panelDuration(container)).toBe(usual);
     await act(async () => root.unmount());
   });
 });

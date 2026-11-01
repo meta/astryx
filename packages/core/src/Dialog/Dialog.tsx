@@ -494,8 +494,8 @@ export function Dialog({
   const isOpen = isOpenProp && (isInline || !isHydrating);
   // A dialog open on the server was present on page load, so it opens settled,
   // with no entry motion; its later opens animate as usual (spec:AST-013 FR13).
-  const opensSettled =
-    useSettledOpen(isOpenProp && !isInline, isOpen, false) && isOpen;
+  const [settledOpen] = useSettledOpen(isOpenProp && !isInline, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   // When no explicit padding prop, use theme default (--astryx-dialog-padding)
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;

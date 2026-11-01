@@ -369,6 +369,11 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
    */
   isEntrySettled?: boolean;
   /**
+   * Called when the settled entry's transition ends, so the host can release
+   * it and later motion in the same open (a drag's settle) animates as usual.
+   */
+  onEntrySettled?: () => void;
+  /**
    * The host's controlled open state — false as soon as the host has taken
    * a close, true while it is open or has refused one — distinct from
    * `state`, which stays `open` until the close settles. Decides whether a
@@ -532,6 +537,8 @@ export function BottomSheetPanel({
   tabIndex,
   xstyle,
   isEntrySettled = false,
+  onEntrySettled,
+  onTransitionEnd,
   isSwipeDismissAllowed = true,
   isPageScrollLocked = false,
   onDismiss,
@@ -861,6 +868,12 @@ export function BottomSheetPanel({
       {...props}
       ref={setElement}
       tabIndex={tabIndex ?? -1}
+      onTransitionEnd={event => {
+        onTransitionEnd?.(event);
+        if (isEntrySettled && event.target === event.currentTarget) {
+          onEntrySettled?.();
+        }
+      }}
       {...mergeProps(
         themeProps('bottom-sheet'),
         stylex.props(

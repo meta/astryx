@@ -17,21 +17,28 @@
  * that first stops being in effect after hydration; later opens animate.
  */
 
-import {useState} from 'react';
+import {useCallback, useState} from 'react';
 import {useIsHydrating} from './useIsHydrating';
 
 /**
  * Returns `requested` as it was on the server and in the hydrating render,
- * until `current` first differs from it after hydration; `none` otherwise.
- * Compare the result with `current` to know whether the open in effect is the
- * settled one.
+ * until `current` first differs from it after hydration or the caller
+ * releases it; `none` otherwise. Compare the result with `current` to know
+ * whether the open in effect is the settled one. The second element releases
+ * it: an overlay whose settled entry still runs a transition (a sheet's
+ * collapsed rise) calls it when that transition ends, so motion within the
+ * same open (a drag's settle) animates as usual.
  *
  * @param requested What the caller asks to have open (the `isOpen` prop, or
  *   the switcher's `activeSheet` prop).
  * @param current What is open in this render, once hydrated.
  * @param none The value meaning nothing is open (`false` or `null`).
  */
-export function useSettledOpen<T>(requested: T, current: T, none: T): T {
+export function useSettledOpen<T>(
+  requested: T,
+  current: T,
+  none: T,
+): [settled: T, release: () => void] {
   const isHydrating = useIsHydrating();
   const [settled, setSettled] = useState<T>(() =>
     isHydrating ? requested : none,
@@ -39,5 +46,6 @@ export function useSettledOpen<T>(requested: T, current: T, none: T): T {
   if (settled !== none && !isHydrating && current !== settled) {
     setSettled(none);
   }
-  return settled;
+  const release = useCallback(() => setSettled(none), [none]);
+  return [settled, release];
 }

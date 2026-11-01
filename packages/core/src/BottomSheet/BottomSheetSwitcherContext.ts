@@ -56,6 +56,8 @@ export interface BottomSheetSwitcherContextValue {
    * (spec:AST-013 FR13).
    */
   settledSheet: string | null;
+  /** Releases `settledSheet` once its settled entry's transition ends. */
+  releaseSettledSheet: () => void;
   hasScrim: boolean;
   onActiveSheetChange: (sheetId: string | null) => void;
   getSheetPhase: (sheetId: string) => BottomSheetSwitcherPhase;
