@@ -227,13 +227,25 @@ function animationRecorder(): void {
   const onStart = (event: Event) => {
     record();
     // Only a live run answers: a replay of an animation that finished on the
-    // same element is a new run, and missed if nothing recorded it.
-    const live = log.some(
-      entry =>
-        entry.finishedAt == null &&
-        entry.animation.playState !== 'idle' &&
-        isRunOf(entry, event),
-    );
+    // same element is a new run, and missed if nothing recorded it. A run the
+    // document still lists, running or paused, answers too: one that starts
+    // paused is never recorded, and one replayed with play() keeps the
+    // finish of its first run.
+    const live =
+      log.some(
+        entry =>
+          entry.finishedAt == null &&
+          entry.animation.playState !== 'idle' &&
+          isRunOf(entry, event),
+      ) ||
+      document
+        .getAnimations()
+        .some(
+          animation =>
+            (animation.playState === 'running' ||
+              animation.playState === 'paused') &&
+            isRunOf({animation}, event),
+        );
     if (!live) {
       const ancestors: Element[] = [];
       for (
@@ -1259,31 +1271,35 @@ export async function waitForAnimation(
       // Start events on the element that found nothing to read: animations
       // that started and finished between two of the page's frames.
       const missed = await locator
-        .evaluate((element, watchedFrom) => {
-          const recorder = (
-            window as unknown as {
-              __harnessAnimations: {
-                unread: {
-                  at: number;
-                  ancestors: Element[];
-                  name: string;
-                }[];
-                armedAt: () => number;
-              };
-            }
-          ).__harnessAnimations;
-          const after = watchedFrom ?? recorder.armedAt();
-          // Matched through the ancestors kept at the event, as the log is:
-          // an exit the page removed is still named for its container. A
-          // missed transition sends two start events; it is named once.
-          return [
-            ...new Set(
-              recorder.unread
-                .filter(u => u.at >= after && u.ancestors.includes(element))
-                .map(u => u.name),
-            ),
-          ];
-        }, since ?? null)
+        .evaluate(
+          (element, watchedFrom) => {
+            const recorder = (
+              window as unknown as {
+                __harnessAnimations: {
+                  unread: {
+                    at: number;
+                    ancestors: Element[];
+                    name: string;
+                  }[];
+                  armedAt: () => number;
+                };
+              }
+            ).__harnessAnimations;
+            const after = watchedFrom ?? recorder.armedAt();
+            // Matched through the ancestors kept at the event, as the log is:
+            // an exit the page removed is still named for its container. A
+            // missed transition sends two start events; it is named once.
+            return [
+              ...new Set(
+                recorder.unread
+                  .filter(u => u.at >= after && u.ancestors.includes(element))
+                  .map(u => u.name),
+              ),
+            ];
+          },
+          since ?? null,
+          {timeout: 1_000},
+        )
         .catch(() => [] as string[]);
       throw new Error(
         missed.length > 0
