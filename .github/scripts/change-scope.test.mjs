@@ -65,6 +65,18 @@ describe('spec-only change scope', () => {
     }
   });
 
+  it('owner-gates a package architecture record like docs/architecture/', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/specs/swift/slots.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+    expect(
+      classifyChanges([{filename: 'packages/native/specs/README.md'}])
+        .touchesKnowledgeRecords,
+    ).toBe(false);
+  });
+
   it('owner-gates architecture records without granting the spec-only fast path', () => {
     const result = classifyChanges([
       {filename: 'docs/architecture/knowledge-contracts.md'},

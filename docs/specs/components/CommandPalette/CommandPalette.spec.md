@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 7
 kind: component
 id: component:CommandPalette
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-11-01
 owners: [cixzhang]
 review_triggers: [behavior, theming, accessibility]
 verified_by:
@@ -40,15 +40,15 @@ system_specs: [spec:AST-056]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                     |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | Prop and visual APIs are unchanged. The result surface exposes listbox semantics only with selectable results; the query input has a real default name; rich Empty content remains ordinary. |
-| Behavior                | Modal Escape delegates to Dialog; query-field Home/End and IME remain native; result changes reset stale highlight; Empty announcements mirror rendered content.                             |
-| End-user impact         | Nested dismissal and native text entry are preserved; assistive technology receives the visible empty message, an independent query-field name, and only existing active options.            |
-| Builder impact          | None; no migration or new caller choice.                                                                                                                                                     |
-| Compatibility/readiness | Visual output is preserved. Empty-result ARIA, query-field accessible naming, empty-state announcement, and highlight reset behavior are corrected and verified.                             |
-| Review checks           | Reject local modal Escape handling, IME routing, Home/End result navigation, empty listboxes, stale active descendants, placeholder-only names, mismatched Empty announcements, or gaps.     |
-| Governing rules         | `family:overlay-dismissal/FR1`, `FR2`, `FR4`, `FR5`; `spec:AST-056/FR3`, `AR1`, `AR2`; existing public component and delegated-owner contracts.                                              |
+| Area                    | Contract                                                                                                                                                                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `CommandPalette` with its documented props and slots, composed from `CommandPaletteInput`, `CommandPaletteList`, `CommandPaletteItem`, `CommandPaletteGroup`, `CommandPaletteEmpty`, and `CommandPaletteFooter`, inside a Dialog.                                                           |
+| Behavior                | Searchable commands in a Dialog: a combobox query field, a listbox of results only while selectable results exist, an empty message otherwise, and a keyboard-guidance footer. Modal Escape belongs to Dialog's shared dismissal.                                                           |
+| End-user impact         | Keyboard and screen-reader users search and run commands with native text editing kept intact, hear the empty message that is shown, and close nested layers one Escape at a time.                                                                                                          |
+| Builder impact          | None.                                                                                                                                                                                                                                                                                       |
+| Compatibility/readiness | Records shipped behavior; no public change. AR1's caller `aria-label` rule is an implementation gap in `component:CommandPaletteList`, listed in its Current-state impact; two owner questions stay open (OQ2 asks whether INV5 should state this composite-semantics reading family-wide). |
+| Review checks           | Reject local modal Escape handling, IME routing, Home/End result navigation, empty listboxes, stale active descendants, placeholder-only names, mismatched Empty announcements, or gaps.                                                                                                    |
+| Governing rules         | `family:overlay-dismissal/FR1`, `FR2`, `FR4`, `FR5`; `spec:AST-056/FR3`, `AR1`, `AR2`; existing public component and delegated-owner contracts.                                                                                                                                             |
 
 This table is a review projection; the body below is authoritative.
 
@@ -60,18 +60,18 @@ surface and modal dismissal ordering to Dialog.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes` for props and visual output
-- Compatibility class: behavioral and accessibility correction; empty states
-  conditionally omit listbox, expanded, controls, and active-descendant ARIA
-  attributes until selectable results exist; the default query accessible name
-  is independent of its placeholder; empty-search announcements mirror the
-  rendered content; public props, styling, targets, and visible defaults remain
-  unchanged
-- Controlled/uncontrolled behavior: unchanged
-- Migration decision: adopts `family:overlay-dismissal/FR1`, `FR2`, `FR4`, and
-  `FR5` through Dialog; no caller migration
+- Released default preserved: `yes`
+- Compatibility class: records shipped behavior; no public change
+- Controlled/uncontrolled behavior: as documented in `CommandPalette.doc.mjs`
+- Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **The List replaces a caller's name (AR1).** A builder's explicit
+  `aria-label` does not name the List today; `component:CommandPaletteList`
+  records the gap.
 
 ## Ownership boundary
 
@@ -89,12 +89,14 @@ Consumer migration instructions belong in consumer docs and release notes.
   content — owned by the product callsite.
 - The Item option's passthrough, pointer, disabled, selected, highlighted, and
   standalone-scroll semantics — owned by `component:CommandPaletteItem`.
-- A `command-palette` root target — no such current target exists, and this
-  factual backfill does not invent one.
+- A `command-palette` root target — no such target exists.
 - Shared layer hosting, positioning, or lifecycle rules beyond the current
   records linked below.
 - The List root's accessible name, list-id application, native passthrough, and
   overflow scrolling — owned by `component:CommandPaletteList`.
+- The Group's role, name, and heading — owned by `component:CommandPaletteGroup`;
+  the Footer's guidance — owned by `component:CommandPaletteFooter`; the Empty
+  surface — owned by `component:CommandPaletteEmpty`.
 
 ## Public concepts
 
@@ -103,16 +105,16 @@ documented in `CommandPalette.doc.mjs` and its subcomponent docs.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                 | Basis                                                          | Draft review state                                                        |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| FR1 | The current default render places Input and Footer around a result surface inside a delegated Dialog. That surface is a List listbox while Items exist and an ordinary Empty container otherwise.   | Current source, docs, tests, and ARIA required-child rule      | Verified current anatomy and valid rich Empty semantics                   |
-| FR2 | Input, List, Item, Group, Group heading, Empty, and Footer carry the seven current `command-palette-*` targets documented below; no `command-palette` root target exists.                           | Current source and target docs                                 | Verified current inventory and focused placement coverage                 |
-| FR3 | The default Input delegates its Search glyph to Icon and pending Loading spinner to Spinner; the default Footer delegates keyboard shortcuts to Kbd; the containing surface delegates to Dialog.    | Current source and component docs                              | Verified current composition; no ownership change                         |
-| FR4 | Query field is a distinct native text field inside Input and currently has no separate public target. The `command-palette-input` target is on the surrounding search region, not the native field. | Current source and target docs                                 | Verified current reachability; long-term theming intent remains unsettled |
-| FR5 | A modal palette leaves Escape unclaimed for Dialog's shared dismissal stack so a nested member handles the first press; inline previews close locally because they do not register as layers.       | `family:overlay-dismissal/FR1`, `FR2`, `FR4`, `FR5`            | Verified by nested and inline integration tests                           |
-| FR6 | The editable query field keeps Home and End for native caret movement, uses PageUp and PageDown for first/last result navigation, and does not route active IME composition keys to commands.       | WAI-ARIA editable combobox convention; objective IME integrity | Verified by user-event navigation and composition-key tests               |
-| FR7 | A committed result set resets highlight before exposure; the query input emits active-descendant only for an index that exists in the current selectable set.                                       | WAI-ARIA active-descendant integrity                           | Verified across populated, empty, and repopulated results                 |
-| FR8 | Empty search announcements mirror rendered `emptySearchText`, including rich caller content; the query input's default accessible name is independent of its placeholder.                           | `spec:AST-056/FR3`, `AR1`, `AR2`                               | Verified by live-region and accessible-name tests                         |
+| ID  | Invariant                                                                                                                                                                                        | Basis                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| FR1 | The default render places Input and Footer around a result surface inside a delegated Dialog. That surface is a List listbox while Items exist and an ordinary Empty container otherwise.        | Current source, docs, tests, and ARIA required-child rule      |
+| FR2 | Input, List, Item, Group, Group heading, Empty, and Footer carry the seven current `command-palette-*` targets documented below; no `command-palette` root target exists.                        | Current source and target docs                                 |
+| FR3 | The default Input delegates its Search glyph to Icon and pending Loading spinner to Spinner; the default Footer delegates keyboard shortcuts to Kbd; the containing surface delegates to Dialog. | Current source and component docs                              |
+| FR4 | Query field is a distinct native text field inside Input and has no separate public target. The `command-palette-input` target is on the surrounding search region, not the native field.        | Current source and target docs                                 |
+| FR5 | A modal palette leaves Escape unclaimed for Dialog's shared dismissal stack so a nested member handles the first press; inline previews close locally because they do not register as layers.    | `family:overlay-dismissal/FR1`, `FR2`, `FR4`, `FR5`            |
+| FR6 | The editable query field keeps Home and End for native caret movement, uses PageUp and PageDown for first/last result navigation, and does not route active IME composition keys to commands.    | WAI-ARIA editable combobox convention; objective IME integrity |
+| FR7 | A committed result set resets highlight before exposure; the query input emits active-descendant only for an index that exists in the current selectable set.                                    | WAI-ARIA active-descendant integrity                           |
+| FR8 | Empty search announcements mirror rendered `emptySearchText`, including rich caller content; the query input's default accessible name is independent of its placeholder.                        | `spec:AST-056/FR3`, `AR1`, `AR2`                               |
 
 ### Allowed variation
 
@@ -136,17 +138,21 @@ documented in `CommandPalette.doc.mjs` and its subcomponent docs.
 
 ### Transformation and precedence order
 
-- No new search, selection, layout, or styling precedence rule is introduced.
+- No search, selection, layout, or styling precedence rule beyond FR1–FR8.
 
 ### Performance and resources
 
-- No new performance or resource rule is introduced.
+- No resource rule.
 
 ## Accessibility contract
 
 - **AR1 — Named composite.** The containing Dialog, combobox, populated listbox,
   groups, options, busy status, empty state, and keyboard guidance preserve their
-  owned accessible names and roles. When no selectable results exist, the result
+  owned accessible names and roles. A caller's explicit `aria-label` names a List or
+  Group (`architecture:public-component-api` INV5); the `listbox` and `option`
+  roles and option state stay component-owned, as
+  `component:CommandPaletteInput` AR3 records. `component:CommandPaletteList`
+  records where today's List replaces a caller's name. When no selectable results exist, the result
   surface and combobox omit listbox, expanded, controls, and active-descendant
   semantics so rich Empty content stays ordinary non-nested content.
 - **AR2 — Topmost Escape.** A modal palette delegates unclaimed Escape presses to
@@ -184,8 +190,7 @@ documented in `CommandPalette.doc.mjs` and its subcomponent docs.
 | Keyboard shortcut | Presents one shortcut as painted key badges in the default Footer.      | `component:Kbd`                | Supporting     | FR3                |
 
 The native Query field is separate from the Input region that carries
-`command-palette-input`. Its current lack of a direct target is observed
-reachability, not a decision that it must remain unthemeable.
+`command-palette-input`. It has no direct target; whether it should is OQ1.
 
 ### Theming anatomy
 
@@ -221,15 +226,15 @@ reachability, not a decision that it must remain unthemeable.
 ```
 
 The seven local targets are current public seams. The delegated parts retain
-their existing component owners. The Query field `none` disposition records a
-current audit gap and does not authorize a new target.
+their existing component owners. The Query field `none` disposition is
+unsettled (OQ1) and does not authorize a new target.
 
 ## Family and system relationships
 
 - `architecture:component-theming-surface` owns anatomy qualification, target
   mapping, delegation, and factual `none` dispositions.
 - `architecture:public-component-api` owns the stable props and composition
-  surface; this documentation adds no API.
+  surface.
 - `architecture:interaction-modality/INV4` owns supported-modality path
   reachability; the exact query-key details follow objective editable-combobox
   and IME composition standards.
@@ -244,35 +249,41 @@ current audit gap and does not authorize a new target.
 
 ## Verification map
 
-| Contract            | Verification                                                                          | Representative states                                            | Mutation or failure expectation                                                                                                                                      | Audit section                      |
-| ------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| FR1, AR1            | CommandPalette root and subcomponent suites plus exact-head Chromium evidence         | Default, grouped, empty, pending, rich Empty, and replaced slots | Exposing an empty listbox, leaving empty Input popup attributes, or nesting rich Empty controls under option semantics fails focused role and hosted axe assertions. | `audit:CommandPalette/anatomy`     |
-| FR2                 | Focused subcomponent suites and `themingTargets.test.ts`                              | Seven local targets at their owned elements                      | Removing or moving a current target fails a focused placement assertion or the global inventory.                                                                     | `audit:CommandPalette/theming`     |
-| FR3                 | `CommandPaletteInput.test.tsx`, `CommandPaletteFooter.test.tsx`, and browser evidence | Default Search glyph, pending spinner, and Footer Kbd            | Replacing or removing the delegated Icon, Spinner, or Kbd instance fails a composed-owner assertion and changes the exact-head evidence inventory.                   | `audit:CommandPalette/theming`     |
-| FR4                 | `CommandPaletteInput.test.tsx` and source inspection                                  | Native query field with idle and pending Input                   | Removing the field fails combobox tests; adding a field target requires an explicit map update.                                                                      | `audit:CommandPalette/anatomy`     |
-| FR5, AR2, AR3       | `CommandPalette.test.tsx`                                                             | Modal host with nested layer; inline preview                     | Restoring local modal Escape handling closes the host instead of the nested surface; removing the inline branch loses preview closing.                               | `audit:CommandPalette/interaction` |
-| FR6, AR4            | `CommandPalette.test.tsx` and `CommandPaletteInput.test.tsx`                          | Home, End, PageDown, Enter, and active IME composition           | Routing Home/End to results or forwarding a composing command key fails user-event and native composition assertions.                                                | `audit:CommandPalette/interaction` |
-| FR7, AR7            | `CommandPalette.test.tsx` and `CommandPaletteInput.test.tsx`                          | Populated, empty, and repopulated result sets                    | Preserving an out-of-range highlight or emitting its nonexistent active descendant fails transition and direct bounds assertions.                                    | `audit:CommandPalette/a11y`        |
-| FR8, AR5, AR6       | `CommandPalette.test.tsx`, `CommandPaletteInput.test.tsx`, and i18n checks            | Rich caller Empty content; default and caller query names        | Announcing catalog copy over rendered caller content or naming the query only through placeholder text fails live-region, name, and catalog assertions.              | `audit:CommandPalette/a11y`        |
-| Theming anatomy map | `scripts/check-knowledge.mjs` and exact-head Chromium evidence                        | Canonical anatomy and seven current local targets                | Missing, extra, prefixed, stale, alias-backed, or visually absent mappings fail repository validation or browser sensor counts.                                      | `audit:CommandPalette/theming`     |
+| Contract            | Verification                                                               | Representative states                                            | Mutation or failure expectation                                                                                                                         | Audit section                      |
+| ------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| FR1, AR1            | CommandPalette root and subcomponent suites                                | Default, grouped, empty, pending, rich Empty, and replaced slots | Exposing an empty listbox, leaving empty Input popup attributes, or nesting rich Empty controls under option semantics fails focused role assertions.   | `audit:CommandPalette/anatomy`     |
+| FR2                 | Focused subcomponent suites and `themingTargets.test.ts`                   | Seven local targets at their owned elements                      | Removing or moving a current target fails a focused placement assertion or the global inventory.                                                        | `audit:CommandPalette/theming`     |
+| FR3                 | `CommandPaletteInput.test.tsx` and `CommandPaletteFooter.test.tsx`         | Default Search glyph, pending spinner, and Footer Kbd            | Replacing or removing the delegated Icon, Spinner, or Kbd instance fails a composed-owner assertion.                                                    | `audit:CommandPalette/theming`     |
+| FR4                 | `CommandPaletteInput.test.tsx`                                             | Native query field with idle and pending Input                   | Removing the field fails combobox tests; adding a field target requires an explicit map update.                                                         | `audit:CommandPalette/anatomy`     |
+| FR5, AR2, AR3       | `CommandPalette.test.tsx`                                                  | Modal host with nested layer; inline preview                     | Restoring local modal Escape handling closes the host instead of the nested surface; removing the inline branch loses preview closing.                  | `audit:CommandPalette/interaction` |
+| FR6, AR4            | `CommandPalette.test.tsx` and `CommandPaletteInput.test.tsx`               | Home, End, PageDown, Enter, and active IME composition           | Routing Home/End to results or forwarding a composing command key fails user-event and native composition assertions.                                   | `audit:CommandPalette/interaction` |
+| FR7, AR7            | `CommandPalette.test.tsx` and `CommandPaletteInput.test.tsx`               | Populated, empty, and repopulated result sets                    | Preserving an out-of-range highlight or emitting its nonexistent active descendant fails transition and direct bounds assertions.                       | `audit:CommandPalette/a11y`        |
+| FR8, AR5, AR6       | `CommandPalette.test.tsx`, `CommandPaletteInput.test.tsx`, and i18n checks | Rich caller Empty content; default and caller query names        | Announcing catalog copy over rendered caller content or naming the query only through placeholder text fails live-region, name, and catalog assertions. | `audit:CommandPalette/a11y`        |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                              | Canonical anatomy and seven current local targets                | Missing, extra, prefixed, stale, or alias-backed mappings fail repository validation. Gap: no check fails if a mapped part stops painting.              | `audit:CommandPalette/theming`     |
 
 Focused target-placement assertions cover all seven local targets. The composed
 Input and Footer tests also pin the delegated Search Icon, pending Spinner, and
-four default Kbd shortcuts; exact-head browser evidence verifies the same owned
-anatomy across light, dark, LTR, RTL, and narrow rendering.
+four default Kbd shortcuts.
 
 ## Decision log
 
-None. This draft records current facts and introduces no component-local design,
-layer, API, or theming decision.
+No component-local decision is recorded.
 
 ## Open questions
 
 - **OQ1 — Should Query field gain a stable public theming target?** (`human-api`)
-  Its current lack of direct reachability is an audit gap, not settled intent.
+  It has no direct target today, and no owner has decided whether it should.
+- **OQ2 — Should `architecture:public-component-api` INV5 state the
+  composite-semantics reading family-wide?** (`human-api`) Inside a composite
+  such as CommandPalette, roles like `combobox`, `listbox`, and `option` and
+  option state are component-owned and replace a caller's, as
+  `component:CommandPaletteInput` AR3 records, while a caller's explicit name
+  still wins. Stating it in INV5 would make every composite follow it; leaving
+  it here keeps it a CommandPalette reading that other composites may not
+  share.
 
 ## Content boundary
 
 This file does not duplicate consumer prop tables/examples, shared layer or
-modality rules, current audit results, or implementation steps. It links to
+modality rules, or implementation steps. It links to
 their owners.
