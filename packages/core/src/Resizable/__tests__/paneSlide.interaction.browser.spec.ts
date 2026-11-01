@@ -9,13 +9,13 @@
  *   fixtures: a start LayoutPanel that takes the hook's own `props`, and one
  *   that takes a hand-built `ResizableProps` object
  * @output Proves the pane slides closed and open by spec:AST-105 FR9's edge
- *   reveal from the edge facing its handle, which it never leaves on any
- *   frame (component:Resizable FR8; component:LayoutPanel FR7), and that
- *   focus inside the collapsing pane moves to the handle and the collapsed
- *   pane is inert and hidden (component:LayoutPanel AR2), in Chromium and
- *   WebKit, with and without Reduce Motion; the hook's own props slide the
- *   same way, and a hand-built object collapses without a slide but still
- *   moves focus and goes inert
+ *   reveal from the edge facing its handle, which it never leaves at any
+ *   moment of the motion (component:Resizable FR8; component:LayoutPanel
+ *   FR7), and that focus inside the collapsing pane moves to the handle and
+ *   the collapsed pane is inert and hidden (component:LayoutPanel AR2), in
+ *   Chromium and WebKit, with and without Reduce Motion; the hook's own props
+ *   slide the same way, and a hand-built object collapses without a slide but
+ *   still moves focus and goes inert
  * @position Interaction proof for packages/core/src/Resizable/createResizable.ts,
  *   resizablePane.ts and packages/core/src/Layout/LayoutPanel.tsx
  */
@@ -34,7 +34,10 @@ const STORY = {
   handBuilt: 'core-resizable--panel-with-hand-built-props',
 } as const;
 
-/** One frame's geometry: the pane's shown edge facing the handle, and the handle's. */
+/** How many evenly spaced moments of a motion are captured. */
+const MOMENTS = 24;
+
+/** One moment's geometry: the pane's shown edge facing the handle, and the handle's. */
 interface Frame {
   /** The pane's edge that faces the handle, where its clip shows it end. */
   shownEdge: number;
@@ -43,16 +46,31 @@ interface Frame {
   paneWidth: number;
 }
 
+/** What a collapse or open did, captured at evenly spaced moments. */
+interface Motion {
+  /** The rest before the input, then each moment, then the end. */
+  frames: Frame[];
+  /** Whether the pane got a clip animation and the handle a glide. */
+  clips: boolean;
+  glides: boolean;
+  durationMs: number;
+}
+
 /**
- * Samples every frame from now until the pane's, handle's and content's
- * animations have finished, after the input `trigger` sends.
+ * Installs, in the page, the reader of one moment of the pane and its handle. The pane moves by
+ * no transform: its box is its layout, and its clip says where it shows. The
+ * handle shows at its layout place, which the pane's margin box ends at in
+ * the row, plus its glide at the glide's own time; its own rect is not read,
+ * because WebKit reports a compositor-run translate ahead of the frame time,
+ * in the rect and in the computed style alike. In Chromium the two readings
+ * agree.
  */
-async function framesOf(
-  page: Page,
-  side: Side,
-  trigger: () => Promise<void>,
-): Promise<Frame[]> {
-  await page.evaluate(sideArg => {
+interface ReaderWindow {
+  __readPaneFrame: (side: Side) => Frame;
+}
+
+function installFrameReader(): void {
+  (window as unknown as ReaderWindow).__readPaneFrame = (side: Side): Frame => {
     const pane = document.querySelector<HTMLElement>(
       '[data-testid="sliding-panel"]',
     );
@@ -60,134 +78,207 @@ async function framesOf(
     if (pane == null || handle == null) {
       throw new Error('the sliding panel story did not render');
     }
-    const frames: Frame[] = [];
-    /**
-     * The translate an element's glide gives it at the glide's current time,
-     * read from the glide's keyframes; 0 with no glide.
-     */
-    const glideOffset = (element: HTMLElement): number => {
-      const glide = element
-        .getAnimations()
-        .find(
-          animation =>
-            animation.effect instanceof KeyframeEffect &&
-            animation.effect.getKeyframes().some(k => k.translate != null),
-        );
-      const effect = glide?.effect;
-      if (glide == null || !(effect instanceof KeyframeEffect)) {
-        return 0;
-      }
+    const pixels = (value: unknown) =>
+      [...String(value).matchAll(/(-?[\d.e+-]+)px/g)].map(match =>
+        Number(match[1]),
+      );
+    const glide = handle
+      .getAnimations()
+      .find(
+        animation =>
+          animation.effect instanceof KeyframeEffect &&
+          animation.effect.getKeyframes().some(k => k.translate != null),
+      );
+    let glideX = 0;
+    const effect = glide?.effect;
+    if (glide != null && effect instanceof KeyframeEffect) {
       const keyframes = effect.getKeyframes();
-      const pixels = (value: unknown) =>
-        [...String(value).matchAll(/(-?[\d.e+-]+)px/g)].map(match =>
-          Number(match[1]),
+      if (keyframes.length === 1) {
+        glideX = pixels(keyframes[0].translate)[0] ?? 0;
+      } else if (keyframes.length > 1) {
+        const duration = Number(effect.getTiming().duration);
+        const at = Math.min(
+          1,
+          Math.max(0, Number(glide.currentTime ?? 0) / duration),
         );
-      if (keyframes.length < 2) {
-        return pixels(keyframes[0]?.translate)[0] ?? 0;
+        let index = 0;
+        while (
+          index < keyframes.length - 2 &&
+          keyframes[index + 1].computedOffset < at
+        ) {
+          index++;
+        }
+        const [x0 = 0] = pixels(keyframes[index].translate);
+        const [x1 = 0] = pixels(keyframes[index + 1].translate);
+        const span =
+          keyframes[index + 1].computedOffset - keyframes[index].computedOffset;
+        const progress =
+          span > 0 ? (at - keyframes[index].computedOffset) / span : 1;
+        glideX = x0 + (x1 - x0) * progress;
       }
-      const duration = Number(effect.getTiming().duration);
-      const at = Math.min(
-        1,
-        Math.max(0, Number(glide.currentTime ?? 0) / duration),
-      );
-      let index = 0;
-      while (
-        index < keyframes.length - 2 &&
-        keyframes[index + 1].computedOffset < at
-      ) {
-        index++;
-      }
-      const [x0 = 0] = pixels(keyframes[index].translate);
-      const [x1 = 0] = pixels(keyframes[index + 1].translate);
-      const span =
-        keyframes[index + 1].computedOffset - keyframes[index].computedOffset;
-      const progress =
-        span > 0 ? (at - keyframes[index].computedOffset) / span : 1;
-      return x0 + (x1 - x0) * progress;
-    };
-    const read = () => {
-      // The pane moves by no transform: its box is its layout, and its clip
-      // runs on the main thread at the frame time.
-      const paneRect = pane.getBoundingClientRect();
-      const paneStyle = getComputedStyle(pane);
-      // inset(top right bottom left): the clip on the edge facing the handle.
-      const insets = (paneStyle.clipPath.match(/-?[\d.]+(px|%)?/g) ?? []).map(
-        value =>
-          value.endsWith('%')
-            ? (parseFloat(value) / 100) * paneRect.width
-            : parseFloat(value),
-      );
-      const right = insets[1] ?? 0;
-      const left = insets[3] ?? 0;
-      // The handle shows at its layout place, which the pane's margin box
-      // ends at in the row, plus its glide at the glide's own time. Its own
-      // rect is not read: WebKit reports a compositor-run translate ahead of
-      // the frame time, by up to about 1.8 px at the fastest part of a
-      // collapse, in the rect and in the computed style alike. In Chromium the
-      // two readings agree.
-      const glide = glideOffset(handle);
-      frames.push(
-        sideArg === 'start'
-          ? {
-              shownEdge: paneRect.right - right,
-              handleEdge:
-                paneRect.right +
-                (parseFloat(paneStyle.marginInlineEnd) || 0) +
-                glide,
-              paneWidth: paneRect.width,
-            }
-          : {
-              shownEdge: paneRect.left + left,
-              handleEdge:
-                paneRect.left -
-                (parseFloat(paneStyle.marginInlineStart) || 0) +
-                glide,
-              paneWidth: paneRect.width,
-            },
-      );
-    };
-    const state = {frames, isSampling: true};
-    (window as unknown as {__paneFrames: typeof state}).__paneFrames = state;
-    // The first frame is the rest before the input.
-    read();
-    const tick = () => {
-      read();
-      if (state.isSampling) {
-        requestAnimationFrame(tick);
-      }
-    };
-    requestAnimationFrame(tick);
-  }, side);
-  await trigger();
-  return page.evaluate(async () => {
-    const state = (
-      window as unknown as {
-        __paneFrames: {frames: Frame[]; isSampling: boolean};
-      }
-    ).__paneFrames;
-    // The motion starts in the commit's frame; wait for it, then for it to end.
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    const elements = [
-      document.querySelector('[data-testid="sliding-panel"]'),
-      document.querySelector('[role="separator"]'),
-      document.querySelector('[data-testid="sliding-content"]'),
-    ].filter((element): element is Element => element != null);
-    await Promise.all(
-      elements
-        .flatMap(element => element.getAnimations())
-        .map(async animation => animation.finished),
+    }
+    const paneRect = pane.getBoundingClientRect();
+    const paneStyle = getComputedStyle(pane);
+    // inset(top right bottom left): the clip on the edge facing the handle.
+    const insets = (paneStyle.clipPath.match(/-?[\d.]+(px|%)?/g) ?? []).map(
+      value =>
+        value.endsWith('%')
+          ? (parseFloat(value) / 100) * paneRect.width
+          : parseFloat(value),
     );
-    await new Promise(resolve => requestAnimationFrame(resolve));
-    state.isSampling = false;
-    return state.frames;
-  });
+    return side === 'start'
+      ? {
+          shownEdge: paneRect.right - (insets[1] ?? 0),
+          handleEdge:
+            paneRect.right +
+            (parseFloat(paneStyle.marginInlineEnd) || 0) +
+            glideX,
+          paneWidth: paneRect.width,
+        }
+      : {
+          shownEdge: paneRect.left + (insets[3] ?? 0),
+          handleEdge:
+            paneRect.left -
+            (parseFloat(paneStyle.marginInlineStart) || 0) +
+            glideX,
+          paneWidth: paneRect.width,
+        };
+  };
+}
+
+/** Reads one moment now. */
+async function readNow(page: Page, side: Side): Promise<Frame> {
+  return page.evaluate(
+    sideArg => (window as unknown as ReaderWindow).__readPaneFrame(sideArg),
+    side,
+  );
+}
+
+/** Opens a fixture with the frame reader installed. */
+async function openFixture(page: Page, storyId: string): Promise<void> {
+  await page.addInitScript(installFrameReader);
+  await openStory(page, storybook(), storyId);
+}
+
+interface CaptureWindow extends ReaderWindow {
+  __paneAnimations: Animation[];
+  __paneAnimate?: Element['animate'];
 }
 
 /**
- * Every frame keeps the pane's shown edge where it sits beside the handle at
- * rest (a panel without a divider overlaps its handle by its collapsed
- * spacing): no gap opens and the edge never runs ahead.
+ * Captures the collapse or open the input `trigger` starts at evenly spaced
+ * moments. Every animation the change starts is paused the moment it is
+ * created and held there (the module starts each one on the timeline's
+ * current time by setting its start time, which would set it running), so
+ * none advances while the test waits for a starved page. Then, in one task,
+ * each is set to the same moment before the geometry is read, and they
+ * finish. Neither a renderer that skips frames nor a page that answers late
+ * can hide a slide or fake one.
+ */
+async function captureMotion(
+  page: Page,
+  side: Side,
+  trigger: () => Promise<void>,
+): Promise<Motion> {
+  const rest = await readNow(page, side);
+  await page.evaluate(() => {
+    const capture = window as unknown as CaptureWindow;
+    const animations: Animation[] = [];
+    capture.__paneAnimations = animations;
+    const animate = Element.prototype.animate;
+    capture.__paneAnimate = animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = animate.apply(this, args);
+      animation.pause();
+      Object.defineProperty(animation, 'startTime', {
+        configurable: true,
+        get: () => null,
+        set: () => {},
+      });
+      animations.push(animation);
+      return animation;
+    };
+  });
+  await trigger();
+  const motion = await page.evaluate(
+    async ({sideArg, moments}) => {
+      const capture = window as unknown as CaptureWindow;
+      const animations = capture.__paneAnimations;
+      // The change commits in the input's own task; give a later commit time
+      // to land before deciding nothing animates. Nothing it starts can run
+      // meanwhile.
+      for (
+        let waited = 0;
+        waited < 1000 && animations.length === 0;
+        waited += 50
+      ) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      if (capture.__paneAnimate != null) {
+        Element.prototype.animate = capture.__paneAnimate;
+        capture.__paneAnimate = undefined;
+      }
+      for (const animation of animations) {
+        Reflect.deleteProperty(animation, 'startTime');
+      }
+      const pane = document.querySelector('[data-testid="sliding-panel"]');
+      const handle = document.querySelector('[role="separator"]');
+      const keyframesOf = (animation: Animation) =>
+        animation.effect instanceof KeyframeEffect
+          ? animation.effect.getKeyframes()
+          : [];
+      const targetOf = (animation: Animation) =>
+        animation.effect instanceof KeyframeEffect
+          ? animation.effect.target
+          : null;
+      const clips = animations.some(
+        a =>
+          targetOf(a) === pane && keyframesOf(a).some(k => k.clipPath != null),
+      );
+      const glides = animations.some(
+        a =>
+          targetOf(a) === handle &&
+          keyframesOf(a).some(k => k.translate != null),
+      );
+      const durationMs =
+        animations.length === 0
+          ? 0
+          : Math.max(
+              ...animations.map(a =>
+                Number(a.effect?.getComputedTiming().endTime),
+              ),
+            );
+      const frames: Frame[] = [];
+      // One task: no frame passes between setting a moment and reading it.
+      // Moments up to, not at, the end: a motion's effects stop applying at
+      // their end, before its finish drops what it holds.
+      for (let moment = 0; durationMs > 0 && moment < moments; moment++) {
+        for (const animation of animations) {
+          animation.currentTime = (durationMs * moment) / moments;
+        }
+        frames.push(capture.__readPaneFrame(sideArg));
+      }
+      for (const animation of animations) {
+        animation.finish();
+      }
+      // What a finished motion leaves behind, once its holds are dropped.
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      frames.push(capture.__readPaneFrame(sideArg));
+      return {frames, clips, glides, durationMs};
+    },
+    {sideArg: side, moments: MOMENTS},
+  );
+  return {...motion, frames: [rest, ...motion.frames]};
+}
+
+/**
+ * Every captured moment keeps the pane's shown edge where it sits beside the
+ * handle at rest (a panel without a divider overlaps its handle by its
+ * collapsed spacing): no gap opens and the edge never runs ahead.
  */
 function expectEdgeOnHandle(frames: Frame[]): void {
   const rest = frames[0].shownEdge - frames[0].handleEdge;
@@ -195,10 +286,22 @@ function expectEdgeOnHandle(frames: Frame[]): void {
     if (frame.paneWidth > 0) {
       expect(
         Math.abs(frame.shownEdge - frame.handleEdge - rest),
-        `frame ${index} of ${frames.length}: ${JSON.stringify(frame)}, at rest ${rest}`,
+        `moment ${index} of ${frames.length}: ${JSON.stringify(frame)}, at rest ${rest}`,
       ).toBeLessThanOrEqual(1.5);
     }
   });
+}
+
+/**
+ * How many captured moments show the handle strictly between where it
+ * started and where it ended, moving one way.
+ */
+function travelling(frames: Frame[]): number {
+  const from = frames[0].handleEdge;
+  const to = frames[frames.length - 1].handleEdge;
+  const low = Math.min(from, to) + 1;
+  const high = Math.max(from, to) - 1;
+  return frames.filter(f => f.handleEdge > low && f.handleEdge < high).length;
 }
 
 /**
@@ -217,68 +320,66 @@ async function collapsedWidthOf(page: Page): Promise<number> {
   });
 }
 
-/** How many frames show the handle between where it started and ended. */
-function travelling(frames: Frame[]): number {
-  const from = frames[0].handleEdge;
-  const to = frames[frames.length - 1].handleEdge;
-  const low = Math.min(from, to) + 1;
-  const high = Math.max(from, to) - 1;
-  return frames.filter(f => f.handleEdge > low && f.handleEdge < high).length;
+/** The pane, its handle and the content are present and painted. */
+async function expectPresent(page: Page): Promise<void> {
+  for (const element of [
+    page.getByTestId('sliding-panel'),
+    page.getByRole('separator', {name: 'Resize panel'}),
+    page.getByTestId('sliding-content'),
+  ]) {
+    await expect(element).toHaveCount(1);
+    const box = await element.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(0);
+    expect(box?.height ?? 0).toBeGreaterThan(0);
+  }
+  expect(
+    (await page.getByTestId('sliding-panel').boundingBox())?.width,
+  ).toBeCloseTo(200, 0);
 }
 
 /**
- * Proves one pane's slide: present and painted first, then collapsed from a
- * button inside it (focus moves to the handle, the pane ends inert), then
- * opened from the handle (no focus moves), its shown edge on the handle on
- * every frame of both.
+ * Proves one pane's slide: collapsed from a button inside it (focus moves to
+ * the handle, the pane ends inert), then opened from the handle (no focus
+ * moves), its shown edge on the handle at every captured moment of both.
  */
 async function expectSlide(
   page: Page,
   side: Side,
   storyId: string,
 ): Promise<void> {
-  await openStory(page, storybook(), storyId);
+  await openFixture(page, storyId);
+  await expectPresent(page);
   const pane = page.getByTestId('sliding-panel');
   const handle = page.getByRole('separator', {name: 'Resize panel'});
-  const content = page.getByTestId('sliding-content');
-  // Present and painted before anything is measured.
-  for (const element of [pane, handle, content]) {
-    await expect(element).toHaveCount(1);
-    const box = await element.boundingBox();
-    expect(box?.width ?? 0).toBeGreaterThan(0);
-    expect(box?.height ?? 0).toBeGreaterThan(0);
-  }
-  expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
 
-  // Collapse from inside the pane, with focus there.
-  const close = page.getByRole('button', {name: 'Close panel'});
-  await close.focus();
-  const closing = await framesOf(page, side, async () => {
+  await page.getByRole('button', {name: 'Close panel'}).focus();
+  const closing = await captureMotion(page, side, async () => {
     await page.keyboard.press('Enter');
   });
-  expect(closing.length).toBeGreaterThan(5);
-  // A slide, not a jump: the handle travels over several frames ...
-  expect(travelling(closing)).toBeGreaterThanOrEqual(3);
-  // ... and the pane's shown edge stays on it on every frame.
-  expectEdgeOnHandle(closing);
+  // A slide, not a jump: the pane clips and the handle glides, and the
+  // handle is on its way at many captured moments (a spring settles its last
+  // pixel late, so not all of them) ...
+  expect(closing.clips).toBe(true);
+  expect(closing.glides).toBe(true);
+  expect(travelling(closing.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
+  // ... and the pane's shown edge stays on it throughout.
+  expectEdgeOnHandle(closing.frames);
   // It ends where the collapsed layout puts it, with nothing held.
   expect((await pane.boundingBox())?.width).toBeCloseTo(
     await collapsedWidthOf(page),
     0,
-  );
-  expect(closing[closing.length - 1].paneWidth).toBeLessThan(
-    closing[0].paneWidth,
   );
   await expect(handle).toBeFocused();
   await expect(pane).toHaveAttribute('inert', '');
   await expect(pane).toHaveAttribute('aria-hidden', 'true');
 
   // Open from the handle: no focus moves.
-  const opening = await framesOf(page, side, async () => {
+  const opening = await captureMotion(page, side, async () => {
     await page.keyboard.press('Enter');
   });
-  expect(travelling(opening)).toBeGreaterThanOrEqual(3);
-  expectEdgeOnHandle(opening);
+  expect(opening.glides).toBe(true);
+  expect(travelling(opening.frames)).toBeGreaterThanOrEqual(MOMENTS / 3);
+  expectEdgeOnHandle(opening.frames);
   expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
   await expect(handle).toBeFocused();
   await expect(pane).not.toHaveAttribute('inert', '');
@@ -302,22 +403,16 @@ test("a panel that takes the configuration-object hook's own props slides the sa
 test('a panel that takes a hand-built ResizableProps object collapses and opens without a slide, and focus still leaves it', async ({
   page,
 }) => {
-  await openStory(page, storybook(), STORY.handBuilt);
+  await openFixture(page, STORY.handBuilt);
+  await expectPresent(page);
   const pane = page.getByTestId('sliding-panel');
   const handle = page.getByRole('separator', {name: 'Resize panel'});
-  for (const element of [pane, handle]) {
-    await expect(element).toHaveCount(1);
-    const box = await element.boundingBox();
-    expect(box?.width ?? 0).toBeGreaterThan(0);
-    expect(box?.height ?? 0).toBeGreaterThan(0);
-  }
-  expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
   await page.getByRole('button', {name: 'Close panel'}).focus();
-  const closing = await framesOf(page, 'start', async () => {
+  const closing = await captureMotion(page, 'start', async () => {
     await page.keyboard.press('Enter');
   });
-  expect(closing.length).toBeGreaterThan(0);
-  expect(travelling(closing)).toBe(0);
+  expect(closing.clips).toBe(false);
+  expect(closing.glides).toBe(false);
   expect((await pane.boundingBox())?.width).toBeCloseTo(
     await collapsedWidthOf(page),
     0,
@@ -325,10 +420,11 @@ test('a panel that takes a hand-built ResizableProps object collapses and opens 
   await expect(handle).toBeFocused();
   await expect(pane).toHaveAttribute('inert', '');
   await expect(pane).toHaveAttribute('aria-hidden', 'true');
-  const opening = await framesOf(page, 'start', async () => {
+  const opening = await captureMotion(page, 'start', async () => {
     await page.keyboard.press('Enter');
   });
-  expect(travelling(opening)).toBe(0);
+  expect(opening.clips).toBe(false);
+  expect(opening.glides).toBe(false);
   expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
   await expect(handle).toBeFocused();
   await expect(pane).not.toHaveAttribute('inert', '');
@@ -338,22 +434,22 @@ test('under Reduce Motion the pane does not travel, and focus still leaves it', 
   page,
 }) => {
   await page.emulateMedia({reducedMotion: 'reduce'});
-  await openStory(page, storybook(), STORY.start);
+  await openFixture(page, STORY.start);
+  await expectPresent(page);
   const pane = page.getByTestId('sliding-panel');
   const handle = page.getByRole('separator', {name: 'Resize panel'});
-  await expect(pane).toHaveCount(1);
-  expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
   await page.getByRole('button', {name: 'Close panel'}).focus();
-  const closing = await framesOf(page, 'start', async () => {
+  const closing = await captureMotion(page, 'start', async () => {
     await page.keyboard.press('Enter');
   });
-  expect(closing.length).toBeGreaterThan(0);
-  expect(travelling(closing)).toBe(0);
+  expect(closing.glides).toBe(false);
+  expect(travelling(closing.frames)).toBe(0);
   await expect(handle).toBeFocused();
   await expect(pane).toHaveAttribute('inert', '');
-  const opening = await framesOf(page, 'start', async () => {
+  const opening = await captureMotion(page, 'start', async () => {
     await page.keyboard.press('Enter');
   });
-  expect(travelling(opening)).toBe(0);
+  expect(opening.glides).toBe(false);
+  expect(travelling(opening.frames)).toBe(0);
   expect((await pane.boundingBox())?.width).toBeCloseTo(200, 0);
 });
