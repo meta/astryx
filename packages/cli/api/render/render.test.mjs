@@ -700,6 +700,56 @@ describe('render(): every write stays inside the current folder', () => {
     }
   }, 90_000);
 
+  it('resolves tsconfig paths by TypeScript rules: exact keys, a star anywhere, targets in order', async () => {
+    put(
+      'tsp/tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@lib': ['./libsrc/index.ts'],
+            '@lib/*': ['./libsrc/*'],
+            '~*': ['./missing/*', './other/*'],
+            'theme-*-x': ['./themes/*.ts'],
+          },
+        },
+      }),
+    );
+    put('tsp/package.json', '{"name":"tsp","private":true}');
+    put('tsp/libsrc/index.ts', "export const Lib = 'lib-index';\n");
+    put('tsp/libsrc/button.tsx', "export const Button = () => <b>lib-button</b>;\n");
+    put('tsp/other/util.ts', "export const util = 'second-target';\n");
+    put('tsp/themes/blue.ts', "export const theme = 'mid-star';\n");
+    put(
+      'tsp/page.tsx',
+      [
+        "import {Lib} from '@lib';",
+        "import {Button} from '@lib/button';",
+        "import {util} from '~util';",
+        "import {theme} from 'theme-blue-x';",
+        'export default function Page() { return <p>{Lib} {util} {theme} <Button /></p>; }',
+        '',
+      ].join('\n'),
+    );
+    await render('tsp/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'tsp/page.html'), 'utf8');
+    for (const text of ['lib-index', 'lib-button', 'second-target', 'mid-star']) expect(html).toContain(text);
+  }, 60_000);
+
+  it('refuses a rendered file whose source block was stripped, in its own words', async () => {
+    put('stripped-own.html', '<!doctype html><html><head><meta name="generator" content="Astryx 0.7.5"></head><body><p>Hello</p></body></html>');
+    /** @type {any} */
+    let error;
+    try {
+      await render('stripped-own.html', {cwd: dir, reverse: true});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(error.message).toContain('rendered by Astryx');
+    expect(error.message).not.toContain('not an Astryx page');
+  });
+
   it('refuses a carried "image" whose bytes are not one', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
     put('fake-img.html', `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}, {path: 'hook.png', bytes: Buffer.from('process.exit(1)\n')}])}</body>`);

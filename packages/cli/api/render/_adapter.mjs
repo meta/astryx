@@ -502,6 +502,15 @@ export function reverseToFile({cwd, input, output, overwrite}) {
       ...(missing.length > 0 ? {missing} : {}),
     };
   }
+  // A file a render wrote, whose source block was taken out on the way
+  // (sanitizers and editors strip <script> elements), says so.
+  if (!isAstryxMarkup(html) && /<meta name="generator" content="Astryx[ "]/.test(html)) {
+    throw new AstryxError(
+      `${shown(cwd, input)} was rendered by Astryx, but its embedded source was removed (a sanitizer or an editor strips <script> blocks) and it has no Astryx components to rebuild from; nothing was written. Render the page again from its source and send the new file as is.`,
+      [],
+      ERROR_CODES.ERR_RENDER_SOURCE_DAMAGED,
+    );
+  }
   if (!isAstryxMarkup(html)) {
     throw new AstryxError(
       `${shown(cwd, input)} is not an Astryx page: it has no embedded source and no Astryx components to rebuild from. To start an Astryx page like it, run astryx build "<what the page is>".`,

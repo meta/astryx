@@ -344,7 +344,7 @@ export const doc = {
       value: 'ERR_RENDER_SOURCE_DAMAGED',
       stability: 'experimental',
       description:
-        '`render --reverse` refused the received file, and nothing was written: its embedded source is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
+        '`render --reverse` refused the received file, and nothing was written: its embedded source was removed (a file a render wrote, with no Astryx components left to rebuild from) or is damaged (not valid, or a file does not match its checksum), lists a path twice, carries a module, stylesheet or JSON file the page does not reach through its own imports, or an image, font or media file whose bytes are not one, or carries a file a render never embeds: a dotfile or dot-folder, anything under node_modules, a package manifest, lockfile or tool configuration, a file a test, story or benchmark runner would run, or any kind but a page module, stylesheet, JSON file or image. Raised only by the experimental render command.',
     },
   ],
 };
