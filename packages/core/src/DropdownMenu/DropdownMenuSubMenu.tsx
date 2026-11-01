@@ -89,6 +89,7 @@ import {
   shadowVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {
   composeEventHandlers,
@@ -148,7 +149,10 @@ const triggerStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   // While the flyout is open, keep the trigger visibly active so the open
   // branch reads as the current path even when focus has moved into the child.
@@ -1144,7 +1148,7 @@ export function DropdownMenuSubMenu(
         ? // The flyout's frame paints its surface, so the menu target rides
           // on it; a drilled-in view sits inside the root's surface.
           mergeProps(
-            themeProps('dropdown-menu'),
+            themeProps('dropdown-menu', {presentation: 'popover'}),
             stylex.props(regionStyles.frame, regionStyles.flyoutSurface),
           )
         : stylex.props(
@@ -1231,6 +1235,7 @@ export function DropdownMenuSubMenu(
         onKeyDown={composeEventHandlers(handleTriggerKeyDown, onKeyDown)}
         isDisabled={isDisabled}
         xstyle={[
+          focusOutlineStyles.focusVisible,
           triggerStyles.root,
           triggerSizeStyles[menuSize],
           isOpen && triggerStyles.open,
@@ -1361,7 +1366,7 @@ export function DropdownMenuSubMenu(
                   data-testid={menuDataTestId}
                   {...menuPress.menuProps}
                   {...mergeProps(
-                    themeProps('dropdown-menu'),
+                    themeProps('dropdown-menu', {presentation: 'popover'}),
                     stylex.props(
                       flyoutStyles.menu,
                       hasOverflow
