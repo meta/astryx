@@ -18,15 +18,23 @@ import {
   useSchedulePaginationPlugin,
   useScheduleViewSelectorPlugin,
 } from '@astryxdesign/lab';
+import {
+  plainDateAddDays,
+  plainDateFromISO,
+  plainDateFromInstant,
+  plainDateToISO,
+  plainDateToInstant,
+  type PlainDate,
+} from '@astryxdesign/core/utils';
 
 // The demo week is fixed and its events are built in the Schedule's own
 // timezone, so every viewer, and CI's browser, sees the same week with its
 // events on the 7-19 grid, whatever the viewer's own timezone or today's date.
 const STORY_TIMEZONE = 'America/Los_Angeles';
-// A Wednesday, in a week with no daylight-saving change.
-const STORY_DATE = '2026-05-13';
-const focusDate = Date.parse(dateTimeISO(STORY_DATE, 12)) as Instant;
-const currentWeekStart = addDays(STORY_DATE, -3);
+// A Wednesday.
+const STORY_DATE = plainDateFromISO('2026-05-13');
+const focusDate = plainDateToInstant(STORY_DATE, STORY_TIMEZONE, 12) as Instant;
+const currentWeekStart = plainDateAddDays(STORY_DATE, -3);
 const storyNow = STORY_DATE;
 
 const categories: ScheduleCategory[] = [
@@ -52,15 +60,15 @@ const events: CalendarEvent[] = [
     id: 'all-hands-previous-day',
     title: 'Company all hands',
     category: 'Company',
-    start: dateTimeISO(addDays(storyNow, -1), 9),
-    end: dateTimeISO(addDays(storyNow, -1), 10),
+    start: dateTimeISO(plainDateAddDays(storyNow, -1), 9),
+    end: dateTimeISO(plainDateAddDays(storyNow, -1), 10),
   }),
   createEventFromISO({
     id: 'all-hands-next-day',
     title: 'Company all hands',
     category: 'Company',
-    start: dateTimeISO(addDays(storyNow, 1), 9),
-    end: dateTimeISO(addDays(storyNow, 1), 10),
+    start: dateTimeISO(plainDateAddDays(storyNow, 1), 9),
+    end: dateTimeISO(plainDateAddDays(storyNow, 1), 10),
   }),
   createEventFromISO({
     id: 'design-review',
@@ -73,43 +81,43 @@ const events: CalendarEvent[] = [
     id: 'launch',
     title: 'Launch window',
     category: 'Launch',
-    start: dateISO(addDays(currentWeekStart, 3)),
-    end: dateISO(addDays(currentWeekStart, 4)),
+    start: plainDateToISO(plainDateAddDays(currentWeekStart, 3)),
+    end: plainDateToISO(plainDateAddDays(currentWeekStart, 4)),
   }),
   createEventFromISO({
     id: 'focus-day',
     title: 'Focus day',
     category: 'Focus',
-    start: dateISO(storyNow),
-    end: dateISO(storyNow),
+    start: plainDateToISO(storyNow),
+    end: plainDateToISO(storyNow),
   }),
   createEventFromISO({
     id: 'company-holiday',
     title: 'Company holiday',
     category: 'Holiday',
-    start: dateISO(addDays(currentWeekStart, 6)),
-    end: dateISO(addDays(currentWeekStart, 6)),
+    start: plainDateToISO(plainDateAddDays(currentWeekStart, 6)),
+    end: plainDateToISO(plainDateAddDays(currentWeekStart, 6)),
   }),
   createEventFromISO({
     id: 'retro',
     title: 'Weekly retro',
     category: 'Retro',
-    start: dateTimeISO(addDays(currentWeekStart, 5), 14),
-    end: dateTimeISO(addDays(currentWeekStart, 5), 15),
+    start: dateTimeISO(plainDateAddDays(currentWeekStart, 5), 14),
+    end: dateTimeISO(plainDateAddDays(currentWeekStart, 5), 15),
   }),
   createEventFromISO({
     id: 'incident',
     title: 'Incident review',
     category: 'Incident',
-    start: dateTimeISO(addDays(currentWeekStart, 1), 10, 30),
-    end: dateTimeISO(addDays(currentWeekStart, 1), 11, 30),
+    start: dateTimeISO(plainDateAddDays(currentWeekStart, 1), 10, 30),
+    end: dateTimeISO(plainDateAddDays(currentWeekStart, 1), 11, 30),
   }),
   createEventFromISO({
     id: 'overnight-migration',
     title: 'Overnight migration',
     category: 'Migration',
-    start: dateTimeISO(addDays(currentWeekStart, 5), 23, 30),
-    end: dateTimeISO(addDays(currentWeekStart, 6), 2),
+    start: dateTimeISO(plainDateAddDays(currentWeekStart, 5), 23, 30),
+    end: dateTimeISO(plainDateAddDays(currentWeekStart, 6), 2),
   }),
 ];
 
@@ -133,46 +141,15 @@ export default meta;
 
 type Story = StoryObj<typeof Schedule>;
 
-// Story dates are plain `YYYY-MM-DD` dates in STORY_TIMEZONE.
-function addDays(date: string, days: number): string {
-  const [year, month, day] = date.split('-').map(Number);
-  return new Date(Date.UTC(year, month - 1, day + days))
-    .toISOString()
-    .slice(0, 10);
-}
-
-function dateISO(date: string): string {
-  return date;
-}
-
-// STORY_TIMEZONE's UTC offset on a date, as `-07:00`. Read at midday, so it
-// is right for every demo hour (none sits in a daylight-saving gap).
-function offsetOn(date: string): string {
-  const name =
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: STORY_TIMEZONE,
-      timeZoneName: 'longOffset',
-    })
-      .formatToParts(Date.parse(`${date}T12:00:00Z`))
-      .find(part => part.type === 'timeZoneName')?.value ?? 'GMT';
-  const offset = name.replace('GMT', '');
-  return offset === '' ? 'Z' : offset;
-}
-
 // A wall-clock time on a story date in STORY_TIMEZONE, as an ISO instant.
-function dateTimeISO(date: string, hour: number, minute: number = 0): string {
-  const time = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-  return `${date}T${time}:00${offsetOn(date)}`;
-}
-
-// The STORY_TIMEZONE date an instant falls on.
-function zonedDate(instant: number): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: STORY_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(instant);
+function dateTimeISO(
+  date: PlainDate,
+  hour: number,
+  minute: number = 0,
+): string {
+  return new Date(
+    plainDateToInstant(date, STORY_TIMEZONE, hour, minute),
+  ).toISOString();
 }
 
 function makeSeededRandom(seed: number): () => number {
@@ -199,7 +176,10 @@ function createAsyncEvents(start: Instant, end: Instant): CalendarEvent[] {
   for (let dayStart = start; dayStart < end; dayStart += 24 * 60 * 60 * 1000) {
     const eventCount = 1 + Math.floor(random() * 3);
     // Midday, so a 23- or 25-hour daylight-saving day still lands on its date.
-    const day = zonedDate(dayStart + 12 * 60 * 60 * 1000);
+    const day = plainDateFromInstant(
+      dayStart + 12 * 60 * 60 * 1000,
+      STORY_TIMEZONE,
+    );
 
     for (let index = 0; index < eventCount; index++) {
       const startHour = 8 + Math.floor(random() * 8);
@@ -227,8 +207,8 @@ function createAsyncEvents(start: Instant, end: Instant): CalendarEvent[] {
           category:
             asyncCategories[Math.floor(random() * asyncCategories.length)]
               .label,
-          start: dateISO(day),
-          end: dateISO(day),
+          start: plainDateToISO(day),
+          end: plainDateToISO(day),
         }),
       );
     }
