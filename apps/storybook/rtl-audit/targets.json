@@ -675,15 +675,6 @@
     }
   },
   {
-    "component": "CodeEditor",
-    "storyId": "lab-codeeditor--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-codeeditor > div > div:first-child",
-      "next": ".astryx-codeeditor > div > div:nth-child(2)"
-    }
-  },
-  {
     "component": "MobileTokenizer",
     "storyId": "lab-mobiletokenizer--touch-flow",
     "dims": ["D2"],
