@@ -605,5 +605,14 @@
       "prev": ".astryx-command-palette-footer > span:first-child",
       "next": ".astryx-command-palette-footer > span:last-child"
     }
+  },
+  {
+    "component": "DrawerHeader",
+    "storyId": "core-drawerheader--audit",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-drawer-header .astryx-heading",
+      "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
+    }
   }
 ]

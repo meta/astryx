@@ -7,6 +7,7 @@
 const {
   isComponentSpecRecordPath,
   isLegacyComponentSpecPath,
+  isPlatformComponentSpecPath,
 } = require('./knowledge-paths.cjs');
 
 /**
@@ -114,6 +115,9 @@ const KNOWLEDGE_RECORD_PATTERNS = [
 function isSpecRecordPath(filePath) {
   return (
     isComponentSpecRecordPath(filePath) ||
+    // A platform record (`<Root>/<PublicName>.swift.spec.md`) is a component
+    // record for its language, gated like the core record beside it.
+    isPlatformComponentSpecPath(filePath) ||
     SPEC_RECORD_PATTERNS.some(pattern => pattern.test(filePath))
   );
 }

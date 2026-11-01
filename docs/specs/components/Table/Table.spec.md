@@ -110,6 +110,12 @@ Consumer migration instructions belong in consumer docs and release notes.
   target-reachability gaps.
 - New public API, theme target, or alias, beyond `useTableRowExpansion`'s
   optional `animatedLayout` option (FR15).
+- TableHeader, TableBody, TableFooter, and TableRow element contracts;
+  `component:TableHeader`, `component:TableBody`, `component:TableFooter`, and
+  `component:TableRow` own them.
+- TableCell, TableHeaderCell, and TableSelectionToolbar contracts;
+  `component:TableCell`, `component:TableHeaderCell`, and
+  `component:TableSelectionToolbar` own them.
 
 ## Public concepts
 

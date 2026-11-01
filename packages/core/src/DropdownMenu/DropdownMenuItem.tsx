@@ -43,10 +43,12 @@ import {
   spacingVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useDropdownMenuContext} from './DropdownMenuContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {isModifiedClick} from './menuItemRoles';
 import {themeProps} from '../utils/themeProps';
@@ -81,7 +83,10 @@ const menuItemStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -296,6 +301,7 @@ export function DropdownMenuItem({
       draggable={href != null ? false : undefined}
       isDisabled={isDisabled}
       xstyle={[
+        focusOutlineStyles.focusVisible,
         menuItemStyles.root,
         itemSizeStyles[menuSize],
         isDestructive && menuItemStyles.destructive,
