@@ -20,6 +20,7 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
+  assertSelectorParses,
   finishFiniteAnimations,
   gradePositionedPair,
   orderD1StoryCandidates,
@@ -1075,5 +1076,28 @@ describe('rtlAudit.D5 physical-region metadata', () => {
         's',
       ),
     ).toThrow(/D5.within/);
+  });
+});
+
+describe('assertSelectorParses', () => {
+  const doc = {
+    querySelector(selector) {
+      if (selector.includes('[[')) {
+        throw new SyntaxError('not a valid selector');
+      }
+      return null;
+    },
+  };
+
+  it('accepts a selector the page can parse, matched or not', () => {
+    expect(() =>
+      assertSelectorParses(doc, '[aria-label="Plot"]'),
+    ).not.toThrow();
+  });
+
+  it('fails closed on a selector the page cannot parse', () => {
+    expect(() => assertSelectorParses(doc, '[[aria-label')).toThrow(
+      /rtlAudit.D5.within/,
+    );
   });
 });

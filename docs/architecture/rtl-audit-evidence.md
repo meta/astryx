@@ -212,7 +212,10 @@ Lint and rendered audit are complementary:
   A nonempty reason proves only valid metadata, not valid non-applicability.
   Review-facing audit output MUST list every declared D1 exclusion in the audited
   scope with its canonical component, story id, dimension, and rationale, including stories not
-  selected as the D1 representative. Reports MUST NOT call the absence of a D1
+  selected as the D1 representative. A `rtlAudit.D5` physical-region declaration
+  receives the same review and disclosure: adding or widening one is reviewed,
+  and the output lists every declaration with its component, story id, kind, and
+  plot selector. Reports MUST NOT call the absence of a D1
   measurement proof that directional behavior is correct. Automatic N/A because
   no directional icons were found requires no extra human approval; an unchanged
   exemption is not reapproved on every audit run. This rule does not admit

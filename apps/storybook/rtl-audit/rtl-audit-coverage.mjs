@@ -558,6 +558,19 @@ export function finishFiniteAnimations(doc) {
 export const PHYSICAL_POSITION_MARKERS = Object.freeze(['chart']);
 
 /**
+ * Fail closed on a `rtlAudit.D5.within` selector the page cannot parse, so a
+ * typo cannot silently grade every overlay as mirrored. Runs in the page: keep
+ * it self-contained.
+ */
+export function assertSelectorParses(doc, selector) {
+  try {
+    doc.querySelector(selector);
+  } catch {
+    throw new Error(`rtlAudit.D5.within "${selector}" is not a valid selector`);
+  }
+}
+
+/**
  * Grade one LTR/RTL pair of D5 positioned elements. By default the RTL center
  * must mirror the LTR center about the parent's center. Under a declared
  * `chart` marker it must keep the same physical position instead, and a

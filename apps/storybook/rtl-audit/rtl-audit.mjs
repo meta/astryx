@@ -66,6 +66,7 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  assertSelectorParses,
   finishFiniteAnimations,
   gradePositionedPair,
   orderD1StoryCandidates,
@@ -605,6 +606,13 @@ const PM_DETECTOR = /* js */ `
 `;
 
 async function detectPositioned(page, physical = null) {
+  // An unparsable plot selector errors the story rather than being skipped
+  // (INV13); it is checked outside the catch below.
+  if (physical) {
+    await page.evaluate(
+      `(${assertSelectorParses.toString()})(document, ${JSON.stringify(physical.within)})`,
+    );
+  }
   const detector = PM_DETECTOR.replace('__RTL_PHYSICAL__', JSON.stringify(physical));
   return page.evaluate(detector).catch(() => []);
 }
@@ -617,6 +625,10 @@ const PM_TOL = Number(process.env.PM_TOL || 3); // px tolerance (signal gap was 
 
 function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
   const card = {component, storyId, dim: 'D5-positional', verdict: 'N-A', notes: [], candidates: 0, fails: []};
+  // Disclose every declared physical region (INV16), whatever the verdict.
+  if (ltrMeasure.physical) {
+    card.declaredD5Physical = {component, storyId, ...ltrMeasure.physical};
+  }
   const ltr = ltrMeasure.positioned;
   const revealedL = PM_REVEAL && ltrMeasure.revealed;
 
@@ -716,6 +728,7 @@ async function measureAutoStory(page, port, storyId, rtl, {positioned, decoratio
   }
   if (positioned && PM_REVEAL) measure.positioned = await detectPositioned(page, physical);
   if (decorations) measure.decorations = await detectDirectionalDecorations(page);
+  measure.physical = physical;
   return measure;
 }
 
@@ -1517,6 +1530,9 @@ async function cleanupRuntime() {
   const surprises = autoFails;
   const pmFails = pmResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
   const decorationFails = decorationResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
+  const declaredD5PhysicalRegions = pmResults.flatMap(result =>
+    result.declaredD5Physical ? [result.declaredD5Physical] : [],
+  );
   const declaredD1Exclusions = autoResults
     .flatMap(result => result.declaredD1Exclusions ?? [])
     .sort(
@@ -1562,6 +1578,8 @@ async function cleanupRuntime() {
     // fresh page.
     pageRecoveries,
     declaredD1Exclusions,
+    // Story-declared plots whose overlays D5 grades as physical (DR5).
+    declaredD5PhysicalRegions,
     autoDiscovery: {
       total: autoResults.length,
       applicable: autoResults.filter(r => r.verdict !== 'N-A').length,
@@ -1599,6 +1617,7 @@ async function cleanupRuntime() {
   console.error(`DEC : ${report.directionalDecorations.pass} pass / ${report.directionalDecorations.fail} fail / ${report.directionalDecorations.na} N-A`);
   console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
   console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+  if (declaredD5PhysicalRegions.length > 0) console.error(`D5P : ${declaredD5PhysicalRegions.length} declared physical region(s): ${declaredD5PhysicalRegions.map(r => `${r.storyId} (${r.physical} within ${r.within})`).join('; ')}`);
   // Non-zero exit only signals CI (which is soft/continue-on-error). Surface a
   // signal but never let it hard-block during the stability window.
   const anySignal =
