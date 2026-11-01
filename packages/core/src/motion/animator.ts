@@ -517,6 +517,14 @@ interface StartGroup {
   madeInFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
+  /**
+   * The latest the browser can have started it: the time its first frame
+   * ran, when that frame left its start unknown (too late after the call to
+   * stand for the start, and the browser had not told it yet). The
+   * compositor has it moving by then, so until the browser tells its start
+   * a read takes the curve from there instead of from its first value.
+   */
+  latest?: number;
   /** A later call in the same task that took over its curves. */
   adoptedBy?: StartGroup;
   readonly resolve: (start: number) => void;
@@ -1078,8 +1086,15 @@ export function createAnimator(
   const valueAt = (property: MotionProperty, time: number): number => {
     const segment = segments.get(property);
     if (segment != null && isHeld(segment) && time <= now()) {
-      // Nothing has moved on screen until the browser starts the call.
-      return segment.at(0);
+      // Nothing has moved on screen until the browser starts the call; once
+      // its first frame has run, it has moved since that frame at least.
+      const latest = segment.group?.latest;
+      if (latest == null || time <= latest) {
+        return segment.at(0);
+      }
+      return time - latest >= segment.duration
+        ? segment.target
+        : segment.at(time - latest);
     }
     return curveAt(property, time);
   };
@@ -1089,8 +1104,15 @@ export function createAnimator(
     if (held != null && isHeld(held)) {
       // Still at its start on screen, but moving in the model: a retarget
       // carries the velocity the curve has reached by now, so a flick whose
-      // moves all land before the browser starts any keeps its speed.
-      return held.speed(Math.max(0, time - held.start));
+      // moves all land before the browser starts any keeps its speed. Past
+      // its first frame it reads, as its value does, from that frame.
+      const latest = held.group?.latest;
+      return held.speed(
+        Math.max(
+          0,
+          time - (latest != null && time > latest ? latest : held.start),
+        ),
+      );
     }
     const segment = segmentAt(property, time);
     if (segment == null || time < segment.start) {
@@ -2134,6 +2156,17 @@ export function createAnimator(
         )
       ) {
         resolveGroup(group, now());
+      }
+      // Still waiting, and moving on screen: started by this frame at the
+      // latest, whichever frame the browser started it in.
+      if (
+        !group.resolved &&
+        group.animations.some(
+          animation =>
+            animation.startTime == null && animation.playState === 'running',
+        )
+      ) {
+        group.latest = now();
       }
     });
     ready.then(
