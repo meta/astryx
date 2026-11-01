@@ -547,6 +547,12 @@ describe('pr-touched-components routing', () => {
     );
   });
 
+  it('checks out the tested merge commit, so a branch that predates the check still runs it', () => {
+    const checkout = job.steps.find(step => step.name === 'Checkout');
+    expect(checkout.uses).toMatch(/^actions\/checkout@/);
+    expect(checkout.with?.ref).toBeUndefined();
+  });
+
   it('exposes the wide-change flag and count', () => {
     expect(job.outputs).toEqual({
       wide_change: '${{ steps.touched.outputs.wide_change }}',

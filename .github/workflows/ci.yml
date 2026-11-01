@@ -3036,10 +3036,11 @@ jobs:
         with:
           component-audit: 'true'
 
+      # The tested merge commit, as pr-visual checks out: a branch that
+      # predates this check has none of its scripts at its own head.
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
 
       # A spec-only, docsite-only or tooling-only change has no analysis; it
