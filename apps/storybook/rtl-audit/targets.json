@@ -631,30 +631,5 @@
       "overlay": ".astryx-overlay-scrim .astryx-stack",
       "overlayRoot": ".astryx-overlay"
     }
-  },
-  {
-    "component": "Kbd",
-    "storyId": "core-kbd--special-keys",
-    "dims": []
-  },
-  {
-    "component": "Skeleton",
-    "storyId": "core-skeleton--shapes",
-    "dims": []
-  },
-  {
-    "component": "Timer",
-    "storyId": "core-timer--default",
-    "dims": []
-  },
-  {
-    "component": "VisuallyHidden",
-    "storyId": "core-visuallyhidden--default",
-    "dims": []
-  },
-  {
-    "component": "LinkProvider",
-    "storyId": "core-link-navigation--destinations",
-    "dims": []
   }
 ]

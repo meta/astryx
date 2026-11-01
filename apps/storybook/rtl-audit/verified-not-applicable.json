@@ -433,25 +433,5 @@
       "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
       "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
     }
-  },
-  {
-    "component": "core/Kbd",
-    "reason": "Kbd renders key names and symbols in a bordered box with equal inline padding. Arrow-key symbols name physical keyboard keys, so they stay unchanged in RTL (design:bidirectionality DR5, hardware), and the arrows used (U+2190, U+2192) are not Unicode bidi-mirrored characters, so nothing mirrors them twice. It owns no inline-asymmetric spacing, physical position, order, scroll, drag, overlay or keyboard behavior."
-  },
-  {
-    "component": "core/Skeleton",
-    "reason": "Skeleton draws placeholder shapes whose only animation is an opacity fade, so nothing sweeps along the inline axis. Its shapes are symmetric boxes with no directional glyph, inline-asymmetric spacing, physical position, order, scroll, drag, overlay or keyboard behavior."
-  },
-  {
-    "component": "core/Timer",
-    "reason": "Timer renders an elapsed or remaining time with tabular numerals. A clock reading is physically meaningful content that stays unchanged in RTL (design:bidirectionality DR5); the browser's bidi algorithm orders the digits and separators. It owns no directional glyph, inline-asymmetric spacing, physical position, order, scroll, drag, overlay or keyboard behavior."
-  },
-  {
-    "component": "core/VisuallyHidden",
-    "reason": "VisuallyHidden clips its content to a 1px box at the inline start so only assistive technology perceives it. Nothing is visible, so there is no visual relationship to mirror, and it owns no glyph, order, scroll, drag, overlay or keyboard behavior."
-  },
-  {
-    "component": "core/LinkProvider",
-    "reason": "LinkProvider renders no element: it supplies the link component through context. Every visible link is rendered by Link, which owns its own RTL evidence. It owns no glyph, inline spacing, physical position, order, scroll, drag, overlay or keyboard behavior."
   }
 ]
