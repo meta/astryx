@@ -34,6 +34,7 @@ import {useTopNavRenderMode} from './TopNavRenderContext';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {mergeProps} from '../utils';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -221,7 +222,11 @@ export function TopNavItem({
       }
       // Forward the original onClick if present
       onClick?.(e);
-      closeMobileNav();
+      // A modified click on a link is the browser's (a new tab): the drawer
+      // stays open for the next one.
+      if (!(href && isModifiedClick(e))) {
+        closeMobileNav();
+      }
     };
 
     return (

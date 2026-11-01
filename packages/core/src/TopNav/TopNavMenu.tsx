@@ -40,6 +40,7 @@ import {navItemStyles} from '../NavItem/navItemStyles.stylex';
 import {useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {isSafeUrl} from '../utils/safeUrl';
 import {themeProps} from '../utils/themeProps';
@@ -523,9 +524,13 @@ export function TopNavMenu({
                 key={getMenuItemKey(item)}
                 href={item.href}
                 {...pressable}
-                onClick={(_e: React.MouseEvent) => {
+                onClick={(e: React.MouseEvent) => {
                   item.onClick?.();
-                  closeMobileNav();
+                  // A modified click on a link is the browser's (a new tab):
+                  // the drawer stays open for the next one.
+                  if (!(item.href && isModifiedClick(e))) {
+                    closeMobileNav();
+                  }
                 }}
                 {...focusOutlineProps.focusVisible(
                   navItemStyles.item,

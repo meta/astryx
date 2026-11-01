@@ -33,6 +33,7 @@ import {useTopNavRenderMode} from './TopNavRenderContext';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {isModifiedClick} from '../DropdownMenu/menuItemRoles';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -207,9 +208,13 @@ export function TopNavMegaMenuItem({
   if (renderMode === 'drawer') {
     const Element = href ? LinkComponent : 'button';
     const elementProps = Element === 'button' ? {type: 'button' as const} : {};
-    const handleDrawerClick = () => {
+    const handleDrawerClick = (e: React.MouseEvent) => {
       onClick?.();
-      closeMobileNav();
+      // A modified click on a link is the browser's (a new tab): the drawer
+      // stays open for the next one.
+      if (!(href && isModifiedClick(e))) {
+        closeMobileNav();
+      }
     };
     return (
       <Element
