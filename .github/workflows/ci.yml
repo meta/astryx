@@ -92,17 +92,58 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' || (inputs.recheck && github.triggering_actor == 'github-actions[bot]') }}
 
 jobs:
-  # Admits the whole run under CI's ceiling of about ninety concurrent jobs
-  # (spec:AST-030 FR16, DEC-16). Every job here but build-storybook needs this
-  # one, directly or through the jobs it needs; build-storybook starts beside
-  # it, and every job that uses the build needs this one too. Like every other job it skips for a draft or an
-  # unlabelled fork, which run no CI (FR17); the required contexts still report
-  # through their own status rules. Otherwise it never fails, so each job's own
-  # condition decides exactly as before. `peak` is the most jobs a run holds at once: a
-  # release-check's from its legs, a pull request's from its measured most plus
-  # the suites its labels opt into (ci-admission.test.mjs). A pull request
-  # waits at most twelve minutes, inside the fifteen-minute job budget.
+  # Admit the whole run under CI's ceiling of about ninety concurrent jobs
+  # (spec:AST-030 FR16, DEC-16), in two slim jobs: `room` waits until the
+  # Storybook build has room and starts it, and `admission` waits for the rest
+  # of the run unless it already fit. Every job here but build-storybook and
+  # ci-full needs admission, directly or through the jobs it needs, so a
+  # waiting run holds only its one waiting job and a build that found room.
+  # Like every other job both skip for a draft or an unlabelled fork, which run
+  # no CI (FR17); the required contexts still report through their own status
+  # rules. Neither fails, so each job's own condition decides exactly as before,
+  # except for a pull-request run CI is full for, which ci-full stops. `peak` is
+  # the most jobs a run holds at once: a release-check's from its legs, a pull
+  # request's from its measured most plus the suites its labels opt into
+  # (ci-admission.test.mjs). A pull request waits at most twelve minutes in all,
+  # inside the fifteen-minute job budget.
+  room:
+    # Finds room for the run's first job, its Storybook build, and records
+    # whether the whole run fit on that look. A pull-request run finding ten
+    # others already waiting, and no room, is turned away: CI is full.
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-slim
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      fits: ${{ steps.room.outputs.fits }}
+      full: ${{ steps.room.outputs.full }}
+      started: ${{ steps.room.outputs.started }}
+      looks: ${{ steps.room.outputs.looks }}
+    steps:
+      - name: Check out the admission action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/ci-admission
+          path: .ci-admission
+          persist-credentials: false
+
+      - name: Wait for room under the CI ceiling
+        id: room
+        uses: ./.ci-admission/.github/actions/ci-admission
+        continue-on-error: true
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
+        with:
+          phase: room
+          peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
+          main: ${{ github.event_name == 'workflow_dispatch' }}
+          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
+          max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
+          label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
+
   admission:
+    needs: [room]
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
     runs-on: ubuntu-slim
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
@@ -122,11 +163,37 @@ jobs:
         continue-on-error: true
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
         with:
+          phase: rest
+          fits: ${{ needs.room.outputs.fits }}
+          full: ${{ needs.room.outputs.full }}
+          started: ${{ needs.room.outputs.started }}
+          looks: ${{ needs.room.outputs.looks }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
+
+  # Stops a pull-request run that CI is full for (room found no room and ten
+  # other pull-request runs waiting), with the reason, so it builds nothing:
+  # cancelling the run cancels admission's wait and every job behind it, and
+  # the required checks report the cancelled run, never a pass.
+  ci-full:
+    needs: [room]
+    if: github.event_name == 'pull_request' && needs.room.outputs.full == 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      # actions: write lets the run cancel itself.
+      actions: write
+    steps:
+      - name: Stop, CI is full
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "::error title=CI is full::CI is full: re-run or push later. Ten pull-request runs were already waiting for room."
+          gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
+          exit 1
 
   maintenance-request:
     needs: [admission]
@@ -980,10 +1047,11 @@ jobs:
             await decideRunLabels({github, context, core});
 
   build-storybook:
-    # Starts beside admission instead of after it: it is one job, and every
-    # job that uses its build also needs admission, so the run's heavy legs
-    # still wait for room (spec:AST-030 FR16, DEC-16).
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
+    # Starts once there is room for it, beside admission's wait for the rest of
+    # the run; every job that uses its build also needs admission, so the heavy
+    # legs still wait for room (spec:AST-030 FR16, DEC-16).
+    needs: [room]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled() && needs.room.outputs.full != 'true') }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '4-core-ubuntu' || 'ubuntu-latest' }}
