@@ -18,7 +18,6 @@ import {
   useRef,
   type ReactNode,
   type RefCallback,
-  type SyntheticEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -32,6 +31,7 @@ import {
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {markLayerSurfacePress} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {
   colorVars,
@@ -669,11 +669,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       return renderLayer(
         <div
           {...stylex.props(styles.content)}
-          // FR11: a press inside the card acts only within the card; neither
-          // its click nor a middle-button mouseup may reach a clickable
-          // container around the trigger.
-          onClick={stopPropagation}
-          onMouseUp={stopPropagation}
+          // FR11: a press inside the card acts only within the card. The mark
+          // tells a clickable container around the trigger to leave its click
+          // or middle-button mouseup alone; document listeners still see it.
+          onClick={markLayerSurfacePress}
+          onMouseUp={markLayerSurfacePress}
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside
             // register as "hovering content" would block every later hide.
@@ -737,10 +737,4 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     show: showLayer,
     hide,
   };
-}
-
-// FR11: stops a press inside the open surface from reaching the trigger's
-// ancestors.
-function stopPropagation(event: SyntheticEvent): void {
-  event.stopPropagation();
 }

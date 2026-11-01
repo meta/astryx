@@ -27,6 +27,7 @@ import {
 } from '@testing-library/react';
 import {useRef} from 'react';
 import {Tooltip} from './Tooltip';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
@@ -820,34 +821,50 @@ describe('Tooltip sibling mode (anchorRef)', () => {
 
 // FR11: a press inside an open tooltip acts only within the tooltip.
 describe('Tooltip surface press', () => {
-  it('keeps a click on the tooltip text from reaching a clickable container', () => {
-    const onContainerClick = vi.fn();
+  it('keeps a click on the tooltip text from activating a clickable card', () => {
+    const onCardClick = vi.fn();
     render(
-      <div onClick={onContainerClick}>
+      <ClickableCard label="Card" onClick={onCardClick}>
+        <span>Card body</span>
         <Tooltip content="Tooltip text" isOpen>
           <button type="button">Trigger</button>
         </Tooltip>
-      </div>,
+      </ClickableCard>,
     );
     fireEvent.click(screen.getByText('Tooltip text'));
-    expect(onContainerClick).not.toHaveBeenCalled();
-    // Positive control: the trigger's own click still reaches the container.
-    fireEvent.click(screen.getByRole('button', {name: 'Trigger'}));
-    expect(onContainerClick).toHaveBeenCalledTimes(1);
+    expect(onCardClick).not.toHaveBeenCalled();
+    // Positive control: a click on the card's own content still activates it.
+    fireEvent.click(screen.getByText('Card body'));
+    expect(onCardClick).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a middle-button press on the tooltip text from reaching a container', () => {
-    // useClickableContainer opens an href in a new tab on a middle mouseup.
-    const onContainerMouseUp = vi.fn();
+  it('keeps a middle-button press on the tooltip text from opening a card link', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
     render(
-      <div onMouseUp={onContainerMouseUp}>
+      <ClickableCard label="Card" href="https://example.com/">
         <Tooltip content="Tooltip text" isOpen>
           <button type="button">Trigger</button>
         </Tooltip>
-      </div>,
+      </ClickableCard>,
     );
     fireEvent.mouseUp(screen.getByText('Tooltip text'), {button: 1});
-    expect(onContainerMouseUp).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('still lets document listeners see a click on the tooltip text', () => {
+    // A Typeahead or menu inside a layer closes and opens from document
+    // listeners, so the press must keep propagating.
+    const onDocumentClick = vi.fn();
+    document.addEventListener('click', onDocumentClick);
+    render(
+      <Tooltip content="Tooltip text" isOpen>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    document.removeEventListener('click', onDocumentClick);
+    expect(onDocumentClick).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a click on the tooltip text inside a label from toggling its control', () => {

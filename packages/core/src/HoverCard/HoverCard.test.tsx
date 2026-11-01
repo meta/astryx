@@ -30,6 +30,7 @@ import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
 import {StrictMode} from 'react';
 import {Button} from '../Button/Button';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Theme, defineTheme} from '../theme';
 import {HoverCard} from './HoverCard';
 import {useHoverCard} from './useHoverCard';
@@ -1340,16 +1341,17 @@ describe('HoverCard theme target names', () => {
 
 // FR11: a press inside an open card acts only within the card.
 describe('HoverCard surface press', () => {
-  it('keeps a click on card content from reaching a clickable container', () => {
-    const onContainerClick = vi.fn();
+  it('keeps a click on card content from activating a clickable card', () => {
+    const onCardClick = vi.fn();
     const onCardButton = vi.fn();
     render(
-      <div onClick={onContainerClick}>
+      <ClickableCard label="Card" onClick={onCardClick}>
+        <span>Card body</span>
         <HoverCard
           isOpen
           content={
             <span>
-              Card content{' '}
+              Hover content{' '}
               <button type="button" onClick={onCardButton}>
                 Card action
               </button>
@@ -1357,28 +1359,45 @@ describe('HoverCard surface press', () => {
           }>
           <button type="button">Trigger</button>
         </HoverCard>
-      </div>,
+      </ClickableCard>,
     );
-    fireEvent.click(screen.getByText(/Card content/));
+    fireEvent.click(screen.getByText(/Hover content/));
     fireEvent.click(
       screen.getByRole('button', {name: 'Card action', hidden: true}),
     );
-    expect(onContainerClick).not.toHaveBeenCalled();
-    // The card's own button keeps its activation.
+    expect(onCardClick).not.toHaveBeenCalled();
+    // The hover card's own button keeps its activation.
     expect(onCardButton).toHaveBeenCalledTimes(1);
+    // Positive control: a click on the card's own content still activates it.
+    fireEvent.click(screen.getByText('Card body'));
+    expect(onCardClick).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a middle-button press on card content from reaching a container', () => {
-    const onContainerMouseUp = vi.fn();
+  it('keeps a middle-button press on card content from opening a card link', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
     render(
-      <div onMouseUp={onContainerMouseUp}>
-        <HoverCard isOpen content={<span>Card content</span>}>
+      <ClickableCard label="Card" href="https://example.com/">
+        <HoverCard isOpen content={<span>Hover content</span>}>
           <button type="button">Trigger</button>
         </HoverCard>
-      </div>,
+      </ClickableCard>,
     );
-    fireEvent.mouseUp(screen.getByText('Card content'), {button: 1});
-    expect(onContainerMouseUp).not.toHaveBeenCalled();
+    fireEvent.mouseUp(screen.getByText('Hover content'), {button: 1});
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('still lets document listeners see a click inside the card', () => {
+    const onDocumentClick = vi.fn();
+    document.addEventListener('click', onDocumentClick);
+    render(
+      <HoverCard isOpen content={<span>Hover content</span>}>
+        <button type="button">Trigger</button>
+      </HoverCard>,
+    );
+    fireEvent.click(screen.getByText('Hover content'));
+    document.removeEventListener('click', onDocumentClick);
+    expect(onDocumentClick).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a click on card text inside a label from toggling its control', () => {

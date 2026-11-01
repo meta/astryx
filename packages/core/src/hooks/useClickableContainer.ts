@@ -22,6 +22,7 @@
  */
 
 import {useCallback, useEffect, type RefObject, type MouseEvent} from 'react';
+import {isLayerSurfacePress} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 
 /**
@@ -201,7 +202,9 @@ export function useClickableContainer({
 
   const onClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
-      if (disabled) {
+      // A press inside an open Tooltip or HoverCard acts only within it
+      // (component:Tooltip FR11, component:HoverCard FR11).
+      if (disabled || isLayerSurfacePress(event)) {
         return;
       }
 
@@ -274,7 +277,7 @@ export function useClickableContainer({
 
   const onMouseUp = useCallback(
     (event: MouseEvent<HTMLElement>) => {
-      if (disabled) {
+      if (disabled || isLayerSurfacePress(event)) {
         return;
       }
 

@@ -18,7 +18,6 @@ import {
   useRef,
   type ReactNode,
   type RefCallback,
-  type SyntheticEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -32,6 +31,7 @@ import {
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {markLayerSurfacePress} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -639,13 +639,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
       return renderLayer(
         // FR11: React bubbles a press on the surface to the trigger's
-        // ancestors, portaled or not, so it would otherwise reach a clickable
-        // container around the trigger: its click, or the mouseup a
-        // middle-button press opens a link with.
+        // ancestors, portaled or not. Marking it lets a clickable container
+        // around the trigger leave it alone (its click, or the mouseup a
+        // middle-button press opens a link with) while document listeners
+        // still see it.
         <div
           {...stylex.props(styles.content)}
-          onClick={stopPropagation}
-          onMouseUp={stopPropagation}>
+          onClick={markLayerSurfacePress}
+          onMouseUp={markLayerSurfacePress}>
           {children}
         </div>,
         renderProps,
@@ -669,10 +670,4 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     describedBy: layerId,
     renderTooltip,
   };
-}
-
-// FR11: stops a press inside the open surface from reaching the trigger's
-// ancestors.
-function stopPropagation(event: SyntheticEvent): void {
-  event.stopPropagation();
 }
