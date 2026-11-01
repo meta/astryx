@@ -245,20 +245,27 @@ export interface AnimateOptions {
   crossfadeAs?: 'entrance' | 'exit';
   /**
    * When the call's animations start. By default a call from rest starts
-   * when the browser commits it, and a call that continues motion on screen
-   * (a retarget) starts now, from the value on screen. Ignored with `at`.
+   * when the browser commits it. A call that continues motion on screen (a
+   * retarget) starts now, from the value on screen. Ignored with `at`.
    * - `'commit'`: a call that continues motion also starts when the browser
-   *   commits it, dated by the browser rather than by the main thread, as a
-   *   call from rest is.
+   *   commits it, as a call from rest does. The browser dates that start, not
+   *   the main thread.
    * - `'presented'`: a call from rest leaves its element at rest and creates
-   *   its animations two frames later, once the frame that carries the
-   *   element at rest has been presented; they then start at their commit. A
-   *   busy UI process delays the motion instead of skipping into it, for two
-   *   frames more before an idle start. Any other change to the animator
+   *   its animations two frames later. By then the frame that shows the
+   *   element at rest is presented, and the animations start at their commit.
+   *   A busy UI process delays the motion instead of skipping into it, for
+   *   two frames more before an idle start. Any other change to the animator
    *   before then creates the animations first, in call order. A call that
    *   continues motion on screen (a retarget) starts now, as by default.
+   * - `'next-frame'`: the caller makes the call in an input event's own
+   *   task, never in a frame callback. The first frame whose callbacks run
+   *   after the call commits it. A call from rest starts at that frame,
+   *   however long the task ran, so a later listener's block delays the
+   *   motion. Without it, the browser dates the start inside that block, and
+   *   the motion skips ahead. A call that continues motion starts now, as by
+   *   default.
    */
-  start?: 'commit' | 'presented';
+  start?: 'commit' | 'presented' | 'next-frame';
   /**
    * A call that retargets a curve on screen adds to it instead of replacing
    * it, as UIKit's animations do: the old curve keeps going (past its end, at
@@ -516,6 +523,12 @@ interface StartGroup {
    * so the frame after it is not the one that starts them.
    */
   madeInFrame?: boolean;
+  /**
+   * Its call asked for `start: 'next-frame'`. The call ran in an input
+   * event's own task, so the first frame after it commits its animations,
+   * however long that task ran.
+   */
+  nextFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
   /**
@@ -2272,7 +2285,12 @@ export function createMotionAnimator(
       if (
         !group.resolved &&
         group.madeInFrame !== true &&
-        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        // A call made in an input event's own task says so with
+        // `start: 'next-frame'`. This frame commits such a call however
+        // late it comes. A later listener's block then holds the motion
+        // back instead of skipping into it.
+        (group.nextFrame === true ||
+          now() - (group.task?.first ?? group.provisional) <= LATE_START_MS) &&
         group.animations.some(
           animation =>
             animation.startTime == null && animation.playState === 'running',
@@ -2456,7 +2474,10 @@ export function createMotionAnimator(
     }
     const {task} = group;
     // A read in the task's first microtasks comes after its end too.
-    const ended = task?.ended ?? now();
+    // A later listener of an input event may hold the event's task past its
+    // first microtask. So for a call made with `start: 'next-frame'`, the
+    // task ends at this read: the first frame after the task, or its `ready`.
+    const ended = group.nextFrame === true ? now() : (task?.ended ?? now());
     if (task == null || ended - task.first <= LATE_START_MS) {
       return start;
     }
@@ -3488,6 +3509,14 @@ export function createMotionAnimator(
         animateOptions.at,
         animateOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        animateOptions.at == null &&
+        animateOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const adopted =
         plan?.landing != null
           ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
@@ -3617,6 +3646,14 @@ export function createMotionAnimator(
         playOptions.at,
         playOptions.start,
       );
+      // Ignored with `at`, which may join an earlier call's start.
+      if (
+        group != null &&
+        playOptions.at == null &&
+        playOptions.start === 'next-frame'
+      ) {
+        group.nextFrame = true;
+      }
       const adopted =
         plan?.landing != null
           ? adoptLandings(plan.landing, Object.keys(next) as MotionProperty[])
