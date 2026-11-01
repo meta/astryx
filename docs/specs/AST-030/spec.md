@@ -40,7 +40,10 @@ affects_consumer_docs: []
     ".github/actions/test-scope/**",
     ".github/scripts/workflow-paths.test.mjs",
     ".github/actions/heavy-caps/**",
-    ".github/scripts/ci-pr-gate.*"
+    ".github/scripts/ci-pr-gate.*",
+    ".github/scripts/perf-*",
+    "apps/sandbox/perf/**",
+    "playwright.perf.config.ts"
   ]
 }
 ```
@@ -355,6 +358,23 @@ they are separately named.
   required check would count as passing. Events other than a pull request (a
   push to `main`, a merge-group entry, a dispatch) are unaffected, and a fork's
   code never runs with the repository's secrets.
+- **FR18 — Runtime performance has one nightly lane, outside the pull-request
+  surfaces.** `perf-nightly.yml` measures a fixed set of Sandbox perf scenes in
+  Chromium on every nightly run of `main` and on manual dispatch: mount long
+  tasks and layouts, interaction layouts and latency, and the JS heap and event
+  listeners left after unmount, as the median of several samples. Its result is
+  trend data: it reports no required context and gates no merge or release. A
+  nightly or dispatched run on `main` is compared with the median of `main`'s
+  recorded runs in the seven days before it; a metric more than 10% worse, and
+  worse by at least that metric's floor, on that run and on the recorded run
+  before it opens the one open regression issue or comments on it, naming the
+  commits since the last run with no metric over the threshold. A metric over
+  the threshold on one run alone is reported as pending. A pull request runs the
+  lane only while it carries `ci:run-perf`, last applied by someone with write,
+  maintain or admin access, under the same label rule and timing as FR12's suite
+  labels and FR17, and only when its paths touch what the scenes measure (FR14);
+  a pull request run is compared with the same history and records nothing. The
+  lane runs on standard runners within the pull-request job budget.
 - **FR19 — A pull request that changes CI states its CI impact.** A pull
   request that changes a workflow, a composite action or a CI script carries
   its CI impact in its description's `CI impact:` line: each changed job's
@@ -432,6 +452,7 @@ the shared Storybook PR owner.
 Outside the classifier-routed workflows, the Internal Registry dependency check,
 the CLI smoke test and the hardening-issue opener run only when the paths they
 read change (FR14).
+The nightly perf lane is the one scheduled measurement outside them (FR18).
 
 ## Verification
 
@@ -450,6 +471,7 @@ read change (FR14).
 | FR15     | workflow contract and reconciler tests                                                                 | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR; run over the request budget; maintainer dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, a non-command comment starts a runner, or an over-budget run decides                                                                                                                                                                                   |
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract; `ci-admission.test.mjs`                 | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup; a run with room, without room, past its longest wait, beside a waiting `main` check, as a draft or unlabelled fork, with opt-in labels, beside small workflows past their measured most, and with the API unreadable; each workflow's most jobs; every required context's rule | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head, a run that starts without room before its longest wait, a pull-request run that starts while `main` waits, a job admission could skip, or a peak below the jobs its run holds fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions                     | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                                                                                                                                                                                                       |
+| FR18     | `perf-nightly-workflow.test.mjs`, `perf-trend.test.mjs` and `run-labels.test.mjs`                      | nightly and dispatch; labelled, unlabelled, draft and unvouched-fork pull requests; write, read and no access; newest label event; failed lookup; 10% boundary; metric floors; seven-day window edges; fewer than three runs; a metric over once, twice in a row, or a different metric before; recorded and pull request runs                                                                                                                                                                                                                                                                                               | a run on an unlabelled pull request, a label honoured from read access, a regression called at exactly 10%, under its floor or on one run alone, a run outside the window in the baseline, a pull request run that records, or a second regression issue fails                                                                                                                                       |
 | FR19     | `ci-impact.test.mjs`, `pr-preview.test.mjs` and the maintenance template                               | CI change and non-CI change; standard, non-standard and expression runners; added, removed and changed jobs; trigger change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a CI change reports no impact, a move onto a non-standard runner or a pool or time-to-green rise past its threshold goes unflagged, or the section names a price                                                                                                                                                                                                                                     |
 | FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver                     | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces                                                                                                                                                                                                                                                                                                                                             | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip fails                                                                                                                               |
 | FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                              | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                      |
@@ -640,6 +662,26 @@ other writers read; it is not a required check, so a contributor waits on
 
 Rejected: keeping a separate spec-owner workflow, which split one review state
 across two workflows and two visible gates.
+
+### DEC-10 — Runtime performance is a nightly trend on main
+
+**Reference:** `spec:AST-030/DEC-10`
+**Decider:** `cixzhang`, `2026-10-31`
+
+Runtime cost (long tasks, forced layouts, interaction latency, what an unmount
+leaves behind) shows only in a real browser and drifts in small steps, so one
+nightly measurement of fixed scenes on `main`, compared with its own recent
+median, finds a regression within two days and names its commit range. A
+standard runner's speed varies by about a fifth from one machine to the next,
+more than the threshold, so a regression counts only when two recorded runs in a
+row show it. It belongs to no surface's test owner: it reads composites across
+components, it judges a trend rather than a pass or fail, and it reports no
+required context, so FR11's rule against new lanes inside a surface does not
+reach it. The history travels between recorded runs as a workflow artifact, so
+the lane needs no write access to the repository's contents. A pull request opts
+in with `ci:run-perf` on the same terms as the CI suite labels.
+
+Rejected: measuring on every pull request (noise and runner time for a signal that needs a trend).
 
 ### DEC-11 — Main's release-check runs about once an hour
 
