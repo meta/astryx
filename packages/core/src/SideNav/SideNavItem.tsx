@@ -10,12 +10,21 @@
  *
  * Navigation item with icon, selected state, row-level actions, and nesting.
  * Collapsed icon-only controls use a meaningful consumer `aria-label` when
- * provided and fall back to `label` when it is missing or blank.
+ * provided and fall back to `label` when it is missing or blank. Their label
+ * tooltip binds to the interactive control through a callback ref, so hover,
+ * keyboard focus, and `aria-describedby` follow the control from the first
+ * collapsed render. A disabled control takes no pointer, so its row listens
+ * for the tooltip instead, while the control keeps focus and the description.
  *
  * Collapsed items with children open their submenu flyout through
  * `useMenuHover`, the shared hover-intent hook (same one `SideNavHeading` and
  * `TopNavMenu` use). Hover is a progressive enhancement over the popover's
  * click behavior and is inert on coarse pointers.
+ *
+ * Nested rows span the full width of the nav list, like top-level rows, so
+ * their hover and selected fill lines up with the rows above them. The
+ * nesting indent sits inside the row as extra inline-start padding, one step
+ * per level, tracked through a private depth context.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/SideNav/SideNav.doc.mjs
@@ -26,10 +35,11 @@
  */
 
 import {
+  createContext,
+  use,
   useCallback,
   useId,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -51,7 +61,7 @@ import {usePopover} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
-import {Tooltip} from '../Tooltip';
+import {useTooltip} from '../Tooltip';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -64,6 +74,7 @@ import {
 import {useSideNavRenderMode} from './SideNavRenderContext';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import {themeProps} from '../utils/themeProps';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -108,26 +119,45 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-1'],
     pointerEvents: 'auto',
   },
-  children: {
-    paddingInlineStart: spacingVars['--spacing-6'],
-  },
+  // The group clips its rows only for the 0fr collapse animation. Nested rows
+  // sit flush with the group, so a permanent clip would cut off their focus
+  // ring, which paints outside the row. The expanded group therefore stops
+  // clipping once it has finished opening: `overflow` is discrete, so it rides
+  // the same transition with `allow-discrete` and a delay equal to the open
+  // duration, holding `hidden` until the rows' height has settled. Collapsing
+  // flips back to `hidden` at once (no delay on the collapsed state), so
+  // nothing spills while the group closes.
+  //
+  // Reduced fallback: a browser without `transition-behavior: allow-discrete`
+  // (the tier below current Baseline) cannot delay the switch, so the group
+  // stops clipping as soon as it starts opening and the opening rows briefly
+  // overlap the row below. The group still opens and the ring still shows.
   childrenCollapsible: {
     display: 'grid',
     gridTemplateRows: '1fr',
-    transitionProperty: 'grid-template-rows',
+    overflow: 'visible',
+    transitionProperty: 'grid-template-rows, overflow',
+    transitionBehavior: 'allow-discrete',
     transitionDuration: {
-      default: durationVars['--duration-medium'],
-      '@media (prefers-reduced-motion: reduce)': '0s',
+      default: `${durationVars['--duration-medium']}, 0s`,
+      '@media (prefers-reduced-motion: reduce)': '0s, 0s',
+    },
+    transitionDelay: {
+      default: `0s, ${durationVars['--duration-medium']}`,
+      '@media (prefers-reduced-motion: reduce)': '0s, 0s',
     },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   childrenCollapsed: {
     gridTemplateRows: '0fr',
-  },
-  childrenInner: {
     overflow: 'hidden',
+    transitionDelay: '0s, 0s',
+  },
+  // No inline padding: nested rows fill the full width of the nav list, and
+  // each row carries its own indent (`indentStyles` below). `minHeight: 0`
+  // lets the 0fr track shrink this item to nothing; the group clips it.
+  childrenInner: {
     minHeight: 0,
-    paddingInlineStart: spacingVars['--spacing-6'],
   },
   expandChevron: {
     display: 'inline-flex',
@@ -232,6 +262,35 @@ const styles = stylex.create({
   },
 });
 
+// Nesting indent, drawn inside the row: one `--spacing-6` step per nesting
+// level. The row itself stays full width, so its hover and selected fill
+// matches a top-level row's.
+// - `sm` / `md` — the ordinary row, where the row element is the link or
+//   button: its own inline-start padding plus the steps.
+//   SYNC: the base padding matches navItemStyles.sm / .md / .lg.
+// - `primary` — the row-wrapper path: the wrapper keeps its base padding and
+//   the steps go on the primary link or button, so the whole indent is part
+//   of the click target rather than dead space that still shows feedback.
+const indentStyles = stylex.create({
+  sm: (depth: number) => ({
+    paddingInlineStart: `calc(${spacingVars['--spacing-1']} + ${depth} * ${spacingVars['--spacing-6']})`,
+  }),
+  md: (depth: number) => ({
+    paddingInlineStart: `calc(${spacingVars['--spacing-2']} + ${depth} * ${spacingVars['--spacing-6']})`,
+  }),
+  primary: (depth: number) => ({
+    paddingInlineStart: `calc(${depth} * ${spacingVars['--spacing-6']})`,
+  }),
+});
+
+/**
+ * How many SideNavItems deep the current item sits: 0 at the top level,
+ * 1 inside one parent, and so on. A collapsed rail's flyout resets it to 0,
+ * since the flyout lists a parent's children as its own top level.
+ */
+const SideNavItemDepthContext = createContext(0);
+SideNavItemDepthContext.displayName = 'SideNavItemDepthContext';
+
 /**
  * Cascaded to the `actions` slot through `SizeContext` so a consumer's row
  * controls come out the same height as the built-in expand/collapse toggle,
@@ -266,6 +325,8 @@ interface NavItemElementProps {
 /**
  * Renders `<a>` (via LinkComponent) when `href` is set, otherwise `<button>`.
  * Centralizes the link-vs-button decision used across all SideNavItem paths.
+ * A disabled item is a `<button>` that keeps its tab stop and exposes
+ * `aria-disabled`, but is inert (spec:AST-085 FR1, FR2).
  */
 function NavItemElement({
   href,
@@ -293,11 +354,25 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      disabled={isDisabled}
-      {...rest}>
+      {...rest}
+      {...(isDisabled
+        ? {
+            'aria-disabled': true,
+            ...disabledInteractionProps(
+              rest.onKeyDown as
+                React.KeyboardEventHandler<HTMLButtonElement> | undefined,
+            ),
+          }
+        : null)}>
       {children}
     </button>
   );
+}
+
+/** Joins the non-empty ids into one `aria-describedby` value. */
+function joinIds(...ids: (string | null | undefined)[]): string | undefined {
+  const joined = ids.filter(Boolean).join(' ');
+  return joined === '' ? undefined : joined;
 }
 
 // =============================================================================
@@ -363,7 +438,9 @@ export interface SideNavItemProps extends BaseProps<HTMLElement> {
    */
   actions?: ReactNode;
   /**
-   * Sub-items for nesting.
+   * Sub-items for nesting. Nested items span the full width of the nav
+   * list, like top-level items; their content is indented one step per
+   * nesting level.
    */
   children?: ReactNode;
   /**
@@ -454,7 +531,7 @@ export function SideNavItem({
   const isInDrawer = renderMode === 'drawer' || renderMode === 'drawer-content';
   const id = useId();
   const hasChildren = !!children;
-  const itemRef = useRef<HTMLDivElement>(null);
+  const depth = use(SideNavItemDepthContext);
 
   // Popover for collapsed items with children
   const popover = usePopover({
@@ -464,6 +541,23 @@ export function SideNavItem({
     dialogLabel: t('@astryx.sideNavItem.submenuLabel', {label}),
   });
   const mergedTriggerRef = useMergedRefs(ref, popover.triggerRef);
+
+  // Label tooltip for a collapsed leaf. It binds through a callback ref and
+  // its id renders as an `aria-describedby` prop, so both follow the element
+  // they describe across re-renders. The hook outlives the collapsed branch,
+  // so it is held shut whenever the item is not a collapsed leaf: a tooltip
+  // open when the rail expands must not come back on the next collapse.
+  const isRailLeaf = isCollapsed && !hasChildren;
+  const railTooltip = useTooltip({
+    placement: 'end',
+    // A disabled leaf's row is the trigger (see the collapsed path). It is not
+    // focusable itself, so `auto` would never hear the focus that bubbles up
+    // from its control.
+    focusTrigger: 'always',
+    isEnabled: isRailLeaf,
+    isOpen: isRailLeaf ? undefined : false,
+  });
+  const railLeafRef = useMergedRefs(ref, railTooltip.ref);
 
   // Collapse state for items with children
   const itemCollapsibleConfig = useMemo(
@@ -576,6 +670,8 @@ export function SideNavItem({
           isSelected && navItemStyles.selected,
           isDisabled && navItemStyles.disabled,
         ),
+        // Spread after `rest`, so keep the caller's class beside these.
+        rest.className,
       ),
       ...pressable,
     };
@@ -608,7 +704,9 @@ export function SideNavItem({
               onClick={() => popover.hide()}>
               <div {...stylex.props(styles.popoverHeader)}>{label}</div>
               <SideNavCollapseContext value={EXPANDED_COLLAPSE_STATE}>
-                {children}
+                <SideNavItemDepthContext value={0}>
+                  {children}
+                </SideNavItemDepthContext>
               </SideNavCollapseContext>
             </div>,
             {placement: 'end', alignment: 'start', xstyle: styles.popoverGap},
@@ -617,9 +715,19 @@ export function SideNavItem({
       );
     }
 
-    // Items without children: icon-only link/button with tooltip
+    // Items without children: icon-only link or button, its label in a
+    // tooltip. The control is the trigger, so the element that takes focus is
+    // the one described. A disabled control takes no pointer
+    // (`navItemStyles.disabled`), so its row listens for the tooltip instead;
+    // the control still takes focus (focusin reaches the row) and stays the
+    // element described (spec:AST-085 FR5).
+    const isRowTrigger = isDisabled;
     const collapsedAriaProps = {
       'aria-current': isSelected ? ('page' as const) : undefined,
+      'aria-describedby': joinIds(
+        rest['aria-describedby'],
+        railTooltip.describedBy,
+      ),
       'aria-disabled': isDisabled || undefined,
       'aria-label': collapsedAccessibleLabel,
       'data-testid': testId,
@@ -627,7 +735,7 @@ export function SideNavItem({
 
     const collapsedElement = (
       <NavItemElement
-        ref={ref}
+        ref={isRowTrigger ? ref : railLeafRef}
         href={href}
         as={as}
         isDisabled={isDisabled}
@@ -640,9 +748,11 @@ export function SideNavItem({
     );
 
     return (
-      <div ref={itemRef} {...stylex.props(styles.root, xstyle)}>
+      <div
+        ref={isRowTrigger ? railTooltip.ref : undefined}
+        {...stylex.props(styles.root, xstyle)}>
         {collapsedElement}
-        <Tooltip content={label} placement="end" anchorRef={itemRef} />
+        {railTooltip.renderTooltip(label)}
       </div>
     );
   }
@@ -686,6 +796,15 @@ export function SideNavItem({
     isSelected && navItemStyles.selected,
     isDisabled && navItemStyles.disabled,
   ] as const;
+  const rowIndent =
+    depth > 0 && indentStyles[size === 'sm' ? 'sm' : 'md'](depth);
+  const primaryIndent = depth > 0 && indentStyles.primary(depth);
+
+  // The indent is a runtime value, so it reaches the element as an inline
+  // style. These props are spread after `rest`, so fold the caller's `style`
+  // back in (caller wins) rather than letting the indent replace it, and the
+  // caller's `className` beside the row's own classes.
+  const callerStyle = {className: rest.className, style: rest.style};
 
   // Three shapes of the same row appearance:
   // - `rowProps` — split-action path (toggle, no actions): presentational
@@ -702,7 +821,10 @@ export function SideNavItem({
   const focusableRowProps = {
     ...mergeProps(
       itemThemeProps,
-      focusOutlineProps.focusVisible(...itemStyleArgs),
+      mergeProps(
+        focusOutlineProps.focusVisible(...itemStyleArgs, rowIndent),
+        callerStyle,
+      ),
     ),
     ...pressable,
   };
@@ -748,11 +870,17 @@ export function SideNavItem({
           onClick={handleClick}
           {...rest}
           {...rowPrimaryAriaProps}
-          {...(hasActions
-            ? // The wrapper rings for this element; suppressing here is what
-              // keeps the UA's own ring from painting inside that one.
-              focusOutlineProps.suppressed(styles.splitAction)
-            : focusOutlineProps.focusVisible(styles.splitAction))}>
+          {...mergeProps(
+            hasActions
+              ? // The wrapper rings for this element; suppressing here is what
+                // keeps the UA's own ring from painting inside that one.
+                focusOutlineProps.suppressed(styles.splitAction, primaryIndent)
+              : focusOutlineProps.focusVisible(
+                  styles.splitAction,
+                  primaryIndent,
+                ),
+            callerStyle,
+          )}>
           {itemContent}
         </NavItemElement>
         {hasIndependentToggle && (
@@ -814,7 +942,7 @@ export function SideNavItem({
   }
 
   const item = (
-    <div ref={itemRef} {...stylex.props(styles.root, xstyle)}>
+    <div {...stylex.props(styles.root, xstyle)}>
       {itemElement}
       {hasChildren && !isCollapsed && (
         <div
@@ -831,7 +959,9 @@ export function SideNavItem({
             <span id={`${id}-label`} hidden>
               {label}
             </span>
-            {children}
+            <SideNavItemDepthContext value={depth + 1}>
+              {children}
+            </SideNavItemDepthContext>
           </div>
         </div>
       )}

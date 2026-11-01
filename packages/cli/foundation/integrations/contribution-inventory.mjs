@@ -24,6 +24,8 @@ import {loadComponentDoc} from '../discovery/component-loader.mjs';
 import {discoverIntegrationTemplatesForOne} from '../discovery/template-adapter.mjs';
 import {discoverIntegrationCodemods} from '../../assets/codemods/integration-discovery.mjs';
 import {discoverIntegrationDocs} from '../discovery/docs-discovery.mjs';
+import {discoverIconSetDirectory} from '../discovery/icon-set-discovery.mjs';
+import {generatedTypesPath} from '../discovery/icon-set-writer.mjs';
 
 // ── File-walk helpers (no module imports, no execution) ──────────
 
@@ -121,8 +123,34 @@ function enumerateDocFiles(root, pkgDir) {
   return walkDir(root, n => DOC_RE.test(n)).map(f => rel(pkgDir, f));
 }
 
+/**
+ * Every file an icon set ships: its descriptor, data file, own definitions,
+ * and license notices, and its generated icons module.
+ * @param {string} root
+ * @param {string} pkgDir
+ */
+function enumerateIconSetFiles(root, pkgDir) {
+  /** @type {string[]} */
+  const files = [];
+  for (const set of discoverIconSetDirectory(root, '(local)').sets) {
+    files.push(set.docPath, set.dataPath);
+    for (const definition of set.definitions) files.push(definition.file);
+    for (const notice of set.notices) files.push(path.join(set.dir, notice));
+    if (set.data.generated) {
+      const generated = path.join(pkgDir, set.data.generated);
+      if (fs.existsSync(generated)) files.push(generated);
+      const types = generatedTypesPath(set.data.generated);
+      if (types && fs.existsSync(path.join(pkgDir, types))) {
+        files.push(path.join(pkgDir, types));
+      }
+    }
+  }
+  return [...new Set(files)].sort().map(file => rel(pkgDir, file));
+}
+
 /** @type {Record<FileInventoryRoot['kind'], (root: string, pkgDir: string) => string[]>} */
 const ENUMERATORS = {
+  iconSets: enumerateIconSetFiles,
   themes: enumerateThemeFiles,
   components: enumerateComponentFiles,
   templates: enumerateTemplateFiles,
@@ -135,13 +163,37 @@ const ROOT_KINDS = /** @type {const} */ ([
   'templates',
   'codemods',
   'docs',
+  'iconSets',
 ]);
+
+/**
+ * The contribution files readers read under each declared root that is a
+ * readable folder, package-relative, without importing anything. A folder
+ * inside a root that cannot be listed is skipped.
+ * @param {{components?: string, templates?: string, codemods?: string, docs?: string, themes?: string, iconSets?: string}} loaded
+ * @param {string} pkgDir
+ * @returns {string[]}
+ */
+export function contributionFiles(loaded, pkgDir) {
+  /** @type {Set<string>} */
+  const files = new Set();
+  for (const kind of ROOT_KINDS) {
+    const root = loaded[kind];
+    if (!root || !isFolder(root)) continue;
+    try {
+      for (const file of ENUMERATORS[kind](root, pkgDir)) files.add(file);
+    } catch {
+      // An unreadable folder inside the root.
+    }
+  }
+  return [...files].sort();
+}
 
 // ── Public: static file inventory ────────────────────────────────
 
 /**
  * @typedef {object} FileInventoryRoot
- * @property {'themes'|'components'|'templates'|'codemods'|'docs'} kind
+ * @property {'themes'|'components'|'templates'|'codemods'|'docs'|'iconSets'} kind
  * @property {string} path — project-relative root path
  * @property {string[]} files — project-relative required file paths
  */
@@ -193,6 +245,8 @@ export function computeRequiredFiles(loaded) {
  * @property {{version: string, id: string}[]} codemods
  * @property {string[]} docs
  * @property {string[]} agentDocsAppend
+ * @property {string[]} [iconSets] icon set names; present only when the
+ *   package declares `experimental.iconSets` (experimental)
  */
 
 /**
@@ -205,7 +259,21 @@ export function computeRequiredFiles(loaded) {
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {{append?: readonly string[]}} [agentDocs]
+ * @property {string} [iconSets]
  */
+
+/**
+ * Whether `dir` is a folder to list. A declared root that is a file is
+ * reported by the root check; discovery finds nothing in it.
+ * @param {string} dir
+ */
+function isFolder(dir) {
+  try {
+    return fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Run the same discovery functions a consumer uses to collect every
@@ -225,11 +293,21 @@ export async function collectIdentities(loaded) {
     agentDocsAppend: loaded.agentDocs?.append
       ? [...loaded.agentDocs.append]
       : [],
+    // Experimental: only a package that declares `experimental.iconSets`
+    // gains the field, so every other package's inventory is unchanged.
+    ...(loaded.iconSets ? {iconSets: []} : {}),
   };
   /** @type {Array<{kind: string, message: string}>} */
   const errors = [];
+  if (loaded.iconSets && fs.existsSync(loaded.iconSets)) {
+    const found = discoverIconSetDirectory(loaded.iconSets, loaded.name);
+    identities.iconSets = found.sets.map(set => set.name).sort();
+    for (const error of found.errors) {
+      errors.push({kind: 'iconSets', message: error.message});
+    }
+  }
 
-  if (loaded.themes && fs.existsSync(loaded.themes)) {
+  if (loaded.themes && isFolder(loaded.themes)) {
     try {
       const themes = await discoverIntegrationThemes(
         /** @type {import('./integrations.mjs').LoadedIntegration} */ (loaded),
@@ -245,14 +323,19 @@ export async function collectIdentities(loaded) {
     }
   }
 
-  if (loaded.components && fs.existsSync(loaded.components)) {
+  if (loaded.components && isFolder(loaded.components)) {
     try {
       const records = discoverIntegrationComponents(loaded) ?? [];
+      // A family doc backs several records: load it, and report it, once.
+      const loads = new Map();
       for (const record of records) {
+        const first = !loads.has(record.docPath);
+        if (first) loads.set(record.docPath, loadComponentDoc(record.docPath));
         try {
-          await loadComponentDoc(record.docPath);
+          await loads.get(record.docPath);
           identities.components.push(record.name);
         } catch (err) {
+          if (!first) continue;
           errors.push({
             kind: 'components',
             message: `${path.relative(loaded.components, record.docPath)}: ${
@@ -270,7 +353,7 @@ export async function collectIdentities(loaded) {
     }
   }
 
-  if (loaded.templates && fs.existsSync(loaded.templates)) {
+  if (loaded.templates && isFolder(loaded.templates)) {
     try {
       const {templates, errors: templateErrors} =
         await discoverIntegrationTemplatesForOne(loaded);
@@ -293,7 +376,7 @@ export async function collectIdentities(loaded) {
     }
   }
 
-  if (loaded.codemods && fs.existsSync(loaded.codemods)) {
+  if (loaded.codemods && isFolder(loaded.codemods)) {
     try {
       const byVersion = await discoverIntegrationCodemods([loaded]);
       /** @type {{version: string, id: string}[]} */
@@ -312,10 +395,13 @@ export async function collectIdentities(loaded) {
     }
   }
 
-  if (loaded.docs && fs.existsSync(loaded.docs)) {
+  if (loaded.docs && isFolder(loaded.docs)) {
     try {
-      const {records, guides, errors: docErrors} =
-        await discoverIntegrationDocs(loaded);
+      const {
+        records,
+        guides,
+        errors: docErrors,
+      } = await discoverIntegrationDocs(loaded);
       for (const docError of docErrors) {
         errors.push({kind: 'docs', message: docError.message});
       }
@@ -335,7 +421,7 @@ export async function collectIdentities(loaded) {
  * handler, not a second set of per-writer rules.
  *
  * @param {IdentitySource} loaded
- * @param {'theme'|'component'|'template'|'codemod'|'doc'|'agent-doc'} kind
+ * @param {'theme'|'component'|'template'|'codemod'|'doc'|'agent-doc'|'icon-set'} kind
  * @param {string} name
  * @param {{version?: string}} [options]
  * @returns {Promise<void>}
@@ -346,6 +432,21 @@ export async function assertContributionVisible(
   name,
   {version} = {},
 ) {
+  if (kind === 'icon-set') {
+    // An icon set is read by its own discovery seam (spec:AST-084 FR1–FR3):
+    // the descriptor and data file must both parse, and the set must be found.
+    const {sets, errors} = loaded.iconSets
+      ? discoverIconSetDirectory(loaded.iconSets, loaded.name)
+      : {sets: [], errors: []};
+    const error = errors.find(entry => entry.name === name);
+    if (error) throw new Error(error.message);
+    if (!sets.some(set => set.name === name)) {
+      throw new Error(
+        `icon-set contribution "${name}" was not visible after writing.`,
+      );
+    }
+    return;
+  }
   const {identities, errors} = await collectIdentities(loaded);
   const errorKind =
     kind === 'theme'
@@ -453,6 +554,12 @@ export function compareIdentities(local, packed) {
     item => `${item.version}/${item.id}`,
   );
   compareKind('Doc topic', local.docs, packed.docs, item => item);
+  compareKind(
+    'Icon set',
+    local.iconSets ?? [],
+    packed.iconSets ?? [],
+    item => item,
+  );
 
   if (
     JSON.stringify(local.agentDocsAppend) !==
@@ -495,6 +602,51 @@ export function findSourceOnlyCandidates(componentsRoot, registeredNames) {
     const match = entry.name.match(PASCAL_CASE_TSX);
     if (!match) continue;
     if (!known.has(match[1])) candidates.push(match[1]);
+  }
+  return candidates.sort();
+}
+
+/**
+ * Metadata suffixes that pair a template source with its spec: the canonical
+ * `.doc.*` family and the released `.template.*` compatibility family.
+ */
+const TEMPLATE_DOC_SUFFIXES = [
+  '.doc.ts',
+  '.doc.mjs',
+  '.doc.js',
+  '.template.ts',
+  '.template.mjs',
+  '.template.js',
+];
+
+/** A `.tsx` source and its stem, which may hold a dot (`landing.page`). */
+const TSX_SOURCE = /^(.+)\.tsx$/u;
+
+/** A test, spec or story stem: never a template. */
+const NOT_A_TEMPLATE = /\.(?:test|spec|stories)$/u;
+
+/**
+ * Find `.tsx` files directly in a templates root that have no same-stem
+ * template metadata, so template discovery never lists them. Like the
+ * component check, it scans only direct children of the root: a file in a
+ * subfolder may be a helper a template imports. A file with a dotted stem (a
+ * test, story, or similar companion) is never a candidate.
+ *
+ * @param {string|undefined} templatesRoot absolute path
+ * @returns {string[]} basenames of the unpaired sources, sorted
+ */
+export function findTemplateSourceOnlyCandidates(templatesRoot) {
+  if (!templatesRoot || !fs.existsSync(templatesRoot)) return [];
+  /** @type {string[]} */
+  const candidates = [];
+  for (const entry of fs.readdirSync(templatesRoot, {withFileTypes: true})) {
+    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+    const match = entry.name.match(TSX_SOURCE);
+    if (!match || NOT_A_TEMPLATE.test(match[1])) continue;
+    const paired = TEMPLATE_DOC_SUFFIXES.some(suffix =>
+      fs.existsSync(path.join(templatesRoot, `${match[1]}${suffix}`)),
+    );
+    if (!paired) candidates.push(entry.name);
   }
   return candidates.sort();
 }

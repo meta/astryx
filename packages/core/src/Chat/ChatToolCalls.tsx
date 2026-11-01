@@ -277,13 +277,13 @@ const styles = stylex.create({
     flexShrink: 0,
   },
   statsAdditions: {
-    color: colorVars['--color-success'],
+    color: colorVars['--color-text-success'],
   },
   statsDeletions: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
   errorText: {
-    color: colorVars['--color-error'],
+    color: colorVars['--color-text-error'],
   },
 
   // Inline result detail
@@ -337,8 +337,8 @@ const styles = stylex.create({
   // Status colors
   colorPending: {color: colorVars['--color-text-disabled']},
   colorRunning: {color: colorVars['--color-accent']},
-  colorComplete: {color: colorVars['--color-success']},
-  colorError: {color: colorVars['--color-error']},
+  colorComplete: {color: colorVars['--color-icon-success']},
+  colorError: {color: colorVars['--color-icon-error']},
 });
 
 // =============================================================================
@@ -465,6 +465,7 @@ function CallRow({
       {call.node != null && (
         <Badge label={call.node} variant="neutral" xstyle={styles.nodePill} />
       )}
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
       {call.target != null && (
         <span {...stylex.props(styles.callLabel)}>{call.target}</span>
       )}
@@ -472,11 +473,13 @@ function CallRow({
         call.deletions != null ||
         call.stats != null) && (
         <span {...stylex.props(styles.stats)}>
+          {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `additions` is a count: 0 renders "+0" */}
           {call.additions != null && (
             <span {...stylex.props(styles.statsAdditions)}>
               +{call.additions}
             </span>
           )}
+          {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `deletions` is a count: 0 renders "-0" */}
           {call.deletions != null && (
             <span {...stylex.props(styles.statsDeletions)}>
               -{call.deletions}
@@ -485,6 +488,7 @@ function CallRow({
           {call.stats}
         </span>
       )}
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `duration` is a string field, not a slot */}
       {call.duration != null && status === 'complete' && (
         <span {...stylex.props(styles.callDuration)}>{call.duration}</span>
       )}
@@ -657,6 +661,7 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
               <VisuallyHidden>{latestStatusAnnouncement}</VisuallyHidden>
             </span>
             <span {...stylex.props(styles.callName)}>{latestCall.name}</span>
+            {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `target` is a string field: an empty string still marks a target */}
             {latestCall.target != null && (
               <span {...stylex.props(styles.callLabel)}>
                 {latestCall.target}

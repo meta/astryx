@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/Popover/Popover.doc.mjs,
     packages/core/src/Popover/usePopover.doc.mjs,
     packages/core/src/hooks/useFocusTrap.test.tsx,
+    packages/core/src/Popover/PopoverPresentation.test.tsx,
     packages/cli/foundation/discovery/theming-targets.mjs,
     packages/cli/foundation/discovery/theming-targets.test.mjs,
     scripts/check-knowledge.mjs,
@@ -44,7 +45,7 @@ surface. The component owns the standard trigger-to-surface composition;
 and rendering contract for custom compositions.
 
 This contract records the behavior present after
-[PR #5373](https://github.com/facebook/astryx/pull/5373), the Popover target
+[PR #5373](https://github.com/meta/astryx/pull/5373), the Popover target
 direction settled by Cindy Zhang on 2026-08-31, the focus/opening correction
 approved by Cindy Zhang on 2026-09-07, and the move of viewport fitting to the
 layer runtime decided by Cindy Zhang on 2026-10-03 (`spec:AST-059`). Public API signatures and release status
@@ -58,6 +59,10 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
+- `presentation` (DEC-6) defaults to `popover`, the released anchored surface;
+  `presentation="popover"` is also the value that keeps it wherever a touch
+  default would otherwise apply (`architecture:public-component-api` INV16,
+  `spec:AST-017` FR3, DEC-23).
 - Canonical target: `popover` owns the broad painted-surface contract for
   `<Popover>` and public `usePopover` compositions
 - Removed alias: 0.7.0 removes `popover-surface`; themes and CSS selectors migrate
@@ -120,6 +125,7 @@ surface, not the Layer entry point. There is no installable
 | Popup semantics              | Dialog or neutral wrapper                                    | Exposes dialog semantics or lets child menu/listbox semantics own the popup                                                | Popover and hook          | Dialog                                                                       | `component:Popover`                                                                 | Current public behavior        | A dialog without a label warns in development. Neutral mode omits dialog role and modal semantics.                                                         |
 | Focus entry                  | Automatic or caller-preserved                                | Focuses genuine caller content, falls back to the labeled dialog surface when none exists, or preserves current focus      | Popover and hook          | Automatic                                                                    | `component:Popover`                                                                 | Current public behavior        | The injected fallback close control is excluded from initial-focus candidates and reveals only when reached sequentially.                                  |
 | Dismissal                    | Outside/Escape enabled or disabled within native constraints | Controls light dismiss and explicit Escape participation                                                                   | Popover and hook          | Both enabled                                                                 | `component:Popover`; `family:overlay-dismissal` owns Escape/platform-close ordering | Current public behavior        | Disabling Escape alone cannot override the native Escape behavior of an auto popover; explicit-dismiss behavior requires light dismiss to be disabled too. |
+| Presentation                 | `popover`, `bottom-sheet`, or `adaptive`                     | Chooses the surface that holds the content: anchored, a BottomSheet, or a BottomSheet on a compact touch screen            | Popover                   | `popover`                                                                    | `component:Popover`; `component:BottomSheet` owns the sheet                         | Decided (DEC-6)                | —                                                                                                                                                          |
 | Surface treatment            | Default surface or caller-owned treatment                    | Applies the shared painted surface and optional consumer styling                                                           | Popover and hook          | Default surface                                                              | `component:Popover`                                                                 | Current public behavior        | Custom styling does not change lifecycle, focus, or dismissal semantics.                                                                                   |
 | Surface padding              | A spacing-scale step, `0` through `10`                       | Sets the inset the painted surface keeps around caller content; `0` is a flush surface for content that owns its own edges | Popover and hook          | Popover: step 3; hook: none                                                  | `component:Popover`                                                                 | Pending owner review (DEC-4)   | The rung lands on the painted surface, so a theme's `padding` on the `popover` target replaces it rather than nesting; consumer `xstyle` merges after it.  |
 | Surface target ownership     | Shared baseline or component-specific refinement             | Assigns `popover` as the broad surface owner and lets a composed component add its own target on that same element         | Popover and hook          | `popover` baseline; no component-specific refinement                         | `component:Popover`; the composed component owns its refinement target              | Current compatibility contract | `popover-surface` is compatibility output, not a new target for consumers or a second anatomy owner.                                                       |
@@ -181,6 +187,7 @@ table owns their semantic effect.
 | FR6 | Component anatomy contains the caller trigger and content, one painted Popover surface, and the optional fallback close control. Popover owns no Header, Body, or separate shared-hook surface part.                                                                                                             | Current source, docs target inventory, and tests                                                      | Accepted anatomy; stale consumer anatomy corrected by this contract                         |
 | FR7 | The painted surface has one broad canonical target, `popover`; composed components may add one authoritative component-specific refinement target.                                                                                                                                                               | Owner direction on 2026-08-31 plus current target inventory                                           | Accepted canonical contract; covered by focused target tests                                |
 | FR8 | The surface padding is one spacing-scale rung applied on the painted surface. Popover defaults to step 3 (the released inset); `0` paints a flush surface; a direct `usePopover` composition paints none unless it asks for a rung. The rung sits where a theme's `padding` on the `popover` target replaces it. | PR #6683 and its Popover tests; `architecture:container-padding/INV8` (padding alone does not enroll) | Pending owner review (DEC-4); implemented and covered by the Popover surface-padding suite  |
+| FR9 | Under a finger, Popover grows out of its trigger and shrinks back into it, and a touch during its growth is ignored, as `spec:AST-094` FR31 and FR35 state. Its dismissal is unchanged, and a mouse keeps today's entrance.                                                                                      | `spec:AST-094` FR31, FR35                                                                             | Pending implementation; tests land with it                                                  |
 
 ### Allowed variation
 
@@ -208,6 +215,8 @@ table owns their semantic effect.
 | Neutral-role popup                                | The neutral wrapper is not selected as a dialog focus target; automatic entry prefers genuine content focus, or callers may disable autofocus for trigger-retained patterns.                | Child menu, listbox, or other semantics own their focus model.                                           |
 | Automatic focus disabled                          | Opening does not move focus.                                                                                                                                                                | May be persistent configuration or a one-opening show preference.                                        |
 | Controlled open                                   | External open state invokes the no-activation opening path: first genuine content control, then dialog-container fallback.                                                                  | The caller remains the visibility source of truth.                                                       |
+| Tab or Shift+Tab inside the open popup            | Focus moves to the next or previous tabbable descendant and wraps at either end, so it stays inside the popup, modal or not.                                                                | A role-neutral menu closes on Tab and a listbox keeps focus in its input, as their own records state.    |
+| Tab or Shift+Tab from outside the open popup      | The popup does not capture it: focus moves to the next or previous control in the page's own order, as if the popup were not there.                                                         | The browser's order, which places an anchored popup after its trigger, may still lead into it.           |
 | Tab from a focused container                      | Focus enters the first tabbable descendant.                                                                                                                                                 | If none exists, focus remains inside.                                                                    |
 | Shift+Tab from a focused container                | Focus enters the last tabbable descendant.                                                                                                                                                  | If none exists, focus remains inside.                                                                    |
 | Escape                                            | The topmost eligible Popover closes according to shared dismissal policy.                                                                                                                   | Explicit-dismiss surfaces may disable both light and Escape dismissal.                                   |
@@ -250,9 +259,12 @@ table owns their semantic effect.
 - **AR2 — Dialog naming.** Dialog mode requires a caller-provided accessible
   label and places dialog/modal semantics on the painted surface. Missing naming
   warns in development but does not synthesize a label.
-- **AR3 — Focus containment and indication.** Automatic entry and
-  Tab/Shift+Tab behavior follow the matrix above; a trapped surface with no
-  tabbable descendant does not let focus escape. Eligible focus destinations use
+- **AR3 — Focus containment and indication.** Every Popover is a focus
+  region, modal or not (DEC-9). Automatic entry and Tab/Shift+Tab behavior
+  follow the matrix above: containment holds focus that is inside the popup,
+  and a Tab that starts outside it is never redirected into it. `isModal`
+  changes only the modal semantics. A trapped surface with no tabbable
+  descendant does not let focus escape. Eligible focus destinations use
   the shared modality-aware focus indication rather than changing semantic focus
   placement to suppress pointer outlines.
 - **AR4 — Focus return.** Dismissal returns focus to the trigger when focus had
@@ -265,12 +277,13 @@ table owns their semantic effect.
 
 ## Design relationships
 
-| Anatomy or state       | Design requirement                                                                                                 | Representation authority       | Hierarchy role | Component contract    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------ | -------------- | --------------------- |
-| Trigger element        | Supplies or references the control and anchor without becoming Popover-owned presentation.                         | Caller content                 | Supporting     | FR6, AR1              |
-| Popover surface        | Paints the component surface, owns the canonical `popover` target, and carries scroll, focus, and dialog behavior. | Current source and owner DEC-2 | Prominent      | FR2, FR4–FR7, AR2–AR4 |
-| Popover content        | Renders caller-supplied interaction or information inside the surface.                                             | Caller content                 | Prominent      | FR2, FR6              |
-| Fallback close control | Provides an end-of-trap close affordance without becoming the initial focus destination.                           | `component:Button`             | Supporting     | FR2, AR3              |
+| Anatomy or state       | Design requirement                                                                                                                         | Representation authority       | Hierarchy role | Component contract    |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------ | -------------- | --------------------- |
+| Trigger element        | Supplies or references the control and anchor without becoming Popover-owned presentation.                                                 | Caller content                 | Supporting     | FR6, AR1              |
+| Popover surface        | Paints the component surface, owns the canonical `popover` target, and carries scroll, focus, and dialog behavior.                         | Current source and owner DEC-2 | Prominent      | FR2, FR4–FR7, AR2–AR4 |
+| Touch sheet            | Holds the same content in place of the surface when `presentation` resolves to `bottom-sheet`; paints BottomSheet's `bottom-sheet` target. | `component:BottomSheet`        | Prominent      | DEC-6, AR1, AR4       |
+| Popover content        | Renders caller-supplied interaction or information inside the surface.                                                                     | Caller content                 | Prominent      | FR2, FR6              |
+| Fallback close control | Provides an end-of-trap close affordance without becoming the initial focus destination.                                                   | `component:Button`             | Supporting     | FR2, AR3              |
 
 ### Theming anatomy
 
@@ -284,6 +297,9 @@ table owns their semantic effect.
     }
   },
   "Popover surface": {"target": "popover"},
+  "Touch sheet": {
+    "delegatesTo": {"owner": "component:BottomSheet", "target": "bottom-sheet"}
+  },
   "Popover content": {
     "none": {
       "reason": "intentional: Caller-supplied content is caller-owned; normal CSS may inherit from the surface, but Popover provides no content target."
@@ -294,6 +310,15 @@ table owns their semantic effect.
   }
 }
 ```
+
+`Popover surface` and `Touch sheet` are alternative presentations of the same
+content, not simultaneous anatomy.
+
+Any element the open touch sheet renders beyond the anchored popover under a
+fine pointer is part of BottomSheet's frame, with its job in
+`component:BottomSheet`'s element jobs, within the open-layer allowance of
+`spec:AST-017` FR60 (DEC-29). Popover adds only its fallback close control to
+the sheet, as the Button itself.
 
 Every public `usePopover` painted surface belongs to the broad `popover` target.
 A composed component may add its own authoritative refinement target, such as
@@ -326,11 +351,14 @@ consumers that need distinct theme reachability provide and document an owned
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | Public boundary, FR1         | `Popover.test.tsx` compile-time public-surface assertions plus package/barrel inspection                                                                  | Unchanged public signatures and same-gesture rejection across Popover-family openings                              | A public type changes or a same-gesture request reaches visibility state.                                                                           | `audit:Popover/api`           |
 | FR2, AR2–AR4                 | `Popover.test.tsx` focus/role suites and `useFocusTrap.test.tsx` container-entry suites                                                                   | Pointer, keyboard/AT-style, read-only, neutral role, no autofocus, controlled, Tab/Shift+Tab, Escape, focus return | Changing semantic destination by modality, selecting fallback close initially, losing shared indication, or allowing focus escape fails assertions. | `audit:Popover/accessibility` |
+| AR3, DEC-9                   | `useFocusTrap.test.tsx` and `Popover.test.tsx` focus-region suites                                                                                        | Modal and non-modal; Tab and Shift+Tab inside the popup and from a control outside it                              | A Tab outside that the popup pulls into itself, or a Tab inside that leaves it, fails assertions.                                                   | `audit:Popover/accessibility` |
 | ORD2, FR4                    | `Popover.test.tsx` sizing/overflow suites; `Popover.stories.tsx` match-trigger and overflow scenarios; geometry under `Core/Layer` viewport-inset stories | Explicit width clamped to the viewport, trigger matching, fitting and overflowing content                          | Reversing width precedence, capping to the span beside the trigger, or always enabling scroll fails emitted-style or overflow assertions.           | `audit:Popover/layout`        |
 | FR8                          | `Popover.test.tsx` surface-padding suite                                                                                                                  | Default rung, `0`, an explicit rung, a direct hook composition with and without a rung                             | A default other than step 3, a rung landing on a box inside the surface, or the hook painting a rung it was not given fails the suite.              | `audit:Popover/theming`       |
+| FR9                          | `spec:AST-094` verification for FR31 and FR35                                                                                                             | Under a finger: open, close, a touch during growth; a mouse                                                        | A Popover that does not grow from and shrink into its trigger, a changed dismissal, or a changed mouse path fails.                                  | `audit:Popover/behavior`      |
 | FR5                          | `Popover.test.tsx` scheduling and observer-lifecycle suites                                                                                               | Closed, opened, repeated signals, cleanup                                                                          | Constructing observers while closed or measuring more than once per pending frame fails lifecycle assertions.                                       | `audit:Popover/resources`     |
 | FR6, FR7 and theming anatomy | `Popover.test.tsx`, `Popover.doc.mjs`, `usePopover.doc.mjs`, `astryx theme targets Popover --json`, and `scripts/check-knowledge.mjs`                     | One real surface with canonical `popover` plus composed-component refinements                                      | A fake anatomy part, missing canonical output, or an active target without a real owner fails review or validation.                                 | `audit:Popover/theming`       |
 | AR5                          | `Popover.stories.tsx` manual-AT fixture and PR #5373 test record                                                                                          | Read-only dialog manual-AT fixture; no recorded NVDA/VoiceOver announcement result                                 | A fixture without recorded AT/browser observations cannot be cited as announcement proof.                                                           | `audit:Popover/at-evidence`   |
+| Presentation (DEC-6, DEC-8)  | `PopoverPresentation.test.tsx`                                                                                                                            | Default on a phone, adaptive on a phone and a desktop, forced sheet, close, controlled, dismissal mapping          | A sheet on a default phone popover, an anchored popover where the sheet is asked for, or a trigger state that ignores the sheet fails.              | `audit:Popover/api`           |
 
 ## Decision log
 
@@ -391,6 +419,56 @@ Rejected: moving focus to the dialog surface on every pointer opening solely to
 avoid a keyboard-looking outline. That mixes visual modality with semantic focus
 placement and bypasses the shared focus-indication owner.
 
+### DEC-6 — Presentation: the anchored popover, a sheet, or adaptive
+
+**Reference:** `component:Popover/DEC-6`
+
+**Decider:** `cixzhang`, `2026-10-25`
+
+Popover takes `presentation` with the vocabulary the menus already use:
+`popover`, `bottom-sheet`, or `adaptive`. `popover` is the default and the
+released anchored surface. `bottom-sheet` presents the content in a
+BottomSheet. `adaptive` chooses exactly as the menus do: the sheet under
+`spec:AST-094` FR13's touch rule, with compact governed by `spec:AST-012` FR9,
+and the anchored popover elsewhere.
+
+### DEC-8 — The sheet Popover presents: label, size, dismissal and loading
+
+**Reference:** `component:Popover/DEC-8`
+
+**Decider:** `cixzhang`, `2026-10-25`
+
+In a sheet, Popover's content is labeled by its `label`, or by the trigger's
+text when it has none, so the dialog always has a name. The sheet always
+light-dismisses: a tap outside it or a swipe down closes it, whatever
+`hasLightDismiss` says, so a finger always has a way out. Its fallback close
+stays hidden, as in an anchored popover. Everything else follows Popover's
+existing props. The sheet of DEC-6 is a modal BottomSheet at the sheet's tall
+height and inset by Popover's `padding`; `xstyle`, `className` and `style`
+style its panel, and `placement`, `alignment` and `width` do not apply. The
+surface is chosen when the popover opens and stays until it closes, and the
+trigger's expanded state and controlled element follow whichever surface is
+open. The sheet loads on demand, so pages whose popovers stay anchored do not
+load it.
+
+### DEC-9 — A Popover is a focus region, modal or not
+
+**Reference:** `component:Popover/DEC-9`
+
+**Decider:** `cixzhang`, `2026-10-26`
+
+A Popover is a focus region like a dialog's. While focus is inside it,
+Tab and Shift+Tab cycle through its controls, and a dismissal closes it and
+returns focus to the trigger (AR4). It leaves the rest of the
+page's focus order alone: a Tab pressed outside it moves to the next control in
+the page and is never pulled into the popup, and a non-modal Popover leaves the
+page interactive. This holds for modal and non-modal popovers alike. A
+role-neutral popup keeps its child role's own Tab model, so a menu still closes
+on Tab and a listbox's focus stays in its input.
+
+Rejected: no Tab containment for non-modal popovers, which would let focus
+fall out of an open popup into the page behind it.
+
 ## Verification gaps
 
 These implementation and evidence items remain required follow-up, but they do
@@ -409,7 +487,8 @@ not block acceptance of the semantic contract above.
 ## Open questions
 
 None. DEC-1 settles the visibility model, DEC-2 settles canonical target
-ownership, and DEC-3 settles semantic focus versus modality-aware indication.
+ownership, DEC-3 settles semantic focus versus modality-aware indication, and
+DEC-9 settles focus containment for modal and non-modal popovers.
 The remaining items are verification work, not human API questions.
 
 ## Content boundary

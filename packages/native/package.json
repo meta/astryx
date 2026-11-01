@@ -1,0 +1,88 @@
+{
+  "name": "@astryxdesign/native",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Experimental native platforms for Astryx (iOS, Android, macOS, Windows) — published to npm only under the @canary dist-tag; never released as a stable (latest) version.",
+  "author": "Meta Open Source",
+  "license": "MIT",
+  "homepage": "https://github.com/meta/astryx#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meta/astryx.git",
+    "directory": "packages/native"
+  },
+  "bugs": {
+    "url": "https://github.com/meta/astryx/issues"
+  },
+  "keywords": [
+    "astryx",
+    "native",
+    "experimental",
+    "design-system"
+  ],
+  "astryx": {
+    "canaryOnly": true,
+    "_comment": "Published ONLY to the @canary dist-tag (see .github/workflows/release.yml). Never published as a stable `latest` release. `private: true` is intentional and must stay — it is npm's hard guarantee against an accidental stable publish."
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "src",
+    "apple",
+    "!apple/Templates",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./components": {
+      "ios": {
+        "types": "./dist/types/ios.d.ts"
+      },
+      "android": {
+        "types": "./dist/types/android.d.ts"
+      },
+      "macos": {
+        "types": "./dist/types/macos.d.ts"
+      },
+      "windows": {
+        "types": "./dist/types/windows.d.ts"
+      },
+      "shared": {
+        "types": "./dist/types/shared.d.ts"
+      },
+      "types": "./dist/types/shared.d.ts"
+    },
+    "./contract": {
+      "source": "./src/contract/index.ts",
+      "types": "./dist/contract/index.d.ts",
+      "default": "./dist/contract/index.js"
+    },
+    "./logic": {
+      "source": "./src/logic/index.ts",
+      "types": "./dist/logic/index.d.ts",
+      "default": "./dist/logic/index.js"
+    }
+  },
+  "scripts": {
+    "prepack": "pnpm build",
+    "build": "node ../../scripts/clean-dist.mjs && tsc --project tsconfig.build.json && node scripts/generate.mjs --types",
+    "generate:apple": "pnpm build && node scripts/generate.mjs --apple",
+    "generate:swift-ios": "pnpm -F @astryxdesign/core build && node scripts/swift-ios-theme.mjs && node scripts/swift-ios-strings.mjs",
+    "test": "vitest run --root ../.. packages/native",
+    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm build && pnpm typecheck:types",
+    "typecheck:types": "tsc --project tsconfig.types.json"
+  },
+  "peerDependencies": {
+    "@astryxdesign/core": "0.7.6"
+  },
+  "devDependencies": {
+    "@astryxdesign/core": "workspace:*"
+  }
+}

@@ -46,6 +46,6 @@
     "@stylexjs/unplugin": "^0.19.0",
     "lexical": "^0.52.0",
     "remark-breaks": "^4.0.0",
-    "storybook": "^10.4.6"
+    "storybook": "^10.6.2"
   }
 }

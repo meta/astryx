@@ -14,10 +14,12 @@
  *   from, null for the app shell, or undefined when no table is available, in
  *   which case the ranker's own pick stands.
  * @position Beside rank.mjs (api/build/kit/); kit.mjs calls it for every
- *   whole page (a part or an edit follows the ranker's placement rules). The
- *   ranker's pick of a template the tables do not list stands, so a new
- *   template can start a build.
+ *   whole page (a part or an edit follows the ranker's placement rules). A
+ *   template the tables do not list competes on its own descriptor's words
+ *   (`ownWords`), so a new template can start a build.
  */
+
+import {STOPWORDS} from '../../search/search.mjs';
 
 /** The app shell, as one candidate. */
 export const SHELL = 'SHELL';
@@ -226,11 +228,64 @@ function memberFeatures(v) {
 }
 
 /**
+ * @typedef {object} DescribedTemplate
+ * @property {string} name
+ * @property {string} [displayName]
+ * @property {string} [category]
+ * @property {string[]} [keywords]
+ */
+
+/**
+ * How many of the idea's stemmed words a template's own descriptor names: its
+ * display name, its category, and its keywords, less search's stopwords.
+ * @param {string} name
+ * @param {DescribedTemplate[]} catalog
+ * @param {Set<string>} words the idea's stemmed words, less search's stopwords
+ */
+function ownWords(name, catalog, words) {
+  const t = catalog.find(c => c.name === name);
+  if (!t) return 0;
+  // Search's stopwords are no evidence: "to" in a "to-do list" keyword must
+  // not answer the "to" of "rows to track orders".
+  const own = new Set(
+    weightWords(
+      [t.displayName ?? '', t.category ?? '', ...(t.keywords ?? [])].join(' '),
+    )
+      .filter(w => !STOPWORDS.has(w))
+      .map(stem),
+  );
+  let n = 0;
+  for (const w of words) if (own.has(w)) n++;
+  return n;
+}
+
+/** How many fewer own words a template whose family the idea names first may
+ * name than the listed template it competes with, and still start. */
+const FAMILY_SLACK = 2;
+
+/**
+ * Where the idea first names a template's family, the part of its category
+ * before ` - ` ("Dashboard" in "Dashboard - Analytics"): the index of that
+ * word among the idea's stemmed words, or Infinity when it does not.
+ * @param {string} name
+ * @param {DescribedTemplate[]} catalog
+ * @param {string[]} order the idea's stemmed words, in order
+ */
+function familyAt(name, catalog, order) {
+  const t = catalog.find(c => c.name === name);
+  const family = weightWords(String(t?.category ?? '').split(' - ')[0]).map(
+    stem,
+  );
+  const at = family.length ? order.findIndex(w => family.includes(w)) : -1;
+  return at < 0 ? Infinity : at;
+}
+
+/**
  * Where an idea starts, by the blended weights.
  * @param {string} idea
  * @param {import('./rank.mjs').RankedPage[]} ranked the ranker's output for the idea
  * @param {import('./rank.mjs').RankedPage | null} pick the ranker's own start
- * @param {{name: string}[]} catalog the project's ready page templates
+ * @param {DescribedTemplate[]} catalog the project's ready page templates
  * @param {{weights?: WeightsFile | null, newPage?: boolean}} [options]
  *   `newPage`: the idea asks for a new page (rank.mjs `asksForNewPage`)
  * @returns {string | null | undefined} a template id, null for the app shell,
@@ -292,10 +347,34 @@ export function weighStart(
     pick && pick.family !== SHELL_FAMILY && cands.includes(pick.name)
       ? pick.name
       : null;
-  // The tables cannot judge a template they do not list, and a template the
-  // ranker placed by its frame stays (spec:AST-048/FR3): the ranker's pick
-  // stands for both.
-  if (kept && (!position.has(kept) || pick?.containerMatched)) return kept;
+  // A template the ranker placed by its frame stays (spec:AST-048/FR3).
+  if (kept && pick?.containerMatched) return kept;
+  // The tables cannot judge a template they do not list (an integration's
+  // template, or one added since they were fit), so its own descriptor
+  // decides: the ranker's pick stands when the idea names as many words of its
+  // display name, category and keywords as of the tables' first listed
+  // template's, or names its family first and nearly as many; otherwise that
+  // listed template starts. Nothing learned about the template is involved,
+  // so a new template competes on its own words.
+  if (kept && !position.has(kept)) {
+    const listed = best(c => c !== SHELL && position.has(c));
+    if (!listed) return kept;
+    // The idea's own words, less search's stopwords: "basically" must not
+    // answer the "Basic" of a category.
+    const content = weightWords(idea).filter(w => !STOPWORDS.has(w));
+    const said = new Set(content.map(stem));
+    const mine = ownWords(kept, catalog, said);
+    const theirs = ownWords(listed, catalog, said);
+    if (mine >= theirs) return kept;
+    // An idea that names the template's family before the listed one's
+    // ("a dashboard with a data table") is that family's page, unless it
+    // names far more of the listed template's words.
+    const order = content.map(stem);
+    return familyAt(kept, catalog, order) < familyAt(listed, catalog, order) &&
+      mine >= theirs - FAMILY_SLACK
+      ? kept
+      : listed;
+  }
   const top = best(() => true);
   if (top !== SHELL) return top;
   // An idea that asks for a new page keeps the ranker's template rather than

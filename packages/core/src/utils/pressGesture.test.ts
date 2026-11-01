@@ -14,6 +14,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import type {PressEvent, PressGesture, PressPaint} from './pressGesture';
 import {
   idlePressGesture,
@@ -53,6 +54,14 @@ describe('the clocks are the native ones', () => {
     expect(PRESS_SLOP_PX).toBe(10);
     expect(PRESS_FADE_MS).toBe(200);
     expect(PRESS_FLASH_MS).toBe(100);
+  });
+
+  it("are the UIKit table's measured values, one definition each", () => {
+    // The machine keeps its own constants, so a pressable page loads no
+    // motion table; the table's entries stay the one definition.
+    expect(PRESS_ONSET_MS).toBe(UIKIT_GESTURES.press.contentTouchDelay.value);
+    expect(PRESS_FLASH_MS).toBe(UIKIT_GESTURES.press.quickTapFlash.value);
+    expect(PRESS_SLOP_PX).toBe(UIKIT_GESTURES.press.slop.value);
   });
 });
 
@@ -269,5 +278,55 @@ describe('the release fades', () => {
     const armed = pressGestureStep(idlePressGesture(), down()).gesture;
     const pressed = pressGestureStep(armed, {kind: 'onset'}).gesture;
     expect(pressGestureStep(pressed, {kind: 'up'}).timer).toBe('fade');
+  });
+});
+
+describe('on a touch-first device, a mouse button or the Space key presses at once', () => {
+  // The stylesheet drops `:active` by the PRIMARY pointer, so on a phone or
+  // a tablet a trackpad click or a Space press has nothing else to paint it.
+  // Nothing can turn either into a scroll, so nothing waits.
+  const buttonDown: PressEvent = {kind: 'buttonDown'};
+
+  it('paints on the press itself and arms no timer', () => {
+    const step = pressGestureStep(idlePressGesture(), buttonDown);
+    expect(step.paint).toBe('on');
+    expect(step.timer).toBeNull();
+    expect(step.gesture.phase).toBe('buttonHeld');
+  });
+
+  it('keeps the paint through any travel, as a held mouse keeps `:active`', () => {
+    const {paints, gesture} = run([
+      buttonDown,
+      move(100 + PRESS_SLOP_PX * 10, 100),
+      move(-500, -500),
+      {kind: 'onset'},
+    ]);
+    expect(paints).toEqual(['on', 'on', 'on', 'on']);
+    expect(gesture.phase).toBe('buttonHeld');
+  });
+
+  it("fades at the release with a finger's fade, and ends idle", () => {
+    const held = pressGestureStep(idlePressGesture(), buttonDown).gesture;
+    const release = pressGestureStep(held, {kind: 'up'});
+    expect(release.paint).toBe('fading');
+    expect(release.timer).toBe('fade');
+    const {paints, gesture} = run([
+      buttonDown,
+      {kind: 'up'},
+      {kind: 'fadeEnd'},
+    ]);
+    expect(paints).toEqual(['on', 'fading', 'none']);
+    expect(gesture.phase).toBe('idle');
+  });
+
+  it('drops the paint at once when the platform takes the press away', () => {
+    const {paints, gesture} = run([buttonDown, {kind: 'cancel'}]);
+    expect(paints).toEqual(['on', 'none']);
+    expect(gesture.phase).toBe('dead');
+  });
+
+  it('takes over a surface whose last press is still fading', () => {
+    const {paints} = run([buttonDown, {kind: 'up'}, buttonDown]);
+    expect(paints).toEqual(['on', 'fading', 'on']);
   });
 });

@@ -208,6 +208,8 @@ export function AvatarGroupOverflow({
   return (
     <span
       ref={ref}
+      // Before the caller's props so a caller-supplied role still wins.
+      role="img"
       {...rest}
       aria-label={label}
       {...mergeProps(

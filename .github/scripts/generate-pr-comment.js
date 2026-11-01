@@ -2,14 +2,21 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @description Generates and posts PR comment with analysis results
- * @input --analysis <file> --a11y <file> --visual <file> --storybook-url <url> --sandbox-url <url> --preview-state <state> --source-conclusion <conclusion> --run-url <url>
- * @output Formatted markdown comment body to stdout
+ * @description Generates the PR comment from the run's analysis results
+ * @input --analysis <file> --base-stats <file> --package-size <file> --api-changes <file> --a11y <file> --visual <file> --visual-frames <file> --preview <file> --jobs <file> --touched <file> --ci-impact <file> --source-conclusion <conclusion> --run-url <url>
+ * @output Formatted markdown comment body to stdout, compact by design: this
+ *   head's preview first, the modified components (preview links, size, lines
+ *   of code, a mark per browser suite that ran; three rows visible, the rest
+ *   collapsed), the changed shots collapsed, one line for package size and
+ *   one for suites that did not run. Accessibility violations add one
+ *   collapsed section. GitHub shows
+ *   the CI checks and CodeBunny posts its own review; neither is repeated.
  */
 
 const fs = require('node:fs');
 const {buildA11ySection} = require('./lib/a11y-format');
-const {buildVisualSection} = require('./lib/visual-format');
+const {buildCompactReport} = require('./lib/pr-status');
+const {renderCiImpact} = require('./lib/ci-impact');
 // Report-file strings render as literal inline text, report numbers as
 // numbers — the comment's structure comes only from this file's literals.
 const {inline, num} = require('./lib/report-text');
@@ -21,207 +28,94 @@ const getArg = name => {
 };
 
 const analysisFile = getArg('analysis') || 'analysis.json';
+const baseStatsFile = getArg('base-stats');
 const a11yFile = getArg('a11y') || 'a11y-report.json';
-const visualFile = getArg('visual');
 const runUrl = getArg('run-url') || '';
-const prNumber = getArg('pr-number') || '';
-const storybookUrl = getArg('storybook-url') || '';
-const sandboxUrl = getArg('sandbox-url') || '';
-const previewState = getArg('preview-state') || '';
 const sourceConclusion = getArg('source-conclusion') || '';
 
-// Read analysis results
-let analysis = {
-  newComponents: [],
-  modifiedComponents: [],
-  componentStats: {},
-  totalBundle: {},
-};
-let a11yReport = {components: {}};
+// Optional JSON inputs. A missing or unreadable file leaves its part out.
+function readOptionalJson(name, file = getArg(name)) {
+  if (!file) return null;
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    console.error(`Warning: Could not read --${name}:`, e.message);
+    return null;
+  }
+}
+
+let analysis = {newComponents: [], modifiedComponents: [], componentStats: {}};
 try {
   analysis = JSON.parse(fs.readFileSync(analysisFile, 'utf8'));
 } catch (e) {
   console.error('Warning: Could not read analysis file:', e.message);
 }
 
+// Base measurements of the merge base, when the caller has one for this
+// exact head (it has matched the head).
+const baseStats = readOptionalJson('base-stats', baseStatsFile);
+if (baseStats) {
+  analysis.baseComponentStats = baseStats.baseComponentStats || undefined;
+  analysis.baseBundlePackages = baseStats.baseBundlePackages || undefined;
+  analysis.baseComponentSizes = baseStats.baseComponentSizes || undefined;
+}
+
+// This head's preview ({state, url, sha, aliasOrigin}), the source run's
+// jobs, the touched-components report, the package-size report, and the
+// browser suites' results. The accessibility report is absent when the
+// audit did not run; the visual verdict when the visual job did not.
+const preview = readOptionalJson('preview');
+const jobs = readOptionalJson('jobs');
+const touched = readOptionalJson('touched');
+const packageSize = readOptionalJson('package-size');
+// The visual frames publish-frames.mjs put on this PR's assets branch.
+const visualFrames = readOptionalJson('visual-frames');
+// The API report step's changes for this head, when it ran.
+const apiChanges = readOptionalJson('api-changes');
+// A CI change's impact on runner usage and time to green (ci-impact.js).
+const ciImpact = readOptionalJson('ci-impact');
+const visualVerdict = readOptionalJson('visual');
+let a11yReport = null;
 try {
   a11yReport = JSON.parse(fs.readFileSync(a11yFile, 'utf8'));
 } catch (e) {
   console.error('Warning: Could not read a11y report:', e.message);
 }
 
-// Build a Storybook deep link URL for a component
-// Story titles like "Core/XDSButton" become path "/docs/core-xdsbutton--docs"
-function getStorybookLink(storybookBaseUrl, storyTitle) {
-  if (!storybookBaseUrl || !storyTitle) return null;
-  // storyTitle may be a single string or an array when multiple story files match
-  const title = Array.isArray(storyTitle) ? storyTitle[0] : storyTitle;
-  if (!title) return null;
-  // Storybook converts "Core/XDSButton" to "core-xdsbutton" as the story ID
-  // prefix. Story ids only ever contain [a-z0-9_-]; the title came from a
-  // report file, so drop anything outside that alphabet before it lands in
-  // the href.
-  const storyPath = title
-    .toLowerCase()
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9_-]/g, '');
-  return `${storybookBaseUrl}?path=/docs/${storyPath}--docs`;
-}
-
-// Build an external link that opens in a new tab
 function extLink(text, url) {
   return `<a href="${String(url).replace(/"/g, '%22')}" target="_blank" rel="noopener noreferrer">${text}</a>`;
 }
 
-// Build component stats section
-let componentSection = '';
-if (analysis.newComponents && analysis.newComponents.length > 0) {
-  componentSection += `### New Components\n\n`;
-  for (const comp of analysis.newComponents) {
-    const stats = analysis.componentStats[comp] || {};
-    const sbLink = getStorybookLink(storybookUrl, stats.storyTitle);
-    const sbBadge = sbLink ? ` · ${extLink('View in Storybook', sbLink)}` : '';
-    const pkgBadge = stats.package
-      ? ` <sub>(${inline(stats.package)})</sub>`
-      : '';
-    componentSection += `<details>\n<summary><strong>${inline(comp)}</strong>${pkgBadge}${sbBadge}</summary>\n\n`;
-    componentSection += `| Metric | Value |\n|--------|-------|\n`;
-    componentSection += `| Bundle Size (ESM) | ${inline(stats.esmSize) || 'N/A'} |\n`;
-    componentSection += `| Bundle Size (CJS) | ${inline(stats.cjsSize) || 'N/A'} |\n`;
-    componentSection += `| Lines of Code | ${inline(stats.linesOfCode) || 'N/A'} |\n`;
-    componentSection += `| Source Files | ${inline(stats.fileCount) || 'N/A'} |\n`;
-    componentSection += `| Complexity | ${inline(stats.complexityRating) || 'N/A'} (${num(stats.complexity)}) |\n`;
-    componentSection += `| Exports | ${stats.exports?.map(inline).join(', ') || 'N/A'} |\n`;
-    componentSection += `| Props Count | ${inline(stats.propsCount) || 'N/A'} |\n`;
-    componentSection += `| Has Tests | ${stats.hasTests ? 'Yes' : 'No'} |\n`;
-    componentSection += `| Has Stories | ${stats.hasStories ? 'Yes' : 'No'} |\n`;
-    componentSection += `\n</details>\n\n`;
-  }
-}
+const details = (summary, content) =>
+  content
+    ? `<details>\n<summary>${summary}</summary>\n\n${content}\n</details>\n\n`
+    : '';
 
-if (analysis.modifiedComponents && analysis.modifiedComponents.length > 0) {
-  componentSection += `### Modified Components\n\n`;
-  for (const comp of analysis.modifiedComponents) {
-    const stats = analysis.componentStats[comp] || {};
-    const baseStats = analysis.baseComponentStats?.[comp] || {};
-    const sbLink = getStorybookLink(storybookUrl, stats.storyTitle);
-    const sbBadge = sbLink ? ` · ${extLink('View in Storybook', sbLink)}` : '';
-
-    // Check if this modified directory has new exports
-    const newExports = analysis.newExports || [];
-    const compExports = stats.exports || [];
-    const newInComp = compExports.filter(e => newExports.includes(e));
-    const newBadge =
-      newInComp.length > 0 ? ` · 🆕 ${newInComp.map(inline).join(', ')}` : '';
-    const pkgBadge = stats.package
-      ? ` <sub>(${inline(stats.package)})</sub>`
-      : '';
-
-    componentSection += `<details>\n<summary><strong>${inline(comp)}</strong>${pkgBadge}${sbBadge}${newBadge}</summary>\n\n`;
-    componentSection += `| Metric | Before | After | Delta |\n|--------|--------|-------|-------|\n`;
-
-    const esmDelta =
-      Number.isFinite(Number(stats.esmBytes)) &&
-      Number.isFinite(Number(baseStats.esmBytes))
-        ? Number(stats.esmBytes) - Number(baseStats.esmBytes)
-        : null;
-    const esmDeltaStr =
-      esmDelta !== null
-        ? esmDelta > 0
-          ? `+${esmDelta}B`
-          : `${esmDelta}B`
-        : 'N/A';
-
-    componentSection += `| Bundle Size (ESM) | ${inline(baseStats.esmSize) || 'N/A'} | ${inline(stats.esmSize) || 'N/A'} | ${esmDeltaStr} |\n`;
-    componentSection += `| Lines of Code | ${inline(baseStats.linesOfCode) || 'N/A'} | ${inline(stats.linesOfCode) || 'N/A'} | - |\n`;
-    componentSection += `| Complexity | ${inline(baseStats.complexityRating) || 'N/A'} | ${inline(stats.complexityRating) || 'N/A'} (${num(stats.complexity)}) | - |\n`;
-    componentSection += `\n</details>\n\n`;
-  }
-}
-
-// Build accessibility section using shared module
-const a11ySection = buildA11ySection(a11yReport);
-
-// Visual regression is optional: the pr-visual job is skipped when no
-// components changed, and absent entirely on older runs.
-let visualVerdict = null;
-if (visualFile) {
-  try {
-    visualVerdict = JSON.parse(fs.readFileSync(visualFile, 'utf8'));
-  } catch {
-    visualVerdict = null;
-  }
-}
-const visualSection = buildVisualSection(
-  visualVerdict,
-  getArg('visual-report-url'),
-  getArg('visual-image-url'),
+// The audit's findings, collapsed: the component table carries each verdict.
+const violations = Object.values(a11yReport?.components || {}).reduce(
+  (sum, component) => sum + (component.violations?.length || 0),
+  0,
 );
+const a11yDetails =
+  violations > 0
+    ? details(
+        `Accessibility: ${num(violations)} violation(s)`,
+        buildA11ySection(a11yReport),
+      )
+    : '';
 
-// Build bundle size section — one row per package the PR actually touched.
-let bundleSection = '### Bundle Size Summary\n\n';
-// Prefer the multi-package list; fall back to the legacy single-core shape so
-// an older analysis.json still renders.
-const bundlePackages =
-  analysis.bundlePackages && analysis.bundlePackages.length > 0
-    ? analysis.bundlePackages
-    : analysis.totalBundle
-      ? [{package: '@astryxdesign/core', ...analysis.totalBundle}]
-      : [];
+// Shots the visual job could not capture: one line; changed shots are listed
+// in the report's visual section.
+const visualFailed =
+  visualVerdict?.status === 'failed'
+    ? `> **Visual:** ${num(visualVerdict.counts?.failed)} shot(s) could not be captured.\n\n`
+    : '';
 
-if (bundlePackages.length > 0) {
-  bundleSection += `| Package | Size (ESM) | Size (CJS) | Gzipped |\n`;
-  bundleSection += `|---------|------------|------------|----------|\n`;
-  for (const b of bundlePackages) {
-    bundleSection += `| ${inline(b.package)} | ${inline(b.esmSize) || 'N/A'} | ${inline(b.cjsSize) || 'N/A'} | ${inline(b.gzipSize) || 'N/A'} |\n`;
-  }
-  bundleSection += `\n`;
-} else {
-  bundleSection += '_No component packages changed._\n\n';
-}
-
-if (analysis.bundleDelta) {
-  const delta = num(analysis.bundleDelta);
-  const direction =
-    delta > 0 ? 'increased' : delta < 0 ? 'decreased' : 'unchanged';
-  bundleSection += `**Bundle size ${direction}:** ${delta > 0 ? '+' : ''}${delta} bytes\n\n`;
-}
-
-// Build storybook link section
-let storybookSection = '';
-if (storybookUrl) {
-  storybookSection = `### 📚 Storybook Preview
-
-**${extLink('View Storybook for this PR', storybookUrl)}**
-
-`;
-}
-
-// Build sandbox link section
-let sandboxSection = '';
-if (sandboxUrl) {
-  sandboxSection = `### 🧪 Sandbox Preview
-
-**${extLink('View Sandbox for this PR', sandboxUrl)}**
-
-`;
-}
-
-// Both previews share the exact-head Vercel deployment, never a Pages, canary,
-// production, or earlier-head fallback.
-let previewAvailabilitySection = '';
-if (previewState) {
-  if (!storybookUrl || !sandboxUrl)
-    previewAvailabilitySection = `> **Preview availability:** Storybook and Sandbox are not both ready on the exact-head Vercel preview.${sourceConclusion && sourceConclusion !== 'success' ? ` CI concluded ${sourceConclusion}.` : ''}\n\n`;
-}
-
-// Build footer with links
-let footerLinks = [];
-if (storybookUrl) footerLinks.push(extLink('Storybook', storybookUrl));
-if (sandboxUrl) footerLinks.push(extLink('Sandbox', sandboxUrl));
-if (runUrl) footerLinks.push(extLink('View full report', runUrl));
-const footerLinksStr =
-  footerLinks.length > 0 ? ` | ${footerLinks.join(' | ')}` : '';
+// A run that did not succeed may have published only part of this report.
+const conclusionNote =
+  sourceConclusion && sourceConclusion !== 'success'
+    ? `> **Current run:** CI concluded ${inline(sourceConclusion)}; parts of this report may be missing.\n\n`
+    : '';
 
 // A one-line caveat shown when the analysis fell back to the approximate
 // two-dot diff. The file list may include base-only churn and, worse, may
@@ -232,17 +126,27 @@ const diffModeCaveat =
     ? '> ⚠️ **Approximate analysis** - the diff could not be resolved to a merge base, so a two-dot fallback was used. The component list may include base-only changes or miss a component whose change also landed on base.\n\n'
     : '';
 
-// Build the full comment
+const report = buildCompactReport({
+  analysis,
+  preview,
+  jobs,
+  touched,
+  a11yReport,
+  visualVerdict,
+  packageSize,
+  visualFrames,
+  apiChanges,
+});
+const footerLinksStr = runUrl
+  ? ` | ${extLink('View full report', runUrl)}`
+  : '';
+
 const body = `## PR Analysis Report
 <!-- astryx-pr-analysis -->
 
-${diffModeCaveat}${previewAvailabilitySection}${storybookSection}${sandboxSection}${componentSection || '_No new or modified components detected._\n\n'}
-${bundleSection}
-${a11ySection}
-${visualSection}---
+${report || '_No component or package changed._\n\n'}${renderCiImpact(ciImpact)}${conclusionNote}${diffModeCaveat}${visualFailed}${a11yDetails}---
 
 <sub>Generated by PR Enrichment workflow${footerLinksStr}</sub>
 `;
 
-// Output to stdout
 console.log(body);

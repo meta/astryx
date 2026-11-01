@@ -1,0 +1,244 @@
+{
+  "apiVersion": 1,
+  "type": "search",
+  "data": {
+    "query": "delete",
+    "matchCount": 19,
+    "results": [
+      {
+        "domain": "component",
+        "name": "AlertDialog",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/AlertDialog",
+        "command": "astryx component AlertDialog",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "global/uninstall",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs global/uninstall --index",
+        "parent": "astryx docs global",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "Dialog",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Dialog",
+        "command": "astryx component Dialog",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "cli/api/functions/theme-template",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/api/functions/theme-template",
+        "parent": "astryx docs cli/api/functions",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "cli/commands/theme-template",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "title": "<text>",
+        "command": "astryx docs cli/commands/theme-template",
+        "parent": "astryx docs cli/commands",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "global/computer-agent-guide",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs global/computer-agent-guide choose",
+        "parent": "astryx docs global/computer-agent-guide --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "global/uninstall",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs global/uninstall agent-guide",
+        "parent": "astryx docs global/uninstall --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "global/uninstall",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs global/uninstall reset",
+        "parent": "astryx docs global/uninstall --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "migration/migration-setup",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs migration/migration-setup foundation-smoke-test",
+        "parent": "astryx docs migration/migration-setup --index",
+        "mentions": []
+      },
+      {
+        "domain": "doc",
+        "name": "use-a-theme",
+        "package": "@astryxdesign/cli",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "section": "<text>",
+        "title": "<text>",
+        "command": "astryx docs use-a-theme migrating-earlier-theme-copies",
+        "parent": "astryx docs use-a-theme --index",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "AlertDialogDeleteConfirmation",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template AlertDialogDeleteConfirmation --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ButtonWithIcon",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ButtonWithIcon --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "PopoverConfirmAction",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template PopoverConfirmAction --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "ToastAction",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template ToastAction --type block",
+        "mentions": []
+      },
+      {
+        "domain": "template",
+        "name": "useContainerRevealHookUsage",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "displayName": "<text>",
+        "kind": "block",
+        "command": "astryx template useContainerRevealHookUsage --type block",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "Button",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/Button",
+        "command": "astryx component Button",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "ButtonGroup",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/ButtonGroup",
+        "command": "astryx component ButtonGroup",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "IconButton",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/IconButton",
+        "command": "astryx component IconButton",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "ToggleButton",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/ToggleButton",
+        "command": "astryx component ToggleButton",
+        "mentions": []
+      }
+    ]
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

@@ -16,7 +16,6 @@ import {describe, expect, it} from 'vitest';
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(SCRIPTS_DIR, '../..');
 const SCRIPT = path.join(SCRIPTS_DIR, 'accessibility-audit.js');
-let nextPort = 40000 + (process.pid % 10000);
 
 const BROWSER_MOCK = String.raw`
 const Module = require('node:module');
@@ -27,22 +26,29 @@ let selectorResolved = false;
 // The layout-settle step waits two frames before sampling geometry.
 global.requestAnimationFrame = callback => setTimeout(callback, 0);
 
+// Storybook's own state as the audit reads it: whether the preview started,
+// the selected story's render phase, and the document's load state.
 function scenarioState() {
   const scenario = process.env.A11Y_TEST_SCENARIO;
   reads += 1;
+  const started = {preview: true, phase: 'rendering', loaded: false};
   if (scenario === 'redirect') {
-    return {url: 'chrome-error://chromewebdata/', classes: [], content: false};
+    return {url: 'chrome-error://chromewebdata/', classes: [], content: false, ...started};
   }
   if (scenario === 'error') {
-    return {url: requestedUrl, classes: ['sb-show-errordisplay'], content: false};
+    return {url: requestedUrl, classes: ['sb-show-errordisplay'], content: false, ...started};
   }
   if (scenario === 'empty') {
-    return {url: requestedUrl, classes: ['sb-show-main'], content: false};
+    return {url: requestedUrl, classes: ['sb-show-main'], content: false, ...started, phase: 'finished'};
+  }
+  if (scenario === 'no-preview') {
+    return {url: requestedUrl, classes: [], content: false, preview: false, phase: null, loaded: true};
   }
   return {
     url: requestedUrl,
     classes: ['sb-show-main'],
     content: reads >= 3,
+    ...started,
   };
 }
 
@@ -50,8 +56,18 @@ function evaluateInFixture(fn, arg) {
   const state = scenarioState();
   const previousWindow = global.window;
   const previousDocument = global.document;
-  global.window = {location: {href: state.url}};
+  const storyId = new URL(state.url).searchParams.get('id');
+  global.window = {
+    location: {href: state.url},
+    __STORYBOOK_PREVIEW__: state.preview
+      ? {
+          selectionStore: {selection: {storyId}},
+          currentRender: {phase: state.phase},
+        }
+      : undefined,
+  };
   global.document = {
+    readyState: state.loaded ? 'complete' : 'interactive',
     body: {classList: {contains: name => state.classes.includes(name)}},
     querySelector: selector =>
       selector === '#storybook-root'
@@ -68,7 +84,15 @@ function evaluateInFixture(fn, arg) {
 }
 
 const page = {
-  goto: async url => { requestedUrl = url; },
+  // A real request, so a run only passes when the audit opens the port its
+  // server actually holds.
+  goto: async url => {
+    requestedUrl = url;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('fixture server answered ' + response.status + ' for ' + url);
+    }
+  },
   addStyleTag: async () => {},
   waitForSelector: async (selector, options) => {
     if (process.env.A11Y_TEST_SCENARIO === 'selector-missing') {
@@ -84,7 +108,11 @@ const page = {
   waitForTimeout: async () => {},
   close: async () => {},
 };
-const context = {newPage: async () => page, close: async () => {}};
+const context = {
+  addInitScript: async () => {},
+  newPage: async () => page,
+  close: async () => {},
+};
 const browser = {newContext: async () => context, close: async () => {}};
 
 class FakeAxeBuilder {
@@ -123,7 +151,6 @@ function runFixture(
   fs.writeFileSync(path.join(storybook, 'index.json'), indexContent);
   fs.writeFileSync(path.join(storybook, 'iframe.html'), '<!doctype html>');
   fs.writeFileSync(mock, BROWSER_MOCK);
-  const port = nextPort++;
   try {
     const result = spawnSync(
       process.execPath,
@@ -135,8 +162,10 @@ function runFixture(
         output,
         '--components',
         components,
+        // Any fixed port may already be held by another process's socket, so
+        // let the OS assign a free one.
         '--port',
-        String(port),
+        '0',
         ...(readySelector == null
           ? []
           : ['--ready-selector', readySelector]),
@@ -203,6 +232,16 @@ const PATTERN_INDEX = JSON.stringify({
 });
 
 describe.sequential('accessibility-audit CLI readiness', () => {
+  it('serves the stories on a port the OS assigns', () => {
+    const result = runFixture('delayed', VALID_INDEX);
+    expect(result.status).toBe(0);
+    const served = /Storybook server running on http:\/\/localhost:(\d+)/.exec(
+      result.stdout,
+    );
+    expect(Number(served?.[1])).toBeGreaterThan(0);
+    expect(result.report.auditedStoryKeys).toHaveLength(1);
+  });
+
   it('waits through a delayed valid Storybook root and writes audited evidence', () => {
     const result = runFixture('delayed', VALID_INDEX);
     expect(result.status).toBe(0);
@@ -300,18 +339,23 @@ describe.sequential('accessibility-audit CLI readiness', () => {
     expect(result.report).toBeNull();
   });
 
-  it(
-    'fails an attached but empty Storybook root without writing a report',
-    () => {
-      const result = runFixture('empty', VALID_INDEX);
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain(
-        'Storybook root did not render story content before timeout',
-      );
-      expect(result.report).toBeNull();
-    },
-    10000,
-  );
+  it('fails a story render Storybook ended with an empty root, without writing a report', () => {
+    const result = runFixture('empty', VALID_INDEX);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      'Storybook ended the story render (finished) with no content in its root',
+    );
+    expect(result.report).toBeNull();
+  });
+
+  it('fails a page that loaded without starting the Storybook preview, without writing a report', () => {
+    const result = runFixture('no-preview', VALID_INDEX);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      'the story page finished loading without starting the Storybook preview',
+    );
+    expect(result.report).toBeNull();
+  });
 
   it('fails an invalid index before browser readiness or routing', () => {
     const result = runFixture('delayed', '{invalid json');

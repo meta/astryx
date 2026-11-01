@@ -5,7 +5,7 @@
 /**
  * @file NumberInput.tsx
  * @input Uses React, useId, useState, useMemo, useCallback, Field, Icon, InputGroupContext
- * @output Exports NumberInput component, NumberInputProps
+ * @output Exports NumberInput component, NumberInputProps; optional steppers are hidden on coarse pointers
  * @position Core implementation; consumed by index.ts, tested by NumberInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -19,6 +19,7 @@
  */
 
 import {
+  use,
   useId,
   useState,
   useMemo,
@@ -28,6 +29,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -51,13 +53,16 @@ import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 
 // Public padding tokens for the `number-input` theme target. A theme writes an
 // ordinary `padding` (in ANY spelling — the shorthand, `paddingBlock`, or a
@@ -96,7 +101,10 @@ const styles = stylex.create({
     paddingInlineEnd: padInlineEnd,
   },
   wrapperWithNumberSteppers: {
-    paddingInlineEnd: 0,
+    paddingInlineEnd: {
+      default: 0,
+      '@media (pointer: coarse)': padInlineEnd,
+    },
   },
   input: {
     display: 'block',
@@ -138,7 +146,12 @@ const styles = stylex.create({
   },
   numberSteppers: {
     alignSelf: 'stretch',
-    display: 'flex',
+    // These compact buttons are a fine-pointer affordance. Touch users can
+    // enter a value directly; keyboard stepping remains available.
+    display: {
+      default: 'flex',
+      '@media (pointer: coarse)': 'none',
+    },
     flexDirection: 'column',
     flexShrink: 0,
     width: spacingVars['--spacing-4'],
@@ -203,7 +216,7 @@ const sizeStyles = stylex.create({
 
 export type NumberInputSize = keyof typeof sizeStyles;
 
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 
 // Re-export shared types for convenience
 
@@ -261,7 +274,7 @@ interface NumberInputPropsBase extends Omit<
    * Whether the input is read-only.
    * The value is shown at full opacity and still submits with the form, but
    * cannot be edited. Unlike `isDisabled`, a read-only input is not dimmed and
-   * stays in the tab order — use it for a value the user should see and send
+   * keeps its form value — use it for a value the user should see and send
    * but not change. Stepping is off in every form while read-only: arrow keys,
    * the wheel, and the number steppers. `isDisabled` takes precedence when both
    * are set.
@@ -275,8 +288,8 @@ interface NumberInputPropsBase extends Omit<
    * keyboard and assistive technology. The field cannot be edited (it becomes
    * read-only) while disabled.
    *
-   * Use this instead of wrapping a disabled input in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled input in `Tooltip`, so the reason
+   * is attached to the field itself.
    *
    * @example
    * ```
@@ -381,6 +394,8 @@ interface NumberInputPropsBase extends Omit<
   isWheelEnabled?: boolean;
   /**
    * Whether to show increment and decrement buttons at the end of the input.
+   * The buttons are hidden on coarse pointers (such as touch screens).
+   * Direct text entry and keyboard stepping remain available.
    * @default false
    */
   hasNumberSteppers?: boolean;
@@ -536,7 +551,7 @@ export function NumberInput({
   description,
   isOptional = false,
   isRequired = false,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   isReadOnly = false,
   disabledMessage,
   startIcon,
@@ -574,6 +589,7 @@ export function NumberInput({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: NumberInputProps) {
   const {rest, container} = useFieldInputStyling('NumberInput', restProps, {
@@ -588,6 +604,7 @@ export function NumberInput({
   const size = useSize(sizeProp, 'md');
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -595,17 +612,27 @@ export function NumberInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
 
   // Pending input while user is typing (null = show formatted value)
   const [pendingInput, setPendingInput] = useState<string | null>(null);
   const [isFocused, setIsFocused] = useState(false);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the input container (which already exists) and
+  // Disabled-reason tooltip. The tooltip listeners attach to the input container (which already exists) and
   // the input stays perceivable via aria-disabled instead of the native
   // disabled attribute. The field is made read-only so it can't be typed into,
   // and value mutation is blocked by the isDisabled guard in the handlers.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
+  // A disabled field keeps its tab stop but, like a natively disabled one,
+  // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
+  const fieldProps = isDisabled
+    ? Object.fromEntries(
+        Object.entries(rest).filter(
+          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
+        ),
+      )
+    : rest;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
@@ -638,6 +665,12 @@ export function NumberInput({
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the input together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const inputLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   const parseInput = useCallback(
     (text: string) => parseNumberInput(text, {min, max, isIntegerOnly, locale}),
@@ -686,17 +719,45 @@ export function NumberInput({
   );
 
   // Handle focus
+  // Tab into the field selects its text so typing replaces it. With
+  // `formatValue` the text at rest differs from the editable text, and putting
+  // the editable text in the input after focus collapses that selection to the
+  // end, so typing would append. When focus arrives with the text selected,
+  // the focus handler commits the swap and selects the swapped-in text itself:
+  // the work one event causes stays in its handler
+  // (architecture:react-component-runtime/INV2).
   const handleFocus = useCallback(
     (e: FocusEvent<HTMLInputElement>) => {
+      const input = e.currentTarget;
+      const editableText =
+        pendingInput ??
+        (value == null ? '' : formatEditableNumber(value, locale));
+      const shouldReselect =
+        input.value.length > 0 &&
+        input.value !== editableText &&
+        input.selectionStart === 0 &&
+        input.selectionEnd === input.value.length;
       setIsFocused(true);
       onFocus?.(e);
+      if (shouldReselect) {
+        // Commit the swap now, so the editable text is in the input to select.
+        // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the editable text must be in the input before the focus event selects it
+        flushSync(() => {});
+        input.setSelectionRange(0, input.value.length);
+      }
     },
-    [onFocus],
+    [onFocus, pendingInput, value, locale],
   );
 
   const commitPendingInput = useCallback(
     (trigger: 'blur' | 'Enter') => {
       if (pendingInput === null) {
+        return;
+      }
+      if (isDisabled) {
+        // A field disabled mid-entry commits nothing; its draft is dropped, as
+        // a natively disabled field's was (spec:AST-085 FR2).
+        setPendingInput(null);
         return;
       }
 
@@ -722,7 +783,17 @@ export function NumberInput({
         onChange(decision.value);
       }
     },
-    [hasClear, isIntegerOnly, locale, max, min, onChange, pendingInput, value],
+    [
+      hasClear,
+      isDisabled,
+      isIntegerOnly,
+      locale,
+      max,
+      min,
+      onChange,
+      pendingInput,
+      value,
+    ],
   );
 
   // Blur ends the edit and displays the resulting committed value.
@@ -780,6 +851,13 @@ export function NumberInput({
   // Handle keyboard events
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
+      if (isDisabled) {
+        // A read-only field still submits its form on Enter.
+        if (e.key === 'Enter') {
+          e.preventDefault();
+        }
+        return;
+      }
       // The field is type="text" for formatted display, so an IME can compose
       // into it: Enter commits the candidate and the arrows walk the candidate
       // window. The composing keydown fires before compositionend, so without
@@ -804,7 +882,7 @@ export function NumberInput({
       }
       onKeyDown?.(e);
     },
-    [commitPendingInput, onEnter, onKeyDown, stepValue],
+    [commitPendingInput, isDisabled, onEnter, onKeyDown, stepValue],
   );
 
   // React's delegated wheel listener can be passive, so use a native,
@@ -860,11 +938,12 @@ export function NumberInput({
       if (!e || e.detail === 0) {
         inputRef.current?.focus();
       } else {
-        // Defer focus restoration past the button's unmount task so iOS Safari
-        // and touch browsers don't jump the page scroll to 0 on tap.
-        requestAnimationFrame(() => {
-          inputRef.current?.focus({preventScroll: true});
-        });
+        // Focus inside the tap: iOS Safari brings up its keyboard only for a
+        // focus made while handling the touch, so a field the tap reaches
+        // unfocused gets its keyboard, as UIKit's clear button makes the
+        // field first responder. `preventScroll` keeps a scrolled page where
+        // it is.
+        inputRef.current?.focus({preventScroll: true});
       }
     },
     [hasClear, onChange],
@@ -889,6 +968,7 @@ export function NumberInput({
       }}
       onClick={handleWrapperClick}
       onMouseUp={handleWrapperMouseUp}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('number-input', {
           size,
@@ -902,6 +982,7 @@ export function NumberInput({
           hasNumberSteppers && styles.wrapperWithNumberSteppers,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.ring,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -914,7 +995,7 @@ export function NumberInput({
       {startIcon && renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       <input
-        {...rest}
+        {...fieldProps}
         ref={mergedInputRef}
         id={id}
         name={isDisabled || formatValue ? undefined : htmlName}
@@ -928,12 +1009,11 @@ export function NumberInput({
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        // With a disabledMessage the input keeps focusability via aria-disabled
-        // so the reason is focus-discoverable; readOnly + the handler guards
-        // keep the value from changing.
-        disabled={isDisabled && !showsDisabledMessage}
-        aria-disabled={showsDisabledMessage ? 'true' : undefined}
-        readOnly={isReadOnly || showsDisabledMessage || undefined}
+        // A disabled input keeps its place in the tab order (spec:AST-085):
+        // aria-disabled instead of the native attribute, with readOnly + the
+        // handler guards keeping the value from changing.
+        aria-disabled={isDisabled ? 'true' : undefined}
+        readOnly={isReadOnly || isDisabled || undefined}
         autoFocus={hasAutoFocus}
         data-autofocus={hasAutoFocus || undefined}
         aria-valuemin={min ?? undefined}
@@ -952,7 +1032,7 @@ export function NumberInput({
         aria-invalid={
           status?.type === 'error' || !isInputValid ? 'true' : undefined
         }
-        aria-labelledby={ariaLabelledBy}
+        aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,
           isDisabled && styles.inputDisabled,
@@ -992,10 +1072,17 @@ export function NumberInput({
             type="button"
             tabIndex={-1}
             {...pressable}
-            disabled={isDisabled || isReadOnly || !canIncrement}
+            aria-disabled={
+              isDisabled || isReadOnly || !canIncrement || undefined
+            }
             aria-label={t('@astryx.numberInput.incrementLabel', {label})}
             onPointerDown={event => event.preventDefault()}
             onClick={() => {
+              // An aria-disabled stepper does nothing, as a natively disabled
+              // one did (spec:AST-085 FR2).
+              if (isDisabled || isReadOnly || !canIncrement) {
+                return;
+              }
               inputRef.current?.focus();
               stepValue(1);
             }}
@@ -1016,10 +1103,17 @@ export function NumberInput({
             type="button"
             tabIndex={-1}
             {...pressable}
-            disabled={isDisabled || isReadOnly || !canDecrement}
+            aria-disabled={
+              isDisabled || isReadOnly || !canDecrement || undefined
+            }
             aria-label={t('@astryx.numberInput.decrementLabel', {label})}
             onPointerDown={event => event.preventDefault()}
             onClick={() => {
+              // An aria-disabled stepper does nothing, as a natively disabled
+              // one did (spec:AST-085 FR2).
+              if (isDisabled || isReadOnly || !canDecrement) {
+                return;
+              }
               inputRef.current?.focus();
               stepValue(-1);
             }}
@@ -1054,6 +1148,7 @@ export function NumberInput({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

@@ -214,6 +214,11 @@ export const V06_THEME_SELECTOR_TARGETS = {
   "typeahead": {"error":["status","error"],"lg":["size","lg"],"md":["size","md"],"sm":["size","sm"],"success":["status","success"],"warning":["status","warning"]},
 };
 
+// Only a prop typed as an open string emitted unbounded bare classes
+// (CodeBlock `language`). MetadataList `columns` is `'single' | 'multi' |
+// number`: its strings are in the table above and every number keeps the
+// `columns-` prefix, so any other class beside `.astryx-metadata-list` is
+// the app's own and stays unchanged.
 /** @type {Record<string, Array<{axis: string, token: 'class-value' | 'prefixed', prefix?: string}>>} */
 // prettier-ignore
 export const V06_THEME_SELECTOR_DYNAMIC_AXES = {
@@ -224,6 +229,6 @@ export const V06_THEME_SELECTOR_DYNAMIC_AXES = {
   "codeblock-header": [{"axis":"language","token":"class-value"}],
   "codeblock-title": [{"axis":"language","token":"class-value"}],
   "grid": [{"axis":"columns","token":"prefixed","prefix":"columns-"}],
-  "metadata-list": [{"axis":"columns","token":"prefixed","prefix":"columns-"},{"axis":"columns","token":"class-value"}],
+  "metadata-list": [{"axis":"columns","token":"prefixed","prefix":"columns-"}],
   "outline-item": [{"axis":"level","token":"prefixed","prefix":"level-"}],
 };

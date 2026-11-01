@@ -314,6 +314,99 @@ describe('CodeBlock', () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalled();
   });
 
+  describe('endContent', () => {
+    const run = () => (
+      <button type="button" onClick={onRun}>
+        Run in terminal
+      </button>
+    );
+    let onRun: ReturnType<typeof vi.fn<() => void>>;
+    beforeEach(() => {
+      onRun = vi.fn<() => void>();
+    });
+
+    it('renders caller controls before Copy in the header', () => {
+      render(<CodeBlock code="npm test" language="bash" endContent={run()} />);
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      const copy = screen.getByRole('button', {name: 'Copy code'});
+      expect(action.parentElement).toBe(copy.parentElement);
+      expect(
+        action.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(screen.getByText('bash')).toBeInTheDocument();
+    });
+
+    it('never creates a header: with no title or label the controls sit in the corner', () => {
+      const {container} = render(
+        <CodeBlock
+          code="npm test"
+          language="bash"
+          hasLanguageLabel={false}
+          endContent={run()}
+        />,
+      );
+      expect(container.querySelector('.astryx-code-block-header')).toBeNull();
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      const copy = screen.getByRole('button', {name: 'Copy code'});
+      const cluster = action.parentElement;
+      expect(cluster).toBe(copy.parentElement);
+      expect(cluster?.parentElement).toBe(container.querySelector('pre'));
+      expect(
+        action.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('keeps its place when Copy is hidden', () => {
+      const {container} = render(
+        <CodeBlock code="npm test" hasCopyButton={false} endContent={run()} />,
+      );
+      expect(screen.queryByRole('button', {name: 'Copy code'})).toBeNull();
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(action.parentElement?.parentElement).toBe(
+        container.querySelector('pre'),
+      );
+    });
+
+    it('sits outside the disclosure and never toggles it, by pointer or keyboard', () => {
+      render(
+        <CodeBlock
+          code={LONG_CODE}
+          language="javascript"
+          title="example"
+          isCollapsible
+          endContent={run()}
+        />,
+      );
+      const header = screen
+        .getAllByRole('button')
+        .find(el => el.hasAttribute('aria-expanded'));
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(header!.contains(action)).toBe(false);
+      fireEvent.click(action);
+      fireEvent.keyDown(action, {key: 'Enter'});
+      fireEvent.keyDown(action, {key: ' '});
+      expect(onRun).toHaveBeenCalledTimes(1);
+      expect(header).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('treats a falsy endContent as absent: no corner column without Copy', () => {
+      const {container} = render(
+        <CodeBlock code="npm test" hasCopyButton={false} endContent={false} />,
+      );
+      const root = container.querySelector('pre');
+      // Only the code viewport: no empty cluster beside it.
+      expect(root?.children).toHaveLength(1);
+      expect(screen.queryAllByRole('button')).toHaveLength(0);
+    });
+
+    it('leaves caller controls unnamed and unstyled by CodeBlock', () => {
+      render(<CodeBlock code="npm test" language="bash" endContent={run()} />);
+      const action = screen.getByRole('button', {name: 'Run in terminal'});
+      expect(action.getAttribute('class')).toBeNull();
+      expect(action).not.toHaveAttribute('aria-label');
+    });
+  });
+
   it('does not nest the copy button inside the collapsible header role="button"', () => {
     render(
       <CodeBlock
@@ -561,7 +654,10 @@ describe('CodeBlock', () => {
       expect(screen.getByRole('group')).toHaveAttribute('aria-label', 'Code');
 
       const copyButton = screen.getByRole('button', {name: 'Copy code'});
-      expect(copyButton.parentElement).toBe(container.querySelector('pre'));
+      // Headerless: Copy sits in the corner cluster, a direct child of the root.
+      expect(copyButton.parentElement?.parentElement).toBe(
+        container.querySelector('pre'),
+      );
       await act(async () => {
         fireEvent.click(copyButton);
       });

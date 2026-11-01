@@ -17,6 +17,7 @@
  */
 
 import {
+  use,
   useId,
   useOptimistic,
   useTransition,
@@ -48,6 +49,7 @@ import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {getInputARIA, isImeKeyEvent} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 
 const styles = stylex.create({
   input: {
@@ -94,7 +96,7 @@ const sizeStyles = stylex.create({
 
 export type TextInputSize = keyof typeof sizeStyles;
 
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 
 // Re-export shared types for convenience
 
@@ -108,16 +110,19 @@ import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import type {BaseProps} from '../BaseProps';
 import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 export type TextInputType = 'text' | 'password' | 'email';
 
 export interface TextInputProps extends Omit<
@@ -155,7 +160,9 @@ export interface TextInputProps extends Omit<
    */
   isRequired?: boolean;
   /**
-   * Whether the input is disabled.
+   * Whether the input is disabled. A disabled input is dimmed, cannot be
+   * edited, and is left out of form submission, but it stays in the tab order
+   * (`aria-disabled`, not the native attribute).
    * @default false
    */
   isDisabled?: boolean;
@@ -163,7 +170,7 @@ export interface TextInputProps extends Omit<
    * Whether the input is read-only.
    * The value is shown at full opacity and still submits with the form, but
    * cannot be edited. Unlike `isDisabled`, a read-only input is not dimmed and
-   * stays in the tab order — use it for a value the user should see and send
+   * keeps its form value — use it for a value the user should see and send
    * but not change. `isDisabled` takes precedence when both are set.
    * @default false
    */
@@ -175,8 +182,8 @@ export interface TextInputProps extends Omit<
    * keyboard and assistive technology. The field cannot be edited (it becomes
    * read-only) while disabled.
    *
-   * Use this instead of wrapping a disabled input in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled input in `Tooltip`, so the reason
+   * is attached to the field itself.
    *
    * @example
    * ```
@@ -293,7 +300,7 @@ export function TextInput({
   description,
   isOptional = false,
   isRequired = false,
-  isDisabled = false,
+  isDisabled: isDisabledProp = false,
   isReadOnly = false,
   disabledMessage,
   startIcon,
@@ -321,8 +328,12 @@ export function TextInput({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TextInputProps) {
+  const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
   const {rest, container} = useFieldInputStyling('TextInput', restProps, {
     containerXstyle,
     containerClassName,
@@ -330,23 +341,34 @@ export function TextInput({
   });
   const t = useTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
+  // A disabled field keeps its tab stop but, like a natively disabled one,
+  // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
+  const fieldProps = isDisabled
+    ? Object.fromEntries(
+        Object.entries(rest).filter(
+          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
+        ),
+      )
+    : rest;
   const size = useSize(sizeProp, 'md');
 
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const inputGroup = useInputGroup();
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), containerRef);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the input container (which already exists) and
+  // Disabled-reason tooltip. The tooltip listeners attach to the input container (which already exists) and
   // the input stays perceivable via aria-disabled instead of the native
   // disabled attribute. The field is made read-only so it can't be typed into,
   // and value mutation is blocked by the isDisabled guard in handleChange.
@@ -382,6 +404,12 @@ export function TextInput({
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the input together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const inputLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     // Value can't change while showing a disabled message (the field is
@@ -407,11 +435,12 @@ export function TextInput({
       if (!e || e.detail === 0) {
         inputRef.current?.focus();
       } else {
-        // Defer focus restoration past the button's unmount task so iOS Safari
-        // and touch browsers don't jump the page scroll to 0 on tap.
-        requestAnimationFrame(() => {
-          inputRef.current?.focus({preventScroll: true});
-        });
+        // Focus inside the tap: iOS Safari brings up its keyboard only for a
+        // focus made while handling the touch, so a field the tap reaches
+        // unfocused gets its keyboard, as UIKit's clear button makes the
+        // field first responder. `preventScroll` keeps a scrolled page where
+        // it is.
+        inputRef.current?.focus({preventScroll: true});
       }
     },
     [onChange],
@@ -436,6 +465,7 @@ export function TextInput({
       }}
       onClick={handleWrapperClick}
       onMouseUp={handleWrapperMouseUp}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('text-input', {
           size,
@@ -447,6 +477,7 @@ export function TextInput({
           inputWrapperStyles.base,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.ring,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -459,7 +490,7 @@ export function TextInput({
       {startIcon && renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       <input
-        {...rest}
+        {...fieldProps}
         ref={useMergedRefs(ref, inputRef)}
         id={id}
         name={isDisabled ? undefined : htmlName}
@@ -467,8 +498,15 @@ export function TextInput({
         value={optimisticValue}
         onChange={handleChange}
         onKeyDown={
-          onEnter || onKeyDown
+          isDisabled || onEnter || onKeyDown
             ? e => {
+                if (isDisabled) {
+                  // A read-only field still submits its form on Enter.
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                  return;
+                }
                 // The composing keydown fires before compositionend, so without
                 // this guard pressing Enter to commit a Japanese/Chinese/Korean
                 // IME conversion would trigger onEnter (submit/save actions)
@@ -482,12 +520,11 @@ export function TextInput({
             : undefined
         }
         placeholder={placeholder}
-        // With a disabledMessage the input keeps focusability via aria-disabled
-        // so the reason is focus-discoverable; readOnly + the handleChange guard
-        // keep the value from changing.
-        disabled={isDisabled && !showsDisabledMessage}
-        aria-disabled={showsDisabledMessage ? 'true' : undefined}
-        readOnly={isReadOnly || showsDisabledMessage || undefined}
+        // A disabled input keeps its place in the tab order (spec:AST-085):
+        // aria-disabled instead of the native attribute, with readOnly + the
+        // handleChange guard keeping the value from changing.
+        aria-disabled={isDisabled ? 'true' : undefined}
+        readOnly={isReadOnly || isDisabled || undefined}
         autoFocus={hasAutoFocus}
         data-autofocus={hasAutoFocus || undefined}
         aria-describedby={
@@ -497,16 +534,18 @@ export function TextInput({
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={status?.type === 'error' ? 'true' : undefined}
         aria-busy={isBusy || undefined}
-        aria-labelledby={ariaLabelledBy}
+        aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}
       />
+      {/* The Spinner comes first so it appears inward of the clear button
+          and the button keeps its place when the field turns busy. */}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {hasClear && value !== '' && !isDisabled && !isReadOnly && (
         <InputClearButton
           label={t('@astryx.textInput.clearLabel', {label})}
           onClick={handleClear}
         />
       )}
-      {isBusy && <Spinner size="sm" />}
       {statusIcon}
     </div>
   );
@@ -528,6 +567,7 @@ export function TextInput({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

@@ -90,7 +90,7 @@ export const docs = {
     {
       name: 'children',
       type: 'ReactNode',
-      description: 'Sub-items for nesting.',
+      description: 'Sub-items for nesting. Nested items span the full width of the nav list, like top-level items; their content is indented one step per nesting level.',
       slotElements: [
         {
           __element: 'SideNavItem',
@@ -213,7 +213,7 @@ export const docsDense = {
       'Passive right-side content only (badges, counts). Interactive controls go in actions.',
     actions:
       'Row-level secondary controls (icon buttons, menus) rendered as siblings of the primary element, after the expand/collapse toggle and before nested children in DOM/focus order. Inherit the row control size via SizeContext (explicit size wins). Hidden when rail collapsed. Passive content goes in endContent; interactive content goes here.',
-    children: 'Sub-items for nesting.',
+    children: 'Sub-items for nesting. Nested rows stay full width; content indents one step per level.',
     collapsible: 'Enables collapse for items w/ children. true=uncontrolled, object=controlled mode.',
     size: "Row size variant: 'sm' | 'md' | 'lg'.",
   },

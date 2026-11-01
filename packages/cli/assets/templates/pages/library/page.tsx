@@ -193,8 +193,7 @@ const ITEMS: LibraryItem[] = [
   {
     id: '18',
     name: 'MobileNav',
-    description:
-      'Bottom tab bar for mobile viewports with icon and label slots.',
+    description: 'Slide-out navigation drawer for mobile viewports.',
     category: 'Navigation',
     type: 'Pattern',
     imageUrl:

@@ -1,4 +1,4 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-export {butterTheme, butterPalettes} from './butterTheme';
+export {butterPalettes, butterTheme} from './butterTheme';
 export {butterIconRegistry} from './icons';

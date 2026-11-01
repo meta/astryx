@@ -75,14 +75,75 @@ async function placedGuides(route, seen = new Set()) {
 }
 
 describe('search domain priority — the rule', () => {
-  it('gives a doc no priority for a keyword or heading match', () => {
+  it('gives a doc no priority for a heading match or a one-word keyword', () => {
     const topic = {
       domain: 'doc',
       name: 'typography/font-setup',
-      keywords: ['font size'],
+      keywords: ['size'],
       titles: ['Font Setup', 'Font Sizes'],
     };
     expect(priority('font size', topic)).toBe(0);
+    expect(priority('size', topic)).toBe(0);
+  });
+
+  it('gives a doc priority when the query is one of its declared keywords', () => {
+    const guide = {
+      domain: 'doc',
+      name: 'guides/quality',
+      titles: ['Is my code good?'],
+      keywords: ['code review', 'review my code'],
+      _declared: ['code review', 'review my code'],
+    };
+    expect(priority('code review', guide)).toBe(1);
+    expect(priority('Code Reviews', guide)).toBe(1);
+    expect(priority('review my code', guide)).toBe(1);
+    // A section's keywords are its headings and code terms.
+    const section = {
+      ...guide,
+      name: 'before-you-ship',
+      _topic: 'guides/quality',
+      _section: 'before-you-ship',
+    };
+    expect(priority('code review', section)).toBe(0);
+  });
+
+  it("gives a doc no priority for a code term or table cell it didn't declare", () => {
+    // A typed doc's keywords hold the first column of its tables and the code
+    // terms its text mentions; `missing_field` reads as two words.
+    const reference = {
+      domain: 'doc',
+      name: 'cli/api/functions/validate-integration',
+      titles: ['validateIntegration'],
+      keywords: ['validate-integration', 'missing_field', 'file required'],
+      _declared: [],
+      _topic: 'cli/api/functions/validate-integration',
+    };
+    expect(priority('missing field', reference)).toBe(0);
+    expect(priority('file required', reference)).toBe(0);
+    expect(
+      priority('missing field', {...reference, _declared: ['missing field']}),
+    ).toBe(1);
+  });
+
+  it('keeps a component the query names exactly above a doc that declares it', async () => {
+    const tokens = tokenizeQuery('empty state');
+    const component = {domain: 'component', name: 'EmptyState'};
+    const doc = {
+      domain: 'doc',
+      name: 'illustrations',
+      keywords: ['empty state'],
+      _declared: ['empty state'],
+    };
+    const c = scoreQuery('empty state', tokens, component);
+    const d = scoreQuery('empty state', tokens, doc);
+    expect(
+      domainPriority('empty state', tokens, /** @type {any} */ (component), c),
+    ).toBe(1);
+    expect(
+      domainPriority('empty state', tokens, /** @type {any} */ (doc), d),
+    ).toBe(1);
+    // Both have priority, so the stronger match wins: the exact name.
+    expect(c?.score).toBeGreaterThan(d?.score ?? 0);
   });
 
   it('gives a doc priority when the query names it', () => {
@@ -190,32 +251,61 @@ describe('search domain priority — the rule', () => {
 
 describe('search domain priority — real docs and components', () => {
   it(
-    'finds the Text component before the typography guides for `font size`',
+    'finds a guide that declares the whole phrase above a component that matches one word',
     async () => {
-      for (const q of ['font size', 'font weight']) {
-        const results = (await search(q, {cwd})).data.results;
-        expect(results[0], q).toMatchObject({
-          domain: 'component',
-          name: 'Text',
-        });
-        const guide = results.findIndex(
-          r => r.domain === 'doc' && /^typography(?:\/|$)/.test(r.name),
-        );
-        // The guide still matches, below the component.
-        expect(guide, q).toBeGreaterThan(0);
+      const results = (await search('font size', {cwd})).data.results;
+      expect(results[0]).toMatchObject({domain: 'doc'});
+      expect(results[0].name).toMatch(/^typography(?:\/|$)/);
+      // The component the phrase points to stays near the top.
+      expect(
+        results
+          .slice(0, 3)
+          .some(r => r.domain === 'component' && r.name === 'Text'),
+      ).toBe(true);
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps a component above a reference doc whose table or code terms hold the phrase',
+    async () => {
+      for (const q of ['missing field', 'file required']) {
+        const [top] = (await search(q, {cwd})).data.results;
+        expect(top, q).toMatchObject({domain: 'component', name: 'Field'});
       }
     },
     SLOW,
   );
 
   it(
-    'reports the text-match score unchanged',
+    'opens the guide that answers a declared phrase, not one that only mentions it',
+    async () => {
+      const [layers] = (await search('cascade layers', {cwd})).data.results;
+      expect(layers).toMatchObject({
+        domain: 'doc',
+        name: 'migration/migration-setup',
+      });
+      const [keyboard] = (await search('keyboard navigation', {cwd})).data
+        .results;
+      expect(keyboard?.name).not.toBe('migration/migration-verification');
+    },
+    SLOW,
+  );
+
+  it(
+    'keeps a component above docs that match only by a heading, with scores unchanged',
     async () => {
       const results = (await search('font size', {cwd})).data.results;
-      const guide = results.find(
-        r => r.domain === 'doc' && /^typography(?:\/|$)/.test(r.name),
+      const text = results.findIndex(
+        r => r.domain === 'component' && r.name === 'Text',
       );
-      expect(guide?.score).toBeGreaterThan(results[0].score);
+      expect(text).toBeGreaterThanOrEqual(0);
+      // A doc below Text outscores it on text alone: priority moved it, not the score.
+      expect(
+        results
+          .slice(text + 1)
+          .some(r => r.domain === 'doc' && r.score > results[text].score),
+      ).toBe(true);
     },
     SLOW,
   );

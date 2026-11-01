@@ -278,6 +278,11 @@ describe('ScrollableArea', () => {
     expect(source).toContain("'@media (forced-colors: active)': 'auto'");
   });
 
+  it("keeps the platform's own scroll indicator on touch screens", () => {
+    const source = stylesSource();
+    expect(source).toContain("'@media (pointer: coarse)': 'auto'");
+  });
+
   it('guards scroll-state query containment as a progressive enhancement', () => {
     const source = stylesSource();
     expect(source).toContain("'@supports (container-type: scroll-state)'");

@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/components/describe-the-component/subcomponent`:
+ * @file `astryx docs authoring/building-blocks/components/describe-the-component/subcomponent`:
  * give one member of a component family its own ComponentDoc.
  */
 
@@ -51,6 +51,7 @@ export default {
   type: 'component',
   name: 'AcmeDialog',
   displayName: 'Acme Dialog',
+  import: '@acme/astryx-widgets/components/AcmeDialog',
   usage: {description: 'Presents a focused task above the current page.'},
   components: [
     {
@@ -82,6 +83,7 @@ export default {
   type: 'component',
   name: 'AcmeDialogHeader',
   displayName: 'Acme Dialog Header',
+  import: '@acme/astryx-widgets/components/AcmeDialogHeader',
   subComponentOf: 'AcmeDialog',
   description: 'Labels an Acme Dialog and holds its close action.',
   props: [
@@ -95,10 +97,8 @@ export default {
 };`,
         },
         {
-          type: 'reference',
-          target: 'schema:component-doc',
-          projection: {fields: ['subComponentOf', 'description', 'props']},
-          presentation: 'full',
+          type: 'prose',
+          text: 'Every field is in {@link schema:component-doc}.',
         },
         {
           type: 'list',
@@ -106,7 +106,7 @@ export default {
           items: [
             '`subComponentOf` must exactly match the parent doc\'s `name`.',
             '`description` explains this member\'s role in the family. `usage` is optional; add it when the member needs guidance beyond that sentence.',
-            'The child inherits family fields such as `group`, `category`, `keywords`, `theming`, and `playground` unless it overrides them.',
+            'The CLI does not copy family fields such as `group`, `category`, or `keywords` from the parent to the child. Set any the child needs in its own doc.',
           ],
         },
       ],

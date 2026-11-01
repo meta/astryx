@@ -10,8 +10,10 @@
  *
  * Three staggered bouncing dots (stylex.keyframes, reduced-motion safe)
  * with a grammar-aware label: "Ana is typing…", "Ana and Ben are typing…",
- * or "Ana and 2 others are typing…". Announced politely via role="status".
- * Renders dots only when no names are provided.
+ * or "Ana and 2 others are typing…". The label is announced once per change
+ * through the shared polite channel (`useAnnounce`), or left to an enclosing
+ * live container such as a chat log; the element itself carries no live role
+ * (spec:AST-086 FR2, FR4). Renders dots only when no names are provided.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/Chat/index.ts (exports)
@@ -19,7 +21,7 @@
  * - /apps/storybook/stories/ChatAdditions.stories.tsx (examples)
  */
 
-import {useMemo} from 'react';
+import {useEffect, useMemo, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -30,7 +32,8 @@ import {
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import type {BaseProps} from '@astryxdesign/core';
-import {mergeProps} from '@astryxdesign/core/utils';
+import {mergeProps, mergeRefs} from '@astryxdesign/core/utils';
+import {useAnnounce} from '@astryxdesign/core/hooks';
 import {themeProps} from '@astryxdesign/core/utils';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import type {TranslatorFn} from '@astryxdesign/core/i18n';
@@ -132,6 +135,14 @@ function typingLabel(
   });
 }
 
+/**
+ * An enclosing live container (a chat transcript's role="log", or any element
+ * the page made live) already delivers content added inside it, so the
+ * indicator must not announce the same words again (spec:AST-086 FR4).
+ */
+const LIVE_CONTAINER_SELECTOR =
+  '[role="log"], [role="status"], [role="alert"], [aria-live="polite"], [aria-live="assertive"]';
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -140,8 +151,9 @@ function typingLabel(
  * Animated three-dot typing hint with a name-aware label.
  *
  * The dots bounce with staggered delays (disabled under
- * prefers-reduced-motion) and the label is announced politely to
- * screen readers via role="status".
+ * prefers-reduced-motion). Each new label is announced politely to screen
+ * readers through the shared announcement channel, unless an enclosing live
+ * container such as a chat log delivers it.
  *
  * @example
  * ```
@@ -164,11 +176,33 @@ export function ChatTypingIndicator({
     [locale],
   );
   const label = typingLabel(names, t, listFormat);
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const mergedRef = useMemo(() => mergeRefs(rootRef, ref), [ref]);
+  const announce = useAnnounce();
+  // The label last announced, so a rerender or a StrictMode effect replay does
+  // not repeat it; cleared when nobody is typing, so the same people starting
+  // again is a new occasion (spec:AST-086 FR6).
+  const announcedLabelRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (label == null) {
+      announcedLabelRef.current = null;
+      return;
+    }
+    if (announcedLabelRef.current === label) {
+      return;
+    }
+    announcedLabelRef.current = label;
+    const isInsideLiveContainer =
+      rootRef.current?.parentElement?.closest(LIVE_CONTAINER_SELECTOR) != null;
+    if (!isInsideLiveContainer) {
+      announce(label, 'polite');
+    }
+  }, [announce, label]);
+
   return (
     <div
-      ref={ref}
-      role="status"
-      aria-live="polite"
+      ref={mergedRef}
       data-testid={testId}
       {...mergeProps(
         themeProps('chat-typing-indicator'),

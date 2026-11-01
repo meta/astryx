@@ -57,6 +57,7 @@ export const doc = {
       cli: 'astryx theme palette generate themes/ocean/palette.config.json --out themes/ocean/tokens/ocean.palette.ts --preview themes/ocean/tokens/ocean.palette.html',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {
       code: 0,

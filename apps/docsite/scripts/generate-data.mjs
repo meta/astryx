@@ -17,6 +17,7 @@
  *   - templateRegistry.ts  — page templates including playground source
  *   - templateMetadataRegistry.ts — lightweight page-template metadata
  *   - docsRegistry.ts      — long-form documentation topics from CLI docs/
+ *   - searchLinks.json     — search destinations and document presentation metadata
  */
 
 import * as fs from 'node:fs';
@@ -31,11 +32,25 @@ import {
 import {
   GUIDE_NAMESPACE_PAGES,
   GUIDE_PAGE_NAMESPACES,
+  ROOT_PAGE_ALIASES,
+  movedGuideRedirects,
   mergeFlatTopics,
   namespacePage,
   routeSlug,
+  sectionAnchors,
+  withCliCommands,
   withoutResolvedTokens,
 } from './docs-pages.mjs';
+import {
+  DOCSITE_CLI_COMMAND,
+  DOCSITE_PACKAGE_MANAGER,
+  GLOBAL_PAGE,
+  GLOBAL_PAGE_CLI_COMMAND,
+  getCliInvocation,
+  prefixCliCommands,
+  runWithDocPackageManager,
+  runWithCliDoor,
+} from './lib/cli-command.mjs';
 import {
   docs as readDocs,
   template as queryTemplates,
@@ -46,7 +61,10 @@ import {
   integrationPackagesForTarget,
 } from '../src/lib/integrationTargets.mjs';
 import {expandWorkspaceDirs} from '../../../scripts/lib/workspace-globs.mjs';
+import {componentStability} from './lib/component-stability.mjs';
 import {projectThemingDoc} from './lib/theming-doc.mjs';
+import {searchLinkTables} from '../src/lib/searchLinks.mjs';
+import {exampleAnchorId} from '../src/lib/exampleAnchor.mjs';
 import {collectBlogImages} from './lib/blog-images.mjs';
 import {
   buildTypeDefinitionIndex,
@@ -625,6 +643,7 @@ async function generateComponentRegistry() {
                 ? projectThemingDoc(sanitizeForJson(d.theming))
                 : null,
               playground: d.playground ? sanitizeForJson(d.playground) : null,
+              stability: d.stability,
             };
             break;
           }
@@ -736,6 +755,7 @@ async function generateComponentRegistry() {
                 : doc.playground
                   ? sanitizeForJson(doc.playground)
                   : (parentMeta.playground ?? null),
+              stability: componentStability(pkg.name, doc, parentMeta),
             });
           }
         } else if (doc.components && doc.components.length > 0) {
@@ -772,6 +792,7 @@ async function generateComponentRegistry() {
               relatedComponents: null,
               relatedHooks: null,
               playground,
+              stability: componentStability(pkg.name, doc),
             });
           }
           for (const sub of doc.components) {
@@ -854,6 +875,7 @@ async function generateComponentRegistry() {
                 : sub.playground
                   ? sanitizeForJson(sub.playground)
                   : playground,
+              stability: componentStability(pkg.name, sub, doc),
             });
           }
         } else if (doc.params) {
@@ -889,6 +911,7 @@ async function generateComponentRegistry() {
             relatedComponents: doc.relatedComponents || null,
             relatedHooks: doc.relatedHooks || null,
             playground: null,
+            stability: componentStability(pkg.name, doc),
           });
         } else {
           // Simple/standalone component
@@ -920,6 +943,7 @@ async function generateComponentRegistry() {
             relatedComponents: null,
             relatedHooks: null,
             playground,
+            stability: componentStability(pkg.name, doc),
           });
         }
       }
@@ -1171,6 +1195,11 @@ export interface ComponentEntry {
   hidden: boolean;
   /** Whether this component is ready for the stable documentation line. */
   isReady: boolean;
+  /** \`'lab'\` for a component of the Lab package (spec:AST-017 FR27),
+   *  \`'experimental'\` for a surface whose doc, or whose family's doc,
+   *  declares \`stability: 'experimental'\` (spec:AST-017 FR21), and null for
+   *  a stable one. */
+  stability: 'experimental' | 'lab' | null;
   registry: {slug?: string; aliases?: string[]} | null;
   parentDoc: string | null;
   props: PropDoc[];
@@ -1754,10 +1783,16 @@ async function docsTreePages() {
       continue;
     }
     routes.push(...(await treeRoutes(root)));
-    const full = await namespacePage(readDocs, root);
+    const full = await namespacePage(readDocs, root, {
+      aliases: ROOT_PAGE_ALIASES.get(root) ?? [],
+    });
     if (!full) continue;
     pages.push(full.page);
-    Object.assign(redirects, full.redirects);
+    Object.assign(
+      redirects,
+      full.redirects,
+      movedGuideRedirects(root, full.redirects),
+    );
   }
   while (pending.length > 0) {
     const route = pending.shift();
@@ -1878,7 +1913,7 @@ async function generateDocsRegistry() {
   // slug (a former flat topic keeps its URL), and each guide under it
   // redirects to its section there. Guides under GUIDE_PAGE_NAMESPACES keep a
   // flat page whose slug is the route with "/" as "-", so
-  // `cli/integrations/quick-start` is /docs/cli-integrations-quick-start.
+  // `cli/component-lookups` is /docs/cli-component-lookups.
   const tree = await docsTreePages();
   for (const page of tree.pages) {
     if (docTopics.some(topic => topic.topic === page.topic)) {
@@ -1901,6 +1936,28 @@ async function generateDocsRegistry() {
   }
 
   docTopics.sort((a, b) => a.topic.localeCompare(b.topic));
+  // Docs write commands as bare `astryx ...`. The site shows them as
+  // `npx @astryxdesign/cli ...`, which runs before any install, and as plain
+  // `astryx ...` on the global mode page, whose readers installed it. Each is
+  // a docsite door name, and goes through the CLI's picker like any other.
+  const cliStem = runWithCliDoor(DOCSITE_CLI_COMMAND, () =>
+    getCliInvocation(DOCSITE_ROOT),
+  );
+  const globalStem = runWithCliDoor(GLOBAL_PAGE_CLI_COMMAND, () =>
+    getCliInvocation(DOCSITE_ROOT),
+  );
+  for (const topic of docTopics) {
+    const stem = topic.topic === GLOBAL_PAGE ? globalStem : cliStem;
+    topic.sections = withCliCommands(
+      topic.sections,
+      (text, lang = null) =>
+        // The CLI rendered the doc tokens as it compiled the doc (for npm,
+        // under runWithDocPackageManager below), so only bare commands are
+        // prefixed here.
+        prefixCliCommands(text, stem, lang),
+      stem,
+    );
+  }
 
   const content = `// Auto-generated by scripts/generate-data.mjs — do not edit
 
@@ -1962,6 +2019,46 @@ export const docRedirects: Record<string, string> = ${JSON.stringify(docRedirect
     `${JSON.stringify(docRedirects, null, 2)}\n`,
   );
   return {docTopics, docsCount: docTopics.length};
+}
+
+/**
+ * The tables the search panel opens a CLI search result through
+ * (src/lib/searchLinks.mjs): this build's doc pages, redirects, section
+ * anchors, component and template pages, and the page each block shows on.
+ * The search API (app/api/search/route.ts) reads them.
+ */
+function generateSearchLinks({
+  docTopics,
+  allComponents,
+  templates,
+  blocks,
+  packages,
+}) {
+  const docRedirects = JSON.parse(
+    fs.readFileSync(path.join(OUT_DIR, 'docRedirects.json'), 'utf-8'),
+  );
+  const tables = searchLinkTables({
+    docTopics,
+    docRedirects,
+    components: Object.values(allComponents)
+      .flat()
+      .map(c => c.name),
+    templates: templates.map(t => t.slug),
+    blocks,
+    // The package pages /docs/[topic] serves; theme packages show on /themes.
+    packagePages: packages
+      .map(p => p.name)
+      .filter(name => !name.startsWith('@astryxdesign/theme-'))
+      .map(name => name.replace('@astryxdesign/', '')),
+    sectionAnchors,
+  });
+  fs.writeFileSync(
+    path.join(OUT_DIR, 'searchLinks.json'),
+    `${JSON.stringify(tables)}\n`,
+  );
+  console.log(
+    `  wrote ${path.relative(REPO_ROOT, path.join(OUT_DIR, 'searchLinks.json'))}`,
+  );
 }
 
 async function generateThemeRegistry(packages) {
@@ -2307,6 +2404,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
         entries.push({
           exampleFor: block.exampleFor,
           basename: base,
+          anchorId: exampleAnchorId(block.dirName),
           registryItemPath,
           name: block.name || block.dirName,
           description: block.description || '',
@@ -2322,6 +2420,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
         entries.push({
           exampleFor: target,
           basename,
+          anchorId: exampleAnchorId(block.dirName),
           registryItemPath,
           name: block.name || block.dirName,
           description: block.description || `Example using ${target}.`,
@@ -2342,7 +2441,7 @@ function generateExampleRegistry(blocks, availableRegistryPaths) {
       const exampleLines = orderExamplesByDoc(component, examples)
         .map(
           entry =>
-            `    {name: ${JSON.stringify(entry.name)}, description: ${JSON.stringify(entry.description)}, registryItemPath: ${JSON.stringify(entry.registryItemPath)}, source: ${JSON.stringify(entry.source)}, load: () => import('./examples/${entry.basename}')},`,
+            `    {name: ${JSON.stringify(entry.name)}, anchorId: ${JSON.stringify(entry.anchorId)}, description: ${JSON.stringify(entry.description)}, registryItemPath: ${JSON.stringify(entry.registryItemPath)}, source: ${JSON.stringify(entry.source)}, load: () => import('./examples/${entry.basename}')},`,
         )
         .join('\n');
       return `  '${component}': [\n${exampleLines}\n  ],`;
@@ -2354,6 +2453,7 @@ import type {ComponentType} from 'react';
 
 export interface ExampleEntry {
   name: string;
+  anchorId: string;
   description: string;
   registryItemPath: string | null;
   source: string;
@@ -2493,7 +2593,8 @@ async function main() {
   const {blocks, blockCount} = await generateBlockRegistry();
   generatePackageStyles(packages, blocks, allComponents);
   const {templates, templateCount} = await generateTemplateRegistry();
-  const {docsCount} = await generateDocsRegistry();
+  const {docTopics, docsCount} = await generateDocsRegistry();
+  generateSearchLinks({docTopics, allComponents, templates, blocks, packages});
   const {blogPostCount} = await generateBlogRegistry();
   const shadcnCounts = generateShadcnRegistryForTarget({
     target: DOCSITE_TARGET,
@@ -2552,7 +2653,8 @@ export const shadcnRegistryIsPreview = ${registryIsPreview};
   console.log('Done.');
 }
 
-main().catch(err => {
+// Every `{@pm}` step on the site reads as npm, whatever this checkout uses.
+runWithDocPackageManager(DOCSITE_PACKAGE_MANAGER, main).catch(err => {
   console.error(err);
   process.exit(1);
 });

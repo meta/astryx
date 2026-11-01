@@ -305,7 +305,7 @@ describe('credential scrubbing', () => {
   });
 
   it.each([
-    ['a URL', 'GET https://api.github.com/repos/facebook/astryx/pulls/4812'],
+    ['a URL', 'GET https://api.github.com/repos/meta/astryx/pulls/4812'],
     ['a websocket URL', 'ws://localhost:5173/hmr/client'],
     ['a proxy URL', 'http://127.0.0.1:8931/a/b/c'],
     ['a time', 'elapsed 12:30 done'],

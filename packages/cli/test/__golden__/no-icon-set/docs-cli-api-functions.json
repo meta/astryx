@@ -1,0 +1,380 @@
+{
+  "apiVersion": 1,
+  "type": "docs.node",
+  "package": "@astryxdesign/cli",
+  "data": {
+    "id": null,
+    "route": "cli/api/functions",
+    "kind": "namespace",
+    "package": "@astryxdesign/cli",
+    "title": "<text>",
+    "summary": "<text>",
+    "breadcrumb": [
+      {
+        "route": "cli",
+        "title": "<text>"
+      },
+      {
+        "route": "cli/api",
+        "title": "<text>"
+      }
+    ],
+    "slots": [
+      {
+        "name": "items",
+        "title": "<text>",
+        "children": [
+          {
+            "route": "cli/api/functions/assert-response",
+            "name": "assert-response",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/blog",
+            "name": "blog",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/build",
+            "name": "build",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/component",
+            "name": "component",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/discover",
+            "name": "discover",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/docs",
+            "name": "docs",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/doctor",
+            "name": "doctor",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/gap-report",
+            "name": "gap-report",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/generate-tonal-palette",
+            "name": "generate-tonal-palette",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/hook",
+            "name": "hook",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/init",
+            "name": "init",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-add",
+            "name": "integration-add",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-add-agent-doc",
+            "name": "integration-add-agent-doc",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-add-codemod",
+            "name": "integration-add-codemod",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-add-component",
+            "name": "integration-add-component",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-add-doc",
+            "name": "integration-add-doc",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-add-template",
+            "name": "integration-add-template",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-add-theme",
+            "name": "integration-add-theme",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-check",
+            "name": "integration-check",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-component-conflicts",
+            "name": "integration-component-conflicts",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-doc-conflicts",
+            "name": "integration-doc-conflicts",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-pack-check",
+            "name": "integration-pack-check",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/integration-template-conflicts",
+            "name": "integration-template-conflicts",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/is-error",
+            "name": "is-error",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/list-themes",
+            "name": "list-themes",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/parse-response",
+            "name": "parse-response",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/search",
+            "name": "search",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/summarize-issues",
+            "name": "summarize-issues",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/swizzle",
+            "name": "swizzle",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/template",
+            "name": "template",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-add",
+            "name": "theme-add",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-build",
+            "name": "theme-build",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-eject",
+            "name": "theme-eject",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-list",
+            "name": "theme-list",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-list-available",
+            "name": "theme-list-available",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-list-copy-sources",
+            "name": "theme-list-copy-sources",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-palette-generate",
+            "name": "theme-palette-generate",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-remove",
+            "name": "theme-remove",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-targets",
+            "name": "theme-targets",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-template",
+            "name": "theme-template",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/theme-use",
+            "name": "theme-use",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/upgrade",
+            "name": "upgrade",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          },
+          {
+            "route": "cli/api/functions/validate-integration",
+            "name": "validate-integration",
+            "package": "@astryxdesign/cli",
+            "kind": "function",
+            "title": "<text>",
+            "summary": "<text>"
+          }
+        ]
+      }
+    ],
+    "content": [],
+    "links": {
+      "up": "<text>",
+      "next": "<text>"
+    }
+  }
+}

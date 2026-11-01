@@ -61,9 +61,8 @@ describe('warnOnIntegrationIssues', () => {
     await warnOnIntegrationIssues([integration], {json: false});
 
     expect(errLines).toHaveLength(1);
-    expect(errLines[0]).toBe(
-      'Warning: @acme/widgets has 1 integration issue(s). ' +
-        'Run: astryx doctor integration validate @acme/widgets',
+    expect(errLines[0]).toMatch(
+      /^Warning: @acme\/widgets has 1 integration issue\(s\)\. Run: .+ doctor integration validate @acme\/widgets$/,
     );
   });
 
@@ -81,9 +80,10 @@ describe('warnOnIntegrationIssues', () => {
 
     await warnOnIntegrationIssues(project, {json: false});
 
-    expect(errLines).toEqual([
-      'Warning: @acme/later has 1 integration issue(s). Run: astryx doctor',
-    ]);
+    expect(errLines).toHaveLength(1);
+    expect(errLines[0]).toMatch(
+      /^Warning: @acme\/later has 1 integration issue\(s\)\. Run: .+ doctor$/,
+    );
   });
 
   it('emits nothing in --json mode (keeps stdout/JSON clean)', async () => {
@@ -103,9 +103,8 @@ describe('warnOnIntegrationIssues', () => {
     await warnOnIntegrationIssues([integration], {json: false});
 
     expect(errLines).toHaveLength(1);
-    expect(errLines[0]).toBe(
-      'Warning: @acme/stale has 1 integration issue(s). ' +
-        'Run: astryx doctor integration validate @acme/stale',
+    expect(errLines[0]).toMatch(
+      /^Warning: @acme\/stale has 1 integration issue\(s\)\. Run: .+ doctor integration validate @acme\/stale$/,
     );
   });
 

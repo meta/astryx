@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/templates/write-good-templates`:
+ * @file `astryx docs authoring/building-blocks/templates/write-good-templates`:
  * what makes a template good, the rubric that scores it, and grading with an agent.
  */
 

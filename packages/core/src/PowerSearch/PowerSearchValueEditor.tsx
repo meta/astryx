@@ -105,12 +105,14 @@ function StringEditor({
   onChange,
   onEnter: _onEnter,
   maxMenuItems,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'string'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue, shouldSave?: boolean) => void;
   onEnter?: () => void;
   maxMenuItems?: number;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue = filterValue?.type === 'string' ? filterValue.value : '';
@@ -126,6 +128,7 @@ function StringEditor({
       <Typeahead
         label={t('@astryx.powersearch.valueEditor.value')}
         isLabelHidden
+        isDisabled={isDisabled}
         searchSource={operatorValue.searchSource}
         value={selectedItem}
         onChange={item => {
@@ -146,6 +149,7 @@ function StringEditor({
     <TextInput
       label={t('@astryx.powersearch.valueEditor.value')}
       isLabelHidden
+      isDisabled={isDisabled}
       value={currentValue}
       placeholder={t('@astryx.powersearch.valueEditor.enterValuePlaceholder')}
       onChange={(value: string) => {
@@ -160,11 +164,13 @@ function StringListEditor({
   filterValue,
   onChange,
   maxMenuItems,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'string_list'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
   maxMenuItems?: number;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue: SearchableItem[] = useMemo(() => {
@@ -194,6 +200,7 @@ function StringListEditor({
     <Tokenizer
       label={t('@astryx.powersearch.valueEditor.values')}
       isLabelHidden
+      isDisabled={isDisabled}
       searchSource={source}
       value={currentValue}
       onChange={items => {
@@ -278,11 +285,13 @@ function IntegerEditor({
   filterValue,
   onChange,
   onEnter,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'integer'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue, shouldSave?: boolean) => void;
   onEnter?: () => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue =
@@ -300,6 +309,7 @@ function IntegerEditor({
     <NumberInput
       label={t('@astryx.powersearch.valueEditor.value')}
       isLabelHidden
+      isDisabled={isDisabled}
       value={currentValue ?? null}
       onChange={handlers.handleChange}
       onFocus={handlers.handleFocus}
@@ -320,11 +330,13 @@ function FloatEditor({
   filterValue,
   onChange,
   onEnter,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'float'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue, shouldSave?: boolean) => void;
   onEnter?: () => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue =
@@ -342,6 +354,7 @@ function FloatEditor({
     <NumberInput
       label={t('@astryx.powersearch.valueEditor.value')}
       isLabelHidden
+      isDisabled={isDisabled}
       value={currentValue ?? null}
       onChange={handlers.handleChange}
       onFocus={handlers.handleFocus}
@@ -360,10 +373,12 @@ function TimeEditor({
   operatorValue,
   filterValue,
   onChange,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'time'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue =
@@ -375,6 +390,7 @@ function TimeEditor({
     <TimeInput
       label={t('@astryx.powersearch.valueEditor.time')}
       isLabelHidden
+      isDisabled={isDisabled}
       value={currentValue}
       onChange={value => {
         if (value != null) {
@@ -390,10 +406,12 @@ function TimeEditor({
 function DateAbsoluteEditor({
   filterValue,
   onChange,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'date_absolute'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   // Convert unixSeconds to ISO date string for the date input
@@ -409,6 +427,7 @@ function DateAbsoluteEditor({
     <DateInput
       label={t('@astryx.powersearch.valueEditor.date')}
       isLabelHidden
+      isDisabled={isDisabled}
       value={currentValue}
       onChange={value => {
         if (value != null) {
@@ -424,10 +443,12 @@ function DateRelativeEditor({
   operatorValue,
   filterValue,
   onChange,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'date_relative'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue, shouldSave?: boolean) => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue =
@@ -469,6 +490,7 @@ function DateRelativeEditor({
     <Selector
       label={t('@astryx.powersearch.valueEditor.relativeDate')}
       isLabelHidden
+      isDisabled={isDisabled}
       options={options}
       value={currentValue}
       onChange={value => {
@@ -481,10 +503,12 @@ function DateRelativeEditor({
 function DateRangeEditor({
   filterValue,
   onChange,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'date_range'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue = useMemo<DateRange | null>(() => {
@@ -534,6 +558,7 @@ function DateRangeEditor({
       <DateRangeInput
         label={t('@astryx.powersearch.valueEditor.dateRange')}
         isLabelHidden
+        isDisabled={isDisabled}
         value={currentValue}
         onChange={handleChange}
         hasClear={false}
@@ -546,10 +571,12 @@ function EnumEditor({
   operatorValue,
   filterValue,
   onChange,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'enum'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue, shouldSave?: boolean) => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const currentValue =
@@ -568,6 +595,7 @@ function EnumEditor({
     <Selector
       label={t('@astryx.powersearch.valueEditor.value')}
       isLabelHidden
+      isDisabled={isDisabled}
       options={options}
       value={currentValue}
       onChange={value => {
@@ -581,10 +609,12 @@ function EnumListEditor({
   operatorValue,
   filterValue,
   onChange,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'enum_list'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const items = useMemo(
@@ -608,6 +638,7 @@ function EnumListEditor({
     <Tokenizer
       label={t('@astryx.powersearch.valueEditor.values')}
       isLabelHidden
+      isDisabled={isDisabled}
       searchSource={source}
       value={currentValue}
       onChange={selectedItems => {
@@ -632,11 +663,13 @@ function EntityListEditor({
   filterValue,
   onChange,
   maxMenuItems,
+  isDisabled,
 }: {
   operatorValue: OperatorValue & {type: 'entity_list'};
   filterValue: FilterValue | undefined;
   onChange: (value: FilterValue) => void;
   maxMenuItems?: number;
+  isDisabled?: boolean;
 }) {
   const t = useTranslator();
   const source = useMemo<SearchSource<SearchableItem>>(() => {
@@ -665,6 +698,7 @@ function EntityListEditor({
     <Tokenizer
       label={t('@astryx.powersearch.valueEditor.entities')}
       isLabelHidden
+      isDisabled={isDisabled}
       searchSource={source}
       value={currentValue}
       onChange={items => {
@@ -738,6 +772,7 @@ export function PowerSearchValueEditor({
     case 'string':
       return (
         <StringEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -749,6 +784,7 @@ export function PowerSearchValueEditor({
     case 'string_list':
       return (
         <StringListEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -759,6 +795,7 @@ export function PowerSearchValueEditor({
     case 'integer':
       return (
         <IntegerEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -769,6 +806,7 @@ export function PowerSearchValueEditor({
     case 'float':
       return (
         <FloatEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -779,6 +817,7 @@ export function PowerSearchValueEditor({
     case 'time':
       return (
         <TimeEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -788,6 +827,7 @@ export function PowerSearchValueEditor({
     case 'date_absolute':
       return (
         <DateAbsoluteEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -797,6 +837,7 @@ export function PowerSearchValueEditor({
     case 'date_relative':
       return (
         <DateRelativeEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -806,6 +847,7 @@ export function PowerSearchValueEditor({
     case 'date_range':
       return (
         <DateRangeEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -815,6 +857,7 @@ export function PowerSearchValueEditor({
     case 'enum':
       return (
         <EnumEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -824,6 +867,7 @@ export function PowerSearchValueEditor({
     case 'enum_list':
       return (
         <EnumListEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}
@@ -833,6 +877,7 @@ export function PowerSearchValueEditor({
     case 'entity_list':
       return (
         <EntityListEditor
+          isDisabled={isDisabled}
           operatorValue={operatorValue}
           filterValue={filterValue}
           onChange={onChange}

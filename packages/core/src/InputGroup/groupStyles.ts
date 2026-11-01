@@ -10,21 +10,32 @@
 import * as stylex from '@stylexjs/stylex';
 import {radiusVars, borderVars} from '../theme/tokens.stylex';
 
-// A grouped control may be followed by context-layer infrastructure rather
-// than another control. Popovers, inert markers, and native dialog surfaces
-// are not visual group members; skip them when finding the trailing edge.
-const IS_LAST_ITEM = ':not(:has(~ *:not([popover]):not(template):not(dialog)))';
+/**
+ * The internal marker every InputGroup member sets on the element that carries
+ * its group styles: compatible inputs, Button addons and InputGroupText. The
+ * group's edge rules name members by it instead of a universal selector. Not
+ * public API.
+ */
+export const inputGroupItemProps = {
+  'data-astryx-input-group-item': '',
+} as const;
+const MEMBER = '[data-astryx-input-group-item]';
+
+// Anything a caller places after a member (a wrapped Button, a custom element)
+// still counts as following it, so the trailing edge keeps today's rule over
+// any sibling; only context-layer infrastructure (popovers, inert markers,
+// native dialog surfaces) is skipped. Followers are not always members, so
+// this rule cannot name them by the marker.
+const FOLLOWED = ':has(~ *:not([popover]):not(template):not(dialog))';
+const IS_LAST_ITEM = `:not(${FOLLOWED})`;
 
 // Button consumes InputGroup context anywhere below the group, including buttons
 // inside an input's own implementation. Keep the visual adaptation on direct
 // children so internal clear, calendar, and disclosure actions stay unchanged.
-const DIRECT_INPUT_GROUP_ADDON = ':where(.astryx-input-group > *)';
-const DIRECT_INPUT_GROUP_ADDON_FOCUS_VISIBLE =
-  ':where(.astryx-input-group > *):focus-visible';
-const DIRECT_INPUT_GROUP_ADDON_NOT_FIRST =
-  ':where(.astryx-input-group > *):not(:first-child)';
-const DIRECT_INPUT_GROUP_ADDON_WITH_MEMBER_AFTER =
-  ':where(.astryx-input-group > *):has(~ *:not([popover]):not(template):not(dialog))';
+const DIRECT_INPUT_GROUP_ADDON = `:where(.astryx-input-group > ${MEMBER})`;
+const DIRECT_INPUT_GROUP_ADDON_FOCUS_VISIBLE = `${DIRECT_INPUT_GROUP_ADDON}:focus-visible`;
+const DIRECT_INPUT_GROUP_ADDON_NOT_FIRST = `${DIRECT_INPUT_GROUP_ADDON}:not(:first-child)`;
+const DIRECT_INPUT_GROUP_ADDON_WITH_MEMBER_AFTER = `${DIRECT_INPUT_GROUP_ADDON}${FOLLOWED}`;
 
 export const groupStyles = stylex.create({
   buttonAddon: {

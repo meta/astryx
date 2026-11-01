@@ -22,29 +22,36 @@ function App() {
 
 ## Colors
 
-Source palette:
+Butter's approved palette is generated from `palette.config.json`. It contains
+complete light and dark ramps for the warm neutral, signature blue, and nine
+categorical families. `#225BFF` and `#FDEE8C` are exact anchors for Butter's
+signature blue and yellow. Green remains anchorless so its ramp stays smooth.
 
-| Role    | Hex       |
-| ------- | --------- |
-| Accent  | `#225BFF` |
-| Yellow  | `#FDEE8C` |
-| Error   | `#FC473B` |
-| Warning | `#FFC502` |
-| Success | `#91D143` |
-| Info    | `#4883FD` |
+Theme and component roles use semantic tokens backed by the small generated
+`butterPaletteRefs` selection. Components should consume those semantic tokens,
+not raw palette values. Error, warning, and success share Red, Yellow, and Green
+rather than maintaining duplicate ramps. Data-visualization colors remain
+separate and are not overridden by this theme.
 
-Each color (Blue, Cyan, Green, Orange, Pink, Purple, Red, Teal, Yellow,
-plus Error / Warning / Success) is published as a smooth 21-step tonal
-palette in `butterPalettes`. Categorical badges, cards, and banner text
-roles read from these palettes via:
+The existing `butterPalettes` export remains unchanged as a compatibility
+snapshot. The complete reviewed mode-aware palette is private to authoring,
+tests, and selected-reference generation, so adopting it does not change the
+public API shape or force the full candidate into theme evaluation.
 
-- `T90` light / `T15` dark: background surfaces
-- `T80` light / `T25` dark: borders, dark-mode text
-- `T25` light / `T80` dark: light-mode text, icons
+After changing `palette.config.json`, regenerate the candidate and receipt with:
 
-To regenerate the palettes after changing a source color, edit the
-`SOURCES` map in `scripts/generate-palettes.mjs`, run the script, and
-paste the output back into `src/butterTheme.ts`.
+```bash
+pnpm -F @astryxdesign/theme-butter exec astryx theme palette generate \
+  palette.config.json \
+  --out src/butterPalettes.generated.ts \
+  --preview .tmp-butter-palette-preview.html \
+  --overwrite
+```
+
+Keep the standard copyright header on the committed TypeScript candidate, review
+the preview in both modes, remove `.tmp-butter-palette-preview.html`, then run
+`pnpm generate:butter-palette-refs`. Keep the theme package and CLI template
+copies synchronized.
 
 ## Typography
 

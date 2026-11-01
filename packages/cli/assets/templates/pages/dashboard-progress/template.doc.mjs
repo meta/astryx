@@ -25,4 +25,11 @@ export const doc = {
   ],
   isReady: true,
   category: 'Dashboard - Project Status',
+  icons: {
+    ArrowDownTrayIcon: 'download',
+    CheckCircleIcon: 'success',
+    ExclamationTriangleIcon: 'warning',
+    FlagIcon: 'flag',
+    StopIcon: 'stop',
+  },
 };

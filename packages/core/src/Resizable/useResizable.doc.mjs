@@ -14,6 +14,8 @@ export const docs = {
     'sidebar',
     'divider',
     'splitter',
+    'splitpane',
+    'resizablepanels',
   ],
   params: [
     {

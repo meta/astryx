@@ -20,6 +20,8 @@ import {Typeahead} from '../Typeahead';
 import type {SearchableItem, SearchSource} from '../Typeahead';
 import {Selector} from '../Selector';
 import {MultiSelector} from '../MultiSelector';
+import {TimeInput} from '../TimeInput';
+import {Button} from '../Button';
 
 const fruits: SearchableItem[] = [
   {id: '1', label: 'Apple'},
@@ -274,6 +276,124 @@ describe('InputGroup', () => {
     expect(
       screen.getByRole('combobox', {name: 'Deadline Date'}),
     ).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('propagates disabled state to all compatible inputs and Button addons', () => {
+    const onChange = () => {};
+    render(
+      <>
+        <InputGroup label="Group" isDisabled>
+          <TextInput label="Text" value="" onChange={onChange} />
+          <Button label="Save" tooltip="Save" />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <NumberInput label="Amount" value={2} onChange={onChange} />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <Selector label="Single fruit" options={['Apple', 'Banana']} />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <MultiSelector
+            label="Multiple fruits"
+            options={['Apple', 'Banana']}
+            value={[]}
+            onChange={onChange}
+          />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <DateInput label="Date" presentation="popover" onChange={onChange} />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <TimeInput
+            label="Time"
+            presentation="text-input"
+            onChange={onChange}
+          />
+        </InputGroup>
+        <InputGroup label="Group" isDisabled>
+          <Typeahead
+            label="Fruit"
+            value={null}
+            searchSource={fruitSource}
+            onChange={onChange}
+            disabledMessage="Unavailable"
+          />
+        </InputGroup>
+      </>,
+    );
+
+    for (const group of screen.getAllByRole('group', {name: 'Group'})) {
+      expect(group).toHaveAttribute('aria-disabled', 'true');
+    }
+    for (const name of [
+      'Group Text',
+      'Group Amount',
+      'Group Single fruit',
+      'Group Multiple fruits',
+      'Group Date',
+      'Group Time',
+      'Group Fruit',
+    ]) {
+      expect(screen.getByLabelText(name)).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    }
+    expect(screen.getByRole('button', {name: 'Save'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('does not let nested groups or children opt out of ancestor disablement', () => {
+    render(
+      <InputGroup label="Outer" isDisabled>
+        <InputGroup label="Inner" isDisabled={false}>
+          <TextInput
+            label="Text"
+            value=""
+            isDisabled={false}
+            onChange={() => {}}
+          />
+        </InputGroup>
+      </InputGroup>,
+    );
+
+    expect(screen.getByRole('group', {name: 'Inner'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(screen.getByRole('textbox', {name: 'Inner Text'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('re-enables inherited children without re-enabling explicitly disabled children', () => {
+    function Example({disabled}: {disabled: boolean}) {
+      return (
+        <InputGroup label="Group" isDisabled={disabled}>
+          <TextInput label="Text" value="" onChange={() => {}} />
+          <TextInput label="Explicit" value="" isDisabled />
+        </InputGroup>
+      );
+    }
+    const {rerender} = render(<Example disabled />);
+    expect(screen.getByRole('textbox', {name: 'Group Text'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    rerender(<Example disabled={false} />);
+    expect(screen.getByRole('group', {name: 'Group'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    expect(
+      screen.getByRole('textbox', {name: 'Group Text'}),
+    ).not.toHaveAttribute('aria-disabled');
+    expect(
+      screen.getByRole('textbox', {name: 'Group Explicit'}),
+    ).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('renders the visible label', () => {

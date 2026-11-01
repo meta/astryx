@@ -191,6 +191,21 @@ for (const [surface, presentation, selector] of SURFACES) {
       expect(own?.textContent).toContain('Start');
     });
 
+    it('puts hidden, inert, and dir on the control', () => {
+      render(
+        <TimeInput
+          label="Start"
+          presentation={presentation}
+          hidden
+          inert
+          dir="rtl"
+        />,
+      );
+      expect(control(selector)).toHaveAttribute('hidden');
+      expect(control(selector)).toHaveAttribute('inert');
+      expect(control(selector)).toHaveAttribute('dir', 'rtl');
+    });
+
     it('keeps control* on the control box in a horizontal-labels FormLayout', () => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       const {container} = render(

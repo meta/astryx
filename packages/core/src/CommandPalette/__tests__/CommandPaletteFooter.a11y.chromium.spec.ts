@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit CommandPaletteFooter
 
 /**
  * @file CommandPaletteFooter.a11y.chromium.spec.ts
@@ -492,7 +493,7 @@ async function capture(page: Page, scenario: Case) {
               ratio: observed.kbdPair.contrastRatio,
               threshold: 4.5,
               exception:
-                'Known shared Kbd contrast gap; tracked by facebook/astryx#7097 and not scored against CommandPaletteFooter.',
+                'Known shared Kbd contrast gap; tracked by meta/astryx#7097 and not scored against CommandPaletteFooter.',
               passed: observed.kbdPair.contrastRatio >= 4.5,
             },
           ]
@@ -532,7 +533,7 @@ async function capture(page: Page, scenario: Case) {
       contrastPairMatrix: contrastRows,
       knownFinding:
         observed.kbdPair && observed.kbdPair.contrastRatio < 4.5
-          ? 'Delegated Kbd glyph contrast is tracked by facebook/astryx#7097; the shared primitive owns the token pair.'
+          ? 'Delegated Kbd glyph contrast is tracked by meta/astryx#7097; the shared primitive owns the token pair.'
           : null,
       browser: browserVersion,
       passed: true,

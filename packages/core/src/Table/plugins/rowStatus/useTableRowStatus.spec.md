@@ -48,7 +48,7 @@ and MUST follow this contract when implemented.
   boundary plus restoration of stable behavior before the next stable release.
 - Migration decision: no stable-consumer codemod and no required stable-consumer
   edit. Canary consumers that intentionally adopted the implicit semantic glyph
-  from [#5671](https://github.com/facebook/astryx/pull/5671) migrate manually from
+  from [#5671](https://github.com/meta/astryx/pull/5671) migrate manually from
   `{color: 'error', label}` to `{status: 'error', label}`.
 
 Stable `0.5.2` already defines `{color, label}` as a caller-painted dot and
@@ -97,7 +97,7 @@ package-version Changeset.
 - A public `variant` or `presentation` prop, extensible variant map, reflected
   variant data attribute, or row-status theme selector axis.
 - No `table-row-status` target is approved by this contract.
-  [#5754](https://github.com/facebook/astryx/pull/5754) remains outside this
+  [#5754](https://github.com/meta/astryx/pull/5754) remains outside this
   contract and is held for a separate AST-002 proposal proving a theme-author
   need, painter placement, and exact guarantees.
 
@@ -214,8 +214,9 @@ add semantic/custom cases to representative Table render and no-op update budget
 - **AR5 — Supplemental tooltip.** Tooltip may repeat `label` as pointer help, but
   the indicator's accessible name MUST remain sufficient without opening it. The
   current indicator is not focusable, so tooltip presence is not keyboard evidence.
-- **AR6 — Row context.** Assistive-technology verification MUST confirm the named
-  status is encountered in its row context without duplicate announcements.
+- **AR6 — Row context.** The named status is exposed in its row context without a
+  duplicate name, proved at the accessibility tree. Assistive-technology
+  observation of the announcement is recommended follow-up under `spec:AST-009`.
 
 ## Design relationships
 
@@ -259,7 +260,7 @@ own AST-002 review and synchronized consumer anatomy.
 | FR3, FR4, FR6            | Add public-subpath compile fixtures for the unchanged interface, declaration merging and extension, semantic interface, callback union, missing labels, unknown statuses, and forbidden mixtures. | Stable custom annotations/extensions; all semantic statuses.                           | `TableRowStatus` changes or stops merging, semantic usage is inaccessible, or supported status mixes with custom fields.                                           |
 | FR3-FR5                  | Extend row-status runtime tests with semantic-looking custom colors, raw/palette dots, explicit custom icons, all semantic statuses, and active-theme substitution.                               | Custom dot, custom icon, and three semantic outcomes.                                  | Custom color selects an implicit glyph, semantic status bypasses shared resolution, or variant becomes caller/theme input.                                         |
 | FR7, ORD2-ORD4, PR4      | Runtime tests under development and production modes with repeated mixed objects, rows, and renders.                                                                                              | `status + color`, `status + icon`, and all three fields.                               | Custom input overrides supported status, forbidden fields affect output, production warns, or development warns more than once per loaded module instance.         |
-| AR1-AR6                  | Existing role/name tests plus browser axe, forced-colors, tooltip modality, and VoiceOver table-navigation evidence.                                                                              | Semantic glyphs, custom icon, custom dot, `null`, light/dark, and every shipped theme. | Header or indicator loses its name, nested glyph is announced twice, glyph distinctions disappear, tooltip becomes sole meaning, or row context duplicates status. |
+| AR1-AR6                  | Existing role/name tests plus browser axe, forced-colors, tooltip modality, and accessibility-tree row-context evidence; VoiceOver table navigation is recommended follow-up.                     | Semantic glyphs, custom icon, custom dot, `null`, light/dark, and every shipped theme. | Header or indicator loses its name, nested glyph is announced twice, glyph distinctions disappear, tooltip becomes sole meaning, or row context duplicates status. |
 | PR1-PR3                  | Extend `Table.perf.test.tsx` with semantic/custom initial render and no-op update cases.                                                                                                          | Stable rerender, mixed rows, and theme substitution.                                   | Resolution adds measurement/resources, creates a parallel registry, or exceeds existing representative Table budgets.                                              |
 | Structural ownership     | `scripts/check-knowledge.mjs`.                                                                                                                                                                    | Colocated module, canonical filename/id, and parent backlink.                          | A missing, duplicate, orphaned, mis-parented, misnamed, or undiscovered record passes validation.                                                                  |
 | Public hygiene and scope | Prettier, `check:knowledge`, checker tests, `check:repo`, changed-file scan, and public-content scan.                                                                                             | Parent backlink plus one module specification; no Changeset.                           | Runtime/docs files, private context, invalid record shape, or unrelated changes enter this contract proposal.                                                      |
@@ -306,7 +307,7 @@ axis or data-attribute guarantee.
 **Direction owner:** cixzhang, 2026-09-01
 
 Stable `0.5.2` custom-marker behavior is preserved without a codemod. The canary
-behavior introduced by [#5671](https://github.com/facebook/astryx/pull/5671), where
+behavior introduced by [#5671](https://github.com/meta/astryx/pull/5671), where
 semantic-looking `color` values choose icons, must be reverted before stable.
 Canary adopters of that implicit glyph migrate manually to `status`.
 
@@ -323,7 +324,7 @@ The semantic interface uses Icon's existing target, registry, and theme-owned
 artwork and tone. This contract records generated anatomy but does not add
 `table-row-status`, `presentation`, `variant`, or an equivalent selector surface.
 
-Owner direction holds [#5754](https://github.com/facebook/astryx/pull/5754)
+Owner direction holds [#5754](https://github.com/meta/astryx/pull/5754)
 as written. A future direct target requires separate AST-002 review after painter
 placement, theme-author need, and exact property guarantees are settled.
 

@@ -4,9 +4,11 @@
 
 /**
  * @file List.tsx
- * @input Uses React, ReactNode, StyleXStyles, theme tokens, ListContext
- *   with optional inline edge compensation
- * @output Exports List component, ListProps, ListDensity, ListStyle types
+ * @input Uses React, ReactNode, StyleXStyles, theme tokens, useDevWarning,
+ *   and ListContext with the row edge treatment. Numbered rows share one
+ *   intrinsic marker column, including when a counter changes digit count.
+ * @output Exports List component, ListProps, ListDensity, ListEdge, ListStyle
+ *   types
  * @position Core implementation; consumed by index.ts, tested by List.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -24,13 +26,16 @@ import type {BaseProps} from '../BaseProps';
 import {
   ListContext,
   type ListDensity,
+  type ListEdge,
   type ListMarkerStyle,
 } from './ListContext';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {useDevWarning} from '../hooks/useDevWarning';
 
 export {
   type ListDensity,
+  type ListEdge,
   type ListMarkerStyle as ListStyle,
 } from './ListContext';
 
@@ -60,16 +65,39 @@ export interface ListProps extends BaseProps<
   hasDividers?: boolean;
 
   /**
-   * Compensates for each item's built-in inline inset, up to the container
-   * padding available on each edge. Use "inline" to bring row content toward
-   * sibling content such as a section heading. Content aligns when the
-   * container padding is at least the item inset; smaller padding leaves
-   * some inset uncompensated.
-   * The cancelling margin reads the same variable the items derive their
-   * inline padding from, so it tracks density and theme padding overrides
-   * automatically. Hover and selection backgrounds still extend past the
-   * text by the inset.
-   * Omit to leave item positions unchanged.
+   * Where each row's text, dividers, and hover and selection backgrounds sit,
+   * relative to the list's edges and the container around it.
+   * - 'padded': text sits inside each row's padding, so it starts a little in
+   *   from a heading above the list and backgrounds have room around it
+   * - 'flush': rows drop their side padding, so text starts on the heading's
+   *   line and dividers and backgrounds stop at the row's content, with no
+   *   room beyond it on either side. Works anywhere. Suits static rows
+   * - 'outset': text sits on the heading's line, and dividers and backgrounds
+   *   reach a little past it into the container's padding. Suits interactive
+   *   rows in a container
+   * - 'bleed': text sits on the heading's line, and dividers and backgrounds
+   *   reach the container's edges with square corners, like Table rows in a
+   *   Card
+   *
+   * A row's first content is what lines up with the heading: its marker,
+   * icon, or avatar when it has one, otherwise its label. 'outset' and
+   * 'bleed' reach into the padding of the nearest container that shares its
+   * padding: a Card, Section, Dialog, or BottomSheet, or a transparent
+   * container such as a Layout region with explicit padding or a padded
+   * ScrollableArea. Place the List directly in that container's padding:
+   * padding that Stack, Center, or your own styles add in between is not
+   * counted. Drawers and the automatic padding of LayoutContent and
+   * LayoutPanel aren't supported yet. With no such container, including in a Popover, they look
+   * like 'padded'. In a container with less padding than the rows' own, text
+   * starts a little after the heading's line. A theme's inline padding on `item` replaces the row
+   * padding of every value, including the zero padding of 'flush'.
+   * @default 'padded'
+   */
+  edge?: ListEdge;
+
+  /**
+   * @deprecated Use `edge="outset"`, which this sets. Still works; `edge`
+   * wins when both are set. `astryx upgrade` rewrites existing usage.
    */
   edgeCompensation?: 'inline';
 
@@ -121,6 +149,28 @@ const styles = stylex.create({
     // vertical scroller. (StyleX emits the physical longhand of this axis.)
     overflowInline: 'clip',
   },
+  // Subgridded numbered rows contribute their marker's intrinsic width to
+  // one column, so text and nested lists never move with an individual number.
+  numberColumns: {
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    gridTemplateColumns: 'max-content minmax(0, 1fr)',
+    columnGap: spacingVars['--spacing-2'],
+  },
+  // 'outset' and 'bleed' rows reach into the container's padding. The list
+  // reaches the container's padding edge on each inline edge first, so its
+  // inline clip (above) moves out with the rows instead of cutting them; each
+  // row then places itself inside it. Container padding vars are inherited,
+  // so the list can read them, while the rows' own inset is scoped to the
+  // rows. Missing or reset container padding resolves to zero.
+  reachesContainerPadding: {
+    marginInlineStart: 'calc(-1 * var(--container-padding-inline-start, 0px))',
+    marginInlineEnd: 'calc(-1 * var(--container-padding-inline-end, 0px))',
+    width:
+      'calc(100% + var(--container-padding-inline-start, 0px) + var(--container-padding-inline-end, 0px))',
+  },
   withDividers: {
     gap: 0,
   },
@@ -148,9 +198,10 @@ const dynamicStyles = stylex.create({
  * Renders semantic `<ul>` or `<ol>` elements with configurable density,
  * dividers, marker styles, and an optional header.
  *
- * Set `edgeCompensation="inline"` to compensate for the items' inline inset
- * up to the container padding available on each edge, for alignment with
- * sibling content such as a section heading.
+ * Set `edge` to choose where row text, dividers, and backgrounds sit: inside
+ * each row's padding (`padded`, the default), at the list's edges (`flush`),
+ * on a heading's line with backgrounds reaching into the container's padding
+ * (`outset`), or reaching the container's edges like Table rows (`bleed`).
  *
  * @example
  * ```
@@ -162,12 +213,16 @@ const dynamicStyles = stylex.create({
  *   <ListItem label="First step" />
  *   <ListItem label="Second step" />
  * </List>
+ * <List edge="flush" hasDividers>
+ *   <ListItem label="Solstice Mug" description="Ceramic, 12 oz" />
+ * </List>
  * ```
  */
 export function List({
   children,
   density = 'balanced',
   hasDividers = false,
+  edge: edgeProp,
   edgeCompensation,
   header,
   listStyle = 'none',
@@ -182,10 +237,21 @@ export function List({
   const headerId = useId();
   const isOrdered = listStyle === 'decimal';
   const Tag = isOrdered ? 'ol' : 'ul';
+  // Plain use of the deprecated prop is reported by its @deprecated type;
+  // development warns only when the two names conflict (spec:AST-017 FR29).
+  useDevWarning(
+    'List',
+    '`edge` and the deprecated `edgeCompensation` are both set; `edge` wins. ' +
+      'Remove `edgeCompensation`. `astryx upgrade` rewrites existing usage.',
+    edgeProp != null && edgeCompensation != null,
+  );
+  const edge: ListEdge =
+    edgeProp ?? (edgeCompensation === 'inline' ? 'outset' : 'padded');
+  const reachesContainerPadding = edge === 'outset' || edge === 'bleed';
 
   const contextValue = useMemo(
-    () => ({density, hasDividers, listStyle, edgeCompensation}),
-    [density, hasDividers, listStyle, edgeCompensation],
+    () => ({density, hasDividers, edge, listStyle}),
+    [density, hasDividers, edge, listStyle],
   );
 
   const listElement = (
@@ -210,7 +276,9 @@ export function List({
         themeProps('list', {density, listStyle}),
         stylex.props(
           styles.list,
+          isOrdered && styles.numberColumns,
           hasDividers && styles.withDividers,
+          reachesContainerPadding && styles.reachesContainerPadding,
           listStyle !== 'none' &&
             (start != null && start !== 1
               ? dynamicStyles.counterStart(start - 1)

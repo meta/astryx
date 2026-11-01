@@ -260,6 +260,17 @@ describe('adjustTime', () => {
     expect(adjustTime('10:00' as ISOTimeString, NaN)).toBe('10:00');
   });
 
+  it('returns the input unchanged for a fractional delta', () => {
+    // `increment` is documented as minutes and typed `number`, so a caller can
+    // hand ArrowUp a fraction. A fractional minute reaching formatISOTime is
+    // not rounded: it pads to "30.5" and the field is left holding a string
+    // that is no longer a parseable time.
+    expect(adjustTime('10:30' as ISOTimeString, 0.5)).toBe('10:30');
+    expect(adjustTime('10:30:45' as ISOTimeString, -0.5, true)).toBe(
+      '10:30:45',
+    );
+  });
+
   it('wraps large negative deltas in constant time', () => {
     expect(adjustTime('10:00' as ISOTimeString, -1440 * 1e7)).toBe('10:00');
     expect(adjustTime('10:00' as ISOTimeString, -1440 * 1e7 - 30)).toBe(

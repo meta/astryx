@@ -27,7 +27,7 @@ architecture:
     architecture:public-component-api,
   ]
 contributing: []
-system_specs: []
+system_specs: [spec:AST-087]
 ---
 
 # Icon component contract
@@ -53,6 +53,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 **Owns**
 
 - Accepting a semantic icon key or a supplied icon component as the glyph source.
+- Passing the resolved size and a variant the entry can receive to a registry entry.
 - Resolving explicit, component-owned contextual, and standalone size defaults.
 - Applying Icon's size, color, theming target, and accessibility semantics to
   the rendered glyph.
@@ -71,12 +72,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept       | Closed values or states                                   | Meaning                                                   | Availability by variant/orientation/state | Default                                         | Owner            | Stability | Invalid-value behavior                                 |
-| ------------- | --------------------------------------------------------- | --------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------- | ---------------- | --------- | ------------------------------------------------------ |
-| Glyph source  | semantic key, namespaced extension key, or icon component | Selects the visual symbol.                                | Every render                              | Required                                        | `component:Icon` | Stable    | TypeScript rejects unsupported built-in string values. |
-| Size          | `xsm`, `sm`, `md`, `lg`                                   | Selects the icon box size.                                | Every rendered glyph                      | nearest component-owned default; otherwise `md` | `component:Icon` | Stable    | TypeScript rejects unsupported values.                 |
-| Color         | documented semantic and palette values                    | Selects the glyph color or inherits it from context.      | Every rendered glyph                      | `inherit`                                       | `component:Icon` | Stable    | TypeScript rejects unsupported values.                 |
-| Accessibility | decorative or meaningfully labelled                       | Controls whether assistive technology receives the glyph. | Every rendered glyph                      | Decorative                                      | `component:Icon` | Stable    | Empty labels use the decorative behavior.              |
+| Concept       | Closed values or states                                   | Meaning                                                    | Availability by variant/orientation/state        | Default                                         | Owner            | Stability | Invalid-value behavior                                                            |
+| ------------- | --------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------ | ----------------------------------------------- | ---------------- | --------- | --------------------------------------------------------------------------------- |
+| Glyph source  | semantic key, namespaced extension key, or icon component | Selects the visual symbol.                                 | Every render                                     | Required                                        | `component:Icon` | Stable    | TypeScript rejects unsupported built-in string values.                            |
+| Size          | `xsm`, `sm`, `md`, `lg`                                   | Selects the icon box size.                                 | Every rendered glyph                             | nearest component-owned default; otherwise `md` | `component:Icon` | Stable    | TypeScript rejects unsupported values.                                            |
+| Color         | documented semantic and palette values                    | Selects the glyph color or inherits it from context.       | Every rendered glyph                             | `inherit`                                       | `component:Icon` | Stable    | TypeScript rejects unsupported values.                                            |
+| Accessibility | decorative or meaningfully labelled                       | Controls whether assistive technology receives the glyph.  | Every rendered glyph                             | Decorative                                      | `component:Icon` | Stable    | Empty labels use the decorative behavior.                                         |
+| Variant       | names in `IconVariantMap`; the active theme lists its own | Requests a theme's alternate artwork for a registry glyph. | Registry glyphs only; never a supplied component | None                                            | `component:Icon` | Stable    | TypeScript rejects unknown names; an unlisted variant renders the normal artwork. |
 
 A namespaced key that does not resolve currently renders nothing. This is
 existing behavior, not an intentional fallback promise.
@@ -86,13 +88,15 @@ existing behavior, not an intentional fallback promise.
 Requirements identify their basis so observed code is not mistaken for an
 intentional decision.
 
-| ID  | Candidate invariant                                                                                                                                                                               | Basis                                                 | Draft review state                                      |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------- |
-| FR1 | Icon MUST present at most one glyph from the supplied semantic key, namespaced key, or icon component.                                                                                            | Documented promise and current tests.                 | Settled intent.                                         |
-| FR2 | Every rendered glyph MUST carry the `icon` theming target with its resolved size and selected color reflected as target data.                                                                     | Current source, docs, and theming tests.              | Settled intent.                                         |
-| FR3 | Icon MUST apply the resolved size as width and height for every glyph, plus font size where needed for 1em-based icon sources. This sizing contract MUST NOT promise an HTML or SVG element type. | Human decision, current source, and tests.            | Settled intent.                                         |
-| FR4 | Supported SVG and styling escape hatches MUST retain their established merge and override behavior.                                                                                               | Current source and regression tests.                  | Current compatibility behavior; verify before changing. |
-| FR5 | An explicit Icon `size` MUST win. Without one, Icon MUST use the nearest default supplied by an owning Astryx component for its documented icon slot; without such a default, Icon MUST use `md`. | Component-size precedence and Button sizing decision. | Settled intent.                                         |
+| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                           | Basis                                                 | Draft review state                                      |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------- |
+| FR1 | Icon MUST present at most one glyph from the supplied semantic key, namespaced key, or icon component.                                                                                                                                                                                                                                                                                                                                        | Documented promise and current tests.                 | Settled intent.                                         |
+| FR2 | Every rendered glyph MUST carry the `icon` theming target with its resolved size and selected color reflected as target data.                                                                                                                                                                                                                                                                                                                 | Current source, docs, and theming tests.              | Settled intent.                                         |
+| FR3 | Icon MUST apply the resolved size as width and height for every glyph, plus font size where needed for 1em-based icon sources. This sizing contract MUST NOT promise an HTML or SVG element type.                                                                                                                                                                                                                                             | Human decision, current source, and tests.            | Settled intent.                                         |
+| FR4 | Supported SVG and styling escape hatches MUST retain their established merge and override behavior.                                                                                                                                                                                                                                                                                                                                           | Current source and regression tests.                  | Current compatibility behavior; verify before changing. |
+| FR5 | An explicit Icon `size` MUST win. Without one, Icon MUST use the nearest default supplied by an owning Astryx component for its documented icon slot; without such a default, Icon MUST use `md`.                                                                                                                                                                                                                                             | Component-size precedence and Button sizing decision. | Settled intent.                                         |
+| FR6 | In registry mode, Icon MUST pass `{size, variant}` to the selected entry, where `size` is the size resolved by ORD1 and `variant` is the requested variant when the active theme lists it and, for a theme-supplied entry, the theme that defined the entry lists it too, otherwise `undefined`. A supplied icon component MUST NOT receive `variant`, Icon MUST NOT forward `variant` to the DOM, and the `icon` target MUST NOT reflect it. | `spec:AST-087` FR1–FR5 and FR9.                       | Settled intent.                                         |
+| FR7 | The `icon` target MUST guarantee `width` and `height` on its `size:*` selectors as reviewed target-specific additions, so a theme sets each size's dimension. Without theme styles, sizes are 12, 16, 20, and 24px at a 16px root and scale with the root font size.                                                                                                                                                                          | `spec:AST-087` FR10.                                  | Settled intent.                                         |
 
 ### Allowed variation
 
@@ -109,15 +113,18 @@ intentional decision.
 
 ### Representative states
 
-| State                            | Required invariant                                       | Allowed variation                              |
-| -------------------------------- | -------------------------------------------------------- | ---------------------------------------------- |
-| Semantic key                     | One resolved glyph carries the `icon` target.            | Theme, registry, or built-in artwork.          |
-| Namespaced extension key         | A resolved extension glyph carries the `icon` target.    | Consumer- or library-owned artwork.            |
-| Supplied icon component          | The supplied glyph carries the `icon` target.            | Component implementation and SVG internals.    |
-| Standalone Icon without `size`   | The resolved size is `md`.                               | Glyph source and color.                        |
-| Owned icon slot without `size`   | The nearest documented component default is used.        | The owning component's declared size mapping.  |
-| Explicit Icon size in owned slot | The explicit Icon size wins over the contextual default. | Any supported Icon size.                       |
-| Unresolved namespaced key        | No glyph is currently rendered.                          | No fallback behavior is established by intent. |
+| State                            | Required invariant                                                                 | Allowed variation                              |
+| -------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Semantic key                     | One resolved glyph carries the `icon` target.                                      | Theme, registry, or built-in artwork.          |
+| Namespaced extension key         | A resolved extension glyph carries the `icon` target.                              | Consumer- or library-owned artwork.            |
+| Supplied icon component          | The supplied glyph carries the `icon` target.                                      | Component implementation and SVG internals.    |
+| Standalone Icon without `size`   | The resolved size is `md`.                                                         | Glyph source and color.                        |
+| Owned icon slot without `size`   | The nearest documented component default is used.                                  | The owning component's declared size mapping.  |
+| Explicit Icon size in owned slot | The explicit Icon size wins over the contextual default.                           | Any supported Icon size.                       |
+| Unresolved namespaced key        | No glyph is currently rendered.                                                    | No fallback behavior is established by intent. |
+| Listed variant                   | The entry receives the size and the variant when its defining theme also lists it. | The theme's artwork for that request.          |
+| Unlisted or omitted variant      | The entry receives `variant: undefined`.                                           | The theme's normal artwork.                    |
+| Variant on a supplied component  | The component renders as given without `variant`.                                  | Component implementation.                      |
 
 ### Transformation and precedence order
 
@@ -172,6 +179,8 @@ not promise a `span`, `svg`, or other element type.
   rules for the `icon` target.
 - `architecture:icon-resolution-and-component-slots` owns semantic-key and
   component-slot resolution before Icon renders the selected source.
+- `spec:AST-087` decides the `variant` request, theme-listed variant names, and
+  theme-set size dimensions.
 - `architecture:public-component-api` owns admission and compatibility rules for
   Icon's public props and observable defaults.
 - The owning component or family specifies each contextual Icon-size mapping.
@@ -181,12 +190,14 @@ not promise a `span`, `svg`, or other element type.
 
 ## Verification map
 
-| Contract            | Verification                                                                   | Representative states                                           | Mutation or failure expectation                                                                                                             | Audit section              |
-| ------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| FR1, FR3, FR5       | `Icon.test.tsx` sizing suites and `IconButton.test.tsx` contextual-size suites | standalone default; Button sizes; explicit override; both modes | Breaking source rendering, standalone fallback, contextual mapping, explicit precedence, or cross-mode sizing fails assertions.             | `audit:Icon/behavior`      |
-| FR2, FR4            | `Icon.test.tsx` target/styling suites plus source inspection                   | Both source modes; size and color variants                      | Removing the target or breaking override composition fails existing assertions; `data-color` reflection currently lacks focused assertions. | `audit:Icon/theming`       |
-| AR1, AR2, AR3       | `Icon.test.tsx` accessible-name suites                                         | Decorative, labelled, explicit ARIA override                    | Changing default or labelled semantics fails accessibility assertions.                                                                      | `audit:Icon/accessibility` |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                  | Canonical consumer anatomy and current target                   | Missing, extra, prefixed, or stale mappings fail repository validation.                                                                     | `audit:Icon/theming`       |
+| Contract            | Verification                                                                   | Representative states                                                                                            | Mutation or failure expectation                                                                                                               | Audit section              |
+| ------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| FR1, FR3, FR5       | `Icon.test.tsx` sizing suites and `IconButton.test.tsx` contextual-size suites | standalone default; Button sizes; explicit override; both modes                                                  | Breaking source rendering, standalone fallback, contextual mapping, explicit precedence, or cross-mode sizing fails assertions.               | `audit:Icon/behavior`      |
+| FR2, FR4            | `Icon.test.tsx` target/styling suites plus source inspection                   | Both source modes; size and color variants                                                                       | Removing the target or breaking override composition fails existing assertions; `data-color` reflection currently lacks focused assertions.   | `audit:Icon/theming`       |
+| AR1, AR2, AR3       | `Icon.test.tsx` accessible-name suites                                         | Decorative, labelled, explicit ARIA override                                                                     | Changing default or labelled semantics fails accessibility assertions.                                                                        | `audit:Icon/accessibility` |
+| FR6                 | `Icon.test.tsx` variant suites (pending)                                       | listed, unlisted, and omitted variant; no active list; inherited entry under a replaced list; supplied component | An unlisted variant, or one the entry's defining theme does not list, reaches an entry, or `variant` reaches a supplied component or the DOM. | `audit:Icon/behavior`      |
+| FR7                 | Theme styling tests for each size (pending)                                    | each size with and without theme styles                                                                          | A themed size does not change the glyph dimension, or an unstyled size changes.                                                               | `audit:Icon/theming`       |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                  | Canonical consumer anatomy and current target                                                                    | Missing, extra, prefixed, or stale mappings fail repository validation.                                                                       | `audit:Icon/theming`       |
 
 Focused coverage for `data-color` on both glyph source modes is a checkable test
 gap; source inspection is the current evidence for that part of FR2.

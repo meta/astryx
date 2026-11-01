@@ -1,6 +1,6 @@
 # Releasing to npm with trusted publishing
 
-The public [Release Process](https://github.com/facebook/astryx/wiki/Release-Process)
+The public [Release Process](https://github.com/meta/astryx/wiki/Release-Process)
 is the operational authority. This page explains the repository and npm mechanics.
 
 Astryx publishes its public `@astryxdesign/*` packages from GitHub Actions through
@@ -26,7 +26,7 @@ stable package is built from an immutable release tag and published with provena
    failed criterion is fixed on that PR rather than by moving the release head
    afterwards. For a patch, self-grade the complete generated changelogs and draft
    GitHub Release notes against the public [Blog Review
-   Rubric](https://github.com/facebook/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)
+   Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)
    under the `update` profile, record the result on the PR, and fix and re-grade
    every failed criterion. A minor requires Cindy's explicit human editorial
    approval of the changelogs, release notes, and required public blog, recorded
@@ -85,21 +85,47 @@ pnpm publish ./packages/<package> \
 
 ## Trusted-publisher setup
 
-Trust is configured per package and must point at `release.yml`. A new public package
-must exist on npm before trust can be registered, so an npm organization owner runs:
+Trust is configured per package. It must name `release.yml` and allow direct
+`npm publish`. A new public package must exist on npm before trust can be
+registered, so once per new package an npm organization owner runs, in their own
+terminal (npm opens two-factor prompts in the browser that only the owner can
+complete):
 
 ```sh
 npm i -g npm@latest
+npm --version   # 11.15 or later
 npm login --registry https://registry.npmjs.org
 node scripts/npm/setup-trusted-publishing.mjs
 node scripts/npm/setup-trusted-publishing.mjs \
   --bootstrap --setup-trust --workflow release.yml
 ```
 
-The default invocation is audit-only. `--bootstrap` claims a missing package name with
-a deprecated `0.0.0-bootstrap.0` version under the `bootstrap` dist-tag; it never
-publishes `latest`. `--setup-trust` registers `release.yml`. Use `--replace` only when
-an existing trust record is intentionally being replaced.
+- The default invocation is audit-only.
+- `--bootstrap` claims a missing package name with a deprecated
+  `0.0.0-bootstrap.0` placeholder under the `bootstrap` dist-tag. npm makes a
+  package's first version its `latest`, so a plain install of the package
+  resolves to the empty placeholder until the package's first stable release.
+- `--setup-trust` registers `release.yml` for `meta/astryx` with direct
+  publish allowed. The script refuses npm older than 11.15: older npm ignores
+  the publish permission, creating a publisher that can only stage releases,
+  and lists every existing publisher as a conflict.
+- Use `--replace` only when an existing trust record is intentionally being
+  replaced, never to clear a conflict reported by npm older than 11.15.
+
+Then open the package's trusted-publisher settings on npmjs.com
+(`https://www.npmjs.com/package/<name>/access`) and confirm the
+`meta/astryx` `release.yml` entry allows `npm publish`, not only
+`npm stage publish`. The same page is the manual path when the script cannot
+finish: add a GitHub Actions publisher with owner `meta`, repository
+`astryx`, workflow `release.yml`, no environment, and `npm publish` allowed.
+
+npm expires a new trusted publisher that no publish has validated within 48
+hours. The next push to `main` publishes the package's canary and validates it.
+If no canary publishes in that window, recreate the publisher.
+
+Registry reads can keep reporting a just-created package as missing for a few
+minutes. A re-run of `--bootstrap` in that window gets `409` for the placeholder
+version; the name is already claimed, and the script continues to trust setup.
 
 The repo pins pnpm 11. The CI Node line must bundle npm 11.5.1 or later for OIDC
-publishing; the local trust setup command requires npm 11.10 or later.
+publishing; the local trust setup command requires npm 11.15 or later.

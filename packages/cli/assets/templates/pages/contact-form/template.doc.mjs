@@ -23,4 +23,9 @@ export const doc = {
   ],
   isReady: true,
   category: 'Form - Basic',
+  icons: {
+    AdjustmentsHorizontalIcon: 'adjustments',
+    HandRaisedIcon: 'raiseHand',
+    RocketLaunchIcon: 'rocket',
+  },
 };

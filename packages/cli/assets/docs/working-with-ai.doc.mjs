@@ -36,26 +36,34 @@ export const docs = {
           type: 'code',
           lang: 'text',
           label: 'Paste this into your AI',
-          code: 'Install @astryxdesign/cli and run `npx @astryxdesign/cli init --features agents` to set up your Astryx context. Read the generated file.',
+          code: 'Install @astryxdesign/cli and run `astryx init --features agents` to set up your Astryx context. Read the generated file.',
         },
         {
           type: 'prose',
-          text: "That's it. The `init --features agents` command generates everything your AI needs (component index, behavioral rules, CLI reference, and package guidance from configured integrations) from the installed project. After a dependency bump, `astryx upgrade --from <old version>` reports a stale block and adding `--apply` refreshes it.",
+          text: "That's it. The `init --features agents` command generates everything your AI needs (component index, behavioral rules, CLI reference, and package guidance from configured integrations) from the installed project. After a dependency bump, `{@command upgrade --from <old version>}` reports a stale block and adding `--apply` refreshes it.",
         },
         {
           type: 'prose',
-          text: 'By default this creates `AGENTS.md` (the tool-agnostic standard most agents read). To target a specific tool\'s file instead:',
+          text: "By default this writes the instructions to `AGENTS.md` (the tool-agnostic standard most agents read), in the project root: the nearest folder whose `package.json` declares an Astryx package, else the nearest with any `package.json`. The search stops at the repository root. In the home folder, or in a settings folder in it outside a project, init writes no agent docs: every folder of the home folder whose name starts with a dot (`~/.claude`, `~/.gemini`, `~/.codex`) is a settings folder, and such a folder itself never counts as a project, even with a `package.json`; a project below it with its own `package.json`, such as an agent worktree, is set up normally. Claude Code skips `AGENTS.md` when the project has a `CLAUDE.md` or `.claude/CLAUDE.md`, so init also writes them to that file, even when it imports `AGENTS.md`: Claude Code does not follow that import in a session started in a subfolder. When both files exist, root `CLAUDE.md` gets the copy and a copy in `.claude/CLAUDE.md` is removed, unless the project ignores `CLAUDE.md`, in which case a `.claude/CLAUDE.md` the project commits keeps a copy. Gemini CLI reads only `GEMINI.md`, so init adds a one-line import of `AGENTS.md` there, unless `GEMINI.md` already imports it. `upgrade` keeps the copies in sync. The block between the Astryx markers belongs to Astryx: init and `upgrade` write, refresh, and remove it whatever the project's ignore rules or generated markers say, and never change the text around it. To target a specific tool's file instead:",
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Manual options',
-          code: `npx @astryxdesign/cli init --features agents --agent claude    # CLAUDE.md if present, else .claude/CLAUDE.md
-npx @astryxdesign/cli init --features agents --agent cursor    # .cursorrules if present, else AGENTS.md
-npx @astryxdesign/cli init --features agents --agent codex     # AGENTS.md (Copilot, Codex, etc.)
-npx @astryxdesign/cli init --features agents --agent hermes    # .hermes.md or HERMES.md if present, else AGENTS.md
-npx @astryxdesign/cli init --features agents --agent muse      # AGENTS.md (Muse)
-npx @astryxdesign/cli init --features agents --agent all       # every agent file present, else AGENTS.md and .claude/CLAUDE.md`,
+          code: `{@command init --features agents --agent claude}    # CLAUDE.md if present, else .claude/CLAUDE.md
+{@command init --features agents --agent cursor}    # .cursorrules if present, else AGENTS.md
+{@command init --features agents --agent codex}     # AGENTS.md (Copilot, Codex, etc.)
+{@command init --features agents --agent hermes}    # .hermes.md or HERMES.md if present, else AGENTS.md
+{@command init --features agents --agent muse}      # AGENTS.md (Muse)
+{@command init --features agents --agent all}       # every agent file present except GEMINI.md, else AGENTS.md and .claude/CLAUDE.md`,
+        },
+        {
+          type: 'prose',
+          text: 'With `--agent all`, `GEMINI.md` keeps its one-line import of `AGENTS.md`. With `--agent claude` or `--agent all`, as by default, when `CLAUDE.md` gets the instructions, `.claude/CLAUDE.md` gets none and a copy already there is removed, unless the project ignores `CLAUDE.md`: a fresh clone does not have it, so a `.claude/CLAUDE.md` the project commits gets a copy too, with `--agent claude` and `--agent all` alike. `init --remove-agents` removes them at the project root and in the folder it runs in.',
+        },
+        {
+          type: 'prose',
+          text: "For agents that work outside any one project, your global install keeps one short Astryx skill, `~/.agents/skills/astryx/SKILL.md`, linked into the skill folders agent tools read, such as `~/.claude/skills/astryx`. It tells agents Astryx is there and when to use it; `{@command init --user}` writes it now or, with `--remove-agents`, turns it off. Inside a project, agents follow that project's own agent docs. See {@link generic:computer-agent-guide}.",
         },
       ],
     },
@@ -70,9 +78,9 @@ npx @astryxdesign/cli init --features agents --agent all       # every agent fil
           type: 'list',
           style: 'ordered',
           items: [
-            '`astryx build "<idea>"`: get the page template to start from (always one: the closest match, or the app shell), two other templates, and the blocks and components for the parts it lacks',
-            '`astryx template <name> <path>`: scaffold that template into the project, keep its frame and spacing, and replace its content',
-            '`astryx component <Name>`: read props and examples for every component used',
+            '`{@command build "<idea>"}`: get the page template to start from (always one: the closest match, or the app shell), two other templates, and the blocks and components for the parts it lacks',
+            '`{@command template <name> <path>}`: scaffold that template into the project, keep its frame and spacing, and replace its content',
+            '`{@command component <Name>}`: read props and examples for every component used',
           ],
         },
         {
@@ -92,7 +100,7 @@ npx @astryxdesign/cli init --features agents --agent all       # every agent fil
           type: 'code',
           lang: 'bash',
           label: 'Install as a Cursor project rule',
-          code: `npx @astryxdesign/cli init --features agents --agent-docs-path .cursor/rules/astryx.mdc`,
+          code: `{@command init --features agents --agent-docs-path .cursor/rules/astryx.mdc}`,
         },
         {
           type: 'prose',
@@ -117,7 +125,7 @@ npx @astryxdesign/cli init --features agents --agent all       # every agent fil
 2. How do you make a Dialog non-dismissible?
 3. What prop does Selector use for its items?
 
-If you don't know all three, run \`npx @astryxdesign/cli init --features agents\` to generate agent docs, then read the generated file.`,
+If you don't know all three, run \`astryx init --features agents\` to generate agent docs, then read the generated file.`,
         },
       ],
     },
@@ -163,9 +171,9 @@ npm run astryx -- docs tokens --dense`,
           type: 'code',
           lang: 'bash',
           label: 'Short output for pasting into AI conversations',
-          code: `astryx docs styling --full --detail brief
-astryx component Dialog --detail compact
-astryx docs principles --dense`,
+          code: `{@command docs styling --full --detail brief}
+{@command component Dialog --detail compact}
+{@command docs principles --dense}`,
         },
       ],
     },
@@ -182,16 +190,16 @@ astryx docs principles --dense`,
         },
         {
           type: 'prose',
-          text: 'Add the server to your MCP config file. This works with any MCP-compatible tool: Claude Desktop (claude_desktop_config.json), Cursor (.cursor/mcp.json), Windsurf (.windsurf/mcp.json), Cline, and others.',
+          text: 'Add the server to your MCP config file. The entry is a remote HTTP server, and the exact shape differs per client, so use the snippet for the tool you run. An entry with an unrecognized transport is skipped with a warning rather than an error, which reads as a server that connects but exposes no tools.',
         },
         {
           type: 'code',
           lang: 'json',
-          label: 'MCP config (same for all tools)',
+          label: 'Claude Code (.mcp.json)',
           code: `{
   "mcpServers": {
     "astryx": {
-      "type": "url",
+      "type": "http",
       "url": "https://astryx.atmeta.com/mcp"
     }
   }
@@ -199,7 +207,56 @@ astryx docs principles --dense`,
         },
         {
           type: 'prose',
+          text: 'Claude Code can also write that entry from the terminal:',
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          code: `claude mcp add --transport http astryx https://astryx.atmeta.com/mcp`,
+        },
+        {
+          type: 'code',
+          lang: 'json',
+          label: 'Cline (cline_mcp_settings.json) - type is streamableHttp',
+          code: `{
+  "mcpServers": {
+    "astryx": {
+      "type": "streamableHttp",
+      "url": "https://astryx.atmeta.com/mcp"
+    }
+  }
+}`,
+        },
+        {
+          type: 'code',
+          lang: 'json',
+          label:
+            'Cursor (.cursor/mcp.json) - remote servers take no type field',
+          code: `{
+  "mcpServers": {
+    "astryx": {
+      "url": "https://astryx.atmeta.com/mcp"
+    }
+  }
+}`,
+        },
+        {
+          type: 'prose',
+          text: 'Claude Desktop is the exception: claude_desktop_config.json holds local stdio servers, so a remote server is added through Settings, then Connectors, then Add custom connector, pasting the URL above.',
+        },
+        {
+          type: 'prose',
           text: 'Once connected, your AI tool can search for components by natural language (e.g. "dropdown menu", "success message") and retrieve full documentation without any manual CLI invocation. The server uses the same keyword index from component docs, so search quality improves automatically as component documentation is updated.',
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: "In global mode: your global install keeps one Astryx skill in your home folder, linked into the folders agent tools read, so agents outside any project know Astryx is there; inside a project, its own agent docs come first. See {@link namespace:global} and {@link generic:computer-agent-guide}.",
         },
       ],
     },

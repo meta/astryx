@@ -22,6 +22,7 @@
  * SYNC: When Switch.tsx changes, update tests to match new behavior
  */
 
+import {StrictMode} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -417,6 +418,63 @@ describe('Switch', () => {
     });
   });
 
+  it('announces one busy start once under StrictMode, from the switch alone', async () => {
+    // Count every message the shared polite region is given. Each announce
+    // writes its text in a later frame, so two announces add it twice.
+    const written: string[] = [];
+    const observer = new MutationObserver(records => {
+      for (const record of records) {
+        const target = record.target as Element;
+        if (target.getAttribute?.('data-astryx-live-region') !== 'polite') {
+          continue;
+        }
+        for (const node of record.addedNodes) {
+          if (node.textContent) {
+            written.push(node.textContent);
+          }
+        }
+      }
+    });
+    observer.observe(document.body, {childList: true, subtree: true});
+
+    const {container} = render(
+      <StrictMode>
+        <Switch
+          label="Sync photos"
+          value={false}
+          onChange={() => {}}
+          isLoading
+        />
+      </StrictMode>,
+    );
+    await waitFor(() => {
+      expect(written).toContain('Loading');
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    observer.disconnect();
+
+    expect(written.filter(text => text === 'Loading')).toHaveLength(1);
+    // The thumb's spinner is a silent indicator: no live role reaches
+    // assistive technology from inside the switch.
+    for (const status of container.querySelectorAll('[role="status"]')) {
+      expect(status.closest('[aria-hidden="true"]')).not.toBeNull();
+    }
+    expect(container.querySelector('[aria-live]')).toBeNull();
+  });
+
+  it('announces again when the switch becomes busy again after settling', async () => {
+    const polite = () =>
+      document.querySelector('[data-astryx-live-region="polite"]');
+    const props = {label: 'Sync photos', value: false, onChange: () => {}};
+    const {rerender} = render(<Switch {...props} isLoading />);
+    await waitFor(() => expect(polite()).toHaveTextContent('Loading'));
+
+    rerender(<Switch {...props} />);
+    polite()!.textContent = '';
+    rerender(<Switch {...props} isLoading />);
+    await waitFor(() => expect(polite()).toHaveTextContent('Loading'));
+  });
+
   it('localizes the loading announcement through the i18n catalog', async () => {
     render(
       <InternationalizationProvider
@@ -505,6 +563,24 @@ describe('Switch', () => {
       />,
     );
     expect(screen.getByRole('switch')).toBeRequired();
+  });
+
+  it('keeps a required switch valid until status shows an error', () => {
+    const {rerender} = render(
+      <Switch label="Accept" value={false} onChange={() => {}} isRequired />,
+    );
+    // Native required alone makes Chromium report the switch invalid.
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-invalid', 'false');
+    rerender(
+      <Switch
+        label="Accept"
+        value={false}
+        onChange={() => {}}
+        isRequired
+        status={{type: 'error', message: 'Required'}}
+      />,
+    );
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-invalid', 'true');
   });
 
   describe('disabledMessage', () => {
@@ -624,16 +700,82 @@ describe('Switch', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
+    it('does not run caller key handlers while disabled', async () => {
+      const user = userEvent.setup();
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
       render(
         <Switch
           label="Enable notifications"
           value={false}
           onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
           isDisabled
         />,
       );
-      expect(screen.getByRole('switch')).toBeDisabled();
+      await user.tab();
+      expect(screen.getByRole('switch')).toHaveFocus();
+      await user.keyboard('{Enter}');
+      await user.keyboard(' ');
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+    });
+
+    it('still runs caller key handlers on an enabled switch', async () => {
+      const user = userEvent.setup();
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      render(
+        <Switch
+          label="Enable notifications"
+          value={false}
+          onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+        />,
+      );
+      await user.tab();
+      // Releasing Tab lands a keyup on the newly focused switch; count only
+      // the key pressed after it.
+      onKeyDown.mockClear();
+      onKeyUp.mockClear();
+      await user.keyboard('{Enter}');
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
+      expect(onKeyUp).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays focusable via aria-disabled when disabled without a reason', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onClick = vi.fn();
+      render(
+        <form>
+          <Switch
+            label="Enable notifications"
+            value={false}
+            onChange={onChange}
+            onClick={onClick}
+            htmlName="notifications"
+            isRequired
+            isDisabled
+          />
+        </form>,
+      );
+      const control = screen.getByRole('switch');
+      expect(control).not.toHaveAttribute('disabled');
+      expect(control).toHaveAttribute('aria-disabled', 'true');
+      await user.tab();
+      expect(control).toHaveFocus();
+      await user.keyboard(' ');
+      await user.click(control);
+      await user.click(screen.getByText('Enable notifications'));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+      expect(control).not.toBeChecked();
+      const form = control.closest('form')!;
+      expect(form.checkValidity()).toBe(true);
+      expect([...new FormData(form).keys()]).toEqual([]);
     });
   });
   describe('labelSpacing', () => {

@@ -7,6 +7,8 @@
  *   ShadCN client in TypeScript and JavaScript modes, verifies exact written
  *   bytes and dependencies, then compiles every installed source file against
  *   current local exports or the exact published packages named by production.
+ *   ShadCN's own scratch directories stay inside each consumer, which is
+ *   removed afterwards.
  * @input A generated preview or hidden production registry under
  *   apps/docsite/public/shadcn.
  * @output A clean-consumer proof for every canonical item and alias route.
@@ -33,6 +35,7 @@ import {
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
 import {expandWorkspaceDirs} from '../../scripts/lib/workspace-globs.mjs';
+import {registryNameForPath} from '../../apps/docsite/src/lib/shadcnRegistry.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '../..');
@@ -270,6 +273,26 @@ function loadCatalog() {
       fail(`${registryPath}.json does not match its registry.json identity`);
     }
 
+    // Search results and `@namespace/<name>` resolve `<name>.json` in the
+    // registry root, and an alias keeps the old name it stood for; each must
+    // serve the canonical item's exact bytes.
+    const organized = [registryPath, ...(item.astryx?.aliases ?? [])];
+    for (const nameRoute of organized.map(registryNameForPath)) {
+      const nameFile = resolveInside(
+        REGISTRY_DIR,
+        `${nameRoute}.json`,
+        `${name} name route`,
+      );
+      if (!fs.existsSync(nameFile)) {
+        fail(`${name} is missing its name route ${nameRoute}.json`);
+      }
+      if (fs.readFileSync(nameFile, 'utf8') !== canonicalBytes) {
+        fail(
+          `name route ${nameRoute}.json drifted from canonical item ${name}`,
+        );
+      }
+    }
+
     for (const route of [registryPath, ...(item.astryx?.aliases ?? [])]) {
       const prior = routes.get(route);
       if (prior != null) {
@@ -428,13 +451,17 @@ function runShadcn(project, itemPaths) {
   if (!fs.existsSync(SHADCN_BIN)) {
     fail('the pinned ShadCN binary is not installed');
   }
+  // ShadCN leaves an empty temporary directory behind for every file it
+  // transforms: keep them inside the consumer, which main() removes.
+  const scratch = path.join(project, '.tmp');
+  fs.mkdirSync(scratch, {recursive: true});
   const result = spawnSync(
     SHADCN_BIN,
     ['add', ...itemPaths, '--yes', '--overwrite', '--silent'],
     {
       cwd: project,
       encoding: 'utf8',
-      env: {...process.env, CI: 'true'},
+      env: {...process.env, CI: 'true', TMPDIR: scratch},
       maxBuffer: MAX_COMMAND_OUTPUT,
       timeout: 10 * 60_000,
     },

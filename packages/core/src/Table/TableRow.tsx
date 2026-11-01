@@ -21,6 +21,7 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import type {StyleXStyles} from '../theme/types';
 import {tableRowMarker} from './table.stylex';
+import {glidingDividerStyles} from './glidingDivider';
 import {TableContext} from './TableContext';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
@@ -182,6 +183,8 @@ export function TableRow({
   if (ctx.dividers === 'rows' || ctx.dividers === 'grid') {
     // Note: last-body-row border removal is handled by TableCell
     // to avoid affecting the header row in <thead>.
+    // While a glide moves the row, its divider moves with it.
+    rowStyles.push(glidingDividerStyles.row);
   }
 
   if (xstyle) {

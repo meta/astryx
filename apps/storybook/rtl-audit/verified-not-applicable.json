@@ -17,6 +17,19 @@
     "reason": "The Core/Field stories use block-flow labels, controls, descriptions, and status text without directional icons, side-specific placement, order, scrolling, dragging, overlays, or keyboard behavior."
   },
   {
+    "component": "core/FieldLabel",
+    "reason": "FieldLabel owns a horizontal flex label row inside an optional block-flow label/description group. Inline spacing and hidden positioning use logical or direction-neutral properties. Its built-in info icon is radially symmetric and its tooltip uses block-axis placement above the label; caller-supplied label icons retain caller ownership. The component has no side-specific placement, reordering, horizontal scroll or drag action, or horizontal keyboard behavior. The exact-head story covers native, group, hidden, description, optionality, disabled, icon, and tooltip-trigger states without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/FieldLabel.stories.tsx": "sha256:22ea61ef92c7242241fe49715714e2802592534c9466c42a3f3787773e176d0c",
+      "packages/core/src/Field/FieldLabel.tsx": "sha256:e1473a8a0d255536bab7719342cf27a1dbcfbf6792f00782f4ca1606abb28ff0",
+      "packages/core/src/Field/index.ts": "sha256:4e7788b82f7987a991ac62a1f519989027abb639353a1da3884dd9e2a09e98f4"
+    }
+  },
+  {
+    "component": "core/EmptyState",
+    "reason": "EmptyState is a centered block-flow status region. Its icon, text group, and action group stack only on the block axis; spacing is block-axis or logical, and text is centered. The component owns no directional glyph, contextual separator, side-specific placement or ordering, horizontal scrolling or dragging, overlay, or directional keyboard behavior. Caller-supplied icons and action controls retain their own RTL ownership."
+  },
+  {
     "component": "core/FieldStatus",
     "reason": "FieldStatus uses block-flow message layout and logical padding and corner radii. Its status glyphs are non-directional, and it has no side-specific placement, order, scrolling, dragging, overlays, or directional keyboard behavior."
   },
@@ -338,6 +351,15 @@
     }
   },
   {
+    "component": "core/CommandPaletteEmpty",
+    "reason": "CommandPaletteEmpty owns one message container that centers caller content on both axes with symmetric logical inline padding, block padding, and centered text, and wraps an unbroken token inside the host. It renders no directional glyph, physical inline positioning, reordered controls, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior; caller text follows the document direction. The content fixture and the CommandPalette audit matrix exercise translated, long, standalone, and in-palette content in RTL without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/CommandPaletteEmpty.stories.tsx": "sha256:35e5e5da27d4440fec7f45d62c9db503210f37c042afd01fd17365ca59c6b2e7",
+      "packages/core/src/CommandPalette/CommandPaletteEmpty.tsx": "sha256:721c495b144ca2e0ccc1f869a44d8be1350d880d17f9a08eb025e7941421bc0e",
+      "packages/core/src/CommandPalette/index.ts": "sha256:ba38845bbde6d73172df2c0791ca513c9f2b7baab17440e066e783ff6cfc7558"
+    }
+  },
+  {
     "component": "core/CommandPaletteList",
     "reason": "CommandPaletteList owns one vertically stacked results container that scrolls on the block axis, with symmetric padding and block-axis gaps. It renders no directional glyph, physical inline positioning, reordered controls, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior; item and group content follow normal document direction, and CommandPalette owns arrow-key navigation. The dedicated fixtures exercise the standalone listbox and the scrolling palette composition without adding a component-owned RTL dimension.",
     "evidence": {
@@ -365,5 +387,51 @@
   {
     "component": "lab/Comments",
     "reason": "Comments is a block-axis timeline of CommentThread rows and activity events inside the core ChatLayout and ChatMessageList, with the composer docked on the block axis. It adds no horizontal positioning, directional glyphs, or arrow-key behavior of its own: rows, rails, and dividers use logical properties, and the load-earlier control and error Banners are centered or full width."
+  },
+  {
+    "component": "core/DropdownMenuItem",
+    "reason": "DropdownMenuItem owns one interactive pointer-menu row whose label, icon, description, and end content follow logical document direction. Its insets use logical properties and its text uses start alignment; it renders no component-owned directional glyph, physical inline placement, reordered controls, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior. DropdownMenu owns directional placement and keyboard navigation. Exact-head frames still render RTL to confirm inherited direction without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/DropdownMenuItem.stories.tsx": "sha256:62c041b50e970a0485490de20655fc788b3ea0e848cdcf7464d3725b030281f8",
+      "packages/core/src/DropdownMenu/DropdownMenuItem.tsx": "sha256:3d5ee9cb5422c7fa560a3546ec6783c9473c925a795dd266a8757fe420555d44",
+      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+    }
+  },
+  {
+    "component": "core/DropdownMenuGroup",
+    "reason": "DropdownMenuGroup owns a block-axis set of menu rows and an optional heading with symmetric logical inline padding. It renders no directional glyph, physical inline placement, reordered content, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior of its own; DropdownMenu owns menu placement and row navigation. The exact-head audit still renders RTL frames to confirm inherited direction without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/DropdownMenuGroup.stories.tsx": "sha256:57927e1c41ededf5b0105c2eefab5bf79fc21ceca084f47251aac0057781aec5",
+      "packages/core/src/DropdownMenu/DropdownMenuGroup.tsx": "sha256:b0baa04f2440927fc38b3c73bab9c0c0a210341a60cc6b59e5450148736b3d20",
+      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+    }
+  },
+  {
+    "component": "core/DropdownMenuDivider",
+    "reason": "DropdownMenuDivider is one horizontal, full-width separator with block-axis margin only. It renders no text, glyph, inline-side placement, reordered content, horizontal scrolling or dragging, overlay, or keyboard behavior of its own; the containing DropdownMenu owns direction-sensitive placement and navigation, while the separator is deliberately skipped by the row focus model. The exact-head audit still renders RTL frames to confirm inherited direction without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/DropdownMenuDivider.stories.tsx": "sha256:d734898c48c73a887e6bdd6485e8539600354c720ee292c326a93c760f470311",
+      "packages/core/src/DropdownMenu/DropdownMenuDivider.tsx": "sha256:c172c36b3900ac83c76c8472a92bd5618184b3ff4fbfdc71ca89e6d3ca7cfdc7",
+      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa",
+      "packages/core/src/Divider/Divider.tsx": "sha256:37bfa57103fdc546226fe751844bb193490439bd990b6bc9bced8f6ced99618d"
+    }
+  },
+  {
+    "component": "core/DropdownMenuRadioGroup",
+    "reason": "DropdownMenuRadioGroup owns one block-axis role=group wrapper whose children remain in document order with a symmetric tokenized gap. It renders no component-owned text, directional glyph, physical inline placement, reordered control, horizontal scroll or drag, side-placed overlay, or horizontal keyboard behavior; DropdownMenu owns placement and navigation, while DropdownMenuRadioItem owns each row and indicator. Exact-head frames still render RTL to confirm inherited direction without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/DropdownMenuRadioGroup.stories.tsx": "sha256:7548ad7bf7c06f438e243774a8f41d4043defc1a122467747c5ff955f202aee1",
+      "packages/core/src/DropdownMenu/DropdownMenuRadioGroup.tsx": "sha256:3be897ab21dcc6a37fb7ab8a1b6d48254e406c544d95a3b939dfc6593ea99cf1",
+      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+    }
+  },
+  {
+    "component": "core/DropdownMenuRadioItem",
+    "reason": "DropdownMenuRadioItem renders one menuitemradio row through Item: a decorative radio marker, an optional icon, the label and description, and end content in logical inline order. Its only inline placement is the coarse-pointer move of the marker to the row's inline end through flex order and marginInlineStart auto, which mirrors with direction. It draws no directional glyph or contextual separator and uses no physical property, horizontal scroll or drag, side-placed overlay, or horizontal keyboard behavior; DropdownMenu owns placement and navigation. Exact-head frames render RTL, including coarse-pointer RTL, and assert the marker's inline-start and inline-end placement without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/DropdownMenuRadioItem.stories.tsx": "sha256:cfe1bd90a8fc189f0f3a94992dee2a148b7256433775c511099b57690c01a614",
+      "packages/core/src/DropdownMenu/DropdownMenuRadioItem.tsx": "sha256:7d7ce618b802170660763de820c0551fc3c63530ba1c105cb4bf7146d30ad518",
+      "packages/core/src/DropdownMenu/index.ts": "sha256:59bf02be4a577cbecf3ad7e981e2577602375892f74548593aa9b998cae733fa"
+    }
   }
 ]

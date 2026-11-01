@@ -21,7 +21,7 @@ import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
  * (→ `.astryx-table-cell`), and `astryx-button` → key `button`.
  *
  * Keep the `astryx-` literal in sync with packages/core/src/naming.ts
- * (NAMESPACE / classPrefix), the same way build-theme.mjs mirrors it.
+ * (NAMESPACE / classPrefix), the same way commands/theme.mjs mirrors it.
  * <!-- SYNC: packages/core/src/naming.ts (namespace prefix source of truth) -->
  * @param {import('@astryxdesign/cli/authoring').ComponentThemingTarget} target
  * @returns {string}

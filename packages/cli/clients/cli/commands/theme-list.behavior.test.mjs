@@ -24,6 +24,12 @@ afterEach(() => {
 
 describe('astryx theme list', () => {
   it('lists bundled themes and points at import, eject, and discover', async () => {
+    // Inside a project; outside one there is no app to import into
+    // (outside-project.test.mjs).
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}',
+    );
     const {status, stdout} = await runCli(['theme', 'list'], {cwd: tmpDir});
 
     expect(status).toBe(0);

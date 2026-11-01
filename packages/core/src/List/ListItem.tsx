@@ -4,9 +4,16 @@
 
 /**
  * @file ListItem.tsx
- * @input Uses React, ReactNode, StyleXStyles, theme tokens, List edge compensation,
- *   CheckboxInput, and the marker or task checkbox a ListMarkerScope sets
- *   (Markdown's nested lists and the task items of mixed lists)
+ * @input Uses React, ReactNode, StyleXStyles, theme tokens, the List row edge
+ *   treatment, CheckboxInput, and the marker or task checkbox a
+ *   ListMarkerScope sets (Markdown's nested lists and the task items of mixed
+ *   lists), and Item's private exact-marker formatting scope for numbered
+ *   rows. Number markers stay on one line in the List's shared column,
+ *   keeping every sibling's text and nested list on the same start line;
+ *   they end on one line too, right-aligned with tabular figures, and hang
+ *   into the row's inline inset before they widen that column. Markdown's
+ *   outside counters keep the themed column and may paint beyond it, matching
+ *   RichText's native outside markers without a finite width threshold.
  * @output Exports ListItem component, ListItemProps type
  * @position Core implementation; consumed by List, index.ts, tested by List.test.tsx
  *
@@ -21,8 +28,9 @@
  * - /packages/cli/assets/templates/blocks/components/List/ (showcase blocks)
  */
 
-import {use, type ReactNode} from 'react';
+import {use, useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import type {StyleXStyles} from '@stylexjs/stylex';
 import {
   colorVars,
   spacingVars,
@@ -31,10 +39,11 @@ import {
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {ListContext, type ListMarker} from './ListContext';
-import {CheckboxInput} from '../CheckboxInput';
-import {mergeProps} from '../utils';
-import {Item} from '../Item';
-import type {ItemSwipeActions, ItemSwipeBehavior} from '../Item';
+import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
+import {mergeProps} from '../utils/mergeProps';
+import {Item} from '../Item/Item';
+import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
+import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -44,6 +53,13 @@ import {themeProps} from '../utils/themeProps';
 export interface ListItemProps extends BaseProps<HTMLLIElement> {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLLIElement>;
+  /**
+   * Vertical alignment of the start and end content against the label,
+   * forwarded to Item. Use `first-line` to keep the start and end content level with the
+   * first line of a wrapped label.
+   * @default 'center'
+   */
+  align?: ItemAlign;
   /**
    * Primary text label for the item.
    *
@@ -139,26 +155,48 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
 // =============================================================================
 
 const styles = stylex.create({
+  numberColumns: {
+    display: {
+      default: 'flex',
+      '@supports (grid-template-columns: subgrid)': 'grid',
+    },
+    gridTemplateColumns: 'subgrid',
+    gridColumn: '1 / -1',
+  },
   withCounter: {
     counterIncrement: 'astryx-list',
   },
-  // List's inline edge compensation cancels as much of the row's built-in
-  // inline inset as the container padding allows (e.g. under a heading).
-  // The margins read --_item-inset-inline — the same variable Item derives
-  // its paddingInline from — on the row element itself (custom properties
-  // only cascade downward, so the <ul> could not read it). Density changes
-  // and theme paddingInline overrides on `item` move both values together.
-  // Each edge clamps against ITS OWN container padding var: a single
-  // start-var clamp on both margins over-cancels the end edge under
-  // asymmetric container padding (16px start / 4px end) and the selected
-  // row paints past the outer border. Logical properties keep RTL correct,
-  // and a zero-padding/full-bleed surface (min(inset, 0px) = 0px) leaves
-  // the row in place instead of pulling it outside its content edge.
-  inlineEdgeCompensation: {
+  // List's edge treatments. Each reads --_item-inset-inline, the variable
+  // Item derives its paddingInline from, on the row itself (custom properties
+  // only cascade downward, so the <ul> cannot read it); density and theme
+  // paddingInline overrides on `item` move it. Each edge resolves against ITS
+  // OWN container padding var, so asymmetric padding never over-reaches an
+  // edge, and logical properties keep RTL correct.
+  //
+  // 'flush': no inset, so content meets the row's edges.
+  edgeFlush: {
+    '--_item-inset-inline': '0px',
+  },
+  // 'outset': the list reaches the container's padding edge (List.tsx); the
+  // row steps back in by whatever padding its inset does not fill, so the row
+  // reaches min(inset, container padding) past the content line and its text
+  // lands on that line when the padding is at least the inset.
+  edgeOutset: {
     marginInlineStart:
-      'calc(-1 * min(var(--_item-inset-inline), var(--container-padding-inline-start, 0px)))',
+      'max(var(--container-padding-inline-start, 0px) - var(--_item-inset-inline), 0px)',
     marginInlineEnd:
-      'calc(-1 * min(var(--_item-inset-inline), var(--container-padding-inline-end, 0px)))',
+      'max(var(--container-padding-inline-end, 0px) - var(--_item-inset-inline), 0px)',
+  },
+  // 'bleed': the row fills the list, which reaches the container's padding
+  // edge (List.tsx); its text sits on the container's padding line, never
+  // closer to the row's edge than its own inset. Square corners: the row
+  // meets the container's straight sides.
+  edgeBleed: {
+    paddingInlineStart:
+      'max(var(--container-padding-inline-start, 0px), var(--_item-inset-inline))',
+    paddingInlineEnd:
+      'max(var(--container-padding-inline-end, 0px), var(--_item-inset-inline))',
+    borderRadius: 0,
   },
   withDivider: {
     borderBlockEndWidth: borderVars['--border-width'],
@@ -180,6 +218,16 @@ const styles = stylex.create({
 // =============================================================================
 
 const MARKER_DOT_SIZE = 6;
+
+/**
+ * How far a counter wider than its marker reaches toward the row's edge: the
+ * row's whole inline inset, the way a native outside marker hangs into its
+ * list's padding. Up to that width the item's text keeps its usual start; a
+ * wider counter widens the List's shared column instead. It is never
+ * clipped: the inset is inside the row, and the row inside the List's inline
+ * clip. Markdown's outside counters use a separate rule (`gutterHang`).
+ */
+const COUNTER_HANG = 'calc(-1 * var(--_item-inset-inline))';
 
 const markerStyles = stylex.create({
   container: {
@@ -214,27 +262,53 @@ const markerStyles = stylex.create({
   },
   number: {
     alignSelf: 'baseline',
+    // The counter ends where the marker ends, so every period in a list lines
+    // up, as a native outside marker's does. Tabular figures give each digit
+    // the same width down the list.
+    display: 'flex',
+    justifyContent: 'flex-end',
     flexShrink: 0,
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-body-size'],
     lineHeight: typeScaleVars['--text-body-leading'],
-    width: spacingVars['--spacing-4'],
+    fontVariantNumeric: 'tabular-nums',
+    // Short counters retain their inset. A longer counter first reaches into
+    // the row's inline inset (COUNTER_HANG) and only then sizes the List's
+    // shared grid column, so no single number moves its item's text.
+    minWidth: spacingVars['--spacing-4'],
+    width: 'auto',
+    whiteSpace: 'nowrap',
   },
   // A number outside a counter style's range (zero or below, or past 3999
   // in roman) is written in decimal, as CSS counter styles fall back.
   decimal: {
     '::before': {
       content: 'counter(astryx-list) "."',
+      marginInlineStart: COUNTER_HANG,
     },
   },
   lowerAlpha: {
     '::before': {
       content: 'counter(astryx-list, lower-alpha) "."',
+      marginInlineStart: COUNTER_HANG,
     },
   },
   lowerRoman: {
     '::before': {
       content: 'counter(astryx-list, lower-roman) "."',
+      marginInlineStart: COUNTER_HANG,
+    },
+  },
+  // Markdown's non-swipe lists allow outside marker paint. Keep their marker
+  // column at the ordinary themed width, as RichText's native outside markers
+  // do (spec:AST-061 FR11). The counter itself stays intrinsic and unbroken;
+  // flex-end aligns its end even when it overflows toward inline-start. A
+  // larger finite negative margin would only move the parity failure threshold.
+  gutterHang: {
+    width: spacingVars['--spacing-4'],
+    '::before': {
+      marginInlineStart: 0,
+      flexShrink: 0,
     },
   },
 });
@@ -296,6 +370,7 @@ export function ListItem({
   rel,
   isDisabled = false,
   isSelected = false,
+  align,
   xstyle,
   className,
   style,
@@ -305,8 +380,8 @@ export function ListItem({
   const ctx = use(ListContext);
   const density = ctx?.density ?? 'balanced';
   const hasDividers = ctx?.hasDividers ?? false;
+  const edge = ctx?.edge ?? 'padded';
   const listStyle = ctx?.listStyle ?? 'none';
-  const edgeCompensation = ctx?.edgeCompensation;
   const hasMarkers = listStyle !== 'none';
   // ListMarkerScope may name another marker for this item.
   const markerKind: ListMarker | null =
@@ -315,36 +390,46 @@ export function ListItem({
   // A task item in a list with markers shows its checkbox instead.
   const task = markerKind == null ? undefined : ctx?.task;
 
-  const marker =
-    task != null ? (
-      <span {...stylex.props(taskMarkerStyles.container)}>
-        <CheckboxInput
-          size="sm"
-          value={task.isChecked}
-          label={task.label}
-          isLabelHidden
-          isReadOnly
-        />
-      </span>
-    ) : markerKind === 'disc' ||
-      markerKind === 'circle' ||
-      markerKind === 'square' ? (
-      <span {...stylex.props(markerStyles.container)}>
+  const hasMarkerGutter = ctx?.hasMarkerGutter === true;
+  const marker = useMemo(
+    () =>
+      task != null ? (
+        <span {...stylex.props(taskMarkerStyles.container)}>
+          <CheckboxInput
+            size="sm"
+            value={task.isChecked}
+            label={task.label}
+            isLabelHidden
+            isReadOnly
+          />
+        </span>
+      ) : markerKind === 'disc' ||
+        markerKind === 'circle' ||
+        markerKind === 'square' ? (
+        <span {...stylex.props(markerStyles.container)}>
+          <span
+            {...stylex.props(
+              markerKind === 'disc'
+                ? markerStyles.dot
+                : markerKind === 'circle'
+                  ? markerStyles.circle
+                  : markerStyles.square,
+            )}
+          />
+        </span>
+      ) : markerKind != null ? (
         <span
           {...stylex.props(
-            markerKind === 'disc'
-              ? markerStyles.dot
-              : markerKind === 'circle'
-                ? markerStyles.circle
-                : markerStyles.square,
+            markerStyles.number,
+            NUMBER_STYLES[markerKind],
+            hasMarkerGutter && markerStyles.gutterHang,
           )}
         />
-      </span>
-    ) : markerKind != null ? (
-      <span {...stylex.props(markerStyles.number, NUMBER_STYLES[markerKind])} />
-    ) : null;
+      ) : null,
+    [task, markerKind, hasMarkerGutter],
+  );
 
-  return (
+  const item = (
     <Item
       as="li"
       ref={ref}
@@ -360,17 +445,30 @@ export function ListItem({
       rel={rel}
       isDisabled={isDisabled}
       isSelected={isSelected}
+      align={align}
       density={density}
-      xstyle={[
-        hasMarkers && styles.withCounter,
-        hasDividers && styles.withDivider,
-        hasDividers && embeddedStyles.noRadius,
-        edgeCompensation === 'inline' && styles.inlineEdgeCompensation,
-        xstyle,
-      ]}
+      xstyle={
+        [
+          listStyle === 'decimal' && styles.numberColumns,
+          hasMarkers && styles.withCounter,
+          hasDividers && styles.withDivider,
+          hasDividers && embeddedStyles.noRadius,
+          edge === 'flush' && styles.edgeFlush,
+          edge === 'outset' && styles.edgeOutset,
+          edge === 'bleed' && styles.edgeBleed,
+          xstyle,
+        ] as StyleXStyles
+      }
       {...mergeProps(themeProps('list-item'), {className, style})}
       {...restProps}
     />
+  );
+  // Only numbered rows contribute two cells to List's shared counter grid.
+  // Passing the marker identity keeps this request off unrelated Items in slots.
+  return listStyle === 'decimal' ? (
+    <ItemMarkerColumnsContext value={marker}>{item}</ItemMarkerColumnsContext>
+  ) : (
+    item
   );
 }
 

@@ -94,10 +94,18 @@ const styles = stylex.create({
     padding: spacingVars['--spacing-2'],
     boxSizing: 'border-box',
   },
+  // The heading gives up space first so the end content and toggle stay in view
+  mobileBarHeading: {
+    display: 'flex',
+    alignItems: 'center',
+    flex: '0 1 auto',
+    minWidth: 0,
+  },
   mobileBarEnd: {
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-1'],
+    flexShrink: 0,
     marginInlineStart: 'auto',
   },
   // Drawer mode — vertical list of nav items
@@ -215,7 +223,9 @@ export function TopNav({
           style,
         )}
         {...props}>
-        {heading && <div {...stylex.props(styles.heading)}>{heading}</div>}
+        {heading && (
+          <div {...stylex.props(styles.mobileBarHeading)}>{heading}</div>
+        )}
         <div {...stylex.props(styles.mobileBarEnd)}>
           {endContent}
           {hasMobileDrawerContent && hasAutoToggle && <MobileNavToggle />}

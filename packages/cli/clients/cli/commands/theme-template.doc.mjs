@@ -35,6 +35,7 @@ export const doc = {
     {label: 'Write it at the project root', cli: 'astryx theme template'},
     {label: 'Somewhere else', cli: 'astryx theme template src/themes/starter.ts'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success, including when an existing file was left untouched'},
     {code: 1, when: 'the target path escapes the project, or the file cannot be written'},

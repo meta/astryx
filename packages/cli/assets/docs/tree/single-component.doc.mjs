@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/components/describe-the-component/single-component`:
+ * @file `astryx docs authoring/building-blocks/components/describe-the-component/single-component`:
  * write and maintain the default ComponentDoc for one public component.
  */
 
@@ -56,14 +56,13 @@ export default {
           style: 'unordered',
           items: [
             'Keep `props` on the top-level doc. Private implementation helpers do not need entries.',
-            'Keep the doc beside the source and change both in the same pull request.',
+            'Name the doc after the source file beside it, such as `AcmeCarousel.doc.mjs` beside `AcmeCarousel.tsx`, and change both in the same pull request.',
             'If the module later exposes several related public exports, adapt this doc with {@link generic:component-family}.',
           ],
         },
         {
-          type: 'reference',
-          target: 'schema:component-doc',
-          presentation: 'summary',
+          type: 'prose',
+          text: 'Every field is in {@link schema:component-doc}.',
         },
       ],
     },
@@ -86,6 +85,15 @@ export default {
     {guidance: false, description: 'Hide information that must remain visible for comparison.'},
   ],
 },`,
+        },
+        {
+          type: 'prose',
+          text: "Set `keywords` to the words people search for: synonyms and the task the component does, such as `keywords: ['slider', 'slideshow', 'rotating cards']`. `{@command search}` ranks a match on a component's name or keywords above one in its description, so without keywords a search for the component's task can list Core components first. Check with the words a person would type:",
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          code: '{@command search "rotating cards" --type component}',
         },
       ],
     },
@@ -122,6 +130,7 @@ export default {
             'Set `required: true` only when every caller must pass the prop.',
             'Write `default` exactly as the value should appear in documentation.',
             'Skip styling escape hatches such as `xstyle`, `className`, and `style`.',
+            '`{@command doctor integration components}` lists a documented prop the code lacks, a public prop the doc misses, and a wrong `required`. See {@link generic:check-the-props}.',
           ],
         },
       ],
@@ -157,7 +166,7 @@ export default {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx component AcmeCarousel\nnpx astryx integration verify',
+          code: '{@command component AcmeCarousel}\n{@command doctor integration components}\n{@command integration verify}',
         },
       ],
     },

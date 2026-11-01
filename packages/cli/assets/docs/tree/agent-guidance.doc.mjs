@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/agent-guidance`: add short lines of
+ * @file `astryx docs authoring/building-blocks/configuration/agent-guidance`: add short lines of
  * guidance that apps put in front of their AI agents, within the limits.
  */
 
@@ -27,7 +27,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: "npx astryx integration add agent-doc 'Use AcmeCarousel for rotating content.'",
+          code: "{@command integration add agent-doc 'Use AcmeCarousel for rotating content.'}",
         },
         {
           type: 'prose',
@@ -80,6 +80,10 @@ export default {
           type: 'prose',
           text: 'A line is one line of plain text. Line breaks, control characters, spaces at either end, and managed-block markers such as `<!-- ASTRYX:START -->` are rejected.',
         },
+        {
+          type: 'prose',
+          text: 'Start a command in a line with the word astryx alone, with no runner in front, as in: Run astryx doctor before finishing. The block names the command the app runs once, at its top, for every command below it, so your line works in every app. See {@link generic:cli-command}.',
+        },
       ],
     },
     {
@@ -88,12 +92,12 @@ export default {
       content: [
         {
           type: 'prose',
-          text: "An app's `astryx init` writes your lines at the end of its managed agent block, each labeled with your package name. The CLI owns the heading, the labels, and the markers.",
+          text: "An app's `{@command init}` writes your lines at the end of its managed agent block, each labeled with your package name. The CLI owns the heading, the labels, and the markers.",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx init --features agents',
+          code: '{@command init --features agents}',
         },
         {
           type: 'code',
@@ -119,9 +123,9 @@ export default {
         {
           type: 'code',
           lang: 'bash',
-          code: `npx astryx init --features agents
+          code: `{@command init --features agents}
 # Or: --from takes the Core version the app had before
-npx astryx upgrade --from 0.7.0 --apply`,
+{@command upgrade --from <version> --apply}`,
         },
         {
           type: 'code',
@@ -131,6 +135,16 @@ npx astryx upgrade --from 0.7.0 --apply`,
         {
           type: 'prose',
           text: '`upgrade --apply` prints that line; `init` prints `[ok] AI agent docs installed -> AGENTS.md`. Without `--apply`, `upgrade` only reports `Agent docs differ from the installed Astryx and integration configuration.` It refreshes the block even when Core did not change. See {@link command:upgrade}.',
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: "In global mode: the agent guide the CLI keeps for the computer carries no integration's guidance, because it serves every folder; your guidance reaches agents through the agent docs `init` writes in an app that installs your package. See {@link namespace:global} and {@link generic:computer-agent-guide}.",
         },
       ],
     },

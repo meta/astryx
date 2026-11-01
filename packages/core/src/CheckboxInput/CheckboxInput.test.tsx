@@ -209,6 +209,40 @@ describe('CheckboxInput', () => {
     );
   });
 
+  it('preserves a caller-provided id on the input and its label', () => {
+    render(
+      <CheckboxInput
+        id="accept-terms"
+        label="Accept terms"
+        value={false}
+        onChange={() => {}}
+      />,
+    );
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toHaveAttribute('id', 'accept-terms');
+    expect(screen.getByText('Accept terms').closest('label')).toHaveAttribute(
+      'for',
+      'accept-terms',
+    );
+    expect(screen.getByLabelText('Accept terms')).toBe(checkbox);
+  });
+
+  it('generates an id the label resolves when the caller passes an empty id', () => {
+    render(
+      <CheckboxInput
+        id=""
+        label="Accept terms"
+        value={false}
+        onChange={() => {}}
+      />,
+    );
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox.id).not.toBe('');
+    expect(screen.getByLabelText('Accept terms')).toBe(checkbox);
+  });
+
   it('forwards arbitrary data-* attributes to the input', () => {
     render(
       <CheckboxInput
@@ -244,7 +278,7 @@ describe('CheckboxInput', () => {
     );
     const checkbox = screen.getByRole('checkbox');
     expect(checkbox).toBeChecked();
-    expect(checkbox).toBeDisabled();
+    expect(checkbox).toHaveAttribute('aria-disabled', 'true');
     expect(checkbox).toHaveAttribute('type', 'checkbox');
   });
 
@@ -554,16 +588,55 @@ describe('CheckboxInput', () => {
       expect(checkbox).not.toBeChecked();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
+    it('stays focusable via aria-disabled when disabled without a reason', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onClick = vi.fn();
+      render(
+        <form>
+          <CheckboxInput
+            label="Accept terms"
+            value={false}
+            onChange={onChange}
+            onClick={onClick}
+            htmlName="terms"
+            isRequired
+            isDisabled
+          />
+        </form>,
+      );
+      const checkbox = screen.getByRole('checkbox');
+      expect(checkbox).not.toHaveAttribute('disabled');
+      expect(checkbox).toHaveAttribute('aria-disabled', 'true');
+      await user.tab();
+      expect(checkbox).toHaveFocus();
+      await user.keyboard(' ');
+      await user.click(checkbox);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+      expect(checkbox).not.toBeChecked();
+      const form = checkbox.closest('form')!;
+      expect(form.checkValidity()).toBe(true);
+      expect([...new FormData(form).keys()]).toEqual([]);
+    });
+
+    it('keeps a disabled indeterminate checkbox mixed after Space or a click', async () => {
+      const user = userEvent.setup();
       render(
         <CheckboxInput
-          label="Accept terms"
-          value={false}
+          label="Select all"
+          value="indeterminate"
           onChange={() => {}}
           isDisabled
         />,
       );
-      expect(screen.getByRole('checkbox')).toBeDisabled();
+      const checkbox = screen.getByRole<HTMLInputElement>('checkbox');
+      expect(checkbox.indeterminate).toBe(true);
+      await user.tab();
+      await user.keyboard(' ');
+      fireEvent.click(checkbox);
+      expect(checkbox.indeterminate).toBe(true);
+      expect(checkbox).not.toBeChecked();
     });
   });
   describe('form participation', () => {

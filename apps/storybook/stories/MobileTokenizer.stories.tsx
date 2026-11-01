@@ -57,3 +57,46 @@ export const TouchFlow: Story = {
   },
   name: 'Touch flow (single searchable management sheet)',
 };
+
+export const Disabled: Story = {
+  render: () => (
+    <div style={{width: 350, display: 'grid', gap: 16}}>
+      <MobileTokenizer
+        label="Tags"
+        searchSource={source}
+        value={[tags[0], tags[1]]}
+        onChange={() => {}}
+        placeholder="Add tags"
+        isDisabled
+      />
+      <MobileTokenizer
+        label="Empty tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        placeholder="Add tags"
+        isDisabled
+      />
+    </div>
+  ),
+};
+
+export const AtLimit: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem[]>([tags[0], tags[1]]);
+    return (
+      <div style={{width: 350}}>
+        <MobileTokenizer
+          label="Tags"
+          searchSource={source}
+          value={value}
+          onChange={items => setValue(items)}
+          placeholder="Add tags"
+          maxEntries={2}
+          debounceMs={0}
+        />
+      </div>
+    );
+  },
+  name: 'At the maxEntries limit',
+};

@@ -26,19 +26,20 @@ export default function TokenizerClear() {
   const [value, setValue] = useState<SearchableItem[]>([users[0], users[1]]);
 
   return (
-    <Stack direction="vertical" gap={2}>
-      <Text type="supporting" color="secondary">
-        Clear-all button appears when tokens are selected
-      </Text>
-      <Tokenizer
-        label="Team Members"
-        placeholder="Search people..."
-        searchSource={userSource}
-        value={value}
-        onChange={items => setValue(items)}
-        hasClear
-        containerStyle={{width: 400}}
-      />
-    </Stack>
+    <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+      <Stack direction="vertical" gap={2}>
+        <Text type="supporting" color="secondary">
+          Clear-all button appears when tokens are selected
+        </Text>
+        <Tokenizer
+          label="Team Members"
+          placeholder="Search people..."
+          searchSource={userSource}
+          value={value}
+          onChange={items => setValue(items)}
+          hasClear
+        />
+      </Stack>
+    </div>
   );
 }

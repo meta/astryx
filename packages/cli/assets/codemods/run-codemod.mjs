@@ -35,8 +35,10 @@ import {
   fixDirectiveCorruption,
   validateOutput,
   isIgnoredDirectory,
+  isIgnoredLinkedDirectory,
 } from './runner.mjs';
 import {createFileProtectionResolver} from '../../foundation/fs/file-protection.mjs';
+import {isCodemodParseError, markingSourceParseErrors} from './parse.mjs';
 
 export const DEFAULT_CODE_EXTENSIONS = [
   '.tsx',
@@ -72,6 +74,69 @@ function protectedResult(filePath, name, protection) {
 }
 
 /**
+ * @typedef {{file: string, codemod: string, location?: string, reason: string}} DeclinedCandidate
+ */
+
+/**
+ * Where a parse error points, as 1-based `line:column`, and its message
+ * without the position Babel appends. Babel reports a 0-based column on
+ * `loc`; PostCSS reports 1-based `line` and `column`.
+ * @param {any} err
+ * @returns {{message: string, location?: string}}
+ */
+function describeParseError(err) {
+  if (err?.name === 'CssSyntaxError') {
+    return {
+      message: String(err.reason ?? err.message),
+      ...(typeof err.line === 'number'
+        ? {location: `${err.line}:${err.column ?? 1}`}
+        : {}),
+    };
+  }
+  const loc = err?.loc;
+  return {
+    message: String(err?.message ?? err).replace(/\s*\(\d+:\d+\)$/, ''),
+    ...(loc && typeof loc.line === 'number'
+      ? {location: `${loc.line}:${(loc.column ?? 0) + 1}`}
+      : {}),
+  };
+}
+
+/**
+ * Decline a protected file a codemod could not parse. A codemod can prove
+ * nothing in bytes it cannot parse, and the file is never written anyway, so
+ * it is listed for manual review instead of failing the run. Only an error a
+ * parse entry point marked (see `parse.mjs`) counts: owned source that does
+ * not parse, and every other error a codemod throws, still fail.
+ * @param {unknown} err
+ * @param {string} filePath
+ * @param {string} relativePath
+ * @param {string} name
+ * @param {{root: string, classify: (file: string) => import('../../foundation/fs/file-protection.mjs').FileProtection[]}} protection
+ * @returns {DeclinedCandidate|null}
+ */
+function declineUnparseableProtected(
+  err,
+  filePath,
+  relativePath,
+  name,
+  protection,
+) {
+  if (!isCodemodParseError(err)) return null;
+  const protections = protection.classify(filePath);
+  if (protections.length === 0) return null;
+  const {message, location} = describeParseError(err);
+  return {
+    file: relativePath,
+    codemod: name,
+    ...(location ? {location} : {}),
+    // The category, not the declaration: a declaration names its source
+    // file from the project root, and `file` may be rebased elsewhere.
+    reason: `unparseable protected file (${[...new Set(protections.map(item => item.reason))].join(', ')}): ${message}`,
+  };
+}
+
+/**
  * Print one blocked candidate without implying that the protected bytes changed.
  * @param {import('../../authoring/codemod/type').CliLog} log
  * @param {ProtectedFile[]} protections
@@ -86,9 +151,10 @@ function logProtected(log, protections) {
 /**
  * Recursively find candidate source files in a directory.
  * @param {string} dir
+ * @param {string} [root] the operation's project root (default: `dir`)
  * @returns {string[]}
  */
-export function findSourceFiles(dir) {
+export function findSourceFiles(dir, root = dir) {
   /** @type {string[]} */
   const results = [];
   /** @param {string} currentDir @param {Set<string>} [ancestors] */
@@ -111,12 +177,24 @@ export function findSourceFiles(dir) {
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
       // Symlinked files and descendants remain read-only candidates so a
-      // required change can be reported. Real-path ancestors prevent cycles.
+      // required change can be reported. Real-path ancestors prevent cycles,
+      // and a link into a dependency or VCS tree is not descended.
       if (entry.isSymbolicLink()) {
         try {
           const target = fs.statSync(fullPath);
           if (target.isFile()) results.push(fullPath);
-          else if (target.isDirectory()) walk(fullPath, nextAncestors);
+          else if (
+            target.isDirectory() &&
+            !isIgnoredLinkedDirectory(
+              dir,
+              fullPath,
+              entry.name,
+              fs.realpathSync(fullPath),
+              root,
+            )
+          ) {
+            walk(fullPath, nextAncestors);
+          }
         } catch {
           // Broken links have no source bytes to evaluate.
         }
@@ -285,6 +363,8 @@ export function runCodeCodemod(
   const protectedFiles = [];
   /** @type {Array<{file: string, codemod: string, error: string}>} */
   const errors = [];
+  /** @type {DeclinedCandidate[]} */
+  const declinedCandidates = [];
   /** @type {Array<{filePath: string, relativePath: string, result: string}>} */
   const candidates = [];
 
@@ -300,7 +380,11 @@ export function runCodeCodemod(
         contents?.get(filePath) ?? fs.readFileSync(filePath, 'utf-8');
       const parser = ext === '.tsx' || ext === '.ts' ? 'tsx' : 'babel';
       const j = jscodeshift.withParser(parser);
-      const api = {jscodeshift: j, stats: () => {}, report: () => {}};
+      const api = {
+        jscodeshift: markingSourceParseErrors(j, source),
+        stats: () => {},
+        report: () => {},
+      };
       let result = codemod.transform({source, path: filePath}, api);
 
       if (result == null || result === source) continue;
@@ -320,6 +404,19 @@ export function runCodeCodemod(
       }
       candidates.push({filePath, relativePath, result});
     } catch (err) {
+      const declined = declineUnparseableProtected(
+        err,
+        filePath,
+        relativePath,
+        name,
+        resolver,
+      );
+      if (declined) {
+        // Printed by the caller once every codemod has run: a later codemod
+        // can still make this file a protected one, listed only as such.
+        declinedCandidates.push(declined);
+        continue;
+      }
       const message = /** @type {any} */ (err).message;
       log.error(`    ✗ ${relativePath} — ${message}`);
       errors.push({file: relativePath, codemod: name, error: message});
@@ -372,5 +469,12 @@ export function runCodeCodemod(
     }
   }
 
-  return {filesChanged, changedFiles, writtenFiles, protectedFiles, errors};
+  return {
+    filesChanged,
+    changedFiles,
+    writtenFiles,
+    protectedFiles,
+    declinedCandidates,
+    errors,
+  };
 }

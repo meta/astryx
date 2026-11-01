@@ -73,7 +73,7 @@ describe('theme build color-scheme output', () => {
     const project = path.join(tmpDir, 'project');
     const themesDir = path.join(project, 'themes');
     // A raw light-dark() token value is what triggers the color-scheme
-    // injection in build-theme.mjs. `defineTheme.test.ts` already covers the
+    // injection in theme.mjs. `defineTheme.test.ts` already covers the
     // separate [light, dark] tuple -> light-dark() conversion; this fixture
     // writes the string directly so this test stays focused on the CLI's own
     // color-scheme decision, not on that conversion.

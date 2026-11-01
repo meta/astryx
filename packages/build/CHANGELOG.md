@@ -1,5 +1,46 @@
 # @astryxdesign/build
 
+# 0.7.5
+
+#### Documentation
+
+- Package links now point to the project's GitHub home, `meta/astryx`.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
+# 0.7.4
+
+---
+
+# 0.7.3
+
+---
+
+# 0.7.2
+
+#### Fixes
+
+- `withAstryx()` builds again under pnpm's default isolated layout. It no longer turns off webpack's symlink resolution, which hid each Astryx package's own dependencies (`Can't resolve 'intl-messageformat'`, `'lucide-react'`). Astryx modules are still matched by their real path, so a workspace-linked package keeps resolving its `source` entries.
+- The PostCSS plugin now scans what each installed Astryx package publishes (its `files` field, or the whole package minus nested `node_modules` when it has none) instead of everything under `node_modules/@astryxdesign`. A package linked from a workspace no longer drags in its own `node_modules`, whose links can cycle back to it and made the build run out of memory, or its unpublished test fixtures. Registry installs scan the same files as before.
+
+#### Performance
+
+- The PostCSS plugin no longer loads the app's root Babel config when it compiles Astryx source. In the documented Next.js setup that config (`next/babel` plus Astryx's StyleX plugin) ran over every installed Astryx module on each build only for the plugin to read StyleX metadata, roughly doubling the CSS pass. The emitted CSS is unchanged, and the app's own files still compile with its config.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @vjeux
+
+---
+
 # 0.7.1
 
 ---

@@ -139,6 +139,12 @@ export const docs = {
         'Markdown plugins whose nodes the editor draws, each adopted with createRichTextExtension. A plugin node renders exactly as core Markdown renders it and edits as one unit; a node whose plugin is not given here shows its source. Pass the extensions the content was converted with, and create them in a client module. RichTextView takes the same prop.',
     },
     {
+      name: 'codeLanguages',
+      type: 'ReadonlyArray<CodeLanguage>',
+      description:
+        'CodeBlock language values a fence may name, each imported on its own (e.g. graphql from @astryxdesign/core/CodeBlock/languages/graphql) or made with createCodeLanguage. Pass the same list as Markdown codeLanguages so a matched fence paints and labels the same while reading and editing. RichTextView takes the same prop.',
+    },
+    {
       name: 'transformers',
       type: 'ReadonlyArray<Transformer>',
       description:

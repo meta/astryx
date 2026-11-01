@@ -39,6 +39,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {findManifestPaths, loadIntegrations} from './integrations.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
 
@@ -123,7 +124,8 @@ export function readDeclaredDependencies(projectDir) {
  *
  * Walking up matters because hoisting is normal — yarn and npm workspaces lift
  * a workspace member's dependency to the repo root, so the app's own
- * node_modules can be empty of a package it genuinely declares.
+ * node_modules can be empty of a package it genuinely declares. Integrations
+ * named in astryx.config resolve through the same walk.
  *
  * Presence is decided by the package's own package.json, not the directory, so
  * a stale empty directory is not mistaken for an install.
@@ -135,18 +137,7 @@ export function readDeclaredDependencies(projectDir) {
  */
 export function resolveInstalledPackageDir(name, fromDir) {
   if (!isBarePackageName(name)) return null;
-  const segments = name.split('/');
-  let dir = path.resolve(fromDir);
-  for (let i = 0; i < 50; i++) {
-    const packageDir = path.join(dir, 'node_modules', ...segments);
-    if (fs.existsSync(path.join(packageDir, 'package.json'))) {
-      return {packageDir, hostDir: dir};
-    }
-    const parent = path.dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return null;
+  return findNodeModulesPackage(fromDir, name);
 }
 
 /**

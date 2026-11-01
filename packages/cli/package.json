@@ -1,18 +1,18 @@
 {
   "name": "@astryxdesign/cli",
-  "version": "0.7.2",
+  "version": "0.7.6",
   "displayName": "CLI",
   "description": "Scaffold projects, browse templates, generate themes, and get agent-ready docs from the command line.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/cli"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -41,6 +41,14 @@
     "./api": {
       "types": "./api/index.d.mts",
       "import": "./api/index.mjs"
+    },
+    "./api/experimental": {
+      "types": "./api/experimental.d.mts",
+      "import": "./api/experimental.mjs"
+    },
+    "./host": {
+      "types": "./host/index.d.ts",
+      "import": "./host/index.mjs"
     },
     "./authoring": {
       "types": "./authoring/index.d.ts",
@@ -81,14 +89,30 @@
     "assets",
     "authoring",
     "foundation",
+    "host",
     "scripts/postinstall.mjs",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "astryx": "node clients/cli/bin/astryx.mjs",
     "postinstall": "node scripts/postinstall.mjs",
-    "test": "vitest run --root ../.. packages/cli",
-    "test:watch": "vitest --root ../.. packages/cli",
+    "test": "cd ../.. && vitest run packages/cli",
+    "test:watch": "cd ../.. && vitest packages/cli",
+    "typecheck": "pnpm typecheck:template-docs && pnpm typecheck:strict",
     "typecheck:template-docs": "tsc --project tsconfig.template-docs.json",
     "typecheck:json-api": "tsc --project tsconfig.json-api.json",
     "typecheck:strict": "tsc --project tsconfig.strict.json",
@@ -103,6 +127,7 @@
     "@babel/parser": "7.29.8",
     "@babel/plugin-transform-typescript": "7.29.7",
     "@babel/types": "7.29.8",
+    "@stylexjs/babel-plugin": "catalog:",
     "ast-types": "0.16.3",
     "commander": "^12.1.0",
     "ignore": "^7.0.5",

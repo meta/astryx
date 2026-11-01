@@ -141,6 +141,16 @@ export interface CodemodRunResult {
     generated: boolean;
     command?: string;
   }>;
+  /**
+   * Protected files left for manual review because their own source does not
+   * parse, so no change can be proven in them. They do not fail the run.
+   */
+  declinedCandidates?: Array<{
+    file: string;
+    codemod: string;
+    location?: string;
+    reason: string;
+  }>;
   errors: Array<{file: string; codemod: string; error: string}>;
 }
 

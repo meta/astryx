@@ -91,13 +91,19 @@ function MockContent({paragraphs = 3}: {paragraphs?: number}) {
  * Standard TopNav used across multiple stories.
  * Provides app identity (logo + heading) and top-level navigation.
  */
-function AppTopNav({endContent}: {endContent?: React.ReactNode}) {
+function AppTopNav({
+  endContent,
+  heading = 'Acme App',
+}: {
+  endContent?: React.ReactNode;
+  heading?: string;
+}) {
   return (
     <TopNav
       label="Main navigation"
       heading={
         <TopNavHeading
-          heading="Acme App"
+          heading={heading}
           logo={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
         />
       }
@@ -127,9 +133,13 @@ function AppTopNav({endContent}: {endContent?: React.ReactNode}) {
  * The TopNav already displays the app name, so the SideNav omits its header
  * to avoid doubling the identity.
  */
-function SideNavWithoutHeader() {
+function SideNavWithoutHeader({
+  collapsible,
+}: {
+  collapsible?: React.ComponentProps<typeof SideNav>['collapsible'];
+}) {
   return (
-    <SideNav>
+    <SideNav collapsible={collapsible}>
       <SideNavSection title="Main" isHeaderHidden>
         <SideNavItem
           label="Dashboard"
@@ -234,6 +244,8 @@ const meta: Meta<typeof AppShell> = {
   tags: ['autodocs'],
   parameters: {
     layout: 'fullscreen',
+    // AppShell sizes itself to the viewport: no story gutter around it.
+    pageFrame: true,
   },
   argTypes: {
     height: {
@@ -304,6 +316,42 @@ export const TopNavWithSideNav: Story = {
     <AppShell
       contentPadding={6}
       topNav={<AppTopNav />}
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * A long app name on a phone. The heading truncates with an ellipsis so the
+ * end content and the menu toggle stay inside the bar.
+ */
+export const LongHeadingOnMobile: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <AppTopNav
+          heading="Northwind Internal Usage Analytics"
+          endContent={
+            <>
+              <Button
+                label="Notifications"
+                variant="ghost"
+                icon={<BellIcon style={{width: 16, height: 16}} />}
+                isIconOnly
+              />
+              <Button
+                label="Profile"
+                variant="ghost"
+                icon={<UserCircleIcon style={{width: 16, height: 16}} />}
+                isIconOnly
+              />
+            </>
+          }
+        />
+      }
       sideNav={<SideNavWithoutHeader />}>
       <MockContent />
     </AppShell>
@@ -462,6 +510,23 @@ export const AutoHeight: Story = {
 };
 
 /**
+ * The default fill height with more content than fits and nothing focusable
+ * in it. The main region scrolls inside the viewport-high shell; while it
+ * overflows it is a stop in the tab order, so the arrow keys and Page Up/Down
+ * can scroll it.
+ */
+export const LongContent: Story = {
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={<AppTopNav />}
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent paragraphs={20} />
+    </AppShell>
+  ),
+};
+
+/**
  * Auto height mode with Field-based inputs. Scroll the inputs under the
  * sticky header — the header must stay above the input surfaces. Field
  * contains its local stacking layers at its own surface (AST-027), so the
@@ -500,6 +565,7 @@ export const AutoHeightWithFields: Story = {
  */
 export const ControlledCollapse: Story = {
   render: function ControlledCollapseStory() {
+    const [isCollapsed, setIsCollapsed] = useState(false);
     return (
       <AppShell
         contentPadding={6}
@@ -509,16 +575,232 @@ export const ControlledCollapse: Story = {
             heading={<TopNavHeading heading="Acme App" />}
             endContent={
               <Button
-                label="Toggle sidebar"
+                label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                 variant="ghost"
                 icon={<Bars3Icon style={{width: 16, height: 16}} />}
                 isIconOnly
+                onClick={() => setIsCollapsed(collapsed => !collapsed)}
               />
             }
           />
         }
-        sideNav={<SideNavWithoutHeader />}>
+        sideNav={
+          <SideNavWithoutHeader
+            collapsible={{
+              isCollapsed,
+              onCollapsedChange: setIsCollapsed,
+              hasButton: false,
+            }}
+          />
+        }>
         <MockContent />
+      </AppShell>
+    );
+  },
+};
+
+/** Placeholder page text only: long lines that rewrap as the rail moves. */
+function PlaceholderPageText() {
+  return (
+    <div {...stylex.props(styles.longContent)}>
+      <Text type="large">Quarterly planning</Text>
+      <Text type="body">
+        Twelve projects are active this quarter and three are archived. Each
+        card shows its owner, its last update and its next milestone, so a long
+        description wraps to the width of the page.
+      </Text>
+      <Text type="body">
+        Collapse the side navigation and the page gets wider: these sentences
+        rewrap. The old wrapping fades out while the new one fades in, as both
+        slide with the rail on one motion. Expand it again and they slide back.
+      </Text>
+      <Text type="body">
+        Nothing animates a width: the layout takes its final size at once, the
+        rail covers or reveals its labels with a clip, and it ends in the real
+        collapsed state, icons only.
+      </Text>
+    </div>
+  );
+}
+
+/**
+ * The rail-collapse stories' code as an app writes it, for the docs' code
+ * panel (Storybook's own source would show the story object around it).
+ * SYNC: When modified, update the render of RailCollapseMotion and
+ * RailCollapseMotionPhone, which run exactly this.
+ */
+const RAIL_COLLAPSE_CODE = `function App() {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  return (
+    <AppShell
+      contentPadding={6}
+      mobileNav={{breakpoint: 'none'}}
+      sideNav={
+        <SideNav collapsible={{isCollapsed, onCollapsedChange: setIsCollapsed}}>
+          <SideNavSection title="Main" isHeaderHidden>
+            <SideNavItem
+              label="Dashboard"
+              icon={HomeIcon}
+              selectedIcon={HomeIconSolid}
+              isSelected
+              href="#"
+            />
+            <SideNavItem
+              label="Analytics"
+              icon={ChartBarIcon}
+              selectedIcon={ChartBarIconSolid}
+              href="#"
+            />
+            <SideNavItem
+              label="Projects"
+              icon={FolderIcon}
+              selectedIcon={FolderIconSolid}
+              href="#"
+              endContent={<Badge label={12} />}
+            />
+          </SideNavSection>
+          <SideNavSection title="Organization">
+            <SideNavItem
+              label="Team"
+              icon={UserGroupIcon}
+              selectedIcon={UserGroupIconSolid}
+              href="#"
+            />
+            <SideNavItem
+              label="Settings"
+              icon={Cog6ToothIcon}
+              selectedIcon={Cog6ToothIconSolid}
+              href="#"
+            />
+          </SideNavSection>
+        </SideNav>
+      }>
+      <PlaceholderPageText />
+    </AppShell>
+  );
+}`;
+
+/**
+ * The side nav's collapse motion (`component:SideNav` FR6,
+ * `component:AppShell` FR17): an AppShell with a collapsible SideNav whose
+ * collapsed state the app holds. Press the collapse button at the bottom of
+ * the rail: the layout snaps, the rail covers or reveals its labels with a
+ * clip, and the page's old and new wrapping cross-fade as they slide on one
+ * motion. Reduce Motion cross-fades with a finger and changes at once with a
+ * mouse.
+ */
+export const RailCollapseMotion: Story = {
+  name: 'Rail collapse motion',
+  parameters: {docs: {source: {code: RAIL_COLLAPSE_CODE, language: 'tsx'}}},
+  render: function RailCollapseMotionStory() {
+    const [isCollapsed, setIsCollapsed] = useState(false);
+    return (
+      <AppShell
+        contentPadding={6}
+        mobileNav={{breakpoint: 'none'}}
+        sideNav={
+          <SideNav
+            collapsible={{isCollapsed, onCollapsedChange: setIsCollapsed}}>
+            <SideNavSection title="Main" isHeaderHidden>
+              <SideNavItem
+                label="Dashboard"
+                icon={HomeIcon}
+                selectedIcon={HomeIconSolid}
+                isSelected
+                href="#"
+              />
+              <SideNavItem
+                label="Analytics"
+                icon={ChartBarIcon}
+                selectedIcon={ChartBarIconSolid}
+                href="#"
+              />
+              <SideNavItem
+                label="Projects"
+                icon={FolderIcon}
+                selectedIcon={FolderIconSolid}
+                href="#"
+                endContent={<Badge label={12} />}
+              />
+            </SideNavSection>
+            <SideNavSection title="Organization">
+              <SideNavItem
+                label="Team"
+                icon={UserGroupIcon}
+                selectedIcon={UserGroupIconSolid}
+                href="#"
+              />
+              <SideNavItem
+                label="Settings"
+                icon={Cog6ToothIcon}
+                selectedIcon={Cog6ToothIconSolid}
+                href="#"
+              />
+            </SideNavSection>
+          </SideNav>
+        }>
+        <PlaceholderPageText />
+      </AppShell>
+    );
+  },
+};
+
+/**
+ * The same motion on a phone: `mobileNav={{breakpoint: 'none'}}` keeps the
+ * rail inline at 390 px instead of the mobile drawer.
+ */
+export const RailCollapseMotionPhone: Story = {
+  name: 'Rail collapse motion (phone)',
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  parameters: {docs: {source: {code: RAIL_COLLAPSE_CODE, language: 'tsx'}}},
+  render: function RailCollapseMotionPhoneStory() {
+    const [isCollapsed, setIsCollapsed] = useState(false);
+    return (
+      <AppShell
+        contentPadding={6}
+        mobileNav={{breakpoint: 'none'}}
+        sideNav={
+          <SideNav
+            collapsible={{isCollapsed, onCollapsedChange: setIsCollapsed}}>
+            <SideNavSection title="Main" isHeaderHidden>
+              <SideNavItem
+                label="Dashboard"
+                icon={HomeIcon}
+                selectedIcon={HomeIconSolid}
+                isSelected
+                href="#"
+              />
+              <SideNavItem
+                label="Analytics"
+                icon={ChartBarIcon}
+                selectedIcon={ChartBarIconSolid}
+                href="#"
+              />
+              <SideNavItem
+                label="Projects"
+                icon={FolderIcon}
+                selectedIcon={FolderIconSolid}
+                href="#"
+                endContent={<Badge label={12} />}
+              />
+            </SideNavSection>
+            <SideNavSection title="Organization">
+              <SideNavItem
+                label="Team"
+                icon={UserGroupIcon}
+                selectedIcon={UserGroupIconSolid}
+                href="#"
+              />
+              <SideNavItem
+                label="Settings"
+                icon={Cog6ToothIcon}
+                selectedIcon={Cog6ToothIconSolid}
+                href="#"
+              />
+            </SideNavSection>
+          </SideNav>
+        }>
+        <PlaceholderPageText />
       </AppShell>
     );
   },

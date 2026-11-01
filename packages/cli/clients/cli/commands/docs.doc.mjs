@@ -23,7 +23,7 @@ export const doc = {
     'opens a node of the docs tree: `cli` lists its guides and reference, ' +
     '`cli/api/functions` lists every API function, and `cli/api/functions/search` prints ' +
     'one. A namespace plus a section prints that section from the one guide below it ' +
-    'that has it (`astryx docs layout side-panels`). `--depth` reads as far down the tree as you ask, from the doc alone (0) to ' +
+    'that has it (`{@command docs layout side-panels}`). `--depth` reads as far down the tree as you ask, from the doc alone (0) to ' +
     'everything below it (all), and with it `--detail` sets how much of each doc below ' +
     'shows: one line (brief, the default), its sections (compact), or all of it (full).',
   fn: 'docs',
@@ -58,11 +58,12 @@ export const doc = {
     {label: 'Every CLI doc, one line each', cli: 'astryx docs cli --depth all'},
     {
       label: 'The integration guides as one read',
-      cli: 'astryx docs cli/integrations --depth all --detail full',
+      cli: 'astryx docs authoring --depth all --detail full',
     },
     {label: 'One API function', cli: 'astryx docs cli/api/functions/search'},
-    {label: 'A whole guide', cli: 'astryx docs cli/integrations/quick-start --full'},
+    {label: 'A whole guide', cli: 'astryx docs authoring/quick-start --full'},
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success'},
     {

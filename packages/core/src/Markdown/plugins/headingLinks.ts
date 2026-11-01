@@ -59,13 +59,21 @@ function fail(message: string): never {
   throw new TypeError(`Markdown heading links: ${message}`);
 }
 
+// Built at runtime, not written as a literal: for targets without property
+// escapes, or when no browserslist is set, Babel's
+// transform-unicode-property-regex rewrites a `\p{…}` literal, and the copy
+// bundled with Next.js lacks the Unicode data it needs, so a source build fails
+// with "Unknown property". A literal is safe once Next's bundled Babel ships
+// that data.
+const NON_SLUG_CHARACTERS = new RegExp('[^\\p{Letter}\\p{Number}]+', 'gu');
+
 function headingSlug(value: string): string {
   return value
     .normalize('NFKC')
     .trim()
     .toLowerCase()
     .replace(/['"]/gu, '')
-    .replace(/[^\p{Letter}\p{Number}]+/gu, '-')
+    .replace(NON_SLUG_CHARACTERS, '-')
     .replace(/^-+|-+$/gu, '');
 }
 

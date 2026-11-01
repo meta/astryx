@@ -50,6 +50,19 @@ describe('DrawerHeader', () => {
     expect(names).toEqual(['Back', 'Edit', 'Close']);
   });
 
+  it('renders 0 values inside their start and end content slots', () => {
+    const {container} = render(
+      <DrawerHeader title="Details" startContent={0} endContent={0} />,
+    );
+
+    expect(
+      container.querySelector('.astryx-drawer-header-start-content'),
+    ).toHaveTextContent('0');
+    expect(
+      container.querySelector('.astryx-drawer-header-end-content'),
+    ).toHaveTextContent('0');
+  });
+
   it('renders a 0 subtitle and skips an empty one', () => {
     const {rerender, container} = render(
       <DrawerHeader title="Details" subtitle={0} />,

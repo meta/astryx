@@ -1,0 +1,21 @@
+$ astryx component Button
+
+$ astryx discover
+
+$ astryx search close
+
+$ astryx template settings-dialog
+package: @astryxdesign/core
+
+$ astryx theme list
+
+$ astryx theme eject stone
+
+$ astryx theme add stone
+
+$ astryx theme use stone
+
+$ astryx theme remove matcha
+
+$ astryx upgrade --from 0.7.0
+<text>

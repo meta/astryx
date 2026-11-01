@@ -38,7 +38,8 @@ detached presentations; consumer usage remains documented in
 
 - Released default preserved: `yes`
 - Compatibility class: additive documentation only; runtime, DOM, styling, and
-  public API remain unchanged
+  public API remain unchanged, except that delivery inside a mounted live
+  container follows `spec:AST-086` FR4
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: direct `FieldStatus variant="tooltip"` support is rejected.
   `tooltip` remains a field-family sentinel that MUST be handled before rendering
@@ -127,11 +128,11 @@ intentional decision.
 - **AR1 — Programmatic announcement channel.** Errors MUST update the persistent
   assertive region; warnings and successes MUST update the persistent polite
   region, including on first mount and when message or type changes, without
-  moving focus.
+  moving focus. Inside a mounted live container, `spec:AST-086` FR4 applies.
 - **AR5 — Assistive-technology output.** Claims about whether, when, or how the
-  message is spoken or presented in braille MUST be verified through the real-AT
-  evidence process in `spec:AST-009`; DOM and accessibility-tree checks prove
-  only programmatic exposure and routing.
+  message is spoken or presented in braille are recommended real-AT follow-up
+  under `spec:AST-009`, not a merge or release requirement; DOM and
+  accessibility-tree checks prove programmatic exposure and routing.
 - **AR2 — Visible description.** The rendered message box MUST remain available
   to assistive technology for `aria-describedby` association and MUST NOT become
   its own newly mounted live region.
@@ -181,7 +182,7 @@ change either presentation.
 | FR5, FR6            | `FieldStatus.test.tsx` forwarding and update suites                     | Initial render and rerender                                   | Breaking the released root or update behavior fails compatibility assertions.                                                         | `audit:FieldStatus/behavior`      |
 | AR1                 | `StatusMessage.a11y.test.tsx` and `StatusMessage.a11y.chromium.spec.ts` | Error, warning, and success; post-mount message replacement   | Removing the persistent channel, changing its role/urgency, or dropping a post-mount update fails the shared status-message contract. | `audit:FieldStatus/accessibility` |
 | AR1                 | `FieldStatus.test.tsx` channel-routing suite                            | First non-empty mount; same-instance message and type changes | Breaking FieldStatus's first-use hook call or severity rerouting fails component-specific assertions.                                 | `audit:FieldStatus/accessibility` |
-| AR5                 | Pending/unverified real-AT evidence governed by `spec:AST-009`          | First mount; message replacement; type/urgency change         | Spoken and braille output remain unverified until a durable named AT/browser receipt exists.                                          | `audit:FieldStatus/accessibility` |
+| AR5                 | Recommended real-AT follow-up under `spec:AST-009`                      | First mount; message replacement; type/urgency change         | Spoken and braille output stay unverified until a real-AT receipt exists; this does not block merge or release.                       | `audit:FieldStatus/accessibility` |
 | AR2                 | `FieldStatus.test.tsx`                                                  | Attached/detached visible message and empty message           | The visible description becomes a second live region or is hidden from assistive technology.                                          | `audit:FieldStatus/accessibility` |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                           | Consumer anatomy and current targets                          | Missing, extra, duplicated, prefixed, or stale mappings fail repository validation.                                                   | `audit:FieldStatus/theming`       |
 

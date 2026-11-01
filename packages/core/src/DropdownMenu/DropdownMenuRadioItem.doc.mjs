@@ -26,12 +26,14 @@ export const docs = {
     {
       name: 'value',
       type: 'string',
+      required: true,
       description:
         "The value this item represents within its group. The group's value matches against this to determine the checked state.",
     },
     {
       name: 'label',
       type: 'ReactNode',
+      required: true,
       description: 'Primary label text identifying the option.',
     },
     {
@@ -43,7 +45,7 @@ export const docs = {
       name: 'icon',
       type: 'IconType',
       description:
-        'Icon to display before the label. See `npx @astryxdesign/cli docs icons` for valid semantic names.',
+        'Icon to display before the label. See `astryx docs icons` for valid semantic names.',
     },
     {
       name: 'isDisabled',

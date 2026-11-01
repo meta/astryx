@@ -71,6 +71,21 @@ describe('FormLayout', () => {
     expect(el).toHaveAttribute('role', 'group');
   });
 
+  it('keeps component-owned direction metadata over a colliding pass-through', () => {
+    render(
+      <FormLayout
+        direction="horizontal"
+        data-direction="vertical"
+        data-testid="layout">
+        content
+      </FormLayout>,
+    );
+    expect(screen.getByTestId('layout')).toHaveAttribute(
+      'data-direction',
+      'horizontal',
+    );
+  });
+
   // ─── Direction modes ────────────────────────────────────────────────────
 
   it('defaults to vertical direction', () => {

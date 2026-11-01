@@ -102,6 +102,37 @@ export const Default: Story = {
 };
 
 /**
+ * A nav menu of action items (no destinations): each runs its `onClick`.
+ */
+export const ActionItems: Story = {
+  render: () => (
+    <TopNav
+      label="Main navigation"
+      heading={<TopNavHeading heading="My App" headingHref="#" />}
+      startContent={
+        <TopNavMenu
+          label="Actions"
+          items={[
+            {
+              title: 'Invite teammates',
+              description: 'Send an invite by email',
+              icon: <UserCircleIcon style={{width: 20, height: 20}} />,
+              onClick: () => {},
+            },
+            {
+              title: 'Run automation',
+              description: 'Start the default workflow',
+              icon: <BoltIcon style={{width: 20, height: 20}} />,
+              onClick: () => {},
+            },
+          ]}
+        />
+      }
+    />
+  ),
+};
+
+/**
  * Multiple nav menus side by side. Hovering one closes the other
  * (standard hover-menu behavior).
  */

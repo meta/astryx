@@ -52,6 +52,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Drawer/Drawer.doc.mjs (props table, features, usage)
  * - /packages/core/src/Drawer/Drawer.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Drawer/__tests__/DrawerNonModalPageScroll.a11y.chromium.spec.ts (the page beside a non-modal drawer scrolls)
  * - /packages/core/src/Drawer/Drawer.spec.md (component contract)
  * - /packages/core/src/Drawer/index.ts (exports if types change)
  * - /packages/cli/assets/templates/blocks/components/Drawer/ (showcase blocks)
@@ -74,6 +75,7 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import {container, overlayPaddingReset} from '../Layout';
 import {
@@ -120,8 +122,13 @@ const styles = stylex.create({
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
     boxShadow: shadowVars['--shadow-high'],
-    overflow: 'hidden',
-    overscrollBehavior: 'contain',
+    // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
+    // Chromium then holds a finger's drag on the page beside an open
+    // non-modal drawer in that container's overscroll containment, so the
+    // page stops scrolling. `clip` clips the off-screen panel the same way
+    // without a scroll container (MobileNav's dialog does the same). The
+    // content area keeps its own scrolling and containment.
+    overflow: 'clip',
     outline: 'none',
     // Full-height side panel, pinned across the block axis.
     insetBlockStart: 0,
@@ -153,8 +160,9 @@ const styles = stylex.create({
   rendered: {
     display: 'flex',
   },
-  // start/end transforms flip under RTL so the panel always slides in from
-  // the edge it is anchored to.
+  // DOM directionality comes from the nearest effective `dir` attribute. A
+  // local override and an inherited region therefore agree with the logical
+  // edge the panel is anchored to.
   end: {
     insetInlineEnd: 0,
     insetInlineStart: 'auto',
@@ -163,7 +171,7 @@ const styles = stylex.create({
     borderInlineStartColor: colorVars['--color-border'],
     transform: {
       default: 'translateX(100%)',
-      ':is([dir="rtl"] *)': 'translateX(-100%)',
+      ':dir(rtl)': 'translateX(-100%)',
     },
   },
   endOpen: {
@@ -171,7 +179,7 @@ const styles = stylex.create({
       default: 'translateX(0)',
       '@starting-style': {
         default: 'translateX(100%)',
-        ':is([dir="rtl"] *)': 'translateX(-100%)',
+        ':dir(rtl)': 'translateX(-100%)',
       },
     },
   },
@@ -183,7 +191,7 @@ const styles = stylex.create({
     borderInlineEndColor: colorVars['--color-border'],
     transform: {
       default: 'translateX(-100%)',
-      ':is([dir="rtl"] *)': 'translateX(100%)',
+      ':dir(rtl)': 'translateX(100%)',
     },
   },
   startOpen: {
@@ -191,7 +199,7 @@ const styles = stylex.create({
       default: 'translateX(0)',
       '@starting-style': {
         default: 'translateX(-100%)',
-        ':is([dir="rtl"] *)': 'translateX(100%)',
+        ':dir(rtl)': 'translateX(100%)',
       },
     },
   },
@@ -494,6 +502,11 @@ export function Drawer({
   // same top-most/IME rules as the shared Escape listener.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
       event.preventDefault();
       if (shouldDismissOnCloseRequest() && allowEscape) {
         handleDismiss();
@@ -569,42 +582,44 @@ export function Drawer({
       onClick={composeEventHandlers(onClickProp, handleClick)}
       onKeyDown={onKeyDownProp}
       onCancel={handleCancel}>
-      <LayerDepthProvider>
-        <LayerContentBoundary>
-          {/* Scrollable content area — tabIndex so the dialog's focusing steps
+      <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen && hasScrim}>
+        <LayerDepthProvider>
+          <LayerContentBoundary>
+            {/* Scrollable content area — tabIndex so the dialog's focusing steps
               land on the panel body rather than the first button inside. */}
-          <div
-            tabIndex={-1}
-            {...stylex.props(
-              styles.content,
-              ...container(
-                usesThemePadding
-                  ? {useThemeDefault: 'drawer'}
-                  : {
-                      paddingInnerX: paddingToken,
-                      paddingInnerY: paddingToken,
-                      paddingOuterX: paddingToken,
-                      paddingOuterY: paddingToken,
-                    },
-              ),
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                paddingStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingInlineVarStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingBlockStartVarStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingBlockEndVarStyles[effectivePadding],
-              styles.contentSafeArea,
-            )}>
-            {children}
-          </div>
-        </LayerContentBoundary>
-      </LayerDepthProvider>
+            <div
+              tabIndex={-1}
+              {...stylex.props(
+                styles.content,
+                ...container(
+                  usesThemePadding
+                    ? {useThemeDefault: 'drawer'}
+                    : {
+                        paddingInnerX: paddingToken,
+                        paddingInnerY: paddingToken,
+                        paddingOuterX: paddingToken,
+                        paddingOuterY: paddingToken,
+                      },
+                ),
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  paddingStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingInlineVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockStartVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockEndVarStyles[effectivePadding],
+                styles.contentSafeArea,
+              )}>
+              {children}
+            </div>
+          </LayerContentBoundary>
+        </LayerDepthProvider>
+      </ModalAnnounceProvider>
     </dialog>
   );
 }

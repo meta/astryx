@@ -308,6 +308,28 @@ describe('Grid', () => {
     expect(grid).toHaveAttribute('aria-label', 'Product grid');
   });
 
+  it('keeps component-owned theme metadata over colliding pass-throughs', () => {
+    render(
+      <Grid
+        columns={3}
+        gap={4}
+        align="end"
+        justify="center"
+        data-columns="9"
+        data-gap="10"
+        data-align="start"
+        data-justify="stretch"
+        data-testid="grid">
+        <div>Item</div>
+      </Grid>,
+    );
+    const grid = screen.getByTestId('grid');
+    expect(grid).toHaveAttribute('data-columns', '3');
+    expect(grid).toHaveAttribute('data-gap', '4');
+    expect(grid).toHaveAttribute('data-align', 'end');
+    expect(grid).toHaveAttribute('data-justify', 'center');
+  });
+
   it('renders children correctly', () => {
     render(
       <Grid columns={3} data-testid="grid">

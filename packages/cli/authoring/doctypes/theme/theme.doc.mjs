@@ -12,7 +12,7 @@ export const doc = {
   displayName: 'ThemeDoc',
   namespace: 'authoring',
   description:
-    'The strongly typed descriptor for one integration or CLI-bundled source theme.',
+    "The strongly typed descriptor for one source theme: bundled with the CLI, shipped by an integration, or kept in the project's src/themes, where `theme eject` writes one.",
   appliesTo: '<theme-source-stem>.doc.mjs',
   fields: [
     {
@@ -65,7 +65,7 @@ export default {
   notes: [
     {
       type: 'prose',
-      text: 'ThemeDoc is static metadata. Default-export one object with literal string and boolean fields; discovery validates it without executing the descriptor or theme source.',
+      text: "ThemeDoc is static metadata. The descriptor holds one default-exported object of literal string and boolean fields, directly under a `/** @type {import('@astryxdesign/cli/authoring').ThemeDoc} */` comment, and nothing else: without that comment, or with any other statement, it fails to load. Discovery validates it without executing the descriptor or theme source.",
     },
     {
       type: 'prose',

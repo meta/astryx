@@ -154,23 +154,30 @@ describe('buildDocsTree', () => {
       source: `${provider}/${name}.doc.mjs`,
     });
     const cliNs = {...ns('cli'), provider: CLI, providerId: CLI, source: `${CLI}/tree/cli.doc.mjs`};
-    // An integration's topics named `CLI` and `UNORGANIZED` claim the CLI's
-    // namespace and the generated level; both are withdrawn.
+    // An integration's topics named `CLI` and `GUIDES` claim the CLI's
+    // namespace and a generated level; both are withdrawn.
     const tree = buildDocsTree({
       namespaces: [cliNs],
       docs: [],
-      topics: [topic('theme', CLI), topic('CLI'), topic('UNORGANIZED')],
+      topics: [topic('theme', CLI), topic('CLI'), topic('GUIDES')],
     });
     expect(tree.get('cli')?.provider).toBe(CLI);
-    expect(tree.get('unorganized')?.provider).toBe(CLI);
+    expect(tree.get('guides')?.provider).toBe(CLI);
     expect(routes(tree)).not.toContain('CLI');
-    expect(routes(tree)).not.toContain('UNORGANIZED');
+    expect(routes(tree)).not.toContain('GUIDES');
     expect(problems(tree)).toEqual(
       expect.arrayContaining([
         ['duplicate_route', expect.stringContaining('both have the route "CLI"')],
-        ['duplicate_route', expect.stringContaining('takes the route "UNORGANIZED", which the CLI\'s own docs keep')],
+        ['duplicate_route', expect.stringContaining('takes the route "GUIDES", which the CLI\'s own docs keep')],
       ]),
     );
+    // It names both docs as their authors know them, never by artifact id,
+    // and says what to change.
+    const taken = problems(tree).find(([, message]) => message.includes('route "CLI"'))?.[1];
+    expect(taken).toBe(
+      `The topic "CLI" from ${P} and Astryx's own namespace "cli" both have the route "CLI", so \`astryx docs CLI\` cannot open both. Fix: rename "CLI" (its \`name\` and its file), such as \`name: 'kit-cli'\`.`,
+    );
+    expect(taken).not.toContain('astryx:artifact');
     expect(tree.getFolded('THEME')?.provider).toBe(CLI);
     // A CLI topic whose own name has capitals keeps its route against a
     // lowercase namespace, although namespaces go into the tree first.
@@ -279,6 +286,40 @@ describe('buildDocsTree', () => {
     expect(routes(tree)).toEqual(['commands', 'commands/theme-add']);
     expect(tree.get('commands')?.slots[0].children).toEqual([
       'commands/theme-add',
+    ]);
+  });
+
+  it('adopts from every package only on an experimental CLI namespace', () => {
+    const CLI = '@astryxdesign/cli';
+    /** @param {object} extra */
+    const shared = extra => ({
+      ...ns('words', {
+        slots: {all: {title: 'All', accepts: {kinds: ['generic']}}},
+        adopts: [
+          {
+            source: {group: 'words', kinds: ['generic'], packages: 'all'},
+            into: 'all',
+          },
+        ],
+        ...extra,
+      }),
+      provider: CLI,
+      providerId: CLI,
+      source: `${CLI}/tree/words.doc.mjs`,
+    });
+    const docs = [
+      guide('mine', {group: 'words', provider: CLI, providerId: CLI}),
+      guide('theirs', {group: 'words'}),
+    ];
+    const stable = buildDocsTree({namespaces: [shared({})], docs});
+    expect(stable.get('words')?.slots[0].children).toEqual(['words/mine']);
+    const experimental = buildDocsTree({
+      namespaces: [shared({stability: 'experimental'})],
+      docs,
+    });
+    expect(experimental.get('words')?.slots[0].children).toEqual([
+      'words/mine',
+      'words/theirs',
     ]);
   });
 
@@ -495,7 +536,7 @@ describe("the CLI's own docs tree", () => {
     async () => {
       const tree = await loadDocsTree({fresh: true});
       expect(tree.diagnostics).toEqual([]);
-      expect(tree.roots().map(node => node.route)).toEqual(['cli', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
+      expect(tree.roots().map(node => node.route)).toEqual(['authoring', 'cli', 'global', 'internationalization', 'layout', 'migration', 'styling', 'styling-libraries', 'tokens', 'typography']);
       // Every slot child is a node one level below the namespace that places
       // it, and every node but the root is placed. Read from the tree, so a
       // restructure of the guides does not need this test edited.

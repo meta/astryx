@@ -27,7 +27,12 @@ import {
   code,
 } from '../formatters/index.mjs';
 import {cliError, rejectEmptyArgument} from '../lib/cli-error.mjs';
-import {discover as discoverApi} from '../../../api/discover/discover.mjs';
+import {
+  answersQueries,
+  discover as discoverApi,
+  OFFICIAL_SOURCE_NAME,
+} from '../../../api/discover/discover.mjs';
+import {isValidSemver} from '../../../foundation/env/semver.mjs';
 import {Project} from '../../../foundation/config/project.mjs';
 import {warnOnIntegrationIssues} from '../../../foundation/integrations/integration-warnings.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
@@ -47,6 +52,7 @@ const KIND_PLURALS = {
   theme: 'themes',
   codemod: 'codemods',
   'agent-doc': 'agent docs',
+  'icon-set': 'icon sets',
 };
 
 // The list fields that hold item names, summarized in the package list.
@@ -57,6 +63,7 @@ const ITEM_FIELDS = [
   'themes',
   'codemods',
   'agentDocs',
+  'iconSets',
 ];
 
 /**
@@ -76,6 +83,7 @@ const RESULT_KINDS = {
   theme: 'theme',
   codemod: 'migration',
   'agent-doc': 'doc',
+  'icon-set': 'mixed',
 };
 
 /**
@@ -201,6 +209,72 @@ function versionLines(versions, marks) {
 }
 
 /**
+ * Whether a package entry adds anything besides themes.
+ * @param {Record<string, unknown>} entry
+ * @returns {boolean}
+ */
+function addsMoreThanThemes(entry) {
+  return ITEM_FIELDS.some(field => {
+    const names = entry[field];
+    return field !== 'themes' && Array.isArray(names) && names.length > 0;
+  });
+}
+
+/**
+ * What an official entry's add command installs, when that is not the version
+ * the page shows: the project's Core version, or the Core range it declares.
+ * @param {string} install the package-manager command
+ * @param {string | undefined} shown the version the page shows
+ * @param {string | undefined} source the entry's source
+ * @returns {string | undefined}
+ */
+function pinNote(install, shown, source) {
+  if (source !== OFFICIAL_SOURCE_NAME) return undefined;
+  const pin = /\S@([\d^~<>=*xXv][^"]*)"?$/u.exec(install)?.[1];
+  if (pin == null || pin === shown) return undefined;
+  return isValidSemver(pin)
+    ? `This installs ${pin}, the version that matches this project's Core.`
+    : `This installs the newest release in ${pin}, the Core range this project declares.`;
+}
+
+/**
+ * The "Add it" blocks for a package the project does not have: the command
+ * that adds it, then what makes its items usable. A theme still needs
+ * `theme add` once the package is installed; anything else loads on the next
+ * command.
+ * @param {string} install the package-manager command
+ * @param {string[]} themes theme slugs the package or item adds
+ * @param {boolean} addsOther whether it adds anything besides themes
+ * @param {string} run how to invoke the CLI
+ * @param {string} [note] what the command installs, when the page shows
+ *   another version
+ * @returns {import('../formatters/index.mjs').Block[]}
+ */
+function addBlocks(install, themes, addsOther, run, note) {
+  /** @type {import('../formatters/index.mjs').Block[]} */
+  const blocks = [section('Add it'), code(install)];
+  if (note) blocks.push(text(note));
+  if (themes.length > 0) {
+    blocks.push(
+      text(
+        themes.length === 1
+          ? 'Then use its theme:'
+          : 'Then use one of its themes:',
+      ),
+      code(themes.map(slug => `${run} theme add ${slug}`).join('\n')),
+    );
+  }
+  if (addsOther || themes.length === 0) {
+    blocks.push(
+      text(
+        'Astryx loads an integration on the next command once it is a dependency.',
+      ),
+    );
+  }
+  return blocks;
+}
+
+/**
  * @param {import('commander').Command} program
  */
 export function registerDiscover(program) {
@@ -222,8 +296,12 @@ export function registerDiscover(program) {
         // Non-blocking nudge: if any configured integration has validation
         // issues, print one compact line to stderr pointing at
         // doctor integration validate. Best-effort; suppressed in --json mode.
+        // Whether a query gets its own answer here or the list (FR1); the
+        // list's hints must not suggest queries that only return it again.
+        let queries = true;
         try {
           const project = await Project.load(process.cwd());
+          queries = answersQueries(project);
           await warnOnIntegrationIssues(project, {json});
         } catch {
           // Never let the nudge break the command.
@@ -263,70 +341,10 @@ export function registerDiscover(program) {
         switch (result.type) {
           case 'discover.list': {
             const listOpts = itemListOptions(Boolean(options.components));
-            const available = result.meta?.available;
+            // Discover always has a source, the official list, so the list
+            // always has an Available side.
+            const available = result.meta?.available ?? [];
             const sources = result.meta?.sources ?? [];
-
-            // No discover source: the list of what this project has, as always.
-            if (available === undefined) {
-              if (result.data.length === 0) {
-                if (options.available) {
-                  // The user specifically asked for available packages but
-                  // there is no source to answer from. Say so honestly.
-                  emit(
-                    text('No discover source is configured.'),
-                    text(
-                      [
-                        'Available integrations are listed by discover sources.',
-                        'A project can set one in astryx.config.mjs, and installed',
-                        'integrations can provide one.',
-                      ].join(' '),
-                    ),
-                    text(
-                      [
-                        `Find Astryx packages on npm: npm search @astryxdesign`,
-                        `Learn more: ${run} docs cli/integrations`,
-                      ].join('\n'),
-                    ),
-                  );
-                } else if (result.meta && result.meta.configured === false) {
-                  emit(
-                    text('No integrations configured.'),
-                    text('Add integration package names to astryx.config.mjs:'),
-                    code(
-                      "export default {\n  integrations: ['@scope/your-integration'],\n};",
-                    ),
-                    text(
-                      [
-                        `Find Astryx packages on npm: npm search @astryxdesign`,
-                        `Learn more: ${run} docs cli/integrations`,
-                      ].join('\n'),
-                    ),
-                  );
-                } else {
-                  emit(
-                    text(
-                      'No external components found in configured integrations.',
-                    ),
-                    text(
-                      `Find more packages: ${run} discover --available (needs a discover source)`,
-                    ),
-                  );
-                }
-                break;
-              }
-              emit(
-                records(result.data, listOpts),
-                text(
-                  [
-                    'Usage:',
-                    `  ${run} discover <package>            Browse a package`,
-                    `  ${run} discover <package>/Component  View component docs`,
-                    `  ${run} discover <search>             Search all packages`,
-                  ].join('\n'),
-                ),
-              );
-              break;
-            }
 
             const kind = options.type
               ? (KIND_PLURALS[options.type] ?? options.type)
@@ -341,7 +359,9 @@ export function registerDiscover(program) {
                   : text(
                       kind
                         ? `None of this project's integrations add ${kind}.`
-                        : 'None yet.',
+                        : result.meta?.configured
+                          ? 'No external components found in configured integrations.'
+                          : 'None yet.',
                     ),
               );
             }
@@ -360,16 +380,44 @@ export function registerDiscover(program) {
               );
             }
             blocks.push(...sourceNotes(sources));
-            blocks.push(
-              text(
-                [
-                  'Usage:',
-                  `  ${run} discover <package>            Browse a package and its versions`,
-                  `  ${run} discover <package>/<item>     View one item`,
-                  `  ${run} discover <search>             Search every item and package`,
-                ].join('\n'),
-              ),
-            );
+            if (!queries) {
+              // This project loads no integration and has no discover source
+              // of its own, so every query returns this list. Point at the
+              // add commands above instead of at queries.
+              if (query?.trim()) {
+                blocks.push(
+                  text(
+                    `This project loads no integration and has no discover source of its own, so discover lists everything instead of answering "${query}".`,
+                  ),
+                );
+              }
+              const themes = available.flatMap(entry =>
+                Array.isArray(entry.themes) ? entry.themes : [],
+              );
+              blocks.push(
+                text(
+                  [
+                    'To add a package, run its install command.',
+                    ...(themes.length > 0
+                      ? [
+                          `Then use a theme it adds: ${run} theme add <theme>, for example ${run} theme add ${themes[0]}`,
+                        ]
+                      : []),
+                  ].join('\n'),
+                ),
+              );
+            } else {
+              blocks.push(
+                text(
+                  [
+                    'Usage:',
+                    `  ${run} discover <package>            Browse a package and its versions`,
+                    `  ${run} discover <package>/<item>     View one item`,
+                    `  ${run} discover <search>             Search every item and package`,
+                  ].join('\n'),
+                ),
+              );
+            }
             emit(...blocks);
             break;
           }
@@ -378,7 +426,7 @@ export function registerDiscover(program) {
             const d = result.data;
             /** @type {import('../formatters/index.mjs').Block[]} */
             const blocks = [record(d, {omit: ['versions', 'install']})];
-            if (d.versions) {
+            if (d.versions && d.versions.length > 0) {
               const shown = d.version;
               const lines = versionLines(d.versions, {
                 shown,
@@ -387,12 +435,12 @@ export function registerDiscover(program) {
                   : undefined,
                 latest: d.latest,
               });
-              const prereleases = d.versions.filter(v => v.prerelease).length;
+              // The shown version is listed even when it is a prerelease.
+              const prereleases = d.versions.filter(
+                v => v.prerelease && v.version !== shown,
+              ).length;
               blocks.push(
-                section(
-                  'Versions',
-                  `${d.versions.length} published, newest first`,
-                ),
+                section('Versions', `${d.versions.length} known, newest first`),
               );
               if (lines.length > 0) blocks.push(list(lines));
               if (prereleases > 0) {
@@ -405,10 +453,16 @@ export function registerDiscover(program) {
             }
             if (d.install) {
               blocks.push(
-                section('Add it'),
-                code(d.install),
-                text(
-                  'Astryx loads an integration on the next command once it is a dependency.',
+                ...addBlocks(
+                  d.install,
+                  d.themes ?? [],
+                  addsMoreThanThemes(
+                    /** @type {Record<string, unknown>} */ (
+                      /** @type {unknown} */ (d)
+                    ),
+                  ),
+                  run,
+                  pinNote(d.install, d.version, d.source),
                 ),
               );
             } else if (d.installedAs) {
@@ -420,7 +474,7 @@ export function registerDiscover(program) {
             }
             blocks.push(
               text(
-                d.installed
+                d.installed && d.components.length > 0
                   ? `Usage: ${run} discover ${d.name}/<ComponentName>`
                   : `See one item: ${run} discover ${d.name}/<item>`,
               ),
@@ -437,7 +491,7 @@ export function registerDiscover(program) {
                 : detail === 'compact'
                   ? formatCompact(docs, docs.name, '')
                   : formatFull(docs);
-            emit(code(md));
+            emit(record({package: result.package}), code(md));
             break;
           }
 
@@ -446,13 +500,13 @@ export function registerDiscover(program) {
             emit(
               record(d, {omit: ['install']}),
               ...(d.install
-                ? [
-                    section('Add it'),
-                    code(d.install),
-                    text(
-                      'Astryx loads an integration on the next command once it is a dependency.',
-                    ),
-                  ]
+                ? addBlocks(
+                    d.install,
+                    d.kind === 'theme' ? [d.name] : [],
+                    d.kind !== 'theme',
+                    run,
+                    pinNote(d.install, d.version, d.source),
+                  )
                 : []),
               text(`Its package: ${run} discover ${d.package}`),
             );

@@ -91,14 +91,16 @@ export function registerSwizzle(program) {
         ),
       ];
 
-      // StyleX build requirement — swizzled StyleX source renders unstyled with
-      // no error unless the consumer's build runs a StyleX compiler.
+      // StyleX build requirement — swizzled StyleX source throws on import
+      // ("Unexpected 'stylex.create' call at runtime") unless the consumer's
+      // build runs a StyleX compiler, so the page does not render at all.
       if (usesStyleX) {
         out.push(
           text(
             [
               `${WARN} These components use StyleX and require a StyleX compiler in your build.`,
-              '  Without one they render unstyled (no error). See setup per framework:',
+              `  Without one, importing them throws "Unexpected 'stylex.create' call at runtime"`,
+              '  and the page does not render. See setup per framework:',
               `  ${run} docs styling`,
               '  Next.js note: the StyleX Babel plugin disables SWC and breaks next/font -',
               '  use an SWC-based StyleX transform instead (covered in the guide).',

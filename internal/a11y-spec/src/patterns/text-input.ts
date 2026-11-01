@@ -82,7 +82,7 @@ const AST_021_PRESERVE_BEHAVIOR: AstryxRecord = {
   clause: 'FR7',
   requirement:
     'Existing behavior is preserved unless a separate change authorizes it.',
-  url: 'https://github.com/facebook/astryx/blob/029368bde880cb25a7912523510419285d803a90/docs/specs/AST-021/spec.md#L85-L89',
+  url: 'https://github.com/meta/astryx/blob/029368bde880cb25a7912523510419285d803a90/docs/specs/AST-021/spec.md#L85-L89',
 };
 
 const INPUT_FIELDS_FR4: AstryxRecord = {
@@ -91,7 +91,7 @@ const INPUT_FIELDS_FR4: AstryxRecord = {
   clause: 'FR4',
   requirement:
     'When a member exposes `disabledMessage`, the inactive field remains focusable enough to expose the reason while editing, selection, and activation stay blocked.',
-  url: 'https://github.com/facebook/astryx/blob/029368bde880cb25a7912523510419285d803a90/docs/families/input-fields.md#L151-L154',
+  url: 'https://github.com/meta/astryx/blob/029368bde880cb25a7912523510419285d803a90/docs/families/input-fields.md#L151-L154',
 };
 
 const WAI_ARIA_ERROR_MESSAGE: WebStandardRequirement = {

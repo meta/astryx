@@ -17,7 +17,18 @@
 import {Worker} from 'node:worker_threads';
 import {AstryxError} from '../error.mjs';
 import {Project} from '../../foundation/config/project.mjs';
-import {CORE_PACKAGE} from '../../foundation/discovery/component-discovery.mjs';
+import {
+  CORE_PACKAGE,
+  discoverIntegrationComponents,
+  docStem,
+  findComponentReadme,
+  findIntegrationComponent,
+  integrationRecordHold,
+  isIntegrationMember,
+  unscopedComponentOwners,
+} from '../../foundation/discovery/component-discovery.mjs';
+import {legacyExternalKeeps} from '../component/_adapter.mjs';
+import {findCoreDir} from '../../foundation/fs/paths.mjs';
 import {captureEnv} from '../../foundation/debug/event.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {parseGapReportReceipt} from '../../authoring/gap-report/parse.mjs';
@@ -43,6 +54,14 @@ export const GAP_REPORT_CATEGORIES = Object.freeze([
 
 export const PUBLIC_CONFIRMATION_MESSAGE =
   'Rerun with --confirm-public to file this report.';
+
+/** What an agent does when more than one destination exists. */
+export const ASK_DESTINATION_MESSAGE =
+  'Ask the person where to file this report, then pass their choice with --to <package>. Never pick a package destination yourself; leave --to out to use the default.';
+
+/**
+ * @typedef {import('./gap-report.type.mjs').GapReportDestination} GapReportDestination
+ */
 
 /**
  * @typedef {object} ReportTarget
@@ -178,13 +197,65 @@ async function selectTarget(project, component, packageName) {
     coreName,
   );
   if (replacement) return targetForPackage(project, replacement.package);
+  // The owner rule runs over every owner discovery finds, loadable or not
+  // (a doc recorded under another export still answers to its file's name);
+  // then only owners whose docs load route a report.
+  const wanted = bareComponent.toLowerCase();
+  const loads = new Set(records.map(r => `${r.package}\0${r.docPath}`));
+  const recorded = project.loadedIntegrations.flatMap(integration =>
+    discoverIntegrationComponents(integration).flatMap(r =>
+      r.name.toLowerCase() === wanted
+        ? [{...r, hold: integrationRecordHold(r)}]
+        : docStem(r.docPath).toLowerCase() === wanted && !isIntegrationMember(r)
+          ? [{...r, hold: 'doc'}]
+          : [],
+    ),
+  );
+  // The checks below find files by name, so they run on every spelling the
+  // case-blind match above found, as well as the one typed.
+  const spellings = new Set([
+    bareComponent,
+    ...recorded.flatMap(r =>
+      [r.name, docStem(r.docPath)].filter(n => n.toLowerCase() === wanted),
+    ),
+  ]);
+  // Core also holds a name only its doc lookup finds, as in detail: a name a
+  // doc records yields to it, though it routes no report itself.
+  const coreDir = findCoreDir(project.cwd);
+  const coreDocs =
+    coreDir != null &&
+    [...spellings].some(name => findComponentReadme(coreDir, name) != null);
+  const ruled = unscopedComponentOwners([
+    ...records
+      .filter(
+        r => r.package === CORE_PACKAGE && r.name.toLowerCase() === wanted,
+      )
+      .map(r => ({...r, hold: 'core'})),
+    ...recorded,
+    // A hidden doc named after its file still holds that name, as the
+    // component lookup finds it; it routes no report.
+    ...project.loadedIntegrations.flatMap(integration =>
+      [...spellings].flatMap(spelling => {
+        const found = findIntegrationComponent(integration, spelling);
+        return found?.hold === 'file'
+          ? [{...found, package: integration.name}]
+          : [];
+      }),
+    ),
+  ]).filter(r => !coreDocs || r.hold !== 'doc');
+  // A legacy docs package keeps an export name a doc records, as in detail.
   const owners = [
     ...new Set(
-      records
+      ([...spellings].some(name =>
+        legacyExternalKeeps(project.cwd, name, ruled),
+      )
+        ? []
+        : ruled
+      )
         .filter(
-          record => record.name.toLowerCase() === bareComponent.toLowerCase(),
+          r => r.hold === 'core' || loads.has(`${r.package}\0${r.docPath}`),
         )
-        .map(record => record.package),
+        .map(r => r.package),
     ),
   ];
 
@@ -474,15 +545,14 @@ function githubRoute(issuesUrl) {
 }
 
 /**
- * Built-in GitHub fallback — runs only when the effective handler set is empty.
- * Requires confirmPublic.
+ * File a report on GitHub with `gh` — for the zero-handler fallback and for a
+ * destination the caller names. Requires confirmPublic.
  *
- * @param {ReportTarget} target
  * @param {{component: string, categoryLabel: string, intention: string, detail?: string, source: string, timestamp: string}} report
  * @param {{repo: string}} github
  * @returns {Promise<Pick<import('./gap-report.type.mjs').GapReportDelivery, 'status'|'url'|'message'>>}
  */
-async function runGithubFallback(target, report, github) {
+async function runGithubFallback(report, github) {
   const {execFile} = await import('node:child_process');
   const title = `[gap] ${report.component}: ${report.intention.slice(0, 70)}`;
   const body = [
@@ -545,6 +615,87 @@ async function runGithubFallback(target, report, github) {
 }
 
 /**
+ * Send a report to an issues URL: a GitHub issues URL is filed with `gh` only
+ * with consent; any other URL comes back as routed_only. Serves the
+ * zero-handler fallback (spec:AST-031/FR8) and a destination named with `to`
+ * (architecture:cli-surface INV36).
+ *
+ * @param {string} issuesUrl
+ * @param {{component: string, categoryLabel: string, intention: string, detail?: string, source: string, timestamp: string}} report
+ * @param {boolean} confirmPublic
+ * @returns {Promise<import('./gap-report.type.mjs').GapReportDelivery>}
+ */
+async function deliverToIssuesUrl(issuesUrl, report, confirmPublic) {
+  const github = githubRoute(issuesUrl);
+  if (github != null && !confirmPublic) {
+    return {
+      handlerType: 'fallback',
+      handler: 'github',
+      audience: 'public',
+      status: 'consent_required',
+      url: null,
+      message: PUBLIC_CONFIRMATION_MESSAGE,
+    };
+  }
+  if (github) {
+    return {
+      handlerType: 'fallback',
+      handler: 'github',
+      audience: 'public',
+      ...(await runGithubFallback(report, github)),
+    };
+  }
+  return {
+    handlerType: 'fallback',
+    handler: 'issuesUrl',
+    audience: null,
+    status: 'routed_only',
+    url: issuesUrl,
+    message:
+      'No automatic handler is available; open the routed URL to file this report.',
+  };
+}
+
+/**
+ * Where a report can go: the default (the handlers, or with none the owning
+ * package's issues URL), then each loaded integration that names its own
+ * issues URL (architecture:cli-surface INV36).
+ *
+ * @param {Project} project
+ * @returns {GapReportDestination[]}
+ */
+function listDestinations(project) {
+  /** @type {GapReportDestination[]} */
+  const destinations = [{to: null, default: true, issuesUrl: null}];
+  for (const integration of project.loadedIntegrations) {
+    if (integration.__loadError || !integration.issuesUrl) continue;
+    if (destinations.some(destination => destination.to === integration.name))
+      continue;
+    destinations.push({
+      to: integration.name,
+      default: false,
+      issuesUrl: integration.issuesUrl,
+    });
+  }
+  return destinations;
+}
+
+/**
+ * The destinations of the project at `cwd`, or only the default when no
+ * project loads there.
+ * @param {string|undefined} cwd
+ * @returns {Promise<GapReportDestination[]>}
+ */
+async function destinationsAt(cwd) {
+  try {
+    const {resolve} = await import('node:path');
+    return listDestinations(await Project.load(resolve(cwd ?? process.cwd())));
+  } catch {
+    return [{to: null, default: true, issuesUrl: null}];
+  }
+}
+
+/**
  * Compute the aggregate status from the deliveries.
  * @param {import('./gap-report.type.mjs').GapReportDelivery[]} deliveries
  * @returns {import('./gap-report.type.mjs').GapReportAggregateStatus}
@@ -602,6 +753,7 @@ export async function gapReport(component, options = {}) {
       options.detail ? '--additional-context' : null,
       options.package ? '--package' : null,
       options.confirmPublic ? '--confirm-public' : null,
+      options.to != null ? '--to' : null,
     ].filter(Boolean);
     if (ignored.length > 0) {
       throw new AstryxError(
@@ -610,9 +762,13 @@ export async function gapReport(component, options = {}) {
         ERROR_CODES.ERR_INVALID_ARGUMENT,
       );
     }
+    const destinations = await destinationsAt(options.cwd);
     return {
       type: 'gap-report.categories',
       data: GAP_REPORT_CATEGORIES.map(category => ({...category})),
+      ...(destinations.length > 1
+        ? {meta: {destinations, ask: ASK_DESTINATION_MESSAGE}}
+        : {}),
     };
   }
 
@@ -641,7 +797,33 @@ export async function gapReport(component, options = {}) {
     options.package,
   );
 
-  const entries = collectGapReportHandlers(project);
+  const destinations = listDestinations(project);
+  /** @type {GapReportDestination | undefined} */
+  let chosen;
+  // `to: null` is absent, like `package: null`; any other value is matched
+  // against the destinations as given, so an empty or unknown one lists them.
+  if (options.to != null) {
+    const to = options.to;
+    chosen = destinations.find(
+      destination => !destination.default && destination.to === to,
+    );
+    if (!chosen) {
+      const choices = destinations.filter(destination => !destination.default);
+      const named = JSON.stringify(String(to).slice(0, 214));
+      throw new AstryxError(
+        choices.length > 0
+          ? `No gap-report destination ${named}. Choose one of: ${choices.map(destination => destination.to).join(', ')}; or leave out --to for the default.`
+          : `No gap-report destination ${named}: no loaded integration names an issues URL. Leave out --to for the default.`,
+        choices.map(destination => ({
+          name: /** @type {string} */ (destination.to),
+          reason: /** @type {string} */ (destination.issuesUrl),
+        })),
+        ERROR_CODES.ERR_UNKNOWN_PACKAGE,
+      );
+    }
+  }
+
+  const entries = chosen ? [] : collectGapReportHandlers(project);
 
   const timestamp = new Date().toISOString();
   const source = captureEnv().invocationSource;
@@ -668,8 +850,24 @@ export async function gapReport(component, options = {}) {
 
   /** @type {import('./gap-report.type.mjs').GapReportDelivery[]} */
   const deliveries = [];
+  const routeReport = {
+    component: resolvedComponent,
+    categoryLabel: categoryEntry.label,
+    intention,
+    detail,
+    source,
+    timestamp,
+  };
 
-  if (entries.length > 0) {
+  if (chosen) {
+    deliveries.push(
+      await deliverToIssuesUrl(
+        /** @type {string} */ (chosen.issuesUrl),
+        routeReport,
+        options.confirmPublic === true,
+      ),
+    );
+  } else if (entries.length > 0) {
     deliveries.push(
       ...(await deliverGapReportHandlers(entries, report, {
         confirmPublic: options.confirmPublic === true,
@@ -683,47 +881,13 @@ export async function gapReport(component, options = {}) {
         ERROR_CODES.ERR_NOT_FOUND,
       );
     }
-
-    const github = githubRoute(target.issuesUrl);
-    if (github != null && options.confirmPublic !== true) {
-      deliveries.push({
-        handlerType: 'fallback',
-        handler: 'github',
-        audience: 'public',
-        status: 'consent_required',
-        url: null,
-        message: PUBLIC_CONFIRMATION_MESSAGE,
-      });
-    } else if (github) {
-      const outcome = await runGithubFallback(
-        target,
-        {
-          component: resolvedComponent,
-          categoryLabel: categoryEntry.label,
-          intention,
-          detail,
-          source,
-          timestamp,
-        },
-        github,
-      );
-      deliveries.push({
-        handlerType: 'fallback',
-        handler: 'github',
-        audience: 'public',
-        ...outcome,
-      });
-    } else {
-      deliveries.push({
-        handlerType: 'fallback',
-        handler: 'issuesUrl',
-        audience: null,
-        status: 'routed_only',
-        url: target.issuesUrl,
-        message:
-          'No automatic handler is available; open the routed URL to file this report.',
-      });
-    }
+    deliveries.push(
+      await deliverToIssuesUrl(
+        target.issuesUrl,
+        routeReport,
+        options.confirmPublic === true,
+      ),
+    );
   }
 
   const filedCount = deliveries.filter(d => d.status === 'filed').length;
@@ -737,10 +901,13 @@ export async function gapReport(component, options = {}) {
     data: {
       status,
       package: target.package,
-      issuesUrl: target.issuesUrl,
+      issuesUrl: chosen ? chosen.issuesUrl : target.issuesUrl,
       deliveries,
       filedCount,
       routedOnlyCount,
+      ...(!chosen && destinations.length > 1
+        ? {destinations, ask: ASK_DESTINATION_MESSAGE}
+        : {}),
     },
   };
 }

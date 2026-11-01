@@ -147,6 +147,52 @@ describe('integration authoring CLI', () => {
     );
   });
 
+  it("verify carries each issue's fix, file, and line in JSON and prints them in text", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      `${JSON.stringify({
+        name: '@acme/widgets',
+        version: '1.0.0',
+        files: ['astryx.integration.mjs', 'docs'],
+      })}\n`,
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'astryx.integration.mjs'),
+      "export default {docs: './docs'};\n",
+    );
+    fs.mkdirSync(path.join(tmpDir, 'docs'));
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'deploying.doc.mjs'),
+      "export const docs = {type: 'generic', name: 'deploying', title: 'Deploying', description: 'How to deploy.', sections: [{title: 'Overview', content: [{type: 'prose', text: 'Ship it.'}]}]};\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'ghost.doc.zh.mjs'),
+      "export default {title: 'ghost'};\n",
+    );
+
+    const json = parseEnvelope(
+      (await runCli(['integration', 'verify', '--json'], tmpDir)).stdout,
+    );
+    const orphans = json.data.issues.filter(issue =>
+      issue.code.endsWith('orphan_doc_overlay'),
+    );
+    expect(orphans.map(issue => issue.code).sort()).toEqual([
+      'orphan_doc_overlay',
+      'packed_orphan_doc_overlay',
+    ]);
+    for (const issue of orphans) {
+      expect(issue).toMatchObject({
+        file: 'docs/ghost.doc.zh.mjs',
+        line: 1,
+        fix: expect.stringContaining('Delete docs/ghost.doc.zh.mjs'),
+      });
+    }
+
+    const text = (await runCli(['integration', 'verify'], tmpDir)).stdout;
+    expect(text).toContain('file: docs/ghost.doc.zh.mjs:1');
+    expect(text).toContain(`fix: ${orphans[0].fix}`);
+  });
+
   it('keeps `integration pack --check` as a deprecated alias of `integration verify`', async () => {
     // The old spelling runs the same check: the same JSON, the same exit code.
     const verify = await runCli(['integration', 'verify', '--json'], tmpDir);
@@ -173,7 +219,7 @@ describe('integration authoring CLI', () => {
     expect(text.status).toBe(verifyText.status);
     expect(text.stdout).toBe(verifyText.stdout);
     expect(text.stderr).toContain('`integration pack --check` is deprecated');
-    expect(text.stderr).toContain('astryx integration verify');
+    expect(text.stderr).toContain(' integration verify`');
     // Without --check it fails, as it did, and points only at the new name:
     // suggesting `--check` would send people to the deprecated spelling.
     const bare = await runCli(['integration', 'pack'], tmpDir);
@@ -181,13 +227,13 @@ describe('integration authoring CLI', () => {
     expect(bare.stderr).toContain(
       '`integration pack` is now `integration verify`',
     );
-    expect(bare.stderr).toContain('astryx integration verify');
+    expect(bare.stderr).toContain(' integration verify`');
     expect(bare.stderr).toContain('npm pack');
     expect(bare.stderr).not.toContain('--check');
     const bareJson = await runCli(['--json', 'integration', 'pack'], tmpDir);
     expect(parseEnvelope(bareJson.stdout)).toMatchObject({
       code: 'ERR_INVALID_ARGUMENT',
-      error: expect.stringContaining('astryx integration verify'),
+      error: expect.stringContaining(' integration verify`'),
     });
     // Help lists it, marked deprecated: nothing is hidden.
     const help = await runCli(['integration', '--help'], tmpDir);

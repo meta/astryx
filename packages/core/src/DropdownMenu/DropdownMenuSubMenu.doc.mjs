@@ -16,6 +16,7 @@ export const docs = {
     {
       name: 'label',
       type: 'ReactNode',
+      required: true,
       description: 'Primary label text for the trigger row.',
     },
     {
@@ -32,6 +33,7 @@ export const docs = {
     {
       name: 'children',
       type: 'ReactNode',
+      required: true,
       description:
         'The flyout menu items: the same components used at the top level (DropdownMenuItem, nested DropdownMenuSubMenu, selectable items).',
     },
@@ -68,6 +70,24 @@ export const docs = {
       default: "'adaptive'",
     },
     {
+      name: 'header',
+      type: 'ReactNode',
+      description:
+        'Content above the sub-menu\'s rows and outside its menu, a field that filters them, say. It keeps its own keys and presses. With a header or footer the sub-menu\'s surface (the flyout, or the drilled-in view on a phone) is a modal dialog named by the row, beside the menu rather than inside it: the row says aria-haspopup="dialog", Tab and Shift+Tab move through the header, the rows and the footer and wrap, Escape returns to the row, and a pointer leaving the flyout closes it only once focus leaves too. A ContextMenu does not show it.',
+    },
+    {
+      name: 'footer',
+      type: 'ReactNode',
+      description:
+        "Content below the sub-menu's rows and outside its menu, a door to where the options are managed, say. Same rules as header.",
+    },
+    {
+      name: 'menuDataTestId',
+      type: 'string',
+      description:
+        'Test id for the sub-menu\'s own role="menu" element: the flyout, or the drilled-in list on a phone. The trigger row takes data-testid.',
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description:
@@ -77,7 +97,7 @@ export const docs = {
       name: 'ref',
       type: 'React.Ref<HTMLElement>',
       description:
-        'Ref forwarded to the trigger row, the element carrying role="menuitem" and aria-haspopup="menu".',
+        'Ref forwarded to the trigger row, the element carrying role="menuitem" and aria-haspopup="menu" ("dialog" with a header or footer).',
     },
   ],
 };
@@ -100,6 +120,10 @@ export const docsDense = {
     onOpenChange: 'called when flyout opens/closes',
     presentation:
       "'flyout' beside the row | 'drill-in' replaces the rows + Back row | 'adaptive' (default) drills in on a coarse pointer",
+    header:
+      'content above the rows, outside the menu; surface becomes a modal dialog named by the row (Tab wraps, Escape returns to the row)',
+    footer: 'content below the rows, outside the menu; same rules as header',
+    menuDataTestId: 'test id for the flyout or drilled-in role="menu"',
     xstyle: 'StyleX styles for the trigger row',
     ref: 'ref to the trigger row (role="menuitem")',
   },

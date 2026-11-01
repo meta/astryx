@@ -46,5 +46,12 @@
     "package": "@acme/kit",
     "import": "@acme/kit",
     "sourceAvailable": true
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
   }
 }

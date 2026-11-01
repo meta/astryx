@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/build-the-template/package-and-test/test-template-in-app`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/package-and-test/test-template-in-app`:
  * copy the packed template into a clean app, build it, and render it the way
  * apps will.
  */
@@ -38,14 +38,14 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           code: `# Confirm discovery and metadata
-npx astryx --json template --list --package @acme/astryx-widgets
+astryx --json template --list --package @acme/astryx-widgets
 
 # Inspect source without writing
-npx astryx template acme-dashboard --package @acme/astryx-widgets
+{@command template acme-dashboard --package @acme/astryx-widgets}
 
 # Copy a page and a block to their real app locations
-npx astryx template acme-dashboard --package @acme/astryx-widgets src/app/acme-dashboard
-npx astryx template acme-stat-card --package @acme/astryx-widgets src/components`,
+{@command template acme-dashboard --package @acme/astryx-widgets src/app/acme-dashboard}
+{@command template acme-stat-card --package @acme/astryx-widgets src/components}`,
         },
         {
           type: 'list',
@@ -64,13 +64,13 @@ npx astryx template acme-stat-card --package @acme/astryx-widgets src/components
       content: [
         {
           type: 'prose',
-          text: "Run the type check (`npx tsc --noEmit`, or the app's own script) and the production build in every framework or bundler the integration supports. One toolchain passing does not prove another.",
+          text: "Run the type check (`{@pm exec tsc --noEmit}`, or the app's own script) and the production build in every framework or bundler the integration supports. One toolchain passing does not prove another.",
         },
         {
           type: 'code',
           lang: 'bash',
-          code: `npx tsc --noEmit
-npm run build`,
+          code: `{@pm exec tsc --noEmit}
+{@pm run build}`,
         },
         {
           type: 'list',

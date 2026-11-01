@@ -9,5 +9,12 @@
     "components": [],
     "source": "export default function Hero() { return <section>zorblax</section>; }\n",
     "demoMediaReplaced": 0
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
+    }
   }
 }

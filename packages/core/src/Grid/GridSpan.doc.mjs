@@ -19,7 +19,7 @@ export const docs = {
     {
       name: 'columns',
       type: "number | 'full'",
-      description: "Columns to span; use `'full'` to span the entire row.",
+      description: "Columns to span; use `'full'` to span all explicit columns.",
     },
     {
       name: 'rows',
@@ -43,7 +43,7 @@ export const docsZh = {
     {
       name: 'columns',
       type: "number | 'full'",
-      description: "要跨越的列数；使用 `'full'` 跨越整行。",
+      description: "要跨越的列数；使用 `'full'` 跨越所有显式列。",
     },
     {
       name: 'rows',
@@ -64,7 +64,7 @@ export const docsDense = {
   displayName: 'Grid Span',
   description: 'Grid item spanning multiple columns/rows.',
   propDescriptions: {
-    columns: "Columns to span; 'full' spans entire row.",
+    columns: "Columns to span; 'full' spans all explicit columns.",
     rows: 'Rows to span.',
     children: 'Content.',
   },

@@ -42,6 +42,7 @@
  */
 
 import {API_VERSION, isJsonMode, toErrorEnvelope} from '../../../foundation/response/json.mjs';
+import {answeredBy} from '../../../foundation/release/run-context.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setCommand, setOutcome, recordHelp} from '../../../foundation/debug/index.mjs';
 
@@ -84,7 +85,7 @@ function jsonActive() {
  * subcommand (e.g. `astryx component --help --json`).
  *
  * @param {import('commander').Command} cmd
- * @returns {{apiVersion: number, type: 'help', data: object}}
+ * @returns {{apiVersion: number, type: 'help', data: object, meta: {answeredBy: {cli: string, core: string | null, copy: 'project' | 'starting' | 'matched' | 'carried' | 'fallback'}}}}
  */
 export function buildHelpEnvelope(cmd) {
   // Reconstruct the fully-qualified command name (e.g. "astryx theme build").
@@ -119,6 +120,7 @@ export function buildHelpEnvelope(cmd) {
       options,
       subcommands,
     },
+    meta: {answeredBy: answeredBy()},
   };
 }
 

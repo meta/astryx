@@ -53,11 +53,10 @@ import type {ChatComposerInputControl} from './ChatContext';
 import {ChatSendButton} from './ChatSendButton';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 
 // =============================================================================
 // Types
@@ -256,11 +255,29 @@ const styles = stylex.create({
   },
   statusError: {
     backgroundColor: colorVars['--color-error-muted'],
-    color: colorVars['--color-text-red'],
+    color: colorVars['--color-on-error-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   statusWarning: {
     backgroundColor: colorVars['--color-warning-muted'],
-    color: colorVars['--color-text-yellow'],
+    color: colorVars['--color-on-warning-muted'],
+    // Forced colors replace status fills with Canvas; this boundary keeps the
+    // fill's shape visible (architecture:theme-tokens INV11).
+    outlineWidth: {default: null, '@media (forced-colors: active)': '1px'},
+    outlineStyle: {default: null, '@media (forced-colors: active)': 'solid'},
+    outlineColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
+    outlineOffset: {default: null, '@media (forced-colors: active)': '-1px'},
   },
   compact: {
     // Override the padding var (not the `padding` property) so both the base
@@ -321,7 +338,7 @@ function isComposerEditor(target: EventTarget | null): target is HTMLElement {
   return (
     target instanceof HTMLElement &&
     target.matches(
-      'textarea, [contenteditable="true"], [role="textbox"], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]',
+      'textarea, [contenteditable="true"], [role="textbox"], [role="combobox"][contenteditable], input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="url"], input[type="tel"], input[type="password"]',
     )
   );
 }
@@ -375,8 +392,6 @@ export function ChatComposer(props: ChatComposerProps) {
   const [internalValue, setInternalValue] = useState('');
   const [hasKeyboardEditorFocus, setHasKeyboardEditorFocus] = useState(false);
 
-  useInteractionModalityTracking();
-
   const isControlled = controlledValue !== undefined;
   const currentValue = isControlled ? controlledValue : internalValue;
 
@@ -405,6 +420,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const canSend = currentValue.trim().length > 0 && !isDisabled;
 
   const bodyRef = useRef<HTMLDivElement>(null);
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const bodyComposedRef = useMergedRefs(bodyRef, modalityRef);
 
   // Input slot registers its focus (and future) control here so the shell can
   // drive it without knowing its DOM shape. Stable ref — safe in the memoized
@@ -439,11 +456,10 @@ export function ChatComposer(props: ChatComposerProps) {
   const handleBodyFocusCapture = useCallback(
     (event: FocusEvent<HTMLDivElement>) => {
       setHasKeyboardEditorFocus(
-        isComposerEditor(event.target) &&
-          getInteractionModality() === 'keyboard',
+        isComposerEditor(event.target) && readModality() === 'keyboard',
       );
     },
-    [],
+    [readModality],
   );
 
   const handleBodyBlurCapture = useCallback(
@@ -455,9 +471,26 @@ export function ChatComposer(props: ChatComposerProps) {
     [],
   );
 
+  // The status bar mounts together with its message, and a live region born
+  // holding its text is not reliably announced, so the shared own-content
+  // module announces what the bar renders: errors assertively, warnings
+  // politely, once per occasion, silent for a status already shown when the
+  // page loads (spec:AST-086 FR2, FR5, FR6, FR11; react-component-runtime
+  // INV10). Changing the status type is a new occasion; clearing it re-arms.
+  const statusRef = useRef<HTMLDivElement>(null);
+  useAnnounceRenderedText(
+    statusRef,
+    Boolean(status?.message),
+    status?.type ?? '',
+    {
+      skipFirstRender: true,
+      politeness: status?.type === 'error' ? 'assertive' : 'polite',
+    },
+  );
+
   const statusEl = status ? (
     <div
-      role={status.type === 'error' ? 'alert' : 'status'}
+      ref={statusRef}
       {...stylex.props(
         styles.statusBar,
         statusPosition === 'top' ? styles.statusTop : styles.statusBottom,
@@ -467,7 +500,9 @@ export function ChatComposer(props: ChatComposerProps) {
       <Icon
         icon={status.type === 'error' ? 'error' : 'warning'}
         size="md"
-        color={status.type === 'error' ? 'error' : 'warning'}
+        // The glyph sits on the pale status fill, so it takes the bar's
+        // on-muted content colour, as Banner and FieldStatus glyphs do.
+        color="inherit"
       />
       {status.message}
     </div>
@@ -512,7 +547,7 @@ export function ChatComposer(props: ChatComposerProps) {
         {drawer}
 
         <div
-          ref={bodyRef}
+          ref={bodyComposedRef}
           onClick={handleBodyClick}
           onPointerDownCapture={() => setHasKeyboardEditorFocus(false)}
           onFocusCapture={handleBodyFocusCapture}

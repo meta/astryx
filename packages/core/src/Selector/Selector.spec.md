@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-08-30
+approved_at: 2026-10-24
 owners: [cixzhang, imdreamrunner]
 review_triggers: [public-api, behavior, layout, theming, accessibility]
 verified_by:
@@ -48,7 +48,7 @@ connection between the closed trigger and its selection surface.
 ## Compatibility and migration
 
 - Released defaults and behavior are unchanged except the `presentation`
-  default, which DEC-1 sets.
+  default, which DEC-1 sets, and `adaptive`'s compact test (below).
 - `indicatorPosition` defaults to `end`; a rendered selection mark occupies
   space at that logical edge, while an empty resolved indicator occupies none.
 - `presentation` defaults to `adaptive` (DEC-1): the modal bottom sheet on
@@ -57,6 +57,13 @@ connection between the closed trigger and its selection surface.
   stable-default change, so it ships as `[breaking]` in a scheduled minor under
   `spec:AST-017`; callers that need the anchored popover on every device pass
   `popover`.
+- `adaptive`'s compact test becomes `spec:AST-012` FR9 (width below the
+  effective `md` point or height below 500) in place of the shipped
+  `(max-width: 768px)` query: a coarse-pointer screen exactly 768 pixels wide and at least 500 tall opens the popover, and a coarse-pointer screen wider than 768 but under
+  500 tall opens the bottom sheet. Both surfaces keep selection working, so no
+  caller must change source and the change is not breaking under
+  `spec:AST-017` FR1; `popover` and `bottom-sheet` pin one surface. It is
+  pending until the shared resolver conforms; FR4 describes the shipped query.
 - `hasClear` changes the value contract to include `null`; that distinction is
   already part of the public type.
 - `isReadOnly` is additive and defaults to `false`. It preserves the selected
@@ -163,17 +170,17 @@ These requirements describe shipped behavior on current `main`.
 
 ### Representative states
 
-| State                    | Required invariant                                                                        | Allowed variation                                          |
-| ------------------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| closed with no value     | Label and placeholder identify the field                                                  | Consumer placeholder text                                  |
-| closed with a value      | Selected option is represented in the trigger                                             | Custom `renderValue` content                               |
-| pointer / popover        | Anchored surface exposes the listbox without modal-dialog semantics                       | Default or explicit placement                              |
-| compact coarse pointer   | BottomSheet exposes a modal dialog containing the listbox                                 | Default or explicit `adaptive`, or explicit `bottom-sheet` |
-| searching                | Visible options, keyboard navigation, and announced result count use one filter           | Consumer search and empty text                             |
-| loading                  | Trigger is busy; empty and no-results output is suppressed                                | Consumer loading duration                                  |
-| disabled with reason     | Trigger remains focusable enough to expose the reason while activation stays blocked      | Consumer reason text                                       |
-| read-only                | Value stays focusable and submittable; menu, clear, and disclosure affordances are absent | Value rendering, status, and busy presentation             |
-| selected/unselected rows | Empty marks consume no width; visible marks retain space at the logical edge              | State-dependent label position/width and themed indicators |
+| State                    | Required invariant                                                                          | Allowed variation                                          |
+| ------------------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| closed with no value     | Label and placeholder identify the field                                                    | Consumer placeholder text                                  |
+| closed with a value      | Selected option is represented in the trigger                                               | Custom `renderValue` content                               |
+| pointer / popover        | Anchored surface exposes the listbox without modal-dialog semantics                         | Default or explicit placement                              |
+| compact coarse pointer   | BottomSheet exposes a modal dialog containing the listbox                                   | Default or explicit `adaptive`, or explicit `bottom-sheet` |
+| searching                | Visible options, keyboard navigation, and announced result count use one filter             | Consumer search and empty text                             |
+| loading                  | Trigger is busy; empty and no-results output is suppressed                                  | Consumer loading duration                                  |
+| disabled with reason     | Trigger remains focusable (`spec:AST-085`) and exposes the reason; activation stays blocked | Consumer reason text                                       |
+| read-only                | Value stays focusable and submittable; menu, clear, and disclosure affordances are absent   | Value rendering, status, and busy presentation             |
+| selected/unselected rows | Empty marks consume no width; visible marks retain space at the logical edge                | State-dependent label position/width and themed indicators |
 
 ### Transformation and precedence order
 
@@ -355,8 +362,9 @@ FR3 implements the system decision owned by `spec:AST-004/DEC-1`.
 
 An omitted `presentation` resolves `adaptive` (FR4): the modal bottom sheet on
 compact coarse-pointer screens and the anchored popover elsewhere, so
-fine-pointer and large-screen output matches `popover`. `adaptive` keeps its
-width-and-pointer query; a pointer-only test belongs to `spec:AST-043` OQ1.
+fine-pointer and large-screen output matches `popover`. `adaptive` resolves
+through `spec:AST-094` FR13: a coarse primary pointer and the `spec:AST-012` FR9
+compact definition.
 Rejected: keeping `popover` as the default, because a phone then gets a
 pointer-sized anchored list unless the caller opts in.
 

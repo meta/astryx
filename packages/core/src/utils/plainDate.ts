@@ -282,11 +282,21 @@ export function plainDateSetEndOfWeekExclusive(
 }
 
 export function plainDateGetWeekNumber(pd: PlainDate): number {
-  const d = plainDateToDate(pd);
-  const dayNum = d.getDay() || 7;
-  d.setDate(d.getDate() + 4 - dayNum);
-  const yearStart = plainDateToDate({year: d.getFullYear(), month: 1, day: 1});
-  return Math.ceil(((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  // ISO week number: ceil(day-of-year of the week's Thursday / 7). Computed
+  // entirely on UTC anchors — the same DST immunity plainDateDiffDays relies
+  // on — because mixing local-time instants leaks the host zone's DST offset
+  // into the day count. When Jan 1 is a Friday (so every Thursday's day-of-year
+  // is an exact multiple of 7), a one-hour offset from a zone whose DST ends
+  // after New Year rounds a whole week up: Sydney, Auckland and Santiago users
+  // saw week 15 for the week that is ISO week 14. utcTime keeps years 1-99
+  // as given, like the other Calendar date helpers.
+  const msPerDay = 24 * 60 * 60 * 1000;
+  const utcMidnight = utcTime(pd.year, pd.month - 1, pd.day);
+  const dayNum = new Date(utcMidnight).getUTCDay() || 7;
+  const thursday = utcMidnight + (4 - dayNum) * msPerDay;
+  const yearStart = utcTime(new Date(thursday).getUTCFullYear(), 0, 1);
+  const dayOfYear = (thursday - yearStart) / msPerDay + 1;
+  return Math.ceil(dayOfYear / 7);
 }
 
 // e.g. "Wednesday, May 21, 2026" (locale-dependent)
@@ -364,10 +374,65 @@ export function plainDateFormat(
   options: Intl.DateTimeFormatOptions,
   locale: Locale = 'en',
 ): string {
-  return new Intl.DateTimeFormat(locale, {
+  const calendar = options.calendar ?? 'gregory';
+  if (options.timeZone != null) {
+    return dateTimeFormatFor(locale, {...options, calendar}).format(
+      plainDateToDate(pd),
+    );
+  }
+  if (TIME_OF_DAY_FIELDS.some(field => options[field] != null)) {
+    // A zone name or a time of day reads local midnight in the zone current
+    // at the call. A cached formatter would keep the zone it was built in,
+    // so this one is built for the call.
+    return new Intl.DateTimeFormat(locale, {...options, calendar}).format(
+      plainDateToDate(pd),
+    );
+  }
+  // Date fields alone: UTC midnight formatted in UTC, so neither the cached
+  // formatter nor the date depends on the host's zone, which can change while
+  // a page is open.
+  return dateTimeFormatFor(locale, {
     ...options,
-    calendar: options.calendar ?? 'gregory',
-  }).format(plainDateToDate(pd));
+    calendar,
+    timeZone: 'UTC',
+  }).format(utcTime(pd.year, pd.month - 1, pd.day));
+}
+
+/** Options that print a time of day or a zone, which a PlainDate lacks. */
+const TIME_OF_DAY_FIELDS = [
+  'timeZoneName',
+  'hour',
+  'minute',
+  'second',
+  'fractionalSecondDigits',
+  'dayPeriod',
+  'timeStyle',
+] as const satisfies ReadonlyArray<keyof Intl.DateTimeFormatOptions>;
+
+/**
+ * One `Intl.DateTimeFormat` per locale and options, built on first use.
+ * Building a formatter costs far more than formatting with it, and a calendar
+ * formats each of a month's 42 day labels with the same options on every
+ * render. The options are keyed in a fixed order, so the same options written
+ * in another order share a formatter.
+ */
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** @internal plainDateFormat's formatter cache; not part of the public API. */
+export function dateTimeFormatFor(
+  locale: Locale,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = JSON.stringify([
+    locale,
+    Object.entries(options).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  ]);
+  let format = dateTimeFormats.get(key);
+  if (format == null) {
+    format = new Intl.DateTimeFormat(locale, options);
+    dateTimeFormats.set(key, format);
+  }
+  return format;
 }
 
 /**

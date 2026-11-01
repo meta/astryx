@@ -12,6 +12,9 @@
  *   - astryx docs returning empty content
  *   - any command exiting non-zero
  *
+ * The several hundred component and doc commands run in a pool, one per CPU,
+ * and report in order: run one at a time they took ten minutes on CI.
+ *
  * Usage:
  *   node .github/scripts/cli-smoke-test.mjs
  *
@@ -19,7 +22,8 @@
  * Exit code 1 = one or more commands failed
  */
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
+import os from 'node:os';
 import {fileURLToPath} from 'node:url';
 import * as path from 'node:path';
 
@@ -45,8 +49,55 @@ function run(args) {
   };
 }
 
-function check(label, args, {minLength = 10} = {}) {
-  const {stdout, stderr, status, timedOut} = run(args);
+/** One CLI command, asynchronously, with the same timeout as `run`. */
+function runAsync(args) {
+  return new Promise(resolve => {
+    const child = spawn(process.execPath, [CLI, ...args], {cwd: ROOT});
+    let stdout = '';
+    let stderr = '';
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGTERM');
+    }, 30_000);
+    child.stdout.setEncoding('utf8').on('data', chunk => (stdout += chunk));
+    child.stderr.setEncoding('utf8').on('data', chunk => (stderr += chunk));
+    child.on('close', status => {
+      clearTimeout(timer);
+      resolve({stdout, stderr, status: status ?? 1, timedOut});
+    });
+  });
+}
+
+// Checks queue in order; `flush` runs them in a pool and reports in order.
+const queue = [];
+function check(label, args, options = {}) {
+  queue.push({label, args, options});
+}
+function section(title) {
+  queue.push({title});
+}
+
+async function flush() {
+  const results = new Array(queue.length);
+  let next = 0;
+  const workers = Array.from({length: Math.max(1, os.availableParallelism())}, async () => {
+    while (next < queue.length) {
+      const index = next++;
+      const item = queue[index];
+      results[index] = item.title ? null : await runAsync(item.args);
+    }
+  });
+  await Promise.all(workers);
+  queue.forEach((item, index) => {
+    if (item.title) console.log(item.title);
+    else report(item.label, results[index], item.options);
+  });
+  queue.length = 0;
+}
+
+function report(label, result, {minLength = 10} = {}) {
+  const {stdout, stderr, status, timedOut} = result;
   const output = (stdout + stderr).trim();
 
   let reason = null;
@@ -99,8 +150,10 @@ function runJson(args) {
 // ---------------------------------------------------------------------------
 // 2. Discover components from astryx component --list --json
 // ---------------------------------------------------------------------------
-console.log('\ncomponent listing');
+section('\ncomponent listing');
 check('astryx component --list', ['component', '--list']);
+// Run before discovery, so a CLI that cannot start shows its error first.
+await flush();
 
 // data.components is a map of category/group key -> [{name, package}, ...].
 const listData = runJson(['component', '--list', '--json'])?.data;
@@ -144,13 +197,13 @@ for (const detail of DETAIL_LEVELS) {
 }
 
 // component --category for each category
-console.log(`\ncomponent --category (${categories.length} categories)`);
+section(`\ncomponent --category (${categories.length} categories)`);
 for (const cat of categories) {
   check(`astryx component --category ${cat}`, ['component', '--category', cat]);
 }
 
 // component docs: every component x every detail level
-console.log(`\ncomponent docs (${componentNames.length} components x ${DETAIL_LEVELS.length} detail levels)`);
+section(`\ncomponent docs (${componentNames.length} components x ${DETAIL_LEVELS.length} detail levels)`);
 for (const name of componentNames) {
   for (const detail of DETAIL_LEVELS) {
     check(`astryx component ${name} --detail ${detail}`, ['component', name, '--detail', detail]);
@@ -158,13 +211,13 @@ for (const name of componentNames) {
 }
 
 // component --props for every component
-console.log(`\ncomponent --props (${componentNames.length} components)`);
+section(`\ncomponent --props (${componentNames.length} components)`);
 for (const name of componentNames) {
   check(`astryx component ${name} --props`, ['component', name, '--props']);
 }
 
 // docs for each topic
-console.log('\ndocs');
+section('\ndocs');
 check('astryx docs (no args)', ['docs']);
 for (const topic of docTopics) {
   check(`astryx docs ${topic}`, ['docs', topic]);
@@ -173,6 +226,8 @@ for (const topic of docTopics) {
 // ---------------------------------------------------------------------------
 // 6. Summary
 // ---------------------------------------------------------------------------
+await flush();
+
 console.log(`\n${passed + failed} checks total: ${passed} passed, ${failed} failed`);
 
 if (failed > 0) {

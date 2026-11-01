@@ -71,6 +71,8 @@ describe('ChatTypingIndicator status-message binding — jsdom lane', () => {
   it('records equivalent and separately owned states explicitly', () => {
     expect(CHAT_TYPING_STATUS_EXCLUSIONS.map(entry => entry.part)).toEqual([
       'omitted names',
+      'indicator mounted with names',
+      'clearing the names',
       'typing-dot animation and reduced motion',
       'transcript log announcements',
     ]);

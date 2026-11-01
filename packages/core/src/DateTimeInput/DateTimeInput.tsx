@@ -65,14 +65,12 @@ import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
 import {useTooltip} from '../Tooltip';
 import {useInputContainer} from '../hooks/useInputContainer';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {
   type ISOTimeString,
   parseDateInput,
   parseISOTime,
-  parseTimeInput,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   isTimeInRange,
   adjustTime,
@@ -101,6 +99,11 @@ import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useLocale, useTranslator} from '../i18n';
+import {
+  formatLocaleTime,
+  parseLocaleTime,
+  resolveHourFormat,
+} from '../utils/timeFormat';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
@@ -146,6 +149,18 @@ export type {
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
 const styles = stylex.create({
+  // The shared disabled style drops the focus ring; restore it while a
+  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
+  disabledFocusRing: {
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':focus-within': colorVars['--color-accent'],
+    },
+    boxShadow: {
+      default: 'none',
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+    },
+  },
   row: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -332,12 +347,12 @@ export interface DateTimeInputProps extends Omit<
   /**
    * Explains why the input is disabled. When set together with
    * `isDisabled`, the input shows a tooltip with this text on hover and
-   * keyboard focus, and the date and time fields stay focusable (via
-   * `aria-disabled`) so the reason is discoverable by keyboard and assistive
-   * technology. Typing and calendar activation stay blocked.
+   * keyboard focus, and the date and time fields are described by it, so the
+   * reason is discoverable by keyboard and assistive technology. Typing and
+   * calendar activation stay blocked.
    *
-   * Use this instead of wrapping a disabled input in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled input in `Tooltip`, so the
+   * reason is tied to the field.
    *
    * @example
    * ```
@@ -399,8 +414,11 @@ export interface DateTimeInputProps extends Omit<
   hasSeconds?: boolean;
 
   /**
-   * Hour display format.
-   * @default '12h'
+   * Hour display format: '12h' with the locale's day period, or '24h'.
+   * When unset, follows the `InternationalizationProvider` locale's hour
+   * cycle (`en-US` 12-hour, `en-GB` 24-hour); a per-user preference rides on
+   * the locale tag (`en-US-u-hc-h23`).
+   * @default the locale's hour cycle
    */
   hourFormat?: DateTimeInputHourFormat;
 
@@ -697,6 +715,9 @@ function PointerDateTimeField({
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isPendingChange = optimisticValue !== value;
   const isBusy = isLoading || isPendingChange;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), dateInputRef);
   // A native wheel emits several edits while it remains open. Disabling the
   // control after the first optimistic edit detaches the iOS picker, so pending
   // changeAction work stays interactive just like TouchDateTimeField. Explicit
@@ -820,8 +841,11 @@ function PointerDateTimeField({
   }
   const nativeTimeValue = nativeTimeDraft ?? valueParts.time;
 
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
+  const formatDisplayTime = useCallback(
+    (time: ISOTimeString, includeSeconds: boolean) =>
+      formatLocaleTime(time, locale, hourFormat, includeSeconds),
+    [locale, hourFormat],
+  );
 
   const timeDisplayValue = useMemo(() => {
     if (timePendingInput !== null) {
@@ -836,12 +860,12 @@ function PointerDateTimeField({
     if (timePendingInput === null || !timePendingInput.trim()) {
       return true;
     }
-    const parsed = parseTimeInput(timePendingInput, hasSeconds);
+    const parsed = parseLocaleTime(timePendingInput, locale, hasSeconds);
     if (!parsed) {
       return false;
     }
     return isTimeInRange(parsed, timeMin, timeMax);
-  }, [timePendingInput, hasSeconds, timeMin, timeMax]);
+  }, [timePendingInput, locale, hasSeconds, timeMin, timeMax]);
 
   const resolvedTimePlaceholder = useMemo(() => {
     if (isTimeFocused && !timeDisplayValue) {
@@ -1032,7 +1056,7 @@ function PointerDateTimeField({
 
   const handleDateInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      // With a disabledMessage the input drops `disabled` for focusability, so
+      // The input is never natively disabled (AST-085 FR1), so
       // guard value mutation explicitly (readOnly also blocks typing).
       if (isEffectivelyDisabled) {
         return;
@@ -1338,7 +1362,7 @@ function PointerDateTimeField({
   // --- Time handlers ---
   const handleTimeInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      // With a disabledMessage the input drops `disabled` for focusability, so
+      // The input is never natively disabled (AST-085 FR1), so
       // guard value mutation explicitly (readOnly also blocks typing).
       if (isEffectivelyDisabled) {
         return;
@@ -1346,7 +1370,7 @@ function PointerDateTimeField({
       const text = e.target.value;
       setTimePendingInput(text);
 
-      const parsed = parseTimeInput(text, hasSeconds);
+      const parsed = parseLocaleTime(text, locale, hasSeconds);
 
       // Typing narrows nothing — free-form entry is the contract, and a time
       // between two options must stay reachable. The list instead follows the
@@ -1370,6 +1394,7 @@ function PointerDateTimeField({
       }
     },
     [
+      locale,
       hasSeconds,
       timeMin,
       timeMax,
@@ -1424,7 +1449,7 @@ function PointerDateTimeField({
         return;
       }
 
-      const parsed = parseTimeInput(timePendingInput, hasSeconds);
+      const parsed = parseLocaleTime(timePendingInput, locale, hasSeconds);
       if (parsed && isTimeInRange(parsed, timeMin, timeMax)) {
         if (parsed !== valueParts.time && valueParts.date) {
           const combined = combineDateTime(valueParts.date, parsed);
@@ -1437,6 +1462,7 @@ function PointerDateTimeField({
     },
     [
       timePendingInput,
+      locale,
       hasSeconds,
       timeMin,
       timeMax,
@@ -1452,7 +1478,8 @@ function PointerDateTimeField({
       // window uses those same arrows to navigate candidates, so guard the
       // composing keydown (fires before compositionend) to avoid stealing them
       // mid-composition. See utils/ime.ts.
-      if (isImeKeyEvent(e.nativeEvent)) {
+      // A disabled or busy field steps nothing, so it announces nothing (FR2).
+      if (isImeKeyEvent(e.nativeEvent) || isEffectivelyDisabled) {
         return;
       }
 
@@ -1513,7 +1540,7 @@ function PointerDateTimeField({
               const typed =
                 timeHighlightFollowsTypingRef.current &&
                 timePendingInput !== null
-                  ? parseTimeInput(timePendingInput, hasSeconds)
+                  ? parseLocaleTime(timePendingInput, locale, hasSeconds)
                   : null;
               const option = timeOptions[activeTimeIndex];
               if (typed) {
@@ -1565,6 +1592,7 @@ function PointerDateTimeField({
     },
     [
       valueParts,
+      locale,
       hasSeconds,
       timeIncrement,
       timeMin,
@@ -1664,6 +1692,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
+              isEffectivelyDisabled && styles.disabledFocusRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1682,7 +1711,7 @@ function PointerDateTimeField({
               max={calendarMax}
               isDateDisabled={isDateDisabled}
               isEffectivelyDisabled={isEffectivelyDisabled}
-              hasDisabledMessage={showsDisabledMessage}
+              isFocusableDisabled
               isEffectivelyRequired={isEffectivelyRequired}
               isBusy={isBusy}
               statusType={status?.type}
@@ -1691,7 +1720,7 @@ function PointerDateTimeField({
                 ...controlProps,
                 'aria-labelledby': controlLabelledBy,
                 onBlur: onBlurProp,
-                onClick: onClickProp,
+                onClick: isEffectivelyDisabled ? undefined : onClickProp,
                 onKeyDown: onKeyDownProp,
               }}
             />
@@ -1700,7 +1729,13 @@ function PointerDateTimeField({
               <button
                 type="button"
                 onClick={handleCalendarToggle}
-                disabled={isEffectivelyDisabled}
+                aria-disabled={isEffectivelyDisabled || undefined}
+                // A tab stop while disabled too, so it carries the reason (FR5).
+                aria-describedby={
+                  showsDisabledMessage
+                    ? disabledMessageTooltip.describedBy
+                    : undefined
+                }
                 aria-label={
                   popover.isOpen
                     ? t('@astryx.dateInput.toggleCalendarClose')
@@ -1735,17 +1770,16 @@ function PointerDateTimeField({
                 value={dateDisplayValue}
                 onChange={handleDateInputChange}
                 onBlur={chainEventHandlers(handleDateBlur, onBlurProp)}
-                onClick={chainEventHandlers(handleDateInputClick, onClickProp)}
+                onClick={
+                  isEffectivelyDisabled
+                    ? undefined
+                    : chainEventHandlers(handleDateInputClick, onClickProp)
+                }
                 onKeyDown={chainEventHandlers(handleDateKeyDown, onKeyDownProp)}
                 aria-labelledby={controlLabelledBy}
                 placeholder={placeholder}
-                // With a disabledMessage the input keeps focusability via
-                // aria-disabled so the reason is focus-discoverable; typing is
-                // blocked with readOnly and the mutation guards, and calendar
-                // activation is blocked by the isEffectivelyDisabled guards.
-                disabled={isEffectivelyDisabled && !showsDisabledMessage}
-                aria-disabled={showsDisabledMessage ? 'true' : undefined}
-                readOnly={showsDisabledMessage || undefined}
+                aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
+                readOnly={isEffectivelyDisabled || undefined}
                 aria-describedby={ariaDescribedBy}
                 aria-required={isEffectivelyRequired ? 'true' : undefined}
                 aria-invalid={
@@ -1782,7 +1816,7 @@ function PointerDateTimeField({
               onClick={handleClear}
             />
           )}
-          {isBusy && <Spinner size="sm" />}
+          {isBusy && <Spinner size="sm" aria-hidden="true" />}
           {statusIcon}
         </div>
 
@@ -1807,6 +1841,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
+              isEffectivelyDisabled && styles.disabledFocusRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1830,7 +1865,7 @@ function PointerDateTimeField({
               max={timeMax}
               hourFormat={hourFormat}
               isEffectivelyDisabled={isEffectivelyDisabled}
-              hasDisabledMessage={showsDisabledMessage}
+              isFocusableDisabled
               isEffectivelyRequired={isEffectivelyRequired}
               isBusy={isBusy}
               statusType={status?.type}
@@ -1882,12 +1917,8 @@ function PointerDateTimeField({
                     ? timeOptionId(activeTimeIndex)
                     : undefined
                 }
-                // With a disabledMessage the input keeps focusability via
-                // aria-disabled so the reason is focus-discoverable; typing is
-                // blocked with readOnly and the mutation guards.
-                disabled={isEffectivelyDisabled && !showsDisabledMessage}
-                aria-disabled={showsDisabledMessage ? 'true' : undefined}
-                readOnly={showsDisabledMessage || undefined}
+                aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
+                readOnly={isEffectivelyDisabled || undefined}
                 aria-label={resolvedTimeLabel}
                 aria-describedby={ariaDescribedBy}
                 aria-required={isEffectivelyRequired ? 'true' : undefined}
@@ -1917,17 +1948,21 @@ function PointerDateTimeField({
 
       {!usesNativePicker &&
         popover.render(
-          <Calendar
-            handleRef={calendarRef}
-            mode="single"
-            value={valueParts.date ?? null}
-            onChange={(d: ISODateString) => handleDateChange(d, 'calendar')}
-            min={calendarMin}
-            max={calendarMax}
-            dateConstraints={dateConstraints}
-            numberOfMonths={numberOfMonths}
-            weekStartsOn={weekStartsOn}
-          />,
+          // Mounted only while open, like the time list below; the calendar
+          // opens on the current value.
+          !popover.isOpen ? null : (
+            <Calendar
+              handleRef={calendarRef}
+              mode="single"
+              value={valueParts.date ?? null}
+              onChange={(d: ISODateString) => handleDateChange(d, 'calendar')}
+              min={calendarMin}
+              max={calendarMax}
+              dateConstraints={dateConstraints}
+              numberOfMonths={numberOfMonths}
+              weekStartsOn={weekStartsOn}
+            />
+          ),
           {placement: 'below', alignment: 'start'},
         )}
 
@@ -2010,11 +2045,18 @@ export function DateTimeInput(props: DateTimeInputProps) {
     props.presentation,
     props.nativePicker,
   );
+  const locale = useLocale();
   const {
     presentation: _presentation,
     nativePicker: _nativePicker,
-    ...rest
+    ...surfaceProps
   } = props;
+  // Every surface gets the resolved hour format, so typed text, the native
+  // field's resting text, preset times, and the sheet wheels agree.
+  const rest = {
+    ...surfaceProps,
+    hourFormat: resolveHourFormat(locale, props.hourFormat),
+  };
   if (effective === 'native') {
     return (
       <PointerDateTimeField

@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/use-a-theme-in-an-app`:
+ * @file `astryx docs authoring/building-blocks/themes/use-a-theme-in-an-app`:
  * an app installs the integration and applies or extends the theme, like any theme.
  */
 
@@ -26,7 +26,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npm install @acme/astryx-widgets\nnpx astryx theme add ocean --package @acme/astryx-widgets',
+          code: '{@pm install @acme/astryx-widgets}\n{@command theme add ocean --package @acme/astryx-widgets}',
         },
         {
           type: 'code',
@@ -34,7 +34,9 @@ export const docs = {
           code: `import {Theme} from '@astryxdesign/core/theme';
 import {themes, defaultThemeSlug} from './astryx-themes';
 
-<Theme theme={themes[defaultThemeSlug]}>{/* app */}</Theme>`,
+<Theme theme={themes[defaultThemeSlug]}>
+  <App />
+</Theme>`,
         },
         {
           type: 'prose',
@@ -61,6 +63,16 @@ export const productTheme = defineTheme({
   extends: oceanTheme,
   tokens: {'--color-accent': ['#0051a3', '#4aa3ff']},
 });`,
+        },
+      ],
+    },
+    {
+      id: 'global-mode',
+      title: 'In global mode',
+      content: [
+        {
+          type: 'prose',
+          text: 'In global mode: install the theme package in each app that uses the theme; inside a project, the CLI ignores packages installed for the computer. See {@link namespace:global} and {@link generic:global-integrations}.',
         },
       ],
     },

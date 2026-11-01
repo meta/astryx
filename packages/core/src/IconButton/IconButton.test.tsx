@@ -12,6 +12,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {unthemedLength} from '../__tests__/unthemedLength';
 import {Icon} from '../Icon/Icon';
 import {IconButton} from './IconButton';
 
@@ -73,8 +74,10 @@ describe('IconButton', () => {
       expect(wrapper).not.toBeNull();
 
       expect(icon).toHaveAttribute('data-size', iconSize);
-      expect(getComputedStyle(icon).width).toBe(renderedSize);
-      expect(getComputedStyle(icon).height).toBe(renderedSize);
+      // The glyph reads the theme's size vars; with no theme it falls back to
+      // the size's own rem value, which the wrapper declares directly.
+      expect(unthemedLength(getComputedStyle(icon).width)).toBe(renderedSize);
+      expect(unthemedLength(getComputedStyle(icon).height)).toBe(renderedSize);
       expect(getComputedStyle(wrapper!).width).toBe(renderedSize);
       expect(getComputedStyle(wrapper!).height).toBe(renderedSize);
     },

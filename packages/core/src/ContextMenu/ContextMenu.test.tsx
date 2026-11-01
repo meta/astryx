@@ -10,8 +10,16 @@
 
 import {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
-import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
+import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
+import {
+  render,
+  screen,
+  fireEvent,
+  act,
+  waitFor,
+  cleanup,
+  createEvent,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {readFileSync} from 'node:fs';
 import {ContextMenu} from './ContextMenu';
@@ -24,8 +32,15 @@ import {
   ContextMenuRadioItem,
 } from './index';
 import {DropdownMenuItem} from '../DropdownMenu/DropdownMenuItem';
+import {DropdownMenuSubMenu} from '../DropdownMenu/DropdownMenuSubMenu';
 import {Divider} from '../Divider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {warmMenuBottomSheet} from '../DropdownMenu/__tests__/warmMenuBottomSheet';
+import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
+
+// The touch sheet is loaded lazily; resolve its modules once up front, so
+// ContextMenu's own lazy sheet renders within the cases' waitFor.
+beforeAll(warmMenuBottomSheet, 20000);
 
 function NestedDismissibleLayer({onDismiss}: {onDismiss: () => void}) {
   const [isOpen, setIsOpen] = useState(true);
@@ -268,7 +283,12 @@ describe('ContextMenu', () => {
     );
 
     fireEvent.contextMenu(screen.getByText('Right-click me'));
-    await user.click(screen.getByRole('button', {name: 'Move to project'}));
+    // The sheet is lazy: its first render suspends once even when the module
+    // is already loaded, so wait for the row rather than relying on an
+    // earlier case to have rendered a sheet.
+    await user.click(
+      await screen.findByRole('button', {name: 'Move to project'}),
+    );
 
     const submenuHeading = screen.getByRole('heading', {
       name: 'Move to project',
@@ -284,21 +304,48 @@ describe('ContextMenu', () => {
     );
   });
 
-  it('keeps only the top content padding in a menu BottomSheet', () => {
-    const source = readFileSync(
-      'packages/core/src/DropdownMenu/MenuBottomSheet.tsx',
-      'utf8',
-    );
-
-    expect(source).toContain('paddingBlockStart={4}');
-    expect(source).toContain('paddingBlockEnd={0}');
-  });
+  for (const mode of ['items', 'compound'] as const) {
+    it(`insets a ${mode} menu sheet itself and publishes the inset to its rows`, async () => {
+      render(
+        mode === 'items' ? (
+          <ContextMenu presentation="bottom-sheet" items={[{label: 'Edit'}]}>
+            <div>Right-click me</div>
+          </ContextMenu>
+        ) : (
+          <ContextMenu
+            presentation="bottom-sheet"
+            menuContent={<DropdownMenuItem label="Edit" />}>
+            <div>Right-click me</div>
+          </ContextMenu>
+        ),
+      );
+      fireEvent.contextMenu(screen.getByText('Right-click me'));
+      const content = await waitFor(() => {
+        const element = document.querySelector<HTMLElement>(
+          'dialog .astryx-context-menu',
+        );
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      // No Section wrapper: the menu element keeps the sheet's 16px top and
+      // 4px side inset plus its own 4px, and publishes the padding it applies.
+      expect(content.parentElement?.closest('.astryx-section')).toBeNull();
+      expect(content).toHaveStyle({
+        paddingTop: 'calc(var(--spacing-4) + var(--spacing-1))',
+        paddingInline: 'calc(var(--spacing-1) + var(--spacing-1))',
+        '--container-padding-block-start':
+          'calc(var(--spacing-4) + var(--spacing-1))',
+        '--container-padding-inline-start':
+          'calc(var(--spacing-1) + var(--spacing-1))',
+      });
+    });
+  }
 
   it('uses the BottomSheet for adaptive presentation on compact touch', async () => {
     vi.stubGlobal(
       'matchMedia',
       vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 768px) and (pointer: coarse)',
+        matches: query === COMPACT_TOUCH_PRESENTATION_QUERY,
         media: query,
         onchange: null,
         addEventListener: vi.fn(),
@@ -334,6 +381,40 @@ describe('ContextMenu', () => {
     fireEvent.keyDown(document, {key: 'Escape'});
     expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
   });
+
+  it.each(['open', 'closed', 'nested'] as const)(
+    'judges presses once inside a %s shadow root',
+    mode => {
+      const host = document.createElement('div');
+      document.body.append(host);
+      let root = host.attachShadow({mode: mode === 'open' ? 'open' : 'closed'});
+      if (mode === 'nested') {
+        const innerHost = document.createElement('div');
+        root.append(innerHost);
+        root = innerHost.attachShadow({mode: 'closed'});
+      }
+      const container = document.createElement('div');
+      root.append(container);
+      try {
+        render(
+          <ContextMenu items={[{label: 'Item 1'}]}>
+            <div>Right-click me</div>
+          </ContextMenu>,
+          {container},
+        );
+        fireEvent.contextMenu(container.querySelector('div div')!);
+        // At the document a press on the menu is retargeted to a shadow host.
+        const item = container.querySelector('[role="menuitem"]')!;
+        fireEvent.mouseDown(item, {composed: true});
+        expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+        // A press on the host itself is outside the menu.
+        fireEvent.mouseDown(host);
+        expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+      } finally {
+        host.remove();
+      }
+    },
+  );
 
   it('closes the menu when Tab is pressed inside it (APG menu pattern)', () => {
     render(
@@ -696,6 +777,46 @@ describe('ContextMenu dividers', () => {
 });
 
 describe('ContextMenu compound mode', () => {
+  it('shows a sub-menu with a header or footer as its rows alone, and says why in development', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <ContextMenu
+          menuContent={
+            <>
+              <DropdownMenuItem label="Rename" onClick={() => {}} />
+              <DropdownMenuSubMenu
+                label="Labels"
+                header={<input aria-label="Filter labels" />}
+                footer={<button type="button">Create label</button>}>
+                <DropdownMenuItem label="Bug" onClick={() => {}} />
+              </DropdownMenuSubMenu>
+            </>
+          }>
+          <div>Right-click me</div>
+        </ContextMenu>,
+      );
+      fireEvent.contextMenu(screen.getByText('Right-click me'));
+      const row = screen.getByRole('menuitem', {name: /Labels/, hidden: true});
+      // No region can sit outside this menu, so none renders inside it.
+      expect(row).toHaveAttribute('aria-haspopup', 'menu');
+      fireEvent.click(row, {detail: 1});
+      await waitFor(() => expect(row).toHaveAttribute('aria-expanded', 'true'));
+      expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
+      expect(
+        screen.queryByRole('textbox', {name: 'Filter labels', hidden: true}),
+      ).toBeNull();
+      expect(
+        screen.getByRole('menuitem', {name: 'Bug', hidden: true}),
+      ).toBeInTheDocument();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('DropdownMenuSubMenu: header and footer'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('renders menuContent as menu items', () => {
     render(
       <ContextMenu
@@ -1199,6 +1320,41 @@ describe('ContextMenu keyboard access for menuitemradio/menuitemcheckbox (#3829)
   });
 });
 
+describe('ContextMenu data-driven submenu inside a section', () => {
+  it('renders a submenu row for an item with nested items inside a section', () => {
+    render(
+      <ContextMenu
+        items={[
+          {
+            type: 'section',
+            title: 'Organize',
+            items: [
+              {label: 'Rename', onClick: () => {}},
+              {
+                label: 'Move to',
+                items: [
+                  {label: 'Folder A', onClick: () => {}},
+                  {label: 'Folder B', onClick: () => {}},
+                ],
+              },
+            ],
+          },
+        ]}>
+        <div>Right-click me</div>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Right-click me'));
+    const trigger = screen.getByRole('menuitem', {
+      name: /Move to/,
+      hidden: true,
+    });
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(
+      screen.getByRole('menuitem', {name: 'Folder A', hidden: true}),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('ContextMenu press model', () => {
   const touch = {pointerType: 'touch', pointerId: 1};
   const item = (name: string) =>
@@ -1315,5 +1471,147 @@ describe('ContextMenu inline trigger (triggerAs)', () => {
       </ContextMenu>,
     );
     expect(screen.getByTestId('area').tagName).toBe('DIV');
+  });
+});
+
+describe('ContextMenu outside dismissal', () => {
+  const finger = (pointerId: number) => ({pointerType: 'touch', pointerId});
+
+  // Holds a finger on the trigger until the long-press opens the menu. Only
+  // the long-press delay is faked.
+  function longPress(trigger: HTMLElement, pointerId: number) {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      fireEvent.pointerDown(trigger, finger(pointerId));
+      fireEvent.touchStart(trigger, {touches: [{clientX: 20, clientY: 20}]});
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  // What a browser sends after a touch: the lift, then compatibility mouse
+  // events aimed at the element the finger held.
+  function lift(target: HTMLElement, pointerId: number) {
+    fireEvent.pointerUp(target, finger(pointerId));
+    fireEvent.touchEnd(target);
+    fireEvent.mouseDown(target);
+    fireEvent.mouseUp(target);
+    fireEvent.click(target);
+  }
+
+  function renderMenu(onOpenChange: (isOpen: boolean) => void) {
+    render(
+      <>
+        <ContextMenu
+          items={[{label: 'Cut'}, {label: 'Copy'}]}
+          data-testid="ctx"
+          onOpenChange={onOpenChange}>
+          <div>Long-press me</div>
+        </ContextMenu>
+        <button type="button">Outside</button>
+      </>,
+    );
+    return {
+      trigger: screen.getByTestId('ctx'),
+      outside: screen.getByRole('button', {name: 'Outside'}),
+    };
+  }
+
+  it('the long press that opened the menu does not close it, mid-hold or as it lifts; the next press outside does', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    longPress(trigger, 1);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    // iOS: a compatibility mousedown while the finger is still down.
+    fireEvent.mouseDown(trigger);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    // Chromium: the compatibility events that follow the lift.
+    lift(trigger, 1);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    // A new press is a new gesture: a mouse press outside closes the menu.
+    fireEvent.pointerDown(outside, {pointerType: 'mouse', pointerId: 9});
+    fireEvent.mouseDown(outside);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a finger long press that opens the menu through a pointer contextmenu (Chromium) does not close it as it lifts', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    fireEvent.pointerDown(trigger, finger(8));
+    const contextmenu = createEvent.contextMenu(trigger, {
+      clientX: 20,
+      clientY: 15,
+      detail: 1,
+    });
+    Object.defineProperty(contextmenu, 'pointerType', {value: 'touch'});
+    fireEvent(trigger, contextmenu);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    lift(trigger, 8);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    // A right-click is not a finger: its gesture's next mousedown, outside,
+    // closes the menu.
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse', pointerId: 1});
+    fireEvent.contextMenu(trigger, {clientX: 20, clientY: 15, detail: 1});
+    fireEvent.mouseDown(outside);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a long press that moves the open menu keeps it open as it lifts', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger} = renderMenu(onOpenChange);
+    fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    longPress(trigger, 2);
+    lift(trigger, 2);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+  });
+
+  it('a tap outside closes the menu through its compatibility mousedown; a scroll that starts outside leaves it open', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+    // The browser takes this finger for a scroll: no compatibility events.
+    fireEvent.pointerDown(outside, finger(3));
+    fireEvent.pointerCancel(outside, finger(3));
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    fireEvent.pointerDown(outside, finger(4));
+    lift(outside, 4);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('a mouse press or a pen press outside closes the menu at the press', () => {
+    for (const pointerType of ['mouse', 'pen']) {
+      const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+      const {trigger, outside} = renderMenu(onOpenChange);
+      fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+      fireEvent.pointerDown(outside, {pointerType, pointerId: 7});
+      fireEvent.mouseDown(outside);
+      expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      cleanup();
+    }
+  });
+
+  it('presses that send no mousedown leave the menu open, as before: a cancelled pointerdown, a finger drag, a second finger', () => {
+    const onOpenChange = vi.fn<(isOpen: boolean) => void>();
+    const {trigger, outside} = renderMenu(onOpenChange);
+    fireEvent.contextMenu(trigger, {clientX: 50, clientY: 15, detail: 1});
+    // A control that cancels its pointerdown (a NumberInput stepper, a
+    // resize handle): the browser sends no mousedown.
+    fireEvent.pointerDown(outside, {pointerType: 'mouse', pointerId: 1});
+    fireEvent.pointerUp(outside, {pointerType: 'mouse', pointerId: 1});
+    // A finger drag on a surface that does not pan (a Slider), lifted.
+    fireEvent.pointerDown(outside, finger(5));
+    fireEvent.pointerMove(outside, finger(5));
+    fireEvent.pointerUp(outside, finger(5));
+    // A second finger's tap.
+    fireEvent.pointerDown(outside, finger(6));
+    fireEvent.pointerDown(outside, finger(7));
+    fireEvent.pointerUp(outside, finger(7));
+    fireEvent.pointerCancel(outside, finger(6));
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 });

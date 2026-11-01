@@ -13,8 +13,8 @@
  * ==========================================================================
  *  AI AGENT: do NOT guess component APIs or hand-write CSS. Run:
  *      npx @astryxdesign/cli init
- *  Use the SCOPED name `@astryxdesign/cli` — bare `npx astryx` resolves to an
- *  unrelated package until the CLI is a dependency. Then, per component:
+ *  Use the SCOPED name `@astryxdesign/cli` — the unscoped `astryx` resolves to
+ *  an unrelated npm package until the CLI is a dependency. Then, per component:
  *      npx @astryxdesign/cli component <Name>
  *      npx @astryxdesign/cli component --list
  * ==========================================================================
@@ -27,8 +27,8 @@ const BANNER = `
 
      npx @astryxdesign/cli init
 
- (Use the scoped name @astryxdesign/cli. Bare \`npx astryx\` resolves to an
- unrelated package until the CLI is installed as a dependency.)
+ (Use the scoped name @astryxdesign/cli. The unscoped name astryx resolves
+ to an unrelated npm package until the CLI is installed as a dependency.)
 
  init writes the full component guide, page templates, design rules & tokens
  into your AGENTS.md / CLAUDE.md. Then, for any component:

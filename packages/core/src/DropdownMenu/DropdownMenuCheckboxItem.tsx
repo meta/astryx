@@ -39,7 +39,7 @@ import {Item} from '../Item';
 import {useDropdownMenuContext} from './DropdownMenuContext';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {colorVars, spacingVars} from '../theme/tokens.stylex';
+import {colorVars, focusVars, spacingVars} from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 
@@ -51,15 +51,15 @@ const styles = stylex.create({
     backgroundColor: {
       default: 'transparent',
       ':focus': colorVars['--color-overlay-hover'],
-      // The overlay is forced to Canvas in high-contrast modes. Keep the
-      // row's content under user-agent control and mark focus with a system
-      // outline instead, so text, icons, and markers stay perceptible.
     },
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    outlineOffset: '-2px',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -102,7 +102,7 @@ export interface DropdownMenuCheckboxItemProps extends Omit<
   description?: ReactNode;
   /**
    * Icon to display before the label. Accepts a semantic icon name (see
-   * `npx @astryxdesign/cli docs icons`) or a rendered node.
+   * `astryx docs icons`) or a rendered node.
    */
   icon?: ReactNode | IconType;
   /**

@@ -53,6 +53,10 @@ const CODE_SPACE = `calc(${spacingVars['--spacing-3']})`;
 // Core CodeBlock's header (8px, a small control, 8px) overlaps the code's
 // 12px top padding by 8px, so its code starts 8px + control + 12px down.
 const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--size-element-sm']} + ${spacingVars['--spacing-3']})`;
+// A block that names no language has no header: core CodeBlock puts its copy
+// button in a column of its own at the inline end (8px, a small control, 8px),
+// beside the code rather than over it, so the code ends that much earlier.
+const CODE_CORNER_SPACE = `calc(${spacingVars['--spacing-4']} + ${sizeVars['--size-element-sm']} + 2 * ${spacingVars['--spacing-2']})`;
 
 const editorTheme = stylex.create({
   // Lexical marks every top-level block `dir="auto"`, which picks each
@@ -317,6 +321,13 @@ const editorTheme = stylex.create({
   table: {
     borderCollapse: 'collapse',
     width: '100%',
+    // The grid's outer edge, matching core Markdown's table: the row and
+    // column lines stop at the table's rim, so without this the top, bottom,
+    // and sides stay open. `border-collapse: collapse` merges it with the
+    // cell lines into one 1px rule rather than doubling up at the edge.
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
   },
   tableRow: {
     borderBottomWidth: '1px',
@@ -335,6 +346,17 @@ const editorTheme = stylex.create({
     textAlign: 'start',
     verticalAlign: 'middle',
     overflowWrap: 'break-word',
+    // A line on every cell edge, as core Markdown's table draws with
+    // `dividers="grid"`. The row lines come from `tableRow`; this is the
+    // column half. The last column draws none, so the rim is the `table`
+    // rule's own border rather than two lines stacked at the edge — the
+    // same rule core `TableCell` follows (`:last-child` → 0).
+    borderInlineEndWidth: {
+      default: borderVars['--border-width'],
+      ':last-child': 0,
+    },
+    borderInlineEndStyle: 'solid',
+    borderInlineEndColor: colorVars['--color-border'],
   },
   tableCellHeader: {
     fontWeight: fontWeightVars['--font-weight-semibold'],
@@ -425,7 +447,14 @@ const editorTheme = stylex.create({
         CODE_HEADER_SPACE,
     },
     paddingBlockEnd: spacingVars['--spacing-3'],
-    paddingInline: spacingVars['--spacing-4'],
+    paddingInlineStart: spacingVars['--spacing-4'],
+    paddingInlineEnd: {
+      // Room for the corner copy button CodeBlockHeaderPlugin draws over a
+      // block that names no language, so no line runs under it.
+      default: CODE_CORNER_SPACE,
+      ':is([data-language]:not([data-language="plaintext"]))':
+        spacingVars['--spacing-4'],
+    },
     // Sized like core Markdown's code frame: as wide as its longest line, at
     // least the prose measure (or the whole width when that is narrower), and
     // never wider than the editor, where long lines wrap.

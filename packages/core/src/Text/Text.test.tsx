@@ -346,3 +346,60 @@ describe('truncated text shows one tooltip, not two', () => {
     }
   });
 });
+
+// With hasTruncateTooltip={false} nothing reads the measured overflow, so a
+// long table of truncated cells must not pay a layout read per cell.
+function countScrollWidthReads(run: () => void): number {
+  const proto = window.HTMLElement.prototype;
+  const original = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+  let reads = 0;
+  Object.defineProperty(proto, 'scrollWidth', {
+    configurable: true,
+    get() {
+      reads += 1;
+      return 0;
+    },
+  });
+  try {
+    run();
+  } finally {
+    if (original) {
+      Object.defineProperty(proto, 'scrollWidth', original);
+    } else {
+      delete (proto as {scrollWidth?: number}).scrollWidth;
+    }
+  }
+  return reads;
+}
+
+describe('Text maxLines without a truncation tooltip', () => {
+  it('takes no truncation measurement when hasTruncateTooltip is false', () => {
+    const reads = countScrollWidthReads(() => {
+      render(
+        <>
+          {Array.from({length: 20}, (_, index) => (
+            <Text
+              type="body"
+              maxLines={1}
+              hasTruncateTooltip={false}
+              key={index}>
+              Cell {index} with text far wider than its column
+            </Text>
+          ))}
+        </>,
+      );
+    });
+    expect(reads).toBe(0);
+  });
+
+  it('still measures when the tooltip is enabled', () => {
+    const reads = countScrollWidthReads(() => {
+      render(
+        <Text type="body" maxLines={1}>
+          Text far wider than its column
+        </Text>,
+      );
+    });
+    expect(reads).toBeGreaterThan(0);
+  });
+});

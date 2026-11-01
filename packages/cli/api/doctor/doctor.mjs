@@ -4,7 +4,11 @@
  * @file Health-check engine for `astryx doctor`.
  *
  * Runs a series of diagnostic checks against the user's project and
- * environment, returning a structured report. Each check is a small,
+ * environment, returning a structured report. Outside a project it checks the
+ * computer instead (spec AST-081 FR4): the Node version, the release that
+ * answered, the newest release the computer knows of, and whether the
+ * computer-level agent text is present and current; no check fails because
+ * the folder has no project. Each check is a small,
  * self-contained function that returns a {@link DoctorCheck} record, so
  * adding a new diagnostic is just appending a function to {@link SYNC_CHECKS}.
  *
@@ -24,9 +28,18 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import {MIN_NODE_VERSION, isNodeVersionSupported} from '../../foundation/env/node-version.mjs';
-import {AGENT_DOC_PATHS} from '../../foundation/agent-docs/agent-doc-state.mjs';
-import {CLI_ROOT, findCoreDir, findInstalledPackage} from '../../foundation/fs/paths.mjs';
-import {explainPackageManager, getCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {
+  AGENT_DOC_PATHS,
+  holdsAstryxBlock,
+} from '../../foundation/agent-docs/agent-doc-state.mjs';
+import {
+  agentDocsTargetDir,
+  assertAgentDocsTarget,
+  resolveAgentDocsRoot,
+} from '../../foundation/agent-docs/agent-docs.mjs';
+import {CLI_ROOT, findProjectCoreDir, findInstalledPackage} from '../../foundation/fs/paths.mjs';
+import {explainPackageManager, formatCliCommand, getCliInvocation, guessCliInvocation} from '../../foundation/env/package-manager.mjs';
+import {chooseDeclaredCliCommand, declaredCliCommandsOf} from '../../foundation/env/cli-command.mjs';
 import {
   findConfigPath,
   Project,
@@ -50,8 +63,13 @@ import {
 } from '../docs/_adapter.mjs';
 import {typedEdges} from '../docs/node/node.mjs';
 import {detailView, indexView} from '../../foundation/doc-compiler/lenses.mjs';
+import {isExperimentalTreeNode} from '../../foundation/doc-compiler/tree.mjs';
 import {semverCompare, isValidSemver, satisfiesRange} from '../../foundation/env/semver.mjs';
 import {checkAppThemes, checkThemes} from './theme-checks.mjs';
+import {availableLine, RUN_FROM_PROJECT, upgradeLine} from '../../foundation/release/notices.mjs';
+import {COMPUTER_COMMAND, COMPUTER_INSTALL_STEP} from '../../foundation/agent-docs/computer-agent-text.mjs';
+import {alignCommand, addCliCommandFor, computerAgentTextState, installCommandFor, insideProjectElsewhere, projectCoreVersion, projectHasOwnCli, computerIntegrationsOutside, computerIntegrationsToAdd, displayHomePath, outsideProject, releaseFacts, builtIntegrationPackages} from './_adapter.mjs';
+import {checkBuilt} from './built-checks.mjs';
 
 /**
  * @typedef {'pass'|'warn'|'fail'|'info'} DoctorStatus
@@ -71,6 +89,10 @@ import {checkAppThemes, checkThemes} from './theme-checks.mjs';
  * @property {string} cwd - Directory to diagnose.
  * @property {string} nodeVersion - Running Node version.
  * @property {string|null} coreDir - Resolved core package directory, or null.
+ * @property {boolean} [ownCli] - Whether the project installs its own CLI;
+ *   false means the copy that started the run answered it (spec AST-081 FR2).
+ * @property {string|null} [projectCore] - The Core release the project names
+ *   (installed, else locked, else declared), as the daily hint reads it.
  * @property {string|null} configPath - Resolved astryx.config.mjs path, or null.
  * @property {import('../../foundation/integrations/integrations.mjs').LoadedIntegration[]|null} [integrations]
  *   Every integration the project loaded, or null when the project could not be
@@ -91,6 +113,9 @@ import {checkAppThemes, checkThemes} from './theme-checks.mjs';
  *   Combined project-level integration issues, including cross-package template replacement warnings.
  * @property {Error|null} [configError] - Error thrown while resolving the config
  *   path (e.g. multiple config files present), surfaced by checkConfig as a FAIL.
+ * @property {{sets: Array<{name: string, package: string}>, withdrawn: Array<{name: string, package: string, reason: string}>, choice: {status: 'selected'|'none'|'ambiguous'|'missing'|'withdrawn', reason: string, configured?: string}}|null} [iconSets]
+ *   The project's icon sets (AST-084 FR17), or null when they could not be read.
+ *   Experimental: may change or be removed in a patch release.
  * @property {string|null} [projectError] - Why the CLI could not load the
  *   project from its config, when it could not. Checks that need the loaded
  *   project quote it when they skip, so a skip says what was found.
@@ -229,7 +254,12 @@ export function checkCoreInstalled(ctx) {
  * @returns {DoctorCheck}
  */
 export function checkVersionAlignment(ctx) {
-  const coreVersion = pkgVersion(ctx.coreDir);
+  // A project with no CLI of its own and no Core installed yet (a fresh
+  // clone) is compared by the Core it locks or declares, as the daily hint
+  // compares it (spec AST-081 FR2).
+  const coreVersion =
+    pkgVersion(ctx.coreDir) ??
+    (ctx.ownCli === false ? (ctx.projectCore ?? null) : null);
   const cliPkg = readPkg(path.join(CLI_ROOT, 'package.json'));
   const cliVersion = cliPkg?.version ?? null;
 
@@ -258,27 +288,66 @@ export function checkVersionAlignment(ctx) {
     };
   }
 
-  const [coreMajor, coreMinor] = coreVersion.split('.').map(Number);
-  const [cliMajor, cliMinor] = cliVersion.split('.').map(Number);
-  const drift = coreMajor !== cliMajor || coreMinor !== cliMinor;
-
+  // A project with no CLI of its own is answered by the copy that started
+  // the run (spec AST-081 FR2): say so, and how to add the CLI at Core's
+  // version.
+  if (ctx.ownCli === false) {
+    // The same comparison as the daily hint: the CLI against the Core the
+    // run reads (spec AST-081 FR2). The command adds the CLI in the project
+    // spec:AST-040 FR9 defines; from a folder inside it whose package.json
+    // is not the project's, or in no project, the fix says how to reach one.
+    const add = addCliCommandFor(ctx.cwd, coreVersion);
+    const matches = coreVersion === cliVersion;
+    const fix = add
+      ? `${matches ? 'To pin it for the team and CI' : 'To match'}, run: ${add.command}.`
+      : matches
+        ? null
+        : NO_PROJECT_FIX;
+    return {
+      id: 'version-alignment',
+      label: '@astryxdesign/core <-> @astryxdesign/cli alignment',
+      status: matches ? 'info' : 'warn',
+      message: matches
+        ? `This project has no Astryx CLI installed; CLI ${cliVersion}, the one you started, answered and matches its Core.`
+        : `This project has no Astryx CLI installed; CLI ${cliVersion}, the one you started, answered while its Core is ${coreVersion}.`,
+      ...(fix ? {fix} : {}),
+    };
+  }
+  // The project's own CLI answers this project whatever its version
+  // (spec AST-081 FR2), so any difference means templates, docs, and agent
+  // text come from one release and components from another.
+  const drift = coreVersion !== cliVersion;
   return {
     id: 'version-alignment',
     label: '@astryxdesign/core <-> @astryxdesign/cli alignment',
     status: drift ? 'warn' : 'pass',
     message: drift
-      ? `@astryxdesign/core v${coreVersion} drifts from @astryxdesign/cli v${cliVersion} (major/minor mismatch).`
+      ? `This project's CLI ${cliVersion} answers it, but its Core is ${coreVersion}: templates, docs, and agent text come from CLI ${cliVersion}, components from Core ${coreVersion}.`
       : `@astryxdesign/core v${coreVersion} is in step with @astryxdesign/cli v${cliVersion}.`,
-    ...(drift
-      ? {
-          fix:
-            semverCompare(cliVersion, coreVersion) > 0
-              ? `Update @astryxdesign/core to ${cliMajor}.${cliMinor}.x to match the CLI.`
-              : `Update @astryxdesign/cli to ${coreMajor}.${coreMinor}.x to match @astryxdesign/core.`,
-        }
-      : {}),
+    ...(drift ? alignFix(ctx.cwd, cliVersion, coreVersion) : {}),
   };
 }
+
+/**
+ * The fix for a CLI and Core on different releases, when a command fits.
+ * @param {string} cwd
+ * @param {string} cli
+ * @param {string} core
+ * @returns {{fix?: string}}
+ */
+function alignFix(cwd, cli, core) {
+  // From a folder inside a project whose package.json is not the project's,
+  // aligning the project would leave this warning in place, so no command
+  // fits there (alignCommand returns none): point at the project instead.
+  const command = alignCommand(cwd, cli, core);
+  return {fix: command ? `To align them, run: ${command}.` : NO_PROJECT_FIX};
+}
+
+/**
+ * The fix where no install command fits: the folder's package.json is not an
+ * Astryx project's (spec AST-040 FR9), and adding there would make it one.
+ */
+const NO_PROJECT_FIX = RUN_FROM_PROJECT;
 
 /**
  * Check 5 — astryx.config.mjs (if present) loads and has a valid shape.
@@ -331,7 +400,7 @@ export async function checkConfig(ctx) {
         label: 'astryx.config.mjs',
         status: 'fail',
         message: `astryx.config.mjs loads, but the CLI could not load the project from it: ${firstLine(ctx.projectError)}`,
-        fix: 'Fix what the message names. `astryx docs authoring config` lists every field astryx.config accepts.',
+        fix: `Fix what the message names. \`${formatCliCommand('docs authoring config', ctx.cwd)}\` lists every field astryx.config accepts.`,
       };
     }
     return {
@@ -349,6 +418,26 @@ export async function checkConfig(ctx) {
       fix: 'Fix the syntax/runtime error in astryx.config.mjs so it imports cleanly.',
     };
   }
+}
+
+/**
+ * Why no integration is implicitly linked, from what actually loaded. A
+ * configured integration is named in astryx.config; the package's own manifest
+ * loads as itself (`__local`). Only the first may be described as named in
+ * astryx.config: a package with no config that loads its own manifest has no
+ * config file to name it.
+ *
+ * @param {Array<{name?: string, __local?: boolean}>} integrations loaded, none
+ *   autolinked and none that failed to load
+ * @returns {string}
+ */
+function describeNoImplicit(integrations) {
+  const own = integrations.filter(integration => integration.__local);
+  const configured = integrations.length - own.length;
+  const ownNames = own.map(integration => integration.name ?? 'this package').join(', ');
+  if (own.length === 0) return 'None — every loaded integration is named in astryx.config.';
+  if (configured === 0) return `None — the only loaded integration is this package's own manifest (${ownNames}).`;
+  return `None — every loaded integration is named in astryx.config or is this package's own manifest (${ownNames}).`;
 }
 
 /**
@@ -395,14 +484,18 @@ export function checkImplicitIntegrations(ctx) {
   const unreadable = describeUnreadableManifests(ctx.autolinkFailures ?? []);
 
   if (implicit.length === 0) {
+    // A record that carries `__loadError` (the package's own manifest, or a
+    // configured one, that failed to load) loaded nothing, so it is not named
+    // as loaded beside the line reporting that it could not be loaded.
+    const loaded = ctx.integrations.filter(integration => !integration.__loadError);
     return {
       id,
       label,
       status: 'info',
       message:
-        (ctx.integrations.length > 0
-          ? 'None — every loaded integration is named in astryx.config.'
-          : unreadable
+        (loaded.length > 0
+          ? describeNoImplicit(loaded)
+          : ctx.integrations.length > 0 || unreadable
             ? 'None loaded.'
             : 'None — no installed dependency ships an astryx.integration.* manifest.') +
         unreadable,
@@ -420,9 +513,15 @@ export function checkImplicitIntegrations(ctx) {
         : '';
     // A declared root counts only when it exists: the manifest's keys are a
     // claim, and `integration-issues` reports the ones that are not true.
-    const declared = ['components', 'templates', 'themes', 'docs', 'codemods'].filter(
-      root => integration[/** @type {'components'} */ (root)],
-    );
+    const declared = [
+      'components',
+      'templates',
+      'themes',
+      'docs',
+      'codemods',
+      // An experimental root counts only in a project that opts in.
+      ...(ctx.iconSets?.choice?.configured ? ['iconSets'] : []),
+    ].filter(root => integration[/** @type {'components'} */ (root)]);
     const missing = declared.filter(root => {
       const dir = integration[/** @type {'components'} */ (root)];
       if (typeof dir !== 'string') return false;
@@ -476,7 +575,7 @@ function describeUnreadableManifests(failures) {
   return (
     ` ${failures.length} installed ${one ? 'dependency ships' : 'dependencies ship'} ` +
     `an astryx.integration.* manifest that could not be loaded, so ${one ? 'it contributes' : 'they contribute'} ` +
-    `nothing: ${listed}. Run \`astryx doctor integration validate <package>\` for details.`
+    `nothing: ${listed}. Run \`${formatCliCommand('doctor integration validate <package>')}\` for details.`
   );
 }
 
@@ -550,7 +649,7 @@ export function checkConfiguredIntegrations(ctx) {
         `${withdrawn.length} of ${configured.length} integration${plural} named in astryx.config could not be loaded, ` +
         `so ${withdrawn.length === 1 ? 'it contributes' : 'they contribute'} nothing: ${listed}.`,
       fix:
-        'Install each one, fix its astryx.integration.* manifest (`astryx doctor integration validate <package>` says what is wrong), ' +
+        `Install each one, fix its astryx.integration.* manifest (\`${formatCliCommand('doctor integration validate <package>', ctx.cwd)}\` says what is wrong), ` +
         'or remove it from `integrations` in astryx.config.',
     };
   }
@@ -563,14 +662,36 @@ export function checkConfiguredIntegrations(ctx) {
 }
 
 /**
+ * Why init writes no agent docs for `cwd`, or null when it does: the folder
+ * it would write to is the home folder or the top of a settings folder in it.
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+function agentDocsRefusal(cwd) {
+  try {
+    assertAgentDocsTarget(agentDocsTargetDir(cwd));
+    return null;
+  } catch (err) {
+    return err instanceof Error && err.name === 'AgentDocsHomeError' ? err.message : null;
+  }
+}
+
+/**
  * Check 7 — agent docs exist and contain the Astryx section markers.
  * @param {DoctorContext} ctx
  * @returns {DoctorCheck}
  */
 export function checkAgentDocs(ctx) {
   // Every file init can write (one shared list), looked for in the working
-  // directory and in the project root: run from src/, the docs sit at the root.
-  const dirs = [...new Set([ctx.cwd, projectRootOf(ctx)])];
+  // directory, the project root, and the folder init writes them to: run from
+  // src/ or a nested package, the docs sit at the root.
+  const dirs = [
+    ...new Set(
+      [ctx.cwd, projectRootOf(ctx), resolveAgentDocsRoot(ctx.cwd) ?? ctx.cwd].map(dir =>
+        path.resolve(dir),
+      ),
+    ),
+  ];
   const present = dirs.flatMap(dir =>
     AGENT_DOC_PATHS.map(rel => path.join(dir, rel)).filter(abs =>
       fs.existsSync(abs),
@@ -578,6 +699,15 @@ export function checkAgentDocs(ctx) {
   );
   /** @param {string} abs */
   const shown = abs => path.relative(ctx.cwd, abs) || path.basename(abs);
+  // In the home folder, or at the top of a settings folder in it, init
+  // writes no agent docs (INV31), so the fix is moving the project or a hand
+  // edit, never init.
+  const refusal = agentDocsRefusal(ctx.cwd);
+  /** @param {string} initFix */
+  const fixFor = initFix =>
+    refusal
+      ? `${refusal} Move the project into a folder of its own, or edit the Astryx block in its agent file by hand.`
+      : initFix;
 
   if (present.length === 0) {
     return {
@@ -585,21 +715,54 @@ export function checkAgentDocs(ctx) {
       label: 'AI agent docs',
       status: 'info',
       message: `No agent docs found: looked for ${AGENT_DOC_PATHS.join(', ')} in ${dirs.map(dir => path.relative(ctx.cwd, dir) || '.').join(' and ')}.`,
-      fix: `Generate agent docs with \`${getCliInvocation(ctx.cwd)} init --features agents\`.`,
+      fix: fixFor(
+        `Generate agent docs with \`${getCliInvocation(ctx.cwd)} init --features agents\`.`,
+      ),
     };
   }
 
-  const withMarkers = present.filter(abs => {
+  /** @param {string} abs */
+  const read = abs => {
     try {
-      const content = fs.readFileSync(abs, 'utf-8');
-      return (
-        (content.includes('<!-- ASTRYX:START -->') || content.includes('<!-- XDS:START -->')) &&
-        (content.includes('<!-- ASTRYX:END -->') || content.includes('<!-- XDS:END -->'))
-      );
+      return fs.readFileSync(abs, 'utf-8');
     } catch {
-      return false;
+      return '';
     }
+  };
+  const withMarkers = present.filter(abs => {
+    const content = read(abs);
+    return (
+      (content.includes('<!-- ASTRYX:START -->') || content.includes('<!-- XDS:START -->')) &&
+      (content.includes('<!-- ASTRYX:END -->') || content.includes('<!-- XDS:END -->')) &&
+      holdsAstryxBlock(content)
+    );
   });
+
+  // A managed block that only imports another file (init's GEMINI.md import
+  // of AGENTS.md) is broken when that file holds no block: the agents that
+  // read either file get no Astryx docs.
+  const dangling = present.flatMap(abs => {
+    const match = /<!-- ASTRYX:START -->\s*@(\S+)\s*<!-- ASTRYX:END -->/.exec(read(abs));
+    if (match == null) return [];
+    const target = path.resolve(path.dirname(abs), match[1]);
+    return holdsAstryxBlock(read(target)) ? [] : [{abs, target}];
+  });
+  if (dangling.length > 0) {
+    return {
+      id: 'agent-docs',
+      label: 'AI agent docs',
+      status: 'fail',
+      message: dangling
+        .map(
+          ({abs, target}) =>
+            `${shown(abs)} imports ${shown(target)}, which holds no Astryx block, so agents that read them get no Astryx docs.`,
+        )
+        .join(' '),
+      fix: fixFor(
+        `Write the block again with \`${getCliInvocation(ctx.cwd)} init --features agents\`.`,
+      ),
+    };
+  }
 
   if (withMarkers.length === 0) {
     return {
@@ -607,7 +770,9 @@ export function checkAgentDocs(ctx) {
       label: 'AI agent docs',
       status: 'warn',
       message: `Agent docs present (${present.map(shown).join(', ')}) but no Astryx section markers found.`,
-      fix: `Add the Astryx section to your agent docs with \`${getCliInvocation(ctx.cwd)} init --features agents\`.`,
+      fix: fixFor(
+        `Add the Astryx section to your agent docs with \`${getCliInvocation(ctx.cwd)} init --features agents\`.`,
+      ),
     };
   }
 
@@ -748,7 +913,67 @@ export function checkIntegrationIssues(ctx) {
     label: 'Integration contributions',
     status: 'warn',
     message: `${issues.length} integration issue(s)${errors > 0 ? `, ${errors} of them errors` : ''}: ${details}`,
-    fix: 'Run `astryx doctor integration` for package-specific diagnostics and resolve cross-package precedence in astryx.config.',
+    fix: `Run \`${formatCliCommand('doctor integration', ctx.cwd)}\` for package-specific diagnostics and resolve cross-package precedence in astryx.config.`,
+  };
+}
+
+/**
+ * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet` names a set
+ * that is not installed, or one that is installed but withdrawn (with why);
+ * warns when two or more sets are installed and none is the project's, and
+ * for each other installed set that was withdrawn, with why.
+ * Icon sets are experimental (spec:AST-017 FR27): only a project that sets
+ * `experimental.iconSet` gets the check, so every other report is unchanged.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIconSets(ctx) {
+  const state = ctx.iconSets;
+  const id = 'icon-sets';
+  const label = 'Icon sets';
+  if (state == null) return null;
+  const {sets, withdrawn, choice} = state;
+  // Only a project that opts in with `experimental.iconSet` gets the check.
+  if (!choice.configured) return null;
+  if (choice.status === 'missing') {
+    return {
+      id,
+      label,
+      status: 'fail',
+      message: choice.reason,
+      fix: 'Install the package that ships the set, or set experimental.iconSet in astryx.config to an installed set (`astryx experimental icon --list` names them).',
+    };
+  }
+  if (choice.status === 'withdrawn') {
+    return {
+      id,
+      label,
+      status: 'fail',
+      message: choice.reason,
+      fix: 'Run `astryx integration check` in the package that ships the set, or install the module its data names; or set experimental.iconSet in astryx.config to a valid installed set (`astryx experimental icon --list` names them).',
+    };
+  }
+  /** @type {string[]} */
+  const problems = [];
+  if (choice.status === 'ambiguous') problems.push(choice.reason);
+  for (const each of withdrawn) problems.push(each.reason);
+  if (problems.length > 0) {
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: problems.join(' | '),
+      fix:
+        choice.status === 'ambiguous'
+          ? 'Set experimental.iconSet in astryx.config to "<package>/<set>" so templates use one set.'
+          : 'Run `astryx integration check` in the package that ships the set, or install its module.',
+    };
+  }
+  return {
+    id,
+    label,
+    status: 'pass',
+    message: `${sets.length} icon set${sets.length === 1 ? '' : 's'} installed. ${choice.reason}`,
   };
 }
 
@@ -926,16 +1151,20 @@ function nameTypes(names) {
 }
 
 /**
- * The section keys `astryx docs authoring --index` lists, read the way that
- * command reads them.
+ * The section keys the field reference lists (`astryx docs
+ * authoring/field-reference --index`), read the way that command reads them.
  * @returns {Promise<{keys: Set<string>} | {keys: null, error: string}>}
  */
 async function authoringTopicKeys() {
   try {
+    const {AUTHORING_REFERENCE_ROUTE} =
+      await import('../../foundation/discovery/authoring-self-docs.mjs');
     const catalog = DocsCatalog.fromBuiltins();
-    const entry = catalog.resolve('authoring');
-    if (!entry) return {keys: null, error: 'it is not a built-in topic'};
-    const index = indexView(await lowerTopic(catalog, entry));
+    const node = (await projectTree(catalog)).get(AUTHORING_REFERENCE_ROUTE);
+    if (!node?.ref?.topicFile) {
+      return {keys: null, error: 'the docs tree has no field reference'};
+    }
+    const index = indexView(await lowerTopic(catalog, guideEntry(node)));
     return {keys: new Set(index.sections.map(section => section.id))};
   } catch (err) {
     return {
@@ -954,7 +1183,7 @@ function surfaceProblems(surface) {
   const problems = [];
   if (surface.types === 0 && surface.untraced.length === 0) {
     problems.push(
-      '@astryxdesign/cli/authoring exports no types, so nothing was compared with `astryx docs authoring`',
+      `@astryxdesign/cli/authoring exports no types, so nothing was compared with \`${formatCliCommand('docs authoring/field-reference')}\``,
     );
   }
   for (const {module, names, reason, source, key} of surface.unreadable) {
@@ -967,7 +1196,7 @@ function surfaceProblems(surface) {
             ? `${source} does not load`
             : `${source} renders section "${key}", which the topic's index does not list`;
     problems.push(
-      `${nameTypes(names)} from ${module} ${names.length === 1 ? 'has' : 'have'} no doc in \`astryx docs authoring\`: ${why}`,
+      `${nameTypes(names)} from ${module} ${names.length === 1 ? 'has' : 'have'} no doc in \`${formatCliCommand('docs authoring/field-reference')}\`: ${why}`,
     );
   }
   for (const {name, reason} of surface.untraced) {
@@ -1008,7 +1237,7 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
     const audit = await auditAuthoringSelfDocs({root, sources});
     const problems = [
       ...audit.unreachable.map(
-        source => `${source} is not in \`astryx docs authoring\``,
+        source => `${source} is not in \`${formatCliCommand('docs authoring/field-reference')}\``,
       ),
       ...audit.failed.map(
         ({source, error}) => `${source} failed to load: ${error}`,
@@ -1024,7 +1253,7 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
         : {keys: options.topicKeys};
     const surface = [
       ...('error' in topic
-        ? [`\`astryx docs authoring\` could not be read: ${topic.error}`]
+        ? [`\`${formatCliCommand('docs authoring/field-reference')}\` could not be read: ${topic.error}`]
         : []),
       ...surfaceProblems(
         await auditAuthoringSurface({root, sources, topicKeys: topic.keys}),
@@ -1048,7 +1277,10 @@ export async function checkAuthoringDocs(_ctx, options = {}) {
       id,
       label,
       status: 'pass',
-      message: `All ${audit.sections} authoring schemas are readable in \`astryx docs authoring\`.`,
+      // Experimental schemas are checked like every other but are sections
+      // of their experimental route, so the count is unchanged without them
+      // (spec:AST-017 FR27).
+      message: `All ${audit.sections} authoring schemas are readable in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
     };
   } catch (err) {
     return {
@@ -1088,11 +1320,11 @@ export async function checkCliDocs(_ctx, options = {}) {
     const problems = [
       ...audit.missing.map(
         source =>
-          `${source} has no namespace, so no \`astryx docs\` topic reads it`,
+          `${source} has no namespace, so no \`${formatCliCommand('docs')}\` topic reads it`,
       ),
       ...audit.unknown.map(
         ({source, namespace}) =>
-          `${source} has namespace "${namespace}", which no \`astryx docs\` topic reads`,
+          `${source} has namespace "${namespace}", which no \`${formatCliCommand('docs')}\` topic reads`,
       ),
       ...audit.misfiled.map(({message}) => message),
       ...audit.failed.map(
@@ -1116,7 +1348,9 @@ export async function checkCliDocs(_ctx, options = {}) {
       id,
       label,
       status: 'pass',
-      message: `All ${audit.docs} CLI docs are readable: ${audit.tree} in the \`astryx docs cli\` tree and ${audit.authoring} in \`astryx docs authoring\`.`,
+      // Experimental docs are checked like every other but not counted
+      // (spec:AST-017 FR27).
+      message: `All ${audit.docs - audit.experimental.docs} CLI docs are readable: ${audit.tree - audit.experimental.tree} in the \`${formatCliCommand('docs cli')}\` tree and ${audit.authoring - audit.experimental.authoring} in \`${formatCliCommand('docs authoring/field-reference')}\`.`,
     };
   } catch (err) {
     return {
@@ -1189,7 +1423,11 @@ export async function checkDocsTree(_ctx, options = {}) {
         fix: DOCS_TREE_FIX,
       };
     }
-    const nodes = [...tree.nodes.values()];
+    // Experimental docs are checked like every other but not counted
+    // (spec:AST-017 FR27).
+    const nodes = [...tree.nodes.values()].filter(
+      node => !isExperimentalTreeNode(tree, node),
+    );
     const namespaces = nodes.filter(node => node.kind === 'namespace').length;
     return {
       id,
@@ -1207,6 +1445,7 @@ export async function checkDocsTree(_ctx, options = {}) {
     };
   }
 }
+
 
 /**
  * Every topic reads progressively, in every language it ships: it loads, its
@@ -1232,16 +1471,23 @@ export async function checkDocsProgressiveDisclosure(ctx) {
   if (catalog) {
     // A guide the docs tree places is a topic read by its route; it is held
     // to the same budget as every flat topic.
-    const guides = [...(await projectTree(catalog)).nodes.values()]
-      // A flat topic in the Unorganized level is checked above, as a topic.
-      .filter(node => node.kind === 'generic' && !node.ref?.flatTopic)
-      .map(guideEntry);
+    const tree = await projectTree(catalog);
+    const placed = [...tree.nodes.values()]
+      // A flat topic in a topic level is checked above, as a topic.
+      .filter(node => node.kind === 'generic' && !node.ref?.flatTopic);
+    // An experimental guide is checked but not counted (spec:AST-017 FR27).
+    const uncounted = new Set(
+      placed
+        .filter(node => isExperimentalTreeNode(tree, node))
+        .map(node => node.route),
+    );
+    const guides = placed.map(guideEntry);
     for (const entry of [...catalog.entries(), ...guides]) {
       for (const lang of [null, ...overlayLanguages(entry)]) {
         const where = lang ? `${entry.name} [${lang}]` : entry.name;
         try {
           const doc = detailView(await compileTopic(catalog, entry, lang));
-          if (lang == null) topics += 1;
+          if (lang == null && !uncounted.has(entry.name)) topics += 1;
           const indexBytes = docsIndexBytes(buildDocsIndexData(doc));
           if (indexBytes > DOC_OUTPUT_BUDGET_BYTES) {
             problems.push(
@@ -1279,9 +1525,460 @@ export async function checkDocsProgressiveDisclosure(ctx) {
 }
 
 /**
+ * Check 11 — the command every printed command starts with, and a warning when
+ * loaded integrations declare different ones (their `cliCommand`). Then the
+ * picker uses neither, so commands fall back to the package-manager guess.
+ *
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck}
+ */
+export function checkCliCommand(ctx) {
+  const id = 'cli-command';
+  const label = 'CLI command';
+  const {command, conflict, declared} = chooseDeclaredCliCommand(
+    declaredCliCommandsOf(ctx.integrations ?? []),
+  );
+  if (conflict) {
+    const claims = declared
+      .map(entry => `${entry.package} (\`${entry.command}\`)`)
+      .join(', ');
+    return {
+      id,
+      label,
+      status: 'warn',
+      message: `Loaded integrations declare different CLI commands: ${claims}. Neither is used, so printed commands start with \`${guessCliInvocation(ctx.cwd)}\`.`,
+      fix: 'Remove the integration that does not belong here, or have every package declare the same `cliCommand` in its astryx.integration manifest.',
+    };
+  }
+  if (command) {
+    const packages = declared.map(entry => entry.package).join(', ');
+    return {
+      id,
+      label,
+      status: 'pass',
+      message: `Printed commands start with \`${command}\`, the cliCommand of ${packages}.`,
+    };
+  }
+  return {
+    id,
+    label,
+    status: 'info',
+    message: `No loaded integration declares a cliCommand, so printed commands start with \`${getCliInvocation(ctx.cwd)}\`.`,
+  };
+}
+
+/* ── outside a project: the computer ─────────────────────────────────── */
+
+/**
+ * What a computer check reads: the running Node, the release that answered
+ * (`meta.answeredBy`), and the newest release the computer knows of.
+ * @typedef {object} ComputerContext
+ * @property {string} nodeVersion
+ * @property {{cli: string, core: string | null, copy: string}} answeredBy
+ * @property {string | null} latest the newest release known, or null
+ * @property {Array<{path: string, state: import('../../foundation/agent-docs/computer-agent-text.mjs').ComputerAgentTextState}>} [agentText]
+  *   each file of the computer-level agent text against this release's rendering
+ * @property {import('../../foundation/env/user-settings.mjs').ComputerAgentTextSettings} [agentTextSettings]
+ *   the person's choices about the computer-level agent text
+ * @property {string | null} [agentTextCommand] the command the skill file
+ *   tells agents to run, or null
+ * @property {string | null} [agentTextInstall] the install step the skill
+ *   file records for when that command is not found, or null
+  * @property {string} [cwd] the folder doctor runs in, for the printed fix
+ * @property {import('../../foundation/release/notices.mjs').GlobalBehind | null} [globalBehind]
+ *   the CLI installed for the computer, when it is older than the newest
+ *   release (outside a project)
+ * @property {import('../../foundation/release/notices.mjs').ProjectLag | null} [projectLag]
+ *   the project's release, when it is behind the newest (inside a project)
+ * @property {{key: string, reason: string, at: number} | null} [lastNoticeSkip]
+ * @property {{at: number, reason: string} | null} [lastCheckFailure] why the
+ *   last update check did not reach the registry, after the last that did
+ *   the newest update notice that did not print, and why (diagnostic only)
+ * @property {{pid: number | null, host: string | null, since: number} | null} [stateLock]
+ *   who holds the state file's lock now (diagnostic only)
+  * @property {Array<import('../../foundation/env/search-path.mjs').SearchPathCommand & {upgrade?: string | null, runner?: boolean}>} [searchPathCommands]
+ *   every `astryx` on the search path, with the command that upgrades it
+ *   the `astryx` commands on the search path, in order
+ * @property {import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate[]} [computerIntegrations]
+ *   the integrations installed beside the running CLI
+ * @property {string[]} [loadedComputerIntegrations] the names of those that
+ *   loaded outside a project
+ * @property {string[]} [folderIntegrations] the names of the integrations the
+ *   folder loads itself, whose copies win over the computer's
+ */
+
+/**
+ * The release that answered this run outside a project, and the Core it
+ * reads from.
+ * @param {ComputerContext} ctx
+ * @returns {DoctorCheck}
+ */
+export function checkAnsweringRelease(ctx) {
+  const {cli, core} = ctx.answeredBy;
+  return {
+    id: 'answering-release',
+    label: 'Release that answered',
+    status: core ? 'pass' : 'info',
+    message: `${
+      core
+        ? `CLI ${cli} with Core ${core} answered, outside a project.`
+        : `CLI ${cli} answered, outside a project. It installs Core ${cli} into the per-user cache the first time a command needs it.`
+    } How each folder is answered: \`${formatCliCommand('astryx docs global', ctx.cwd)}\`.`,
+  };
+}
+
+/**
+ * The newest release this computer knows of, beside the one that answered
+ * (spec AST-081 FR10). Runs inside and outside a project, and is always
+ * info. Inside one, a release behind the newest names the install and
+ * upgrade commands; outside one, a CLI installed for the computer that is
+ * behind names the command of the package manager that installed it, after
+ * the Node it needs when the computer runs an older one. Doctor installs
+ * nothing.
+ * @param {ComputerContext} ctx
+ * @returns {DoctorCheck}
+ */
+export function checkNewestRelease(ctx) {
+  const check = newestReleaseCheck(ctx);
+  const notes = [
+    checkFailureNote(ctx.lastCheckFailure),
+    skipNote(ctx.lastNoticeSkip),
+    lockNote(ctx.stateLock),
+  ].filter(Boolean);
+  return notes.length > 0 ? {...check, message: [check.message, ...notes].join(' ')} : check;
+}
+
+/**
+ * The note on a state-file lock held right now, which keeps notices from
+ * being recorded (diagnostic only).
+ * @param {{pid: number | null, host: string | null, since: number} | null | undefined} lock
+ * @returns {string | null}
+ */
+function lockNote(lock) {
+  if (!lock) return null;
+  const by = lock.pid == null ? '' : ` by process ${lock.pid}${lock.host ? ` on ${lock.host}` : ''}`;
+  return `The state file's lock is held${by} since ${new Date(lock.since).toISOString()}.`;
+}
+
+/**
+ * The note on an update check that did not reach the registry (diagnostic
+ * only): no check, no notices.
+ * @param {{at: number, reason: string} | null | undefined} failed
+ * @returns {string | null}
+ */
+function checkFailureNote(failed) {
+  if (!failed) return null;
+  const why =
+    failed.reason === 'npm-missing'
+      ? 'npm could not be started'
+      : failed.reason === 'bad-reply'
+        ? "npm's answer named no release"
+        : failed.reason.startsWith('npm-failed: ')
+          ? `npm failed (${failed.reason.slice('npm-failed: '.length)}); its registry and proxy settings decide where it asks`
+          : failed.reason;
+  return `The last update check, ${new Date(failed.at).toISOString()}, did not reach the registry: ${why}.`;
+}
+
+/** What a recorded notice skip's reason means, for doctor's update line. */
+const SKIP_REASONS = {
+  'already-shown': 'it had already printed that day',
+  'no-newer': 'no newer release was known',
+  'no-project': 'the folder belongs to no Astryx project, so no install command fits',
+};
+
+/**
+ * The note on the last update notice that did not print, for diagnosis
+ * (diagnostic state, not a contract).
+ * @param {{key: string, reason: string, at: number} | null | undefined} skip
+ * @returns {string | null}
+ */
+function skipNote(skip) {
+  if (!skip) return null;
+  const why = /** @type {Record<string, string>} */ (SKIP_REASONS)[skip.reason] ?? skip.reason;
+  return `Last update notice skipped ${new Date(skip.at).toISOString()} (${skip.key}): ${why}.`;
+}
+
+/**
+ * {@link checkNewestRelease} without the skip note.
+ * @param {ComputerContext} ctx
+ * @returns {DoctorCheck}
+ */
+function newestReleaseCheck(ctx) {
+  const {latest, globalBehind: behind, projectLag: lag} = ctx;
+  const {cli} = ctx.answeredBy;
+  const base = {id: 'newest-release', label: 'Newest release', status: /** @type {const} */ ('info')};
+  if (behind) {
+    return {
+      ...base,
+      message: `${availableLine(behind.current, behind.newest)}. The CLI installed for the computer stays on its release until you upgrade it.`,
+      fix: `${upgradeLine(behind.command, behind.node)}.`,
+    };
+  }
+  if (lag) {
+    return {
+      ...base,
+      message: `This project uses Astryx ${lag.current}; ${lag.newest} is the newest.`,
+      fix: `${upgradeLine(`${lag.install}, then ${lag.upgrade}`, lag.node)}.`,
+    };
+  }
+  if (!latest) {
+    return {
+      ...base,
+      message: 'Update check: not run yet, so the newest release is not known here; it runs in the background once a day, after a command.',
+    };
+  }
+  if (isValidSemver(latest) && isValidSemver(cli) && semverCompare(latest, cli) > 0) {
+    return {
+      ...base,
+      message: `Release ${latest} is newer than ${cli}, the release that answered.`,
+    };
+  }
+  return {...base, message: `No newer release is known: the newest is ${latest}.`};
+}
+
+/**
+ * The `astryx` commands on the search path (spec AST-081 FR11): the first is
+ * the one a shell runs. Warns when it is not the Astryx CLI, or is a release
+ * that predates the hand-off and so answers every folder itself.
+ * @param {ComputerContext} ctx
+ * @returns {DoctorCheck}
+ */
+export function checkCliOnPath(ctx) {
+  const rows = ctx.searchPathCommands ?? [];
+  const base = {id: 'cli-on-path', label: '`astryx` on the search path'};
+  const describe = (/** @type {import('../../foundation/env/search-path.mjs').SearchPathCommand} */ row) =>
+    row.astryx ? `${row.file} (CLI ${row.version ?? 'of unknown version'})` : `${row.file} (not the Astryx CLI)`;
+  const others = rows.slice(1);
+  const othersNote = others.length > 0 ? ` Later on the search path: ${others.map(describe).join(', ')}.` : '';
+  const [first] = rows;
+  if (!first) {
+    return {
+      ...base,
+      status: 'info',
+      message: 'No `astryx` command on the search path, so `astryx` runs only through a package manager.',
+      fix: 'To run the CLI in any folder, install it for the computer: `npm i -g @astryxdesign/cli`.',
+    };
+  }
+  if (!first.astryx) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `The first \`astryx\` on the search path, ${first.file}, is not the Astryx CLI, so \`astryx\` runs another program.${othersNote}`,
+      fix: 'Remove that program from the search path, or put the folder of the CLI installed for the computer before it.',
+    };
+  }
+  if (first.handsOff === false) {
+    return {
+      ...base,
+      status: 'warn',
+      message: `The first \`astryx\` on the search path, ${first.file}, runs CLI ${first.version ?? 'of unknown version'}, which predates the hand-off and answers every folder itself.${othersNote}`,
+      fix: `To upgrade, run: \`${first.upgrade ?? 'npm i -g @astryxdesign/cli@latest'}\`.`,
+    };
+  }
+  return {
+    ...base,
+    status: 'pass',
+    message: `\`astryx\` runs ${describe(first)}.${othersNote}`,
+  };
+}
+
+/**
+ * The computer-level agent text (spec AST-081 FR4, FR8): turned off, present
+ * and equal to this release's rendering, present but different, or absent,
+ * for the files the chosen agents read. Always `info`: the text is optional,
+ * so it never warns or fails. A file Astryx did not write counts as absent,
+ * and a file a person edited is named; both are kept as they are.
+ * @param {ComputerContext} ctx
+ * @returns {DoctorCheck}
+ */
+export function checkComputerAgentText(ctx) {
+  const state = ctx.agentTextSettings && ctx.agentText ? null : computerAgentTextState();
+  const settings = ctx.agentTextSettings ?? /** @type {NonNullable<typeof state>} */ (state).settings;
+  const base = {
+    id: 'computer-agent-text',
+    label: 'Computer-level agent text',
+    status: /** @type {const} */ ('info'),
+  };
+  if (!settings.install) {
+    return {
+      ...base,
+      message: 'The computer-level agent text is turned off (`astryx init --user --remove-agents`), so the CLI installed for the computer does not write it.',
+      fix: `To turn it back on, run \`${formatCliCommand('astryx init --user', ctx.cwd)}\`.`,
+    };
+  }
+  const entries = ctx.agentText ?? /** @type {NonNullable<typeof state>} */ (state).entries;
+  const command = ctx.agentText ? (ctx.agentTextCommand ?? null) : /** @type {NonNullable<typeof state>} */ (state).command;
+  const recorded = (ctx.agentText ? ctx.agentTextInstall : /** @type {NonNullable<typeof state>} */ (state).install) ?? null;
+  const fix = `Run \`${formatCliCommand('astryx init --user', ctx.cwd)}\`.`;
+  const [file, ...links] = entries;
+  const home = (/** @type {{path: string}} */ e) => displayHomePath(e.path);
+  const linked = links.filter(l => l.state === 'linked').map(home);
+  const copied = links.filter(l => l.state === 'current').map(home);
+  const skipped = links.filter(l => l.state === 'foreign' || l.state === 'edited').map(home);
+  const dangling = links.filter(l => l.state === 'dangling').map(home);
+  const missing = links.filter(l => l.state === 'absent' || l.state === 'differs').map(home);
+  const linkNote =
+    (linked.length > 0 ? ` Linked into: ${linked.join(', ')}.` : '') +
+    (copied.length > 0 ? ` Copied into: ${copied.join(', ')}.` : '') +
+    (skipped.length > 0 ? ` Not linked, because something Astryx did not create is there: ${skipped.join(', ')}.` : '') +
+    (dangling.length > 0 ? ` Linked, but the skill folder the link points to is not there, so agents reading it see nothing (as in a container that mounts only that folder): ${dangling.join(', ')}.` : '') +
+    (missing.length > 0 ? ` Not linked yet: ${missing.join(', ')}.` : '');
+  if (file.state === 'foreign' || file.state === 'edited') {
+    return {
+      ...base,
+      message: `${home(file)} ${file.state === 'edited' ? 'was edited since Astryx wrote it' : 'was not written by Astryx'}, so it is left as it is (delete it to get the current text).${linkNote}`,
+    };
+  }
+  if (file.state === 'absent') {
+    return {
+      ...base,
+      message: `No computer-level agent text: agents outside a project with Astryx agent docs do not know Astryx is here.${linkNote}`,
+      fix,
+    };
+  }
+  const current = file.state === 'current';
+  const status = `${current ? 'The computer-level agent text matches this release' : "The computer-level agent text differs from this release's"}: ${home(file)}.`;
+  // The skill outlives the CLI it names when the home folder outlasts the
+  // folder the CLI is installed in, as on a machine whose system folders
+  // reset on restart. Reported only when no `astryx` command is on the search
+  // path at all, apart from a package runner's own copy, which it puts first
+  // only for the run it starts (the way back when the global CLI is gone).
+  // Any other `astryx`, even one the scan cannot trace to the package, such
+  // as the shim of Volta, asdf or mise, may well run the CLI, so doctor stays
+  // quiet here and cli-on-path reports what it can; never a false "gone".
+  // The reinstalled copy refreshes the text too.
+  const rows = ctx.searchPathCommands;
+  if (command === COMPUTER_COMMAND && rows && !rows.some(r => !r.runner)) {
+    return {
+      ...base,
+      message: `${status} It tells agents to run \`${COMPUTER_COMMAND}\`, but no \`${COMPUTER_COMMAND}\` command is on the search path, so agents that read it find no CLI to run (as when a restart removes the CLI installed for the computer and keeps the home folder).${linkNote}`,
+      fix: recorded
+        ? `Run \`${recorded}\`, the step the skill names for when \`${COMPUTER_COMMAND}\` is not found.`
+        : `Install it for the computer: \`${COMPUTER_INSTALL_STEP}\`.`,
+    };
+  }
+  return {
+    ...base,
+    message: `${status}${linkNote}`,
+    ...(!current || missing.length > 0 || dangling.length > 0 ? {fix} : {}),
+  };
+}
+
+/**
+ * The integrations installed for the computer (spec AST-081 FR12). Outside a
+ * project: each one that loads, and a warning for each that is skipped
+ * because its peer ranges exclude the answering release, or fails to load.
+ * @param {ComputerContext} ctx
+ * @returns {DoctorCheck}
+ */
+export function checkComputerIntegrations(ctx) {
+  const found = ctx.computerIntegrations ?? [];
+  const loaded = new Set(ctx.loadedComputerIntegrations ?? []);
+  const base = {id: 'computer-integrations', label: 'Integrations installed for this computer'};
+  if (found.length === 0) {
+    return {
+      ...base,
+      status: 'info',
+      message: 'No integration is installed beside the CLI installed for this computer.',
+    };
+  }
+  const label = (/** @type {{name: string, version?: string}} */ c) => (c.version ? `${c.name}@${c.version}` : c.name);
+  const own = new Set(ctx.folderIntegrations ?? []);
+  const shadowed = found.filter(c => own.has(c.name));
+  const rest = found.filter(c => !own.has(c.name));
+  const used = rest.filter(c => !c.incompatible && loaded.has(c.name));
+  const skipped = rest.filter(c => c.incompatible);
+  const failed = rest.filter(c => !c.incompatible && !loaded.has(c.name));
+  const notes = [
+    used.length > 0 ? `Used outside a project: ${used.map(label).join(', ')}.` : '',
+    ...shadowed.map(c => `${label(c)} is not used here: this folder loads its own copy of ${c.name}.`),
+    ...skipped.map(c => `Skipped ${label(c)}: ${c.incompatible}.`),
+    ...failed.map(c => `${label(c)} could not be loaded.`),
+  ].filter(Boolean);
+  const fixes = [
+    ...skipped.map(c => `install a release of ${c.name} that supports this CLI`),
+    ...failed.map(c => `run \`${formatCliCommand(`astryx doctor integration validate ${c.name}`, ctx.cwd)}\``),
+  ];
+  return {
+    ...base,
+    status: skipped.length + failed.length > 0 ? 'warn' : 'pass',
+    message: notes.join(' '),
+    ...(fixes.length > 0 ? {fix: `To fix: ${fixes.join('; ')}.`} : {}),
+  };
+}
+
+/**
+ * Inside a project, the integrations installed for the computer that the
+ * project does not install: available, never used (spec AST-081 FR12).
+ * Always info.
+ * @param {{installed: Set<string>, candidates: import('../../foundation/integrations/computer-integrations.mjs').ComputerIntegrationCandidate[], install: ((name: string) => string) | null, elsewhere?: boolean}} input
+ *   `install`: the command that adds a package with the project's package
+ *   manager (read by the adapter); null when the folder belongs to no
+ *   project, or `elsewhere`: its package.json is not the project's, where the
+ *   fix points at the project's folder
+ * @returns {DoctorCheck}
+ */
+export function checkComputerIntegrationsAvailable({installed, candidates, install, elsewhere = false}) {
+  const available = candidates.filter(c => !installed.has(c.name));
+  const base = {id: 'computer-integrations', label: 'Integrations installed for this computer', status: /** @type {const} */ ('info')};
+  if (available.length === 0) {
+    return {...base, message: 'No integration installed for this computer is missing from this project.'};
+  }
+  const add = install;
+  return {
+    ...base,
+    message: `Installed for this computer but not in this project, so not used here: ${available.map(c => c.name).join(', ')}.`,
+    ...(add
+      ? {fix: `To use one in this project, run ${available.map(c => `\`${add(c.name)}\``).join(' or ')}.`}
+      : elsewhere
+        ? {fix: NO_PROJECT_FIX}
+        : {}),
+  };
+}
+
+/**
+ * The checks doctor runs outside a project, in order.
+ * @type {Array<(ctx: ComputerContext) => DoctorCheck>}
+ */
+export const COMPUTER_CHECKS = [
+  ctx =>
+    checkNodeVersion({
+      cwd: '',
+      nodeVersion: ctx.nodeVersion,
+      coreDir: null,
+      configPath: null,
+    }),
+    checkAnsweringRelease,
+  checkNewestRelease,
+    checkCliOnPath,
+  checkComputerIntegrations,
+  checkComputerAgentText,
+];
+
+/**
+ * Doctor outside a project: the computer, never the folder.
+ * @param {string} cwd
+ * @returns {Promise<DoctorReport>}
+ */
+async function runComputerChecks(cwd) {
+  /** @type {ComputerContext} */
+  const ctx = {
+    nodeVersion: process.versions.node,
+    cwd,
+    ...releaseFacts(cwd, {project: false}),
+  };
+  Object.assign(ctx, await computerIntegrationsOutside(cwd));
+  const checks = COMPUTER_CHECKS.map(fn => fn(ctx));
+  const summary = {pass: 0, warn: 0, fail: 0, info: 0};
+  for (const c of checks) summary[c.status] += 1;
+  return {checks, summary};
+}
+
+/**
  * Ordered list of synchronous check functions. Append here to add a check.
  * (checkConfig is async and is awaited separately by {@link runChecks}.)
- * @type {Array<(ctx: DoctorContext) => DoctorCheck>}
+ * A check that returns null does not apply to the project and is left out.
+ * @type {Array<(ctx: DoctorContext) => DoctorCheck | null>}
  */
 export const SYNC_CHECKS = [
   checkNodeVersion,
@@ -1291,9 +1988,11 @@ export const SYNC_CHECKS = [
   checkConfiguredIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIconSets,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
+  checkCliCommand,
 ];
 
 /**
@@ -1301,11 +2000,27 @@ export const SYNC_CHECKS = [
  *
  * @param {object} [options]
  * @param {string} [options.cwd] - Directory to diagnose (default: process.cwd()).
+ * @param {string} [options.built] - A finished build to check for Astryx
+ *   use: a project folder, a build output folder, or one built file
+ *   (built-checks.mjs). Without it, the checks are unchanged.
  * @returns {Promise<DoctorReport>}
  */
 export async function runChecks(options = {}) {
+  if (options.built != null) {
+    const {built, ...rest} = options;
+    const report = await runChecks(rest);
+    const cwd = rest.cwd ?? process.cwd();
+    const checks = [
+      ...report.checks,
+      ...checkBuilt(built, {cwd, packages: builtIntegrationPackages(built, cwd)}),
+    ];
+    const summary = {pass: 0, warn: 0, fail: 0, info: 0};
+    for (const c of checks) summary[c.status] += 1;
+    return {checks, summary};
+  }
   const cwd = options.cwd ?? process.cwd();
-  const coreDir = findCoreDir(cwd);
+  if (outsideProject(cwd)) return runComputerChecks(cwd);
+  const coreDir = findProjectCoreDir(cwd);
   // findConfigPath throws when multiple config files coexist. That's a
   // misconfiguration doctor exists to report — catch it and surface it through
   // checkConfig as a FAIL rather than crashing the whole diagnostic engine.
@@ -1336,10 +2051,14 @@ export async function runChecks(options = {}) {
   let configuredIntegrations = null;
   /** @type {string|null} */
   let projectError = null;
+  /** @type {DoctorContext['iconSets']} */
+  let iconSets = null;
   /** @type {import('../../foundation/config/project.mjs').Project | null} */
   let project = null;
   try {
-    project = await Project.load(cwd);
+    // Doctor judges the project, so it reads only the Core the project
+    // installed, never a carried one (spec AST-081 FR3).
+    project = await Project.load(cwd, {core: 'project'});
   } catch (err) {
     // A project the CLI cannot load leaves the checks that need it
     // skipped. The reason is kept: those checks and the config
@@ -1429,6 +2148,11 @@ export async function runChecks(options = {}) {
         docsCatalog = null;
         docsCatalogError = err instanceof Error ? err.message : String(err);
       }
+      try {
+        iconSets = await project.iconSets();
+      } catch {
+        iconSets = null;
+      }
       integrationIssues = await project.issues();
     } catch {
       // Best-effort: once the project has loaded, a later read that throws
@@ -1442,6 +2166,8 @@ export async function runChecks(options = {}) {
     cwd,
     nodeVersion: process.versions.node,
     coreDir,
+    ownCli: projectHasOwnCli(cwd),
+    projectCore: projectCoreVersion(cwd),
     configPath,
     integrations,
     docsCatalog,
@@ -1452,6 +2178,7 @@ export async function runChecks(options = {}) {
     configuredIntegrations,
     configError,
     projectError,
+    iconSets,
   };
 
   /** @type {DoctorCheck[]} */
@@ -1459,12 +2186,38 @@ export async function runChecks(options = {}) {
   // Run the theme checks and config check after the environment checks. The
   // released `themes` check keeps its place, ahead of the app-theme checks.
   for (const fn of SYNC_CHECKS) {
-    checks.push(fn(ctx));
+    const check = fn(ctx);
+    if (check) checks.push(check);
     if (fn === checkVersionAlignment) {
       const appThemeChecks = await checkAppThemes(cwd);
       checks.push(checkThemes(cwd, appThemeChecks), ...appThemeChecks);
       checks.push(await checkConfig(ctx));
     }
+  }
+  const facts = releaseFacts(cwd, {project: true});
+  checks.push(
+    checkNewestRelease({
+      nodeVersion: ctx.nodeVersion,
+      answeredBy: facts.answeredBy,
+      latest: facts.latest,
+      projectLag: facts.projectLag,
+      lastNoticeSkip: facts.lastNoticeSkip,
+      lastCheckFailure: facts.lastCheckFailure,
+      stateLock: facts.stateLock,
+    }),
+  );
+  checks.push(
+    checkCliOnPath({
+      nodeVersion: ctx.nodeVersion,
+      answeredBy: facts.answeredBy,
+      latest: null,
+      searchPathCommands: facts.searchPathCommands,
+    }),
+  );
+  {
+    const loadedNames = (project?.loadedIntegrations ?? []).map((/** @type {{name: string}} */ i) => i.name);
+    const candidates = await computerIntegrationsToAdd(cwd, loadedNames);
+    checks.push(checkComputerIntegrationsAvailable({installed: new Set(loadedNames), candidates, install: installCommandFor(cwd), elsewhere: insideProjectElsewhere(cwd)}));
   }
   checks.push(await checkAuthoringDocs(ctx));
   checks.push(await checkCliDocs(ctx));
@@ -1481,8 +2234,7 @@ export async function runChecks(options = {}) {
  * Programmatic API: run the doctor and return the same envelope shape that
  * `astryx doctor --json` emits.
  *
- * @param {object} [options]
- * @param {string} [options.cwd]
+ * @param {import('./doctor.type.mjs').DoctorOptions} [options]
  * @returns {Promise<{type: 'doctor', data: DoctorReport}>}
  */
 export async function doctor(options = {}) {

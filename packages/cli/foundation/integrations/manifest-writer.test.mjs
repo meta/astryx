@@ -227,3 +227,45 @@ describe('patchIntegrationRoot', () => {
     );
   });
 });
+
+describe('patchIntegrationRoot with a nested key beside a spread', () => {
+  it('refuses to add the object a spread may set, and leaves the manifest as it was', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'shared.mjs'),
+      "export default {experimental: {other: './other'}};\n",
+    );
+    const before =
+      "import shared from './shared.mjs';\n\nexport default {\n  ...shared,\n  docs: './docs',\n};\n";
+    const file = manifest(before);
+    await expect(
+      patchIntegrationRoot(tmpDir, 'experimental.iconSets', './icon-sets'),
+    ).rejects.toThrow(
+      /spreads another object \(`\.\.\.`\) where "experimental" would go.*Set "experimental\.iconSets: '\.\/icon-sets'" in it yourself/u,
+    );
+    expect(fs.readFileSync(file, 'utf8')).toBe(before);
+  });
+
+  it('adds the key inside an existing literal object, keeping its other keys', async () => {
+    const file = manifest(
+      "export default {\n  experimental: {\n    other: './other',\n  },\n};\n",
+    );
+    await patchIntegrationRoot(tmpDir, 'experimental.iconSets', './icon-sets');
+    const text = fs.readFileSync(file, 'utf8');
+    expect(text).toContain("other: './other'");
+    expect(text).toContain("iconSets: './icon-sets'");
+    expect(text.match(/experimental:/gu)).toHaveLength(1);
+  });
+
+  it('a top-level key beside a spread is still added: the loaded manifest shows whether the spread sets it', async () => {
+    const file = manifest(
+      "const shared = {docs: './docs'};\n\nexport default {\n  ...shared,\n};\n",
+    );
+    await patchIntegrationRoot(tmpDir, 'themes', './themes');
+    expect(fs.readFileSync(file, 'utf8')).toContain("themes: './themes'");
+    // The spread already sets `docs`: the same value is a no-op, another a
+    // conflict, so the spread's value is never shadowed.
+    await expect(
+      patchIntegrationRoot(tmpDir, 'docs', './elsewhere'),
+    ).rejects.toBeInstanceOf(IntegrationRootConflictError);
+  });
+});

@@ -30,6 +30,7 @@ import type {SearchSource, SearchableItem} from '../Typeahead';
 import {useCombobox} from '../Selector';
 import type {SelectorOptionData} from '../Selector';
 import {CommandPaletteContext} from './CommandPaletteContext';
+import {BusyStartSettleContext} from './busyStartSettle';
 import {CommandPaletteList} from './CommandPaletteList';
 import {CommandPaletteItem} from './CommandPaletteItem';
 import {CommandPaletteGroup} from './CommandPaletteGroup';
@@ -317,12 +318,19 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   const isBusy = isPending;
   const searchVersionRef = useRef(0);
   const emptyStateRef = useRef<HTMLDivElement>(null);
+  const settleBusyAnnouncementRef = useRef<(() => void) | null>(null);
+  const registerBusyAnnouncementSettle = useCallback(
+    (settle: (() => void) | null) => {
+      settleBusyAnnouncementRef.current = settle;
+    },
+    [],
+  );
 
-  // Announce search status to screen readers through the shared polite live
+  // Announce search results to screen readers through the shared polite live
   // region (comboboxes-7 announce path, mirroring Selector / BaseTypeahead).
-  // The busy spinner and the empty states are otherwise purely visual, so a
-  // screen-reader user typing a query would hear nothing when loading starts
-  // or results disappear.
+  // The empty states are otherwise purely visual, so a screen-reader user
+  // typing a query would hear nothing when results disappear. The busy start
+  // is announced by CommandPaletteInput.
   const announce = useAnnounce();
 
   const value = controlledValue ?? internalValue;
@@ -407,13 +415,8 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
       startTransition(async () => {
         const isBootstrap = query === '';
 
-        // Loading started for a user query: tell screen-reader users the
-        // spinner appeared. The polite region coalesces rapid updates, so for
-        // fast sources the result-count announcement below simply replaces
-        // this instead of stacking one "Loading" per keystroke.
-        if (!isBootstrap) {
-          announce(t('@astryx.commandPalette.loading'));
-        }
+        // The busy start ("Loading") is announced by CommandPaletteInput,
+        // from a region inside the palette's dialog (spec:AST-086 FR8, FR3).
 
         // Client-filter previous results for instant narrowing while fetch is in flight
         if (!isBootstrap && searchResults.length > 0) {
@@ -432,6 +435,12 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
         const items = await Promise.resolve(result);
 
         if (searchVersionRef.current === version) {
+          if (!isBootstrap) {
+            // This query's outcome is announced below (a count) or from the
+            // rendered empty state; a busy start not yet announced would
+            // follow it, so the input drops it (spec:AST-086 FR8).
+            settleBusyAnnouncementRef.current?.();
+          }
           // Commit query and results together
           setSearch(query);
           setOptimisticResults(items);
@@ -671,7 +680,9 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
           defaultHasDividers
           header={
             <LayoutHeader hasDivider padding={0}>
-              {input ?? <CommandPaletteInput />}
+              <BusyStartSettleContext value={registerBusyAnnouncementSettle}>
+                {input ?? <CommandPaletteInput />}
+              </BusyStartSettleContext>
             </LayoutHeader>
           }
           content={

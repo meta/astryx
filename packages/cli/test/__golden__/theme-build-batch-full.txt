@@ -136,7 +136,7 @@ Building theme from themes/orchid.mjs...
 
 Install in your app (paths are relative to a file in src/; adjust if yours lives elsewhere):
 
-  import { Theme } from '@astryxdesign/core';
+  import { Theme } from '@astryxdesign/core/theme';
   import { amberTheme } from './themes/amber';
   import './themes/amber.css';
 
@@ -146,7 +146,7 @@ Install in your app (paths are relative to a file in src/; adjust if yours lives
 
 Or with a <link> tag:
 
-  import { Theme } from '@astryxdesign/core';
+  import { Theme } from '@astryxdesign/core/theme';
   import { amberTheme } from './themes/amber';
 
   <link rel="stylesheet" href="./themes/amber.css" />

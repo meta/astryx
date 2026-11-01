@@ -6,7 +6,7 @@
  * @input  in-memory repository trees shaped like the real workspace
  * @output proofs that a shipped change needs a Changeset naming its package,
  *   that exempt surfaces need none, and that a released CLI JSON id cannot
- *   disappear unclassified — including red arms replaying #7125 and #7154
+ *   disappear unclassified — including regressions for #7125, #7154, and #7626
  * @position focused suite for scripts/release/changeset-coverage.mjs
  */
 
@@ -241,6 +241,35 @@ describe('classifyPath — what ships to consumers', () => {
     expect(result.reason).toMatch(reason);
   });
 
+  it('exempts a package-root API report that files does not pack, despite its exclusion globs', () => {
+    const negated = repo({
+      'packages/core/package.json': manifest('@astryxdesign/core', {
+        files: ['dist', 'src', '!**/*.test.*'],
+      }),
+    });
+    const result = classifyPath('packages/core/api-report.md', at(negated));
+    expect(result).toEqual({
+      ships: false,
+      reason: 'API report, outside the tarball',
+    });
+    expect(
+      classifyPath('packages/core/src/Button/Button.tsx', at(negated)).ships,
+    ).toBe(true);
+  });
+
+  it('ships an API report that files packs', () => {
+    const packed = repo({
+      'packages/core/package.json': manifest('@astryxdesign/core', {
+        files: ['dist', 'api-report.md'],
+      }),
+    });
+    expect(classifyPath('packages/core/api-report.md', at(packed))).toEqual({
+      ships: true,
+      package: '@astryxdesign/core',
+      surface: 'docs',
+    });
+  });
+
   it('treats a Changesets-ignored package as exempt even when it is not private', () => {
     const ignored = repo({
       'apps/sandbox/package.json': manifest('@astryxdesign/sandbox'),
@@ -309,6 +338,236 @@ describe('isPackedFile, isWorkspaceDir, consumerManifestDelta', () => {
     expect(consumerManifestDelta(before, loosened)).toEqual([
       'peerDependencies',
     ]);
+  });
+});
+
+describe('rule 1 — locale updates', () => {
+  const english = 'packages/core/locales/en.json';
+  const french = 'packages/core/locales/fr-FR.json';
+  const key = '@astryx.commandPalette.noResultsFor';
+  const loading = '@astryx.commandPalette.loading';
+  const catalog = {
+    [key]: {
+      defaultMessage: 'Aucun résultat pour {query}',
+      description: 'Old context.',
+    },
+    [loading]: {defaultMessage: 'Chargement', description: 'Loading context.'},
+  };
+  const base = repo({
+    'packages/core/package.json': manifest('@astryxdesign/core', {
+      files: ['src', 'locales'],
+    }),
+    [english]: JSON.stringify({
+      [key]: {
+        defaultMessage: 'No results for {query}',
+        description: 'Old context.',
+      },
+      [loading]: {defaultMessage: 'Loading', description: 'Loading context.'},
+    }),
+    [french]: JSON.stringify(catalog),
+  });
+
+  it('replays #7626: description-only edits in 29 existing locales need no Changeset', () => {
+    const locales = [
+      'af-ZA',
+      'ar-SA',
+      'ca-ES',
+      'cs-CZ',
+      'da-DK',
+      'de-DE',
+      'el-GR',
+      'es-ES',
+      'fi-FI',
+      'fr-FR',
+      'he-IL',
+      'hu-HU',
+      'it-IT',
+      'ja-JP',
+      'ko-KR',
+      'nl-NL',
+      'no-NO',
+      'pl-PL',
+      'pt-BR',
+      'pt-PT',
+      'ro-RO',
+      'ru-RU',
+      'sr-SP',
+      'sv-SE',
+      'tr-TR',
+      'uk-UA',
+      'vi-VN',
+      'zh-CN',
+      'zh-TW',
+    ];
+    const before = {...base};
+    const after = {...base};
+    for (const locale of locales) {
+      const file = `packages/core/locales/${locale}.json`;
+      before[file] = JSON.stringify(catalog);
+      after[file] = JSON.stringify({
+        ...catalog,
+        [key]: {
+          ...catalog[key],
+          description:
+            'Not read by any component: CommandPalette announces emptySearchText instead.',
+        },
+      });
+    }
+    const result = change(before, after);
+    expect(result.problems).toEqual([]);
+    expect(result.coverage.exempt).toHaveLength(29);
+  });
+
+  it('exempts translator descriptions in English, including JSON property reordering', () => {
+    const source = JSON.parse(base[english]);
+    source[key] = {
+      description: 'Updated context.',
+      defaultMessage: source[key].defaultMessage,
+    };
+    expect(
+      change(base, {...base, [english]: JSON.stringify(source)}).problems,
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      'corrected text',
+      {
+        ...catalog,
+        [key]: {
+          ...catalog[key],
+          defaultMessage: 'Aucun résultat trouvé pour {query}',
+        },
+      },
+    ],
+    ['filled translation', {[key]: catalog[key], [loading]: catalog[loading]}],
+    ['omitted translation', {[key]: catalog[key]}],
+  ])('exempts an existing language’s %s', (name, translated) => {
+    const before =
+      name === 'filled translation'
+        ? {...base, [french]: JSON.stringify({[key]: catalog[key]})}
+        : base;
+    expect(
+      change(before, {...base, [french]: JSON.stringify(translated)}).problems,
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      'new language',
+      'packages/core/locales/es-ES.json',
+      JSON.stringify(catalog),
+    ],
+    ['empty catalog', french, '{}'],
+    ['malformed JSON', french, '{'],
+    ['non-catalog JSON', french, '[]'],
+    ['invalid message', french, JSON.stringify({[key]: {defaultMessage: 42}})],
+    [
+      'unknown field',
+      french,
+      JSON.stringify({...catalog, [key]: {...catalog[key], runtime: true}}),
+    ],
+  ])(
+    'needs no Changeset for a translated catalog’s %s',
+    (name, file, contents) => {
+      const head = {...base, [file]: contents};
+      if (contents === null) delete head[file];
+      expect(change(base, head).problems).toEqual([]);
+    },
+  );
+
+  it('requires a Changeset when a translated locale is renamed without keeping its old path', () => {
+    const head = {...base, 'packages/core/locales/fr.json': base[french]};
+    delete head[french];
+    const result = change(base, head);
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]).toContain('fr-FR.json');
+    expect(result.coverage.exempt).toHaveLength(1);
+  });
+
+  it.each([
+    ['removed language', french, null],
+    [
+      'committed pseudo-locale',
+      'packages/core/locales/pseudo.json',
+      JSON.stringify(catalog),
+    ],
+    [
+      'English key addition',
+      english,
+      JSON.stringify({
+        ...JSON.parse(base[english]),
+        '@astryx.newMessage': {
+          defaultMessage: 'New message',
+          description: 'New context.',
+        },
+      }),
+    ],
+    ['new English catalog', english, JSON.stringify(catalog)],
+    ['removed English catalog', english, null],
+    ['malformed English JSON', english, '{'],
+    ['empty English catalog', english, '{}'],
+    ['non-catalog English JSON', english, '[]'],
+    [
+      'invalid English message',
+      english,
+      JSON.stringify({[key]: {defaultMessage: 42}}),
+    ],
+    [
+      'unknown English field',
+      english,
+      JSON.stringify({[key]: {...catalog[key], runtime: true}}),
+    ],
+    [
+      'nested locale path',
+      'packages/core/locales/sub/fr-FR.json',
+      JSON.stringify(catalog),
+    ],
+    [
+      'English copy',
+      english,
+      JSON.stringify({
+        ...JSON.parse(base[english]),
+        [key]: {
+          defaultMessage: 'Nothing matches {query}',
+          description: 'Old context.',
+        },
+      }),
+    ],
+    [
+      'English key removal',
+      english,
+      JSON.stringify({[key]: JSON.parse(base[english])[key]}),
+    ],
+  ])('still requires a Changeset for %s', (name, file, contents) => {
+    const before = {...base};
+    if (name === 'new English catalog') delete before[english];
+    const head = {...before, [file]: contents};
+    if (contents === null) delete head[file];
+    expect(change(before, head).problems).toHaveLength(1);
+  });
+
+  it('requires a Changeset when English is renamed to a translated locale', () => {
+    const head = {...base, 'packages/core/locales/fr.json': base[english]};
+    delete head[english];
+    const result = change(base, head);
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]).toContain('en.json');
+  });
+
+  it('does not exempt source changes mixed with a routine translation update', () => {
+    const head = {
+      ...base,
+      [french]: JSON.stringify({
+        ...catalog,
+        [key]: {...catalog[key], description: 'Updated context.'},
+      }),
+      'packages/core/src/Button/Button.tsx': 'export const Button = 2;\n',
+    };
+    const result = change(base, head);
+    expect(result.problems).toHaveLength(1);
+    expect(result.problems[0]).toContain('Button.tsx');
+    expect(result.coverage.exempt).toHaveLength(1);
   });
 });
 

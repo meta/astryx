@@ -2,7 +2,7 @@
 
 /**
  * @file Codemod: Rename Avatar named sizes to Icon's abbreviated scale
- * @see https://github.com/facebook/astryx/issues/2672
+ * @see https://github.com/meta/astryx/issues/2672
  *
  * This transform is deliberately limited to static literals written directly
  * in the `size` prop of an imported Avatar or AvatarGroup JSX element. It does

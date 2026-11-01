@@ -1372,7 +1372,8 @@ function DayCell({
         // Mark today's cell programmatically (APG date-picker pattern), not just
         // visually, so screen-reader users can identify the current date.
         aria-current={state.isToday ? 'date' : undefined}
-        disabled={isDisabled}
+        // A disabled day stays focusable through aria-disabled (spec:AST-085
+        // FR1); arrows still skip it and its click and hover are guarded.
         // Initial roving tab-stop seed; useGridFocus owns it after mount.
         tabIndex={isTabbableDay ? 0 : -1}
         onClick={() => !state.effectivelyDisabled && onDayClick(date)}

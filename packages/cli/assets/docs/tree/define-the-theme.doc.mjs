@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/building-blocks/themes/define-the-theme`:
+ * @file `astryx docs authoring/building-blocks/themes/define-the-theme`:
  * map the palette to tokens, keep light-dark() to colors, and avoid Core internals.
  */
 
@@ -45,7 +45,7 @@ export const oceanTheme = defineTheme({
         },
         {
           type: 'prose',
-          text: 'Local imports must stay inside the theme folder. One that leaves it, such as `../../shared/colors`, fails with `invalid_theme`, and the theme disappears from `theme list`. `npx astryx theme template` writes a file that explains every `defineTheme` field. For the full token set, scope selectors, and component theming, read {@link generic:author-a-theme}.',
+          text: 'Local imports must stay inside the theme folder. One that leaves it, such as `../../shared/colors`, fails with `invalid_theme`, and every theme in the package disappears from `theme list`. `{@command theme template}` writes a file that explains every `defineTheme` field. For the full token set and component theming, read {@link generic:author-a-theme}.',
         },
       ],
     },
@@ -55,13 +55,14 @@ export const oceanTheme = defineTheme({
       content: [
         {
           type: 'prose',
-          text: 'To base a theme on an existing one, `extends` it: import the base theme and override only the tokens you change. The derived theme keeps a live link to the base and inherits its later changes — unlike `--from`, which forks a copy ({@link generic:add-a-theme}).',
+          text: 'To base a theme on an existing one, `extends` it: import the base theme and override only the tokens you change. Add the derived theme with `integration add theme ocean-contrast`, and import the base from its built package export, since local imports cannot leave the theme folder. The derived theme keeps a live link to the base and picks up its later changes when you rebuild it — unlike `--from`, which forks a copy ({@link generic:add-a-theme}).',
         },
         {
           type: 'code',
           lang: 'ts',
-          code: `import {defineTheme} from '@astryxdesign/core/theme';
-import {oceanTheme} from './oceanTheme';
+          code: `// themes/ocean-contrast/oceanContrastTheme.ts
+import {defineTheme} from '@astryxdesign/core/theme';
+import {oceanTheme} from '@acme/astryx-widgets/themes/ocean';
 
 export const oceanContrastTheme = defineTheme({
   name: 'ocean-contrast',
@@ -79,7 +80,7 @@ export const oceanContrastTheme = defineTheme({
       content: [
         {
           type: 'prose',
-          text: 'Each `[light, dark]` pair compiles to a `light-dark()` value, which switches only colors. Give it colors. For a value that is not a plain color — a gradient — put `light-dark()` on each color stop, not around the whole value: a browser without `light-dark()` drops the declaration, and the stop form is the one that degrades safely.',
+          text: 'Each `[light, dark]` pair compiles to a `light-dark()` value, which switches only colors. Give it colors. For a value that is not a plain color — a gradient — put `light-dark()` on each color stop, not around the whole value: `light-dark()` takes two colors, so wrapping whole gradients makes the value invalid where the token is used, and `theme build` does not warn.',
         },
       ],
     },

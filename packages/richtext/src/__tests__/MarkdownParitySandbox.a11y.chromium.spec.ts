@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y scope core/Markdown richtext/* ^(apps/storybook/stories/RichTextEditor\.(markdownParity|stories)|packages/richtext/src/__tests__/(MarkdownParitySandbox|RichTextView|RichTextEditorToolbar)) ^packages/richtext/src/
 
 /**
  * @file MarkdownParitySandbox.a11y.chromium.spec.ts
@@ -449,6 +450,71 @@ test('side by side: a list of task and plain items keeps each task checkbox and 
   expect(errors).toEqual([]);
 });
 
+// spec:AST-061 FR11: however wide a numbered list's counters grow, from `99.`
+// to `100.` or from `i.` to `viii.` two lists down, each item's text, and each
+// nested list's, starts in the same place on both surfaces.
+test('side by side: wide counters start the text where RichText starts it', async ({
+  page,
+}) => {
+  const errors = await openStory(page, STORY.sideBySide, DESKTOP);
+  await waitForDocument(page, MARKDOWN);
+  await waitForDocument(page, RICH_TEXT);
+  const textStarts = (surface: string) =>
+    page.evaluate(selector => {
+      const block = document.querySelector(
+        `${selector} [data-parity-block="list-ordered-wide"]`,
+      );
+      const origin = block?.getBoundingClientRect().left ?? 0;
+      const starts: Array<[string, number]> = [];
+      for (const item of block?.querySelectorAll('li') ?? []) {
+        // The item's own first text; RichText holds a nested list in an item
+        // of its own, which has none.
+        const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          if (!node.textContent?.trim()) {
+            continue;
+          }
+          if (node.parentElement?.closest('li') === item) {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            starts.push([
+              node.textContent.trim(),
+              range.getBoundingClientRect().left - origin,
+            ]);
+          }
+          break;
+        }
+      }
+      return starts;
+    }, surface);
+  const markdown = await textStarts(MARKDOWN);
+  const richText = new Map(await textStarts(RICH_TEXT));
+  expect(markdown.map(([text]) => text)).toEqual([
+    'Wide step ninety-eight',
+    'Wide step ninety-nine',
+    'Lettered step a',
+    'Roman step i',
+    'Roman step ii',
+    'Roman step iii',
+    'Roman step iv',
+    'Roman step v',
+    'Roman step vi',
+    'Roman step vii',
+    'Roman step viii',
+    'Wide step one hundred',
+  ]);
+  expect([...richText.keys()].sort()).toEqual(
+    markdown.map(([text]) => text).sort(),
+  );
+  for (const [text, start] of markdown) {
+    expect(
+      Math.abs((richText.get(text) ?? Number.NaN) - start),
+      `text of ${text}`,
+    ).toBeLessThanOrEqual(1);
+  }
+  expect(errors).toEqual([]);
+});
+
 // spec:AST-061 FR5: each task item has one real checkbox where core
 // Markdown's is, the item stays a list item, and every list row has one
 // marker.
@@ -807,7 +873,7 @@ for (const viewport of [PHONE, DESKTOP, {width: 2200, height: 900}] as const) {
     // One header per fenced block; the first is the `ts` block's.
     await expect(
       page.locator(`${RICH_TEXT} [data-richtext-code-header]`),
-    ).toHaveCount(6);
+    ).toHaveCount(7);
     const header = page
       .locator(`${RICH_TEXT} [data-richtext-code-header]`)
       .first();
@@ -890,6 +956,7 @@ for (const globals of [
       'code-plaintext': '',
       'code-unknown': 'notalanguage',
       'code-long': 'sh',
+      'code-plain-long': '',
     } as const;
     const markdown = await surfaceGeometry(page, MARKDOWN);
     const richText = await surfaceGeometry(page, RICH_TEXT);
@@ -902,6 +969,42 @@ for (const globals of [
       expect(
         Math.abs(height(richText) - height(markdown)),
         `${key} height`,
+      ).toBeLessThanOrEqual(2);
+    }
+    // A fence that names no language keeps its corner copy button beside the
+    // code, never over it: the text ends as far from the frame's inline end
+    // on both surfaces.
+    const textInset = (surface: string, key: string) =>
+      page.evaluate(
+        ({selector}) => {
+          const block = document.querySelector<HTMLElement>(selector);
+          const frame = block?.matches('pre, code')
+            ? block
+            : block?.querySelector<HTMLElement>('pre, code');
+          if (frame == null) {
+            return -1;
+          }
+          const rect = frame.getBoundingClientRect();
+          const style = getComputedStyle(frame);
+          const rtl = style.direction === 'rtl';
+          const line = frame.querySelector('[data-line="1"]');
+          if (line != null) {
+            const text = line.getBoundingClientRect();
+            return rtl ? text.left - rect.left : rect.right - text.right;
+          }
+          return rtl
+            ? parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft)
+            : parseFloat(style.borderRightWidth) +
+                parseFloat(style.paddingRight);
+        },
+        {selector: `${surface} [data-parity-block="${key}"]`},
+      );
+    for (const key of ['code-plain', 'code-plain-long']) {
+      const markdownInset = await textInset(MARKDOWN, key);
+      expect(markdownInset, `${key} markdown inset`).toBeGreaterThan(40);
+      expect(
+        Math.abs((await textInset(RICH_TEXT, key)) - markdownInset),
+        `${key} text inset`,
       ).toBeLessThanOrEqual(2);
     }
     // The label core Markdown shows for each fence.
@@ -926,14 +1029,14 @@ for (const globals of [
     // RichText draws one header per fence, in order, each with a copy button
     // and the same label.
     const headers = page.locator(`${RICH_TEXT} [data-richtext-code-header]`);
-    await expect(headers).toHaveCount(6);
+    await expect(headers).toHaveCount(7);
     const richTextLabels = await headers.evaluateAll(elements =>
       elements.map(element =>
         (element.textContent ?? '').replace('Copy code', '').trim(),
       ),
     );
     expect(richTextLabels).toEqual(Object.values(fences));
-    for (const index of [0, 1, 2, 3, 4, 5]) {
+    for (const index of [0, 1, 2, 3, 4, 5, 6]) {
       await expect(
         headers.nth(index).getByRole('button', {name: 'Copy code'}),
       ).toBeVisible();

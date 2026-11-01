@@ -29,7 +29,7 @@ export const Standalone: Story = {
     return (
       <div
         style={{
-          width: 'min(22rem, calc(100vw - 2rem))',
+          width: 'min(22rem, calc(100vw - 4rem))',
           border: '1px solid currentColor',
           borderRadius: 8,
         }}>

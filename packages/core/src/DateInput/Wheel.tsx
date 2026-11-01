@@ -12,7 +12,7 @@
  * rubber-banding, and the settle animation are the platform's; all this adds
  * is `scroll-snap-align: center` on each option, half a viewport of padding at
  * each end so the first and last option can reach the middle, and a commit
- * when the scrolling stops.
+ * when the scrolling stops and no finger or mouse drag still holds it.
  *
  * The falloff (rows fading and tipping away from the centre) is a CSS
  * scroll-driven animation on a `view()` timeline — the browser interpolates it
@@ -106,7 +106,10 @@ const styles = stylex.create({
     transformStyle: 'preserve-3d',
     scrollbarWidth: 'none',
     outline: 'none',
-    touchAction: 'pan-y',
+    // Vertical pans scroll the wheel; a two-finger pinch stays the page's, so
+    // the page can still zoom over an open picker (WCAG 1.4.4), as it does
+    // over the menus and listboxes (`module:DropdownMenu/useMenuPress` FR4).
+    touchAction: 'pan-y pinch-zoom',
   },
   item: {
     display: 'flex',
@@ -256,6 +259,13 @@ export function Wheel({
   // `selectedIndex` only catches up when the wheel settles.
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
 
+  // A mouse cannot drag a scroll container, so without this the wheel ignores
+  // the one gesture its shape invites. Touch is untouched — it pans natively,
+  // with momentum this could not match. See usePointerDragScroll. The drag it
+  // holds is not rest either: the settle below waits for its release, as it
+  // waits for a finger's (useScrollSettle).
+  const {isDraggingRef} = usePointerDragScroll(scrollerRef, isActive);
+
   // Row height in px, read from layout rather than assumed, so a theme that
   // retunes --date-input-touch-wheel-item-size still lands on the right row.
   const itemBlockSize = useCallback((): number => {
@@ -303,6 +313,7 @@ export function Wheel({
       }
     },
     isActive,
+    isDraggingRef,
   );
 
   // Park the committed row under the band whenever the wheel is shown, or the
@@ -371,11 +382,6 @@ export function Wheel({
   // 'all': a wheel scrolls vertically, the same axis the sheet wants, so
   // there is no way to share — it takes every touch that lands on it.
   useOwnScrollGesture(scrollerRef, 'all', {isEnabled: isActive});
-
-  // A mouse cannot drag a scroll container, so without this the wheel ignores
-  // the one gesture its shape invites. Touch is untouched — it pans natively,
-  // with momentum this could not match. See usePointerDragScroll.
-  usePointerDragScroll(scrollerRef, isActive);
 
   const moveBy = useCallback(
     (delta: number) => {

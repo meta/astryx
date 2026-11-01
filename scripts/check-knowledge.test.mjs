@@ -7,18 +7,22 @@ import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
   composeKnowledgeSchemas,
+  collectConcernMatches,
   collectGlobalReviewMatches,
   discoverKnowledgeRecords,
   extractKnowledgeClaims,
+  matchesPathPattern,
   parseAnatomyThemingBlock,
   parseDesignDecisionsBlock,
   parseKnowledgeDocument,
+  parsePathApplicabilityBlock,
   parseReviewApplicabilityBlock,
   routeGlobalReviewBaselinesAtRevision,
   validateAnatomyThemingMap,
   validateDesignDecisionsBlock,
   validateDelegations,
   validateKnowledgeRoot,
+  validatePathApplicability,
   validateReviewApplicability,
   validateSchemaEvolution,
 } from './check-knowledge.mjs';
@@ -412,6 +416,149 @@ describe('global review applicability', () => {
     expect(parseReviewApplicabilityBlock(record).problems.join('\n')).toMatch(
       /repeats JSON field "public-api"/,
     );
+  });
+
+  it('keeps the same key in two different objects', () => {
+    const record = currentRecord.replace(
+      '# Fixture system spec',
+      '# Fixture system spec\n\n<!-- review-applicability:v1 -->\n```json\n{"scope":"global","concerns":{"a":{"names":["x"],"claims":["FR1"]},"b":{"names":["y"],"claims":["FR2"]}}}\n```',
+    );
+    const parsed = parseReviewApplicabilityBlock(record);
+    expect(parsed.problems).toEqual([]);
+    expect(validateReviewApplicability(parsed.config, record)).toEqual([]);
+  });
+
+  it('accepts a concerns map with or without triggers', () => {
+    const concerns = {
+      'slot-presence': {
+        names: ['isRenderable'],
+        patterns: ["typeof [\\w.]+ !== 'boolean'"],
+        claims: ['FR1'],
+      },
+    };
+    expect(
+      validateReviewApplicability({scope: 'global', concerns}, currentRecord),
+    ).toEqual([]);
+    expect(
+      validateReviewApplicability(
+        {scope: 'global', triggers: {'public-api': ['FR2']}, concerns},
+        currentRecord,
+      ),
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      'neither triggers nor concerns',
+      {scope: 'global'},
+      /triggers, concerns, or both/,
+    ],
+    [
+      'an unknown block key',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['x'], claims: ['FR1']}},
+        extra: 1,
+      },
+      /and nothing else/,
+    ],
+    [
+      'an empty concerns map',
+      {scope: 'global', concerns: {}},
+      /at least one concern/,
+    ],
+    [
+      'a concern without names or patterns',
+      {scope: 'global', concerns: {a: {claims: ['FR1']}}},
+      /at least one name or pattern/,
+    ],
+    [
+      'a concern name that is not an identifier',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['is renderable'], claims: ['FR1']}},
+      },
+      /not an identifier/,
+    ],
+    [
+      'an invalid pattern',
+      {scope: 'global', concerns: {a: {patterns: ['('], claims: ['FR1']}}},
+      /invalid pattern/,
+    ],
+    [
+      'a concern claim the record lacks',
+      {scope: 'global', concerns: {a: {names: ['x'], claims: ['FR99']}}},
+      /references missing claim "FR99"/,
+    ],
+    [
+      'an unknown concern key',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['x'], claims: ['FR1'], owner: 'y'}},
+      },
+      /claims with names, patterns, or both/,
+    ],
+  ])('rejects concerns with %s', (_name, config, expected) => {
+    expect(
+      validateReviewApplicability(config, currentRecord).join('\n'),
+    ).toMatch(expected);
+  });
+
+  it('routes each claim whose concern matches an added line, with the evidence', () => {
+    const record = {
+      path: 'docs/specs/AST-900/spec.md',
+      content: currentRecord.replace(
+        '# Fixture system spec',
+        `# Fixture system spec\n\n<!-- review-applicability:v1 -->\n\n\`\`\`json\n${JSON.stringify(
+          {
+            scope: 'global',
+            concerns: {
+              'slot-presence': {
+                names: ['isRenderable'],
+                patterns: ["typeof [\\w.]+ !== 'boolean'"],
+                claims: ['FR1'],
+              },
+              'unrelated-concern': {names: ['useScrollLock'], claims: ['FR2']},
+            },
+          },
+        )}\n\`\`\`\n`,
+      ),
+    };
+    const added = [
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 3,
+        text: 'const x = 1;',
+      },
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 4,
+        text: "  const hasLabel = label !== '' && label != null && typeof label !== 'boolean';",
+      },
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 5,
+        text: 'isRenderableish(x);',
+      },
+    ];
+    const matches = collectConcernMatches([record], added, null);
+    expect(matches).toEqual([
+      expect.objectContaining({
+        recordId: 'spec:AST-900',
+        concern: 'slot-presence',
+        claimId: 'FR1',
+        claim: 'Public API stays stable.',
+        utilities: ['isRenderable'],
+        evidence: [
+          expect.objectContaining({
+            line: 4,
+            matched: "typeof label !== 'boolean'",
+          }),
+        ],
+      }),
+    ]);
+    expect(matches[0].matchReason).toContain('(shared: isRenderable)');
+    expect(collectConcernMatches([record], [], null)).toEqual([]);
   });
 
   it('keeps the canonical claim title when a verification table repeats its id', () => {
@@ -2224,5 +2371,156 @@ describe('knowledge validation', () => {
     expect((await validateKnowledgeRoot(root)).join('\n')).toMatch(
       /duplicate id component:Button/,
     );
+  });
+});
+
+describe('path-applicability:v1', () => {
+  it('matches ** across whole segments, * and ? within one segment', () => {
+    const cases = [
+      ['apps/docsite/**', 'apps/docsite/src/a.ts', true],
+      ['apps/docsite/**', 'apps/docsite', false],
+      ['apps/docsite/**', 'apps/docsite-old/a.ts', false],
+      [
+        'packages/**/*.doc.mjs',
+        'packages/core/src/Button/Button.doc.mjs',
+        true,
+      ],
+      ['packages/**/*.doc.mjs', 'packages/Button.doc.mjs', true],
+      [
+        'packages/**/*.doc.mjs',
+        'packages/core/src/Button/Button.doc.zh.mjs',
+        false,
+      ],
+      ['packages/*/src/index.ts', 'packages/core/src/index.ts', true],
+      ['packages/*/src/index.ts', 'packages/core/nested/src/index.ts', false],
+      ['scripts/check-?.mjs', 'scripts/check-a.mjs', true],
+      ['scripts/check-?.mjs', 'scripts/check-ab.mjs', false],
+      ['docs/a.b.md', 'docs/aXb.md', false],
+      ['README.md', 'README.md', true],
+      ['README.md', 'packages/core/README.md', false],
+    ];
+    for (const [pattern, filePath, expected] of cases) {
+      expect([
+        pattern,
+        filePath,
+        matchesPathPattern(pattern, filePath),
+      ]).toEqual([pattern, filePath, expected]);
+    }
+  });
+
+  it('accepts a valid block and rejects malformed, unsafe, repeated, or stale patterns', () => {
+    const files = ['apps/docsite/src/a.ts', 'README.md'];
+    const content = [
+      '# Record',
+      '',
+      '<!-- path-applicability:v1 -->',
+      '',
+      '```json',
+      '{"paths": ["apps/docsite/**", "README.md"]}',
+      '```',
+    ].join('\n');
+    const parsed = parsePathApplicabilityBlock(content, 'r.md');
+    expect(parsed.problems).toEqual([]);
+    expect(validatePathApplicability(parsed.config, 'r.md', files)).toEqual([]);
+
+    const problems = config => validatePathApplicability(config, 'r.md', files);
+    expect(problems({paths: []})).toEqual([
+      'r.md: path-applicability:v1 requires a non-empty paths list.',
+    ]);
+    expect(problems({paths: ['README.md'], scope: 'global'})).toEqual([
+      'r.md: path-applicability:v1 requires exactly paths.',
+    ]);
+    expect(
+      problems({
+        paths: [
+          'README.md',
+          'README.md',
+          '/abs/**',
+          'a/../b',
+          'a/b**',
+          '**',
+          'docs/{a,b}.md',
+          'apps/missing/**',
+          '**/*',
+          '**/**',
+          '**/?*',
+          '*/src/a.ts',
+        ],
+      }),
+    ).toEqual([
+      'r.md: path-applicability:v1 pattern "README.md" is repeated.',
+      'r.md: path-applicability:v1 pattern "/abs/**" must be repository-relative with no empty, "." or ".." segments.',
+      'r.md: path-applicability:v1 pattern "a/../b" must be repository-relative with no empty, "." or ".." segments.',
+      'r.md: path-applicability:v1 pattern "a/b**" may use ** only as a whole segment.',
+      'r.md: path-applicability:v1 pattern "**" covers the whole repository; name the paths.',
+      'r.md: path-applicability:v1 pattern "docs/{a,b}.md" may use only letters, digits, _ . @ - / and the wildcards * ** ?.',
+      'r.md: path-applicability:v1 pattern "apps/missing/**" matches no repository file.',
+      'r.md: path-applicability:v1 pattern "**/*" must start with a literal path segment; a leading wildcard covers the whole repository.',
+      'r.md: path-applicability:v1 pattern "**/**" must start with a literal path segment; a leading wildcard covers the whole repository.',
+      'r.md: path-applicability:v1 pattern "**/?*" must start with a literal path segment; a leading wildcard covers the whole repository.',
+      'r.md: path-applicability:v1 pattern "*/src/a.ts" must start with a literal path segment; a leading wildcard covers the whole repository.',
+    ]);
+    expect(
+      validatePathApplicability({paths: ['apps/**']}, 'r.md', [
+        'apps/a.ts',
+        'apps/b/c.ts',
+      ]),
+    ).toEqual([
+      'r.md: path-applicability:v1 pattern "apps/**" matches every repository file; name the paths.',
+    ]);
+    expect(
+      validatePathApplicability({paths: ['apps/missing/**']}, 'r.md', null),
+    ).toEqual([]);
+  });
+
+  it('reports duplicate blocks through the shared overlay parser', () => {
+    const block =
+      '<!-- path-applicability:v1 -->\n```json\n{"paths": ["README.md"]}\n```\n';
+    expect(
+      parsePathApplicabilityBlock(`${block}\n${block}`, 'r.md').problems,
+    ).toEqual(['r.md: duplicate path-applicability:v1 blocks.']);
+  });
+});
+
+describe('INV25 record reachability', () => {
+  function gitFixture(root) {
+    execFileSync('git', ['init', '-q'], {cwd: root});
+    execFileSync('git', ['add', '-A'], {cwd: root});
+  }
+
+  it('fails a current record no tracked non-record path reaches, and passes once a pattern reaches it', async () => {
+    const root = fixtureRoot();
+    writeSystemSpec(root, 'AST-900', systemSpecRecord());
+    fs.mkdirSync(path.join(root, 'apps/site'), {recursive: true});
+    fs.writeFileSync(path.join(root, 'apps/site/index.md'), '# Site\n');
+    gitFixture(root);
+    expect(await validateKnowledgeRoot(root)).toEqual([
+      'docs/specs/AST-900/spec.md: current record spec:AST-900 is not reached from any repository path that is not itself a record (INV25). Link it through placement, applies_to, verified_by, a membership or consumer-doc id, a cited spec number, or a path-applicability:v1 block.',
+    ]);
+
+    fs.writeFileSync(
+      path.join(root, 'docs/specs/AST-900/spec.md'),
+      systemSpecRecord().replace(
+        '# Fixture system spec\n',
+        '# Fixture system spec\n\n<!-- path-applicability:v1 -->\n\n```json\n{"paths": ["apps/site/**"]}\n```\n',
+      ),
+    );
+    gitFixture(root);
+    expect(await validateKnowledgeRoot(root)).toEqual([]);
+  });
+
+  it('skips reachability when the root has no tracked file list', async () => {
+    const root = fixtureRoot();
+    writeSystemSpec(root, 'AST-900', systemSpecRecord());
+    expect(await validateKnowledgeRoot(root)).toEqual([]);
+  });
+
+  it('runs from the command line without deadlocking on its own import', () => {
+    const output = execFileSync(
+      process.execPath,
+      [path.join(repoRoot, 'scripts/check-knowledge.mjs')],
+      {cwd: repoRoot, encoding: 'utf8'},
+    );
+    expect(output).toContain('Knowledge templates and records are aligned.');
   });
 });

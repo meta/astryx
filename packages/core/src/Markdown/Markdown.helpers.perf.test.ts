@@ -357,17 +357,17 @@ describe('Markdown helper performance', () => {
         }),
       ];
 
-      // Timed on the transform stage alone and compared at the FASTEST
-      // sample of each side: this is a few hundred microseconds against a
-      // parse of milliseconds, so measuring the whole parse buries it, and
-      // a minimum is the least-disturbed sample each side achieved.
+      // Timed on the transform stage alone: this is a few hundred
+      // microseconds against a parse of milliseconds, so measuring the whole
+      // parse buries it. Each side is compared at its FASTEST sample, the
+      // least-disturbed run it achieved, and the two sides alternate sample by
+      // sample so a slow stretch of the machine reaches both instead of one.
       const root = parseMarkdownAst(source);
-      const fastestTransform = (
+      const transformOnly = (
         plugins: ReadonlyArray<ReturnType<typeof createMarkdownPlugin>>,
-      ): number => {
+      ) => {
         const prepared = prepareMarkdownPlugins(plugins);
-        let fastest = Number.POSITIVE_INFINITY;
-        for (let sample = 0; sample < 60; sample++) {
+        return () => {
           const start = performance.now();
           benchmarkSink ^= applyMarkdownTransforms(
             root,
@@ -376,18 +376,24 @@ describe('Markdown helper performance', () => {
             true,
             'block',
           ).children.length;
-          fastest = Math.min(fastest, performance.now() - start);
-        }
-        void benchmarkSink;
-        return fastest;
+          return performance.now() - start;
+        };
       };
-
-      const single = plugin('scale-single', gaps);
-      const double = plugin('scale-double', doubled);
-      // Warm both before either is recorded.
-      fastestTransform(single);
-      fastestTransform(double);
-      const ratio = fastestTransform(double) / fastestTransform(single);
+      const single = transformOnly(plugin('scale-single', gaps));
+      const double = transformOnly(plugin('scale-double', doubled));
+      let fastestSingle = Number.POSITIVE_INFINITY;
+      let fastestDouble = Number.POSITIVE_INFINITY;
+      for (let sample = 0; sample < 80; sample++) {
+        // The first rounds only warm both sides.
+        const singleTime = single();
+        const doubleTime = double();
+        if (sample >= 20) {
+          fastestSingle = Math.min(fastestSingle, singleTime);
+          fastestDouble = Math.min(fastestDouble, doubleTime);
+        }
+      }
+      void benchmarkSink;
+      const ratio = fastestDouble / fastestSingle;
       console.log(
         `  ${sections} sections, ${doubled.length} ranges over ${gaps.length}: ${ratio.toFixed(3)}`,
       );

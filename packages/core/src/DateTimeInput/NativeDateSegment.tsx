@@ -60,7 +60,8 @@ export type NativeDateSegmentProps = {
   max?: ISODateString;
   isDateDisabled: (date: ReturnType<typeof plainDateFromISO>) => boolean;
   isEffectivelyDisabled: boolean;
-  hasDisabledMessage: boolean;
+  /** While disabled, stay focusable: aria-disabled and readOnly, not `disabled`. */
+  isFocusableDisabled: boolean;
   isEffectivelyRequired: boolean;
   isBusy: boolean;
   statusType?: InputStatusType;
@@ -87,7 +88,7 @@ export function NativeDateSegment({
   max,
   isDateDisabled,
   isEffectivelyDisabled,
-  hasDisabledMessage,
+  isFocusableDisabled,
   isEffectivelyRequired,
   isBusy,
   statusType,
@@ -262,7 +263,7 @@ export function NativeDateSegment({
       <button
         type="button"
         onClick={openPicker}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.dateInput.openCalendar')}
         tabIndex={-1}
         {...stylex.props(
@@ -290,9 +291,11 @@ export function NativeDateSegment({
           onBlur={chainEventHandlers(handleBlur, onBlurProp)}
           min={min}
           max={max}
-          disabled={isEffectivelyDisabled && !hasDisabledMessage}
-          aria-disabled={hasDisabledMessage ? 'true' : undefined}
-          readOnly={hasDisabledMessage || undefined}
+          disabled={isEffectivelyDisabled && !isFocusableDisabled}
+          aria-disabled={
+            isEffectivelyDisabled && isFocusableDisabled ? 'true' : undefined
+          }
+          readOnly={(isEffectivelyDisabled && isFocusableDisabled) || undefined}
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={

@@ -49,7 +49,9 @@ function candleSlot(resolved: ResolvedPoint[], ctx: SeriesContext): number {
 }
 
 export function candlestick(options: CandlestickOptions): SeriesDef {
-  // Emitted core semantic tokens (data-viz --color-data-* tokens aren't CSS vars).
+  // Keep the semantic success/error defaults. CSS-capable dataVars consumers
+  // use Core's data CSS variables (astryx.css in prebuilt mode); Canvas and other
+  // non-CSS paths need resolveThemeToken() or useTheme().token() concrete colors.
   const upColor = options.upColor ?? 'var(--color-success)';
   const downColor = options.downColor ?? 'var(--color-error)';
 

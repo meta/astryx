@@ -38,6 +38,16 @@
  * descendant when an ANCESTOR is hovered, which is a different question (a
  * row may legitimately highlight around a disabled control) and is left
  * alone.
+ *
+ * PSEUDO-ELEMENTS: `:hover::after` and `:hover::before` are reported but never
+ * autofixed. StyleX 0.19.0 ranks a key by the pseudo-classes it understands,
+ * and a `:not()` guard in the same key as a pseudo-element drops the
+ * pseudo-element's weight from the ranking (priority 8330 becomes 3240). The
+ * guarded rule then loses to a plain `::after` rule at 8000, so the hover
+ * treatment silently never paints (#5442 broke SelectableCard, Thumbnail and
+ * ClickableCard's overlay this way). No spelling of the guard inside such a key
+ * escapes it, so the fix for these keys is outside the selector: keep the
+ * disabled case out in JS and silence the one key with a comment that says so.
  */
 
 /** Zero-specificity guard appended to a self-hover selector. */
@@ -57,6 +67,11 @@ function isSelfHoverKey(key) {
 /** Already guarded, in any spelling a hand might use. */
 function hasDisabledGuard(key) {
   return /:not\([^)]*(?::disabled|\[aria-disabled)/.test(key);
+}
+
+/** Carries a pseudo-ELEMENT (`::after`, `::before`, ...). */
+function hasPseudoElement(key) {
+  return key.includes('::');
 }
 
 /**
@@ -110,6 +125,16 @@ const rule = {
       unguardedHover:
         "'{{key}}' still matches a disabled element — browsers suppress a disabled control's events, not its hover styling. " +
         "Write '{{fixed}}' instead (`:where()` adds no specificity, so overrides are unaffected).",
+      unguardedHoverPseudoElement:
+        "'{{key}}' still matches a disabled element, and the rule cannot autofix it: StyleX 0.19.0 drops the pseudo-element's " +
+        'priority from a key that also carries a `:not()` guard, so a guarded `::after`/`::before` hover rule loses to a plain ' +
+        'one and never paints. Keep the disabled case out in JS instead (apply the class only when the control is enabled) ' +
+        'and silence this key with an eslint-disable comment that says so.',
+      guardedHoverPseudoElement:
+        "'{{key}}' is guarded, but StyleX 0.19.0 drops the pseudo-element's priority from a key that carries a `:not()` guard, " +
+        'so a plain `::after`/`::before` rule outranks it and the hover treatment never paints. Drop the guard from the key, ' +
+        'keep the disabled case out in JS (apply the class only when the control is enabled), and silence this key with an ' +
+        'eslint-disable comment that says so.',
     },
     schema: [],
   },
@@ -118,7 +143,22 @@ const rule = {
       Property(node) {
         if (!isInsideStylexCreate(node)) return;
         const key = keyOf(node);
-        if (!isSelfHoverKey(key) || hasDisabledGuard(key)) return;
+        if (!isSelfHoverKey(key)) return;
+
+        // No guard written into a pseudo-element key survives StyleX's
+        // ranking, so these are reported without a fix, guarded or not.
+        if (hasPseudoElement(key)) {
+          context.report({
+            node: node.key,
+            messageId: hasDisabledGuard(key)
+              ? 'guardedHoverPseudoElement'
+              : 'unguardedHoverPseudoElement',
+            data: {key},
+          });
+          return;
+        }
+
+        if (hasDisabledGuard(key)) return;
 
         const fixed = guardKey(key);
         context.report({
@@ -143,4 +183,4 @@ const rule = {
 };
 
 export default rule;
-export {GUARD, guardKey, isSelfHoverKey, hasDisabledGuard};
+export {GUARD, guardKey, isSelfHoverKey, hasDisabledGuard, hasPseudoElement};

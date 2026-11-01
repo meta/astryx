@@ -11,7 +11,7 @@
  * (ERR_CORE_NOT_FOUND) when core can't be located.
  */
 
-import {findCoreDir, listComponents} from '../../foundation/fs/paths.mjs';
+import {findProjectCoreDir, listComponents} from '../../foundation/fs/paths.mjs';
 import {resolveComponentReplacements} from '../../foundation/discovery/component-replacement.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {AstryxError} from '../error.mjs';
@@ -44,7 +44,7 @@ export async function resolveComponentReplacement(
  * @returns {{coreDir: string, components: string[]}}
  */
 export function resolveCore(cwd) {
-  const coreDir = findCoreDir(cwd);
+  const coreDir = findProjectCoreDir(cwd);
   if (!coreDir) {
     throw new AstryxError(
       'Could not find @astryxdesign/core package. Make sure you are inside the design system monorepo or have @astryxdesign/core installed.',

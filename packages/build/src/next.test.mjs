@@ -635,3 +635,119 @@ describe('withAstryx alias coverage', () => {
     }
   });
 });
+
+describe('withAstryx under symlinked installs', () => {
+  let root;
+
+  /** Write files under `dir`, creating directories as needed. */
+  function writeFiles(dir, files) {
+    for (const [file, contents] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), {recursive: true});
+      fs.writeFileSync(path.join(dir, file), contents);
+    }
+  }
+
+  /** A minimal `@astryxdesign/core` whose source imports a dependency. */
+  const coreFiles = {
+    'package.json': JSON.stringify({
+      name: '@astryxdesign/core',
+      exports: {'.': {source: './src/index.ts', default: './dist/index.js'}},
+    }),
+    'src/index.ts': "import 'intl-messageformat';\n",
+    'dist/index.js': '',
+  };
+
+  /** Link `target` at `link`, the way pnpm links a package. */
+  function link(target, linkPath) {
+    fs.mkdirSync(path.dirname(linkPath), {recursive: true});
+    fs.symlinkSync(target, linkPath, 'junction');
+  }
+
+  /** Resolve `request` from `dir` with the resolver options webpack gets. */
+  function resolveWith(resolve, dir, request) {
+    const resolver = ResolverFactory.createResolver({
+      fileSystem: new CachedInputFileSystem(fs, 4000),
+      extensions: ['.ts', '.tsx', '.js'],
+      conditionNames: ['import', 'default'],
+      alias: resolve.alias,
+      ...('symlinks' in resolve ? {symlinks: resolve.symlinks} : {}),
+      useSyncFileSystemCalls: true,
+    });
+    return resolver.resolveSync({}, dir, request);
+  }
+
+  beforeAll(() => {
+    root = fs.realpathSync(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-next-links-')),
+    );
+  });
+
+  afterAll(() => {
+    fs.rmSync(root, {recursive: true, force: true});
+  });
+
+  it("resolves a package's own dependencies under pnpm's isolated layout", () => {
+    // pnpm keeps each package and its dependencies side by side in its store,
+    // and links only the app's direct dependencies into `node_modules`.
+    const app = path.join(root, 'isolated');
+    const store = path.join(
+      app,
+      'node_modules/.pnpm/@astryxdesign+core@1.0.0/node_modules',
+    );
+    writeFiles(path.join(store, '@astryxdesign/core'), coreFiles);
+    writeFiles(path.join(store, 'intl-messageformat'), {
+      'package.json': JSON.stringify({name: 'intl-messageformat'}),
+      'index.js': '',
+    });
+    link(
+      path.join(store, '@astryxdesign/core'),
+      path.join(app, 'node_modules/@astryxdesign/core'),
+    );
+    fs.mkdirSync(path.join(app, 'src'));
+
+    const {resolve} = withAstryx({}).webpack({resolve: {}}, {dir: app});
+    const entry = resolveWith(
+      resolve,
+      path.join(app, 'src'),
+      '@astryxdesign/core',
+    );
+
+    expect(
+      resolveWith(resolve, path.dirname(entry), 'intl-messageformat'),
+    ).toBe(path.join(store, 'intl-messageformat/index.js'));
+  });
+
+  it("scopes the source condition to a workspace link's real path", () => {
+    // A workspace package links from outside any `node_modules`, so its real
+    // path has no `node_modules/@astryxdesign/` segment.
+    const workspace = path.join(root, 'workspace');
+    const app = path.join(workspace, 'apps/site');
+    writeFiles(path.join(workspace, 'packages/core'), coreFiles);
+    link(
+      path.join(workspace, 'packages/core'),
+      path.join(app, 'node_modules/@astryxdesign/core'),
+    );
+
+    const config = withAstryx({}).webpack({resolve: {}}, {dir: app});
+    const [rule] = config.module.rules;
+    // Webpack's condition semantics: a RegExp tests the path, a string
+    // matches it as a prefix.
+    const matches = file =>
+      [rule.test]
+        .flat()
+        .some(condition =>
+          typeof condition === 'string'
+            ? file.startsWith(condition)
+            : condition.test(file),
+        );
+
+    expect(rule.resolve.conditionNames).toEqual(['source', '...']);
+    expect(matches(path.join(workspace, 'packages/core/src/index.ts'))).toBe(
+      true,
+    );
+    expect(matches(path.join(workspace, 'packages/core-x/src/index.ts'))).toBe(
+      false,
+    );
+    expect(matches(path.join(app, 'src/page.tsx'))).toBe(false);
+  });
+});

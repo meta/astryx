@@ -31,7 +31,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale: 12-hour with AM/PM for US-centric UIs, 24-hour for international or technical contexts.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: true,
@@ -71,7 +71,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Wrap a disabled TimeInput in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled TimeInput in Tooltip to explain why it is disabled. Use the disabledMessage prop instead, which ties the reason to the field.',
       },
     ],
     anatomy: [
@@ -144,14 +144,15 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disables the input and suppresses interactions.',
+      description:
+        'Disables the input and suppresses interactions. The input stays focusable and exposes `aria-disabled`.',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled TimeInput in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the input (activation stays blocked). Use this instead of wrapping a disabled TimeInput in Tooltip.',
     },
     {
       name: 'value',
@@ -205,14 +206,14 @@ export const docs = {
       name: 'hourFormat',
       type: "'12h' | '24h'",
       description:
-        "Controls the display format. '12h' shows AM/PM (e.g. '2:30 PM'); '24h' uses 24-hour notation (e.g. '14:30').",
-      default: "'12h'",
+        "Controls the display format. '12h' shows the locale's day period (e.g. '2:30 PM', '오후 2:30'); '24h' uses 24-hour notation (e.g. '14:30'). When unset, follows the InternationalizationProvider locale's hour cycle: en-US reads 12-hour, en-GB and de-DE read 24-hour. To honor a person's own preference, pass it on the locale tag (e.g. 'en-US-u-hc-h23') rather than per field.",
+      default: "the locale's hour cycle",
     },
     {
       name: 'increment',
       type: 'number',
       description:
-        'Number of minutes to add or subtract when the user presses the up or down arrow key.',
+        'Number of minutes to add or subtract when the user presses the up or down arrow key. Steps are whole minutes; a fractional value leaves the time unchanged.',
       default: '1',
     },
     {
@@ -329,14 +330,14 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '禁用输入框并抑制交互。',
+      description: '禁用输入框并抑制交互。输入框仍可聚焦并暴露 `aria-disabled`。',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        '说明输入框为何被禁用。与 isDisabled 一起使用时，在悬停/键盘聚焦时显示提示，并通过 aria-disabled 保持输入框可聚焦（仍阻止输入和调整）。请使用此属性，而不是用 Tooltip 包裹已禁用的 TimeInput。',
+        '说明输入框为何被禁用。与 isDisabled 一起使用时，在悬停/键盘聚焦时显示提示，并描述输入框（仍阻止输入和调整）。请使用此属性，而不是用 Tooltip 包裹已禁用的 TimeInput。',
     },
     {
       name: 'value',
@@ -386,13 +387,14 @@ export const docsZh = {
       name: 'hourFormat',
       type: "'12h' | '24h'",
       description:
-        "控制显示格式。'12h' 显示 AM/PM（例如 '2:30 PM'）；'24h' 使用 24 小时制（例如 '14:30'）。",
-      default: "'12h'",
+        "控制显示格式。'12h' 使用区域设置的上午/下午用语（例如 '2:30 PM'、'오후 2:30'）；'24h' 使用 24 小时制（例如 '14:30'）。未设置时遵循 InternationalizationProvider 区域设置的小时制：en-US 为 12 小时制，en-GB 和 de-DE 为 24 小时制。要遵循用户自己的偏好，请在区域标签中传入（例如 'en-US-u-hc-h23'），而不是逐个字段设置。",
+      default: '区域设置的小时制',
     },
     {
       name: 'increment',
       type: 'number',
-      description: '用户按上或下方向键时增加或减少的分钟数。',
+      description:
+        '用户按上或下方向键时增加或减少的分钟数。步长为整分钟；传入小数时时间保持不变。',
       default: '1',
     },
     {
@@ -474,7 +476,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          "Choose the hour format (12h or 24h) that matches your audience's locale: 12-hour with AM/PM for US-centric UIs, 24-hour for international or technical contexts.",
+          "Leave hourFormat unset so the field follows the InternationalizationProvider locale's hour cycle (12-hour in en-US, 24-hour in en-GB or de-DE). Set it only when the field itself needs a fixed format, and carry a person's own 12/24-hour preference on the provider locale (e.g. 'en-US-u-hc-h23') rather than on each field.",
       },
       {
         guidance: true,
@@ -509,7 +511,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Wrap a disabled TimeInput in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled TimeInput in Tooltip to explain why it is disabled. Use the disabledMessage prop instead, which ties the reason to the field.',
       },
     ],
     anatomy: [
@@ -563,7 +565,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Choose hour format (12h/24h) to match locale: 12h for US, 24h for international.',
+          "Leave hourFormat unset to follow the provider locale's hour cycle; put a person's 12/24h preference on the locale tag (en-US-u-hc-h23), not on each field.",
       },
       {
         guidance: true,
@@ -611,7 +613,7 @@ export const docsDense = {
       'Marks required+sets aria-required. Mutually exclusive w/ isOptional.',
     isDisabled: 'Disables input, suppresses interactions.',
     disabledMessage:
-      'Reason shown in a tooltip on hover/focus when disabled; keeps input focusable via aria-disabled.',
+      'Reason shown in a tooltip on hover/focus when disabled; describes the input.',
     value: 'Controlled time in ISO format (HH:MM or HH:MM:SS).',
     onChange: 'Fired on time change. Receives undefined when cleared.',
     changeAction:
@@ -622,8 +624,9 @@ export const docsDense = {
     hasSeconds: 'Includes seconds in display+parsing.',
     hasClear: 'Shows clear button when value set+not disabled.',
     hourFormat:
-      "Display format. '12h' shows AM/PM; '24h' uses 24-hour notation.",
-    increment: 'Minutes to add/subtract on arrow up/down.',
+      "Display format. '12h' shows the locale's day period; '24h' uses 24-hour notation. Unset follows the provider locale's hour cycle (a -u-hc- tag carries a user preference).",
+    increment:
+      'Minutes to add/subtract on arrow up/down. Whole minutes only; a fractional value leaves the time unchanged.',
     presentation:
       "picker surface: 'adaptive-native' (default) = typed field fine / browser/OS coarse (hasSeconds or increment!=1 retains typed); 'native' = browser/OS always, no fallback; 'adaptive-bottom-sheet' = typed fine / Astryx wheel sheet coarse; 'bottom-sheet' = sheet always; 'text-input'/'popover' = typed field only.",
     nativePicker:

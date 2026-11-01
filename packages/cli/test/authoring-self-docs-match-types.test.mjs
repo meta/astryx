@@ -23,7 +23,7 @@ const SUBPATHS = [
   'codemod',
   'debug',
 ];
-const GRAPH_FIELDS = ['placement', 'aliases', 'audience'];
+const GRAPH_FIELDS = ['placement', 'aliases', 'audience', 'stability'];
 
 /** Each self-doc and the published type (or union) it describes. */
 const SELF_DOCS = {

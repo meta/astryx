@@ -9,7 +9,8 @@
 import {describe, it, expect} from 'vitest';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {ideaKind, pickStart, rankPages} from './rank.mjs';
+import {ideaKind} from './kind.mjs';
+import {pickStart, rankPages} from './rank.mjs';
 import {loadComponents, loadPageTemplates} from '../_adapter.mjs';
 
 // api/build/kit/ -> up 5 = repo root (has packages/core and the templates).

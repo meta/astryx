@@ -18,9 +18,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import module from 'node:module';
-import {CLI_ROOT} from '../fs/paths.mjs';
+import {CLI_ROOT, findWorkspaceRoot} from '../fs/paths.mjs';
 import {detectStylingSystem} from '../agent-docs/agent-docs.mjs';
-import {decidePackageManagerIn} from '../env/package-manager.mjs';
+import {
+  decidePackageManagerIn,
+  formatCliCommand,
+} from '../env/package-manager.mjs';
 
 // ── Known packages that a template may import without the user installing them.
 // react and react-dom are the framework; @astryxdesign/* is the design system
@@ -67,49 +70,6 @@ const ADD_VERB = {
   bun: 'bun add',
   npm: 'npm install',
 };
-
-/**
- * Whether a package.json declares a workspace (`workspaces` field).
- * @param {string} dir
- * @returns {{exists: boolean, declaresWorkspace: boolean}}
- */
-function readPackageJson(dir) {
-  const pkgPath = path.join(dir, 'package.json');
-  if (!fs.existsSync(pkgPath)) return {exists: false, declaresWorkspace: false};
-  try {
-    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
-    return {exists: true, declaresWorkspace: pkg.workspaces != null};
-  } catch {
-    return {exists: true, declaresWorkspace: false};
-  }
-}
-
-/**
- * The workspace root (AST-048 FR15): the nearest directory at or above the
- * target that declares a workspace, by `pnpm-workspace.yaml` or a package.json
- * `workspaces` field; outside a workspace, the nearest package.json's
- * directory; with no package.json, the target itself.
- * @param {string} target
- * @returns {string}
- */
-function findWorkspaceRoot(target) {
-  let dir = path.resolve(target);
-  /** @type {string | null} */
-  let nearestPackage = null;
-  for (;;) {
-    const pkg = readPackageJson(dir);
-    if (
-      fs.existsSync(path.join(dir, 'pnpm-workspace.yaml')) ||
-      pkg.declaresWorkspace
-    ) {
-      return dir;
-    }
-    if (pkg.exists && nearestPackage == null) nearestPackage = dir;
-    const parent = path.dirname(dir);
-    if (parent === dir) return nearestPackage ?? path.resolve(target);
-    dir = parent;
-  }
-}
 
 /**
  * The project's package manager for an install command (AST-048 FR17, FR19):
@@ -230,7 +190,7 @@ export function analyzeTemplateNeeds(source, cwd) {
   }
   if (stylexCompilerNeeded) {
     notes.push(
-      'This template uses StyleX. Your project needs a StyleX compiler plugin \u2014 see `astryx docs styling-overview` for setup steps.',
+      `This template uses StyleX. Your project needs a StyleX compiler plugin \u2014 see \`${formatCliCommand('docs styling-overview')}\` for setup steps.`,
     );
   }
 

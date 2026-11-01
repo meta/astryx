@@ -1,0 +1,94 @@
+Results for "icon set" (20 of 373)
+name:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons
+section:     use-astryx-icon
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons use-astryx-icon
+parent:      pnpm exec astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons --index
+name:        icons
+section:     theme-overrides
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons theme-overrides
+parent:      pnpm exec astryx docs icons --index
+name:        icons
+section:     icon-variants
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons icon-variants
+parent:      pnpm exec astryx docs icons --index
+name:        theme
+section:     icon-sizes
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme icon-sizes
+parent:      pnpm exec astryx docs theme --index
+name:        ToolbarTableFilter
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ToolbarTableFilter --type block
+name:        Icon
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/Icon
+command:     pnpm exec astryx component Icon
+name:        icons
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons --index
+parent:      pnpm exec astryx docs foundations
+name:        IconButton
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/IconButton
+command:     pnpm exec astryx component IconButton
+name:        useInputContainer
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/hooks
+command:     pnpm exec astryx hook useInputContainer
+name:        useInputStatusIcon
+domain:      hook
+package:     @astryxdesign/core
+import:      @astryxdesign/core/hooks
+command:     pnpm exec astryx hook useInputStatusIcon
+name:        BaseTypeaheadCustomSearch
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template BaseTypeaheadCustomSearch --type block
+name:        BottomSheetSnapPoints
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template BottomSheetSnapPoints --type block
+name:        BreadcrumbsDeepHierarchy
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template BreadcrumbsDeepHierarchy --type block
+name:        BreadcrumbsWithIcons
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template BreadcrumbsWithIcons --type block
+name:        ButtonFloating
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ButtonFloating --type block
+name:        ButtonGroupShowcase
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ButtonGroupShowcase --type block
+name:        ButtonWithIcon
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ButtonWithIcon --type block
+name:        CenterHorizontal
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template CenterHorizontal --type block
+name:        CenterInsideACard
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template CenterInsideACard --type block
+name:        ChatComposerDrawerShowcase
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ChatComposerDrawerShowcase --type block

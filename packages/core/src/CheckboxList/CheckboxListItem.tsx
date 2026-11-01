@@ -29,6 +29,8 @@ import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
 import {useTranslator} from '../i18n';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
+import {joinAriaIDs} from '../utils/inputAria';
+import type {ItemAlign} from '../Item';
 
 // =============================================================================
 // Styles
@@ -45,6 +47,13 @@ const styles = stylex.create({
 // =============================================================================
 
 export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
+  /**
+   * Vertical alignment of the start and end content against the label,
+   * forwarded to Item. Use `first-line` to keep the checkbox level with the
+   * first line of a wrapped label.
+   * @default 'center'
+   */
+  align?: ItemAlign;
   /**
    * Primary text label for the item.
    *
@@ -145,14 +154,19 @@ export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
  *
  * This component owns `aria-describedby`, so the prop is omitted rather than
  * accepted and overwritten: a caller passing one would otherwise lose the id
- * silently.
+ * silently. After the row's description comes the group's disabled reason
+ * (CheckboxList's disabledMessage), which describes each checkbox (FR9).
  */
 function DescribedCheckboxInput(
   props: Omit<CheckboxInputProps, 'aria-describedby'>,
 ) {
   const describedBy = use(ItemDescriptionContext);
+  const reasonID = use(CheckboxListContext)?.disabledMessageID;
   return (
-    <CheckboxInput {...props} aria-describedby={describedBy ?? undefined} />
+    <CheckboxInput
+      {...props}
+      aria-describedby={joinAriaIDs(describedBy ?? undefined, reasonID)}
+    />
   );
 }
 
@@ -192,6 +206,7 @@ export function CheckboxListItem({
   className,
   style,
   onClick: onClickProp,
+  align,
   ...restProps
 }: CheckboxListItemProps) {
   const t = useTranslator();
@@ -297,6 +312,7 @@ export function CheckboxListItem({
       label={namesFromVisibleLabel ? <span id={labelID}>{label}</span> : label}
       description={description}
       endContent={endContent}
+      align={align}
       isDisabled={effectiveDisabled}
       // Delegate row clicks to the checkbox instead of wiring onClick (which
       // would add an invisible row button = a second tab stop). The checkbox

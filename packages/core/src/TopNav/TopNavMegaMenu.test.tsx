@@ -9,6 +9,7 @@
  * SYNC: When TopNavMegaMenu changes, update tests to match new behavior
  */
 
+import {createRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
@@ -769,6 +770,53 @@ describe('TopNavMegaMenu — drawer mode', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
+  it('makes collapsed items inert and hidden from assistive technology', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    const region = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    );
+
+    expect(region).toHaveAttribute('inert');
+    expect(region).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.queryByRole('link', {name: 'Analytics'})).toBeNull();
+
+    await user.click(trigger);
+    expect(region).not.toHaveAttribute('inert');
+    expect(region).toHaveAttribute('aria-hidden', 'false');
+    expect(screen.getByRole('link', {name: 'Analytics'})).toBeInTheDocument();
+  });
+
+  it('clips the drawer section only while it is collapsed', async () => {
+    // The ring paints outside the item, so a permanent clip would cut it off.
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </TopNavRenderContext>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Products'});
+    const section = document.getElementById(
+      trigger.getAttribute('aria-controls') ?? '',
+    )!;
+    expect(getComputedStyle(section).overflow).toBe('hidden');
+    expect(getComputedStyle(section.firstElementChild!).overflow).toBe('');
+
+    await user.click(trigger);
+    expect(getComputedStyle(section).overflow).toBe('visible');
+  });
+
   it('renders featured content when expanded', async () => {
     const user = userEvent.setup();
 
@@ -1081,5 +1129,25 @@ describe('TopNavMegaMenuItem pass-through props', () => {
     expect(screen.getByTestId('drawer-item').getAttribute('class')).not.toEqual(
       drawerWithout,
     );
+  });
+});
+
+describe('TopNavMegaMenu ref', () => {
+  const items = <TopNavMegaMenuItem title="Analytics" href="/analytics" />;
+
+  it('forwards its ref to the trigger button', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(<TopNavMegaMenu ref={ref} label="Products" items={items} />);
+    expect(ref.current).toBe(screen.getByRole('button', {name: 'Products'}));
+  });
+
+  it('forwards its ref to the drawer trigger', () => {
+    const ref = createRef<HTMLButtonElement>();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu ref={ref} label="Products" items={items} />
+      </TopNavRenderContext>,
+    );
+    expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
   });
 });

@@ -4,12 +4,16 @@
 
 /**
  * @file Markdown.tsx
- * @input Markdown string, canonical AST, optional plugins and custom renderers
+ * @input Markdown string, canonical AST, optional plugins and custom renderers;
+ *   static document lists permit outside counter paint through ordered and
+ *   unordered ancestors. Flow-task
+ *   bodies use per-item first-line markers; paragraph-only task lists retain
+ *   their CheckboxList representation.
  * @output Exports Markdown component, MarkdownProps, and renderer contracts
  * @position Core implementation; renders markdown as Astryx components
  */
 
-import {Suspense, useMemo, useRef} from 'react';
+import {Suspense, useMemo, useRef, useState} from 'react';
 import type React from 'react';
 import {Fragment} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -28,6 +32,8 @@ import {
 import type {TextDisplay} from '../theme/types';
 import {CodeBlock, Code} from '../CodeBlock';
 import {parseFenceLanguage} from '../CodeBlock/tokenizer';
+import {listedLanguage, sameCodeLanguageList} from '../CodeBlock/grammar';
+import type {CodeLanguage} from '../CodeBlock/grammar';
 import {CheckboxList} from '../CheckboxList/CheckboxList';
 import {CheckboxListItem} from '../CheckboxList/CheckboxListItem';
 import {Blockquote} from '../Blockquote/Blockquote';
@@ -41,6 +47,7 @@ import {TableHeaderCell} from '../Table/TableHeaderCell';
 import {TableHeader} from '../Table/TableHeader';
 import {TableBody} from '../Table/TableBody';
 import {mergeProps} from '../utils';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useStreamingText} from '../hooks/useStreamingText';
 import {computeBoundaries, computeSegments} from './streaming';
 import type {BaseProps} from '../BaseProps';
@@ -318,6 +325,15 @@ export interface MarkdownProps<
    * literal text.
    */
   autolink?: 'gfm';
+  /**
+   * CodeBlock language values a fence may name: each one imported on its
+   * own, such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. A fence whose language word is one of
+   * a listed value's identifiers renders with that value, ahead of a built-in
+   * with the same identifier; a later entry wins. Without it, fences render
+   * as they do today.
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
 }
 
 // ---------------------------------------------------------------------------
@@ -404,6 +420,16 @@ const markdownTableCellStyles = stylex.create({
   // and lets the column carry the width instead.
   code: {
     wordBreak: 'normal',
+  },
+  // The grid's outer edge. `dividers="grid"` draws the lines *between* cells
+  // and stops at the table's rim, so without this the top, bottom, and sides
+  // stay open and the grid reads as unfinished. On the table element, not the
+  // wrapper, so `border-collapse: collapse` merges it with the cell lines
+  // into one 1px rule rather than doubling up at the edge.
+  tableOuterEdge: {
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
   },
 });
 
@@ -565,8 +591,20 @@ const styles = stylex.create({
     '--container-padding-block-start': '0px',
     '--container-padding-block-end': '0px',
   },
+  // Static Markdown lists never host swipe actions. Let outside counter ink
+  // paint through both ordered and unordered ancestors; general List and
+  // swipe-capable rows retain their own inline clip (component:List FR9).
   blockIndent: {
     marginInline: `calc(-1 * ${spacingVars['--spacing-2']})`,
+    overflowInline: 'visible',
+  },
+  // Numbered document lists keep their ordinary text inset regardless of
+  // counter width, matching RichText's native outside markers (AST-061 FR11).
+  // These rows have no swipe actions: unlike general List, their outside ink
+  // may paint past the gutter instead of being clipped at a finite threshold.
+  markerGutter: {
+    marginInlineStart: `calc(-1 * (${spacingVars['--spacing-2']} + ${spacingVars['--spacing-4']}))`,
+    paddingInlineStart: spacingVars['--spacing-4'],
   },
   // HR
   hr: {
@@ -1315,6 +1353,8 @@ function renderBlock(
   components: Partial<MarkdownComponents> | undefined,
   preparedPlugins: PreparedMarkdownPlugins | undefined,
   t: TranslatorFn,
+  // Language values fences may name (component:Markdown FR30).
+  codeLanguages: ReadonlyArray<CodeLanguage> | undefined,
   headingProjection?: MarkdownHeadingProjection,
   // How many lists enclose this block (spec:AST-061 DEC-6).
   listDepth = 0,
@@ -1489,7 +1529,10 @@ function renderBlock(
       const diffLanguage = isDiff
         ? fence.language.match(/^\w*/)?.[0] || 'plaintext'
         : undefined;
-      const language = diffLanguage ?? legacyLanguage;
+      const fenceWord = diffLanguage ?? legacyLanguage;
+      // A listed language value claims its identifiers ahead of a built-in
+      // with the same identifier (component:Markdown FR30).
+      const language = listedLanguage(codeLanguages, fenceWord) ?? fenceWord;
       // A semantic-fence proposal claims its fence before the host's code
       // renderer (spec:AST-036 FR17). The host renderer, or the default Code
       // block without one, draws every unclaimed fence and is the fallback
@@ -1549,6 +1592,7 @@ function renderBlock(
       }
       try {
         const rendered = renderer.render({node: proposal.node});
+        // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- a plugin renderer's '' is its output; only null, undefined or a boolean asks for the readable fallback
         if (rendered == null || typeof rendered === 'boolean') {
           return fallback;
         }
@@ -1606,6 +1650,7 @@ function renderBlock(
             components,
             preparedPlugins,
             t,
+            codeLanguages,
             headingProjection,
             listDepth,
           ),
@@ -1649,6 +1694,7 @@ function renderBlock(
               components,
               preparedPlugins,
               t,
+              codeLanguages,
               headingProjection,
               listDepth,
             ),
@@ -1657,10 +1703,16 @@ function renderBlock(
       );
     }
     case 'list': {
-      // Detect task lists: all items have a checked state
+      // Preserve the released CheckboxList representation for paragraph-only
+      // pure task lists. Flow/nested task bodies use the shared per-item marker
+      // path below, which owns first-line placement and static outside paint.
       const isTaskList =
         node.children.length > 0 &&
-        node.children.every(item => item.checked != null);
+        node.children.every(
+          item =>
+            item.checked != null &&
+            item.children.every(block => block.type === 'paragraph'),
+        );
 
       if (isTaskList) {
         // Extract labels from task items — render as rich inline content
@@ -1728,6 +1780,7 @@ function renderBlock(
                         components,
                         preparedPlugins,
                         t,
+                        codeLanguages,
                         headingProjection,
                         listDepth + 1,
                       ),
@@ -1773,7 +1826,7 @@ function renderBlock(
             listStyle={node.ordered ? 'decimal' : 'disc'}
             density="compact"
             start={node.ordered ? node.start : undefined}
-            xstyle={styles.blockIndent}>
+            xstyle={[styles.blockIndent, node.ordered && styles.markerGutter]}>
             {node.children.map((item, i) => {
               const firstChild = item.children[0];
               const isInline =
@@ -1817,6 +1870,7 @@ function renderBlock(
                       components,
                       preparedPlugins,
                       t,
+                      codeLanguages,
                       headingProjection,
                       listDepth + 1,
                     ),
@@ -1824,7 +1878,7 @@ function renderBlock(
                 </>
               );
 
-              // A task item beside plain items keeps its own checked state
+              // Each task item on this shared list path keeps its checked state
               // (FR23): it shows a read-only checkbox where its marker
               // would be, named by its text.
               const firstParagraph = item.children.find(
@@ -1857,7 +1911,8 @@ function renderBlock(
                       listDepth % 3
                     ]
                   }
-                  task={task}>
+                  task={task}
+                  hasMarkerGutter={node.ordered}>
                   <ListItem
                     label={label}
                     {...(recordsSourceLines
@@ -1905,7 +1960,10 @@ function renderBlock(
             ),
           )}
           {...lineStamps}>
-          <Table dividers="rows" textOverflow="wrap">
+          <Table
+            dividers="grid"
+            textOverflow="wrap"
+            xstyle={markdownTableCellStyles.tableOuterEdge}>
             <TableHeader>
               <TableRow>
                 {header?.children.map((h, i) => (
@@ -2100,6 +2158,7 @@ export function Markdown<
   plugins,
   inlinePlugins,
   autolink,
+  codeLanguages: codeLanguagesProp,
   xstyle,
   className,
   style,
@@ -2108,7 +2167,29 @@ export function Markdown<
   ...props
 }: MarkdownProps<Plugins>): React.ReactElement {
   const t = useTranslator();
+  // Keep one list while it names the same values, so an inline
+  // `codeLanguages={[…]}` does not re-render every block on each parent
+  // render (adjusting state during render, not in an Effect).
+  const [codeLanguages, setCodeLanguages] = useState(codeLanguagesProp);
+  if (!sameCodeLanguageList(codeLanguages, codeLanguagesProp)) {
+    setCodeLanguages(codeLanguagesProp);
+  }
   const LinkComponent = useLinkComponent();
+  // Links read the caller's handler when clicked, so a handler recreated on
+  // every caller render does not invalidate the memoized document below.
+  // Only whether a handler exists changes the rendered links.
+  const onLinkClickRef = useRef(onLinkClick);
+  useIsomorphicLayoutEffect(() => {
+    onLinkClickRef.current = onLinkClick;
+  });
+  const hasLinkClick = onLinkClick != null;
+  const stableOnLinkClick = useMemo<MarkdownProps['onLinkClick']>(
+    () =>
+      hasLinkClick
+        ? (href, event) => onLinkClickRef.current?.(href, event)
+        : undefined,
+    [hasLinkClick],
+  );
   // Derive the set of source IDs for the parser (stable across renders when sources don't change)
   const sourceIds = useMemo(
     () => (sources ? new Set(Object.keys(sources)) : undefined),
@@ -2314,19 +2395,82 @@ export function Markdown<
     return next;
   }, [display, smoothedLen, maxSpans]);
 
-  const cursor: StreamingCursor = {
-    offset: 0,
-    boundaries,
-    active: isStreaming,
-  };
-
-  // Build citation context — numbers are assigned in encounter order during rendering.
-  // This is recreated each render so numbering stays consistent with the AST.
-  const citationCtx: CitationContext | null = sources
-    ? {sources, numberMap: new Map(), nextNumber: 1, style: citationStyle}
+  const contentWidthValue = contentWidth
+    ? typeof contentWidth === 'number'
+      ? `${contentWidth}px`
+      : contentWidth
     : null;
 
+  // The block document is the expensive part of a long Markdown render. It
+  // depends only on these inputs, so a caller re-render that changes none of
+  // them returns the same elements and React skips the whole subtree. The
+  // cursor and citation numbering are rebuilt inside, from the start of the
+  // document, exactly as a full render builds them.
+  const renderedBlocks = useMemo(() => {
+    if (display === 'inline') {
+      return null;
+    }
+    const blockCursor: StreamingCursor = {
+      offset: 0,
+      boundaries,
+      active: isStreaming,
+    };
+    // Numbers are assigned in encounter order during rendering.
+    const blockCitationCtx: CitationContext | null = sources
+      ? {sources, numberMap: new Map(), nextNumber: 1, style: citationStyle}
+      : null;
+    return blocks.map((block, i) =>
+      renderBlock(
+        block,
+        i,
+        blocks.length,
+        density,
+        headingLevelStart,
+        stableOnLinkClick,
+        blockCursor,
+        blockCitationCtx,
+        contentWidthValue,
+        contentAlign,
+        LinkComponent,
+        inlinePlugins,
+        components,
+        preparedPlugins,
+        t,
+        codeLanguages,
+        headingProjection,
+      ),
+    );
+  }, [
+    display,
+    blocks,
+    boundaries,
+    isStreaming,
+    sources,
+    citationStyle,
+    density,
+    headingLevelStart,
+    stableOnLinkClick,
+    contentWidthValue,
+    contentAlign,
+    LinkComponent,
+    inlinePlugins,
+    components,
+    preparedPlugins,
+    t,
+    headingProjection,
+    codeLanguages,
+  ]);
+
   if (display === 'inline') {
+    const cursor: StreamingCursor = {
+      offset: 0,
+      boundaries,
+      active: isStreaming,
+    };
+    // Numbers are assigned in encounter order during rendering.
+    const citationCtx: CitationContext | null = sources
+      ? {sources, numberMap: new Map(), nextNumber: 1, style: citationStyle}
+      : null;
     const renderedInline = (
       <span
         ref={ref}
@@ -2344,7 +2488,7 @@ export function Markdown<
           renderInline(
             node,
             i,
-            onLinkClick,
+            stableOnLinkClick,
             cursor,
             citationCtx,
             LinkComponent,
@@ -2378,30 +2522,7 @@ export function Markdown<
         className,
         style,
       )}>
-      {blocks.map((block, i) =>
-        renderBlock(
-          block,
-          i,
-          blocks.length,
-          density,
-          headingLevelStart,
-          onLinkClick,
-          cursor,
-          citationCtx,
-          contentWidth
-            ? typeof contentWidth === 'number'
-              ? `${contentWidth}px`
-              : contentWidth
-            : null,
-          contentAlign,
-          LinkComponent,
-          inlinePlugins,
-          components,
-          preparedPlugins,
-          t,
-          headingProjection,
-        ),
-      )}
+      {renderedBlocks}
     </div>
   );
 

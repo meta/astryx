@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
   useTransition,
+  type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {BottomSheet} from '../BottomSheet';
@@ -39,13 +40,15 @@ import {
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useTranslator} from '../i18n';
-import {sizeVars, spacingVars} from '../theme/tokens.stylex';
+import {useLocale, useTranslator} from '../i18n';
+import {formatLocaleTime} from '../utils/timeFormat';
+import {colorVars, sizeVars, spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
@@ -55,8 +58,6 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {themeProps} from '../utils/themeProps';
 import {
   clampTime,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   getInputARIA,
   isTimeInRange,
@@ -74,6 +75,17 @@ const sizeStyles = stylex.create({
 });
 
 const styles = stylex.create({
+  // Same as TimeInput's: the focus ring for a focused disabled field.
+  disabledFocusRing: {
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':focus-within': colorVars['--color-accent'],
+    },
+    boxShadow: {
+      default: 'none',
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+    },
+  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -225,6 +237,7 @@ export function TouchTimeField({
     ...controlProps
   } = rest;
   const t = useTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');
@@ -242,6 +255,15 @@ export function TouchTimeField({
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
+  const sheetBodyRef = useRef<HTMLDivElement | null>(null);
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8). A change made in the open modal sheet starts it while
+  // the sheet is open, so it is announced from inside the sheet.
+  useBusyAnnouncement(
+    isBusy,
+    t('@astryx.spinner.loading'),
+    isSheetOpen ? sheetBodyRef : inputRef,
+  );
   const isEffectivelyDisabled = isDisabled || isLoading;
 
   const showsDisabledMessage = isDisabled && !!disabledMessage;
@@ -280,10 +302,8 @@ export function TouchTimeField({
     [changeAction, isEffectivelyDisabled, onChange, setOptimisticValue],
   );
 
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
   const displayValue = optimisticValue
-    ? formatDisplayTime(optimisticValue, hasSeconds)
+    ? formatLocaleTime(optimisticValue, locale, hourFormat, hasSeconds)
     : '';
 
   const fallbackTime = useMemo(() => {
@@ -437,6 +457,7 @@ export function TouchTimeField({
       ref={el => {
         disabledMessageTooltip.ref(el);
       }}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('time-input', {
           size,
@@ -447,6 +468,7 @@ export function TouchTimeField({
           inputWrapperStyles.base,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && styles.disabledFocusRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -459,7 +481,7 @@ export function TouchTimeField({
       <button
         type="button"
         onClick={openSheet}
-        disabled={isEffectivelyDisabled}
+        aria-disabled={isEffectivelyDisabled || undefined}
         aria-label={t('@astryx.timeInput.openPicker', {label})}
         tabIndex={-1}
         {...stylex.props(focusOutlineStyles.focusVisible, styles.iconButton)}>
@@ -475,10 +497,19 @@ export function TouchTimeField({
         readOnly
         inputMode="none"
         onChange={() => {}}
-        onClick={chainEventHandlers(openSheet, onClickProp)}
+        onClick={
+          isEffectivelyDisabled
+            ? undefined
+            : chainEventHandlers(openSheet, onClickProp)
+        }
+        // Enter would submit a surrounding form while disabled (FR2).
+        onKeyDown={chainEventHandlers((e: KeyboardEvent<HTMLInputElement>) => {
+          if (isEffectivelyDisabled && e.key === 'Enter') {
+            e.preventDefault();
+          }
+        }, controlProps.onKeyDown)}
         placeholder={placeholder}
-        disabled={isEffectivelyDisabled && !showsDisabledMessage}
-        aria-disabled={showsDisabledMessage ? 'true' : undefined}
+        aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={status?.type === 'error' ? 'true' : undefined}
@@ -494,7 +525,7 @@ export function TouchTimeField({
         }
         {...stylex.props(styles.input)}
       />
-      {isBusy && <Spinner size="sm" />}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {hasClear && optimisticValue && !isEffectivelyDisabled && (
         <InputClearButton
           label={t('@astryx.timeInput.clearLabel', {label})}
@@ -509,7 +540,7 @@ export function TouchTimeField({
         height="hug"
         // sheetBody owns the inset, including the band under the grab handle.
         padding={0}>
-        <div {...stylex.props(styles.sheetBody)}>
+        <div ref={sheetBodyRef} {...stylex.props(styles.sheetBody)}>
           <div {...stylex.props(styles.wheels)}>
             <Wheel
               label={t('@astryx.dateTimeInput.hourWheel')}

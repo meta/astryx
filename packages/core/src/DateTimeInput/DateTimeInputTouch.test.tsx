@@ -987,6 +987,30 @@ describe('DateTimeInput touch surface', () => {
   });
 });
 
+describe('DateTimeInput touch surface: disabled without a reason', () => {
+  it('stays focusable and inert, and skips a caller onClick (AST-085 FR1, FR2)', () => {
+    const onClick = vi.fn();
+    render(
+      <DateTimeInput
+        label="Meeting"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    for (const field of [dateField(), timeField()]) {
+      expect(field).not.toHaveAttribute('disabled');
+      expect(field).toHaveAttribute('aria-disabled', 'true');
+      field.focus();
+      expect(field).toHaveFocus();
+      fireEvent.click(field);
+      fireEvent.keyDown(field, {key: 'Enter'});
+      expect(field).toHaveAttribute('aria-expanded', 'false');
+    }
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
 describe('DateTimeInput touch surface: no stale commit', () => {
   // Records what each commit painted, so a value that is corrected one render
   // later (by an effect) shows up as a stale intermediate frame.

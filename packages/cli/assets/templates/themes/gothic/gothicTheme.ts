@@ -6,7 +6,6 @@
  * A dark-only theme with deep blue-gray tones and a distressed display
  * heading. Inspired by ink, manuscript, and noir typography.
  *
- * Core palette: #E8F1F6, #96A0AB, #495056, #24292D, #101314
  * Categorical colors follow a pastel-on-dark pattern (light backgrounds
  * with dark text) — same in any system color preference.
  *
@@ -15,6 +14,12 @@
 
 import {defineTheme, defineSyntaxTheme} from '@astryxdesign/core/theme';
 import {gothicIconRegistry} from './icons';
+import {gothicPaletteRefs} from './gothicPaletteRefs.generated';
+
+const {blue, cyan, green, neutral, orange, pink, purple, red, teal, yellow} =
+  gothicPaletteRefs;
+
+const withAlpha = (color: string, alpha: string): string => `${color}${alpha}`;
 
 /**
  * Gothic syntax palette — atmospheric tones drawn from the gothic
@@ -26,29 +31,24 @@ import {gothicIconRegistry} from './icons';
 const gothicSyntax = defineSyntaxTheme({
   name: 'astryx-gothic',
   tokens: {
-    keyword: '#c39adb', // Cathedral plum
-    string: '#a3c987', // Forest moss
-    comment: '#6b7079', // Faded ink
-    number: '#dec074', // Aged gold
-    function: '#8aa1d8', // Midnight indigo
-    type: '#c39adb', // Cathedral plum
-    variable: '#E8F1F6', // Parchment
-    operator: '#96A0AB', // Mid neutral
-    constant: '#e6b85e', // Candlelight amber
-    tag: '#d97580', // Blood crimson
-    attribute: '#dec074', // Aged gold
-    property: '#7cc5b3', // Verdigris
-    punctuation: '#7a8290', // Mid neutral
-    background: '#101314',
-    // Diff rows on the near-black background: any lighter wash lowers every
-    // light token's contrast, so the rows take opaque hues at the
-    // background's own luminance — a deep green and a deep red that read as
-    // colour, not brightness — and every token keeps the contrast it has on
-    // the plain background. Markers: forest moss and blood crimson.
-    added: '#081408',
-    removed: '#1e0a0a',
-    'added-marker': '#a3c987',
-    'removed-marker': '#d97580',
+    keyword: purple.dark[80],
+    string: green.dark[70],
+    comment: neutral.dark[65],
+    number: yellow.dark[70],
+    function: blue.dark[65],
+    type: purple.dark[80],
+    variable: neutral.dark[95],
+    operator: neutral.dark[75],
+    constant: yellow.dark[65],
+    tag: pink.dark[65],
+    attribute: yellow.dark[70],
+    property: teal.dark[70],
+    punctuation: neutral.dark[65],
+    background: neutral.dark[10],
+    added: green.dark[5],
+    removed: red.dark[5],
+    'added-marker': green.dark[70],
+    'removed-marker': pink.dark[65],
   },
 });
 
@@ -114,129 +114,112 @@ export const gothicTheme = defineTheme({
   syntax: gothicSyntax,
 
   tokens: {
-    // =========================================================================
-    // Colors — gothic dark palette (single values, dark-only)
-    // Core: #E8F1F6, #96A0AB, #495056, #24292D, #101314
-    // =========================================================================
+    '--color-accent': neutral.dark[95],
+    '--color-accent-muted': withAlpha(neutral.dark[95], '20'),
+    '--color-neutral': withAlpha(neutral.dark[95], '1a'),
+    '--color-background-surface': neutral.dark[10],
+    '--color-background-body': neutral.dark[10],
+    '--color-overlay': withAlpha(neutral.dark[10], 'cc'),
+    '--color-overlay-hover': withAlpha(neutral.dark[95], '0d'),
+    '--color-overlay-pressed': withAlpha(neutral.dark[95], '1a'),
+    '--color-background-muted': neutral.dark[20],
 
-    // Core semantic
-    '--color-accent': '#E8F1F6',
-    '--color-accent-muted': '#E8F1F620',
-    '--color-neutral': '#E8F1F61A',
-    '--color-background-surface': '#101314',
-    '--color-background-body': '#101314',
-    '--color-overlay': '#101314CC',
-    '--color-overlay-hover': '#E8F1F60D',
-    '--color-overlay-pressed': '#E8F1F61A',
-    '--color-background-muted': '#24292D',
+    '--color-text-primary': neutral.dark[95],
+    '--color-text-secondary': neutral.dark[75],
+    '--color-text-disabled': neutral.dark[40],
+    '--color-text-accent': neutral.dark[95],
+    '--color-on-dark': neutral.dark[95],
+    '--color-on-light': neutral.dark[10],
+    '--color-on-accent': neutral.dark[10],
+    '--color-on-success': neutral.dark[10],
+    '--color-on-error': neutral.dark[10],
+    '--color-on-warning': neutral.dark[10],
 
-    // Text
-    '--color-text-primary': '#E8F1F6',
-    '--color-text-secondary': '#96A0AB',
-    '--color-text-disabled': '#495056',
-    '--color-text-accent': '#E8F1F6',
-    '--color-on-dark': '#E8F1F6',
-    '--color-on-light': '#101314',
-    '--color-on-accent': '#101314',
-    '--color-on-success': '#101314',
-    '--color-on-error': '#101314',
-    '--color-on-warning': '#101314',
+    '--color-info': blue.dark[65],
+    '--color-info-muted': blue.dark[75],
+    '--color-on-info': neutral.dark[10],
 
-    // Icon
-    '--color-icon-accent': '#E8F1F6',
-    '--color-icon-primary': '#E8F1F6',
-    '--color-icon-secondary': '#96A0AB',
-    '--color-icon-disabled': '#495056',
+    '--color-text-info': blue.dark[75],
+    '--color-text-success': green.dark[75],
+    '--color-text-warning': yellow.dark[75],
+    '--color-text-error': red.dark[75],
+    '--color-on-info-muted': blue.dark[20],
+    '--color-on-success-muted': green.dark[20],
+    '--color-on-warning-muted': yellow.dark[15],
+    '--color-on-error-muted': red.dark[20],
 
-    // Surface variants
-    '--color-background-card': '#1a1d20',
-    '--color-background-popover': '#24292D',
-    '--color-background-inverted': '#E8F1F6',
+    '--color-icon-accent': neutral.dark[95],
+    '--color-icon-primary': neutral.dark[95],
+    '--color-icon-secondary': neutral.dark[75],
+    '--color-icon-disabled': neutral.dark[40],
 
-    // Status / Sentiment — dusty pastels matching the categorical
-    // pattern. Used for status surfaces, destructive button bg, etc.
-    '--color-success': '#b3c79a', // sage moss
-    '--color-success-muted': '#b3c79a',
-    '--color-error': '#c6a6a2', // dusty rose
-    '--color-error-muted': '#c6a6a2',
-    '--color-warning': '#d3c490', // aged gold
-    '--color-warning-muted': '#d3c490',
+    '--color-background-card': neutral.dark[15],
+    '--color-background-popover': neutral.dark[20],
+    '--color-background-inverted': neutral.dark[95],
 
-    // Border
-    '--color-border': '#E8F1F61A',
-    '--color-border-emphasized': '#495056',
+    '--color-success': green.dark[75],
+    '--color-success-muted': green.dark[75],
+    '--color-error': red.dark[75],
+    '--color-error-muted': red.dark[75],
+    '--color-warning': yellow.dark[75],
+    '--color-warning-muted': yellow.dark[75],
 
-    // Effects
-    '--color-skeleton': '#495056',
-    '--color-shadow': '#0000004D',
-    '--color-tint-hover': 'white',
+    '--color-border': withAlpha(neutral.dark[95], '1a'),
+    '--color-border-emphasized': neutral.dark[40],
 
-    // =========================================================================
-    // Categorical — dusty pastel-on-dark pattern
-    // Hand-tuned dusty pastels (T75 with reduced chroma) — confident
-    // but never bright. Neutral is a dark slate with white text — the
-    // "no-color" variant earns its hierarchy by matching the page mood.
-    // =========================================================================
+    '--color-skeleton': neutral.dark[40],
+    '--color-shadow': withAlpha(neutral.dark[0], '4d'),
+    '--color-tint-hover': neutral.dark[100],
 
-    // Blue (periwinkle midnight)
-    '--color-background-blue': '#a3b5d6',
-    '--color-border-blue': '#8696b8',
-    '--color-icon-blue': '#2a3b6e',
-    '--color-text-blue': '#1f2c54',
+    '--color-background-blue': blue.dark[75],
+    '--color-border-blue': blue.dark[60],
+    '--color-icon-blue': blue.dark[30],
+    '--color-text-blue': blue.dark[20],
 
-    // Cyan (cathedral mist)
-    '--color-background-cyan': '#a3c2cf',
-    '--color-border-cyan': '#86a4b1',
-    '--color-icon-cyan': '#2a5e75',
-    '--color-text-cyan': '#204858',
+    '--color-background-cyan': cyan.dark[75],
+    '--color-border-cyan': cyan.dark[60],
+    '--color-icon-cyan': cyan.dark[30],
+    '--color-text-cyan': cyan.dark[20],
 
-    // Gray (dark slate — special: dark bg + light text)
-    '--color-background-gray': '#3d4248',
-    '--color-border-gray': '#5d646b',
-    '--color-icon-gray': '#E8F1F6',
-    '--color-text-gray': '#E8F1F6',
+    '--color-background-gray': neutral.dark[35],
+    '--color-border-gray': neutral.dark[50],
+    '--color-icon-gray': neutral.dark[95],
+    '--color-text-gray': neutral.dark[95],
 
-    // Green (sage moss)
-    '--color-background-green': '#b3c79a',
-    '--color-border-green': '#96a880',
-    '--color-icon-green': '#3a5e2c',
-    '--color-text-green': '#244023',
+    '--color-background-green': green.dark[75],
+    '--color-border-green': green.dark[60],
+    '--color-icon-green': green.dark[30],
+    '--color-text-green': green.dark[20],
 
-    // Orange (warm tan)
-    '--color-background-orange': '#d3b89a',
-    '--color-border-orange': '#b6987d',
-    '--color-icon-orange': '#8a4818',
-    '--color-text-orange': '#6e3812',
+    '--color-background-orange': orange.dark[75],
+    '--color-border-orange': orange.dark[60],
+    '--color-icon-orange': orange.dark[30],
+    '--color-text-orange': orange.dark[20],
 
-    // Pink (dusty rose)
-    '--color-background-pink': '#c89aab',
-    '--color-border-pink': '#aa7d8e',
-    '--color-icon-pink': '#8d2d4c',
-    '--color-text-pink': '#71223c',
+    '--color-background-pink': pink.dark[75],
+    '--color-border-pink': pink.dark[60],
+    '--color-icon-pink': pink.dark[30],
+    '--color-text-pink': pink.dark[15],
 
-    // Purple (muted plum)
-    '--color-background-purple': '#b29bc4',
-    '--color-border-purple': '#947da6',
-    '--color-icon-purple': '#5a2370',
-    '--color-text-purple': '#481b58',
+    '--color-background-purple': purple.dark[75],
+    '--color-border-purple': purple.dark[60],
+    '--color-icon-purple': purple.dark[30],
+    '--color-text-purple': purple.dark[20],
 
-    // Red (dusty rose)
-    '--color-background-red': '#c6a6a2',
-    '--color-border-red': '#a48581',
-    '--color-icon-red': '#5e3a35',
-    '--color-text-red': '#4a2520',
+    '--color-background-red': red.dark[75],
+    '--color-border-red': red.dark[60],
+    '--color-icon-red': red.dark[30],
+    '--color-text-red': red.dark[20],
 
-    // Teal (sage verdigris)
-    '--color-background-teal': '#a3c2b6',
-    '--color-border-teal': '#86a499',
-    '--color-icon-teal': '#1f5e52',
-    '--color-text-teal': '#174a40',
+    '--color-background-teal': teal.dark[75],
+    '--color-border-teal': teal.dark[60],
+    '--color-icon-teal': teal.dark[30],
+    '--color-text-teal': teal.dark[20],
 
-    // Yellow (aged gold)
-    '--color-background-yellow': '#d3c490',
-    '--color-border-yellow': '#b6a775',
-    '--color-icon-yellow': '#876515',
-    '--color-text-yellow': '#6c5010',
+    '--color-background-yellow': yellow.dark[75],
+    '--color-border-yellow': yellow.dark[60],
+    '--color-icon-yellow': yellow.dark[30],
+    '--color-text-yellow': yellow.dark[15],
 
     // =========================================================================
     // Radius — subtle rounding (original gothic)
@@ -254,14 +237,14 @@ export const gothicTheme = defineTheme({
     // =========================================================================
     // Shadows — restrained, atmospheric
     // =========================================================================
-    '--shadow-low': '0 2px 4px #00000033, 0 4px 8px #00000040',
-    '--shadow-med': '0 2px 4px #00000033, 0 4px 12px #00000040',
-    '--shadow-high': '0 4px 6px #00000040, 0 12px 24px #0000004D',
-    '--shadow-inset-hover': 'inset 0px 0px 0px 1px #96A0AB30',
-    '--shadow-inset-selected': 'inset 0px 0px 0px 2px #96A0AB50',
-    '--shadow-inset-success': 'inset 0px 0px 0px 1px #87b06a50',
-    '--shadow-inset-warning': 'inset 0px 0px 0px 1px #d6b56a50',
-    '--shadow-inset-error': 'inset 0px 0px 0px 1px #d4485150',
+    '--shadow-low': `0 2px 4px ${withAlpha(neutral.dark[0], '33')}, 0 4px 8px ${withAlpha(neutral.dark[0], '40')}`,
+    '--shadow-med': `0 2px 4px ${withAlpha(neutral.dark[0], '33')}, 0 4px 12px ${withAlpha(neutral.dark[0], '40')}`,
+    '--shadow-high': `0 4px 6px ${withAlpha(neutral.dark[0], '40')}, 0 12px 24px ${withAlpha(neutral.dark[0], '4d')}`,
+    '--shadow-inset-hover': `inset 0 0 0 1px ${withAlpha(neutral.dark[75], '30')}`,
+    '--shadow-inset-selected': `inset 0 0 0 2px ${withAlpha(neutral.dark[75], '50')}`,
+    '--shadow-inset-success': `inset 0 0 0 1px ${withAlpha(green.dark[55], '50')}`,
+    '--shadow-inset-warning': `inset 0 0 0 1px ${withAlpha(yellow.dark[75], '50')}`,
+    '--shadow-inset-error': `inset 0 0 0 1px ${withAlpha(red.dark[75], '50')}`,
   },
 
   components: {
@@ -316,28 +299,20 @@ export const gothicTheme = defineTheme({
         borderRadius: 'var(--radius-element)',
       },
       'status:info': {
-        backgroundColor: 'var(--color-background-blue)',
-        '--color-text-primary': 'var(--color-text-blue)',
-        '--color-text-secondary': 'var(--color-text-blue)',
-        '--color-accent': 'var(--color-text-blue)',
+        '--color-info-muted': 'var(--color-background-blue)',
+        '--color-on-info-muted': 'var(--color-text-blue)',
       },
       'status:success': {
-        backgroundColor: 'var(--color-background-green)',
-        '--color-text-primary': 'var(--color-text-green)',
-        '--color-text-secondary': 'var(--color-text-green)',
-        '--color-success': 'var(--color-text-green)',
+        '--color-success-muted': 'var(--color-background-green)',
+        '--color-on-success-muted': 'var(--color-text-green)',
       },
       'status:warning': {
-        backgroundColor: 'var(--color-background-yellow)',
-        '--color-text-primary': 'var(--color-text-yellow)',
-        '--color-text-secondary': 'var(--color-text-yellow)',
-        '--color-warning': 'var(--color-text-yellow)',
+        '--color-warning-muted': 'var(--color-background-yellow)',
+        '--color-on-warning-muted': 'var(--color-text-yellow)',
       },
       'status:error': {
-        backgroundColor: 'var(--color-background-red)',
-        '--color-text-primary': 'var(--color-text-red)',
-        '--color-text-secondary': 'var(--color-text-red)',
-        '--color-error': 'var(--color-text-red)',
+        '--color-error-muted': 'var(--color-background-red)',
+        '--color-on-error-muted': 'var(--color-text-red)',
       },
     },
 
@@ -424,11 +399,11 @@ export const gothicTheme = defineTheme({
 });
 
 /**
- * Raw tonal palettes — every color at every tone step (0–100 in 5s).
- * Use these for custom components or data visualization.
- *
- * Categorical hues (blue, green, etc.) follow gothic gem-tone hues.
- * Neutral mirrors the original gothic blue-gray palette (H≈210).
+ * Frozen released compatibility palettes. These values preserve the public
+ * `gothicPalettes` shape and values for existing consumers; the maintained
+ * theme renders selected stops from `gothicPalettes.generated.ts` instead.
+ * Components should consume semantic theme tokens, and charts should use the
+ * data-visualization color API.
  */
 export const gothicPalettes = {
   // Neutral — H=210 C=4 (cool blue-gray, original gothic)

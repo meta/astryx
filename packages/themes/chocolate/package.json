@@ -1,19 +1,19 @@
 {
   "name": "@astryxdesign/theme-chocolate",
-  "version": "0.7.2",
+  "version": "0.7.6",
   "displayName": "Chocolate Theme",
   "private": false,
-  "description": "Warm chocolate theme for Astryx — rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
+  "description": "Warm chocolate theme for Astryx \u2014 rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/themes/chocolate"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -51,20 +51,34 @@
     "dist",
     "src",
     "fonts.css",
-    "fonts.css.d.ts"
+    "fonts.css.d.ts",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../../scripts/api-report/cli.mjs --package .",
     "build": "node ../../../scripts/clean-dist.mjs && astryx theme build src/chocolateTheme.ts -o dist/theme.css --icons-specifier ./icons.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.18.0"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.2",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19"
   },
   "devDependencies": {
-    "@astryxdesign/cli": "0.7.2"
+    "@astryxdesign/cli": "0.7.6"
   },
   "module": "./dist/source.mjs"
 }

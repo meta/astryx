@@ -83,6 +83,8 @@ const headerStyles = stylex.create({
 
 const headerDividerStyles = stylex.create({
   cell: {
+    // For a pinned header cell's own divider to match (plugins/stickyColumns).
+    '--_table-row-divider-width': borderVars['--border-width'],
     borderBottomWidth: borderVars['--border-width'],
     borderBottomStyle: 'solid',
     borderBottomColor: colorVars['--color-border'],

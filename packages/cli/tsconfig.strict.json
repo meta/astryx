@@ -15,6 +15,8 @@
     "clients/**/*.ts",
     "foundation/**/*.mjs",
     "foundation/**/*.ts",
+    "host/**/*.mjs",
+    "host/**/*.ts",
     "lib/**/*.mjs",
     "lib/**/*.ts",
     "utils/**/*.mjs",

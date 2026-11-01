@@ -23,17 +23,50 @@
  * overlay loading, and resolution they share sit in _adapter.mjs.
  */
 
-import {list} from './list/list.mjs';
-import {index} from './index/index.mjs';
-import {detail} from './detail/detail.mjs';
+import {list as listRead} from './list/list.mjs';
+import {index as indexRead} from './index/index.mjs';
+import {detail as detailRead} from './detail/detail.mjs';
 import {
   namespaceSection,
-  section as sectionLeaf,
+  section as sectionRead,
 } from './detail/section/section.mjs';
-import {node as nodeLeaf, nodeView} from './node/node.mjs';
+import {node as nodeRead, nodeView} from './node/node.mjs';
 import {resolveDocsArgument} from './_adapter.mjs';
 import {AstryxError} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
+import {
+  docPackageManager,
+  formatCliCommand,
+  runWithDocPackageManager,
+} from '../../foundation/env/package-manager.mjs';
+
+/**
+ * Run a docs read with `{@pm}` steps rendered for the project in `cwd`, the
+ * folder the read is about, not the process's working directory. A host that
+ * already chose a package manager keeps its choice.
+ * @template T
+ * @param {string | undefined} cwd
+ * @param {() => T} fn
+ * @returns {T}
+ */
+function inProject(cwd, fn) {
+  return runWithDocPackageManager(docPackageManager(cwd ?? process.cwd()), fn);
+}
+
+/** @type {typeof listRead} */
+const list = (options = {}) => inProject(options?.cwd, () => listRead(options));
+/** @type {typeof indexRead} */
+const index = (topic, options = {}) =>
+  inProject(options?.cwd, () => indexRead(topic, options));
+/** @type {typeof detailRead} */
+const detail = (topic, options = {}) =>
+  inProject(options?.cwd, () => detailRead(topic, options));
+/** @type {typeof sectionRead} */
+const sectionLeaf = (topic, sectionName, options = {}) =>
+  inProject(options?.cwd, () => sectionRead(topic, sectionName, options));
+/** @type {typeof nodeRead} */
+const nodeLeaf = (route, options = {}) =>
+  inProject(options?.cwd, () => nodeRead(route, options));
 
 export {list, index, detail, sectionLeaf as section, nodeLeaf as node};
 
@@ -97,6 +130,23 @@ function depthRead(options) {
  * >}
  */
 export async function docs(topic, section, options = {}) {
+  return inProject(options.cwd, () => docsRead(topic, section, options));
+}
+
+/**
+ * The docs read itself, inside its project's package-manager scope.
+ * @param {string} [topic]
+ * @param {string} [section]
+ * @param {any} [options]
+ * @returns {Promise<
+ *   import('./docs.type.mjs').DocsListResponse |
+ *   import('./docs.type.mjs').DocsIndexResponse |
+ *   import('./docs.type.mjs').DocsDetailResponse |
+ *   import('./docs.type.mjs').DocsDetailSectionResponse |
+ *   import('./docs.type.mjs').DocsNodeResponse
+ * >}
+ */
+async function docsRead(topic, section, options = {}) {
   const read = depthRead(options);
   if (!topic) return list(options);
   const found = await resolveDocsArgument(topic, options);
@@ -108,7 +158,7 @@ export async function docs(topic, section, options = {}) {
         return namespaceSection(found.tree, found.node, section, options);
       }
       throw new AstryxError(
-        `"${found.node.route}" has no sections. Read it whole: astryx docs ${found.node.route}.`,
+        `"${found.node.route}" has no sections. Read it whole: ${formatCliCommand(`docs ${found.node.route}`)}.`,
         [{name: found.node.route, reason: found.node.summary}],
         ERROR_CODES.ERR_UNKNOWN_SECTION,
       );

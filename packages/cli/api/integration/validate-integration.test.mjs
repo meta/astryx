@@ -80,6 +80,28 @@ describe('validate-integration API', () => {
     expect(errors).toBe(0);
   });
 
+  it('warns, with a fix and the file, on docs no reader can serve', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default { docs: './docs' };\n`,
+    });
+    fs.mkdirSync(path.join(pkgDir, 'docs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkgDir, 'docs', 'ghost.doc.zh.mjs'),
+      "export default {title: 'ghost'};\n",
+    );
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    expect(byCode(result.issues, 'orphan_doc_overlay')).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        file: 'docs/ghost.doc.zh.mjs',
+        fix: expect.stringContaining('Delete docs/ghost.doc.zh.mjs'),
+      }),
+    ]);
+  });
+
   it('reports an unknown manifest key as a warning, and still loads the rest', async () => {
     // The manifest used to be parsed with a strict schema, so a single unknown
     // key failed the parse — and an integration whose manifest fails to parse
@@ -174,6 +196,17 @@ describe('validate-integration API', () => {
     const agentDocsIssues = byCode(result.issues, 'invalid_agent_docs');
     expect(agentDocsIssues).toHaveLength(1);
     expect(agentDocsIssues[0].severity).toBe('error');
+  });
+
+  it('reports nothing for a docsiteUrl', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default {docsiteUrl: 'https://widgets.example.com'};\n`,
+    });
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    expect(result.issues).toEqual([]);
   });
 
   it('flags a broken codemod as invalid_codemod error', async () => {
@@ -307,6 +340,36 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
       byCode(result.issues, 'source_without_component_doc')[0].message,
     ).toContain(
       "Fix: add InvisibleWidget.doc.mjs beside it with type: 'component'",
+    );
+  });
+
+  it('warns when a template source has no same-stem metadata, skipping test files', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default { templates: './templates' };\n`,
+    });
+    fs.mkdirSync(path.join(pkgDir, 'templates'));
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', 'stray.tsx'),
+      'export default function Stray() { return null; }\n',
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', 'stray.test.tsx'),
+      "import {it} from 'vitest';\nit('renders', () => {});\n",
+    );
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    const warnings = byCode(result.issues, 'source_without_template_doc');
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        message: expect.stringContaining('"stray.tsx"'),
+      }),
+    ]);
+    expect(warnings[0].message).not.toContain('stray.test.tsx');
+    expect(warnings[0].message).toContain(
+      "Fix: add stray.doc.mjs beside it with type: 'page' or 'block'",
     );
   });
 
@@ -582,7 +645,10 @@ describe('integration diagnostics are read-only', () => {
       'components/Orphan.doc.mjs',
       "export default {type: 'component', name: 'Orphan', props: []};\n",
     );
-    write('templates/dash.doc.mjs', "export default {type: 'page', name: 'Dash'};\n");
+    write(
+      'templates/dash.doc.mjs',
+      "export default {type: 'page', name: 'Dash'};\n",
+    );
     write(
       'docs/theme.doc.mjs',
       "export default {type: 'generic', name: 'theme', title: 'Theme', description: 'x', sections: [{title: 'A', content: [{type: 'prose', text: 'x'}]}]};\n",
@@ -603,7 +669,9 @@ describe('integration diagnostics are read-only', () => {
       path.join(consumer, 'package.json'),
       JSON.stringify({name: 'consumer'}),
     );
-    writeDiagnosedPackage(path.join(consumer, 'node_modules', '@acme', 'widgets'));
+    writeDiagnosedPackage(
+      path.join(consumer, 'node_modules', '@acme', 'widgets'),
+    );
     const before = {pkg: snapshot(pkgDir), consumer: snapshot(consumer)};
 
     const local = await validateIntegration(undefined, {cwd: pkgDir});
@@ -620,9 +688,13 @@ describe('integration diagnostics are read-only', () => {
     }
 
     expect(summarizeIssues(local.data.issues).errors).toBeGreaterThan(0);
-    expect(byCode(local.data.issues, 'unreachable_contribution')).toHaveLength(1);
+    expect(byCode(local.data.issues, 'unreachable_contribution')).toHaveLength(
+      1,
+    );
     expect(summarizeIssues(installed.data.issues).errors).toBeGreaterThan(0);
-    expect({pkg: snapshot(pkgDir), consumer: snapshot(consumer)}).toEqual(before);
+    expect({pkg: snapshot(pkgDir), consumer: snapshot(consumer)}).toEqual(
+      before,
+    );
   });
 });
 
@@ -644,7 +716,9 @@ describe('validated separates "checked and clean" from "never checked"', () => {
     expect(validate.data.issues).toEqual([]);
 
     const templates = await integrationTemplateConflicts(undefined, {cwd: dir});
-    const components = await integrationComponentConflicts(undefined, {cwd: dir});
+    const components = await integrationComponentConflicts(undefined, {
+      cwd: dir,
+    });
     const docs = await integrationDocConflicts(undefined, {cwd: dir});
     expect(templates.data.validated).toBe(false);
     expect(components.data.validated).toBe(false);
@@ -660,7 +734,9 @@ describe('validated separates "checked and clean" from "never checked"', () => {
     expect(validate.data.name).toBe('@acme/widgets');
 
     const templates = await integrationTemplateConflicts(undefined, {cwd: dir});
-    const components = await integrationComponentConflicts(undefined, {cwd: dir});
+    const components = await integrationComponentConflicts(undefined, {
+      cwd: dir,
+    });
     const docs = await integrationDocConflicts(undefined, {cwd: dir});
     expect(templates.data.validated).toBe(true);
     expect(components.data.validated).toBe(true);
@@ -732,8 +808,12 @@ describe('unreadable folders are reported, never fatal', () => {
       expect(
         byCode(result.issues, 'unreadable_root').map(issue => issue.message),
       ).toEqual([
-        expect.stringMatching(/^Declared codemods root cannot be read \(EACCES\)/),
-        expect.stringMatching(/^Declared themes root cannot be read \(EACCES\)/),
+        expect.stringMatching(
+          /^Declared codemods root cannot be read \(EACCES\)/,
+        ),
+        expect.stringMatching(
+          /^Declared themes root cannot be read \(EACCES\)/,
+        ),
       ]);
     },
   );

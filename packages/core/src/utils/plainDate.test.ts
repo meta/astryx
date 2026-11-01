@@ -1,12 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, afterEach} from 'vitest';
 import {
   type PlainDate,
   plainDateCreate,
   plainDateFromISO,
   plainDateToISO,
   plainDateToDate,
+  dateTimeFormatFor,
   plainDateFromDate,
   plainDateToday,
   getDaysInMonth,
@@ -28,6 +29,7 @@ import {
   plainDateGetWeekNumber,
   plainDateFormat,
   formatSharedDate,
+  DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
@@ -711,6 +713,42 @@ describe('plainDateGetWeekNumber', () => {
     expect(plainDateGetWeekNumber({year: 2026, month: 1, day: 4})).toBe(1);
   });
 
+  // Regression: the week number must not depend on the host timezone's DST
+  // offset. Zones whose DST ends after New Year (southern hemisphere) used to
+  // add a phantom hour to the Thursday-vs-Jan-1 day count, and in years whose
+  // Jan 1 is a Friday that hour rounded a whole week up.
+  describe('DST independence', () => {
+    const originalTZ = process.env.TZ;
+
+    afterEach(() => {
+      if (originalTZ === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTZ;
+      }
+    });
+
+    it.each(['Australia/Sydney', 'Pacific/Auckland', 'America/Santiago'])(
+      'does not round week 14 up to 15 in %s (DST ends after New Year)',
+      zone => {
+        process.env.TZ = zone;
+        // 2021-01-01 is a Friday, so every ISO Thursday falls on a whole
+        // multiple of 7 days into the year. 2021-04-05..11 is ISO week 14.
+        expect(plainDateGetWeekNumber({year: 2021, month: 4, day: 5})).toBe(14);
+        expect(plainDateGetWeekNumber({year: 2021, month: 4, day: 8})).toBe(14);
+        expect(plainDateGetWeekNumber({year: 2021, month: 4, day: 11})).toBe(
+          14,
+        );
+      },
+    );
+
+    it('keeps late-December weeks correct in Australia/Sydney', () => {
+      process.env.TZ = 'Australia/Sydney';
+      // 2027-12-30 (Thursday) is ISO week 52, not 53.
+      expect(plainDateGetWeekNumber({year: 2027, month: 12, day: 30})).toBe(52);
+    });
+  });
+
   it('keeps years 1-99 instead of mapping them to 1900-1999', () => {
     // 0004-01-01 is a Thursday (ISO week 1); 1904-01-01 was a Friday.
     expect(plainDateGetWeekNumber({year: 4, month: 1, day: 1})).toBe(1);
@@ -718,6 +756,94 @@ describe('plainDateGetWeekNumber', () => {
 });
 
 describe('plainDateFormat', () => {
+  it('keeps one formatter per locale and options, whatever order the options are in', () => {
+    // A month of day labels, as a calendar renders them, reuses one formatter.
+    const first = dateTimeFormatFor('en-NZ', DATE_FORMAT_WITH_WEEKDAY);
+    expect(dateTimeFormatFor('en-NZ', DATE_FORMAT_WITH_WEEKDAY)).toBe(first);
+    expect(
+      dateTimeFormatFor('en-NZ', {
+        year: 'numeric',
+        day: 'numeric',
+        month: 'long',
+        weekday: 'long',
+      }),
+    ).toBe(first);
+    // Other options, or another locale, get their own.
+    expect(dateTimeFormatFor('en-NZ', DATE_FORMAT_MONTH_YEAR)).not.toBe(first);
+    expect(dateTimeFormatFor('en-ZA', DATE_FORMAT_WITH_WEEKDAY)).not.toBe(
+      first,
+    );
+  });
+
+  it('formats the same date after the host zone moves', () => {
+    // The page stays open while the device travels east: a formatter cached
+    // in the first zone must not move the date.
+    const zone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_MONTH_YEAR,
+          'en-IE',
+        ),
+      ).toBe('February 2026');
+      process.env.TZ = 'America/New_York';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_MONTH_YEAR,
+          'en-IE',
+        ),
+      ).toBe('February 2026');
+      process.env.TZ = 'Pacific/Kiritimati';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 2, day: 1},
+          DATE_FORMAT_WITH_WEEKDAY,
+          'en-IE',
+        ),
+      ).toBe('Sunday 1 February 2026');
+    } finally {
+      if (zone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = zone;
+      }
+    }
+  });
+
+  it('prints a zone name or a time of day in the host zone, as before', () => {
+    // A PlainDate has neither: such fields read local midnight in the zone
+    // current at the call, not the UTC the date-only path formats in.
+    const zone = process.env.TZ;
+    try {
+      process.env.TZ = 'America/Los_Angeles';
+      const withZone = plainDateFormat(
+        {year: 2026, month: 1, day: 25},
+        {...DATE_FORMAT_LONG, timeZoneName: 'short'},
+        'en-US',
+      );
+      expect(withZone).toContain('January 25, 2026');
+      expect(withZone).toContain('PST');
+      expect(withZone).not.toContain('UTC');
+      process.env.TZ = 'America/New_York';
+      expect(
+        plainDateFormat(
+          {year: 2026, month: 1, day: 25},
+          {...DATE_FORMAT_LONG, timeZoneName: 'short'},
+          'en-US',
+        ),
+      ).toContain('EST');
+    } finally {
+      if (zone === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = zone;
+      }
+    }
+  });
+
   it('returns a human-readable date string with weekday', () => {
     const result = plainDateFormat(
       {year: 2026, month: 1, day: 25},

@@ -30,6 +30,12 @@ export interface SegmentedControlContextValue {
    * tooltip is keyboard-discoverable; selection is still blocked.
    */
   hasDisabledMessage?: boolean;
+  /**
+   * The id of the group's disabled-reason tooltip while `hasDisabledMessage`
+   * is true. It also describes each segment, so the segment that has focus is
+   * described by the reason (spec:AST-085 FR5).
+   */
+  disabledReasonID?: string;
 }
 
 export const SegmentedControlContext =

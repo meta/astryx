@@ -71,6 +71,13 @@ const CLIENT_APIS = new Set([
 
 const EXTENSIONS = ['.tsx', '.ts', '.mjs', '.js', '.jsx'];
 
+/**
+ * `'use client'` modules a server-safe component may render as a client
+ * island: each does nothing on the server, so the component's server output
+ * is unchanged. The walk stops at them.
+ */
+const CLIENT_ISLANDS = new Set(['hooks/AnnounceRenderedText.tsx']);
+
 const isSourceFile = (name: string) =>
   /\.[jt]sx?$/.test(name) &&
   !/\.(test|test-violations|stories|doc|perf)\./.test(name) &&
@@ -357,6 +364,9 @@ function findClientSurfaces(
       continue;
     }
     visited.add(key);
+    if (CLIENT_ISLANDS.has(relative(SRC_DIR, file))) {
+      continue;
+    }
 
     const info = parseModule(file);
     const chain = via.join(' -> ');

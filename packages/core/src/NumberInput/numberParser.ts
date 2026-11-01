@@ -29,6 +29,9 @@
  * read off the input: SEPARATOR_CHARS below is a bounded alphabet, the same
  * shape utils/dateParser.ts uses for its `[-/.]` date separators.
  *
+ * Digit-script folding is shared with utils/timeFormat.ts through
+ * utils/unicodeDigits.ts.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/NumberInput/NumberInput.tsx
  * - /packages/core/src/NumberInput/numberParser.test.ts
@@ -36,6 +39,7 @@
  */
 
 import type {Locale} from '../i18n';
+import {INVISIBLE_CHARS, toAsciiDigits} from '../utils/unicodeDigits';
 
 interface LocaleNumberSymbols {
   group: string;
@@ -80,15 +84,9 @@ function getLocaleNumberSymbols(locale: Locale | undefined) {
   return symbols;
 }
 
-// Built at runtime rather than written as literals: Babel's
-// transform-unicode-property-regex rewrites a `\p{...}` regex LITERAL into an
-// enumerated character class, and the copy bundled with Next rejects the
-// General_Category short names, failing the sandbox build. Property escapes are
-// ES2018 and need no transform in any browser this package supports.
-const DECIMAL_DIGIT = new RegExp('\\p{Nd}', 'u');
+// Built at runtime rather than written as a literal: see
+// utils/unicodeDigits.ts (Babel's property-escape transform).
 const CURRENCY = new RegExp('\\p{Sc}', 'u');
-// Zero-width joiners, bidi isolates and the BOM Excel prepends.
-const INVISIBLES = /[\u200B-\u200D\u200E\u200F\u061C\u2066-\u2069\uFEFF]/g;
 // Hyphen last: inside the character class this builds, a leading one would
 // open a range.
 const MINUS_SIGNS = '\u2212\u2012\u2013-';
@@ -110,42 +108,6 @@ const SEPARATOR_CHARS = ",.' \u2019\u066B\u066C";
 const NUMBER_BODY = new RegExp(`^[0-9${SEPARATOR_CHARS}]+$`);
 /** No grouping and at most one full stop: the format `Number()` reads. */
 const MACHINE_NUMBER = /^(?:\d+\.?\d*|\.\d+)$/;
-
-/**
- * Value of any Unicode decimal digit. Each digit script lays its ten digits
- * out consecutively, so walking back to the script's zero derives the value
- * for Arabic-Indic, Devanagari, full-width and the rest without shipping a
- * table of them. Returns null in the one shape the walk cannot resolve: two
- * digit blocks adjacent in code space (the mathematical alphanumerics).
- */
-function digitValue(char: string): number | null {
-  const codePoint = char.codePointAt(0);
-  if (codePoint == null) {
-    return null;
-  }
-  for (let zero = codePoint; codePoint - zero < 10; zero--) {
-    if (!DECIMAL_DIGIT.test(String.fromCodePoint(zero - 1))) {
-      return codePoint - zero;
-    }
-  }
-  return null;
-}
-
-function toAsciiDigits(text: string): string | null {
-  let out = '';
-  for (const char of text) {
-    if (!DECIMAL_DIGIT.test(char)) {
-      out += char;
-      continue;
-    }
-    const value = digitValue(char);
-    if (value == null) {
-      return null;
-    }
-    out += String(value);
-  }
-  return out;
-}
 
 /**
  * Reduce a digits-and-separators string to a plain machine number under one
@@ -302,7 +264,7 @@ export function parseLocaleNumber(
   locale?: Locale,
 ): number | null {
   const normalized = toAsciiDigits(
-    text.normalize('NFKC').replace(INVISIBLES, ''),
+    text.normalize('NFKC').replace(INVISIBLE_CHARS, ''),
   );
   if (normalized == null) {
     return null;

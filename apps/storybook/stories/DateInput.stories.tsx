@@ -72,7 +72,7 @@ const meta: Meta<typeof DateInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the focusable controls of the field (activation stays blocked). Use this instead of wrapping a disabled DateInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -320,9 +320,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled DateInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby on the field's focusable controls (activation is still
+// blocked). Use disabledMessage instead of wrapping a disabled DateInput in
+// Tooltip, so the reason is tied to the field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<ISODateString | undefined>(undefined);

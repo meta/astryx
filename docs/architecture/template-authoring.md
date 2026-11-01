@@ -170,10 +170,10 @@ authoring check; it does not replace runtime catalog validation.
 
 This record does not absorb adjacent facts:
 
-- The shipped `cli/integrations/templates/template-quality` guide owns the public
+- The shipped `authoring/building-blocks/templates/write-good-templates` guides own the public
   grading rules, rubric version, grade bands, categories, weights, and agent
   workflow. The public
-  [Contributing Templates](https://github.com/facebook/astryx/wiki/Contributing-Templates)
+  [Contributing Templates](https://github.com/meta/astryx/wiki/Contributing-Templates)
   guide owns contributor workflow and the score-ledger publication procedure,
   and links to the shipped rubric instead of copying it. Its current statement
   that renaming is breaking is superseded by `spec:AST-017/DEC-2`.

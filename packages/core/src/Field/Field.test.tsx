@@ -2,7 +2,7 @@
 
 /**
  * @file Field.test.tsx
- * @input Uses vitest, @testing-library/react, Field component
+ * @input Uses Vitest, Testing Library, StyleX, Field, FormLayoutContext
  * @output Unit tests for Field component behavior
  * @position Testing; validates Field.tsx implementation
  *
@@ -10,10 +10,17 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, screen, waitFor} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {Field} from './Field';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+
+const testStyles = stylex.create({
+  root: {
+    minWidth: '123px',
+  },
+});
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
@@ -571,6 +578,57 @@ describe('Field', () => {
         {children}
       </FormLayoutContext>
     );
+
+    it('composes root props without letting callers replace layout semantics', () => {
+      const onClick = vi.fn();
+      const expectedXstyleClass = stylex.props(testStyles.root).className;
+      if (expectedXstyleClass == null) {
+        throw new Error('Expected the test xstyle to produce a class name.');
+      }
+
+      render(
+        <Field
+          label="Name"
+          inputID="name-input"
+          data-testid="field"
+          data-layout="consumer"
+          data-owner="consumer"
+          className="consumer-class"
+          style={{width: '321px'}}
+          xstyle={testStyles.root}
+          onClick={onClick}>
+          <input id="name-input" />
+        </Field>,
+        {wrapper: horizontalLabelsWrapper},
+      );
+
+      const field = screen.getByTestId('field');
+      expect(field).toHaveClass('astryx-field', 'consumer-class');
+      expect(field).toHaveClass(expectedXstyleClass);
+      expect(field).toHaveAttribute('data-layout', 'horizontal-labels');
+      expect(field).toHaveAttribute('data-owner', 'consumer');
+      expect(field).toHaveStyle({width: '321px'});
+      fireEvent.click(field);
+      expect(onClick).toHaveBeenCalledOnce();
+    });
+
+    it('visually hides the description in horizontal-label mode when the label is hidden', () => {
+      render(
+        <Field
+          label="Search"
+          inputID="search-input"
+          isLabelHidden
+          description="Search for items"
+          descriptionID="search-desc">
+          <input id="search-input" aria-describedby="search-desc" />
+        </Field>,
+        {wrapper: horizontalLabelsWrapper},
+      );
+
+      const description = screen.getByText('Search for items');
+      expect(description.className).toContain('visuallyHidden');
+      expect(description).toHaveAttribute('id', 'search-desc');
+    });
 
     it('applies display:contents when in horizontal-labels context', () => {
       const {container} = render(

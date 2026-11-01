@@ -763,9 +763,13 @@ describe('Pagination', () => {
         />,
       );
       const dot = screen.getByRole('button', {name: 'Go to page 2'});
-      expect(dot).toBeDisabled();
+      // spec:AST-085 FR1: the active dot keeps its tab stop, exposed as disabled.
+      expect(dot).not.toHaveAttribute('disabled');
+      expect(dot).toHaveAttribute('aria-disabled', 'true');
       dot.focus();
+      expect(dot).toHaveFocus();
       await user.keyboard('{ArrowRight}');
+      await user.keyboard('{Enter} ');
       expect(onChange).not.toHaveBeenCalled();
     });
   });
@@ -961,7 +965,7 @@ describe('Pagination', () => {
         />,
       );
       const box = screen.getByRole('spinbutton', {name: 'Go to page'});
-      expect(box).toBeDisabled();
+      expect(box).toHaveAttribute('aria-disabled', 'true');
       // Disabled input never fires a change.
       await user.type(box, '5{Enter}');
       expect(onChange).not.toHaveBeenCalled();
@@ -995,7 +999,7 @@ describe('Pagination', () => {
       // editable box is inert rather than accepting entries it can't resolve.
       expect(
         screen.getByRole('spinbutton', {name: 'Go to page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('renders the localized "Page" label by default and a custom pageLabel', () => {

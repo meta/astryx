@@ -64,6 +64,7 @@ function writeIntegration(name, components, peers) {
         type: 'component',
         name: componentName,
         displayName: componentName,
+        import: `${name}/components/${componentName}`,
         ...(replaces ? {replaces} : {}),
         keywords: ['acme'],
         usage: {description: `${componentName} for Acme apps.`},

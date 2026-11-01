@@ -135,6 +135,36 @@ export const InlineWithText: Story = {
   ),
 };
 
+/**
+ * `maxLines={1}` inside a fixed-width line: the link, as an anchor or as a
+ * button, stops at the line and draws an ellipsis.
+ */
+export const TruncatedInConstrainedLine: Story = {
+  tags: ['!autodocs'],
+  render: () => (
+    <div style={{display: 'grid', gap: 12, width: 220}} data-truncation-host="">
+      {(['anchor', 'button'] as const).map(form => (
+        <p
+          key={form}
+          data-truncation-line={form}
+          style={{
+            margin: 0,
+            overflow: 'hidden',
+            whiteSpace: 'nowrap',
+            textOverflow: 'ellipsis',
+          }}>
+          <Link
+            href={form === 'anchor' ? '/meetings/weekly' : undefined}
+            onClick={form === 'button' ? () => {} : undefined}
+            maxLines={1}>
+            Weekly design review with the product and research teams
+          </Link>
+        </p>
+      ))}
+    </div>
+  ),
+};
+
 export const AllVariants: Story = {
   render: () => (
     <div
@@ -250,7 +280,7 @@ export const ButtonFallbackDisabled: Story = {
     docs: {
       description: {
         story:
-          'The button fallback supports the `isDisabled` prop with native `disabled` attribute.',
+          'The button fallback supports the `isDisabled` prop: it stays focusable with `aria-disabled` and ignores clicks, Enter and Space.',
       },
     },
   },

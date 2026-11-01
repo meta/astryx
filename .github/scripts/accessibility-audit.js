@@ -5,7 +5,7 @@
 /**
  * @description Runs accessibility audits on component stories using axe-core
  * @input --storybook-dir <path> --output <file> [--components <comma-separated>]
- *   [--stories <comma-separated-story-ids>] [--port <number>]
+ *   [--stories <comma-separated-story-ids>] [--port <number, 0 = any free>]
  *   [--ready-selector <css-selector>] [--concurrency <pages, default 1>]
  *   [--shard <i>/<n> --shard-output <file>] (scan every n-th story, write it)
  *   [--merge-shards <dir>] (read a complete shard set instead of scanning)
@@ -61,7 +61,7 @@ const hasFlag = (name) => args.includes(`--${name}`);
 const storybookDir = getArg('storybook-dir') || 'apps/storybook/dist';
 const outputFile = getArg('output') || 'a11y-report.json';
 const port = Number(getArg('port') || 6007);
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
+if (!Number.isInteger(port) || port < 0 || port > 65535) {
   throw new Error(`Invalid --port value: ${getArg('port')}`);
 }
 const componentsArg = getArg('components');
@@ -71,7 +71,7 @@ const requestedStories = (storiesArg || '').split(',').filter(Boolean);
 // --components present but EMPTY means the caller derived an explicit empty
 // audit set (pr-a11y on a PR whose core/src changes map to no component —
 // e.g. a shared test file). Audit nothing and pass. Only an ABSENT flag
-// means "all stories" (the a11y-weekly contract).
+// means "all stories" (the full release-check contract).
 const emptyComponentSet = componentsArg !== null && components.length === 0;
 if (storiesArg !== null && requestedStories.length === 0) {
   throw new Error('--stories requires at least one story id');
@@ -193,7 +193,9 @@ function createServer(dir, port) {
     });
 
     server.listen(port, () => {
-      console.log(`Storybook server running on http://localhost:${port}`);
+      console.log(
+        `Storybook server running on http://localhost:${server.address().port}`,
+      );
       resolve(server);
     });
   });
@@ -369,6 +371,8 @@ async function runAccessibilityAudit() {
   // A merge reads results; it starts no server and no browser.
   const scanning = mergeShardsDir === null;
   const server = scanning ? await createServer(storybookPath, port) : null;
+  // The port the server actually holds: `--port 0` lets the OS pick a free one.
+  const origin = server ? `http://localhost:${server.address().port}` : null;
   const browser = scanning ? await chromium.launch() : null;
   const componentResults = {};
   const auditedStoryIds = new Set();
@@ -381,24 +385,38 @@ async function runAccessibilityAudit() {
           reducedMotion: 'reduce',
         })
       : null;
+    // Animations are frozen from the page's first script on, however far the
+    // document has parsed: an adopted stylesheet needs no <head>.
+    if (context) {
+      await context.addInitScript(css => {
+        const sheet = new CSSStyleSheet();
+        sheet.replaceSync(css);
+        document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+      }, FREEZE_CSS);
+    }
 
     // Scan one story on a fresh page; returns its axe violations.
     const scanStory = async (component, story) => {
       const page = await context.newPage();
       try {
-        const url = `http://localhost:${port}/iframe.html?id=${story.id}&viewMode=story`;
-        // Higher timeout to accommodate axe-core's heavier DOM analysis
+        const url = `${origin}/iframe.html?id=${story.id}&viewMode=story`;
+        // The bound covers only the server's answer. Loading and rendering
+        // the story is CPU-bound, so the readiness gate waits for the outcome
+        // the page and Storybook report instead, with a per-story backstop
+        // that names a story that never renders (lib/a11y-story-readiness.js).
         await page.goto(url, {
-          waitUntil: 'domcontentloaded',
+          waitUntil: 'commit',
           timeout: 15000,
         });
-        await page.addStyleTag({ content: FREEZE_CSS }).catch(() => {});
         await waitForStoryReadiness(
           () =>
             page.evaluate(
               ({expectedOrigin, storyId}) => {
                 const currentUrl = new URL(window.location.href);
                 const root = document.querySelector('#storybook-root');
+                const preview = window.__STORYBOOK_PREVIEW__;
+                // Absent until the document has parsed its <body>.
+                const classes = document.body?.classList;
                 return {
                   url: currentUrl.href,
                   urlMatches:
@@ -406,19 +424,24 @@ async function runAccessibilityAudit() {
                     currentUrl.pathname === '/iframe.html' &&
                     currentUrl.searchParams.get('id') === storyId,
                   errorVisible:
-                    document.body.classList.contains('sb-show-errordisplay') ||
-                    document.body.classList.contains('sb-show-nopreview'),
-                  mainVisible:
-                    document.body.classList.contains('sb-show-main'),
+                    classes?.contains('sb-show-errordisplay') === true ||
+                    classes?.contains('sb-show-nopreview') === true,
+                  mainVisible: classes?.contains('sb-show-main') === true,
                   hasContent:
                     root != null &&
                     (root.childElementCount > 0 ||
                       (root.textContent ?? '').trim().length > 0),
+                  pageLoaded: document.readyState === 'complete',
+                  previewStarted: preview != null,
+                  renderPhase:
+                    preview?.selectionStore?.selection?.storyId === storyId
+                      ? (preview.currentRender?.phase ?? null)
+                      : null,
                 };
               },
-              {expectedOrigin: `http://localhost:${port}`, storyId: story.id},
+              {expectedOrigin: origin, storyId: story.id},
             ),
-          {timeoutMs: 5000, pollMs: 50},
+          {storyId: story.id, pollMs: 50},
         );
         if (readySelector != null) {
           await page.waitForSelector(readySelector, {

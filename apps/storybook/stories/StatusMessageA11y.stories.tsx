@@ -77,7 +77,6 @@ export const SpinnerDefaultLabelMounted = coreStory(
 export const SpinnerVisibleLabelMounted = coreStory(
   'spinner-visible-label-mounted',
 );
-export const ChatSystemStatusMounted = coreStory('chat-system-status-mounted');
 export const ProgressLoadingToComplete = coreStory(
   'progress-loading-to-complete',
 );
@@ -89,4 +88,3 @@ export const ProgressMarkFocusedUpdate = coreStory(
 export const ChatTypingEmptyToMessage = labStory(
   'chat-typing-empty-to-message',
 );
-export const ChatTypingNameMounted = labStory('chat-typing-name-mounted');

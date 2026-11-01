@@ -104,7 +104,7 @@ export const docs = {
     {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
-      description: 'Presentation policy forwarded to DropdownMenu. `adaptive` keeps the anchored popover on pointer-based layouts and uses a BottomSheet at 768px and below when the primary pointer is coarse.',
+      description: 'Presentation policy forwarded to DropdownMenu. `adaptive` keeps the anchored popover on pointer-based layouts and uses a BottomSheet on a compact touch screen: a coarse primary pointer, and a viewport narrower than the theme `md` breakpoint (768px by default) or shorter than 500px.',
       default: "'popover'",
     },
     {
@@ -204,7 +204,7 @@ export const docsZh = {
     {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
-      description: '菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且宽度不超过 768px 时使用 BottomSheet。',
+      description: '菜单呈现策略。`adaptive` 在指针布局中使用锚定浮层，在主指针为粗略指针且视口宽度小于主题的 `md` 断点（默认 768px）或高度小于 500px 时使用 BottomSheet。',
       default: "'popover'",
     },
     {

@@ -4,7 +4,7 @@
 
 /**
  * @file useTypeahead.ts
- * @input Uses React useCallback/useRef
+ * @input Uses React useCallback/useEffect/useRef
  * @output Exports useTypeahead hook for first-character (type-to-focus) search
  * @position Core hook; adds APG typeahead to menus, listboxes, and other
  *   collections. Composes with useListFocus/useGridFocus (or any collection)
@@ -14,7 +14,7 @@
  * - /packages/core/src/hooks/index.ts
  */
 
-import {useCallback, useRef} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
 
 export interface UseTypeaheadOptions {
   /**
@@ -134,6 +134,11 @@ export function useTypeahead(options: UseTypeaheadOptions): UseTypeaheadReturn {
       timeoutRef.current = undefined;
     }
   }, []);
+
+  // A collection that unmounts, or that an `<Activity>` boundary hides,
+  // mid-typing leaves no reset timer running and comes back with an empty
+  // buffer, as the reset would have left it.
+  useEffect(() => reset, [reset]);
 
   const scheduleReset = useCallback(() => {
     if (timeoutRef.current) {

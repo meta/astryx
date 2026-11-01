@@ -72,10 +72,12 @@ requirements. Assistive-technology evidence remains separately owned.
   public [Browser Support guide](../../../packages/cli/assets/docs/browser-support.doc.mjs)
   and record their source and refresh date. TypeScript targets, build targets, and
   feature tables are not support evidence.
-- **FR3 — Two explicit browser support rows are always included.** Independently
+- **FR3 — Explicit browser support rows are always included.** Independently
   of the generated Baseline coverage, Astryx explicitly supports:
-  - the latest stable Chrome release on desktop; and
-  - Safari on the latest stable iOS release.
+  - the latest stable Chrome release on desktop;
+  - Safari on the latest stable iOS release; and
+  - for touch presentations, Chrome on the latest stable Android release
+    (`spec:AST-094`).
 
   “Latest” means the current stable release identified and refreshed from
   authoritative browser release data, not a handwritten version. Other browsers
@@ -191,7 +193,7 @@ hydrating render can differ from the server's markup.
 
 ## Decision log
 
-### DEC-1 — Rolling Baseline tiers plus two official browser rows
+### DEC-1 — Rolling Baseline tiers plus official browser rows
 
 **Reference:** `spec:AST-013/DEC-1`
 **Decider:** `cixzhang`, `2026-09-01`
@@ -199,7 +201,8 @@ hydrating render can differ from the server's markup.
 Astryx uses current Web Platform Baseline for full support, Baseline minus two
 years for reduced fallback, and no promise below that tier. Latest stable Chrome
 on desktop and Safari on latest stable iOS are always included as official support
-and test rows independently of generated Baseline coverage. Generated compatibility
+and test rows independently of generated Baseline coverage, and touch
+presentations add Chrome on the latest stable Android (`spec:AST-094`). Generated compatibility
 rows and the named official test matrix remain distinct public facts.
 
 ### DEC-2 — Explicit support does not require proof on every change
@@ -207,7 +210,7 @@ rows and the named official test matrix remain distinct public facts.
 **Reference:** `spec:AST-013/DEC-2`
 **Decider:** `cixzhang`, `2026-09-02`
 
-DEC-1's two named browser rows are explicit support rows, not a required automated
+DEC-1's named browser rows are explicit support rows, not a required automated
 or per-change test matrix. Astryx investigates and fixes defects reproduced in
 those browsers, but routine changes do not need to prove every supported browser
 before landing. Actual-browser evidence is required when the change makes a

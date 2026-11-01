@@ -80,6 +80,77 @@ function createSearchSource(
   };
 }
 
+describe('isDisabled reaches every built-in value editor', () => {
+  const items = [
+    {id: 'a', label: 'Alpha'},
+    {id: 'b', label: 'Beta'},
+  ];
+  const enumValues = [
+    {value: 'a', label: 'Alpha'},
+    {value: 'b', label: 'Beta'},
+  ];
+  const cases: ReadonlyArray<[string, OperatorValue]> = [
+    ['string', {type: 'string'}],
+    [
+      'string with a search source',
+      {type: 'string', searchSource: createSearchSource(items)},
+    ],
+    [
+      'string_list',
+      {type: 'string_list', searchSource: createSearchSource(items)},
+    ],
+    ['integer', {type: 'integer'}],
+    ['float', {type: 'float'}],
+    ['time', {type: 'time'}],
+    ['date_absolute', {type: 'date_absolute'}],
+    ['date_relative', {type: 'date_relative'}],
+    ['date_range', {type: 'date_range'}],
+    ['enum', {type: 'enum', values: enumValues}],
+    ['enum_list', {type: 'enum_list', values: enumValues}],
+    [
+      'entity_list',
+      {type: 'entity_list', searchSource: createSearchSource(items)},
+    ],
+  ];
+
+  // Every form control the editor renders outside a closed popover (a date
+  // input's calendar stays mounted while closed, and its disabled trigger
+  // cannot open it), so a disabled built-in editor leaves nothing a person
+  // can type into, press, or open.
+  function controlsOf(container: HTMLElement): HTMLElement[] {
+    return Array.from(
+      container.querySelectorAll<HTMLElement>(
+        'input, textarea, button, select, [role="combobox"], [contenteditable="true"]',
+      ),
+    ).filter(element => {
+      const popover = element.closest<HTMLElement>('[popover]');
+      return (
+        element.getAttribute('aria-hidden') !== 'true' &&
+        (popover == null || popover.matches(':popover-open'))
+      );
+    });
+  }
+
+  const isUnavailable = (element: HTMLElement) =>
+    (element as HTMLInputElement).disabled === true ||
+    element.getAttribute('aria-disabled') === 'true';
+
+  it.each(cases)('%s', (_name, operatorValue) => {
+    const {container} = render(
+      <PowerSearchValueEditor
+        operatorValue={operatorValue}
+        filterValue={undefined}
+        onChange={() => {}}
+        config={stubConfig}
+        isDisabled
+      />,
+    );
+    const controls = controlsOf(container);
+    expect(controls.length).toBeGreaterThan(0);
+    expect(controls.filter(element => !isUnavailable(element))).toEqual([]);
+  });
+});
+
 // =============================================================================
 // #1103 — StringEditor ignores searchSource
 // =============================================================================

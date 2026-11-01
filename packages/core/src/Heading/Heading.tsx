@@ -45,7 +45,7 @@ import {
 import {useTruncation} from '../Text/useTruncation';
 import {resolveStyleColor} from '../Text/Text';
 import type {LayerPlacement} from '../Layer';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -253,8 +253,12 @@ export function Heading({
   // the closed built-in StyleX maps with an unknown name.
   const builtinType = type && isBuiltinHeadingType(type) ? type : undefined;
 
-  // Truncation detection
-  const truncation = useTruncation({maxLines});
+  // Truncation detection. Only the tooltip reads the measured overflow, so
+  // with the tooltip off the text is clipped by CSS alone and nothing is
+  // measured or observed.
+  const truncation = useTruncation({
+    maxLines: hasTruncateTooltip === false ? 0 : maxLines,
+  });
 
   // Tooltip for truncated text
   const tooltipPlacement: LayerPlacement =

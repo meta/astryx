@@ -10,7 +10,8 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {renderHook} from '@testing-library/react';
+import {Activity, type ReactNode} from 'react';
+import {render, renderHook} from '@testing-library/react';
 import {useTypeahead} from './useTypeahead';
 
 const LABELS = ['Apple', 'Apricot', 'Banana', 'Cherry'] as const;
@@ -84,6 +85,46 @@ describe('useTypeahead', () => {
     vi.advanceTimersByTime(800);
     api.onKeyDown(key('b')); // fresh buffer → Banana
     expect(onMatch).toHaveBeenLastCalledWith(2);
+  });
+
+  it('clears the pending buffer reset when the component unmounts', () => {
+    const {result, unmount} = renderHook(() =>
+      useTypeahead({getItemLabels: () => LABELS, onMatch: vi.fn()}),
+    );
+    result.current.onKeyDown(key('a'));
+    expect(vi.getTimerCount()).toBe(1);
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('empties the buffer when an Activity boundary hides the collection', () => {
+    const latest: {api: ReturnType<typeof useTypeahead> | null} = {api: null};
+    function Probe(): ReactNode {
+      latest.api = useTypeahead({
+        getItemLabels: () => LABELS,
+        onMatch: vi.fn(),
+      });
+      return null;
+    }
+    const {rerender} = render(
+      <Activity mode="visible">
+        <Probe />
+      </Activity>,
+    );
+    latest.api?.onKeyDown(key('a'));
+    rerender(
+      <Activity mode="hidden">
+        <Probe />
+      </Activity>,
+    );
+    expect(vi.getTimerCount()).toBe(0);
+    rerender(
+      <Activity mode="visible">
+        <Probe />
+      </Activity>,
+    );
+    // The typed prefix went with the hide, so a bare Space is not typeahead.
+    expect(latest.api?.onKeyDown(key(' '))).toBe(false);
   });
 
   it('skips disabled items', () => {

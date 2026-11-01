@@ -54,16 +54,9 @@ Every knowledge record declares `authority: draft | current | archived`.
   accept current `.github/DESIGNOWNERS` members. Legacy v1 `owners` metadata is
   descriptive and does not grant approval rights.
 - Pull requests that create, change, or archive a `current` record wait on the
-  `spec-owner-approval` status for their exact current head. Draft-only records
-  pass that status after validation without an owner review.
-- Any ENGOWNER can approve another author's current-record PR through GitHub
-  review. A DESIGNOWNER may do the same for current design or theme records and
-  normative design assets. When an eligible approver is also the PR author, they
-  comment `/approve-spec <full-head-sha>`. Any new commit invalidates that
-  approval.
-- A configured review app may relay an eligible owner's exact-head decision;
-  the gate counts it as that owner's command. `.github/REVIEW_GATE.md`
-  describes the relay.
+  review gate, `review-required`, until an owner approves their content with
+  `/approve-spec <full-sha>` or a review (`architecture:knowledge-contracts`
+  DEC-14). Draft-only records need no owner approval.
 - Only `current` documents guide implementation and review.
 - A specification describes durable ideal behavior independently of any one pull
   request. Pull requests and issues may appear only as clearly non-authoritative
@@ -111,11 +104,42 @@ base authority commit is its `origin/main` merge base, includes only
 `authority: current` records, and returns only the matched claims; draft records
 and nonmatching routes are omitted.
 
+An optional `path-applicability:v1` JSON block lists the repository paths a
+record governs when no placement, path field, name, or inherited link reaches
+them: `{"paths": ["apps/docsite/**"]}`. Patterns are repository-relative globs:
+`**` is a whole segment spanning any depth, `*` matches within one segment, and
+`?` matches one character. Like `review-applicability:v1`, it is an
+independently versioned overlay, so opting in does not migrate a record kind.
+A pattern must start with a literal path segment. Validation rejects
+malformed, unsafe, repeated, whole-repository, and no-match patterns. A match only locates the record for a path; claim scope and
+precedence are unchanged. `pnpm check:knowledge` also fails when a current record
+is reached from no tracked path that is not itself a record
+(`architecture:knowledge-contracts` INV25 and INV26).
+
 New record kinds should prefer one typed relationship list over parallel fields.
 If `system-spec` receives a future schema revision, replace its legacy
 `affects_*` fields with one typed `affects` list containing ids such as
 `architecture:*`, `family:*`, `theme:*`, and `contributing:*`; this PR does not
 change the v1 system-spec shape.
+
+Run `pnpm specs:for <path>` to list the current records linked to any repository
+path: the record's own placement, `applies_to` and `verified_by` entries, family
+and design membership, `affects_consumer_docs` ids, system-spec numbers the file
+cites in its text (not inside a record path), and the references those records
+inherit. Only visible records are followed, so a draft never adds a link unless
+`--include-draft` is passed. A reference scoped to one claim or
+decision (`spec:AST-NNN/FR3`) lists that claim, not the whole record. The specs that
+decided a linked record are listed separately, as are the global claims the
+matched component and module triggers route (the same selection as
+`review-global-baselines.mjs`). With `--diff origin/main` (or
+`--diff <base>..<head>`) it reads the change, lists its files when none are
+named, and puts first the claims whose owning record's `concerns` the added
+lines match. The default view lists the claims and the linked record ids; `--records`
+shows how each record links. A path with no linked record is reported as
+such. Records are read from the working tree, so on a pull-request branch the
+result includes that branch's proposed records and is not review authority.
+`pnpm specs:for --unrouted` lists tracked files with no governing record;
+`--unreached` lists current records that no other path reaches.
 
 Run `pnpm check:knowledge` to validate templates and records. Pure spec-record
 pull requests do not add Changesets because they do not publish package changes.

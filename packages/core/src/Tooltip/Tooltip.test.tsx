@@ -25,6 +25,7 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
+import {useRef} from 'react';
 import {Tooltip} from './Tooltip';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
@@ -84,17 +85,15 @@ describe('Tooltip', () => {
     expect(screen.getByRole('button', {name: 'Trigger'})).toBeInTheDocument();
   });
 
-  it('gives the tooltip layer role="tooltip" linked from the trigger', () => {
+  it('renders the content prop inside the tooltip layer', () => {
     render(
       <Tooltip content="Tooltip text">
         <button type="button">Trigger</button>
       </Tooltip>,
     );
-    const layer = screen.getByRole('tooltip', {hidden: true});
-    expect(layer).toHaveTextContent('Tooltip text');
-    // ARIA tooltip pattern: trigger references the layer via aria-describedby.
-    const trigger = screen.getByRole('button', {name: 'Trigger'});
-    expect(trigger.getAttribute('aria-describedby')).toBe(layer.id);
+    expect(screen.getByRole('tooltip', {hidden: true})).toHaveTextContent(
+      'Tooltip text',
+    );
   });
 
   it('calls onOpenChange(true) when shown via hover', async () => {
@@ -110,6 +109,29 @@ describe('Tooltip', () => {
 
     await waitFor(() => {
       expect(onOpenChange).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe('content taller than the room above and below (spec:AST-059 FR4)', () => {
+    it('carries the anchor-clear fallback list, so it never settles over its trigger', async () => {
+      render(
+        <Tooltip content="Tall tooltip" isDefaultOpen placement="below">
+          <button type="button">Trigger</button>
+        </Tooltip>,
+      );
+      const tooltip = await waitFor(() => {
+        const el = document.querySelector('[role="tooltip"]') as HTMLElement;
+        expect(el).not.toBeNull();
+        return el;
+      });
+      expect(tooltip.style.positionTryFallbacks).toMatch(
+        /^var\(--_astryx-layer-try-fallbacks, /,
+      );
+      expect(
+        tooltip.style.getPropertyValue('--_astryx-layer-clear-fallbacks'),
+      ).toBe(
+        '--astryx-layer-beside-end, --astryx-layer-beside-start, flip-block, --astryx-layer-fit-below, --astryx-layer-fit-above',
+      );
     });
   });
 
@@ -366,7 +388,11 @@ describe('Tooltip', () => {
       __resetInteractionModalityForTest();
     });
 
-    /** A tap: the pointer sequence a finger produces before hover is faked. */
+    /**
+     * A tap, in the order a browser dispatches it: the finger's pointer events,
+     * then the hover it synthesizes, then the `click` that says the touch was a
+     * tap and not the start of a scroll.
+     */
     const tap = (element: HTMLElement) => {
       // A finger's arrival fires pointerenter too, and that is the path a pen
       // must not take — cover it here rather than starting at pointerdown.
@@ -375,6 +401,14 @@ describe('Tooltip', () => {
       fireEvent.pointerUp(element, {pointerType: 'touch'});
       // Touch synthesizes hover after the press; the tooltip must not act on it.
       fireEvent.mouseEnter(element);
+      fireEvent.click(element);
+    };
+
+    /** A tap outside: what a finger landing and lifting elsewhere dispatches. */
+    const tapOutside = (element: HTMLElement) => {
+      fireEvent.pointerDown(element, {pointerType: 'touch'});
+      fireEvent.pointerUp(element, {pointerType: 'touch'});
+      fireEvent.click(element);
     };
 
     it('opens on a tap when the trigger performs no action', async () => {
@@ -480,9 +514,141 @@ describe('Tooltip', () => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
 
-      fireEvent.pointerDown(screen.getByRole('button', {name: 'Elsewhere'}), {
-        pointerType: 'touch',
+      tapOutside(screen.getByRole('button', {name: 'Elsewhere'}));
+
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
       });
+    });
+
+    it('opens when the finger lifts, not when it lands', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      // The finger is still down: it may be starting a scroll.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+      fireEvent.click(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+    });
+
+    it('never opens for a touch that turns into a scroll', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerEnter(trigger, {pointerType: 'touch'});
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      // The browser takes the touch for the page scroll: no tap follows.
+      fireEvent.pointerCancel(trigger, {pointerType: 'touch'});
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('never opens for a press the browser did not count as a tap', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      // A long press: the finger lifts, but the browser fires no click
+      // (it selected text or showed its own menu instead).
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalled();
+    });
+
+    it('does not take a later keyboard click for the tap of an earlier press', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip
+          content="What this metric means"
+          onOpenChange={onOpenChange}
+          touchTrigger="tap"
+          delay={0}>
+          <button type="button">Info</button>
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByRole('button', {name: 'Info'});
+      // A press that never became a tap ...
+      fireEvent.pointerDown(trigger, {pointerType: 'touch'});
+      fireEvent.pointerUp(trigger, {pointerType: 'touch'});
+      // ... then Enter on the focused button, which fires its own click.
+      fireEvent.keyDown(trigger, {key: 'Enter'});
+      fireEvent.click(trigger);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(true);
+    });
+
+    it('closes on a tap outside when the finger lifts, not when it lands', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+            Abbreviation
+          </Tooltip>
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+
+      tap(screen.getByText('Abbreviation'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+      });
+    });
+
+    it('closes when a scroll starts outside', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <>
+          <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+            Abbreviation
+          </Tooltip>
+          <p>Page content</p>
+        </>,
+      );
+
+      tap(screen.getByText('Abbreviation'));
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+
+      const page = screen.getByText('Page content');
+      fireEvent.pointerDown(page, {pointerType: 'touch'});
+      fireEvent.pointerCancel(page, {pointerType: 'touch'});
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -544,6 +710,7 @@ describe('Tooltip', () => {
       fireEvent.pointerEnter(trigger, {pointerType: 'pen', buttons: 0});
       fireEvent.pointerDown(trigger, {pointerType: 'pen'});
       fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+      fireEvent.click(trigger);
 
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
@@ -602,5 +769,51 @@ describe('Tooltip', () => {
         expect(onOpenChange).toHaveBeenCalledWith(true);
       });
     });
+  });
+});
+
+describe('Tooltip sibling mode (anchorRef)', () => {
+  // SideNavItem's collapsed rail tooltip renders the Tooltip inside the very
+  // element anchorRef points at. React attaches an ancestor's ref after its
+  // descendants' layout effects, so on mount the tooltip's effect used to see
+  // a null anchor and never retried (#7692).
+  it('attaches to an anchor it is rendered inside of', async () => {
+    const onOpenChange = vi.fn();
+    function AnchorInside() {
+      const anchorRef = useRef<HTMLDivElement>(null);
+      return (
+        <div ref={anchorRef}>
+          <button type="button">Inner</button>
+          <Tooltip
+            content="Sibling tooltip"
+            anchorRef={anchorRef}
+            delay={0}
+            onOpenChange={onOpenChange}
+          />
+        </div>
+      );
+    }
+
+    const {unmount} = render(<AnchorInside />);
+    const anchor = screen.getByRole('button', {name: 'Inner'})
+      .parentElement as HTMLElement;
+
+    // The anchor is described by the tooltip once the commit has attached refs.
+    await waitFor(() => {
+      expect(anchor.getAttribute('aria-describedby')).not.toBe('');
+    });
+    const layer = screen.getByRole('tooltip', {hidden: true});
+    expect(anchor.getAttribute('aria-describedby')).toBe(layer.id);
+
+    // Hovering the anchor opens the tooltip: the interaction listeners were
+    // attached to the late anchor too.
+    fireEvent.mouseEnter(anchor);
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledWith(true);
+    });
+
+    // Unmounting detaches: the aria-describedby the tooltip added is removed.
+    unmount();
+    expect(anchor.getAttribute('aria-describedby')).toBe(null);
   });
 });

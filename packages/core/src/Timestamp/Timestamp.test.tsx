@@ -11,6 +11,9 @@ import {
 } from 'vitest';
 import {render, screen, act, waitFor, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {Profiler} from 'react';
+import {hydrateRoot, type Root} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
 import {Timestamp} from './Timestamp';
 import {formatInstant} from './formatInstant';
 import {formatTooltipLines} from './tooltipEntries';
@@ -765,6 +768,20 @@ describe('Timestamp', () => {
       HTMLElement.prototype.hidePopover = originalHidePopover;
     });
 
+    it("keeps a caller's tabIndex while the hover card is attached (FR9)", async () => {
+      render(
+        <Timestamp
+          value={Date.now() / 1000 - 3600}
+          format="relative"
+          tabIndex={-1}
+          data-testid="ts"
+        />,
+      );
+      expect(screen.getByTestId('ts')).toHaveAttribute('tabindex', '-1');
+      await openTimestampHoverCard();
+      expect(screen.getByTestId('ts')).toHaveAttribute('tabindex', '-1');
+    });
+
     it('makes the <time> element focusable while the hover card is attached', () => {
       render(
         <Timestamp
@@ -1446,7 +1463,7 @@ describe('Timestamp pass-through props', () => {
     expect(time).toHaveAttribute('data-source', 'cms');
   });
 
-  it('keeps its own spelled-out label on a relative timestamp', () => {
+  it("keeps a caller's aria-label on a relative timestamp (FR5)", () => {
     render(
       <Timestamp
         value={Date.now()}
@@ -1460,9 +1477,185 @@ describe('Timestamp pass-through props', () => {
     expect({
       ariaLabel: stamp.getAttribute('aria-label'),
       dataSource: stamp.getAttribute('data-source'),
-    }).toEqual({
-      ariaLabel: expect.not.stringMatching(/^Caller label$/),
-      dataSource: 'cms',
+    }).toEqual({ariaLabel: 'Caller label', dataSource: 'cms'});
+  });
+
+  it('names a relative timestamp by the full date when the caller names nothing (FR5)', () => {
+    render(
+      <Timestamp
+        value={Date.now()}
+        format="relative"
+        aria-label={undefined}
+        data-testid="stamp"
+      />,
+    );
+    expect(screen.getByTestId('stamp').getAttribute('aria-label')).toMatch(
+      /\d{4}/,
+    );
+  });
+});
+
+/**
+ * Counts `new Date()` calls with no argument (reads of the current time) made
+ * while `run` executes.
+ */
+function countClockReads(run: () => void): number {
+  const ActiveDate = globalThis.Date;
+  let reads = 0;
+  class CountingDate extends ActiveDate {
+    constructor(...args: [] | [string | number | Date]) {
+      if (args.length === 0) {
+        reads += 1;
+      }
+      super(...(args as [string | number | Date]));
+    }
+  }
+  globalThis.Date = CountingDate as DateConstructor;
+  try {
+    run();
+  } finally {
+    globalThis.Date = ActiveDate;
+  }
+  return reads;
+}
+
+describe('Timestamp server rendering', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-25T12:00:00Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each(['date', 'date_time', 'time', 'unix_seconds'] as const)(
+    'never reads the current time for the absolute %s format',
+    format => {
+      const element = (
+        <Timestamp value="2026-03-25T10:00:00Z" format={format} />
+      );
+      expect(countClockReads(() => renderToString(element))).toBe(0);
+      expect(countClockReads(() => render(element))).toBe(0);
+    },
+  );
+
+  it.each(['relative', 'relative_short', 'auto'] as const)(
+    'renders the %s format as the full date and time in UTC on the server without reading the clock',
+    format => {
+      const value = '2026-03-25T10:00:00Z';
+      let html = '';
+      expect(
+        countClockReads(() => {
+          html = renderToString(<Timestamp value={value} format={format} />);
+        }),
+      ).toBe(0);
+      const host = document.createElement('div');
+      host.innerHTML = html;
+      expect(host.textContent).toBe(
+        formatInstant(new Date(value), 'date_time', 'en-US', {
+          timeZone: 'UTC',
+          isTimezoneShown: true,
+        }),
+      );
+    },
+  );
+
+  it('never commits the UTC placeholder when a client Timestamp switches to a relative format', () => {
+    const value = Date.now() / 1000 - 7200;
+    const committed: string[] = [];
+    function Spy({format}: {format: 'date' | 'relative'}) {
+      return (
+        <Profiler
+          id="ts"
+          onRender={() => {
+            committed.push(document.querySelector('time')?.textContent ?? '');
+          }}>
+          <Timestamp value={value} format={format} hasTooltip={false} />
+        </Profiler>
+      );
+    }
+    const {rerender} = render(<Spy format="date" />);
+    committed.length = 0;
+    rerender(<Spy format="relative" />);
+    expect(screen.getByText('2 hours ago')).toBeInTheDocument();
+    expect(committed.some(text => text.includes('UTC'))).toBe(false);
+  });
+
+  describe('across time zones', () => {
+    const originalTZ = process.env.TZ;
+
+    afterEach(() => {
+      if (originalTZ === undefined) {
+        delete process.env.TZ;
+      } else {
+        process.env.TZ = originalTZ;
+      }
     });
+
+    it('writes the same server markup whatever the server time zone', () => {
+      const element = (
+        <Timestamp value="2026-03-25T10:00:00Z" format="relative" />
+      );
+      process.env.TZ = 'UTC';
+      const utc = renderToString(element);
+      process.env.TZ = 'Asia/Tokyo';
+      expect(renderToString(element)).toBe(utc);
+    });
+
+    it('hydrates server markup from another time zone without a mismatch', () => {
+      const value = Date.now() / 1000 - 7200;
+      const element = (
+        <Timestamp value={value} format="relative" hasTooltip={false} />
+      );
+      process.env.TZ = 'UTC';
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      host.innerHTML = renderToString(element);
+
+      process.env.TZ = 'America/Los_Angeles';
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let root: Root | undefined;
+      try {
+        act(() => {
+          root = hydrateRoot(host, element, {
+            onRecoverableError: error => {
+              throw error;
+            },
+          });
+        });
+        expect(host.textContent).toBe('2 hours ago');
+        expect(errors).not.toHaveBeenCalled();
+      } finally {
+        errors.mockRestore();
+        act(() => root?.unmount());
+        host.remove();
+      }
+    });
+  });
+
+  it('hydrates the server markup without a mismatch, then shows the relative phrase', () => {
+    const value = Date.now() / 1000 - 7200;
+    const element = (
+      <Timestamp value={value} format="relative" hasTooltip={false} />
+    );
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = renderToString(element);
+    expect(host.textContent).not.toBe('2 hours ago');
+
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let root: Root | undefined;
+    try {
+      act(() => {
+        root = hydrateRoot(host, element);
+      });
+      expect(host.textContent).toBe('2 hours ago');
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      act(() => root?.unmount());
+      host.remove();
+    }
   });
 });

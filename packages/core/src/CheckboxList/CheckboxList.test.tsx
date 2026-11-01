@@ -22,6 +22,7 @@ import userEvent from '@testing-library/user-event';
 import {CheckboxList} from './CheckboxList';
 import {CheckboxListItem} from './CheckboxListItem';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {List} from '../List/List';
 
 // FieldStatus announces status messages through the persistent useAnnounce
@@ -59,6 +60,28 @@ beforeEach(() => {
 });
 
 describe('CheckboxList', () => {
+  it('forwards CheckboxListItem align to its Item row unchanged', () => {
+    render(
+      <CheckboxList label="Toppings" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Cheese" value="cheese" data-testid="cheese" />
+        <CheckboxListItem
+          label="Olives"
+          value="olives"
+          align="first-line"
+          data-testid="olives"
+        />
+      </CheckboxList>,
+    );
+    expect(screen.getByTestId('cheese')).toHaveAttribute(
+      'data-align',
+      'center',
+    );
+    expect(screen.getByTestId('olives')).toHaveAttribute(
+      'data-align',
+      'first-line',
+    );
+  });
+
   it('renders with label', () => {
     render(
       <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
@@ -266,8 +289,9 @@ describe('CheckboxList', () => {
       </CheckboxList>,
     );
     const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes[0]).toBeDisabled();
-    expect(checkboxes[1]).toBeDisabled();
+    expect(checkboxes[0]).toHaveAttribute('aria-disabled', 'true');
+    expect(checkboxes[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(checkboxes[0]).not.toHaveAttribute('disabled');
   });
 
   it('does not call onChange when group is disabled', () => {
@@ -295,8 +319,9 @@ describe('CheckboxList', () => {
       </CheckboxList>,
     );
     const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes[0]).not.toBeDisabled();
-    expect(checkboxes[1]).toBeDisabled();
+    expect(checkboxes[0]).not.toHaveAttribute('aria-disabled');
+    expect(checkboxes[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(checkboxes[1]).not.toHaveAttribute('disabled');
   });
 
   it('throws when item has no value prop inside collection-mode CheckboxList', () => {
@@ -1066,6 +1091,95 @@ describe('CheckboxListItem ARIA props', () => {
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
     });
 
+    it('describes each checkbox with the reason', () => {
+      renderGroup();
+      const tooltip = screen.getByRole('tooltip', h);
+      for (const name of ['Email', 'SMS']) {
+        const checkbox = screen.getByRole('checkbox', {name});
+        expect(checkbox.getAttribute('aria-describedby')?.split(' ')).toContain(
+          tooltip.id,
+        );
+        expect(checkbox).toHaveAccessibleDescription(
+          'Notifications are managed by your administrator',
+        );
+      }
+    });
+
+    it("keeps a row's own description ahead of the reason", () => {
+      render(
+        <CheckboxList
+          label="Notifications"
+          value={['email']}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Notifications are managed by your administrator">
+          <CheckboxListItem
+            label="Email"
+            value="email"
+            description="Weekly digest"
+          />
+        </CheckboxList>,
+      );
+      const tooltip = screen.getByRole('tooltip', h);
+      const checkbox = screen.getByRole('checkbox', {name: 'Email'});
+      const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Weekly digest Notifications are managed by your administrator',
+      );
+    });
+
+    // spec:AST-085 FR5: a keyboard user hears the reason on the checkbox that
+    // has focus.
+    it('describes the focused checkbox with the reason as Tab moves through the group', async () => {
+      const user = userEvent.setup();
+      renderGroup();
+      await user.tab();
+      const email = screen.getByRole('checkbox', {name: 'Email'});
+      expect(email).toHaveFocus();
+      expect(email).toHaveAccessibleDescription(
+        'Notifications are managed by your administrator',
+      );
+      await user.tab();
+      const sms = screen.getByRole('checkbox', {name: 'SMS'});
+      expect(sms).toHaveFocus();
+      expect(sms).toHaveAccessibleDescription(
+        'Notifications are managed by your administrator',
+      );
+    });
+
+    it('opens the reason on a tap and toggles nothing', async () => {
+      __resetInteractionModalityForTest();
+      const onChange = vi.fn();
+      renderGroup({onChange});
+      const tooltip = screen.getByRole('tooltip', h);
+      const sms = screen.getByRole('checkbox', {name: 'SMS'});
+      // A tap, in the order a browser dispatches it.
+      fireEvent.pointerEnter(sms, {pointerType: 'touch'});
+      fireEvent.pointerDown(sms, {pointerType: 'touch'});
+      fireEvent.pointerUp(sms, {pointerType: 'touch'});
+      fireEvent.mouseEnter(sms);
+      fireEvent.click(sms);
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('adds no reason to the checkboxes of a group that is not disabled', () => {
+      render(
+        <CheckboxList
+          label="Notifications"
+          value={['email']}
+          onChange={() => {}}
+          disabledMessage="Notifications are managed by your administrator">
+          <CheckboxListItem label="Email" value="email" />
+        </CheckboxList>,
+      );
+      expect(screen.getByRole('checkbox', {name: 'Email'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
     it('does not render a tooltip when not disabled', () => {
       render(
         <CheckboxList
@@ -1115,7 +1229,7 @@ describe('CheckboxListItem ARIA props', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('keeps checkboxes natively disabled when disabled without a reason', () => {
+    it('keeps checkboxes focusable via aria-disabled when disabled without a reason', () => {
       render(
         <CheckboxList
           label="Notifications"
@@ -1127,7 +1241,8 @@ describe('CheckboxListItem ARIA props', () => {
         </CheckboxList>,
       );
       for (const checkbox of screen.getAllByRole('checkbox', h)) {
-        expect(checkbox).toBeDisabled();
+        expect(checkbox).not.toHaveAttribute('disabled');
+        expect(checkbox).toHaveAttribute('aria-disabled', 'true');
       }
     });
   });

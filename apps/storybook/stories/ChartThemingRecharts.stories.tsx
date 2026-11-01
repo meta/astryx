@@ -112,22 +112,14 @@ const hoverSeries = {
 };
 
 const seriesDefinitions = [
-  {key: 'revenue', label: 'Revenue', color: series.revenue, dash: undefined},
-  {key: 'costs', label: 'Costs', color: series.costs, dash: '6 4'},
+  {key: 'revenue', label: 'Revenue', color: series.revenue},
+  {key: 'costs', label: 'Costs', color: series.costs},
 ] as const;
 
-function SeriesCue({color, dash}: {color: string; dash: string | undefined}) {
+function SeriesCue({color}: {color: string}) {
   return (
     <svg aria-hidden="true" focusable="false" height="12" width="28">
-      <line
-        stroke={color}
-        strokeDasharray={dash}
-        strokeWidth="3"
-        x1="1"
-        x2="27"
-        y1="6"
-        y2="6"
-      />
+      <line stroke={color} strokeWidth="3" x1="1" x2="27" y1="6" y2="6" />
     </svg>
   );
 }
@@ -137,7 +129,7 @@ function SeriesLegend() {
     <ul {...stylex.props(styles.legendList)} aria-label="Chart series">
       {seriesDefinitions.map(definition => (
         <li {...stylex.props(styles.legendItem)} key={definition.key}>
-          <SeriesCue color={definition.color} dash={definition.dash} />
+          <SeriesCue color={definition.color} />
           <Text type="supporting">{definition.label}</Text>
         </li>
       ))}
@@ -166,7 +158,7 @@ function SeriesTooltip({active, label, payload}: TooltipContentProps) {
             data-series-cue={definition.key}
             key={definition.key}>
             <span {...stylex.props(styles.legendItem)}>
-              <SeriesCue color={definition.color} dash={definition.dash} />
+              <SeriesCue color={definition.color} />
               {definition.label}
             </span>
             <span>{String(entry.value)}</span>
@@ -285,38 +277,20 @@ function ThemeAwareRechartsExample({
               />
               <Legend content={<SeriesLegend />} />
               <Bar
-                activeBar={{
-                  fill: hoverSeries.revenue,
-                  stroke: colorVars['--color-text-primary'],
-                  strokeWidth: 2,
-                }}
+                activeBar={{fill: hoverSeries.revenue}}
                 dataKey="revenue"
                 fill={highlightRevenue ? hoverSeries.revenue : series.revenue}
                 isAnimationActive={false}
                 name="Revenue"
                 radius={[barRadius, barRadius, 0, 0]}
-                stroke={
-                  highlightRevenue
-                    ? colorVars['--color-border-emphasized']
-                    : colorVars['--color-text-primary']
-                }
-                strokeWidth={highlightRevenue ? 2 : 1}
               />
               <Bar
-                activeBar={{
-                  fill: hoverSeries.costs,
-                  stroke: colorVars['--color-text-primary'],
-                  strokeDasharray: '6 4',
-                  strokeWidth: 2,
-                }}
+                activeBar={{fill: hoverSeries.costs}}
                 dataKey="costs"
                 fill={series.costs}
                 isAnimationActive={false}
                 name="Costs"
                 radius={[barRadius, barRadius, 0, 0]}
-                stroke={colorVars['--color-text-primary']}
-                strokeDasharray="6 4"
-                strokeWidth={1}
               />
             </BarChart>
           </ResponsiveContainer>
@@ -420,7 +394,13 @@ export const ThemeTokens: Story = {
     const revenueBar = canvasElement.querySelector<SVGElement>(
       BAR_SELECTORS.revenue,
     );
+    const costsBar = canvasElement.querySelector<SVGElement>(
+      BAR_SELECTORS.costs,
+    );
     expect(revenueBar).not.toBeNull();
+    expect(costsBar).not.toBeNull();
+    expect(revenueBar).not.toHaveAttribute('stroke');
+    expect(costsBar).not.toHaveAttribute('stroke');
     if (revenueBar) {
       const expectedActiveFill = resolveSvgFill(
         revenueBar,
@@ -439,10 +419,7 @@ export const ThemeTokens: Story = {
           '.recharts-active-bar path',
         );
         expect(activeBar).toHaveAttribute('fill', hoverSeries.revenue);
-        expect(activeBar).toHaveAttribute(
-          'stroke',
-          colorVars['--color-text-primary'],
-        );
+        expect(activeBar).not.toHaveAttribute('stroke');
         expect(
           canvasElement.querySelector('[data-chart-tooltip]'),
         ).toBeVisible();
@@ -467,10 +444,7 @@ export const ThemeTokens: Story = {
           expect(getComputedStyle(highlightedRevenueBar).fill).toBe(
             expectedActiveFill,
           );
-          expect(highlightedRevenueBar).toHaveAttribute(
-            'stroke',
-            colorVars['--color-border-emphasized'],
-          );
+          expect(highlightedRevenueBar).not.toHaveAttribute('stroke');
         }
       });
     }
@@ -492,9 +466,8 @@ export const ThemeTokens: Story = {
       name: 'Chart series',
     });
     expect(legend).toBeVisible();
-    expect(legend.querySelector('li:last-child line')).toHaveAttribute(
+    expect(legend.querySelector('li:last-child line')).not.toHaveAttribute(
       'stroke-dasharray',
-      '6 4',
     );
     expect(
       within(canvasElement).getByText('Quarterly performance values'),

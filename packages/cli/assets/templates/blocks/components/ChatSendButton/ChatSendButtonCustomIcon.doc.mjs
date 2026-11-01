@@ -10,4 +10,10 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Chat', 'ChatSendButton', 'Icon', 'Layout', 'Text'],
+  icons: {
+    CheckIcon: 'check',
+    PaperAirplaneIcon: 'send',
+    SparklesIcon: 'sparkles',
+    XCircleIcon: 'error',
+  },
 };

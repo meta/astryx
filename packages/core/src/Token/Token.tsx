@@ -41,6 +41,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {useTranslator} from '../i18n';
 import type {TokenColorMap} from './index';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 
 // =============================================================================
 // Types
@@ -190,7 +191,7 @@ const styles = stylex.create({
     '::after': {
       content: '""',
       position: 'absolute',
-      inset: '-14px',
+      inset: '-4px',
     },
   },
 });
@@ -298,6 +299,8 @@ export function Token({
   className,
   style,
   'data-testid': testId,
+  'aria-labelledby': ariaLabelledBy,
+  'aria-describedby': ariaDescribedBy,
   ref,
   ...rest
 }: TokenProps) {
@@ -321,7 +324,9 @@ export function Token({
         e.stopPropagation();
         onRemove(e);
       }}
-      disabled={isDisabled}
+      // Focusable while disabled (spec:AST-085 FR1), but inert (FR2).
+      aria-disabled={isDisabled || undefined}
+      {...(isDisabled ? disabledInteractionProps() : null)}
       {...focusOutlineProps.focusVisible(styles.removeButton)}>
       <Icon icon="close" size="xsm" color="inherit" />
     </button>
@@ -339,13 +344,61 @@ export function Token({
     </>
   );
 
+  // Naming inputs reach the element that owns the token's action: the inner
+  // button of a clickable token, otherwise the root
+  // (architecture:public-component-api INV5).
+  const labellingProps = {
+    'aria-labelledby': ariaLabelledBy,
+    'aria-describedby': ariaDescribedBy,
+  };
+
   const sharedProps = {
     'data-testid': testId,
     ...(isLabelHidden ? {'aria-label': label} : {}),
     ...(description != null ? {'aria-description': description} : {}),
   };
 
-  if (role === 'link') {
+  // A disabled link keeps a focusable link with aria-disabled and no
+  // destination, as a disabled Link does (spec:AST-085 FR1, FR5;
+  // component:Link FR5). useInteractiveRole reports no link role once
+  // disabled, so the structure is chosen here.
+  const isDisabledLink = isDisabled && href != null && effectiveOnClick == null;
+
+  if (isDisabledLink && onRemove == null) {
+    // A disabled link is an <a> with no href, as Link renders one: nothing can
+    // navigate, it keeps a Tab stop and the link role (spec:AST-085 FR1, FR5).
+    // The router LinkComponent is skipped, since a custom router link may
+    // require a live href.
+    const DisabledAnchor = 'a';
+    return (
+      <DisabledAnchor
+        ref={ref as React.Ref<HTMLAnchorElement>}
+        role="link"
+        aria-disabled={true}
+        tabIndex={0}
+        {...mergeProps(
+          themeProps('token', {color, size, disabled: 'disabled'}),
+          focusOutlineProps.focusVisible(
+            styles.base,
+            sizeStyles[size],
+            colorStyles[color],
+            styles.interactive,
+            styles.disabled,
+            xstyle,
+          ),
+          className,
+          style,
+        )}
+        {...rest}
+        {...labellingProps}
+        {...disabledInteractionProps(rest.onKeyDown)}
+        {...sharedProps}>
+        {content}
+      </DisabledAnchor>
+    );
+  }
+
+  if (role === 'link' || isDisabledLink) {
     if (onRemove == null) {
       return (
         <LinkComponent
@@ -353,7 +406,11 @@ export function Token({
           href={href as string}
           {...pressable}
           {...mergeProps(
-            themeProps('token', {color, size}),
+            themeProps('token', {
+              color,
+              size,
+              disabled: isDisabled ? 'disabled' : null,
+            }),
             focusOutlineProps.focusVisible(
               styles.base,
               sizeStyles[size],
@@ -367,6 +424,7 @@ export function Token({
             style,
           )}
           {...rest}
+          {...labellingProps}
           {...(isDisabled ? {'aria-disabled': true} : {})}
           {...sharedProps}>
           {content}
@@ -402,7 +460,11 @@ export function Token({
           </span>
         }
         {...mergeProps(
-          themeProps('token', {color, size}),
+          themeProps('token', {
+            color,
+            size,
+            disabled: isDisabled ? 'disabled' : null,
+          }),
           focusOutlineProps.focusWithin(
             styles.base,
             sizeStyles[size],
@@ -416,6 +478,7 @@ export function Token({
           style,
         )}
         {...rest}
+        {...labellingProps}
         {...sharedProps}
       />
     );
@@ -436,7 +499,11 @@ export function Token({
         onClick={isDisabled ? undefined : handleContainerClick}
         {...pressable}
         {...mergeProps(
-          themeProps('token', {color, size}),
+          themeProps('token', {
+            color,
+            size,
+            disabled: isDisabled ? 'disabled' : null,
+          }),
           focusOutlineProps.focusWithin(
             styles.base,
             sizeStyles[size],
@@ -455,7 +522,9 @@ export function Token({
         <button
           type="button"
           onClick={effectiveOnClick}
-          disabled={isDisabled}
+          {...labellingProps}
+          aria-disabled={isDisabled || undefined}
+          {...(isDisabled ? disabledInteractionProps() : null)}
           {...stylex.props(styles.invisibleButton)}>
           <span
             {...stylex.props(
@@ -475,7 +544,11 @@ export function Token({
     <span
       ref={ref}
       {...mergeProps(
-        themeProps('token', {color, size}),
+        themeProps('token', {
+          color,
+          size,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         stylex.props(
           styles.base,
           sizeStyles[size],
@@ -487,6 +560,7 @@ export function Token({
         style,
       )}
       {...rest}
+      {...labellingProps}
       {...sharedProps}>
       {content}
     </span>

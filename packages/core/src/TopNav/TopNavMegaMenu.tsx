@@ -120,7 +120,11 @@ const styles = stylex.create({
   chevronOpen: {
     transform: 'rotate(180deg)',
   },
-  // Animation styles applied to the layer's popover element.
+  // Animation styles applied to the layer's popover element. Under
+  // `prefers-reduced-motion: reduce` the panel never rises (design:reduced-motion
+  // DR1): on a touch screen it cross-fades, 200 ms on easeInOut whatever the
+  // theme's duration (DR2, DR4), and with a mouse it opens and closes at once
+  // (DR3).
   panelAnimation: {
     opacity: {
       default: 0,
@@ -129,10 +133,23 @@ const styles = stylex.create({
     transform: {
       default: 'translateY(-4px)',
       ':popover-open': 'translateY(0)',
+      '@media (prefers-reduced-motion: reduce)': 'none',
     },
-    transitionProperty: 'opacity, transform, overlay, display',
-    transitionDuration: durationVars['--duration-medium-min'],
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionProperty: {
+      default: 'opacity, transform, overlay, display',
+      '@media (prefers-reduced-motion: reduce)': 'opacity, overlay, display',
+    },
+    transitionDuration: {
+      default: durationVars['--duration-medium-min'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '200ms',
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        'cubic-bezier(0.42, 0, 0.58, 1)',
+    },
     transitionBehavior: 'allow-discrete',
     '@starting-style': {
       opacity: 0,
@@ -229,18 +246,22 @@ const styles = stylex.create({
   drawerChevronExpanded: {
     transform: 'rotate(180deg)',
   },
+  // Clips only while collapsed or animating; see TopNavMenu drawerStyles.items.
   drawerItems: {
     display: 'grid',
     gridTemplateRows: '0fr',
-    transitionProperty: 'grid-template-rows',
-    transitionDuration: durationVars['--duration-medium'],
+    overflow: 'hidden',
+    transitionProperty: 'grid-template-rows, overflow',
+    transitionBehavior: 'allow-discrete',
+    transitionDuration: `${durationVars['--duration-medium']}, 0s`,
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   drawerItemsExpanded: {
     gridTemplateRows: '1fr',
+    overflow: 'visible',
+    transitionDelay: `0s, ${durationVars['--duration-medium']}`,
   },
   drawerItemsInner: {
-    overflow: 'hidden',
     minHeight: 0,
   },
 
@@ -357,6 +378,7 @@ export function TopNavMegaMenu({
   if (renderMode === 'drawer') {
     return (
       <DrawerMegaMenu
+        ref={ref}
         label={label}
         items={items}
         featured={featured}
@@ -543,6 +565,7 @@ function DefaultMegaMenu({
 // =============================================================================
 
 function DrawerMegaMenu({
+  ref,
   label,
   items,
   featured,
@@ -551,7 +574,7 @@ function DrawerMegaMenu({
   style,
   onClick: onClickProp,
   ...rest
-}: Pick<TopNavMegaMenuProps, 'label' | 'items' | 'featured'> &
+}: Pick<TopNavMegaMenuProps, 'ref' | 'label' | 'items' | 'featured'> &
   BaseProps<HTMLButtonElement>) {
   const [isExpanded, setIsExpanded] = useState(false);
   const pressable = usePressFeedback();
@@ -561,6 +584,7 @@ function DrawerMegaMenu({
     <div {...stylex.props(styles.drawerSection)}>
       {/* Header toggle — same pattern as TopNavMenu drawer */}
       <button
+        ref={ref}
         type="button"
         {...rest}
         onClick={composeEventHandlers(onClickProp, () =>
@@ -595,6 +619,8 @@ function DrawerMegaMenu({
       {/* Animated expand/collapse container */}
       <div
         id={`${menuId}-items`}
+        aria-hidden={!isExpanded}
+        inert={!isExpanded ? true : undefined}
         {...stylex.props(
           styles.drawerItems,
           isExpanded && styles.drawerItemsExpanded,

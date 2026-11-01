@@ -19,6 +19,8 @@ const path = require('path');
 
 const ASTRYX_MODULE = /[\\/]node_modules[\\/]@astryxdesign[\\/]/;
 
+const escapeRegExp = text => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
  * Every alias this helper installs lives in `nextConfig.webpack`, and Turbopack
  * never calls that hook. So `withAstryx()` under Turbopack reinstates exactly
@@ -271,8 +273,24 @@ function withAstryx(nextConfig = {}) {
       // raw TS. This is robust to new third-party `source`-shipping deps.
       config.module = config.module || {};
       config.module.rules = config.module.rules || [];
+      // `Rule.test` matches the module being processed, by the path the
+      // resolver reports, and webpack reports a symlinked package by its real
+      // path. Under pnpm's isolated layout that path still runs through
+      // `node_modules/@astryxdesign/`, but a workspace link's does not
+      // (`packages/core/...`), so the rule also matches each installed
+      // package's real directory.
+      const from = (context && context.dir) || process.cwd();
+      const realPackageDirs = astryxPackages
+        .map(name => findPackageDir(name, from))
+        .filter(dir => dir != null)
+        .map(dir => escapeRegExp(fs.realpathSync(dir) + path.sep));
       config.module.rules.unshift({
-        test: ASTRYX_MODULE,
+        test:
+          realPackageDirs.length === 0
+            ? ASTRYX_MODULE
+            : new RegExp(
+                `${ASTRYX_MODULE.source}|^(?:${realPackageDirs.join('|')})`,
+              ),
         resolve: {
           conditionNames: ['source', '...'],
         },
@@ -290,13 +308,11 @@ function withAstryx(nextConfig = {}) {
       // third-party `source` shippers such as `lexical`.
       config.resolve = config.resolve || {};
 
-      // Preserve the symlinked node_modules path so Next.js's
-      // transpilePackages matcher recognizes @astryxdesign/* packages under
-      // pnpm's symlinked layout. Without this, webpack dereferences
-      // the symlink to packages/<name>/... which doesn't contain
-      // "node_modules/@astryxdesign" and transpilation is silently skipped,
-      // breaking subpath imports like '@astryxdesign/core/AlertDialog'.
-      config.resolve.symlinks = false;
+      // Leave `resolve.symlinks` at webpack's default (true). Under pnpm's
+      // isolated layout a package's own dependencies (`intl-messageformat`
+      // for Core, `lucide-react` for the neutral theme) sit beside its real
+      // path, not under the app's `node_modules`, so resolving from the
+      // symlink path cannot find them.
 
       // Call user's webpack config if provided
       const merged = existingWebpack

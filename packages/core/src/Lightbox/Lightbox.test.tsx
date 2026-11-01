@@ -53,6 +53,21 @@ describe('Lightbox', () => {
     expect(dialog).toBeInTheDocument();
   });
 
+  it('opens once an item arrives when opened with none', () => {
+    const {rerender} = render(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={[]} />,
+    );
+    expect(document.querySelector('dialog')).toBeNull();
+    rerender(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={() => {}}
+        media={[{src: '/photo.jpg', alt: 'Photo'}]}
+      />,
+    );
+    expect(document.querySelector('dialog')).toHaveAttribute('open');
+  });
+
   it('calls showModal when isOpen becomes true', () => {
     render(
       <Lightbox
@@ -115,6 +130,24 @@ describe('Lightbox', () => {
     const closeButton = screen.getByLabelText('Close');
     fireEvent.click(closeButton);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('ignores a cancel that bubbles up from inside it', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+      />,
+    );
+    // Only a close request fired at the <dialog> itself dismisses; a bubbling
+    // `cancel` from a control inside (a dismissed file picker) does not.
+    const inside = document.querySelector('dialog button')!;
+    const fromInside = new Event('cancel', {bubbles: true, cancelable: true});
+    inside.dispatchEvent(fromInside);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(fromInside.defaultPrevented).toBe(false);
   });
 
   it('calls onOpenChange(false) on Escape via cancel event', () => {
@@ -321,6 +354,50 @@ describe('Lightbox', () => {
       expect(onIndexChange).toHaveBeenCalledWith(2);
       fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
       expect(onIndexChange).toHaveBeenCalledWith(0);
+    });
+
+    it('follows the visual direction of the arrows in RTL', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <div dir="rtl">
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={media}
+            index={1}
+            onIndexChange={onIndexChange}
+          />
+        </div>,
+      );
+      const dialog = document.querySelector('dialog')!;
+      // The component resolves direction with getComputedStyle at keydown, and
+      // jsdom does not inherit `dir` down to it, so set it on the dialog too.
+      dialog.style.direction = 'rtl';
+      // Next sits on the left in RTL: ArrowLeft moves to the next item.
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(2);
+      fireEvent.keyDown(dialog, {key: 'ArrowRight'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(0);
+      expect(onIndexChange).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves the direction at keydown, so a direction change applies at once', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          index={1}
+          onIndexChange={onIndexChange}
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(0);
+      dialog.style.direction = 'rtl';
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(2);
     });
   });
 
@@ -567,6 +644,30 @@ describe('Lightbox', () => {
       const dialog = document.querySelector('dialog')!;
       fireEvent.keyDown(dialog, {key: 'ArrowRight'});
       expect(onIndexChange).toHaveBeenCalledWith(2);
+    });
+
+    it('keeps panning physical in RTL: the image is not mirrored', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          index={1}
+          onIndexChange={onIndexChange}
+          hasZoom
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      dialog.style.direction = 'rtl';
+      fireEvent.keyDown(zoomTarget(), {key: 'Enter'});
+      const img = screen.getByAltText('Image B');
+      // ArrowRight still reveals what is to the right of the photo.
+      fireEvent.keyDown(dialog, {key: 'ArrowRight'});
+      expect(img.getAttribute('style') ?? '').toContain(
+        'translate(-25px, 0px)',
+      );
+      expect(onIndexChange).not.toHaveBeenCalled();
     });
 
     it('announces zoom state changes politely', async () => {

@@ -53,6 +53,7 @@ export const docs = {
     'determinate',
     'indeterminate',
     'meter',
+    'linearprogress',
   ],
   props: [
     {

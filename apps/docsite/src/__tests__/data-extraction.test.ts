@@ -1101,7 +1101,7 @@ describe('docsRegistry', () => {
 
     const theme = docTopics.find(d => d.topic === 'theme');
     expect(theme).toBeDefined();
-    expect(theme?.title).toBe('Theme System');
+    expect(theme?.title).toBe('Theming');
   });
 
   it('known topics are present', () => {

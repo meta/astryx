@@ -7,7 +7,7 @@ authority: current
 archive_reason: null
 superseded_by: null
 approved_by: cixzhang
-approved_at: 2026-09-07
+approved_at: 2026-10-24
 owners: [cixzhang, imdreamrunner]
 applies_to:
   [
@@ -36,6 +36,8 @@ deciding_specs:
     spec:AST-012/DEC-3,
     spec:AST-012/DEC-5,
     spec:AST-017/DEC-1,
+    spec:AST-017/DEC-26,
+    spec:AST-087/DEC-9,
   ]
 ---
 
@@ -163,7 +165,10 @@ but acceptance alone is best effort, not a compatibility promise.
   factual `none` are valid outcomes. A `none` reason distinguishes an intentional
   current boundary from a reachability gap or unsettled future exposure; it never
   silently decides future themeability. When desktop and touch render different
-  parts or use different theming owners, they use separate anatomy rows.
+  parts or use different theming owners, they use separate anatomy rows. Those
+  rows describe alternatives that are never mounted together outside the one
+  transient copy during a presentation switch, and both follow the minimal
+  construction of `architecture:component-style-authoring` INV7.
 - **INV4 — Targets paint.** A target belongs on a stable visible element that
   paints theme-controlled output—not an event wrapper, speculative internal
   structure, or a node created only for layout plumbing.
@@ -172,7 +177,9 @@ but acceptance alone is best effort, not a compatibility promise.
   distinct public visual contract.
 - **INV6 — State stays on the owning target.** Variant, size, selection, disabled,
   and interaction state are reflected as target capabilities through
-  `themeProps`; they do not create parallel targets solely for each state.
+  `themeProps`; they do not create parallel targets solely for each state. An
+  artwork request, such as `Icon.variant`, selects supplied artwork rather than
+  styling and is not reflected.
 - **INV7 — Guarantees use one catalog and exact target declarations.** The shared
   catalog defines the supported vocabulary, not an automatic target promise. Each
   target's `guaranteedProperties` lists the rational catalog subset it guarantees
@@ -212,8 +219,13 @@ but acceptance alone is best effort, not a compatibility promise.
   be theme-extensible only when it is visual and an unavailable custom value has
   one safe, deterministic baseline that does not depend on the active theme.
   `Heading.type` qualifies because required `Heading.level` provides that
-  baseline. `Icon.size` does not: no missing custom size can be inferred without
-  silently changing geometry, alignment, or composition. Behavioral, structural,
+  baseline. `Icon.variant` qualifies because an unlisted variant renders the
+  request without a variant, which is the same for every theme. It is an
+  artwork request, not a styling selector: the `icon` target does not reflect
+  it, so it has no `themeProps()` reflection, `visualProps` entry, or
+  component styling map. `Icon.size` does
+  not: no missing custom size can be inferred without silently changing
+  geometry, alignment, or composition. Behavioral, structural,
   placement, directional, and state-machine axes remain closed regardless. A
   theme may redefine an existing value on a closed axis, but it may not add one.
 - **INV15 — Conditional styling does not create conditional API.** Adaptation
@@ -358,7 +370,11 @@ how themes become output, or the design rationale for a component's appearance.
   and every ineligible axis stays closed. A focused component test covers the
   custom value with no matching active theme rule. `extensibleAxes.test.ts`
   checks only the structural wiring: the public map, `themeProps()` reflection,
-  and consumer metadata.
+  and consumer metadata. An artwork axis keeps the public map check, because
+  its map is the one theme build augments, but has no styling wiring: the guard
+  exempts it from the `themeProps()` reflection and `visualProps` checks only,
+  by an explicit list of artwork-request maps, currently `IconVariantMap`. Its
+  focused fallback test renders an unlisted name.
 - Adding a property to a target's `guaranteedProperties` records its purpose and
   scope, proves a rational observable effect on the owned anatomy part, and adds
   representative compiler/runtime coverage. Catalog membership alone does not add
@@ -412,24 +428,28 @@ how themes become output, or the design rationale for a component's appearance.
   writes to the closed ordered rule model. `spec:AST-012/DEC-5` makes component
   validation shared with root themes and reserves effective-root presence for
   values whose validity depends on theme enrollment.
+- `spec:AST-087/DEC-9` makes `Icon.variant` a theme-extensible axis whose names
+  each theme lists once and whose fallback is the request without a variant.
+- `spec:AST-017/DEC-26` builds components from minimal DOM; desktop and touch
+  rows are never mounted together outside the one transient switch copy (INV3).
 - `spec:AST-017/DEC-1` owns published compatibility classification and migration:
   compatibility-path removal is breaking. This record owns the exact deprecated
   theming cohort and its approved 0.7.0 removal window.
 
 ## Verification
 
-| Invariant    | Evidence                                                                                                                                                                         | Failure signal                                                                                                                                                                |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1         | Cross-package target/documentation inventory                                                                                                                                     | An exported target in a participating package is invisible to metadata or CLI validation                                                                                      |
-| INV2, INV3   | Bidirectional anatomy-disposition/target check                                                                                                                                   | A current target has no semantic part owner, anatomy mechanically creates targets, or `none` silently becomes future policy                                                   |
-| INV4, INV5   | Component review plus rendered DOM inspection                                                                                                                                    | Public target lands on non-painting plumbing or aliases a child primitive without distinct semantics                                                                          |
-| INV6         | `themingTargets.test.ts` and `extensibleAxes.test.ts`                                                                                                                            | State/variant is invisible to the owner target or becomes an unnecessary parallel target                                                                                      |
-| INV7, INV8   | Existing property fixtures (partial; gaps below)                                                                                                                                 | A declared property is missing evidence, or an unlisted counterpart is treated as implied                                                                                     |
-| INV9         | API docs and compatibility review                                                                                                                                                | Generic property acceptance is presented as a supported compatibility promise                                                                                                 |
-| INV10, INV11 | Existing registry/public-var/runtime tests (partial; gaps below)                                                                                                                 | A public semantic var bypasses admission, or a consumer must write a private var to reach promised behavior                                                                   |
-| INV12, INV13 | Canonical-only runtime emission and discovery, removed-alias rejection, complete codemod mapping/tests, canonical maintained-theme/template inventory, and family-owner fixtures | A removed alias is emitted or discovered, the migration mapping is incomplete, canonical targets change, removed compatibility metadata survives, or ownership stays implicit |
-| INV14        | Component contract, owner review, focused no-match fallback test, and structural `extensibleAxes.test.ts` coverage                                                               | An ineligible axis opens, a missing rule changes behavior unpredictably, or the map/reflection/docs wiring drifts                                                             |
-| INV15        | Shared root/adaptation component-validation fixtures covering finite, open, enrolled, and unresolved domains                                                                     | Root and adaptation disagree, a valid open value requires a root style, a rule conditionally enrolls a custom value, or unresolved behavior becomes adaptation-specific       |
+| Invariant    | Evidence                                                                                                                                                                         | Failure signal                                                                                                                                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1         | Cross-package target/documentation inventory                                                                                                                                     | An exported target in a participating package is invisible to metadata or CLI validation                                                                                                                              |
+| INV2, INV3   | Bidirectional anatomy-disposition/target check                                                                                                                                   | A current target has no semantic part owner, anatomy mechanically creates targets, or `none` silently becomes future policy; or separate desktop and touch rows are mounted at once outside the transient switch copy |
+| INV4, INV5   | Component review plus rendered DOM inspection                                                                                                                                    | Public target lands on non-painting plumbing or aliases a child primitive without distinct semantics                                                                                                                  |
+| INV6         | `themingTargets.test.ts` and `extensibleAxes.test.ts`                                                                                                                            | State/variant is invisible to the owner target or becomes an unnecessary parallel target                                                                                                                              |
+| INV7, INV8   | Existing property fixtures (partial; gaps below)                                                                                                                                 | A declared property is missing evidence, or an unlisted counterpart is treated as implied                                                                                                                             |
+| INV9         | API docs and compatibility review                                                                                                                                                | Generic property acceptance is presented as a supported compatibility promise                                                                                                                                         |
+| INV10, INV11 | Existing registry/public-var/runtime tests (partial; gaps below)                                                                                                                 | A public semantic var bypasses admission, or a consumer must write a private var to reach promised behavior                                                                                                           |
+| INV12, INV13 | Canonical-only runtime emission and discovery, removed-alias rejection, complete codemod mapping/tests, canonical maintained-theme/template inventory, and family-owner fixtures | A removed alias is emitted or discovered, the migration mapping is incomplete, canonical targets change, removed compatibility metadata survives, or ownership stays implicit                                         |
+| INV14        | Component contract, owner review, focused no-match fallback test, and structural `extensibleAxes.test.ts` coverage with its explicit artwork-axis exemption list                 | An ineligible axis opens, a missing rule changes behavior unpredictably, the map/reflection/docs wiring drifts, or an artwork axis gains reflection or loses its exemption                                            |
+| INV15        | Shared root/adaptation component-validation fixtures covering finite, open, enrolled, and unresolved domains                                                                     | Root and adaptation disagree, a valid open value requires a root style, a rule conditionally enrolls a custom value, or unresolved behavior becomes adaptation-specific                                               |
 
 Known conformance and verification gaps:
 

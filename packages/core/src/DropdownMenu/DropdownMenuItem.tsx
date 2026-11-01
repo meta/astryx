@@ -43,6 +43,7 @@ import {
   spacingVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
@@ -66,9 +67,6 @@ const menuItemStyles = stylex.create({
     backgroundColor: {
       default: 'transparent',
       ':focus': colorVars['--color-overlay-hover'],
-      // The overlay is forced to Canvas in high-contrast modes. Keep the
-      // row's content under user-agent control and mark focus with a system
-      // outline instead, so text, icons, and end content stay perceptible.
       // The pressed look only where hover exists. Under a finger the row a
       // press BEGAN on would otherwise stay painted while the highlight (focus)
       // moves to the row under the finger — two rows lit.
@@ -85,7 +83,10 @@ const menuItemStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outlineOffset: '-2px',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -94,11 +95,11 @@ const menuItemStyles = stylex.create({
   destructive: {
     // Only recolor the text/icon; the hover / focus background stays the shared
     // neutral overlay from `root` so the hover state matches every other menu
-    // item. The root color covers the label/description via the Item custom
-    // properties (and any bare text). Semantic error tokens keep it theme-aware.
-    color: colorVars['--color-error'],
-    '--_item-label-color': colorVars['--color-error'],
-    '--_item-description-color': colorVars['--color-error'],
+    // item. The semantic status foreground covers the label, description, icon,
+    // and any bare text on a plain surface.
+    color: colorVars['--color-text-error'],
+    '--_item-label-color': colorVars['--color-text-error'],
+    '--_item-description-color': colorVars['--color-text-error'],
   },
 });
 

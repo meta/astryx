@@ -32,6 +32,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
+import {useAnnounce} from '../hooks/useAnnounce';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {
   colorVars,
@@ -353,6 +354,38 @@ export function useTriggerMenu(
     isHidden: false,
   });
 
+  // The loading row carries no live role: it mounts already holding its text
+  // and is removed when results arrive, so it would be skipped. The shared
+  // channel announces each loading episode once instead (spec:AST-086 FR2,
+  // FR6), once the row has been painted: the second animation frame runs
+  // after the first paint, and a search that settles before then never shows
+  // the row, so it announces nothing (FR7). The flag clears when the loading
+  // row goes away, so the next search is a new occasion.
+  const announce = useAnnounce();
+  const hasAnnouncedLoadingRef = useRef(false);
+  // Mirrors renderMenu: no row exists without an active trigger or while hidden.
+  const isLoadingRowShown =
+    state.isLoading && !state.isHidden && state.activeTrigger !== null;
+  // One catalog string serves the row and the announcement (FR7).
+  const loadingText =
+    state.activeTrigger?.loadingText ?? t('@astryx.chatTriggerMenu.searching');
+  useEffect(() => {
+    if (!isLoadingRowShown) {
+      hasAnnouncedLoadingRef.current = false;
+      return;
+    }
+    if (hasAnnouncedLoadingRef.current) {
+      return;
+    }
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        hasAnnouncedLoadingRef.current = true;
+        announce(loadingText, 'polite');
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [announce, isLoadingRowShown, loadingText]);
+
   const triggerStartRef = useRef<number>(-1);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRequestIdRef = useRef<number>(0);
@@ -381,6 +414,12 @@ export function useTriggerMenu(
     onHide: useCallback(() => {
       if (isMenuSuppressedRef.current) {
         return;
+      }
+      // A search still waiting out its debounce must not start for a menu
+      // that is gone.
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+        searchTimeoutRef.current = null;
       }
       searchRequestIdRef.current++;
       removeAnchorSpan();
@@ -555,8 +594,12 @@ export function useTriggerMenu(
         if (trigger.searchSource) {
           // Use SearchSource — cancel previous, then search
           trigger.searchSource.cancel?.();
-          setState(prev => ({...prev, isLoading: true}));
           const result = trigger.searchSource.search(query);
+          // A synchronous source already has its results, so it never shows
+          // or announces the loading row (spec:AST-086 FR7).
+          if (!Array.isArray(result)) {
+            setState(prev => ({...prev, isLoading: true}));
+          }
           Promise.resolve(result).then(
             items => {
               if (!isCurrent()) {
@@ -873,14 +916,11 @@ export function useTriggerMenu(
     }
 
     const emptyText = activeTrigger.emptySearchText ?? 'No results';
-    const loadingText = activeTrigger.loadingText ?? 'Searching\u2026';
 
     let listContent: ReactNode;
     if (state.isLoading) {
       listContent = (
-        <div role="status" {...stylex.props(styles.loadingState)}>
-          {loadingText}
-        </div>
+        <div {...stylex.props(styles.loadingState)}>{loadingText}</div>
       );
     } else if (state.items.length === 0 && state.isActive) {
       listContent = <div {...stylex.props(styles.emptyState)}>{emptyText}</div>;
@@ -951,7 +991,16 @@ export function useTriggerMenu(
         xstyle: styles.popoverSurface,
       },
     );
-  }, [popover, listboxId, state, selectItem, getItemId, highlightOnHover, t]);
+  }, [
+    popover,
+    listboxId,
+    state,
+    selectItem,
+    getItemId,
+    highlightOnHover,
+    t,
+    loadingText,
+  ]);
 
   return {
     state,

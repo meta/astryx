@@ -1718,8 +1718,14 @@ interface DelimiterRun {
   readonly canClose: boolean;
 }
 
-const UNICODE_WHITESPACE = /^[\t\n\f\r\p{Zs}]$/u;
-const UNICODE_PUNCTUATION = /^[\p{P}\p{S}]$/u;
+// Built at runtime, not written as literals: for targets without property
+// escapes, or when no browserslist is set, Babel's
+// transform-unicode-property-regex rewrites a `\p{…}` literal, and the copy
+// bundled with Next.js lacks the Unicode data it needs, so a source build fails
+// with "Unknown property". Literals are safe once Next's bundled Babel ships
+// that data.
+const UNICODE_WHITESPACE = new RegExp('^[\\t\\n\\f\\r\\p{Zs}]$', 'u');
+const UNICODE_PUNCTUATION = new RegExp('^[\\p{P}\\p{S}]$', 'u');
 
 /** The character before `index` (a whole code point), if any. */
 function characterBefore(text: string, index: number): string | undefined {

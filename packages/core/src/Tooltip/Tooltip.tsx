@@ -242,28 +242,51 @@ export function Tooltip({
       return;
     }
 
+    const attach = (el: HTMLElement) => {
+      // Use combined ref for position + interaction
+      tooltip.ref(el);
+
+      // Set aria-describedby, merging with existing
+      const existingDescribedBy = el.getAttribute('aria-describedby');
+      el.setAttribute(
+        'aria-describedby',
+        mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
+      );
+
+      return () => {
+        tooltip.ref(null);
+        if (existingDescribedBy) {
+          el.setAttribute('aria-describedby', existingDescribedBy);
+        } else {
+          el.removeAttribute('aria-describedby');
+        }
+      };
+    };
+
     const el = anchorRef.current;
-    if (!el) {
-      return;
+    if (el) {
+      return attach(el);
     }
 
-    // Use combined ref for position + interaction
-    tooltip.ref(el);
-
-    // Set aria-describedby, merging with existing
-    const existingDescribedBy = el.getAttribute('aria-describedby');
-    el.setAttribute(
-      'aria-describedby',
-      mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
-    );
-
-    return () => {
-      tooltip.ref(null);
-      if (existingDescribedBy) {
-        el.setAttribute('aria-describedby', existingDescribedBy);
-      } else {
-        el.removeAttribute('aria-describedby');
+    // React attaches an ancestor's ref after its descendants' layout effects,
+    // so a tooltip rendered inside its own anchor (SideNavItem's collapsed
+    // rail tooltip) still sees null here on mount, and this effect's deps
+    // never change to re-run it. Re-check once the commit has attached all
+    // refs; if the anchor is still gone, this tooltip has no anchor, as before.
+    let detach: (() => void) | undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
       }
+      const el = anchorRef.current;
+      if (el) {
+        detach = attach(el);
+      }
+    });
+    return () => {
+      cancelled = true;
+      detach?.();
     };
   }, [anchorRef, tooltip.ref, tooltip.describedBy]);
 

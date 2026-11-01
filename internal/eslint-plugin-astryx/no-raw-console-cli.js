@@ -27,13 +27,15 @@
  * ban #1:
  *   - packages/cli/foundation/response/json.mjs (defines humanLog / jsonOut)
  *   - packages/cli/clients/cli/index.mjs      (wiring / banner)
- *   - packages/cli/clients/cli/bin/astryx.mjs (entrypoint / error boundary)
+ *   - packages/cli/clients/cli/bin/astryx.mjs (entrypoint / Node gate)
+ *   - packages/cli/clients/cli/run.mjs        (one run / error boundary)
  */
 
 const EXEMPT_SUFFIXES = [
   'packages/cli/foundation/response/json.mjs',
   'packages/cli/clients/cli/index.mjs',
   'packages/cli/clients/cli/bin/astryx.mjs',
+  'packages/cli/clients/cli/run.mjs',
 ];
 
 // Command files must funnel human output through emit(); humanLog/humanWarn are

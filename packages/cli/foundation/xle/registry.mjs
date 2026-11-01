@@ -20,6 +20,7 @@ import path from 'node:path';
 import {findCoreDir} from '../fs/paths.mjs';
 import {
   discoverComponents,
+  familyMember,
   findComponentReadme,
   resolveImportPath,
 } from '../discovery/component-discovery.mjs';
@@ -126,6 +127,9 @@ export async function buildRegistry({cwd = process.cwd()} = {}) {
     } catch {
       continue; // a malformed doc must not take down the whole language
     }
+    // A member documented in its family's doc (VStack in Stack's doc) is
+    // registered by the family's own folder, with every other member.
+    if (familyMember(docs, dirName)) continue;
     const importPath = resolveImportPath(coreDir, dirName);
 
     const register = (/** @type {string} */ rawName, /** @type {import('./xle-ast').DocProp[]} */ props) => {

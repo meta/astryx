@@ -54,6 +54,7 @@ import type {BaseProps} from '@astryxdesign/core';
 import {
   ensureHighlightStyles,
   tokenize,
+  type CodeLanguage,
   type SyntaxToken,
   type TokenLine,
 } from '@astryxdesign/core/CodeBlock';
@@ -131,10 +132,20 @@ export interface DiffViewerProps extends BaseProps<HTMLDivElement> {
    */
   viewMode?: DiffViewerViewMode;
   /**
-   * Syntax-highlighting language. Defaults to one inferred from the file's
-   * extension; unknown extensions render as plain text.
+   * Syntax-highlighting language: a built-in identifier such as `'rust'`, or
+   * a language value — a module imported on its own, such as `graphql` from
+   * `@astryxdesign/core/CodeBlock/languages/graphql`, or one made with
+   * `createCodeLanguage`. Defaults to one inferred from the file's name or
+   * extension among the built-ins and `codeLanguages`; an unmatched file
+   * renders as plain text.
    */
-  language?: string;
+  language?: string | CodeLanguage;
+  /**
+   * Language values the file's name or extension may infer, such as
+   * `[graphql, dockerfile]`; a later entry wins. Pass the same list to every
+   * DiffViewer on a review page.
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
   /**
    * Show the old and new line-number gutters.
    * @default true
@@ -246,18 +257,49 @@ const EXTENSION_LANGUAGES: Record<string, string> = {
   yml: 'yaml',
   md: 'markdown',
   markdown: 'markdown',
+  c: 'c',
+  h: 'c',
+  cpp: 'cpp',
+  cc: 'cpp',
+  cxx: 'cpp',
+  hpp: 'cpp',
+  hh: 'cpp',
+  sql: 'sql',
+  rs: 'rust',
+  kt: 'kotlin',
+  kts: 'kotlin',
+  swift: 'swift',
+  go: 'go',
 };
 
-function inferLanguage(path: string | null): string {
+/**
+ * The language a file's name or extension infers: a listed value first (a
+ * later entry wins), then a built-in, else plain text (CodeBlock FR13).
+ */
+function inferLanguage(
+  path: string | null,
+  codeLanguages: ReadonlyArray<CodeLanguage> | undefined,
+): string | CodeLanguage {
   if (path == null) {
     return 'plaintext';
   }
   const base = path.slice(path.lastIndexOf('/') + 1);
   const dot = base.lastIndexOf('.');
-  if (dot <= 0) {
-    return 'plaintext';
+  const extension = dot > 0 ? base.slice(dot + 1).toLowerCase() : null;
+  if (codeLanguages != null) {
+    for (let i = codeLanguages.length - 1; i >= 0; i--) {
+      const language = codeLanguages[i];
+      if (
+        language.fileNames.includes(base) ||
+        (extension != null && language.fileExtensions.includes(extension))
+      ) {
+        return language;
+      }
+    }
   }
-  return EXTENSION_LANGUAGES[base.slice(dot + 1).toLowerCase()] ?? 'plaintext';
+  return extension == null
+    ? 'plaintext'
+    : (EXTENSION_LANGUAGES[extension] ?? 'plaintext');
 }
 
 // ---------------------------------------------------------------------------
@@ -337,7 +379,7 @@ function addInlineEmphasis(
  */
 function buildCells(
   file: DiffViewerFile,
-  language: string,
+  language: string | CodeLanguage,
   inlineHighlight: DiffViewerInlineHighlight,
 ): LineCell[][] {
   return file.hunks.map((hunk, hunkIndex) => {
@@ -1063,6 +1105,7 @@ export function DiffViewer({
   file,
   viewMode = 'unified',
   language: languageProp,
+  codeLanguages,
   hasLineNumbers = true,
   isWrapped = false,
   changeIndicator = 'classic',
@@ -1090,7 +1133,7 @@ export function DiffViewer({
   }, []);
 
   const path = file.newPath ?? file.oldPath;
-  const language = languageProp ?? inferLanguage(path);
+  const language = languageProp ?? inferLanguage(path, codeLanguages);
   const displayPath =
     file.status === 'renamed' && file.oldPath != null && file.newPath != null
       ? t('@astryx.diffViewer.renamedPath', {

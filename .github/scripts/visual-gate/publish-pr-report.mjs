@@ -23,6 +23,18 @@ function refuse(message) {
   throw new Error(`visual report rejected: ${message}`);
 }
 
+// Rerunning only the failed jobs keeps the artifacts of the jobs that passed,
+// so the report can come from an earlier attempt of the same run, never a
+// later one.
+function attemptBelongsToRun(artifactAttempt, reportedAttempt) {
+  const artifact = Number(artifactAttempt);
+  return (
+    Number.isSafeInteger(artifact) &&
+    artifact > 0 &&
+    artifact <= Number(reportedAttempt)
+  );
+}
+
 function text(value = '') {
   if (typeof value !== 'string' || value.length > 4000)
     refuse('invalid report text');
@@ -126,7 +138,7 @@ export function publishPrReport({
     !SHA.test(raw.context?.baseSha) ||
     (baseSha && raw.context.baseSha !== baseSha) ||
     String(raw.context?.runId) !== String(runId) ||
-    String(raw.context?.runAttempt) !== String(runAttempt) ||
+    !attemptBelongsToRun(raw.context?.runAttempt, runAttempt) ||
     !SHA.test(raw.context?.sha)
   ) {
     refuse('artifact does not match the exact CI head/base/run/attempt');
@@ -158,11 +170,13 @@ export function publishPrReport({
     context: {
       sha: raw.context.sha,
       headSha,
-      // Fork runs can omit GitHub's PR/base association. That base remains
-      // report data, never acceptance or baseline-write authority.
+      // Without a caller-supplied base, this is the base the CI run recorded.
+      // It is report data, never acceptance or baseline-write authority.
       baseSha: baseSha || raw.context.baseSha,
       runId: String(runId),
-      runAttempt: String(runAttempt),
+      // The attempt that produced this evidence, which can precede the
+      // reported attempt after a rerun of only the failed jobs.
+      runAttempt: String(raw.context.runAttempt),
     },
     baseline: {sha: text(raw.baseline?.sha ?? '')},
     counts,
@@ -221,7 +235,10 @@ export function publishPrReport({
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  const flag = name => args[args.indexOf(`--${name}`) + 1];
+  const flag = name => {
+    const index = args.indexOf(`--${name}`);
+    return index === -1 ? undefined : args[index + 1];
+  };
   publishPrReport({
     input: path.resolve(flag('input')),
     output: path.resolve(flag('output')),

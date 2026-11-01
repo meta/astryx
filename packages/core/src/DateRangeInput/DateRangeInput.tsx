@@ -75,6 +75,7 @@ import {
 import type {SizeValue} from '../utils/types';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {themeProps} from '../utils/themeProps';
@@ -97,6 +98,18 @@ export type {
 } from '../Field';
 
 const styles = stylex.create({
+  // The shared disabled style drops the focus ring; restore it while a
+  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
+  disabledFocusRing: {
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':focus-within': colorVars['--color-accent'],
+    },
+    boxShadow: {
+      default: 'none',
+      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+    },
+  },
   trigger: {
     display: 'block',
     flex: 1,
@@ -309,12 +322,12 @@ export interface DateRangeInputProps extends Omit<
   /**
    * Explains why the input is disabled. When set together with
    * `isDisabled`, the input shows a tooltip with this text on hover and
-   * keyboard focus, and the trigger stays focusable (via `aria-disabled`)
-   * so the reason is discoverable by keyboard and assistive technology.
-   * Activation stays blocked.
+   * keyboard focus, and the trigger is described by it, so the reason is
+   * discoverable by keyboard and assistive technology. Activation stays
+   * blocked.
    *
-   * Use this instead of wrapping a disabled input in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled input in `Tooltip`, so the
+   * reason is tied to the field.
    *
    * @example
    * ```
@@ -546,12 +559,12 @@ export function DateRangeInput({
   const isBusy = isLoading || optimisticValue !== value;
   const isEffectivelyDisabled = isDisabled || isBusy;
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isEffectivelyDisabled
-  // guard in handleToggle. Only the persistent isDisabled state (not the
-  // transient busy state) surfaces a reason.
+  // A disabled or busy field never renders native `disabled` (spec:AST-085
+  // FR1): its buttons stay focusable via aria-disabled, and activation is
+  // blocked by the isEffectivelyDisabled guard in handleToggle. The
+  // disabled-reason tooltip's listeners attach to the trigger container. Only
+  // the persistent isDisabled state (not the transient busy state) surfaces a
+  // reason.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -600,7 +613,7 @@ export function DateRangeInput({
 
   const fireChange = useCallback(
     (newValue: DateRange | null) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange(newValue);
@@ -611,7 +624,13 @@ export function DateRangeInput({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   const handleToggle = useCallback(() => {
@@ -626,13 +645,19 @@ export function DateRangeInput({
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
+      if (isDisabled) {
+        return;
+      }
       fireChange(range);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   const triggerRef = useRef<HTMLButtonElement>(null);
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
   const triggerButtonRef = useMergedRefs<HTMLButtonElement>(triggerRef, ref);
 
   const handleClear = useCallback(
@@ -695,6 +720,7 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             sizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
+            isEffectivelyDisabled && styles.disabledFocusRing,
             status && inputStatusBorderStyles[status.type],
             status &&
               !isEffectivelyDisabled &&
@@ -708,7 +734,7 @@ export function DateRangeInput({
         <button
           type="button"
           onClick={handleToggle}
-          disabled={isEffectivelyDisabled}
+          aria-disabled={isEffectivelyDisabled || undefined}
           aria-label={
             popover.isOpen
               ? t('@astryx.dateInput.toggleCalendarClose')
@@ -734,12 +760,14 @@ export function DateRangeInput({
           ref={triggerButtonRef}
           id={id}
           type="button"
-          onClick={chainEventHandlers(handleToggle, onClickProp)}
-          // With a disabledMessage the trigger keeps focusability via
-          // aria-disabled so the reason is focus-discoverable; activation is
-          // still blocked by the isEffectivelyDisabled guard in handleToggle.
-          disabled={isEffectivelyDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}
+          // The browser still dispatches a click on an aria-disabled button,
+          // so a caller's onClick is skipped too (spec:AST-085 FR2).
+          onClick={
+            isEffectivelyDisabled
+              ? undefined
+              : chainEventHandlers(handleToggle, onClickProp)
+          }
+          aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
           // A caller aria-label replaces the trigger's name; a caller
           // aria-labelledby is read after it (label and selected range).
           aria-label={ariaLabelProp ?? triggerAriaLabel}
@@ -772,7 +800,7 @@ export function DateRangeInput({
             {ariaLabelProp ?? triggerAriaLabel}
           </VisuallyHidden>
         )}
-        {isBusy && <Spinner size="sm" />}
+        {isBusy && <Spinner size="sm" aria-hidden="true" />}
         {statusIcon}
       </div>
       {isEffectivelyRequired && (
@@ -794,6 +822,7 @@ export function DateRangeInput({
                 const presetRange = preset.getRange();
                 const isActive = isRangeEqual(value, presetRange);
                 const isPresetDisabled =
+                  isDisabled ||
                   !isRangeWithinSpan(presetRange, maxRangeSpan, minRangeSpan) ||
                   isDateDisabled(plainDateFromISO(presetRange.start)) ||
                   isDateDisabled(plainDateFromISO(presetRange.end));
@@ -807,8 +836,18 @@ export function DateRangeInput({
                     // marked with aria-current (not aria-selected, a listbox
                     // concept that contradicted the Tab interaction) (forms-5).
                     aria-current={isActive ? 'true' : undefined}
-                    disabled={isPresetDisabled}
-                    onClick={() => handleRangeSelect(presetRange)}
+                    // Focusable while disabled (AR3, spec:AST-085 FR1).
+                    aria-disabled={isPresetDisabled || undefined}
+                    aria-describedby={
+                      showsDisabledMessage
+                        ? disabledMessageTooltip.describedBy
+                        : undefined
+                    }
+                    onClick={() => {
+                      if (!isPresetDisabled) {
+                        handleRangeSelect(presetRange);
+                      }
+                    }}
                     {...mergeProps(
                       themeProps('date-range-input-preset', {
                         selected: isActive ? 'selected' : null,
@@ -827,18 +866,22 @@ export function DateRangeInput({
               })}
             </div>
           )}
-          <Calendar
-            mode="range"
-            value={optimisticValue}
-            onChange={handleRangeSelect}
-            min={min}
-            max={max}
-            dateConstraints={dateConstraints}
-            maxRangeSpan={maxRangeSpan}
-            minRangeSpan={minRangeSpan}
-            numberOfMonths={numberOfMonths}
-            weekStartsOn={weekStartsOn}
-          />
+          {/* The layer renders its children open or closed, so mount the
+              calendar only while it is open. */}
+          {popover.isOpen && (
+            <Calendar
+              mode="range"
+              value={optimisticValue}
+              onChange={handleRangeSelect}
+              min={min}
+              max={max}
+              dateConstraints={dateConstraints}
+              maxRangeSpan={maxRangeSpan}
+              minRangeSpan={minRangeSpan}
+              numberOfMonths={numberOfMonths}
+              weekStartsOn={weekStartsOn}
+            />
+          )}
         </div>,
         {placement: 'below', alignment: 'start'},
       )}

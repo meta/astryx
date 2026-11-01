@@ -7,15 +7,26 @@
  * app's `<Theme>` runs on the app's Core either way, so the build loads the
  * project's installed `@astryxdesign/core` when it differs from the CLI's own.
  * When there is no Core to use, the error names the fix for where it ran:
- * install it in an app, build it in the Astryx repository.
+ * install it in an app, build it in the Astryx repository. An installed Core
+ * that does not load, or lacks the functions the build calls, fails the build,
+ * naming it, rather than leave the build to the CLI's own Core.
  */
 
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {coreUnavailableMessage, themeBuild} from './build.mjs';
+import {fetchCarriedThemeCoreDir} from '../_adapter.mjs';
+
+vi.mock('../_adapter.mjs', async importOriginal => {
+  const actual = /** @type {Record<string, any>} */ (await importOriginal());
+  return {
+    ...actual,
+    fetchCarriedThemeCoreDir: vi.fn(actual.fetchCarriedThemeCoreDir),
+  };
+});
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '../../../../..');
@@ -53,9 +64,10 @@ afterEach(() => {
  * entry as it is imported. Its `exports` map lists `source` first, as Core's
  * own does, so the build must skip that condition to find the runtime file.
  * @param {string} dir
- * @param {{broken?: boolean}} [options]
+ * @param {{broken?: boolean, themeModule?: string}} [options] `themeModule`
+ *   replaces the theme entry's source
  */
-function installCore(dir, {broken = false} = {}) {
+function installCore(dir, {broken = false, themeModule} = {}) {
   const core = path.join(dir, 'node_modules', '@astryxdesign', 'core');
   fs.mkdirSync(core, {recursive: true});
   fs.writeFileSync(
@@ -82,11 +94,28 @@ function installCore(dir, {broken = false} = {}) {
         `globalThis.__astryxProjectCoreLoads = [...(globalThis.__astryxProjectCoreLoads ?? []), '${entry}'];\n`;
   fs.writeFileSync(
     path.join(core, 'theme.mjs'),
-    module('theme', 'theme/index.js'),
+    themeModule ?? module('theme', 'theme/index.js'),
   );
   fs.writeFileSync(path.join(core, 'root.mjs'), module('root', 'index.js'));
   return core;
 }
+
+describe('theme build outside a project, with the Core this CLI release carries', () => {
+  it('fails naming a carried Core that does not load, rather than build with the CLI’s own', async () => {
+    const carried = installCore(makeDir(), {broken: true});
+    vi.mocked(fetchCarriedThemeCoreDir).mockReturnValueOnce(carried);
+    const bare = makeDir();
+    const build = themeBuild('ocean.mjs', {}, {cwd: bare});
+    await expect(build).rejects.toMatchObject({
+      code: 'ERR_CORE_NOT_FOUND',
+      message: expect.stringContaining(
+        `Could not load the @astryxdesign/core this CLI release carries, at ${carried}`,
+      ),
+    });
+    await expect(build).rejects.toThrow(/Import error: this Core is broken/);
+    expect(fs.existsSync(path.join(bare, 'ocean.css'))).toBe(false);
+  });
+});
 
 describe('theme build generates with the Core the project installed', () => {
   it('loads the app’s installed Core when it differs from the CLI’s own', async () => {
@@ -114,11 +143,37 @@ describe('theme build generates with the Core the project installed', () => {
     expect(fs.existsSync(path.join(bare, 'ocean.css'))).toBe(true);
   });
 
-  it('keeps the CLI’s own Core when the installed one does not load', async () => {
+  it('fails naming an installed Core that does not load, rather than build with the CLI’s own', async () => {
     const app = makeDir();
     installCore(app, {broken: true});
-    await themeBuild('ocean.mjs', {}, {cwd: app});
-    expect(fs.existsSync(path.join(app, 'ocean.css'))).toBe(true);
+    await expect(themeBuild('ocean.mjs', {}, {cwd: app})).rejects.toMatchObject(
+      {
+        code: 'ERR_CORE_NOT_FOUND',
+        message: expect.stringContaining(
+          `Could not load the @astryxdesign/core installed at ${path.join('node_modules', '@astryxdesign', 'core')}`,
+        ),
+      },
+    );
+    await expect(themeBuild('ocean.mjs', {}, {cwd: app})).rejects.toThrow(
+      /Import error: this Core is broken/,
+    );
+    expect(fs.existsSync(path.join(app, 'ocean.css'))).toBe(false);
+  });
+
+  it('fails naming an installed Core without the functions the build calls, rather than build with the CLI’s own', async () => {
+    const app = makeDir();
+    installCore(app, {
+      themeModule: 'export const defineTheme = theme => theme;\n',
+    });
+    await expect(themeBuild('ocean.mjs', {}, {cwd: app})).rejects.toMatchObject(
+      {
+        code: 'ERR_CORE_INCOMPATIBLE',
+        message: expect.stringContaining(
+          'does not export generateThemeRulesSplit',
+        ),
+      },
+    );
+    expect(fs.existsSync(path.join(app, 'ocean.css'))).toBe(false);
   });
 });
 

@@ -5,7 +5,8 @@
 /**
  * @file usePopover.tsx
  * @input Uses useLayer, useFocusTrap, React hooks
- * @output Exports the public usePopover hook with derived focus and guarded opening.
+ * @output Exports the public usePopover hook with derived focus and guarded opening,
+ *   and FALLBACK_CLOSE_SELECTOR for Popover.tsx (internal).
  * @position Higher-level layer utility; used by DatePicker, Combobox, etc.
  *
  * Combines popover layer behavior with focus trap for dialog-like popovers.
@@ -39,7 +40,11 @@ import {paddingStyles} from '../Layout/padding.stylex';
 import type {SpacingStep} from '../utils/types';
 import {stableClassName} from '../naming';
 
-const FALLBACK_CLOSE_SELECTOR = '[data-astryx-popover-fallback-close]';
+/**
+ * The fallback close button's wrapper (anchored layer) or button (sheet,
+ * Popover.tsx); initial focus skips it.
+ */
+export const FALLBACK_CLOSE_SELECTOR = '[data-astryx-popover-fallback-close]';
 
 function attemptFocus(element: HTMLElement): boolean {
   try {
@@ -47,7 +52,9 @@ function attemptFocus(element: HTMLElement): boolean {
   } catch {
     // Ignore non-focusable elements; the caller will try the next target.
   }
-  return document.activeElement === element;
+  // The element's own document: a popover rendered into a second document
+  // (an iframe, a Picture-in-Picture window) never moves this one's focus.
+  return element.ownerDocument.activeElement === element;
 }
 
 function focusFirstContentControl(container: HTMLElement): boolean {
@@ -443,23 +450,34 @@ function usePopoverImplementation(
 
   // Auto-focus first element when popover opens (unless skipped)
   useEffect(() => {
-    if (layer.isOpen && hasAutoFocus && !skipAutoFocusRef.current) {
-      // Use requestAnimationFrame to ensure DOM is ready
-      requestAnimationFrame(focusInitialTarget);
-    }
     // Reset the per-open focus preference after the popover closes.
     if (!layer.isOpen) {
       skipAutoFocusRef.current = false;
+      return;
+    }
+    if (hasAutoFocus && !skipAutoFocusRef.current) {
+      // Wait a frame so the content is mounted. A popover that closes or
+      // unmounts first cancels it: the frame would otherwise move focus into
+      // content that is no longer shown, after the close had left it alone.
+      const frame = requestAnimationFrame(focusInitialTarget);
+      return () => cancelAnimationFrame(frame);
     }
   }, [layer.isOpen, hasAutoFocus, focusInitialTarget]);
 
-  // Combined ref for trigger element (layer anchor + our ref)
+  // Combined ref for trigger element (layer anchor + our ref). It is keyed on
+  // the layer's own ref, not the whole layer: the layer object changes with
+  // every new onShow or onHide, and a trigger ref that changed with it made
+  // React detach and reattach the trigger on every render. It reads nothing
+  // else from the layer, and layer.ref (useLayer's contextRef) reads only refs
+  // and its anchor name and anchor-clearance option, so nothing in it goes
+  // stale.
+  const layerRef = layer.ref;
   const triggerRef = useCallback(
     (el: HTMLElement | null) => {
       triggerElementRef.current = el;
-      layer.ref(el);
+      layerRef(el);
     },
-    [layer],
+    [layerRef],
   );
 
   // Show function with optional focus preservation

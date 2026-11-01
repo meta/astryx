@@ -134,8 +134,10 @@ describe('Token', () => {
       />,
     );
     const button = screen.getByRole('button', {name: 'Disabled'});
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
     expect(button.tagName).toBe('BUTTON');
+    fireEvent.click(button);
     // Container click is also disabled
     const container = screen.getByTestId('token');
     fireEvent.click(container);
@@ -254,14 +256,138 @@ describe('Token accessibility', () => {
     ).toBeInTheDocument();
   });
 
-  it('disables both buttons when isDisabled is true', () => {
+  it('keeps aria-labelledby and aria-describedby on a disabled link token', () => {
     render(
-      <Token label="Token" onClick={() => {}} onRemove={() => {}} isDisabled />,
+      <>
+        <span id="dl-label">Docs section</span>
+        <span id="dl-hint">Unavailable offline</span>
+        <Token
+          label="Docs"
+          href="/docs"
+          isDisabled
+          aria-labelledby="dl-label"
+          aria-describedby="dl-hint"
+        />
+      </>,
+    );
+    const link = screen.getByRole('link', {name: 'Docs section'});
+    expect(link).toHaveAccessibleDescription('Unavailable offline');
+  });
+
+  it("passes aria-labelledby and aria-describedby to a clickable token's button (public-component-api INV5)", () => {
+    render(
+      <>
+        <span id="field-label">Fruit</span>
+        <span id="field-hint">Pick one</span>
+        <Token
+          label="Apple"
+          onClick={() => {}}
+          aria-labelledby="field-label"
+          aria-describedby="field-hint"
+          data-testid="token"
+        />
+      </>,
+    );
+    const button = screen.getByRole('button', {name: 'Fruit'});
+    expect(button).toHaveAccessibleDescription('Pick one');
+    expect(screen.getByTestId('token')).not.toHaveAttribute('aria-labelledby');
+  });
+
+  it('reflects the disabled state on the token target in every structure (theming-surface INV6)', () => {
+    render(
+      <>
+        <Token label="Static" isDisabled data-testid="static" />
+        <Token
+          label="Clickable"
+          onClick={() => {}}
+          isDisabled
+          data-testid="clickable"
+        />
+        <Token label="Link" href="/docs" isDisabled data-testid="link" />
+        <Token
+          label="Link with remove"
+          href="/docs"
+          onRemove={() => {}}
+          isDisabled
+          data-testid="link-and-remove"
+        />
+        <Token label="Enabled" href="/docs" data-testid="enabled" />
+      </>,
+    );
+    for (const id of ['static', 'clickable', 'link', 'link-and-remove']) {
+      expect(screen.getByTestId(id), id).toHaveAttribute(
+        'data-disabled',
+        'disabled',
+      );
+    }
+    expect(screen.getByTestId('enabled')).not.toHaveAttribute('data-disabled');
+  });
+
+  it('keeps a disabled link token a focusable link with no destination (spec:AST-085 FR1, FR5)', async () => {
+    const user = userEvent.setup();
+    const onRemove = vi.fn();
+    render(
+      <>
+        <Token label="Docs" href="/docs" isDisabled />
+        <Token label="Guide" href="/guide" isDisabled onRemove={onRemove} />
+      </>,
+    );
+    for (const name of ['Docs', 'Guide']) {
+      const link = screen.getByRole('link', {name});
+      expect(link, name).toHaveAttribute('aria-disabled', 'true');
+      expect(link, name).not.toHaveAttribute('href');
+    }
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Docs'})).toHaveFocus();
+    await user.tab();
+    expect(screen.getByRole('link', {name: 'Guide'})).toHaveFocus();
+    await user.tab();
+    await user.keyboard('{Enter}');
+    expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it("passes other keys to a disabled link token's onKeyDown, but not Enter or Space", async () => {
+    const user = userEvent.setup();
+    const onKeyDown = vi.fn();
+    render(
+      <Token label="Docs" href="/docs" isDisabled onKeyDown={onKeyDown} />,
+    );
+    await user.tab();
+    await user.keyboard('{ArrowRight}');
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+    expect(onKeyDown.mock.calls[0][0].key).toBe('ArrowRight');
+    await user.keyboard('{Enter} ');
+    expect(onKeyDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps both buttons focusable and inert when isDisabled is true', async () => {
+    const user = userEvent.setup();
+    const handleClick = vi.fn();
+    const handleRemove = vi.fn();
+    render(
+      <Token
+        label="Token"
+        onClick={handleClick}
+        onRemove={handleRemove}
+        isDisabled
+      />,
     );
     const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(2);
     for (const button of buttons) {
-      expect(button).toBeDisabled();
+      expect(button).not.toHaveAttribute('disabled');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      // A wrapping Popover listens for clicks on the button itself.
+      const nativeClick = vi.fn();
+      button.addEventListener('click', nativeClick);
+      await user.tab();
+      expect(button).toHaveFocus();
+      await user.keyboard('{Enter} ');
+      expect(nativeClick).not.toHaveBeenCalled();
+      fireEvent.click(button);
     }
+    expect(handleClick).not.toHaveBeenCalled();
+    expect(handleRemove).not.toHaveBeenCalled();
   });
 
   it('does not fire onClick or onRemove when disabled', () => {

@@ -44,12 +44,13 @@ const NO_ACTION_OF_THEIR_OWN = [];
 /**
  * Commands that record for themselves instead of returning a descriptor.
  *
- * They cannot come from a CommandDoc — `manifest` introspects the live program,
- * `postinstall` is a package-script hook — so they carry the mark by hand. The
- * mark is a hatch, and a hatch nobody watches is a hole: this list is the
- * watch. The root program is checked separately below.
+ * Empty: every command, `manifest` and the hidden `postinstall` hook included,
+ * registers through defineCommand. The mark is a hatch, and a hatch nobody
+ * watches is a hole: this list is the watch. The root program is checked
+ * separately below.
+ * @type {string[]}
  */
-const RECORD_FOR_THEMSELVES = ['manifest', 'postinstall'];
+const RECORD_FOR_THEMSELVES = [];
 
 /**
  * Every command in the program, depth first, with its fully qualified name.

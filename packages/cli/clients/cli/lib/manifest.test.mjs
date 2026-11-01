@@ -55,6 +55,10 @@ const CLI_LAYER_TYPES = {
 };
 
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});
+/** Hidden commands (a package-script hook): documented, never in the manifest. */
+const HIDDEN = new Set(
+  program.commands.filter((c) => /** @type {any} */ (c)._hidden).map((c) => c.name()),
+);
 
 /** Flatten the manifest command tree into fully-qualified names. */
 function flatten(cmds, out = []) {
@@ -116,10 +120,17 @@ describe('manifest: drift guards', () => {
 
   it('takes every command example from its CommandDoc', () => {
     for (const [name, doc] of commandDocs) {
+      if (HIDDEN.has(name)) continue;
       const entry = allEntries.find((c) => c.name === name);
       expect(entry, `CommandDoc "${name}" has no manifest entry`).toBeDefined();
       expect(entry.examples ?? [], name).toEqual((doc.examples ?? []).map((e) => e.cli));
     }
+  });
+
+  it('documents the hidden postinstall hook and keeps it out of the manifest', () => {
+    expect([...HIDDEN]).toEqual(['postinstall']);
+    expect(commandDocs.has('postinstall')).toBe(true);
+    expect(allNames.has('postinstall')).toBe(false);
   });
 
   it('lists every response type the wrapped API function returns', () => {
@@ -152,6 +163,7 @@ describe('manifest: drift guards', () => {
 
   it('takes response types from the wrapped FunctionDoc, plus CLI-layer envelopes', () => {
     for (const [name, doc] of commandDocs) {
+      if (HIDDEN.has(name)) continue;
       const entry = allEntries.find((c) => c.name === name);
       const returns = doc.fn ? functionDocs.get(doc.fn).returns.map((r) => r.type) : [];
       const expected = [...returns, ...(CLI_LAYER_TYPES[name] ?? [])];
@@ -305,5 +317,30 @@ describe('manifest: text projection', () => {
     );
     expect(textKeys).toContain('name');
     for (const key of textKeys) expect(jsonKeys).toContain(key);
+  });
+});
+
+describe('global mode is discoverable (spec:AST-017 FR14)', () => {
+  it('the manifest names what a run may do beyond its command, and the docs topic that explains it', () => {
+    expect(manifest.globalMode.docs).toBe('astryx docs global');
+    for (const word of ['hands the run', 'once a day', 'agent skill']) {
+      expect(manifest.globalMode.summary).toContain(word);
+    }
+  });
+
+  it('--help carries one line pointing to the global mode docs', () => {
+    const help = program.helpInformation() + '';
+    let after = '';
+    program.emit('afterHelp', {
+      error: false,
+      write: (/** @type {string} */ s) => {
+        after += s;
+      },
+    });
+    const lines = `${help}${after}`
+      .split('\n')
+      .filter(line => line.startsWith('Global mode:'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/docs global\.$/u);
   });
 });

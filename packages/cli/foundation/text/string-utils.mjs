@@ -48,7 +48,8 @@ export function findClosestComponents(name, components, maxDistance = 3) {
  *    30  keyword Levenshtein distance 2
  *    20  name Levenshtein distance 3
  *
- * Each result: { name, score, reason }
+ * Each result: { name, score, reason }, plus `keywordAt` when a keyword set
+ * the component's score: the position of the keyword that set it.
  *
  * @param {string} needle
  * @param {string} coreDir
@@ -64,6 +65,9 @@ export async function searchComponents(needle, coreDir, components) {
   const allNames = Object.values(components).flat();
   /** @type {Map<string, {name: string, score: number, reason: string}>} */
   const scored = new Map();
+  /** Position of the keyword that set each component's score. */
+  /** @type {Map<string, number>} */
+  const keywordAt = new Map();
 
   /**
    * @param {string} name
@@ -146,12 +150,14 @@ export async function searchComponents(needle, coreDir, components) {
 
       // Keyword matching
       if (docs.keywords && Array.isArray(docs.keywords)) {
-        for (const kw of docs.keywords) {
+        for (const [at, kw] of docs.keywords.entries()) {
           const kwLower = kw.toLowerCase();
+          const before = scored.get(comp)?.score ?? 0;
 
           // Exact keyword
           if (kwLower === term) {
             addMatch(comp, 90, 'keyword "' + kw + '"');
+            if (!keywordAt.has(comp) || before < 90) keywordAt.set(comp, at);
             break;
           }
 
@@ -170,6 +176,7 @@ export async function searchComponents(needle, coreDir, components) {
             addMatch(comp, 70, 'keyword "' + kw + '" (distance ' + dist + ')');
           else if (dist === 2)
             addMatch(comp, 30, 'keyword "' + kw + '" (distance ' + dist + ')');
+          if ((scored.get(comp)?.score ?? 0) > before) keywordAt.set(comp, at);
         }
       }
 
@@ -202,9 +209,46 @@ export async function searchComponents(needle, coreDir, components) {
     }
   }
 
-  const results = Array.from(scored.values()).sort(
-    (a, b) => b.score - a.score || a.name.localeCompare(b.name),
-  );
+  // --- Pass 3: a name made of other words around a component's name ---
+  // Only when nothing above matched: a contiguous run of the needle's words
+  // ("Primitive Button", "Meta Employee Typeahead") that is a component's
+  // whole name. Longer runs and runs nearer the end score higher.
+  if (scored.size === 0) {
+    const words = String(needle)
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean);
+    const byLower = new Map(allNames.map(n => [n.toLowerCase(), n]));
+    const longest = Math.max(0, ...allNames.map(n => n.length));
+    for (let i = 0; i < words.length; i++) {
+      let run = '';
+      for (let j = i + 1; j <= words.length; j++) {
+        // Grow the run one word at a time; stop once no name is that long.
+        run += words[j - 1];
+        if (run.length > longest) break;
+        if (run.length < 4 || run === term) continue;
+        const comp = byLower.get(run);
+        if (!comp) continue;
+        const span = j - i;
+        const atEnd = j === words.length ? 1 : 0;
+        addMatch(comp, 10 + Math.min(span, 4) + atEnd, 'name part "' + run + '"');
+      }
+    }
+    // Keep only the strongest name parts, so a weaker part never sits
+    // beside the best one.
+    const best = Math.max(0, ...[...scored.values()].map(r => r.score));
+    for (const [name, r] of scored) if (r.score < best) scored.delete(name);
+  }
+
+  const results = Array.from(scored.values())
+    .map(r =>
+      keywordAt.has(r.name)
+        ? {...r, keywordAt: /** @type {number} */ (keywordAt.get(r.name))}
+        : r,
+    )
+    .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
 
   return results;
 }

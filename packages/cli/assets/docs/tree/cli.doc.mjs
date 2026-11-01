@@ -14,10 +14,16 @@ export const docs = {
   name: 'cli',
   title: 'Astryx CLI',
   summary:
-    'Commands, programmatic APIs, integration authoring, and output contracts.',
+    'Commands, programmatic APIs, and output contracts. Building an integration is under {@link namespace:authoring}.',
   keywords: ['cli', 'commands', 'api', 'reference'],
   slots: {
     guides: {title: 'Guides', accepts: {kinds: ['generic', 'namespace']}},
     reference: {title: 'Reference', accepts: {kinds: ['namespace']}},
   },
+  blocks: [
+    {
+      type: 'prose',
+      text: 'Use the CLI in any folder: install it once for your computer, and every project still gets the release that matches its Core. See {@link namespace:global}.',
+    },
+  ],
 };

@@ -4,7 +4,7 @@
 
 /**
  * @file DrawerHeader.tsx
- * @input Uses React, StyleX, LayoutHeader, Button, Icon, Heading, Text, i18n, BaseProps, mergeProps, themeProps
+ * @input Uses React, StyleX, LayoutHeader, Button, Icon, Heading, Text, i18n, BaseProps, isRenderable, mergeProps, themeProps
  * @output Exports DrawerHeader component and DrawerHeaderProps
  * @position Drawer header; composed in a Layout header slot inside Drawer, tested by DrawerHeader.test.tsx
  *
@@ -22,6 +22,7 @@
  * - /packages/cli/assets/templates/blocks/components/Drawer/ (showcase blocks)
  * - /packages/cli/assets/templates/blocks/components/DrawerHeader/ (showcase blocks)
  * - /apps/storybook/stories/Drawer.stories.tsx (examples and visual coverage)
+ * - /apps/storybook/stories/DrawerHeader.stories.tsx (component audit fixture)
  */
 
 import type {ReactNode} from 'react';
@@ -34,7 +35,7 @@ import {Icon} from '../Icon';
 import {LayoutHeader} from '../Layout';
 import {Text} from '../Text';
 import {useTranslator} from '../i18n';
-import {mergeProps, themeProps} from '../utils';
+import {isRenderable, mergeProps, themeProps} from '../utils';
 
 const styles = stylex.create({
   container: {
@@ -147,10 +148,9 @@ export function DrawerHeader({
   ...rest
 }: DrawerHeaderProps) {
   const t = useTranslator();
-  // A node subtitle may be `0`: render it inside Text instead of letting a
-  // truthiness check leak a bare text node, and skip only empty values.
-  const hasSubtitle =
-    subtitle != null && typeof subtitle !== 'boolean' && subtitle !== '';
+  const hasSubtitle = isRenderable(subtitle);
+  const hasStartContent = isRenderable(startContent);
+  const hasEndContent = isRenderable(endContent);
   const shouldCompensateEndBlock =
     endContentEdgeCompensation == null
       ? onOpenChange != null
@@ -175,7 +175,7 @@ export function DrawerHeader({
           themeProps('drawer-header'),
           stylex.props(styles.container),
         )}>
-        {startContent && (
+        {hasStartContent && (
           <div
             {...mergeProps(
               themeProps('drawer-header-start-content'),
@@ -196,7 +196,7 @@ export function DrawerHeader({
             </Text>
           )}
         </div>
-        {(endContent || onOpenChange) && (
+        {(hasEndContent || onOpenChange != null) && (
           <div
             {...mergeProps(
               themeProps('drawer-header-end-content'),

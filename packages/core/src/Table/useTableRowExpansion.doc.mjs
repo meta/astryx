@@ -55,6 +55,12 @@ export const docs = {
         'Toggle a row by clicking anywhere on it, not only on its chevron. A pointer-only convenience layered over the chevron, which stays the accessible control for keyboard and assistive tech. Clicks on interactive cell content (buttons, links, form controls) or on a text selection do not toggle, and non-expandable rows stay inert.',
       default: 'false',
     },
+    {
+      name: 'animatedLayout',
+      type: 'AnimatedLayout',
+      description:
+        "A handle from useAnimatedLayout. With it, opening or closing a panel glides the rows after it (and the content after the table) to their new places instead of jumping, the opening panel plays in on the same motion, and each row's divider moves with it. Under Reduce Motion the rows fade in place on a touch screen and change at once with a mouse; in a table with column lines (dividers columns or grid, which do not move yet) they change at once. Without it, rows jump.",
+    },
   ],
   examples: [
     {
@@ -124,5 +130,7 @@ export const docsDense = {
       "Detail panel background: 'transparent' (default) paints nothing, so the panel takes the surface behind the table and leaves a striped table's zebra alone; 'muted' washes it, for a bare table where nothing else separates the panel from the data.",
     hasRowClickExpansion:
       'Toggle a row by clicking anywhere on it, not just the chevron; pointer-only, skips interactive cell content and text selections. Defaults to false.',
+    animatedLayout:
+      'Handle from useAnimatedLayout: opening or closing a panel glides the rows after it instead of jumping them. Under Reduce Motion they fade in place on touch and change at once with a mouse; with column lines they change at once.',
   },
 };

@@ -616,6 +616,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-mobile-power-search",
+      "path": "components/lab/mobile-power-search",
+      "aliases": []
+    },
+    {
       "name": "component-lab-mobile-tokenizer",
       "path": "components/lab/mobile-tokenizer",
       "aliases": []
@@ -2425,6 +2430,21 @@
       "aliases": []
     },
     {
+      "name": "example-list-input-budget-allocation",
+      "path": "examples/list-input/budget-allocation",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-family-member-declaration",
+      "path": "examples/list-input/family-member-declaration",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-mailing-list",
+      "path": "examples/list-input/mailing-list",
+      "aliases": []
+    },
+    {
       "name": "example-list-item-basic",
       "path": "examples/list-item/basic",
       "aliases": []
@@ -3725,6 +3745,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-animated-layout",
+      "path": "hooks/use-animated-layout",
+      "aliases": []
+    },
+    {
       "name": "hook-use-announce",
       "path": "hooks/use-announce",
       "aliases": []
@@ -4492,6 +4517,11 @@
     {
       "name": "showcase-link-default",
       "path": "showcases/link/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-list-input-tag-options",
+      "path": "showcases/list-input/tag-options",
       "aliases": []
     },
     {

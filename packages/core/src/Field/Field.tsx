@@ -4,7 +4,7 @@
 
 /**
  * @file Field.tsx
- * @input Uses React, HTMLAttributes, ReactNode, FieldLabel, IconType, useFieldStatusAnnouncement
+ * @input Uses React, StyleX, BaseProps, FieldLabel/FieldStatus, FormLayoutContext, Text, VisuallyHidden, theme/status utilities
  * @output Exports Field component, FieldProps
  * @position Core implementation; consumed by index.ts, tested by Field.test.tsx
  *
@@ -29,7 +29,8 @@ import type {IconType} from '../Icon';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
-import {Text} from '../Text';
+import {Text} from '../Text/Text';
+import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
 
 const styles = stylex.create({
@@ -298,20 +299,28 @@ export function Field({
     return (
       <div
         ref={ref}
+        {...props}
         {...mergeProps(
           themeProps('field', {layout: 'horizontal-labels'}),
           stylex.props(styles.horizontalLabels, xstyle),
           className,
           style,
-        )}
-        {...props}>
+        )}>
         <div {...stylex.props(styles.horizontalLabelAlign)}>{labelNode}</div>
         <div {...stylex.props(styles.inputStatusWrapper)}>
-          {description && (
-            <Text type="supporting" display="block" id={resolvedDescriptionID}>
-              {description}
-            </Text>
-          )}
+          {description &&
+            (isLabelHidden ? (
+              <VisuallyHidden id={resolvedDescriptionID}>
+                {description}
+              </VisuallyHidden>
+            ) : (
+              <Text
+                type="supporting"
+                display="block"
+                id={resolvedDescriptionID}>
+                {description}
+              </Text>
+            ))}
           {children}
           {statusNode}
         </div>

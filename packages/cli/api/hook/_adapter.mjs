@@ -14,14 +14,14 @@
  * @position api/hook/_adapter.mjs — shared by ./list, ./detail, ./detail/params
  */
 
-import {findCoreDir} from '../../foundation/fs/paths.mjs';
+import {requireCoreDir} from '../../foundation/fs/paths.mjs';
 import {
   findHookDoc,
   getAllHookNames,
 } from '../../foundation/discovery/hook-discovery.mjs';
 import {loadDocs} from '../../foundation/discovery/component-loader.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
-import {AstryxError} from '../error.mjs';
+import {AstryxError, coreDirOrThrow} from '../error.mjs';
 import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 
 /** The package that owns Core's components, hooks, and codemods. */
@@ -34,15 +34,7 @@ export {CORE_PROVIDER_ID as CORE_PACKAGE} from '../../foundation/identity/provid
  * @returns {string} Absolute path to the core package directory.
  */
 export function resolveCoreDir(cwd) {
-  const coreDir = findCoreDir(cwd);
-  if (!coreDir) {
-    throw new AstryxError(
-      'Could not find @astryxdesign/core package',
-      undefined,
-      ERROR_CODES.ERR_CORE_NOT_FOUND,
-    );
-  }
-  return coreDir;
+  return coreDirOrThrow(requireCoreDir, cwd);
 }
 
 /**

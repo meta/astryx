@@ -55,6 +55,7 @@ export const docs = {
     'sidebar',
     'dialog',
     'side drawer',
+    'sidesheet',
   ],
   // No isInline docs-preview prop (the drawer has no inline containment), so
   // this is the overlay preview: closed on load with an open trigger, knobs

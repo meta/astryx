@@ -24,7 +24,7 @@ export const States: Story = {
   render: () => (
     <CommandPaletteList
       label="Command item states"
-      style={{inlineSize: 'min(22rem, calc(100vw - 2rem))'}}>
+      style={{inlineSize: 'min(22rem, calc(100vw - 4rem))'}}>
       <CommandPaletteItem value="open-file" onSelect={() => {}}>
         Open file
         <Kbd keys="mod+o" />
@@ -40,6 +40,27 @@ export const States: Story = {
       </CommandPaletteItem>
       <CommandPaletteItem value="archived" isDisabled onSelect={() => {}}>
         Archived command
+      </CommandPaletteItem>
+    </CommandPaletteList>
+  ),
+};
+
+/** Coincident visual state and long content remain measurable without changing option semantics. */
+export const CombinedAndLong: Story = {
+  render: () => (
+    <CommandPaletteList
+      label="Combined and long command item states"
+      style={{inlineSize: 'min(22rem, calc(100vw - 4rem))'}}>
+      <CommandPaletteItem
+        value="selected-highlighted"
+        isHighlighted
+        isSelected
+        onSelect={() => {}}>
+        Selected and highlighted
+      </CommandPaletteItem>
+      <CommandPaletteItem value="long-label" onSelect={() => {}}>
+        Review every pending workspace configuration change before continuing
+        <Kbd keys="mod+shift+p" />
       </CommandPaletteItem>
     </CommandPaletteList>
   ),

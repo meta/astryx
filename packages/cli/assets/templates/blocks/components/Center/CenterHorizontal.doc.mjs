@@ -11,4 +11,12 @@ export const doc = {
   isReady: true,
   aspectRatio: 16 / 9,
   componentsUsed: ['Center', 'Card', 'Icon', 'IconButton', 'Layout'],
+  icons: {
+    BoldIcon: 'bold',
+    ItalicIcon: 'italic',
+    LinkIcon: 'link',
+    ListBulletIcon: 'list',
+    PhotoIcon: 'image',
+    UnderlineIcon: 'underline',
+  },
 };

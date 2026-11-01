@@ -1,0 +1,1813 @@
+{
+  "apiVersion": 1,
+  "type": "manifest",
+  "data": {
+    "name": "astryx",
+    "version": "<version>",
+    "apiVersion": 1,
+    "description": "<text>",
+    "globalOptions": [
+      {
+        "flag": "-V, --version",
+        "description": "<text>",
+        "type": "boolean"
+      },
+      {
+        "flag": "--zh",
+        "description": "<text>",
+        "type": "boolean"
+      },
+      {
+        "flag": "--dense",
+        "description": "<text>",
+        "type": "boolean"
+      },
+      {
+        "flag": "--lang <locale>",
+        "description": "<text>",
+        "type": "enum",
+        "choices": [
+          "en",
+          "zh",
+          "dense"
+        ]
+      },
+      {
+        "flag": "--detail <level>",
+        "description": "<text>",
+        "type": "enum",
+        "choices": [
+          "full",
+          "compact",
+          "brief"
+        ],
+        "default": "<text>"
+      },
+      {
+        "flag": "--json",
+        "description": "<text>",
+        "type": "boolean"
+      }
+    ],
+    "commands": [
+      {
+        "name": "blog",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "slug",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "build",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "query",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--type <domain>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--limit <n>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--verbose",
+            "description": "<text>",
+            "type": "boolean"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "component",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "names",
+            "required": false,
+            "variadic": true,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--list",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--category <category>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--props",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--source",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--showcase",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--blocks",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--package <name>",
+            "description": "<text>",
+            "type": "string"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "discover",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "query",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--components",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--type <kind>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--installed",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--available",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--limit <n>",
+            "description": "<text>",
+            "type": "string"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "docs",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "topic",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          },
+          {
+            "name": "section",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--index",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--full",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--depth <levels>",
+            "description": "<text>",
+            "type": "string"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "doctor",
+        "description": "<text>",
+        "arguments": [],
+        "options": [
+          {
+            "flag": "--built <path>",
+            "description": "<text>",
+            "type": "string"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>",
+        "subcommands": [
+          {
+            "name": "doctor integration",
+            "description": "<text>",
+            "arguments": [],
+            "options": [],
+            "json": false,
+            "examples": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "subcommands": [
+              {
+                "name": "doctor integration components",
+                "description": "<text>",
+                "arguments": [
+                  {
+                    "name": "package",
+                    "required": false,
+                    "variadic": false,
+                    "description": "<text>"
+                  }
+                ],
+                "options": [],
+                "json": true,
+                "responseTypes": [
+                  "<text>"
+                ],
+                "examples": [
+                  "<text>",
+                  "<text>"
+                ],
+                "exitCodes": [
+                  {
+                    "code": 0,
+                    "when": "<text>"
+                  },
+                  {
+                    "code": 1,
+                    "when": "<text>"
+                  }
+                ],
+                "outsideProject": "<text>"
+              },
+              {
+                "name": "doctor integration docs",
+                "description": "<text>",
+                "arguments": [
+                  {
+                    "name": "package",
+                    "required": false,
+                    "variadic": false,
+                    "description": "<text>"
+                  }
+                ],
+                "options": [],
+                "json": true,
+                "responseTypes": [
+                  "<text>"
+                ],
+                "examples": [
+                  "<text>",
+                  "<text>"
+                ],
+                "exitCodes": [
+                  {
+                    "code": 0,
+                    "when": "<text>"
+                  },
+                  {
+                    "code": 1,
+                    "when": "<text>"
+                  }
+                ],
+                "outsideProject": "<text>"
+              },
+              {
+                "name": "doctor integration templates",
+                "description": "<text>",
+                "arguments": [
+                  {
+                    "name": "package",
+                    "required": false,
+                    "variadic": false,
+                    "description": "<text>"
+                  }
+                ],
+                "options": [],
+                "json": true,
+                "responseTypes": [
+                  "<text>"
+                ],
+                "examples": [
+                  "<text>",
+                  "<text>"
+                ],
+                "exitCodes": [
+                  {
+                    "code": 0,
+                    "when": "<text>"
+                  },
+                  {
+                    "code": 1,
+                    "when": "<text>"
+                  }
+                ],
+                "outsideProject": "<text>"
+              },
+              {
+                "name": "doctor integration validate",
+                "description": "<text>",
+                "arguments": [
+                  {
+                    "name": "package",
+                    "required": false,
+                    "variadic": false,
+                    "description": "<text>"
+                  }
+                ],
+                "options": [],
+                "json": true,
+                "responseTypes": [
+                  "<text>"
+                ],
+                "examples": [
+                  "<text>",
+                  "<text>"
+                ],
+                "exitCodes": [
+                  {
+                    "code": 0,
+                    "when": "<text>"
+                  },
+                  {
+                    "code": 1,
+                    "when": "<text>"
+                  }
+                ],
+                "outsideProject": "<text>"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "gap-report",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "component",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--category <category>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--reason <reason>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--additional-context <text>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--package <pkg>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--confirm-public",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--to <package>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--list-categories",
+            "description": "<text>",
+            "type": "boolean"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "hook",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--list",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--category <category>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--params",
+            "description": "<text>",
+            "type": "boolean"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "init",
+        "description": "<text>",
+        "arguments": [],
+        "options": [
+          {
+            "flag": "--features <list>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--all",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--remove-agents",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--user",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--agent <tool>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--agent-docs-path <path...>",
+            "description": "<text>",
+            "type": "string"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "integration",
+        "description": "<text>",
+        "arguments": [],
+        "options": [],
+        "json": false,
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "integration add",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "kind",
+                "required": true,
+                "variadic": false,
+                "description": "<text>"
+              },
+              {
+                "name": "name",
+                "required": true,
+                "variadic": false,
+                "description": "<text>"
+              }
+            ],
+            "options": [
+              {
+                "flag": "--dry-run",
+                "description": "<text>",
+                "type": "boolean"
+              },
+              {
+                "flag": "--type <type>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "--replaces <topic>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "--extends <topic>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "--parent <namespace>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "--from <theme>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "--to <version>",
+                "description": "<text>",
+                "type": "string"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "integration check",
+            "description": "<text>",
+            "arguments": [],
+            "options": [
+              {
+                "flag": "--strict",
+                "description": "<text>",
+                "type": "boolean"
+              },
+              {
+                "flag": "--next",
+                "description": "<text>",
+                "type": "boolean"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "integration pack",
+            "description": "<text>",
+            "arguments": [],
+            "options": [
+              {
+                "flag": "--check",
+                "description": "<text>",
+                "type": "boolean"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "integration verify",
+            "description": "<text>",
+            "arguments": [],
+            "options": [],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          }
+        ]
+      },
+      {
+        "name": "manifest",
+        "description": "<text>",
+        "arguments": [],
+        "options": [],
+        "json": true,
+        "responseTypes": [
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "search",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "query",
+            "required": true,
+            "variadic": true,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--type <domain>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--limit <n>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--verbose",
+            "description": "<text>",
+            "type": "boolean"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "swizzle",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "component",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--output <dir>",
+            "description": "<text>",
+            "type": "string",
+            "default": "<text>"
+          },
+          {
+            "flag": "--package <pkg>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--list",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "-f, --overwrite",
+            "description": "<text>",
+            "type": "boolean"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "template",
+        "description": "<text>",
+        "arguments": [
+          {
+            "name": "name",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          },
+          {
+            "name": "path",
+            "required": false,
+            "variadic": false,
+            "description": "<text>"
+          }
+        ],
+        "options": [
+          {
+            "flag": "--list",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--type <type>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--package <pkg>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--skeleton",
+            "description": "<text>",
+            "type": "boolean"
+          },
+          {
+            "flag": "--cdn [path]",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "-f, --overwrite",
+            "description": "<text>",
+            "type": "boolean"
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      },
+      {
+        "name": "theme",
+        "description": "<text>",
+        "arguments": [],
+        "options": [],
+        "json": false,
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "subcommands": [
+          {
+            "name": "theme add",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "slug",
+                "required": false,
+                "variadic": false,
+                "description": "<text>"
+              }
+            ],
+            "options": [
+              {
+                "flag": "--list",
+                "description": "<text>",
+                "type": "boolean"
+              },
+              {
+                "flag": "--import",
+                "description": "<text>",
+                "type": "boolean"
+              },
+              {
+                "flag": "--package <package>",
+                "description": "<text>",
+                "type": "string"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>",
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "theme build",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "files",
+                "required": true,
+                "variadic": true,
+                "description": "<text>"
+              }
+            ],
+            "options": [
+              {
+                "flag": "--family",
+                "description": "<text>",
+                "type": "boolean"
+              },
+              {
+                "flag": "--family-key <key>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "-o, --out <path>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "--icons-specifier <specifier>",
+                "description": "<text>",
+                "type": "string"
+              },
+              {
+                "flag": "-w, --watch",
+                "description": "<text>",
+                "type": "boolean"
+              },
+              {
+                "flag": "-c, --check",
+                "description": "<text>",
+                "type": "boolean"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>",
+              "<text>",
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "theme eject",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "slug",
+                "required": true,
+                "variadic": false,
+                "description": "<text>"
+              },
+              {
+                "name": "path",
+                "required": false,
+                "variadic": false,
+                "description": "<text>"
+              }
+            ],
+            "options": [
+              {
+                "flag": "-f, --overwrite",
+                "description": "<text>",
+                "type": "boolean"
+              },
+              {
+                "flag": "--package <package>",
+                "description": "<text>",
+                "type": "string"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "theme list",
+            "description": "<text>",
+            "arguments": [],
+            "options": [
+              {
+                "flag": "--package <package>",
+                "description": "<text>",
+                "type": "string"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "theme palette",
+            "description": "<text>",
+            "arguments": [],
+            "options": [],
+            "json": false,
+            "examples": [
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "subcommands": [
+              {
+                "name": "theme palette generate",
+                "description": "<text>",
+                "arguments": [
+                  {
+                    "name": "config",
+                    "required": true,
+                    "variadic": false,
+                    "description": "<text>"
+                  }
+                ],
+                "options": [
+                  {
+                    "flag": "-o, --out <path>",
+                    "description": "<text>",
+                    "type": "string"
+                  },
+                  {
+                    "flag": "--preview <path>",
+                    "description": "<text>",
+                    "type": "string"
+                  },
+                  {
+                    "flag": "-f, --overwrite",
+                    "description": "<text>",
+                    "type": "boolean"
+                  }
+                ],
+                "json": true,
+                "responseTypes": [
+                  "<text>"
+                ],
+                "examples": [
+                  "<text>",
+                  "<text>",
+                  "<text>"
+                ],
+                "exitCodes": [
+                  {
+                    "code": 0,
+                    "when": "<text>"
+                  },
+                  {
+                    "code": 1,
+                    "when": "<text>"
+                  }
+                ],
+                "outsideProject": "<text>"
+              }
+            ]
+          },
+          {
+            "name": "theme remove",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "slug",
+                "required": true,
+                "variadic": false,
+                "description": "<text>"
+              }
+            ],
+            "options": [],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "theme targets",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "filter",
+                "required": false,
+                "variadic": false,
+                "description": "<text>"
+              }
+            ],
+            "options": [],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>",
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "theme template",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "path",
+                "required": false,
+                "variadic": false,
+                "description": "<text>"
+              }
+            ],
+            "options": [
+              {
+                "flag": "-f, --overwrite",
+                "description": "<text>",
+                "type": "boolean"
+              }
+            ],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>",
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          },
+          {
+            "name": "theme use",
+            "description": "<text>",
+            "arguments": [
+              {
+                "name": "slug",
+                "required": true,
+                "variadic": false,
+                "description": "<text>"
+              }
+            ],
+            "options": [],
+            "json": true,
+            "responseTypes": [
+              "<text>"
+            ],
+            "examples": [
+              "<text>"
+            ],
+            "exitCodes": [
+              {
+                "code": 0,
+                "when": "<text>"
+              },
+              {
+                "code": 1,
+                "when": "<text>"
+              }
+            ],
+            "outsideProject": "<text>"
+          }
+        ]
+      },
+      {
+        "name": "upgrade",
+        "description": "<text>",
+        "arguments": [],
+        "options": [
+          {
+            "flag": "--from <version>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--apply",
+            "description": "<text>",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "flag": "--force",
+            "description": "<text>",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "flag": "--codemod <name>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--skip-codemod <name...>",
+            "description": "<text>",
+            "type": "string"
+          },
+          {
+            "flag": "--integration <package>",
+            "description": "<text>",
+            "type": "string",
+            "default": []
+          },
+          {
+            "flag": "--path <dir>",
+            "description": "<text>",
+            "type": "string",
+            "default": "<text>"
+          },
+          {
+            "flag": "--install-deps",
+            "description": "<text>",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "flag": "--registry",
+            "description": "<text>",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "flag": "--list",
+            "description": "<text>",
+            "type": "boolean",
+            "default": false
+          }
+        ],
+        "json": true,
+        "responseTypes": [
+          "<text>",
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "examples": [
+          "<text>",
+          "<text>",
+          "<text>"
+        ],
+        "exitCodes": [
+          {
+            "code": 0,
+            "when": "<text>"
+          },
+          {
+            "code": 1,
+            "when": "<text>"
+          }
+        ],
+        "outsideProject": "<text>"
+      }
+    ],
+    "jsonSupported": [
+      "blog",
+      "build",
+      "component",
+      "discover",
+      "docs",
+      "doctor",
+      "doctor integration components",
+      "doctor integration docs",
+      "doctor integration templates",
+      "doctor integration validate",
+      "gap-report",
+      "hook",
+      "init",
+      "integration add",
+      "integration check",
+      "integration pack",
+      "integration verify",
+      "manifest",
+      "search",
+      "swizzle",
+      "template",
+      "theme add",
+      "theme build",
+      "theme eject",
+      "theme list",
+      "theme palette generate",
+      "theme remove",
+      "theme targets",
+      "theme template",
+      "theme use",
+      "upgrade"
+    ],
+    "globalMode": {
+      "docs": "<text>",
+      "summary": "<text>"
+    },
+    "responseTypes": {
+      "blog": [
+        "<text>",
+        "<text>"
+      ],
+      "build": [
+        "<text>",
+        "<text>"
+      ],
+      "component": [
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>"
+      ],
+      "discover": [
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>"
+      ],
+      "docs": [
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>"
+      ],
+      "doctor": [
+        "<text>"
+      ],
+      "doctor integration components": [
+        "<text>"
+      ],
+      "doctor integration docs": [
+        "<text>"
+      ],
+      "doctor integration templates": [
+        "<text>"
+      ],
+      "doctor integration validate": [
+        "<text>"
+      ],
+      "gap-report": [
+        "<text>",
+        "<text>"
+      ],
+      "hook": [
+        "<text>",
+        "<text>",
+        "<text>"
+      ],
+      "init": [
+        "<text>",
+        "<text>",
+        "<text>"
+      ],
+      "integration add": [
+        "<text>"
+      ],
+      "integration check": [
+        "<text>"
+      ],
+      "integration pack": [
+        "<text>"
+      ],
+      "integration verify": [
+        "<text>"
+      ],
+      "manifest": [
+        "<text>"
+      ],
+      "search": [
+        "<text>"
+      ],
+      "swizzle": [
+        "<text>",
+        "<text>"
+      ],
+      "template": [
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>"
+      ],
+      "theme add": [
+        "<text>",
+        "<text>"
+      ],
+      "theme build": [
+        "<text>",
+        "<text>",
+        "<text>"
+      ],
+      "theme eject": [
+        "<text>"
+      ],
+      "theme list": [
+        "<text>"
+      ],
+      "theme palette generate": [
+        "<text>"
+      ],
+      "theme remove": [
+        "<text>"
+      ],
+      "theme targets": [
+        "<text>"
+      ],
+      "theme template": [
+        "<text>"
+      ],
+      "theme use": [
+        "<text>"
+      ],
+      "upgrade": [
+        "<text>",
+        "<text>",
+        "<text>",
+        "<text>"
+      ]
+    }
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

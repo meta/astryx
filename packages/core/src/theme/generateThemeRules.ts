@@ -4,8 +4,9 @@
  * @file Theme CSS generation utilities
  *
  * Shared logic for generating CSS rules from a resolved theme definition,
- * including one component-leaf lowering path for root, adaptation, and
- * media-surface values plus condition-correct Heading weight precedence guards.
+ * including source-scoped semantic role defaults and one component-leaf lowering
+ * path for root, adaptation, and media-surface values plus condition-correct
+ * Heading weight precedence guards.
  * Built adaptation metadata resolves against the same root component defaults
  * as defineTheme, so scale-only rules do not reset authored component styles.
  * Used by both the runtime path (Theme injects <style>) and the build
@@ -29,11 +30,15 @@ import type {ComponentStyleMap, DefinedTheme} from './defineTheme';
 import {
   normalizeThemeAdaptations,
   resolveThemeAdaptationRules,
+  type ResolvedThemeAdaptationRule,
 } from './themeAdaptations';
 import {parseStyleKey} from '../utils/parseStyleKey';
 import {getDerivedVars} from './derivedVarRegistry';
+import {STATUS_NAMES, deriveStatusRoleTokens} from './statusRoleDerivation';
 import {cssVar, classPrefix, dataAttrNamespace} from '../naming';
 import {
+  analyzeDeclarationValue,
+  canonicalizeDeclarationName,
   checkDeclarationName,
   checkDeclarationValue,
 } from './declarationBoundary';
@@ -448,7 +453,7 @@ function joinDeclarations(
   for (const [rawProp, rawValue] of entries) {
     // Legacy unenrolled tokens retain non-string values. Scan the same text
     // interpolation has always emitted, without changing the normalized theme.
-    const value = `${rawValue}`;
+    const value = stringifyTokenValue(rawValue);
     const prop = mapProp(rawProp);
     if (acceptDeclaration(prop, value, location, sink)) {
       lines.push(`    ${prop}: ${value};`);
@@ -457,14 +462,526 @@ function joinDeclarations(
   return lines.join('\n');
 }
 
+/**
+ * Public status roles whose canonical default references an existing semantic
+ * source token. StyleX owns the document defaults. A theme that authors a
+ * source repeats its omitted role at the theme root so nested Theme regions
+ * bind the alias locally without changing authored-token metadata.
+ *
+ * Conditional scopes repeat an omitted alias only when the source changes on
+ * that scope. Explicit adaptation role writes are replayed after generated
+ * aliases (and on media descendants) so authored role precedence survives
+ * overlapping conditions without disabling the alias in non-matching states.
+ */
+const SCOPED_STATUS_ROLE_DEFAULTS: ReadonlyArray<
+  readonly [role: string, source: string]
+> = [
+  ['--color-text-info', '--color-text-blue'],
+  ['--color-text-success', '--color-text-green'],
+  ['--color-text-warning', '--color-text-yellow'],
+  ['--color-text-error', '--color-text-red'],
+  ['--color-on-info-muted', '--color-text-blue'],
+  ['--color-on-success-muted', '--color-text-green'],
+  ['--color-on-warning-muted', '--color-text-yellow'],
+  ['--color-on-error-muted', '--color-text-red'],
+  // Icon and border roles follow the text role, set or derived (INV17).
+  ['--color-icon-info', '--color-text-info'],
+  ['--color-icon-success', '--color-text-success'],
+  ['--color-icon-warning', '--color-text-warning'],
+  ['--color-icon-error', '--color-text-error'],
+  ['--color-border-info', '--color-text-info'],
+  ['--color-border-success', '--color-text-success'],
+  ['--color-border-warning', '--color-text-warning'],
+  ['--color-border-error', '--color-text-error'],
+];
+
+const SCOPED_STATUS_ROLE_SOURCES = new Map(SCOPED_STATUS_ROLE_DEFAULTS);
+
+/** Colours INV17's derivation measures; a scope that sets one re-derives. */
+const STATUS_MEASURED =
+  /^--color-(?:info|success|warning|error|on-|background-surface|background-card)/;
+
+const STATUS_ROLE_ORDER = new Map(
+  SCOPED_STATUS_ROLE_DEFAULTS.map(([role], index) => [role, index]),
+);
+
+type TokenValues = Record<string, unknown>;
+
+function stringifyTokenValue(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  // Preserve the exact JavaScript interpolation behavior legacy themes received
+  // before declaration analysis accepted non-string token values.
+  return String(value);
+}
+
+interface TokenCascadeState {
+  values: TokenValues;
+  important: Set<string>;
+}
+
+function assignTokenCascade(
+  state: TokenCascadeState,
+  ...tokenSets: ReadonlyArray<TokenValues | undefined>
+): void {
+  for (const tokens of tokenSets) {
+    for (const [rawToken, rawValue] of Object.entries(tokens ?? {})) {
+      const token = canonicalizeDeclarationName(rawToken);
+      const value = stringifyTokenValue(rawValue);
+      const analysis = analyzeDeclarationValue(value);
+      // Match joinDeclarations: declarations that cannot be emitted never
+      // participate in the browser cascade this safety model validates.
+      if (token === null || analysis.reason !== null) {
+        continue;
+      }
+      if (state.important.has(token) && !analysis.important) {
+        continue;
+      }
+      state.values[token] = value;
+      if (analysis.important) {
+        state.important.add(token);
+      } else {
+        state.important.delete(token);
+      }
+    }
+  }
+}
+
+function createTokenCascade(
+  ...tokenSets: ReadonlyArray<TokenValues | undefined>
+): TokenCascadeState {
+  const state: TokenCascadeState = {values: {}, important: new Set()};
+  assignTokenCascade(state, ...tokenSets);
+  return state;
+}
+
+/** Check whether one candidate value closes a cycle through its own role. */
+function tokenValuesWouldHaveCycleWithValue(
+  tokens: TokenValues,
+  relevantToken: string,
+  candidateValue: string,
+): boolean {
+  const stack = [...analyzeDeclarationValue(candidateValue).references];
+  const visited = new Set<string>();
+  while (stack.length > 0) {
+    const token = stack.pop();
+    if (token === undefined) {
+      continue;
+    }
+    if (token === relevantToken) {
+      return true;
+    }
+    if (
+      visited.has(token) ||
+      !Object.prototype.hasOwnProperty.call(tokens, token)
+    ) {
+      continue;
+    }
+    visited.add(token);
+    for (const reference of analyzeDeclarationValue(
+      stringifyTokenValue(tokens[token]),
+    ).references) {
+      if (
+        reference === relevantToken ||
+        Object.prototype.hasOwnProperty.call(tokens, reference)
+      ) {
+        stack.push(reference);
+      }
+    }
+  }
+  return false;
+}
+
+const WIDTH_CELL_RANK = {
+  sm: 1,
+  md: 2,
+  lg: 3,
+  xl: 4,
+  '2xl': 5,
+} as const;
+
+function adaptationConditionMatchesCell(
+  condition: ResolvedThemeAdaptationRule['when'],
+  widthRank: number,
+  pointer: 'coarse' | 'fine' | 'none',
+  contrast: 'more' | 'less' | 'no-preference' | 'custom',
+  motion: 'reduce' | 'no-preference',
+): boolean {
+  const from = condition.width?.from;
+  if (from !== undefined && widthRank < WIDTH_CELL_RANK[from]) {
+    return false;
+  }
+  const below = condition.width?.below;
+  if (below !== undefined && widthRank >= WIDTH_CELL_RANK[below]) {
+    return false;
+  }
+  return (
+    (condition.pointer === undefined || condition.pointer === pointer) &&
+    (condition.contrast === undefined || condition.contrast === contrast) &&
+    (condition.motion === undefined || condition.motion === motion)
+  );
+}
+
+const REACHABLE_MATCH_SET_CACHE = new WeakMap<
+  ReadonlyArray<ResolvedThemeAdaptationRule>,
+  number[][]
+>();
+
+/** Every reachable ordered adaptation-rule match set, including the root. */
+function reachableAdaptationMatchSets(
+  rules: ReadonlyArray<ResolvedThemeAdaptationRule>,
+): number[][] {
+  const cached = REACHABLE_MATCH_SET_CACHE.get(rules);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const matchSets = new Map<string, number[]>();
+  for (let widthRank = 0; widthRank <= 5; widthRank++) {
+    for (const pointer of ['coarse', 'fine', 'none'] as const) {
+      for (const contrast of [
+        'more',
+        'less',
+        'no-preference',
+        'custom',
+      ] as const) {
+        for (const motion of ['reduce', 'no-preference'] as const) {
+          const indexes = rules.flatMap((rule, index) =>
+            adaptationConditionMatchesCell(
+              rule.when,
+              widthRank,
+              pointer,
+              contrast,
+              motion,
+            )
+              ? [index]
+              : [],
+          );
+          matchSets.set(indexes.join(','), indexes);
+        }
+      }
+    }
+  }
+  const reachable = [...matchSets.values()];
+  REACHABLE_MATCH_SET_CACHE.set(rules, reachable);
+  return reachable;
+}
+
+function effectiveAdaptationTokenValues(
+  rootTokens: Record<string, string>,
+  rootLocalTokens: Record<string, string> | undefined,
+  rootAliases: ReadonlyArray<readonly [string, string]>,
+  rules: ReadonlyArray<ResolvedThemeAdaptationRule>,
+  matchingRuleIndexes: ReadonlyArray<number>,
+  conditionalAliases: ReadonlyArray<
+    ReadonlyArray<readonly [string, string]>
+  > = [],
+): TokenValues {
+  const effective = createTokenCascade(
+    rootTokens,
+    Object.fromEntries(rootAliases),
+    rootLocalTokens,
+  );
+  for (const index of matchingRuleIndexes) {
+    const rule = rules[index];
+    assignTokenCascade(
+      effective,
+      rule.tokens,
+      Object.fromEntries(conditionalAliases[index] ?? []),
+      rule.localTokens,
+    );
+  }
+  // Emission replays authored roles after every ordinary adaptation block so
+  // an explicit role beats aliases from any later overlapping rule.
+  for (const index of matchingRuleIndexes) {
+    assignTokenCascade(
+      effective,
+      Object.fromEntries(authoredStatusRoleEntries(rules[index].tokens)),
+    );
+  }
+  return effective.values;
+}
+
+function retainedAdaptationRules(
+  theme: ThemeRuleSource,
+): ResolvedThemeAdaptationRule[] {
+  if (!('__adaptations' in theme) && !('__adaptationRules' in theme)) {
+    return [];
+  }
+  return resolvedAdaptationRules(theme as DefinedTheme);
+}
+
+/** Root status roles a theme leaves unset: INV17-derived values and INV16 aliases. */
+export function generatedScopedStatusRoleDefaults(
+  tokens: Record<string, string>,
+  localTokens: Record<string, string> = {},
+  rules: ReadonlyArray<ResolvedThemeAdaptationRule> = [],
+): [string, string][] {
+  // INV17: roles a theme leaves unset while setting their status source are
+  // computed against the theme's own surfaces first; the aliases below then
+  // treat them as present, so icon and border roles follow a derived text role.
+  const entries: [string, string][] = deriveStatusRoleTokens(
+    tokens,
+    localTokens,
+  );
+  const authoredRoot = createTokenCascade(
+    tokens,
+    Object.fromEntries(entries),
+    localTokens,
+  ).values;
+  const states = reachableAdaptationMatchSets(rules).map(indexes => ({
+    indexes,
+    values: effectiveAdaptationTokenValues(
+      tokens,
+      localTokens,
+      entries,
+      rules,
+      indexes,
+    ),
+  }));
+
+  for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+    const alias = `var(${source})`;
+    if (
+      authoredRoot[role] !== undefined ||
+      (authoredRoot[source] === undefined &&
+        !entries.some(([emitted]) => emitted === source))
+    ) {
+      continue;
+    }
+    const isSafe = states.every(
+      ({values}) =>
+        values[role] !== undefined ||
+        !tokenValuesWouldHaveCycleWithValue(values, role, alias),
+    );
+    if (isSafe) {
+      entries.push([role, alias]);
+      for (const {values} of states) {
+        if (values[role] === undefined) {
+          values[role] = alias;
+        }
+      }
+    }
+  }
+  // One canonical order whether a role is derived or aliased, so themes that
+  // differ only in which roles needed computing still emit comparable rules.
+  return entries.sort(
+    ([a], [b]) =>
+      (STATUS_ROLE_ORDER.get(a) ?? 0) - (STATUS_ROLE_ORDER.get(b) ?? 0),
+  );
+}
+
+function authoredStatusRoleEntries(
+  tokens: Record<string, string>,
+): [string, string][] {
+  const canonicalTokens = createTokenCascade(tokens).values;
+  return SCOPED_STATUS_ROLE_DEFAULTS.flatMap(([role]) => {
+    const value = canonicalTokens[role];
+    return value === undefined ? [] : [[role, stringifyTokenValue(value)]];
+  });
+}
+
+function tokenValueIsAliasOf(value: unknown, source: string): boolean {
+  return (
+    analyzeDeclarationValue(stringifyTokenValue(value)).singleVarReference ===
+    source
+  );
+}
+
+function mediaRoleRestorationValue(role: string, value: string): string {
+  const source = SCOPED_STATUS_ROLE_SOURCES.get(role);
+  return source !== undefined && tokenValueIsAliasOf(value, source)
+    ? value
+    : 'inherit';
+}
+
+function generatedAdaptationStatusRoleDefaults(
+  rootTokens: Record<string, string>,
+  rootLocalTokens: Record<string, string> | undefined,
+  rules: ReadonlyArray<ResolvedThemeAdaptationRule>,
+  rootAliases: ReadonlyArray<readonly [string, string]>,
+): [string, string][][] {
+  const aliases = rules.map((): [string, string][] => []);
+  const rootValues = createTokenCascade(
+    rootTokens,
+    Object.fromEntries(rootAliases),
+    rootLocalTokens,
+  ).values;
+  const states = reachableAdaptationMatchSets(rules).map(indexes => ({
+    indexes,
+    values: effectiveAdaptationTokenValues(
+      rootTokens,
+      rootLocalTokens,
+      rootAliases,
+      rules,
+      indexes,
+      aliases,
+    ),
+  }));
+
+  for (const [index, rule] of rules.entries()) {
+    const authoredRule = createTokenCascade(
+      rule.tokens,
+      rule.localTokens,
+    ).values;
+    // INV17 in an adaptation: a rule that changes a colour the derivation
+    // measures gets the roles derived from the root and that rule together.
+    if (Object.keys(authoredRule).some(token => STATUS_MEASURED.test(token))) {
+      const ruleDerived = new Map(
+        deriveStatusRoleTokens(
+          {...rootTokens, ...rule.tokens},
+          {...rootLocalTokens, ...rule.localTokens},
+        ),
+      );
+      for (const [role, value] of ruleDerived) {
+        if (authoredRule[role] === undefined && rootValues[role] !== value) {
+          aliases[index].push([role, value]);
+        }
+      }
+    }
+    // Roles this rule derived count as set: they are not overwritten by an
+    // alias, and roles that follow them (icon and border) alias them here.
+    const ruleRoles = new Map(aliases[index]);
+    const ruleSources = {...authoredRule, ...Object.fromEntries(ruleRoles)};
+    for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+      const alias = `var(${source})`;
+      const rootRole = rootValues[role];
+      if (
+        ruleRoles.has(role) ||
+        authoredRule[role] !== undefined ||
+        (ruleSources[source] === undefined &&
+          !aliases[index].some(([emitted]) => emitted === source)) ||
+        rootRole !== undefined
+      ) {
+        continue;
+      }
+
+      const matchingStates = states.filter(({indexes}) =>
+        indexes.includes(index),
+      );
+      const isSafe = matchingStates.every(
+        ({values}) =>
+          values[role] !== undefined ||
+          !tokenValuesWouldHaveCycleWithValue(values, role, alias),
+      );
+      if (isSafe) {
+        aliases[index].push([role, alias]);
+        for (const {values} of matchingStates) {
+          if (values[role] === undefined) {
+            values[role] = alias;
+          }
+        }
+      }
+    }
+  }
+  return aliases;
+}
+
+function generatedMediaStatusRoleDefaults(
+  tokens: Record<string, string>,
+  rootTokens: Record<string, string>,
+  rootLocalTokens: Record<string, string> | undefined,
+  rules: ReadonlyArray<ResolvedThemeAdaptationRule>,
+  rootAliases: ReadonlyArray<readonly [string, string]>,
+): [string, string][] {
+  const aliases: [string, string][] = [];
+  const rootValues = createTokenCascade(
+    rootTokens,
+    Object.fromEntries(rootAliases),
+    rootLocalTokens,
+  ).values;
+  // A media surface sits on content the compiler cannot measure, so a status
+  // colour set there reaches its roles as an INV16 alias, even where the root
+  // holds an INV17-derived value.
+  const rootDerived = new Set(
+    deriveStatusRoleTokens(rootTokens, rootLocalTokens).map(([role]) => role),
+  );
+  const authoredMedia = createTokenCascade(tokens).values;
+  const authoredRolesByRule = rules.map(
+    rule => new Map(authoredStatusRoleEntries(rule.tokens)),
+  );
+  const states = reachableAdaptationMatchSets(rules).map(indexes => ({
+    indexes,
+    values: {...authoredMedia},
+  }));
+  const candidateValueFor = (
+    role: string,
+    alias: string,
+    matchingRuleIndexes: ReadonlyArray<number>,
+  ): string => {
+    const candidate = createTokenCascade({[role]: alias});
+    for (const index of matchingRuleIndexes) {
+      const authoredValue = authoredRolesByRule[index].get(role);
+      if (authoredValue !== undefined) {
+        assignTokenCascade(candidate, {
+          [role]: mediaRoleRestorationValue(role, authoredValue),
+        });
+      }
+    }
+    return stringifyTokenValue(candidate.values[role]);
+  };
+
+  for (const [role, source] of SCOPED_STATUS_ROLE_DEFAULTS) {
+    const alias = `var(${source})`;
+    const rootRole = rootValues[role];
+    if (
+      authoredMedia[role] !== undefined ||
+      (authoredMedia[source] === undefined &&
+        !aliases.some(([emitted]) => emitted === source)) ||
+      (rootRole !== undefined &&
+        !tokenValueIsAliasOf(rootRole, source) &&
+        !rootDerived.has(role))
+    ) {
+      continue;
+    }
+
+    const candidateValues = states.map(({indexes, values}) => ({
+      values,
+      candidate: candidateValueFor(role, alias, indexes),
+    }));
+    const isSafe = candidateValues.every(
+      ({values, candidate}) =>
+        values[role] === candidate ||
+        !tokenValuesWouldHaveCycleWithValue(values, role, candidate),
+    );
+    if (isSafe) {
+      aliases.push([role, alias]);
+      for (const {values, candidate} of candidateValues) {
+        values[role] = candidate;
+      }
+    }
+  }
+  // Content on a fill does not depend on the surface beneath it, so a status
+  // fill set here gets its INV17 content colour (theme-compilation INV17).
+  const mediaFills = new Set(
+    STATUS_NAMES.filter(
+      status =>
+        authoredMedia[`--color-${status}`] !== undefined &&
+        authoredMedia[`--color-on-${status}`] === undefined,
+    ).map(status => `--color-on-${status}`),
+  );
+  if (mediaFills.size > 0) {
+    for (const [role, value] of deriveStatusRoleTokens(
+      {...rootTokens, ...tokens},
+      rootLocalTokens,
+    )) {
+      if (mediaFills.has(role) && rootValues[role] !== value) {
+        aliases.push([role, value]);
+      }
+    }
+  }
+  return aliases;
+}
+
 /** The `:scope` token block for portable and theme-local token values. */
 function tokenBlock(
   source: ThemeRuleSource,
   location: string,
   sink: DiagnosticSink,
+  tokenEntries: [string, string][] = Object.entries(source.tokens),
 ): string | null {
   const declarations = [
-    joinDeclarations(Object.entries(source.tokens), `${location}tokens`, sink),
+    joinDeclarations(tokenEntries, `${location}tokens`, sink),
     joinDeclarations(
       Object.entries(source.localTokens ?? {}),
       `${location}localTokens`,
@@ -474,8 +991,7 @@ function tokenBlock(
     .filter(block => block.length > 0)
     .join('\n');
   const hasEntries =
-    Object.keys(source.tokens).length > 0 ||
-    Object.keys(source.localTokens ?? {}).length > 0;
+    tokenEntries.length > 0 || Object.keys(source.localTokens ?? {}).length > 0;
   return hasEntries ? `  :scope {\n${declarations}\n  }` : null;
 }
 
@@ -515,6 +1031,96 @@ export interface ThemeRuleSource {
   components?: ComponentStyleMap;
 }
 
+interface StatusRoleGenerationContext {
+  theme: DefinedTheme;
+  rules: ResolvedThemeAdaptationRule[];
+  rootAliases: [string, string][];
+  adaptationAliases?: [string, string][][];
+}
+
+interface StatusRoleGenerationCacheEntry {
+  signature: string;
+  context: StatusRoleGenerationContext;
+}
+
+const STATUS_ROLE_GENERATION_CACHE = new WeakMap<
+  DefinedTheme,
+  StatusRoleGenerationCacheEntry
+>();
+
+let activeStatusRoleGeneration: StatusRoleGenerationContext | undefined;
+
+function tokenSetSignature(
+  tokens: Record<string, unknown> | undefined,
+): (readonly [string, string, string])[] {
+  return Object.entries(tokens ?? {}).map(
+    ([name, value]): readonly [string, string, string] => [
+      name,
+      typeof value,
+      stringifyTokenValue(value),
+    ],
+  );
+}
+
+function statusRoleGenerationSignature(
+  theme: DefinedTheme,
+  rules: ReadonlyArray<ResolvedThemeAdaptationRule>,
+): string {
+  return JSON.stringify([
+    tokenSetSignature(theme.tokens),
+    tokenSetSignature(theme.localTokens),
+    rules.map(rule => [
+      rule.query,
+      rule.when,
+      tokenSetSignature(rule.tokens),
+      tokenSetSignature(rule.localTokens),
+      rule.components,
+    ]),
+  ]);
+}
+
+function createStatusRoleGenerationContext(
+  theme: DefinedTheme,
+): StatusRoleGenerationContext {
+  const rules = resolvedAdaptationRules(theme);
+  const signature = statusRoleGenerationSignature(theme, rules);
+  const cached = STATUS_ROLE_GENERATION_CACHE.get(theme);
+  if (cached?.signature === signature) {
+    return cached.context;
+  }
+  const context: StatusRoleGenerationContext = {
+    theme,
+    rules,
+    rootAliases: generatedScopedStatusRoleDefaults(
+      theme.tokens,
+      theme.localTokens,
+      rules,
+    ),
+  };
+  STATUS_ROLE_GENERATION_CACHE.set(theme, {signature, context});
+  return context;
+}
+
+function statusRoleGenerationContext(
+  theme: DefinedTheme,
+): StatusRoleGenerationContext {
+  return activeStatusRoleGeneration?.theme === theme
+    ? activeStatusRoleGeneration
+    : createStatusRoleGenerationContext(theme);
+}
+
+function adaptationStatusRoleDefaults(
+  context: StatusRoleGenerationContext,
+): [string, string][][] {
+  context.adaptationAliases ??= generatedAdaptationStatusRoleDefaults(
+    context.theme.tokens,
+    context.theme.localTokens,
+    context.rules,
+    context.rootAliases,
+  );
+  return context.adaptationAliases;
+}
+
 export function generateThemeRules(
   theme: ThemeRuleSource,
   warnings?: string[],
@@ -527,8 +1133,20 @@ export function generateThemeRules(
   // without duplicating prose selectors inside every media query.
   const val = (key: string): string => `var(${key})`;
 
-  // 1. Token block — CSS custom properties on :scope
-  const tokenRules = tokenBlock(theme, '', sink);
+  // 1. Token block — CSS custom properties on :scope. Source-derived status
+  // aliases live here once; conditional rules only emit authored writes.
+  const context =
+    activeStatusRoleGeneration?.theme === theme
+      ? activeStatusRoleGeneration
+      : undefined;
+  const rules = context?.rules ?? retainedAdaptationRules(theme);
+  const rootAliases =
+    context?.rootAliases ??
+    generatedScopedStatusRoleDefaults(theme.tokens, theme.localTokens, rules);
+  const tokenRules = tokenBlock(theme, '', sink, [
+    ...Object.entries(theme.tokens),
+    ...rootAliases,
+  ]);
   if (tokenRules !== null) {
     parts.push(tokenRules);
   }
@@ -537,8 +1155,8 @@ export function generateThemeRules(
   // Components styled with `font-family: inherit` (SideNav items, Buttons)
   // otherwise resolve against the browser default serif, since nothing else
   // sets a page font. `font-family` inherits, so one rule on :scope covers
-  // the tree. Only emitted when the theme declares a body font, so a bare
-  // theme still contributes no scope rules of its own.
+  // the tree. Only emitted when the theme declares a body font; a bare theme
+  // still contributes no font rule of its own.
   if (theme.tokens['--font-family-body']) {
     parts.push(`  :scope {\n    font-family: var(--font-family-body);\n  }`);
   }
@@ -1001,6 +1619,34 @@ export function generateThemeRulesSplit(
   return {component, prose};
 }
 
+function resolvedAdaptationRules(
+  theme: DefinedTheme,
+): ResolvedThemeAdaptationRule[] {
+  // Retained metadata is part of the built-theme contract. Validate it even
+  // when a concrete rule cache is present so a stale or malformed breakpoint
+  // map cannot bypass the same checks live themes receive.
+  const normalized =
+    theme.__adaptations === undefined
+      ? undefined
+      : normalizeThemeAdaptations(theme.name, theme.__adaptations, undefined);
+  if (Array.isArray(theme.__adaptationRules)) {
+    return theme.__adaptationRules;
+  }
+  if (normalized === undefined) {
+    return [];
+  }
+  return (
+    resolveThemeAdaptationRules(
+      theme.name,
+      normalized,
+      theme.__axes ?? {},
+      theme.tokens,
+      theme.localTokens,
+      theme.components,
+    ) ?? []
+  );
+}
+
 /**
  * Generate CSS for on-media token and component overrides.
  *
@@ -1016,6 +1662,12 @@ export function generateOnMediaCSS(
   const parts: string[] = [];
   const scopeSelector = themeScopeStart(theme.name);
   const sink = diagnosticSink(warnings);
+  const context = statusRoleGenerationContext(theme);
+  const {rules, rootAliases} = context;
+  const mediaStatusRoleDefaults = new Map<
+    'dark' | 'light',
+    [string, string][]
+  >();
 
   for (const surface of ['dark', 'light'] as const) {
     const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
@@ -1024,8 +1676,20 @@ export function generateOnMediaCSS(
     }
     const location = surface === 'dark' ? 'onDark.' : 'onLight.';
 
-    // Token overrides
-    const tokenEntries = Object.entries(onMedia.tokens);
+    // Token overrides. MediaTheme writes on a descendant surface, so a source
+    // alias must be local unless an authored root/adaptation role owns it.
+    const statusRoleDefaults = generatedMediaStatusRoleDefaults(
+      onMedia.tokens,
+      theme.tokens,
+      theme.localTokens,
+      rules,
+      rootAliases,
+    );
+    mediaStatusRoleDefaults.set(surface, statusRoleDefaults);
+    const tokenEntries = [
+      ...Object.entries(onMedia.tokens),
+      ...statusRoleDefaults,
+    ];
     if (tokenEntries.length > 0) {
       const declarations = joinDeclarations(
         tokenEntries,
@@ -1057,12 +1721,54 @@ export function generateOnMediaCSS(
     }
   }
 
-  if (parts.length === 0) {
+  const adaptationMediaRoleBlocks: string[] = [];
+  for (const [index, rule] of rules.entries()) {
+    const authoredRoles = authoredStatusRoleEntries(rule.tokens);
+    if (authoredRoles.length === 0) {
+      continue;
+    }
+    const roleParts: string[] = [];
+    for (const surface of ['dark', 'light'] as const) {
+      const onMedia = surface === 'dark' ? theme.__onDark : theme.__onLight;
+      if (!onMedia) {
+        continue;
+      }
+      const generatedRoles = new Set(
+        (mediaStatusRoleDefaults.get(surface) ?? []).map(([role]) => role),
+      );
+      const restorationEntries: [string, string][] = authoredRoles
+        .filter(([role]) => generatedRoles.has(role))
+        .map(([role, value]) => [role, mediaRoleRestorationValue(role, value)]);
+      if (restorationEntries.length === 0) {
+        continue;
+      }
+      const declarations = joinDeclarations(
+        restorationEntries,
+        `adaptations[${index}].on${surface}.statusRoles.`,
+        sink,
+      );
+      roleParts.push(`  ${mediaSelector(surface)} {\n${declarations}\n  }`);
+    }
+    if (roleParts.length > 0) {
+      adaptationMediaRoleBlocks.push(
+        generateAdaptationMediaBlock(rule.query, roleParts, scopeSelector),
+      );
+    }
+  }
+
+  if (parts.length === 0 && adaptationMediaRoleBlocks.length === 0) {
     return '';
   }
 
-  const inner = parts.join('\n\n');
-  return `@scope (${scopeSelector}) to (${THEME_SCOPE_TO}) {\n${inner}\n}`;
+  const blocks: string[] = [];
+  if (parts.length > 0) {
+    const inner = parts.join('\n\n');
+    blocks.push(
+      `@scope (${scopeSelector}) to (${THEME_SCOPE_TO}) {\n${inner}\n}`,
+    );
+  }
+  blocks.push(...adaptationMediaRoleBlocks);
+  return blocks.join('\n\n');
 }
 
 /** Generate only the declarations one adaptation rule writes. */
@@ -1070,9 +1776,13 @@ function generateAdaptationRuleRules(
   rule: ThemeRuleSource,
   location: string,
   sink: DiagnosticSink,
+  statusRoleDefaults: [string, string][],
 ): string[] {
   const parts: string[] = [];
-  const tokens = tokenBlock(rule, location, sink);
+  const tokens = tokenBlock(rule, location, sink, [
+    ...Object.entries(rule.tokens),
+    ...statusRoleDefaults,
+  ]);
   if (tokens !== null) {
     parts.push(tokens);
   }
@@ -1125,25 +1835,11 @@ export function generateAdaptationCSS(
 ): ThemeCSSOutput {
   const sink = diagnosticSink(warnings);
   // Built themes can reach this compiler without passing through defineTheme.
-  // Validate retained metadata even when it has no rules (and therefore emits
-  // no CSS): width points remain observable through AppShell and inheritance.
-  const normalizedAdaptations =
-    theme.__adaptations === undefined
-      ? undefined
-      : normalizeThemeAdaptations(theme.name, theme.__adaptations, undefined);
-  const rules =
-    theme.__adaptationRules ??
-    (normalizedAdaptations
-      ? resolveThemeAdaptationRules(
-          theme.name,
-          normalizedAdaptations,
-          theme.__axes ?? {},
-          theme.tokens,
-          theme.localTokens,
-          theme.components,
-        )
-      : undefined);
-  if (!rules || rules.length === 0) {
+  // Resolve retained metadata so width points remain observable through
+  // AppShell and inheritance even when a rule emits no CSS.
+  const context = statusRoleGenerationContext(theme);
+  const {rules} = context;
+  if (rules.length === 0) {
     return {prose: '', component: ''};
   }
 
@@ -1152,6 +1848,8 @@ export function generateAdaptationCSS(
   const adaptsHeading = rules.some(rule =>
     hasHeadingComponentRules(rule.components),
   );
+
+  const statusRoleDefaults = adaptationStatusRoleDefaults(context);
 
   // Emit ordinary rule writes first, without inherited Heading weight
   // fallbacks. Carrying an earlier weight into a later block makes that value
@@ -1163,11 +1861,34 @@ export function generateAdaptationCSS(
       rule,
       `adaptations[${index}].`,
       sink,
+      statusRoleDefaults[index],
     );
     if (parts.length === 0) {
       continue;
     }
     blocks.push(generateAdaptationMediaBlock(rule.query, parts, scopeSelector));
+  }
+
+  // Replay explicit role writes after every generated source alias. This keeps
+  // an authored role authoritative when its condition overlaps a later rule
+  // that changes only the role's source, while the alias still works when the
+  // authored-role condition is inactive.
+  for (const [index, rule] of rules.entries()) {
+    const roleEntries = authoredStatusRoleEntries(rule.tokens);
+    if (roleEntries.length === 0) {
+      continue;
+    }
+    const roleRule = tokenBlock(
+      {tokens: {}},
+      `adaptations[${index}].statusRoles.`,
+      sink,
+      roleEntries,
+    );
+    if (roleRule !== null) {
+      blocks.push(
+        generateAdaptationMediaBlock(rule.query, [roleRule], scopeSelector),
+      );
+    }
   }
 
   if (adaptsHeading) {
@@ -1229,6 +1950,22 @@ function indentRule(rule: string): string {
  * generator emits only a theme's explicitly authored token overrides.
  */
 export function generateThemeCSS(
+  theme: DefinedTheme,
+  warnings?: string[],
+): ThemeCSSOutput {
+  if (activeStatusRoleGeneration?.theme === theme) {
+    return generateThemeCSSWithContext(theme, warnings);
+  }
+  const previous = activeStatusRoleGeneration;
+  activeStatusRoleGeneration = createStatusRoleGenerationContext(theme);
+  try {
+    return generateThemeCSSWithContext(theme, warnings);
+  } finally {
+    activeStatusRoleGeneration = previous;
+  }
+}
+
+function generateThemeCSSWithContext(
   theme: DefinedTheme,
   warnings?: string[],
 ): ThemeCSSOutput {

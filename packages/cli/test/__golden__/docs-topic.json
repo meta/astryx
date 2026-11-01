@@ -36,8 +36,15 @@
       }
     ],
     "links": {
-      "up": "astryx docs unorganized",
+      "up": "astryx docs guides",
       "previous": "astryx docs working-with-ai"
+    }
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<cli version>",
+      "core": "<cli version>",
+      "copy": "project"
     }
   }
 }

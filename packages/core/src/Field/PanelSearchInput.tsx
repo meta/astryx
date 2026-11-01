@@ -41,13 +41,12 @@
 
 import {useCallback, useState, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Icon} from '../Icon';
+import type {StyleXStyles} from '@stylexjs/stylex';
+import {Icon} from '../Icon/Icon';
 import {InputClearButton} from './InputClearButton';
-import {mergeProps} from '../utils';
-import {
-  getInteractionModality,
-  useInteractionModalityTracking,
-} from '../utils/interactionModality';
+import {mergeProps} from '../utils/mergeProps';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   colorVars,
   durationVars,
@@ -177,6 +176,14 @@ export interface PanelSearchInputProps extends Omit<
    * handler of its own.
    */
   onContainerKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+
+  /**
+   * Styles for the field box itself (the rounded row that draws the focus
+   * ring), as opposed to `xstyle`, which lands on the outer gutter. A panel
+   * whose rows are taller than a dropdown's — a touch sheet — uses it to grow
+   * the field to the same height as its rows.
+   */
+  fieldXstyle?: StyleXStyles;
 }
 
 /**
@@ -199,6 +206,7 @@ export function PanelSearchInput({
   onFocus,
   onBlur,
   onContainerKeyDown,
+  fieldXstyle,
   xstyle,
   className,
   style,
@@ -210,14 +218,15 @@ export function PanelSearchInput({
   // stays `:focus-visible`, this only narrows it.
   const [isKeyboardFocus, setIsKeyboardFocus] = useState(false);
 
-  useInteractionModalityTracking();
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const mergedInputRef = useMergedRefs(ref, modalityRef);
 
   const handleFocus = useCallback(
     (e: React.FocusEvent<HTMLInputElement>) => {
-      setIsKeyboardFocus(getInteractionModality() === 'keyboard');
+      setIsKeyboardFocus(readModality() === 'keyboard');
       onFocus?.(e);
     },
-    [onFocus],
+    [onFocus, readModality],
   );
 
   const handleBlur = useCallback(
@@ -232,19 +241,18 @@ export function PanelSearchInput({
     (e?: React.MouseEvent<HTMLButtonElement>) => {
       onValueChange('');
       // Clearing puts the caret back where the user was typing, matching
-      // TextInput's built-in clear. Defer focus restoration past the button's
-      // unmount task so touch browsers don't jump page scroll on tap, while
-      // preserving synchronous focus for keyboard users.
-      if (!e || e.detail === 0) {
-        if (typeof ref === 'object' && ref?.current) {
-          ref.current.focus();
-        }
-      } else {
-        requestAnimationFrame(() => {
-          if (typeof ref === 'object' && ref?.current) {
-            ref.current.focus({preventScroll: true});
-          }
-        });
+      // TextInput's built-in clear, and it does so inside the tap: iOS raises
+      // the software keyboard only for a focus made while the browser is
+      // still dispatching the person's tap, and a UIKit search field's clear
+      // button makes the field first responder, keyboard and all (measured on
+      // iOS 26.2). A frame later the focus came with no keyboard. When the
+      // input already has focus, the clear button's pressed state never takes
+      // it, so this is a no-op and the keyboard stays where it is.
+      // `preventScroll` keeps a pointer tap from scrolling the page.
+      if (typeof ref === 'object' && ref?.current) {
+        ref.current.focus(
+          e == null || e.detail === 0 ? undefined : {preventScroll: true},
+        );
       }
     },
     [onValueChange, ref],
@@ -259,10 +267,11 @@ export function PanelSearchInput({
         {...stylex.props(
           styles.field,
           isKeyboardFocus && styles.fieldKeyboardFocus,
+          fieldXstyle,
         )}>
         <Icon icon="search" size="sm" color="secondary" xstyle={styles.icon} />
         <input
-          ref={ref}
+          ref={mergedInputRef}
           type="text"
           aria-label={label}
           placeholder={placeholder}

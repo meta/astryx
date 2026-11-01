@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatMessageMetadata
 
 /**
  * @file ChatMessageMetadata.a11y.chromium.spec.ts
@@ -395,7 +396,9 @@ test('captures narrow touch reflow in both modes', async ({browser}) => {
   try {
     const page = await context.newPage();
     const scenario = CASES.find(item => item.name === 'narrow-overflow');
-    if (!scenario) {throw new Error('Narrow metadata fixture is missing');}
+    if (!scenario) {
+      throw new Error('Narrow metadata fixture is missing');
+    }
     const failures: string[] = [];
     for (const mode of ['light', 'dark'] as const) {
       failures.push(

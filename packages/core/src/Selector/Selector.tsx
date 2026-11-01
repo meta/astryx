@@ -20,6 +20,7 @@
  */
 
 import React, {
+  use,
   useCallback,
   useEffect,
   useId,
@@ -79,6 +80,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {SelectorOption} from './SelectorOption';
 import {SelectorRowLayoutContext} from './SelectorRowLayoutContext';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import {warnOnce} from '../utils/devWarning';
 import {useSize} from '../SizeContext/SizeContext';
 import {
@@ -87,13 +89,16 @@ import {
 } from '../Field/fieldParts';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
@@ -289,6 +294,21 @@ const styles = stylex.create({
         '@media (pointer: coarse)': 'scale(1)',
       },
       '[data-astryx-press="on"]': 'scale(0.98)',
+    },
+  },
+  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
+  // and the shared disabled wrapper style drops the field focus ring, so the
+  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
+  // itself, a direct child, so a focused status button keeps its own outline.
+  triggerDisabledFocus: {
+    borderColor: {
+      default: colorVars['--color-border-emphasized'],
+      ':has(> [aria-disabled="true"]:focus-visible)':
+        colorVars['--color-accent'],
+    },
+    boxShadow: {
+      default: 'none',
+      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   triggerGhostDisabled: {
@@ -627,8 +647,8 @@ interface SelectorPropsBase<
    * The selected value stays visible, focusable, and included in form
    * submission, and retains its combobox identity with `aria-readonly`. The
    * selection surface and editing affordances are removed.
-   * Unlike `isDisabled`, a read-only selector is not dimmed and stays in the
-   * tab order. `isDisabled` takes precedence when both are set.
+   * Unlike `isDisabled`, a read-only selector is not dimmed and keeps its
+   * value in form submission. `isDisabled` takes precedence when both are set.
    * @default false
    */
   isReadOnly?: boolean;
@@ -640,8 +660,8 @@ interface SelectorPropsBase<
    * so the reason is discoverable by keyboard and assistive technology.
    * Activation stays blocked.
    *
-   * Use this instead of wrapping a disabled selector in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled selector in `Tooltip`, so the
+   * reason is attached to the trigger itself.
    *
    * @example
    * ```
@@ -935,7 +955,7 @@ export function Selector<T extends SelectorOptionType>(
     description,
     isOptional = false,
     isRequired = false,
-    isDisabled = false,
+    isDisabled: isDisabledProp = false,
     isReadOnly = false,
     disabledMessage,
     options,
@@ -972,10 +992,14 @@ export function Selector<T extends SelectorOptionType>(
     onFocus,
     onKeyDown: onKeyDownProp,
     'aria-describedby': ariaDescribedByProp,
+    'aria-labelledby': ariaLabelledByProp,
     hasClear: hasClearProp,
     id,
     ...restProps
   } = props as SelectorPropsClearable<T>;
+  const inputGroup = useInputGroup();
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = isDisabledProp || inputGroupState.isDisabled;
   const {rest, container} = useFieldInputStyling('Selector', restProps, {
     containerXstyle,
     containerClassName,
@@ -1007,6 +1031,7 @@ export function Selector<T extends SelectorOptionType>(
   const emptyStateRef = useRef<HTMLDivElement>(null);
   const descriptionId = useId();
   const statusMessageId = useId();
+  const fieldLabelId = useId();
   const inputLabelId = useId();
   const readOnlyDescriptionId = useId();
   const searchId = useId();
@@ -1014,12 +1039,13 @@ export function Selector<T extends SelectorOptionType>(
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+  const triggerModality = useInteractionModalityTracking();
   const triggerButtonRef = useMergedRefs<HTMLButtonElement>(
     triggerRef as React.Ref<HTMLButtonElement>,
+    triggerModality.ref,
     ref,
   );
   const searchRef = useRef<HTMLInputElement>(null);
-  const inputGroup = useInputGroup();
 
   const [searchQuery, setSearchQuery] = useState('');
   // Mirrors searchQuery for the seed path, which runs before focus reaches the
@@ -1032,13 +1058,14 @@ export function Selector<T extends SelectorOptionType>(
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(normalizedValue);
   const isBusy = isLoading || optimisticValue !== normalizedValue;
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
   const announce = useAnnounce();
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip. The container receives hover and bubbled focus
+  // while the trigger stays focusable via aria-disabled. Opening and selection
+  // are guarded independently, including options in an already-open surface.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1067,6 +1094,12 @@ export function Selector<T extends SelectorOptionType>(
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the trigger together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const triggerLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelId, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   // Flatten options for keyboard navigation
   const selectableItems = useMemo(
@@ -1108,6 +1141,14 @@ export function Selector<T extends SelectorOptionType>(
 
   // Ref for listbox to measure selected item position
   const listboxRef = useRef<HTMLDivElement>(null);
+  // The trigger may name the active option only once the listbox holding it
+  // is in the document. The bottom sheet loads its surface on first open, so
+  // the trigger expands a moment before its options exist.
+  const [isListboxMounted, setIsListboxMounted] = useState(false);
+  const attachListbox = useCallback((node: HTMLDivElement | null) => {
+    listboxRef.current = node;
+    setIsListboxMounted(node != null);
+  }, []);
 
   // Typeahead is defined below (it needs the popover), but closing and clearing
   // must drop its pending buffer — otherwise a stale prefix survives the reset
@@ -1143,6 +1184,7 @@ export function Selector<T extends SelectorOptionType>(
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
     popoverOptions: {
       hasLightDismiss: true,
       hasCloseButton: false,
@@ -1287,6 +1329,11 @@ export function Selector<T extends SelectorOptionType>(
 
   const commitValue = useCallback(
     (newValue: string) => {
+      // A surface or pointer gesture can outlive the enabled state that opened
+      // it. Enforce current availability before callbacks or optimistic state.
+      if (isDisabled || isEffectivelyReadOnly) {
+        return;
+      }
       onChange?.(newValue);
       if (changeAction) {
         startTransition(async () => {
@@ -1295,7 +1342,14 @@ export function Selector<T extends SelectorOptionType>(
         });
       }
     },
-    [onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isDisabled,
+      isEffectivelyReadOnly,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Selector behavior (keyboard nav, selection)
@@ -1784,7 +1838,7 @@ export function Selector<T extends SelectorOptionType>(
       {renderSearch()}
       <Divider />
       <div
-        ref={listboxRef}
+        ref={attachListbox}
         id={listboxId}
         role="listbox"
         aria-labelledby={triggerId}
@@ -1803,7 +1857,7 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   ) : (
     <div
-      ref={listboxRef}
+      ref={attachListbox}
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
@@ -1872,14 +1926,30 @@ export function Selector<T extends SelectorOptionType>(
     });
   }
 
+  // A disabled trigger stays focusable but, like a natively disabled button,
+  // runs no caller event handler other than focus and blur, and a press on it
+  // reaches no handler at all (`spec:AST-085` FR2).
+  const callerProps = isDisabled
+    ? Object.fromEntries(
+        Object.entries(rest).filter(
+          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
+        ),
+      )
+    : rest;
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
-    ...rest,
+    ...callerProps,
+    onClick: isDisabled
+      ? event => {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      : rest.onClick,
     id: triggerId,
     // A caller's description is kept alongside the field's own.
     'aria-describedby':
       [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
       undefined,
-    'aria-labelledby': ariaLabelledBy,
+    'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
     'aria-invalid': status?.type === 'error' ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
@@ -1887,12 +1957,14 @@ export function Selector<T extends SelectorOptionType>(
     // it leaves uncancelled. A caller `onClick` arrives through `rest` and
     // runs on the trigger before the press bubbles to the control box's
     // toggle, as it always has.
-    onKeyDown: composeEventHandlers(handleTriggerKeyDown, onKeyDownProp),
+    onKeyDown: isDisabled
+      ? handleTriggerKeyDown
+      : composeEventHandlers(handleTriggerKeyDown, onKeyDownProp),
     onFocus: event => {
       onFocus?.(event);
       surface.onTriggerFocus(event);
     },
-    tabIndex: isDisabled && !showsDisabledMessage ? -1 : 0,
+    tabIndex: 0,
     ...stylex.props(
       styles.trigger,
       isEffectivelyReadOnly && styles.triggerReadOnly,
@@ -1913,6 +1985,7 @@ export function Selector<T extends SelectorOptionType>(
         }}
         onClick={onTriggerClick}
         {...pressable}
+        {...(inputGroup ? inputGroupItemProps : undefined)}
         {...mergeProps(
           themeProps('selector', {
             variant,
@@ -1932,6 +2005,10 @@ export function Selector<T extends SelectorOptionType>(
             surface.isTriggerFocusRingSuppressed &&
               selectorPresentationStyles.pointerRestoredFocus,
             isDisabled && inputWrapperStyles.disabled,
+            variant === 'input' &&
+              isDisabled &&
+              !surface.isTriggerFocusRingSuppressed &&
+              styles.triggerDisabledFocus,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&
@@ -1987,28 +2064,22 @@ export function Selector<T extends SelectorOptionType>(
             !isEffectivelyReadOnly &&
             !hasSearch &&
             surface.isOpen &&
+            isListboxMounted &&
             highlightedIndex >= 0
               ? getItemId(highlightedIndex)
               : undefined
           }
-          // With a disabledMessage the trigger keeps focusability via
-          // aria-disabled so the reason is focus-discoverable; activation is
-          // still blocked by the isDisabled guards in useCombobox.
-          disabled={isDisabled && !showsDisabledMessage}
-          aria-disabled={showsDisabledMessage ? 'true' : undefined}>
+          // A disabled trigger keeps its tab stop and says so through
+          // aria-disabled (`spec:AST-085` FR1); the isDisabled guards in
+          // useCombobox block every way of opening it.
+          aria-disabled={isDisabled ? 'true' : undefined}>
           {valueContent}
         </button>
-        {htmlName != null && (
-          <input
-            type="hidden"
-            name={htmlName}
-            value={value ?? ''}
-            // Disabled native controls are excluded from form submission;
-            // mirror that for the hidden carrier.
-            disabled={isDisabled}
-          />
+        {/* A disabled selector submits no value (`spec:AST-085` FR3). */}
+        {htmlName != null && !isDisabled && (
+          <input type="hidden" name={htmlName} value={value ?? ''} />
         )}
-        {isBusy && <Spinner size="sm" />}
+        {isBusy && <Spinner size="sm" aria-hidden="true" />}
         {hasClear && value != null && !isDisabled && !isEffectivelyReadOnly && (
           <InternalInputClearButton
             {...keepOpenProps}
@@ -2094,6 +2165,7 @@ export function Selector<T extends SelectorOptionType>(
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={triggerId}
+      labelID={ariaLabelledByProp != null ? fieldLabelId : undefined}
       descriptionID={description ? descriptionId : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

@@ -18,4 +18,11 @@ export const doc = {
   ],
   isReady: true,
   category: 'Dashboard - Funnel & Cohort',
+  icons: {
+    ArrowDownIcon: 'arrowDown',
+    ArrowDownTrayIcon: 'download',
+    ArrowTrendingDownIcon: 'trendDown',
+    ArrowUpIcon: 'arrowUp',
+    StopIcon: 'stop',
+  },
 };

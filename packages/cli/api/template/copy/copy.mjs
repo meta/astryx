@@ -20,15 +20,23 @@ import {AstryxError, writeFailed} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {pkgOf, replaceDemoMedia} from '../../../foundation/discovery/template-adapter.mjs';
 import {analyzeTemplateNeeds} from '../../../foundation/discovery/template-needs.mjs';
+import {
+  NO_ICON_SETS,
+  mapTemplateIcons,
+} from '../../../foundation/discovery/template-icons.mjs';
 
 /**
  * Scaffold an already-resolved template to `targetPath` (relative to `cwd`) and
  * return the `template.copy` receipt.
  * @param {import('../../../foundation/discovery/template-adapter.mjs').DiscoveredTemplate} match
- * @param {{targetPath: string, cwd: string, overwrite?: boolean}} ctx
+ * @param {{targetPath: string, cwd: string, overwrite?: boolean, iconSets?: Parameters<typeof mapTemplateIcons>[1]}} ctx
+ *   `iconSets`: the project's icon sets; without them the icons are unchanged
  * @returns {import('../template.type.mjs').TemplateCopyResponse}
  */
-export function templateCopy(match, {targetPath, cwd, overwrite = false}) {
+export function templateCopy(
+  match,
+  {targetPath, cwd, overwrite = false, iconSets = NO_ICON_SETS},
+) {
   if (!fs.existsSync(match.filePath)) {
     throw new AstryxError(
       `No source file found for template "${match.dirName}"`,
@@ -84,8 +92,15 @@ export function templateCopy(match, {targetPath, cwd, overwrite = false}) {
   // Strip demo image references so the scaffolded file renders without a
   // Meta-only network dependency. Read before any write, so a failure below
   // leaves nothing behind.
-  const {source: outputSource, demoMediaReplaced} = replaceDemoMedia(
+  const {source: withMedia, demoMediaReplaced} = replaceDemoMedia(
     fs.readFileSync(match.filePath, 'utf-8'),
+  );
+  // Icons follow the project's icon set (AST-084 FR9). An icon with no match
+  // keeps its import, so its library stays a needed dependency below.
+  const {source: outputSource, icons} = mapTemplateIcons(
+    withMedia,
+    iconSets,
+    match.icons,
   );
   try {
     fs.mkdirSync(outputDir, {recursive: true});
@@ -115,6 +130,7 @@ export function templateCopy(match, {targetPath, cwd, overwrite = false}) {
       notes,
       missingPackages: missing,
       installCommand,
+      ...(icons ? {icons} : {}),
     },
   };
 }

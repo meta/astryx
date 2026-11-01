@@ -58,10 +58,25 @@ describe('Link', () => {
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
 
-  it('button fallback supports isDisabled', () => {
-    render(<Link isDisabled>Disabled Action</Link>);
+  it('button fallback stays focusable and inert when isDisabled', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <Link isDisabled onClick={onClick}>
+        Disabled Action
+      </Link>,
+    );
     const button = screen.getByRole('button');
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    const nativeClick = vi.fn();
+    button.addEventListener('click', nativeClick);
+    await user.tab();
+    expect(button).toHaveFocus();
+    await user.keyboard('{Enter} ');
+    expect(nativeClick).not.toHaveBeenCalled();
+    fireEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('button fallback has type="button"', () => {
@@ -156,11 +171,10 @@ describe('Link', () => {
         Disabled Link
       </Link>,
     );
-    // An href-less anchor has no implicit `link` role, so query by text.
-    const link = screen.getByText('Disabled Link').closest('a');
-    expect(link).not.toBeNull();
+    // The href-less anchor keeps a Tab stop and an explicit link role.
+    const link = screen.getByRole('link', {name: 'Disabled Link'});
     expect(link).toHaveAttribute('aria-disabled', 'true');
-    expect(link).toHaveAttribute('tabIndex', '-1');
+    expect(link).toHaveAttribute('tabIndex', '0');
     // Visual classes are preserved in the disabled state.
     expect(link?.className).toContain('astryx-link');
   });
@@ -416,6 +430,35 @@ describe('Link', () => {
     const link = screen.getByRole('link', {name: 'Themed Link'});
     expect(link.className).toContain('astryx-link');
     expect(link).toHaveAttribute('data-color', 'secondary');
+  });
+
+  it('keeps the reflected data-color when a caller passes its own', () => {
+    const callerProps = {'data-color': 'danger'};
+    render(
+      <>
+        <Link href="/test" color="secondary" {...callerProps}>
+          Anchor Link
+        </Link>
+        <Link color="secondary" onClick={() => {}} {...callerProps}>
+          Button Link
+        </Link>
+        <Link href="/test" color="secondary" isDisabled {...callerProps}>
+          Disabled Link
+        </Link>
+      </>,
+    );
+    expect(screen.getByRole('link', {name: 'Anchor Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('button', {name: 'Button Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('link', {name: 'Disabled Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
   });
 });
 

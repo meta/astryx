@@ -8,6 +8,9 @@ dist/
 # Storybook
 storybook-static/
 
+# One-off PR evidence is attached or linked from the PR, not source assets.
+/docs/pr-assets/
+
 # Test coverage
 coverage/
 
@@ -94,3 +97,7 @@ packages/core/src/i18n/generated-locales/
 # when the manifest's claims no longer match the repo.
 apps/storybook/.lab-readiness/
 apps/storybook/.storybook/lab-readiness/
+
+# PR browser accessibility runner output (pnpm test:a11y-contract:pr)
+/pr-a11y-evidence/
+/pr-a11y-output/

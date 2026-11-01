@@ -20,15 +20,27 @@ import {
 
 describe('parseNodeVersion', () => {
   it('parses a plain semver string', () => {
-    expect(parseNodeVersion('22.14.1')).toEqual({major: 22, minor: 14, patch: 1});
+    expect(parseNodeVersion('22.14.1')).toEqual({
+      major: 22,
+      minor: 14,
+      patch: 1,
+    });
   });
 
   it('strips a leading v', () => {
-    expect(parseNodeVersion('v20.10.0')).toEqual({major: 20, minor: 10, patch: 0});
+    expect(parseNodeVersion('v20.10.0')).toEqual({
+      major: 20,
+      minor: 10,
+      patch: 0,
+    });
   });
 
   it('ignores a prerelease/build suffix on the patch segment', () => {
-    expect(parseNodeVersion('16.20.2-nightly')).toEqual({major: 16, minor: 20, patch: 2});
+    expect(parseNodeVersion('16.20.2-nightly')).toEqual({
+      major: 16,
+      minor: 20,
+      patch: 2,
+    });
   });
 
   it('defaults missing segments to 0', () => {

@@ -10,7 +10,8 @@
  *
  * Full-height slide-out drawer overlay for mobile navigation.
  * The mobile counterpart to SideNav — accepts the same children
- * (SideNavSection, SideNavItem, or any ReactNode).
+ * (SideNavSection, SideNavItem, or any ReactNode). The drawer is never wider
+ * than 85% of the viewport, so a strip of the page stays beside it to tap.
  *
  * Uses the native `<dialog>` element with `showModal()` for top-layer rendering.
  * This eliminates z-index stacking issues — the drawer renders above everything
@@ -71,6 +72,7 @@ import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {overlayPaddingReset} from '../Layout/padding.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
@@ -223,7 +225,10 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: spacingVars['--spacing-12'],
+    // At least one bar high, and taller for header content that needs it (a
+    // stacked title and search, or a title wrapped at a larger text size), so
+    // it never runs into the first item below.
+    minHeight: spacingVars['--spacing-12'],
     paddingInline: spacingVars['--spacing-2'],
     flexShrink: 0,
     borderBlockEndWidth: borderVars['--border-width'],
@@ -250,9 +255,12 @@ const styles = stylex.create({
 });
 
 const dynamicStyles = stylex.create({
+  // The requested width, never more than 85 % of the viewport: on a narrow
+  // phone a strip of the page stays visible beside the drawer, as a target
+  // for the tap that closes it.
   width: (w: number) => ({
-    width: '100vw',
-    maxWidth: `${w}px`,
+    width: `${w}px`,
+    maxWidth: '85vw',
   }),
 });
 
@@ -260,8 +268,15 @@ const dynamicStyles = stylex.create({
 // Close timing
 // =============================================================================
 
-/** Longest the drawer will wait before closing, however long the hold is. */
-const MAX_CLOSE_DELAY_MS = 250;
+/**
+ * Longest the drawer will wait before closing, however long the hold is.
+ *
+ * Exported so `AppShell` can defer hiding this drawer's `Activity` boundary
+ * by at least this long too (`ACTIVITY_HIDE_BUFFER_MS` in AppShell.tsx) —
+ * otherwise Activity's `display: none !important` lands before this delay's
+ * own scheduled `dialog.close()` has a chance to run (#5701).
+ */
+export const MAX_CLOSE_DELAY_MS = 250;
 /** Fraction of the hold to close at, so the close never lands on its boundary. */
 const CLOSE_WITHIN_HOLD = 0.6;
 
@@ -488,6 +503,21 @@ export function MobileNav({
   // Element that was focused when the drawer opened; focus goes back to it
   // once the native dialog has closed (see closeAndRestoreFocus).
   const triggerElementRef = useRef<HTMLElement | null>(null);
+
+  // Keeps the dialog rendered from the commit that closes it until the delayed
+  // `close()` below has run. The `display` transition on the dialog is meant to
+  // do this, but a browser that does not hold a discrete `display` transition
+  // (WebKit) drops the dialog to `display: none` at once while it is still an
+  // open modal: nothing is visible, yet the whole page stays inert until the
+  // timer fires. Set during render, so it is already true in the commit that
+  // closes. The drawer's transform and the backdrop stay keyed to `isOpen`, so
+  // the slide-out is unchanged.
+  const [isCloseHeld, setIsCloseHeld] = useState(false);
+  const [wasOpen, setWasOpen] = useState(isOpen);
+  if (wasOpen !== isOpen) {
+    setWasOpen(isOpen);
+    setIsCloseHeld(!isOpen);
+  }
   const gutterRef = useRef<ScrollbarGutterHold | null>(null);
 
   // Gives back the gutter held open in place of the hidden scrollbar.
@@ -563,7 +593,12 @@ export function MobileNav({
 
       closeTimeoutRef.current = setTimeout(() => {
         closeAndRestoreFocus(dialog, triggerElementRef);
+        setIsCloseHeld(false);
       }, resolveCloseDelay(dialog));
+    } else {
+      // Nothing is open, so there is no close to hold the dialog for, and no
+      // close timer is left to release the hold.
+      setIsCloseHeld(false);
     }
 
     return () => {
@@ -601,6 +636,9 @@ export function MobileNav({
   const {shouldDismissOnCloseRequest} = useLayerDismissal({
     isActive: isOpen,
     onDismiss: () => onOpenChange(false),
+    // The dialog's document is this layer's: rendered into an iframe or a
+    // Picture-in-Picture window, it ranks with the layers opened inside it.
+    getContainer: () => dialogRef.current,
   });
 
   // The native `cancel` event is the browser's own close-watcher firing: an
@@ -613,6 +651,11 @@ export function MobileNav({
   // only, and never while an IME composition is in progress.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
       event.preventDefault();
       if (!shouldDismissOnCloseRequest()) {
         return;
@@ -647,7 +690,7 @@ export function MobileNav({
           layerStructureReset.reset,
           styles.dialog,
           overlayPaddingReset.reset,
-          isOpen && styles.open,
+          (isOpen || isCloseHeld) && styles.open,
           styles.backdrop,
           isOpen && styles.backdropOpen,
           xstyle,
@@ -665,43 +708,48 @@ export function MobileNav({
       }
       onClick={composeEventHandlers(onClickProp, handleDialogClick)}
       onCancel={handleCancel}>
-      <LayerDepthProvider>
-        <LayerContentBoundary>
-          {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
-          <div
-            tabIndex={-1}
-            {...stylex.props(
-              styles.drawer,
-              dynamicStyles.width(width),
-              isStart && styles.drawerStart,
-              isStart && isOpen && styles.drawerStartOpen,
-              !isStart && styles.drawerEnd,
-              !isStart && isOpen && styles.drawerEndOpen,
-            )}>
-            {/* Header — content + close button */}
+      <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
+        <LayerDepthProvider>
+          <LayerContentBoundary>
+            {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
             <div
-              {...stylex.props(styles.header, !header && styles.headerNoTitle)}>
-              {typeof header === 'string' ? (
-                <Heading level={2} xstyle={styles.headerText}>
-                  {header}
-                </Heading>
-              ) : (
-                (header ?? null)
-              )}
-              <Button
-                variant="ghost"
-                label={t('@astryx.mobileNav.closeNavigation')}
-                icon={<Icon icon="close" color="inherit" />}
-                onClick={() => onOpenChange(false)}
-                isIconOnly
-              />
-            </div>
+              tabIndex={-1}
+              {...stylex.props(
+                styles.drawer,
+                dynamicStyles.width(width),
+                isStart && styles.drawerStart,
+                isStart && isOpen && styles.drawerStartOpen,
+                !isStart && styles.drawerEnd,
+                !isStart && isOpen && styles.drawerEndOpen,
+              )}>
+              {/* Header — content + close button */}
+              <div
+                {...stylex.props(
+                  styles.header,
+                  !header && styles.headerNoTitle,
+                )}>
+                {typeof header === 'string' ? (
+                  <Heading level={2} xstyle={styles.headerText}>
+                    {header}
+                  </Heading>
+                ) : (
+                  (header ?? null)
+                )}
+                <Button
+                  variant="ghost"
+                  label={t('@astryx.mobileNav.closeNavigation')}
+                  icon={<Icon icon="close" color="inherit" />}
+                  onClick={() => onOpenChange(false)}
+                  isIconOnly
+                />
+              </div>
 
-            {/* Scrollable content */}
-            <div {...stylex.props(styles.content)}>{children}</div>
-          </div>
-        </LayerContentBoundary>
-      </LayerDepthProvider>
+              {/* Scrollable content */}
+              <div {...stylex.props(styles.content)}>{children}</div>
+            </div>
+          </LayerContentBoundary>
+        </LayerDepthProvider>
+      </ModalAnnounceProvider>
     </dialog>
   );
 }

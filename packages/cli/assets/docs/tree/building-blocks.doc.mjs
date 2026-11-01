@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-/** @file astryx docs cli/integrations/building-blocks — the kinds you can add. */
+/** @file astryx docs authoring/building-blocks — the kinds you can add. */
 
 /** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */
 export const docs = {
   type: 'namespace',
   name: 'building-blocks',
-  placement: {parent: 'namespace:integrations', slot: 'guides', order: 20},
+  placement: {parent: 'namespace:authoring', slot: 'guides', order: 20},
   title: 'Building Blocks',
   summary:
     'Add components, templates, themes, docs, and codemods, and configure how it behaves.',
@@ -23,6 +23,10 @@ export const docs = {
     },
   },
   blocks: [
+    {
+      type: 'prose',
+      text: 'In global mode: every kind your package adds also applies outside projects when users install it for their computer, beside the global CLI; inside a project, only if the project installs it. See {@link namespace:global} and {@link generic:global-integrations}.',
+    },
     {
       type: 'prose',
       text: 'These are everything you can add to an integration. Mix them however you like. You are not limited to any one thing.',

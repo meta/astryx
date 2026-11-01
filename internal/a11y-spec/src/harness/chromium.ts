@@ -1203,6 +1203,79 @@ export function createChromiumHarness(
       await page.mouse.move(releaseX, releaseY);
       await page.mouse.up();
     },
+    hover: async targetSubject => {
+      const target = pointerTargets.get(targetSubject);
+      if (target == null) {
+        throw new Error(
+          'the Chromium harness was asked to hover a subject it did not create',
+        );
+      }
+      // The same bounded reach as `click`: a subject a pointer can never rest
+      // on reports why instead of sitting out the whole test timeout.
+      try {
+        await target.hover({timeout: POINTER_REACH_BUDGET_MS});
+      } catch (error) {
+        if (isTimeout(error)) {
+          throw new Error(
+            `a pointer could not reach this subject within ${POINTER_REACH_BUDGET_MS}ms: the browser never found it visible, stable, and able to receive a pointer event. Something is covering it, or it is clipped to nothing.`,
+            {cause: error},
+          );
+        }
+        throw error;
+      }
+    },
+    pointerAway: async () => {
+      const viewport = await page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }));
+      // Corners first, then edge midpoints: the first point that is off the
+      // subject and every related subject. A point over one of them would
+      // leave the pointer where the outcome is being judged.
+      const candidates = [
+        [viewport.width - 2, viewport.height - 2],
+        [2, viewport.height - 2],
+        [viewport.width - 2, 2],
+        [2, 2],
+        [viewport.width / 2, viewport.height - 2],
+        [viewport.width - 2, viewport.height / 2],
+      ] as const;
+      // The pointer target is watched too: `hover` rests on it, and a binding's
+      // pointer target can differ from its semantic subject.
+      const watched = [
+        locator,
+        pointerLocator,
+        ...Object.values(options.related ?? {}),
+      ];
+      for (const [x, y] of candidates) {
+        const handles = (
+          await Promise.all(watched.map(item => item.elementHandles()))
+        ).flat();
+        try {
+          const clear = await page.evaluate(
+            ([pointX, pointY, elements]) => {
+              const hit = document.elementFromPoint(pointX, pointY);
+              return (
+                hit != null &&
+                !elements.some(
+                  element => element === hit || element.contains(hit),
+                )
+              );
+            },
+            [x, y, handles] as const,
+          );
+          if (clear) {
+            await page.mouse.move(x, y);
+            return;
+          }
+        } finally {
+          await Promise.all(handles.map(handle => handle.dispose()));
+        }
+      }
+      throw new Error(
+        'every edge of the viewport is covered by the subject or a related subject, so there is nowhere to move the pointer away to',
+      );
+    },
     typeText: async (_subject, text) => {
       await locator.focus();
       await page.keyboard.type(text);

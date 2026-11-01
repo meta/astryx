@@ -18,7 +18,8 @@
  *   pointer events stay with the element it landed on (implicit capture), so a
  *   menu container never sees a finger that slid onto it — the document does.
  * - The highlight follows the pointer (DOM focus with `preventScroll` in a
- *   menu; a callback for a picker that highlights by index).
+ *   menu, its indicator following the last input; a callback for a picker
+ *   that highlights by index).
  * - The row under the RELEASE acts, the way its own click would, carrying the
  *   release's button and modifier keys.
  * - The browser's stray `click` for a tracked gesture is swallowed at the
@@ -32,11 +33,14 @@
  * - `pointercancel`, a second pointer, or the window losing focus end the
  *   gesture with nothing acting; the model never re-implements scrolling.
  * - While a press is tracked in an overflowing menu, a pointer resting near
- *   the top or bottom edge scrolls the menu toward that edge.
+ *   the top or bottom edge scrolls the menu toward that edge (the shared
+ *   timer of utils/edgeAutoscroll.ts).
  *
  * The menu root is marked `data-astryx-menu-press` so a nested flyout (a DOM
  * descendant of its parent menu) can tell which level owns a press, and so a
- * surface can be recognised as carrying this model.
+ * surface can be recognised as carrying this model. A menu the root renders
+ * beside itself names the root with `data-astryx-menu-press-surface` and counts
+ * as nested in it.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
@@ -45,7 +49,14 @@
  * - /packages/core/src/hooks/menuPressGesture.ts
  */
 
-import {useCallback, useEffect, useMemo, useRef, type RefObject} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
 import {
   IDLE_MENU_PRESS,
@@ -55,11 +66,22 @@ import {
   type MenuPressGesture,
   type MenuPressPointerType,
 } from './menuPressGesture';
+import {MENU_PRESS_MARKER} from './menuPressMarker';
 import {useLongPress, type UseLongPressHandlers} from './useLongPress';
+import {edgeAutoscroll} from '../utils/edgeAutoscroll';
+import {focusForLastInput} from '../utils/focusReturn';
+import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 
-/** Marks a menu root that carries this press model. */
-export const MENU_PRESS_MARKER = 'data-astryx-menu-press';
+export {MENU_PRESS_MARKER};
 const MENU_PRESS_ROOT_SELECTOR = `[${MENU_PRESS_MARKER}]`;
+/**
+ * Carried by a menu root that another root renders beside itself rather than
+ * inside it, naming that root's `id`: the menu of a sub-menu with a header or
+ * footer, in a dialog beside the root's menu, is nested in that root for the
+ * press model, as a flyout inside the root's DOM is. Nothing else beside the
+ * root carries it, so a picker placed in a header or footer stays its own root.
+ */
+export const MENU_PRESS_SURFACE_ATTR = 'data-astryx-menu-press-surface';
 
 /** How long after a tracked release the browser's click is still swallowed. */
 export const MENU_PRESS_STRAY_CLICK_MS = 400;
@@ -199,8 +221,8 @@ export interface UseMenuPressOptions {
   getScroller?: () => HTMLElement | null;
   /**
    * Resolve the element under a viewport point. Defaults to
-   * `document.elementFromPoint`, falling back to the event target where the
-   * document lacks it (jsdom). A test seam.
+   * `elementFromPoint` on the menu's own document or shadow root, falling back
+   * to the event target where the document lacks it (jsdom). A test seam.
    */
   hitTest?: (x: number, y: number) => Element | null;
   /** @default 500 */
@@ -246,14 +268,42 @@ function isRowFocusable(row: HTMLElement): boolean {
 function getOutermostRoot(menu: HTMLElement): HTMLElement {
   let root = menu;
   for (;;) {
-    const parent = root.parentElement?.closest<HTMLElement>(
-      MENU_PRESS_ROOT_SELECTOR,
-    );
-    if (parent == null) {
+    const parent =
+      root.parentElement?.closest<HTMLElement>(MENU_PRESS_ROOT_SELECTOR) ??
+      getSurfaceOwner(root);
+    if (parent == null || parent === root) {
       return root;
     }
     root = parent;
   }
+}
+
+/**
+ * The menu root that renders `menu` beside itself, if any (see
+ * `MENU_PRESS_SURFACE_ATTR`). Read off the menu itself, never an ancestor, so
+ * a root placed in a region of that surface is not adopted.
+ */
+function getSurfaceOwner(menu: HTMLElement): HTMLElement | null {
+  const ownerId = menu.getAttribute(MENU_PRESS_SURFACE_ATTR);
+  if (!ownerId) {
+    return null;
+  }
+  const owner = menu.ownerDocument.getElementById(ownerId);
+  return owner?.matches(MENU_PRESS_ROOT_SELECTOR) === true ? owner : null;
+}
+
+/**
+ * Whether `element` is inside the menu tree whose outermost root is `root`:
+ * inside the root itself, or inside a menu nested in it through a surface
+ * the root renders beside itself. Anything else in such a surface (a header
+ * field, say) is outside the menu, as the root's own regions are.
+ */
+function isInMenuTree(element: Element, root: HTMLElement): boolean {
+  if (root.contains(element)) {
+    return true;
+  }
+  const owner = element.closest<HTMLElement>(MENU_PRESS_ROOT_SELECTOR);
+  return owner != null && getOutermostRoot(owner) === root;
 }
 
 interface ResolvedPoint {
@@ -289,6 +339,9 @@ interface ResolvedPoint {
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  // The highlight, and the hover focus of the rows in this menu, follow the
+  // last input, which this tracks for the menu's own document.
+  useInteractionModalityTrackingFor(options.menuRef);
 
   const gestureRef = useRef<MenuPressGesture<HTMLElement>>(IDLE_MENU_PRESS);
   const pointerIdRef = useRef<number | null>(null);
@@ -300,10 +353,36 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // exists.
   const longPressApiRef = useRef<UseLongPressHandlers | null>(null);
   const touchMovePreventerRef = useRef<(() => void) | null>(null);
+  // The edge autoscroll running now: its scroller, its direction, and the
+  // re-read of the row under the resting pointer after each step.
   const autoscrollRef = useRef<{
-    timer: ReturnType<typeof setInterval>;
+    scroller: HTMLElement;
     direction: 1 | -1;
+    reread: () => void;
   } | null>(null);
+  const [autoscroll] = useState(() =>
+    edgeAutoscroll({
+      intervalMs: AUTOSCROLL_INTERVAL_MS,
+      immediate: true,
+      step: () => (autoscrollRef.current?.direction ?? 0) * AUTOSCROLL_STEP_PX,
+      apply: delta => {
+        const running = autoscrollRef.current;
+        if (running == null) {
+          return 0;
+        }
+        const before = running.scroller.scrollTop;
+        running.scroller.scrollTop = before + delta;
+        const moved = running.scroller.scrollTop - before;
+        if (moved === 0) {
+          // The edge is reached; nothing more to reveal.
+          autoscrollRef.current = null;
+          return 0;
+        }
+        running.reread();
+        return moved;
+      },
+    }),
+  );
   const lastPointerEventRef = useRef<PointerEvent | null>(null);
   const triggerGestureRef = useRef<number | null>(null);
   // The second pointer that ended a gesture must not start the next one.
@@ -326,20 +405,29 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
       if (hitTest != null) {
         element = hitTest(event.clientX, event.clientY);
       } else if (typeof doc.elementFromPoint === 'function') {
-        element = doc.elementFromPoint(event.clientX, event.clientY);
+        // Hit-test in the menu's own tree: inside a shadow root the document
+        // answers with the shadow host, never the row under the pointer.
+        const tree = menu?.getRootNode();
+        const scope: Pick<Document, 'elementFromPoint'> =
+          tree != null &&
+          tree !== doc &&
+          typeof (tree as ShadowRoot).elementFromPoint === 'function'
+            ? (tree as ShadowRoot)
+            : doc;
+        element = scope.elementFromPoint(event.clientX, event.clientY);
       } else {
         element = event.target instanceof Element ? event.target : null;
       }
       const root = menu == null ? null : getOutermostRoot(menu);
       const isInMenu =
-        root != null && element != null && root.contains(element);
+        root != null && element != null && isInMenuTree(element, root);
       const trigger = triggerRef?.current ?? null;
       const isOnTrigger =
         trigger != null && element != null && trigger.contains(element);
       let row: HTMLElement | null = null;
       if (isInMenu && element != null) {
         row = element.closest<HTMLElement>(itemSelector);
-        if (row != null && !root.contains(row)) {
+        if (row != null && !isInMenuTree(row, root)) {
           row = null;
         }
       }
@@ -349,11 +437,9 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   );
 
   const stopAutoscroll = useCallback(() => {
-    if (autoscrollRef.current != null) {
-      clearInterval(autoscrollRef.current.timer);
-      autoscrollRef.current = null;
-    }
-  }, []);
+    autoscroll.stop();
+    autoscrollRef.current = null;
+  }, [autoscroll]);
 
   const endGesture = useCallback(() => {
     longPressApiRef.current?.cancel();
@@ -376,7 +462,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
       }
       // In a menu the highlight IS focus. A row whose root takes no
       // focus is highlighted through the control inside it; over nothing,
-      // the menu root holds focus so no row is lit.
+      // the menu root holds focus so no row is lit. The focus follows the
+      // last input (`architecture:interaction-modality` INV1): a held press
+      // is pointer input, so the row does not match :focus-visible, which a
+      // plain focus() would inherit from the focus before it.
       const target =
         row == null
           ? menuRef.current
@@ -384,7 +473,7 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
             ? row
             : row.querySelector<HTMLElement>(INNER_CONTROL_SELECTOR);
       if (target != null && target !== getDocument().activeElement) {
-        target.focus({preventScroll: true});
+        focusForLastInput(target, {preventScroll: true});
       }
     },
     [getDocument],
@@ -533,36 +622,29 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         return;
       }
       stopAutoscroll();
-      const tick = () => {
-        const before = scroller.scrollTop;
-        scroller.scrollTop = before + direction * AUTOSCROLL_STEP_PX;
-        if (scroller.scrollTop === before) {
-          // The edge is reached; nothing more to reveal.
-          stopAutoscroll();
-          return;
-        }
-        // The rows moved under the resting pointer: re-read the row under it.
-        const last = lastPointerEventRef.current;
-        if (last != null) {
-          const point = resolvePoint(last);
-          stepRef.current(
-            {
-              type: 'move',
-              row: point.row,
-              isInMenu: point.isInMenu,
-              time: Date.now(),
-            },
-            last,
-          );
-        }
-      };
       autoscrollRef.current = {
+        scroller,
         direction,
-        timer: setInterval(tick, AUTOSCROLL_INTERVAL_MS),
+        // The rows moved under the resting pointer: re-read the row under it.
+        reread: () => {
+          const last = lastPointerEventRef.current;
+          if (last != null) {
+            const point = resolvePoint(last);
+            stepRef.current(
+              {
+                type: 'move',
+                row: point.row,
+                isInMenu: point.isInMenu,
+                time: Date.now(),
+              },
+              last,
+            );
+          }
+        },
       };
-      tick();
+      autoscroll.update();
     },
-    [getScroller, resolvePoint, stopAutoscroll],
+    [autoscroll, getScroller, resolvePoint, stopAutoscroll],
   );
 
   // --- Document-level tracking ----------------------------------------------

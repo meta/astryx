@@ -21,7 +21,7 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const STORY = 'core-markdown-plugins-heading-links--overview';
+const STORY = 'core-markdown--heading-links';
 const OUTPUT = path.resolve('test-results/markdown-heading-links');
 const GEOMETRY_TOLERANCE_PX = 1;
 let storybook: StaticServer;

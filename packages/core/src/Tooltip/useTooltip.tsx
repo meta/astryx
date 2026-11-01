@@ -21,7 +21,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
-  useLayer,
+  useLayerInternal,
   type ContextRenderProps,
   type LayerAlignment,
   type LayerPlacement,
@@ -279,10 +279,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     onHide,
   } = options;
 
-  const layer = useLayer({
+  // A tooltip stays open while its trigger is hovered, so it must never settle
+  // over the trigger: content taller than the room above and below opens
+  // beside it, or on the roomier side sized to that room, and scrolls what does not
+  // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
+  const layer = useLayerInternal({
     mode: 'context',
     onShow,
     onHide,
+    keepsAnchorClear: true,
   });
   const {
     ref: layerRef,
@@ -397,15 +402,28 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     scheduleShow();
   }, [isTouchPointerRef, scheduleShow]);
 
-  const handleMouseLeave = useCallback(() => {
-    // On touch the synthesized mouseleave arrives with the next tap elsewhere,
-    // which the outside-tap dismissal already handles — and handling it here
-    // too would close the tooltip behind the tap-open bookkeeping's back.
-    if (isTouchPointerRef.current) {
-      return;
-    }
-    scheduleHide();
-  }, [isTouchPointerRef, scheduleHide]);
+  const handleMouseLeave = useCallback(
+    (event: Event) => {
+      // On touch the synthesized mouseleave arrives with the next tap elsewhere,
+      // which the outside-tap dismissal already handles — and handling it here
+      // too would close the tooltip behind the tap-open bookkeeping's back.
+      if (isTouchPointerRef.current) {
+        return;
+      }
+      // Leaving straight onto the tooltip: the surface's onMouseEnter already
+      // ran, because React dispatches it from the mouseout that precedes this
+      // mouseleave, so a hide scheduled now would never be cancelled. The
+      // surface's own mouse leave schedules the hide instead.
+      const next = (event as MouseEvent).relatedTarget as Node | null;
+      const surface =
+        next == null ? null : next.ownerDocument?.getElementById(layerId);
+      if (surface != null && surface.contains(next)) {
+        return;
+      }
+      scheduleHide();
+    },
+    [isTouchPointerRef, layerId, scheduleHide],
+  );
 
   const handleFocusIn = useCallback(
     (e: Event) => {

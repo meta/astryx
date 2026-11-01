@@ -56,6 +56,13 @@ export const docs = {
       ],
     },
     {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        'Vertical alignment of the start and end content against the label, passed through to Item unchanged. `first-line` keeps a small mark (a checkbox) level with the first line of a wrapped label. See Item.align.',
+      default: "'center'",
+    },
+    {
       name: 'isDisabled',
       type: 'boolean',
       description: 'Whether this individual item is disabled.',
@@ -131,6 +138,13 @@ export const docsZh = {
       description: '在标签区域后渲染的内容。',
     },
     {
+      name: 'align',
+      type: "'center' | 'start' | 'first-line'",
+      description:
+        '起始和结束内容相对于标签的垂直对齐方式，原样传递给 Item。`first-line` 让小标记（复选框）与换行标签的第一行保持水平。参见 Item.align。',
+      default: "'center'",
+    },
+    {
       name: 'isDisabled',
       type: 'boolean',
       description: '是否禁用此单个选项。',
@@ -165,6 +179,8 @@ export const docsDense = {
   description:
     'Individual checkbox item w/ label, description, end content slot. Collection mode inside CheckboxList with value; standalone inside List or CheckboxList without value.',
   propDescriptions: {
+    align:
+      "Start/end content alignment, passed to Item: 'center' (default), 'start', or 'first-line' (centered on the label's first line).",
     label:
       'Primary label. String or ReactNode; nested controls keep their behavior. A ReactNode names the checkbox from its visible text.',
     'aria-label':

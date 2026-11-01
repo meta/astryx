@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {spawnSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -123,4 +123,27 @@ describe('integrationPackCheck with lifecycle script output', () => {
     expect(failure?.message).toContain('npm pack failed (exit 3)');
     expect(failure?.message).toContain('prepack exploded');
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'packs with npm itself when an earlier npm on the PATH refuses every command',
+    async () => {
+      writeThemePackage({});
+      const refusing = path.join(tmpDir, '.refusing-bin');
+      fs.mkdirSync(refusing);
+      fs.writeFileSync(
+        path.join(refusing, 'npm'),
+        "#!/bin/sh\necho 'npm commands are not allowed on this machine'\nexit 1\n",
+        {mode: 0o755},
+      );
+      vi.stubEnv('PATH', `${refusing}${path.delimiter}${process.env.PATH}`);
+      try {
+        const result = await integrationPackCheck({cwd: tmpDir});
+
+        expect(result.data.issues).toEqual([]);
+        expect(result.data.packable).toBe(true);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
 });

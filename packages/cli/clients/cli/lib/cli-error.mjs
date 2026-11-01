@@ -53,6 +53,7 @@
 import {isJsonMode, jsonError as _jsonError, humanWarn} from '../../../foundation/response/json.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {setOutcome} from '../../../foundation/debug/index.mjs';
+import {formatCliCommand} from '../../../foundation/env/package-manager.mjs';
 
 /**
  * Suggestion object — matches the shape used by API errors and the JSON
@@ -122,7 +123,9 @@ export function cliError(message, options = {}) {
   if (suggestions?.length) {
     console.error('');
     for (const s of suggestions) {
-      const tag = s.reason ? `  ${s.name}  (${s.reason})` : `  ${s.name}`;
+      // A suggested command stays bare in JSON and is prefixed here.
+      const name = /^astryx(\s|$)/.test(s.name) ? formatCliCommand(s.name) : s.name;
+      const tag = s.reason ? `  ${name}  (${s.reason})` : `  ${name}`;
       console.error(tag);
     }
   }

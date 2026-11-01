@@ -8,7 +8,8 @@
  *   BUTTON_PATTERN_EXCLUSIONS, the parts deliberately left to another pattern.
  * @position The binding inventory required before any assertion moves
  *   (`docs/specs/AST-021/spec.md` FR2, FR4), and the single definition of what
- *   each state IS.
+ *   each state IS. Disabled ClickableCard remains focusable and inert under
+ *   `docs/specs/AST-085-focusable-disabled/spec.md` FR1 and FR2.
  *
  * A state earns a row when it can change what the button pattern promises: a
  * different name source, a different operability, a different exposure of
@@ -223,8 +224,8 @@ export const BUTTON_BINDING_STATES = [
   {
     id: 'clickable-card-disabled',
     binding: 'ClickableCard',
-    summary: 'a disabled action card',
-    facts: facts({operable: false, focusable: false, unavailable: true}),
+    summary: 'a disabled action card: focusable, unavailable, and inert',
+    facts: facts({operable: false, focusable: true, unavailable: true}),
     visibleLabel: null,
     pointerTargetSelector: '[data-a11y-pointer-target]',
     storyId: 'a11y-button-pattern--clickable-card-disabled',

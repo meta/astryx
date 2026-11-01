@@ -1,18 +1,18 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.2",
+  "version": "0.7.6",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/core"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -769,10 +769,65 @@
       "types": "./dist/Typeahead/utils.d.ts",
       "default": "./dist/Typeahead/utils.js"
     },
+    "./CodeBlock/languages/dockerfile": {
+      "source": "./src/CodeBlock/languages/dockerfile.ts",
+      "types": "./dist/CodeBlock/languages/dockerfile.d.ts",
+      "default": "./dist/CodeBlock/languages/dockerfile.js"
+    },
+    "./CodeBlock/languages/graphql": {
+      "source": "./src/CodeBlock/languages/graphql.ts",
+      "types": "./dist/CodeBlock/languages/graphql.d.ts",
+      "default": "./dist/CodeBlock/languages/graphql.js"
+    },
+    "./CodeBlock/languages/java": {
+      "source": "./src/CodeBlock/languages/java.ts",
+      "types": "./dist/CodeBlock/languages/java.d.ts",
+      "default": "./dist/CodeBlock/languages/java.js"
+    },
+    "./CodeBlock/languages/lua": {
+      "source": "./src/CodeBlock/languages/lua.ts",
+      "types": "./dist/CodeBlock/languages/lua.d.ts",
+      "default": "./dist/CodeBlock/languages/lua.js"
+    },
+    "./CodeBlock/languages/objective-c": {
+      "source": "./src/CodeBlock/languages/objective-c.ts",
+      "types": "./dist/CodeBlock/languages/objective-c.d.ts",
+      "default": "./dist/CodeBlock/languages/objective-c.js"
+    },
+    "./CodeBlock/languages/powershell": {
+      "source": "./src/CodeBlock/languages/powershell.ts",
+      "types": "./dist/CodeBlock/languages/powershell.d.ts",
+      "default": "./dist/CodeBlock/languages/powershell.js"
+    },
+    "./CodeBlock/languages/ruby": {
+      "source": "./src/CodeBlock/languages/ruby.ts",
+      "types": "./dist/CodeBlock/languages/ruby.d.ts",
+      "default": "./dist/CodeBlock/languages/ruby.js"
+    },
+    "./CodeBlock/languages/thrift": {
+      "source": "./src/CodeBlock/languages/thrift.ts",
+      "types": "./dist/CodeBlock/languages/thrift.d.ts",
+      "default": "./dist/CodeBlock/languages/thrift.js"
+    },
+    "./CodeBlock/languages/toml": {
+      "source": "./src/CodeBlock/languages/toml.ts",
+      "types": "./dist/CodeBlock/languages/toml.d.ts",
+      "default": "./dist/CodeBlock/languages/toml.js"
+    },
     "./Markdown/remark": {
       "source": "./src/Markdown/remark.ts",
       "types": "./dist/Markdown/remark.d.ts",
       "default": "./dist/Markdown/remark.js"
+    },
+    "./internal/touch": {
+      "source": "./src/internal/touch.ts",
+      "types": "./dist/internal/touch.d.ts",
+      "default": "./dist/internal/touch.js"
+    },
+    "./internal/tokenizer-presentation": {
+      "source": "./src/internal/tokenizer-presentation.ts",
+      "types": "./dist/internal/tokenizer-presentation.d.ts",
+      "default": "./dist/internal/tokenizer-presentation.js"
     }
   },
   "files": [
@@ -784,12 +839,26 @@
     "docs.mjs",
     "groups.doc.mjs",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "prepack": "pnpm build",
     "postinstall": "node scripts/postinstall.mjs",
-    "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
+    "build": "node ../../scripts/clean-dist.mjs && pnpm build:i18n && pnpm build:esm && tsc --project tsconfig.build.json && node ../../scripts/add-declaration-extensions.mjs && pnpm build:css && node ../../scripts/check-no-dev-jsx.mjs && node ../../scripts/check-fully-specified.mjs",
     "build:i18n": "node ../../scripts/generate-i18n-runtime.mjs && node scripts/build-pseudo-locale.mjs",
     "build:esm": "babel src --out-dir dist --extensions .ts,.tsx --out-file-extension .js --ignore \"**/*.test.ts,**/*.test.tsx,**/__tests__/**,**/*.perf.test.*,**/*.doc.mjs,**/*.d.ts,**/*.css,**/*.css.d.ts\" --config-file ./babel.config.json",
     "build:css": "node ../../scripts/build-css.mjs",
@@ -799,7 +868,7 @@
     "test:watch": "vitest --root ../..",
     "lint": "eslint src",
     "typecheck:docs": "tsc --project tsconfig.docs.json",
-    "typecheck": "tsc --project tsconfig.json --noEmit"
+    "typecheck": "tsc --project tsconfig.json --noEmit && pnpm typecheck:docs"
   },
   "peerDependencies": {
     "@stylexjs/stylex": "^0.19.0",
@@ -809,6 +878,7 @@
   "devDependencies": {
     "@astryxdesign/a11y-spec": "workspace:*",
     "@astryxdesign/cli": "workspace:*",
+    "@astryxdesign/interaction-harness": "workspace:*",
     "@babel/cli": "catalog:",
     "@babel/core": "catalog:",
     "@babel/preset-react": "catalog:",

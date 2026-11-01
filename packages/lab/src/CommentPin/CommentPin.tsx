@@ -5,8 +5,10 @@
 /**
  * @file CommentPin.tsx
  * @input Ordered participants (grouped pins show at most three circles),
- *   total and unread represented thread counts, controlled
- *   selected/dimmed/resolved/disabled state, and button DOM props
+ *   total and unread represented thread counts (unread shows as a dot), a
+ *   size on the element-size
+ *   scale, controlled selected/dimmed/resolved/disabled state, and button DOM
+ *   props
  * @output Exports the avatar-first CommentPin button and its public types
  * @position Lab collaboration primitive for annotation anchors over content or
  *   in content margins; callers own grouping, coordinates, and opened content
@@ -22,18 +24,19 @@
 
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
-import {Avatar} from '@astryxdesign/core/Avatar';
+import {Avatar, type AvatarSize} from '@astryxdesign/core/Avatar';
 import {AvatarGroup, AvatarGroupOverflow} from '@astryxdesign/core/AvatarGroup';
 import {
   useDevWarning,
   useMergedRefs,
   usePressFeedback,
 } from '@astryxdesign/core/hooks';
+import {Icon, type IconSize} from '@astryxdesign/core/Icon';
+import {StatusDot} from '@astryxdesign/core/StatusDot';
 import {
   borderVars,
   colorVars,
   fontWeightVars,
-  radiusVars,
   shadowVars,
   sizeVars,
   spacingVars,
@@ -47,6 +50,9 @@ import {
   mergeProps,
   themeProps,
 } from '@astryxdesign/core/utils';
+
+/** Pin heights on the shared element-size scale: 28, 32, or 36px. */
+export type CommentPinSize = 'sm' | 'md' | 'lg';
 
 /** Identity data for one representative shown inside a CommentPin. */
 export interface CommentPinParticipant {
@@ -74,10 +80,17 @@ export interface CommentPinProps extends Omit<
    * Ordered participants, lead first. A single marker shows the first. A
    * grouped marker shows distinct IDs as an AvatarGroup of at most three
    * circles: every participant when three or fewer are distinct, otherwise the
-   * first two plus a `+N` overflow circle. Pass every distinct participant so
-   * the overflow count is accurate.
+   * first two plus an ellipsis overflow circle. Pass every distinct
+   * participant so the overflow appears only when more than three people
+   * participate.
    */
   participants: readonly [CommentPinParticipant, ...CommentPinParticipant[]];
+  /**
+   * Pin height on the element-size scale: `sm` 28px, `md` 32px, `lg` 36px,
+   * with 22px, 24px, and 28px participant circles.
+   * @default 'sm'
+   */
+  size?: CommentPinSize;
   /**
    * Total number of threads represented by this marker. Values above one use
    * the grouped presentation and show the exact total.
@@ -86,8 +99,9 @@ export interface CommentPinProps extends Omit<
   threadCount?: number;
   /**
    * Number of represented threads with unread activity. When above zero, an
-   * accent badge shows this number in place of the thread total, on single
-   * and grouped pins alike. Values above `threadCount` are capped.
+   * accent status dot appears at the end of the pin: after the thread total,
+   * or after the participant on a single pin. Values above `threadCount` are
+   * capped.
    * @default 0
    */
   unreadCount?: number;
@@ -98,7 +112,11 @@ export interface CommentPinProps extends Omit<
    * disabling it, so it remains available to switch selection.
    */
   isDimmed?: boolean;
-  /** Whether every thread represented by this pin is resolved. */
+  /**
+   * Whether every thread represented by this pin is resolved. A resolved pin
+   * renders nothing unless it is selected, so resolved discussion leaves the
+   * content while a thread the reader opened keeps its anchor.
+   */
   isResolved?: boolean;
   /** Whether activation is unavailable. */
   isDisabled?: boolean;
@@ -118,21 +136,16 @@ const styles = stylex.create({
       default: 'left bottom',
       ':is([dir="rtl"] *)': 'right bottom',
     },
-    minWidth: sizeVars['--size-element-sm'],
-    height: sizeVars['--size-element-sm'],
     margin: 0,
-    padding: spacingVars['--spacing-0-5'],
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
     borderColor: 'transparent',
-    // Speech-bubble silhouette: three fully rounded logical corners and a
-    // fixed 4px logical bottom-start corner. The literal is intentional:
-    // themes may enlarge `--radius-inner`, which would soften the anchor cue.
-    // Logical longhands mirror the corner in RTL by construction.
-    borderStartStartRadius: radiusVars['--radius-full'],
-    borderStartEndRadius: radiusVars['--radius-full'],
-    borderEndEndRadius: radiusVars['--radius-full'],
-    borderEndStartRadius: '4px',
+    // Speech-bubble silhouette: a fixed 2px logical bottom-start corner; the
+    // other three corners are half the pin's height (see `sizeStyles`). The
+    // literal is intentional: no radius token is 2px, and themes may change
+    // `--radius-inner`, which would soften the anchor cue. Logical longhands
+    // mirror the corner in RTL by construction.
+    borderEndStartRadius: '2px',
     backgroundColor: colorVars['--color-background-popover'],
     backgroundImage: 'none',
     boxShadow: shadowVars['--shadow-med'],
@@ -151,8 +164,6 @@ const styles = stylex.create({
   withCount: {
     justifyContent: 'flex-start',
     gap: spacingVars['--spacing-1'],
-    paddingInlineStart: spacingVars['--spacing-0-5'],
-    paddingInlineEnd: spacingVars['--spacing-2'],
   },
   selected: {
     // Native buttons keep ButtonFace/ButtonText under forced colors unless the
@@ -182,28 +193,6 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'HighlightText',
     },
   },
-  resolved: {
-    // This state authors Canvas colors in forced-colors mode, so opt the native
-    // button out of ButtonFace/ButtonText remapping and author both sides.
-    forcedColorAdjust: 'none',
-    borderColor: {
-      default: 'transparent',
-      '@media (forced-colors: active)': 'CanvasText',
-    },
-    backgroundColor: {
-      default: colorVars['--color-background-muted'],
-      '@media (forced-colors: active)': 'Canvas',
-    },
-    boxShadow: 'none',
-    color: {
-      default: colorVars['--color-text-secondary'],
-      '@media (forced-colors: active)': 'CanvasText',
-    },
-    opacity: {
-      default: 0.72,
-      '@media (forced-colors: active)': 1,
-    },
-  },
   dimmed: {
     opacity: {
       default: 0.4,
@@ -217,47 +206,116 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 1,
     },
   },
+  // An aria-disabled button gets no system disabled paint in forced colors;
+  // GrayText is the platform's disabled affordance there. Defaults repeat the
+  // base values, since StyleX merges per property. Only unselected pins take
+  // it — the selected treatment keeps its forced-colors Highlight, so a
+  // selected disabled pin stays prominent (ORD4).
+  disabledUnselected: {
+    borderColor: {
+      default: 'transparent',
+      '@media (forced-colors: active)': 'GrayText',
+    },
+    color: {
+      default: colorVars['--color-text-secondary'],
+      '@media (forced-colors: active)': 'GrayText',
+    },
+  },
   avatarRail: {
     display: 'inline-flex',
     alignItems: 'center',
     flexShrink: 0,
   },
-  // AvatarGroupOverflow pads its count for multi-digit pills; inside this
-  // compact pin a short `+N` must stay a circle the size of its sibling
-  // Avatars, while longer counts still grow from the shared minimum width.
+  // AvatarGroup draws every face inside a 2px surface ring. Sitting the first
+  // ring in the start padding keeps the faces themselves as far from the start
+  // edge as from the top and bottom, as on a single pin.
+  groupedRail: {
+    marginInlineStart: -2,
+  },
+  // AvatarGroupOverflow pads its content for multi-digit `+N` pills; the
+  // ellipsis inside this pin stays a circle the size of its sibling Avatars.
   overflowCircle: {
     paddingInline: 0,
   },
-  count: {
-    display: 'inline-block',
-    minWidth: spacingVars['--spacing-3'],
-    color: 'inherit',
-    fontVariantNumeric: 'tabular-nums',
-    textAlign: 'center',
-  },
-  unreadBadge: {
-    // Native buttons remap colors under forced colors; author the full pair.
-    forcedColorAdjust: 'none',
+  // The thread total and then the unread dot follow the participants. The
+  // end padding gives whichever comes last room before the pin's edge, so a
+  // number or dot never crowds it.
+  trailing: {
     display: 'inline-flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    boxSizing: 'border-box',
-    minWidth: spacingVars['--spacing-5'],
-    height: spacingVars['--spacing-5'],
-    paddingInline: spacingVars['--spacing-1'],
-    borderRadius: radiusVars['--radius-full'],
-    backgroundColor: {
-      default: colorVars['--color-accent'],
-      '@media (forced-colors: active)': 'Highlight',
-    },
+    gap: spacingVars['--spacing-1'],
+    paddingInlineEnd: spacingVars['--spacing-1'],
+  },
+  count: {
+    color: 'inherit',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  // StatusDot paints its plate with a background, which forced colors would
+  // erase; there it takes the pin's own text color, so it shows in every state.
+  unreadDot: {
+    forcedColorAdjust: 'none',
     color: {
       default: colorVars['--color-on-accent'],
-      '@media (forced-colors: active)': 'HighlightText',
+      '@media (forced-colors: active)': 'inherit',
     },
-    fontVariantNumeric: 'tabular-nums',
-    lineHeight: 1,
+    backgroundColor: {
+      default: colorVars['--color-accent'],
+      '@media (forced-colors: active)': 'currentColor',
+    },
   },
 });
+
+// Each size pairs an element-size height with a participant circle diameter
+// (see AVATAR_SIZE). The padding is the inset that centers that circle in the
+// height, applied on every side: the avatars and overflow sit the same
+// distance from all four edges. The three round corners are half the height,
+// which is fully round: the 9999px full-radius token would make the browser
+// scale every corner down to fit the box (the CSS corner-overlap rule) and
+// shrink the 2px anchor corner to nothing.
+const sizeStyles = stylex.create({
+  sm: {
+    minWidth: sizeVars['--size-element-sm'],
+    height: sizeVars['--size-element-sm'],
+    padding: `calc((${sizeVars['--size-element-sm']} - 22px) / 2 - ${borderVars['--border-width']})`,
+    borderStartStartRadius: `calc(${sizeVars['--size-element-sm']} / 2)`,
+    borderStartEndRadius: `calc(${sizeVars['--size-element-sm']} / 2)`,
+    borderEndEndRadius: `calc(${sizeVars['--size-element-sm']} / 2)`,
+  },
+  md: {
+    minWidth: sizeVars['--size-element-md'],
+    height: sizeVars['--size-element-md'],
+    padding: `calc((${sizeVars['--size-element-md']} - 24px) / 2 - ${borderVars['--border-width']})`,
+    borderStartStartRadius: `calc(${sizeVars['--size-element-md']} / 2)`,
+    borderStartEndRadius: `calc(${sizeVars['--size-element-md']} / 2)`,
+    borderEndEndRadius: `calc(${sizeVars['--size-element-md']} / 2)`,
+  },
+  lg: {
+    minWidth: sizeVars['--size-element-lg'],
+    height: sizeVars['--size-element-lg'],
+    padding: `calc((${sizeVars['--size-element-lg']} - 28px) / 2 - ${borderVars['--border-width']})`,
+    borderStartStartRadius: `calc(${sizeVars['--size-element-lg']} / 2)`,
+    borderStartEndRadius: `calc(${sizeVars['--size-element-lg']} / 2)`,
+    borderEndEndRadius: `calc(${sizeVars['--size-element-lg']} / 2)`,
+  },
+});
+
+/**
+ * Participant circle diameter per pin size, matching the literals in
+ * `sizeStyles`. Avatar renders any pixel size; its typed scale lists neither
+ * 22 nor 28, hence the cast.
+ */
+const AVATAR_SIZE: Record<CommentPinSize, AvatarSize> = {
+  sm: 22 as AvatarSize,
+  md: 24,
+  lg: 28 as AvatarSize,
+};
+
+/** The overflow ellipsis per pin size. */
+const OVERFLOW_ICON_SIZE: Record<CommentPinSize, IconSize> = {
+  sm: 'xsm',
+  md: 'xsm',
+  lg: 'sm',
+};
 
 function takeDistinctParticipants(
   participants: readonly CommentPinParticipant[],
@@ -305,7 +363,8 @@ const MAX_GROUP_CIRCLES = 3;
  * The caller owns grouping, representative selection, coordinates, collision
  * handling, and the content opened by activation. Absolute placement maps the
  * host anchor to the pin's logical bottom-start corner. The pin only owns its
- * compact button surface and controlled visual states.
+ * compact button surface and controlled visual states. `size` sets its height
+ * on the element-size scale.
  *
  * @example
  * ```
@@ -331,6 +390,7 @@ const MAX_GROUP_CIRCLES = 3;
 export function CommentPin({
   label,
   participants,
+  size = 'sm',
   threadCount = 1,
   unreadCount = 0,
   isSelected = false,
@@ -343,6 +403,9 @@ export function CommentPin({
   style,
   ...rest
 }: CommentPinProps): React.ReactNode {
+  const resolvedSize: CommentPinSize =
+    size === 'md' || size === 'lg' ? size : 'sm';
+  const avatarSize = AVATAR_SIZE[resolvedSize];
   const validThreadCount = isValidThreadCount(threadCount);
   const resolvedThreadCount = validThreadCount ? threadCount : 1;
   const isGrouped = resolvedThreadCount > 1;
@@ -353,7 +416,7 @@ export function CommentPin({
   const hasUnread = resolvedUnreadCount > 0;
 
   // Grouped pins cap at MAX_GROUP_CIRCLES circles: every distinct participant
-  // when they fit, otherwise one fewer Avatar plus a `+N` overflow circle.
+  // when they fit, otherwise one fewer Avatar plus an ellipsis overflow circle.
   const distinctParticipants = takeDistinctParticipants(
     participants,
     isGrouped ? Number.POSITIVE_INFINITY : 1,
@@ -395,6 +458,13 @@ export function CommentPin({
   });
   const mergedRef = useMergedRefs(ref, hasTooltip ? tooltip.ref : undefined);
 
+  // Resolved discussion leaves the content. A selected pin stays, so a thread
+  // the reader opened (or resolved from its popover) keeps its anchor until
+  // the host clears the selection.
+  if (isResolved && !isSelected) {
+    return null;
+  }
+
   const avatarParticipants =
     visibleParticipants.length > 0
       ? visibleParticipants
@@ -408,9 +478,37 @@ export function CommentPin({
       type="button"
       aria-label={label}
       aria-pressed={isSelected}
-      disabled={isDisabled}
+      // A disabled pin keeps its tab stop and is announced as disabled through
+      // aria-disabled instead of the native attribute (spec:AST-085 FR1). The
+      // activation guards below keep it inert (FR2); focus is kept when the
+      // pin becomes disabled while focused (FR4), and the shared focus outline
+      // still paints, dimmed with the rest of the pin (FR6).
+      aria-disabled={isDisabled ? 'true' : undefined}
+      onClick={e => {
+        if (isDisabled) {
+          // A natively disabled element dispatched no click at all, so an
+          // aria-disabled pin must not reach the caller's handler, and the
+          // click must not leak to a clickable ancestor (annotation surface)
+          // the native attribute never let it reach either (FR2).
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        rest.onClick?.(e);
+      }}
+      // The keyboard paths to activation are Enter and Space; other keys still
+      // reach caller handlers, as on an enabled pin (FR2).
+      onKeyDown={e => {
+        if (isDisabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        rest.onKeyDown?.(e);
+      }}
       {...mergeProps(
         themeProps('comment-pin', {
+          size: resolvedSize,
           grouped: isGrouped ? 'grouped' : null,
           unread: hasUnread ? 'unread' : null,
           selected: isSelected ? 'selected' : null,
@@ -420,20 +518,23 @@ export function CommentPin({
         }),
         focusOutlineProps.focusVisible(
           styles.root,
+          sizeStyles[resolvedSize],
           interactionOverlayStyles.backgroundImage,
           (isGrouped || hasUnread) && styles.withCount,
-          isResolved && !isSelected && styles.resolved,
           isDimmed && !isSelected && styles.dimmed,
           isSelected && styles.selected,
           isDisabled && styles.disabled,
+          isDisabled && !isSelected && styles.disabledUnselected,
           xstyle,
         ),
         className,
         style,
       )}>
-      <span aria-hidden="true" {...stylex.props(styles.avatarRail)}>
+      <span
+        aria-hidden="true"
+        {...stylex.props(styles.avatarRail, isGrouped && styles.groupedRail)}>
         {isGrouped ? (
-          <AvatarGroup size="xsm">
+          <AvatarGroup size={avatarSize}>
             {avatarParticipants.map(participant => (
               <Avatar
                 key={participant.id}
@@ -445,8 +546,12 @@ export function CommentPin({
             {overflowCount > 0 ? (
               <AvatarGroupOverflow
                 count={overflowCount}
-                xstyle={styles.overflowCircle}
-              />
+                xstyle={styles.overflowCircle}>
+                <Icon
+                  icon="moreHorizontal"
+                  size={OVERFLOW_ICON_SIZE[resolvedSize]}
+                />
+              </AvatarGroupOverflow>
             ) : null}
           </AvatarGroup>
         ) : (
@@ -455,19 +560,21 @@ export function CommentPin({
               key={participant.id}
               name={participant.name}
               src={participant.avatarSrc}
-              size="xsm"
+              size={avatarSize}
               tooltip={false}
             />
           ))
         )}
       </span>
-      {hasUnread ? (
-        <span aria-hidden="true" {...stylex.props(styles.unreadBadge)}>
-          {resolvedUnreadCount}
-        </span>
-      ) : isGrouped ? (
-        <span aria-hidden="true" {...stylex.props(styles.count)}>
-          {resolvedThreadCount}
+      {hasUnread || isGrouped ? (
+        <span aria-hidden="true" {...stylex.props(styles.trailing)}>
+          {isGrouped ? (
+            <span {...stylex.props(styles.count)}>{resolvedThreadCount}</span>
+          ) : null}
+          {hasUnread ? (
+            // Decorative: the button's label carries the unread context.
+            <StatusDot variant="accent" label="" xstyle={styles.unreadDot} />
+          ) : null}
         </span>
       ) : null}
     </button>

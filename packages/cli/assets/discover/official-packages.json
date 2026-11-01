@@ -1,0 +1,387 @@
+{
+  "packages": [
+    {
+      "package": "@astryxdesign/charts",
+      "description": "Astryx charts — a config-model data visualization library (d3-based). Published to npm only under the @canary dist-tag for early testing; never released as a stable (latest) version.",
+      "canaryOnly": true,
+      "contributions": [
+        {
+          "kind": "component",
+          "name": "Chart"
+        },
+        {
+          "kind": "component",
+          "name": "ChartAxis"
+        },
+        {
+          "kind": "component",
+          "name": "ChartGrid"
+        },
+        {
+          "kind": "component",
+          "name": "ChartLegend"
+        },
+        {
+          "kind": "component",
+          "name": "ChartSwatch"
+        },
+        {
+          "kind": "component",
+          "name": "ChartTooltip"
+        },
+        {
+          "kind": "template",
+          "name": "ChartShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "ChartTrendComparison"
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/lab",
+      "description": "Experimental Astryx components — published to npm only under the @canary dist-tag for early testing; never released as a stable (latest) version.",
+      "canaryOnly": true,
+      "contributions": [
+        {
+          "kind": "component",
+          "name": "ChartArea"
+        },
+        {
+          "kind": "component",
+          "name": "ChartBar"
+        },
+        {
+          "kind": "component",
+          "name": "ChartCandlestick"
+        },
+        {
+          "kind": "component",
+          "name": "ChartDot"
+        },
+        {
+          "kind": "component",
+          "name": "ChartDotGL"
+        },
+        {
+          "kind": "component",
+          "name": "ChartDotGLInteractive"
+        },
+        {
+          "kind": "component",
+          "name": "ChartHeatmapGL"
+        },
+        {
+          "kind": "component",
+          "name": "ChartLine"
+        },
+        {
+          "kind": "component",
+          "name": "ChartStreamGL"
+        },
+        {
+          "kind": "component",
+          "name": "ChatEmojiPicker"
+        },
+        {
+          "kind": "component",
+          "name": "ChatReactionBar"
+        },
+        {
+          "kind": "component",
+          "name": "ChatReasoning"
+        },
+        {
+          "kind": "component",
+          "name": "ChatTypingIndicator"
+        },
+        {
+          "kind": "component",
+          "name": "ChatUnreadDivider"
+        },
+        {
+          "kind": "component",
+          "name": "CircularProgress"
+        },
+        {
+          "kind": "component",
+          "name": "CodeEditor"
+        },
+        {
+          "kind": "component",
+          "name": "CommentComposer"
+        },
+        {
+          "kind": "component",
+          "name": "CommentPin"
+        },
+        {
+          "kind": "component",
+          "name": "Comments"
+        },
+        {
+          "kind": "component",
+          "name": "CommentThread"
+        },
+        {
+          "kind": "component",
+          "name": "DiffViewer"
+        },
+        {
+          "kind": "component",
+          "name": "EmojiPicker"
+        },
+        {
+          "kind": "component",
+          "name": "InfoTip"
+        },
+        {
+          "kind": "component",
+          "name": "ListInput"
+        },
+        {
+          "kind": "component",
+          "name": "LogStream"
+        },
+        {
+          "kind": "component",
+          "name": "MobilePowerSearch"
+        },
+        {
+          "kind": "component",
+          "name": "MobileTokenizer"
+        },
+        {
+          "kind": "component",
+          "name": "RadialChart"
+        },
+        {
+          "kind": "component",
+          "name": "SankeyChart"
+        },
+        {
+          "kind": "component",
+          "name": "Schedule"
+        },
+        {
+          "kind": "component",
+          "name": "Stat"
+        },
+        {
+          "kind": "component",
+          "name": "SVGIcon"
+        },
+        {
+          "kind": "component",
+          "name": "ThreeDBar"
+        },
+        {
+          "kind": "component",
+          "name": "ThreeDChart"
+        },
+        {
+          "kind": "component",
+          "name": "ThreeDScatter"
+        },
+        {
+          "kind": "component",
+          "name": "ThreeDScatterGL"
+        },
+        {
+          "kind": "component",
+          "name": "ThreeDSurface"
+        },
+        {
+          "kind": "component",
+          "name": "Tour"
+        },
+        {
+          "kind": "component",
+          "name": "TourStep"
+        },
+        {
+          "kind": "component",
+          "name": "TransferList"
+        },
+        {
+          "kind": "template",
+          "name": "CommentComposerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "CommentPinInMargin"
+        },
+        {
+          "kind": "template",
+          "name": "CommentPinShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "CommentsInCard"
+        },
+        {
+          "kind": "template",
+          "name": "CommentsInline"
+        },
+        {
+          "kind": "template",
+          "name": "CommentsShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "CommentThreadInPopover"
+        },
+        {
+          "kind": "template",
+          "name": "CommentThreadShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "DiffViewerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "EmojiPickerInPopover"
+        },
+        {
+          "kind": "template",
+          "name": "EmojiPickerShowcase"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputBudgetAllocation"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputFamilyMembers"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputMailingList"
+        },
+        {
+          "kind": "template",
+          "name": "ListInputShowcase"
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/richtext",
+      "description": "Astryx rich text — a Lexical-based rich text editor and viewer, styled with Astryx design tokens.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "component",
+          "name": "RichTextEditor"
+        },
+        {
+          "kind": "template",
+          "name": "RichTextEditorShowcase"
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/theme-butter",
+      "description": "Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "butter",
+          "title": "Butter",
+          "summary": "Warm, creamy yellows with a friendly blue accent. Playful enough for consumer surfaces, soft enough to stay readable."
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/theme-chocolate",
+      "description": "Warm chocolate theme for Astryx — rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "chocolate",
+          "title": "Chocolate",
+          "summary": "Warm chocolate theme for Astryx — rich brown palette with Fraunces headings, Albert Sans body, and Lucide icons"
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/theme-gothic",
+      "description": "Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "gothic",
+          "title": "Gothic",
+          "summary": "Deep blue-grays and a signature display serif. Dramatic and editorial, for surfaces that want to be remembered."
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/theme-matcha",
+      "description": "Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "matcha",
+          "title": "Matcha",
+          "summary": "Earthy greens with a calm, organic feel. Naturalistic and grounded, great for wellness or content-first apps."
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/theme-neutral",
+      "description": "Restrained warm grays. Minimal and quiet, so the content stays the focus.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "neutral",
+          "title": "Neutral",
+          "summary": "Restrained warm grays. Minimal and quiet, so the content stays the focus."
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/theme-stone",
+      "description": "Warm stone and slate, earthy and understated, with just enough character to feel handcrafted.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "stone",
+          "title": "Stone",
+          "summary": "Warm stone and slate, earthy and understated, with just enough character to feel handcrafted."
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/theme-y2k",
+      "description": "Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro.",
+      "releasedWithCore": true,
+      "contributions": [
+        {
+          "kind": "theme",
+          "name": "y2k",
+          "title": "Y2K",
+          "summary": "Hot pinks, lime greens, and Poppins. Bubbly, playful, and unmistakably retro."
+        }
+      ]
+    },
+    {
+      "package": "@astryxdesign/vega",
+      "description": "Astryx Vega wrapper — chart and data visualization components. Published to npm only under the @canary dist-tag for early testing; never released as a stable (latest) version.",
+      "canaryOnly": true,
+      "contributions": [
+        {
+          "kind": "component",
+          "name": "VegaChart"
+        }
+      ]
+    }
+  ]
+}

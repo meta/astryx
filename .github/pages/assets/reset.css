@@ -204,35 +204,6 @@
   }
 
   /* ===========================================================================
-     AspectRatio Fit Baseline
-     =========================================================================== */
-
-  /*
-   * Child sizing for AspectRatio's `fit` prop — the component marks the
-   * child's direct parent with `data-astryx-aspect-ratio-override` (carrying
-   * the fit value), and these direct-child rules size the child, so
-   * consumers don't hand-write width/height/object-fit on every media child.
-   * The marker sits on the parent itself, so the rules don't depend on
-   * AspectRatio's internal element structure or its theming surface. As with
-   * the [data-astryx-media] baseline below, the rules are zero-specificity
-   * and any styling the child sets itself still wins. `fit="center"` needs
-   * no rules here — the component centers the child from its own wrapper.
-   */
-  :where([data-astryx-aspect-ratio-override="cover"], [data-astryx-aspect-ratio-override="contain"])
-    > :where(*) {
-    width: 100%;
-    height: 100%;
-  }
-
-  :where([data-astryx-aspect-ratio-override="cover"]) > :where(img, video) {
-    object-fit: cover;
-  }
-
-  :where([data-astryx-aspect-ratio-override="contain"]) > :where(img, video) {
-    object-fit: contain;
-  }
-
-  /* ===========================================================================
      Forms
      =========================================================================== */
 
@@ -292,6 +263,15 @@
   :where(input, textarea)::placeholder {
     opacity: 1;
     color: var(--color-text-secondary, light-dark(#4E606F, #AAAFB5));
+  }
+
+  /*
+   * Chromium draws the dropdown marker of a field with a `list` as a glyph
+   * set on the line-height the field inherits, so with any line-height above
+   * 1 the marker sits below the middle of the field.
+   */
+  :where([list])::-webkit-calendar-picker-indicator {
+    line-height: 1;
   }
 
   /*

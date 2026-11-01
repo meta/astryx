@@ -1,5 +1,488 @@
 # @xds/core
 
+# 0.7.5
+
+#### New Features
+
+- Status colors are readable everywhere they appear, and Info is a status of its own. Each status (info, success, warning, error) now has a strong fill (`--color-<status>`) with content on it (`--color-on-<status>`, at least 4.5:1), a pale fill (`--color-<status>-muted`) with its content (`--color-on-<status>-muted`), and readable text for the page and cards (`--color-text-<status>`). Status icons (`--color-icon-<status>`) and borders (`--color-border-<status>`) default to the readable text color. The Info roles (`--color-info`, `--color-on-info`, `--color-info-muted`, …) are new and no longer borrow your accent color.
+
+  `--color-success`, `--color-warning`, and `--color-error` and `bg-<status>` keep their meaning as the strong fills. In Tailwind, `bg-info`, `bg-info-muted`, `text-on-<status>`, `text-on-<status>-muted`, and `text-status-<status>` are new; `text-`, `decoration-`, `placeholder-`, and `caret-<status>` now use the readable text shade, and `border-`, `divide-`, `outline-`, and `ring-<status>` use the border shade, while `bg-`, `accent-`, `fill-`, `stroke-<status>`, shadows, and gradients keep the strong fill. For example, Core's light `text-warning` is now `#753F07` instead of `#E9AF08`. To keep the fill color on text, write `text-[var(--color-warning)]`.
+
+  What changes on screen:
+
+  - Core's dark Error content (`--color-on-error`) is now `#0A1317` instead of white, so text on dark-mode error fills reaches 4.5:1. Core's Info Badge uses `#0064E0` instead of the accent (`#2694FE` in dark mode).
+  - Status icons (Icon `color="info|success|warning|error"`), Stepper status glyphs, and Chat tool-call status icons use the readable shades. Core's light success icon is now `#09441F` instead of `#0D8626`.
+  - Input and FileInput status borders use the border shades. Core's light warning border is now `#753F07` instead of `#E9AF08`, and Butter's light success and warning input borders reach 3:1.
+  - Banner draws its title, description, icon, and controls in the on-muted colors, and fills Info with `--color-info-muted`.
+  - Status fills keep a visible edge in forced-colors mode.
+  - Content on Chocolate and Matcha success and error fills, and on Stone success, warning, and error fills, now reaches 4.5:1.
+  - Every first-party theme sets a blue Info. Chocolate and Matcha Info Badges move from the accent to that blue; Butter keeps its own Info Badge colors.
+  - Neutral's `--color-success`, `--color-warning`, and `--color-error` are now the fills its Badges already showed, and its `--color-info` is `#0074E2` (`#6D9CFE` in dark mode). Its Badges, StatusDots, progress fills, and Stepper badges look the same; its accent ProgressBar, StatusDot, and Stepper now use Neutral's accent instead of blue.
+  - Neutral no longer defines its undocumented local status tokens. Use the standard roles instead: `--astryx-theme-neutral-color-status-fill-success`, `-status-fill-warning`, and `-status-fill-error` → `--color-success`, `--color-warning`, `--color-error`; `-status-muted-accent` → `--color-info-muted`; `-on-tint-neutral` → `--color-neutral`; the `-on-tint-overlay-*` and `-destructive-overlay-*` tokens → `--color-overlay-hover` and `--color-overlay-pressed`. `--astryx-theme-neutral-color-status-fill-accent` keeps its value but is deprecated.
+
+  Custom themes get the content and text roles they don't set: they are derived from the theme's status fills. To keep a component's previous color, set the matching role, for example `--color-icon-success` to your old `--color-success`.
+
+- BottomSheets stack in the order they open. A modal sheet opened over another now sits on top of it: the sheet underneath keeps its state, moves back slightly, and can't be used until it is on top again; only one backdrop dims the page; and Escape, a backdrop tap, a swipe, or the system close gesture closes only the top sheet. Closing the top sheet returns focus to the sheet below, and closing a whole stack returns focus once, to where the flow started. A sheet inside another sheet's content now closes with it. Non-modal sheets (`hasScrim={false}`) never stack. No props change, and a single sheet behaves as before.
+- Multi-step sheet flows no longer need a wrapper. When the top BottomSheet closes and another opens in the same update, for example from one state value that names the open step, the new sheet replaces the old one: it rises into place, the backdrop stays steady, focus moves into the new sheet, and closing the flow later returns focus to whatever opened it. This happens when the step change comes from inside the closing sheet, such as its own Continue or Back button. Non-modal sheets (`hasScrim={false}`) replace each other the same way, and now open above all page content in the browser's top layer instead of relying on a `z-index`.
+- `BottomSheetSwitcher` and BottomSheet's `sheetId` prop are deprecated and keep working until a future minor release. Write each step as its own `BottomSheet` instead:
+  1. Replace `activeSheet` / `onActiveSheetChange` with one `step` state value.
+  2. On each step, replace `sheetId="id"` with `isOpen={step === 'id'}` and `onOpenChange={isOpen => !isOpen && setStep(current => (current === 'id' ? null : current))}`.
+  3. Remove the `BottomSheetSwitcher` wrapper and move its `hasScrim` onto every step.
+  4. Keep your step buttons as they are, for example `setStep('next')`.
+
+  To keep a step open, ignore `false` in its `onOpenChange` (this replaces `onCancel`); to keep Escape but block the backdrop tap and swipe, use `purpose="form"`. A consumer `aria-label` becomes each step's `label`. Dialog-level `ref`, `id`, `className`, and styling props have no direct replacement: a standalone sheet's `ref` and props reach its panel. Flows that keep the switcher work as before, now with toasts above the flow and reduced-motion support.
+
+- Popover takes `presentation`, like DropdownMenu and Selector: `'popover'` (the default) anchors it to its trigger, `'bottom-sheet'` shows its content in a modal BottomSheet named by `label`, and `'adaptive'` uses the sheet on phones and the anchored popover elsewhere. In a sheet, positioning props such as `placement` and `width` don't apply, and `xstyle`, `className`, and `style` style the sheet's panel. The sheet code loads only when it can be used.
+- Menus and selectors with `presentation="adaptive"` (DropdownMenu, ContextMenu, MoreMenu, Selector, MultiSelector) and sub-menus that drill in on phones now switch to a bottom sheet by the shared phone-size rule on touch screens. A touch screen exactly 768px wide now keeps the anchored popover, and a phone in landscape (wider than 768px but shorter than 500px) now gets the sheet. A theme that moves its `md` breakpoint moves this edge too. To keep a fixed presentation, pass `presentation="popover"` or `"bottom-sheet"`, or `presentation="flyout"` on `DropdownMenuSubMenu`. Desktop mouse and keyboard users see no change.
+- `@astryxdesign/core/theme` exports `compactDefinition(widthBreakpoints?)` and `DEFAULT_COMPACT_DEFINITION`: one shared rule for a phone-sized screen, narrower than the theme's `md` breakpoint (768px by default) or shorter than 500px, with ready-made media queries.
+- `CodeBlock` highlights C, C++, SQL, Rust, Kotlin, Swift, and Go with no setup, so you only ship the languages you use.
+
+  Every other language is opt in, one at a time:
+
+  - Import that language on its own and pass it as `language`, for example `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`.
+  - Modules ship for `graphql`, `java`, `thrift`, `objectiveC` (path `languages/objective-c`), `toml`, `powershell`, `ruby`, `lua`, and `dockerfile`.
+  - A string such as `language="graphql"` still selects only a built-in language.
+
+  Your own languages work the same way. `createCodeLanguage({name, identifiers, fileExtensions, fileNames, tokenize})` makes a language from your own tokenize function.
+
+  The built-in tokenizer stays within 4,608 bytes gzipped. Each module adds at most 512 bytes, and only when you import it.
+
+- `CodeBlock` takes `endContent` for your own controls, such as a "Run in terminal" button. They sit just before Copy, in the header when there is one, otherwise beside the code, never over it. For a one-line command, leave out the title and pass `hasLanguageLabel={false}` to get a single row with its controls beside it.
+- CodeBlock's `tokenizer` prop is deprecated in favor of a custom language: pass `language={createCodeLanguage({name, identifiers, tokenize})}` with the same function. The prop still works. `astryx upgrade` rewrites it when the block has a fixed `language`, and leaves a TODO comment where it can't safely rewrite it.
+- `Markdown` takes `codeLanguages`, a list of CodeBlock languages, so fenced code in Markdown can use the extra or custom languages too. A listed language wins over a built-in language of the same name, and `diff-<name>` fences get diff coloring on top.
+- Expanding and collapsing can glide instead of jump. Create a handle with `useAnimatedLayout({containerRef})` and pass it to Collapsible or TreeList as `animatedLayout`: when one opens or closes, the content around it inside that container glides to its new place, revealed content fades in, and the chevron turns, all as one motion. Fixed and sticky elements stay put and the container never scrolls. Under Reduce Motion the change cross-fades on touch and is immediate with a mouse. Without the prop, nothing changes.
+- Table: `useTableRowExpansion` accepts the same `animatedLayout` handle, so opening or closing a row's panel glides the rows after it, dividers included, instead of jumping. Under Reduce Motion rows fade on touch and change at once with a mouse; tables with column lines change at once.
+- TreeList chevrons and guide lines sit 4px closer to the start of the row, and the gap between chevron and label widens from 4px to 8px. Labels stay where they were.
+- `Icon` takes an optional `variant` to ask the active theme for alternate artwork, for example `<Icon icon="info" variant="filled" />`. The theme's icon receives the variant only when the theme lists it in `iconVariants`; otherwise it draws its normal artwork. Icons you pass as components never receive `variant`, and it is never written to the page. Icons without `variant` render as before.
+- A theme icon can now pick its artwork by size: an entry in `defineTheme({icons})` or `registerIcons()` can be a function of `{size, variant}`, and `Icon` calls it with the size it renders at. Returning `null` draws no icon. `getIcon`, `getExtendedIcon`, `getIconRegistry`, `useIcon`, and a theme's `icons` field still return nodes, reading a function at `{size: 'md'}`. Existing icon entries are unchanged.
+- A theme can list the icon variants it supports, such as `filled`, with `defineTheme({iconVariants})`, and read them back from `theme.iconVariants`. Child themes inherit the list unless they set their own. `@astryxdesign/core/Icon` exports `IconVariantMap` and `IconVariant` for typing variants. Themes without `iconVariants` are unchanged.
+- `astryx theme build` keeps function icons and icon variant lists, so a built theme draws each icon at the same size and variant as the live theme, including icons inherited from another theme. A theme that lists `iconVariants` gets matching types in `<theme>.variants.d.ts`. Themes without these features build exactly as before.
+- Themes can set the real size of each Icon size: `width` and `height` in `px` or `rem` on `components.icon['size:sm']` (or `xsm`, `md`, `lg`) now resize the glyph itself, for named icons and SVG components, in live and built themes. Before, they sized only the box around the icon. Sizes a theme does not style still render at 12, 16, 20, or 24px at a 16px root. `astryx docs theme` gains an Icon sizes section.
+- `useCombobox` (from `@astryxdesign/core/Selector`) can now build an accessible search-with-results on your own text field, such as a search box whose results replace part of the page, or an "add people" field in a dialog. Spread `getFieldProps` on your input, `getListboxProps` on your list, and `getOptionProps` on each option. Focus stays in the field, arrow keys move through results, Enter picks, and Escape hides the list without closing a surrounding dialog. Announce result counts yourself with `useAnnounce`. Existing uses behave as before.
+- Navigation menus support press-and-slide, as DropdownMenu does: in NavHeadingMenu, TopNavMenu, SideNavHeading's menu, TopNavHeading's product menu, BreadcrumbItem's menu, and TabMenu, a press that slides across the items picks the one it lifts on, with the highlight following the pointer. Link items are no longer draggable. Keyboard and screen-reader behavior is unchanged.
+- On touch screens, `ScrollableArea` shows the phone's own scroll indicator, which is easier to see than the faint bar it drew before. Mouse and trackpad scrollbars keep the neutral color. To keep the neutral color on touch screens too, set `scrollbarColor` through `xstyle`.
+- New `--ease-exit` motion token for things leaving the screen, beside `--ease-standard` for things arriving. BottomSheet already closes on it, so nothing looks different, but a theme can now tune the exit. `astryx docs motion` and the theme template list it.
+
+#### Fixes
+
+- With an `animatedLayout` handle, content before a Collapsible or TreeList change now glides too when the layout moves it, for example items in a centered or end-aligned row.
+- With an `animatedLayout` handle, content after a change now glides even when it carries a resting transform, such as a Button or a swipeable row at rest, instead of jumping.
+- With an `animatedLayout` handle in a right-to-left container, content after a Collapsible or TreeList change now glides instead of jumping.
+- Screen readers now hear announcements made inside an open Dialog, modal BottomSheet, modal Drawer, Lightbox, MobileNav, or CommandPalette. Before, `useAnnounce` messages went to a page region the open dialog hid. Messages sent as a dialog closes are spoken once it has closed. Your code needs no change. Not yet covered: CommandPalette's result counts, Lightbox's position and zoom messages, and Selector's and MultiSelector's sheet messages.
+- `useAnnounce`: messages announced at the same moment are now read together, in order, instead of the last one replacing the others, and an identical repeat is read once. A screen reader no longer misses a result count announced next to a confirmation.
+- A disabled ChatComposerInput keeps focus and its place in the tab order instead of sending focus to the page, and blocks editing and sending while keeping the draft.
+- A disabled ComplexSelector ignores selections from a popup that was already open.
+- Disabling an InputGroup now disables the inputs and Button addons inside it, unless a child sets its own state.
+- A disabled Tokenizer blocks adding, creating, and removing tokens, and leaves its values out of form submission.
+- Banner's status text color no longer leaks into your `endContent`, including dialogs opened from it.
+- BottomSheet renders fewer page elements, with no visual change.
+- With Reduce Motion on, BottomSheets (including `BottomSheetSwitcher` steps) no longer slide or scale: on touch screens they fade in place within 200 ms, and with a mouse or keyboard they change at once. A swipe-to-dismiss fades out in place.
+- When a shorter BottomSheet replaces a taller one, the taller sheet moves down to meet it before fading, so the switch looks like one sheet changing height.
+- Toasts shown from a `BottomSheetSwitcher` step appear above the flow and can be pressed. Before, the step covered them.
+- Toasts appear above an open BottomSheet and can be pressed. Before, the sheet covered them, and pressing a toast's action could dismiss the sheet instead.
+- Typeahead and CommandPalette no longer announce "Loading" after the results have already arrived.
+- ClickableCard, SelectableCard, and interactive Thumbnails show their pressed state under a finger in apps that compile Astryx from source (the Vite and PostCSS integrations, and Storybook). Mouse hover and press, and the precompiled stylesheet, are unchanged.
+- `ChatComposer`'s status bar announces each error and warning once, without its decorative icon, and no longer announces a status that is already showing when the page loads.
+- Tapping the clear button of an unfocused TextInput or NumberInput now brings up the iPhone keyboard, without scrolling the page.
+- In a CodeBlock with no title or language label, the Copy button no longer covers code. It sits in its own column beside the first line, so long lines stop before it, whether scrolled, wrapped, or right-to-left. Blocks with a header are unchanged.
+- A long unbroken word, such as a URL or file path, in CommandPalette's empty message now wraps instead of spilling past both edges.
+- ComplexSelector's trigger is now a combobox, so screen readers hear when the field is required. A custom `renderTrigger` control gets the same role and states, and a disabled one keeps its tab stop without opening. Tests that find the trigger with `getByRole('button')` should use `getByRole('combobox')`.
+- ComplexSelector: your `aria-label` or `aria-labelledby` now names the built-in trigger instead of being ignored.
+- A ContextMenu opened by a long press stays open when the finger lifts.
+- With Reduce Motion on a touch screen, Dialog fades in within 200 ms instead of appearing abruptly. With a mouse it still appears at once.
+- `DropdownMenuRadioItem` now runs your `onClick` and `onPointerMove` handlers, after it selects its value. Disabled rows still select nothing and don't call `onClick`. Its docs now mark `value` and `label` as required.
+- EmptyState announces reliably: it no longer uses `role="status"`, which screen readers read inconsistently. An EmptyState that appears or changes after the page loads announces its title and description once; one present at load announces nothing. A `role` you pass now reaches it. Your code needs no change.
+- Clearing a FileInput returns focus to its visible button, so screen readers announce the field again.
+- On touch screens, Tooltip and HoverCard open only on a real tap. Starting a scroll on an info icon no longer pops them open.
+- Rows with `swipeActions` no longer block pinch-zoom, and a second finger hands the gesture to the browser.
+- With Reduce Motion on, tooltips, popovers, menus, and other layers opened by a finger fade in within 200 ms instead of appearing abruptly. With a mouse they still appear at once.
+- `Layout` no longer uses a selector that could make the browser restyle the whole layout on every change, which slowed long documents. It looks the same.
+- Lightbox fills the visible screen, so Safari's toolbar on iPhone no longer covers the caption.
+- A Lightbox opened before its first item arrives now opens when the item does.
+- In right-to-left pages, Lightbox's arrow keys now match its Next and Previous buttons.
+- Multi-digit numbers in List and Markdown stay on one line in a shared number column, so text and nested lists stay aligned. Bullet lists keep their spacing.
+- Numbered List and Markdown markers end on the same edge with even-width digits, so every period lines up.
+- Pasted-text counts, spoken shortcut names, Ctrl and Esc key caps, and file-size limits are now translated and use local number formats.
+- DropdownMenu and ContextMenu rows under the mouse no longer show a keyboard focus ring after a click.
+- DropdownMenu, MoreMenu, and ContextMenu shown as bottom sheets no longer keep the sheet and every item on the page while closed.
+- `MobileNav` is never wider than 85% of the screen, as documented, so even a 320px phone keeps a strip of page to tap to close it.
+- MultiSelector keeps your `aria-labelledby`, read after the field's label.
+- A disabled `NavHeadingMenuItem` with `href` no longer navigates when clicked or activated.
+- Sliding the mouse across NavHeadingMenu or TabMenu items no longer selects their text.
+- NumberInput keeps your `aria-labelledby`, read after the field's label.
+- A disabled NumberInput stays in the tab order, so keyboard and screen-reader users can reach it and hear that it is unavailable. It is read-only and marked `aria-disabled="true"` instead of using the native `disabled` attribute. Part of #7814.
+- `Overlay`, `DropdownMenuGroup`, and `MobileNavToggle` pass `id`, `data-*`, `aria-*`, and event handlers through to the page, so test ids and analytics attributes work on them.
+- Pressing Escape right after opening a Popover or a collapsed SideNav submenu leaves focus on the trigger instead of moving it into hidden content.
+- An open Popover no longer captures Tab presses made elsewhere on the page. Tab inside the popover still cycles, and Escape still closes it.
+- A Popover rendered into an iframe or a picture-in-picture window now focuses, keeps Tab inside, closes on Escape, and returns focus as it does on the page.
+- PowerSearch no longer announces its starting result count when it mounts in React StrictMode.
+- On phones and tablets, presses made with a mouse, trackpad, or the Space key now show the pressed state.
+- Type declarations resolve in projects that use `moduleResolution: NodeNext`.
+- `RadioList` no longer makes large pages restyle every row's contents on each change. It looks and behaves the same.
+- Scrollable areas (`ScrollableArea`, and Table, CodeBlock, BottomSheet, and Schedule viewports) join the tab order as soon as their content overflows, including content that loads already overflowing.
+- SegmentedControl keeps your `aria-describedby`, read before the disabled reason.
+- Selector keeps your `aria-labelledby`, read after the field's label.
+- Selector's phone sheet no longer points screen readers at an option that hasn't appeared yet.
+- A collapsed SideNav item's tooltip now belongs to the link or button itself, so keyboard focus shows the label and screen readers read it.
+- SideNavHeading: `headerEndContent` now sits beside the heading link instead of inside it, so pressing a button there no longer also follows the link.
+- SideNav's rail collapses and expands smoothly instead of snapping, and the page content inside AppShell moves with it. Under Reduce Motion it cross-fades on touch and changes at once otherwise.
+- Skeleton keeps pulsing in Safari while the page runs JavaScript. It looks and times the same.
+- Slider keeps your `aria-labelledby`, read after its label.
+- An idle Slider no longer keeps a page-wide listener running.
+- A Slider drag belongs to the finger that started it: a second finger can't take it over or end it, and two fingers can still drag two sliders at once.
+- A clickable Step reads as "1 Account" instead of "1Account". Nothing changes on screen. Fixes #7966.
+- A Switch with long content in its row no longer makes the row restyle on every change. Its focus ring looks the same; a link inside the label or description keeps its own focus ring.
+- Tabs and TabMenu triggers no longer shrink below their labels on pages that reset `min-width`; the tab strip scrolls instead.
+- Pinned Table columns keep their row dividers while the table scrolls sideways, including theme and custom border colors.
+- A disabled TextInput or TextArea stays in the tab order, so keyboard and screen-reader users can reach it and hear that it is unavailable. It is read-only and marked `aria-disabled="true"` instead of using the native `disabled` attribute. Part of #7814.
+- TextInput keeps your `aria-labelledby`, read after the field's label.
+- Thumbnail's Open and Remove buttons stay in place, focusable and announced as disabled, while they can't act, so keyboard focus no longer drops to the page.
+- A toast dismissed while hidden, or before it first appeared, now really leaves the stack instead of taking an empty slot later.
+- Tokenizer and PowerSearch put the text cursor right after the last token, on the last row.
+- Tokenizer and PowerSearch tokens wrap before the clear-all button and loading indicator instead of running under them, and rows don't shift when a search starts or ends.
+- A Tooltip that moved clear of its trigger stays clear when the trigger moves or the page scrolls.
+- A Tooltip taller than the space above and below its trigger no longer covers the trigger: it opens beside it, or on the side with more room and scrolls.
+- With Reduce Motion on, TopNav's mega menu fades on touch screens and opens at once with a mouse, instead of rising.
+- Sliding the mouse across TopNavMenu action items no longer selects their text.
+- Typeahead and Tokenizer hide an old "no results" row while the next search is running.
+- Tapping a Typeahead's selected value to edit it, or the clear button in a Selector or MultiSelector search row, now brings up the phone keyboard on the first tap.
+- In Typeahead, Tokenizer, and PowerSearch menus, an option is highlighted only when the pointer moves over it, not when it slides under a resting mouse, so Enter no longer picks an option you didn't point at.
+- `VisuallyHidden` content can no longer be made visible by accident: `xstyle`, `className`, and `style` no longer reach the element.
+
+  Measured prop by prop against `main`'s implementation, before and after this change:
+
+  - `xstyle` arrived as the attribute only — the `style` attribute was unaffected — so passing it left a stray attribute on the page and changed nothing you could see.
+  - `className` never reached the element, before or after.
+  - `style` did reach the element, and an inline style could un-hide the content. It no longer does; this is the one visible change.
+
+  None of the three is styling surface on `VisuallyHiddenProps`: `className` and `style` reach the element only through a cast or an untyped spread, and `xstyle` is documented as ignored, so typed code loses nothing.
+
+  `xstyle` stays declared on `VisuallyHiddenProps`, documented as ignored, so existing code keeps compiling.
+
+- Pinch-zoom works again over the TimeInput, DateTimeInput, and DateInput picker wheels.
+
+#### Performance
+
+- With an `animatedLayout` handle, a change in a long Collapsible or TreeList measures the page once instead of once per row.
+- Pages with many closed popovers, tooltips, and menus load faster.
+- Closed Tooltips, Selectors, and ComplexSelectors render once when they mount, and Popovers and DropdownMenus render less.
+- Scrolling a `ScrollableArea`, Table, CodeBlock, or BottomSheet body does less work on each frame, so scrolling stays smooth on busy pages.
+
+#### Documentation
+
+- EmptyState now announces through the page's shared announcer regions. In tests, `getByRole('status')` or `getByRole('alert')` may match those regions; scope the query with `within(container)`.
+- Badge's docs mark `label` as required, matching its types.
+- `DropdownMenuSubMenu`'s docs mark `label` and `children` as required, document `menuDataTestId`, and state that `presentation` defaults to `'adaptive'`.
+- `ListItem`'s docs now say that `isSelected` marks the row as the current item with `aria-current="true"`.
+- Package links now point to the project's GitHub home, `meta/astryx`.
+- SelectableCard's guidance no longer recommends it for single-choice groups, since each card is a checkbox.
+- TabList's description no longer promises a built-in "more" menu (a narrow tab strip scrolls), and the library page template describes `MobileNav` as the slide-out drawer it is.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @aashish254
+- @cixzhang
+- @ejhammond
+- @ernestt
+- @harjothkhara
+- @HelloOjasMutreja
+- @imdreamrunner
+- @kentonquatman
+- @korkt-kim
+- @kyu-rong
+- @light-merlin-dark
+- @nynexman4464
+- @parinith-web
+- @rubyycheung
+- @thewebartisan7
+- @vjeux
+
+---
+
+# 0.7.4
+
+#### New Features
+
+- `BottomSheetSwitcher` presents each step in its own native `<dialog>`. Every child `BottomSheet` owns a dialog exactly like a standalone sheet; the switcher presents the selected sheet's dialog (`showModal()` with a scrim, `show()` without), keeps the previous sheet's dialog open and inert beneath the entering one through the handoff, and closes it once its panel has faded. One backdrop paints at a time: the retained dialog keeps the scrim until it closes, then the new dialog takes it over without a fade, so the page is never dimmed twice and the previous panel is never dimmed. Focus containment is the browser's own modal-dialog containment (as for `Dialog`) instead of a script trap; the page scroll lock (the shared body lock, held once by the switcher for the whole modal flow, through a handoff and until after the exit), Escape and platform-close routing, `purpose` dismissal rules, and focus return to the opener are unchanged. Going back to a sheet whose dialog is still fading closes and re-presents that dialog so the interactive sheet is the topmost layer again. (#7720)
+  Public props, defaults, and exports are unchanged. Two observable details move with the structure: The switcher's `ref` resolves to the dialog hosting the flow — the active sheet's dialog, which changes on a handoff; the exiting sheet's through its exit; and, while the flow is closed, the dialog that hosted it last (or the first mounted sheet's) — instead of one persistent element; it is never `null` while a sheet is mounted, from the first commit on, and a callback ref's returned cleanup runs on each detach. `onCancel` and the forwarded dialog props apply to each sheet's dialog (a `role` given to the switcher included, except on a `required` step, which is an `alertdialog` as before), except `id` and `data-testid`, which render once, on the dialog the `ref` resolves to, from the first commit's synchronous re-render on; server markup of a flow that mounts closed carries them on no element (the shared dialog carried them). A non-modal flow orders its sheet dialogs inside a switcher-owned isolated wrapper that carries the one overlay value the shared dialog carried before.
+
+#### Fixes
+
+- `TextInput`, `TextArea`, `Selector` and `MultiSelector` announce "Loading" once, politely, through the shared announcement channel when they become busy, and the Spinner they show while busy is hidden from assistive technology. Before, the Spinner mounted as its own `role="status"` region already holding its name, which screen readers often skip, and it competed with the control's own `aria-busy` as a second owner of the same feedback. A rerender or StrictMode replay does not repeat the announcement; settling and becoming busy again announces again. Tests that found the busy Spinner with `getByRole('status', {name: 'Loading'})` should check the control's `aria-busy` instead. (#7920)
+- Carousel: when the focused edge scroll button runs out (the carousel reached that edge), focus now moves to the scroll area without scrolling it, instead of to the opposite scroll button. No API changes. (#7926)
+- `CheckboxInput` announces its busy start ("Loading") once, politely, through the shared announcement channel. The Spinner it shows in place of the check mark while busy sits inside the decorative, hidden indicator, so before this nothing told screen-reader users that the checkbox had become busy beyond its `aria-busy`. Inside an open modal dialog the announcement goes to a status region in the dialog. (#7948)
+- `CommandPaletteItem` now reflects its highlighted, selected, and disabled states on the `command-palette-item` theme target as `data-highlighted="highlighted"`, `data-selected="selected"`, and `data-disabled="disabled"`. A theme can now style the active keyboard result, the chosen value, or an unavailable command, for example `.astryx-command-palette-item[data-selected]`. States derived from CommandPalette are reflected too. Rendering, semantics, and props are unchanged. (#7967)
+- `CommandPalette` announces each busy start ("Loading"), including its load on opening or clearing the query, once from a status region inside its dialog, and its search Spinner is hidden from assistive technology. Before, the Spinner mounted as its own `role="status"` region already named "Loading", and the palette's own "Loading" went to the page-level announcement channel, which an open native modal hides from assistive technology. Result-count announcements are unchanged. Tests that found the Spinner with `getByRole('status')` should query the Spinner element instead. (#7956)
+- A busy `DateInput` (`isLoading`, or a pending `changeAction`) no longer looks disabled. On the popover, native, and bottom-sheet surfaces the field keeps its ordinary paint and shows its Spinner while new commits are blocked; only `isDisabled` dims the field. The busy field still takes no hover ring and keeps its keyboard focus ring. Props, semantics, and announcements are unchanged. (#7968)
+- `DateInput` (popover, native and bottom-sheet presentations) and `DateRangeInput` announce their busy start ("Loading") once, politely, through the shared announcement channel, and the Spinner they show while busy is hidden from assistive technology. Before, that Spinner mounted as its own `role="status"` region already named "Loading", which screen readers often skip, and it was a second owner beside the field's `aria-busy`. Inside an open modal dialog the announcement goes to a status region in the dialog. Tests that found the busy Spinner with `getByRole('status', {name: 'Loading'})` should check the field's `aria-busy` instead. (#7939)
+- `DateTimeInput` and `TimeInput` (popover, native and bottom-sheet presentations) announce their busy start ("Loading") once, politely, through the shared announcement channel, and the Spinner they show while busy is hidden from assistive technology. Before, that Spinner mounted as its own `role="status"` region already named "Loading", which screen readers often skip, and it was a second owner beside the field's `aria-busy`. A change made inside the open bottom sheet under a pending `changeAction` is announced from inside the sheet. Tests that found the busy Spinner with `getByRole('status', {name: 'Loading'})` should check the field's `aria-busy` instead. (#7942)
+- `FileInput` announces its busy start ("Loading") once, politely, through the shared announcement channel, and the Spinner it shows while busy is hidden from assistive technology. Before, that Spinner mounted as its own `role="status"` region already named "Loading", which screen readers often skip. A file pick keeps its single "file selected" announcement, because it is one user action, even when it starts a busy period (`changeAction`, or `isLoading` set from `onChange`). Other busy starts, such as `isLoading` on its own or a clear under `changeAction`, announce "Loading". Inside an open modal dialog the announcement goes to a status region in the dialog. Tests that found the busy Spinner with `getByRole('status', {name: 'Loading'})` should check the field's `aria-busy` instead. (#7954)
+- Selector, DropdownMenu and ContextMenu: clicking an option inside a shadow root (open, closed or nested) selects it. The menus used to read the document's view of the click, which names the shadow host, so the click closed the menu without selecting anything. (#7914)
+- `DropdownMenuSubMenu` (with `hasSpinner`), an uploading `Thumbnail`, and `ChatMessageList` while it loads older messages announce their busy start ("Loading") once, politely, through the shared announcement channel. The Spinner each one shows is hidden from assistive technology. Before, that Spinner mounted as its own `role="status"` region already named "Loading", which screen readers often skip; in `ChatMessageList` it was also a second live role inside the log. Tests that found these Spinners with `getByRole('status', {name: 'Loading'})` should query the Spinner element or the owner's busy state instead. (#7950)
+- ChatComposerInput: the trigger menu's loading row no longer mounts as a `role="status"` region already holding its text, which screen readers could skip. The loading text is announced once per pending search through the shared polite channel instead, and a search that returns its results before the loading row is painted, such as `createStaticSource` or a cached result, announces nothing; the visible row and its `loadingText` are unchanged. (#7900)
+  Fixes #7859.
+- useTypeahead clears its pending buffer reset when its component unmounts or an `<Activity>` boundary hides it, so a menu, list or selector removed within 750 ms of a typed character leaves no timer running behind it, and a hidden one comes back with an empty buffer (#7938)
+- `ComplexSelector`, `Typeahead`, `Tokenizer` and a directly used `BaseTypeahead` announce their busy start ("Loading") once, politely, through the shared announcement channel, and the Spinner they show while busy or while a search is in flight is no longer a live region: ComplexSelector's is hidden from assistive technology, and the search Spinner of Typeahead, Tokenizer and BaseTypeahead stays named as an image ("Loading") so the search's busy feedback keeps its name. Before, that Spinner mounted as its own `role="status"` region already named "Loading", which screen readers often skip, and it was a second owner beside the control's `aria-busy`. Inside an open modal dialog the announcement goes to a status region in the dialog. Tests that found the busy Spinner with `getByRole('status', {name: 'Loading'})` should check the control's `aria-busy`, or find the search Spinner with `getByRole('img', {name: 'Loading'})`. (#7930)
+
+#### Documentation
+
+- `BottomSheetSwitcher` anatomy names its host part `Sheet dialogs` — one native dialog per child sheet, the one hosting the active sheet carrying the flow's ref, id, modality, and dismissal — instead of `Shared dialog`. (#7720)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @HelloOjasMutreja
+- @imdreamrunner
+- @vjeux
+
+---
+
+# 0.7.3
+
+#### New Features
+
+- `DropdownMenuSubMenu` takes `header` and `footer`, as the root `DropdownMenu` does, so a sub-menu can have a filter field above its rows, or an action such as "New folder" below them, outside the sub-menu's menu itself. With either, the sub-menu's surface (the flyout, or the drilled-in view on a phone) is a modal dialog named by its row: the row says `aria-haspopup="dialog"`, Tab and Shift+Tab walk the header, the rows and the footer and wrap, Escape returns to the row, and a pointer leaving the flyout closes it only once focus leaves too. A `ContextMenu` does not show a sub-menu's `header` or `footer`. Without them nothing changes.
+
+  ```diff
+   <DropdownMenuSubMenu
+     label="Move to"
+  +  header={<TextInput label="Filter folders" isLabelHidden value={query} onChange={setQuery} />}
+  +  footer={<Button label="New folder" onClick={createFolder} />}
+   >
+     <DropdownMenuItem label="Folder A" onClick={() => move('a')} />
+   </DropdownMenuSubMenu>
+  ```
+
+#### Fixes
+
+- `TimeInput`'s arrow keys ignore a fractional increment instead of writing a malformed time such as "14:30.5": `adjustTime` returns the time unchanged for a fractional minute delta ([#7823](https://github.com/meta/astryx/pull/7823)).
+- Screen readers now announce a `Button` that is first rendered with `isLoading` (for example after a remount). Its visually hidden loading live region mounts empty and gets "Loading" on the next frame, because screen readers skip a live region that already holds its text when it appears. A Button that becomes loading after it mounts is unchanged, and a Button mounted idle does no extra render.
+- `ChatComposer`: screen readers now announce a status message, errors assertively and warnings politely, once per occasion: a rerender does not repeat it, and a status that clears and then returns is announced again. Before, the status bar mounted as a `role="alert"` or `role="status"` region already holding its text, which screen readers often skip. The message now goes through the shared announcement channel, and the visible bar no longer carries a live role. No API changes.
+- `ChatSystemMessage`: a new chat notice inside a `ChatMessageList` now has one live region announcing it, the list's polite log, instead of also being a second live region nested in it (WCAG 2.2 SC 4.1.3). Its root no longer forces `role="status"`, in either variant, so date and divider rows are no longer presented as status messages, and a `role` passed to the component reaches its root. Tests that found a system message by the `status` role should query it by its text instead.
+- Keyboard and screen-reader users can now reach disabled `CheckboxInput`, `CheckboxList` items, `Switch`, `Slider` and `FileInput`, and hear that they are disabled. Before, they rendered the native `disabled` attribute unless a `disabledMessage` was set, so Tab skipped them. Now every disabled control exposes `aria-disabled="true"` and keeps the Tab stop it has when enabled, while toggling, selecting, dragging, opening the file picker and any `onClick` stay blocked, and its value is still left out of form submission. A focused disabled checkbox, switch, slider thumb or file input shows its keyboard focus indicator. No API changes.
+- The agent guide that global mode writes to the home folder now tells agents to deliver a page built with Astryx, not only how to find things. Before, agents that found the right template could still build the page with a tool that cannot install packages and deliver a page with no Astryx in it. The guide now tells agents to work in a project folder (creating one if there is none); add `@astryxdesign/core` and `@astryxdesign/cli` to a new project or one without Core, or, in a project that already has `@astryxdesign/core`, the CLI at the same version; run `astryx init` there; follow the same template-first workflow and self-check the project agent docs give; and end by building the project and delivering that build. The guide stays version-free and names only commands every release keeps. The project agent docs are unchanged, and so is what `@astryxdesign/core`'s install script prints: its copy of the shared agent-docs file only gains the same workflow lines.
+- Keyboard and screen-reader users can now reach a disabled `ComplexSelector` and hear that it is unavailable (WCAG 2.2 SC 2.1.1 and 4.1.2). Before, its trigger rendered the native `disabled` attribute, so Tab skipped it and a focused trigger lost focus when disabled; now it exposes `aria-disabled="true"`, keeps focus, shows its keyboard focus outline, and still opens nothing. A press or key on it reaches no handler: not the toggle, not a caller's `onClick` or `onKeyDown`, and not an ancestor's click handler.
+- Keyboard and screen-reader users can now reach a disabled `Calendar` day or `Pagination` dot and hear that it is disabled. Disabled `TreeList` rows' expand toggle and action button, disabled `Pagination` dots and disabled `Calendar` days expose `aria-disabled="true"` instead of the native `disabled` attribute, while clicks, Enter and Space still do nothing and arrow keys still skip disabled days as before. No API changes.
+- `DateInput`: keyboard and screen-reader users can now reach a disabled date field and hear that it is disabled. A disabled or busy field no longer renders native `disabled`: its input and calendar button keep their place in the focus order and expose `aria-disabled`, while typing and opening stay blocked, and a focused disabled field shows its focus ring. Tests that query a disabled DateInput with `toBeDisabled()` or `:disabled` should check `aria-disabled="true"` instead.
+- `DateRangeInput`: keyboard and screen-reader users can now reach a disabled field or preset and hear that it is disabled. A disabled or busy field and a disabled preset no longer render native `disabled`: the trigger, calendar button and presets keep their place in the focus order and expose `aria-disabled`, while opening and selecting stay blocked, and a focused disabled field shows its focus ring. Tests that query them with `toBeDisabled()` or `:disabled` should check `aria-disabled="true"` instead ([#7866](https://github.com/meta/astryx/pull/7866)).
+- `DateTimeInput`: keyboard and screen-reader users can now reach a disabled or busy field and hear that it is disabled. It no longer renders native `disabled` on its text, native-picker or touch fields, or on its calendar and clock buttons: they keep their place in the focus order and expose `aria-disabled`, while typing, picking, opening and a caller's `onClick` stay blocked, and a focused disabled field shows its focus ring. `TimeInput`'s native picker button, which shares the time segment and stays out of the tab order, also moves from `disabled` to `aria-disabled` and stays inert. Tests that query a disabled DateTimeInput with `toBeDisabled()` or `:disabled` should check `aria-disabled="true"` instead.
+- Apps that use Core's prebuilt CSS without a StyleX build step now get the default data colors: the prebuilt CSS defines the canonical `dataVars` defaults, so compiled imports and raw CSS references paint correctly.
+- `Dialog`, `BottomSheet` and `BottomSheetSwitcher` stay open when a file picker inside them is dismissed. A file input fires a bubbling `cancel` event when its picker closes without a choice, and all three took that event for a close request of their own and closed (a switcher closed its whole flow). They now act only on a `cancel` aimed at their own `<dialog>`, so Escape and platform close requests (the Android back gesture) behave as before. No API changes.
+- `DropdownMenuRadioGroup` now forwards `ref`, and its docs explain controlled selection, how to name the group, when the menu closes, and how it composes inside a `DropdownMenu`.
+- `astryx init` writes the agent docs at the project root, in files the project commits, so Codex, Gemini CLI, Copilot CLI and Claude Code all read the block from the project root or any folder below it ([#7497](https://github.com/meta/astryx/pull/7497)). It no longer writes agent docs into a project's subfolder, the home folder, or a settings folder in it such as `~/.gemini`.
+  - `AGENTS.md` holds the block, created when missing. Before, a project with only `CLAUDE.md` got the block only there, so Codex and Gemini CLI never saw it.
+  - Claude Code skips `AGENTS.md` in a folder that has a `CLAUDE.md` or `.claude/CLAUDE.md`, so the Claude Code file the project already has keeps a full copy: root `CLAUDE.md`, else `.claude/CLAUDE.md`. It keeps the copy even when it imports `AGENTS.md`, because Claude Code does not follow that import in a session started in a subfolder; started at the root, Claude Code then reads two. When both exist, the copy goes in root `CLAUDE.md`, which projects commit even when they ignore `.claude/`, and a block in `.claude/CLAUDE.md` is removed. Init creates no Claude file. `astryx upgrade` refreshes every copy, except in a project at the top of a home settings folder (see the next entry).
+  - Gemini CLI reads only `GEMINI.md`: init adds a one-line import, `@./AGENTS.md`, creating `GEMINI.md` when it is missing. It adds none when `GEMINI.md` already imports `AGENTS.md`, inline or on its own line. It adds the import even when the project's `.gemini/settings.json` has Gemini read `AGENTS.md` through `context.fileName`: Gemini loads those settings only when it starts at the project root, so a session started in a subfolder would otherwise get no copy. Started at the root, Gemini then reads two.
+  - The project root is the nearest folder at or above where init runs whose `package.json` declares an `@astryxdesign` package, else the nearest with any `package.json`. The search stops at a repository root and never counts the home folder. With no `package.json` found, init writes where it runs, as before. `docsWritten` still lists each file relative to where init ran, for example `../../AGENTS.md`.
+  - A `GEMINI.md` that resolves outside the project, for example a link to a shared file, is skipped and reported in `docsError` with one note (not an error line), in the default layout and in a project's own layout; the rest is written and init exits 0.
+  - The managed block belongs to Astryx: init and `astryx upgrade` write, refresh, and remove only the block, whatever ignore rules or generated markers say, as 0.7.1 did, and never change the text around it. Every write stays inside the project: run in the folder 0.7.1 wrote, an agent file 0.7.1 wrote there whose path leaves the project still refuses the run with exit 1. The project's Claude Code file (root `CLAUDE.md`, or `.claude/CLAUDE.md` when there is no root one) that resolves outside the project and is a block-less import of an existing `AGENTS.md`, which 0.7.1 left alone, is skipped and reported in `docsError` with one note, and init exits 0. Run from a folder below the project root, where 0.7.1 wrote in that folder instead, a project-root file whose path leaves the project is skipped and reported in `docsError` with one note, the rest is written, and init exits 0.
+  - While root `CLAUDE.md` is untracked and ignored by the repository's ignore rules (any ignore file from the repository root down, such as a monorepo's root `.gitignore`, the local exclude file, or configured excludes; init asks git, Sapling or Mercurial), a `.claude/CLAUDE.md` the project commits gets the copy too, so a fresh clone still gives Claude Code a copy; `--agent claude` and `--agent all` write it there as well. A file the repository tracks counts as committed whatever the ignore rules say, as git and Mercurial ignore only untracked files, and when the repository cannot answer, the copy is kept, on the first run as on later ones. Such a copy that resolves outside the project refuses the run with exit 1 where 0.7.1 wrote it too; one 0.7.1 did not write (the one `--agent claude` adds, or a block-less import of an existing `AGENTS.md`) is skipped and reported in `docsError` with one note, and init exits 0. So is a `.claude/CLAUDE.md` whose block `--agent claude` would remove beside a `CLAUDE.md`, since 0.7.1's `claude` preset wrote only `CLAUDE.md` there. Beside a committed root `CLAUDE.md`, with `.claude` linked outside the project, three cases that 0.7.1 refused now exit 0 with nothing written: the default with a `.claude/CLAUDE.md` of plain text, and `--agent all` with one of plain text or a block-less import of `AGENTS.md`; root `CLAUDE.md` holds the copy, so no write leaves the project. In a project that keeps its own layout, a `GEMINI.md` that imports no agent file now gets a copy, as the other agent files do.
+  - The copy in `.claude/CLAUDE.md` is removed only once root `CLAUDE.md` holds the same block, and only the managed block between its markers: the rest of the file stays, and the file is deleted only when nothing but whitespace is left. `astryx init --remove-agents` deletes a file it created only when nothing but whitespace or init's own heading is left; 0.7.0 also deleted a file whose remaining text had a heading and any line with the word "guidance".
+  - `astryx init --remove-agents` removes the block at the project root, where `init` writes it, and in the folder it runs in. Run from a subfolder, it removes what `init` wrote at the root, and a block an earlier version left in that subfolder; a root agent file with a block that resolves outside the project is left as it is with a note, and the run exits 0, as 0.7.1 did when it touched only the subfolder. Exit codes and the JSON shape are unchanged.
+  - `--agent claude` and `--agent all` never leave a block in both `CLAUDE.md` and `.claude/CLAUDE.md`, unless the project ignores `CLAUDE.md`: when `CLAUDE.md` gets the block, a block in `.claude/CLAUDE.md` is removed. `--agent all` keeps the `GEMINI.md` import. The `--agent` help and the working-with-AI guide say so. `--agent-docs-path` writes where init runs, as before.
+  - `astryx doctor` fails when the `GEMINI.md` import points at an `AGENTS.md` with no block. The setup check in the CLI and in `@astryxdesign/core` no longer counts that import as set up, and looks at `GEMINI.md`. The reminder to run `init` that commands print looks at the project root too, so it stops once `init` has run in a nested package.
+- `astryx init` and `astryx upgrade` no longer write agent docs into your home folder, or into a settings folder in it such as `~/.gemini` or `~/.claude` outside a project. Agents read the files in those folders in every project, so a block there reached unrelated work. This follows the CLI's existing rules that no command writes agent docs into those folders and that a write outside a command's own folder is refused before anything is written.
+  - **Refused by `init`:** the home folder itself, and the top of any folder in it whose name starts with a dot (every such folder is a settings folder), even when it holds a `package.json`. A folder below it with its own `package.json` is a project and is set up normally, such as an agent worktree in `~/.codex/worktrees/` or `~/.cursor/worktrees/`, and `astryx upgrade` refreshes it. With `--agent-docs-path`, each file's own folder is checked: from the home folder, `notes/AI.md` is written as before, while `AI.md` or `.claude/CLAUDE.md` is refused.
+  - **What `init` does instead:** it writes no agent docs, reports `docsError` as `install-failed` with the reason, and exits 0, as before.
+  - **Refused by `upgrade`:** refreshing a block in a project whose root is the home folder or the top of a settings folder, such as `~/.dotfiles` with a `package.json`, with or without `--apply`. It leaves the block as it is, sets `agentDocs.action` to `error` (never `would-refresh`), and warns with the folder and why; its other steps and its exit status are as before. With no block there, it gives the same reason instead of suggesting `astryx init`. `astryx doctor`'s agent-docs fix does the same, and the setup reminder after each command stays quiet.
+  - **Migration:** run `astryx init` from the project's own folder, or add the block to the file by hand. Move a project rooted at the home folder or a settings folder into a folder of its own, or update or remove its block by hand. To remove a block an earlier version wrote into `~/.claude/CLAUDE.md`, run `astryx init --remove-agents` in the home folder.
+- Keyboard and screen-reader users can now reach a disabled `MultiSelector` and hear that it is unavailable (WCAG 2.2 SC 2.1.1 and 4.1.2). Before, its trigger rendered the native `disabled` attribute and `tabIndex={-1}`, so Tab skipped it and a focused trigger lost focus when disabled; now it exposes `aria-disabled="true"`, keeps focus, still opens nothing, and submits no form value. Like a natively disabled button, it runs no caller event handler other than focus and blur, and a press on it reaches no handler. A focused disabled trigger shows a keyboard focus ring, dimmed with the rest of the control (WCAG 2.2 SC 2.4.7).
+- Keyboard and screen-reader users can now reach a disabled `Link` or `ClickableCard`, and the buttons of a disabled `Token`. Before, they rendered the native `disabled` attribute or `tabIndex={-1}`, so Tab skipped them. Now each disabled control exposes `aria-disabled="true"` and keeps the Tab stop it has when enabled, while activation by click, Enter or Space, `onClick`, removal and navigation stay blocked; a disabled Link keeps no live destination and is exposed with the link role. A `Popover` no longer opens from a wrapped or `anchorRef` trigger marked `aria-disabled="true"` (for example a disabled `Button` with a `tooltip`), including for a click dispatched straight on the trigger; before, such a click opened it. No API changes.
+- Keyboard and screen-reader users can now reach a disabled `Selector` and hear that it is unavailable (WCAG 2.2 SC 2.1.1 and 4.1.2). Before, its trigger rendered the native `disabled` attribute and `tabIndex={-1}`, so Tab skipped it and a focused trigger lost focus when disabled; now it exposes `aria-disabled="true"`, keeps focus, still opens nothing, and submits no form value. Like a natively disabled button, it runs no caller event handler other than focus and blur, and a press on it reaches no handler. A focused disabled trigger shows a keyboard focus ring, dimmed with the rest of the control (WCAG 2.2 SC 2.4.7).
+- `Selector` options in a narrow list now shrink and truncate a long label with an ellipsis instead of being clipped past the list edge.
+- `Switch`: a busy switch announces "Loading" once per busy start. Under React StrictMode the announcement used to be made twice.
+- `TimeInput`: keyboard and screen-reader users can now reach a disabled field, or a busy bottom-sheet field, and hear that it is disabled. It no longer renders native `disabled` on its typed, native-picker or touch input or its picker button: they keep their place in the focus order and expose `aria-disabled`, while typing, arrow-key adjustment, opening, submitting a surrounding form with Enter, and a caller's `onClick` stay blocked, a draft typed before the field became disabled is dropped, and a focused disabled field shows its focus ring. Tests that query a disabled or busy TimeInput with `toBeDisabled()` or `:disabled` should check `aria-disabled="true"` instead.
+- Pages that use `Timestamp` with an absolute format (`date`, `time`, `date_time` and the other fixed formats) now prerender in Next.js with `cacheComponents` turned on, where they used to fail the build: `Timestamp` no longer reads the current time while rendering on the server, and absolute formats never read the clock. `relative`, `relative_short` and `auto` read the clock on the client only: a server render or static prerender shows the full date and time in UTC, labelled, and the client switches to the format's normal output right after hydration, so server and client markup now always match. Client-only rendering is unchanged. No API changes ([#7883](https://github.com/meta/astryx/pull/7883)).
+- `Tooltip`: moving the pointer straight from the trigger onto the tooltip in one step no longer hides it, so it stays open while hovered (WCAG 2.2 SC 1.4.13).
+- A `SideNavItem` in a collapsed `SideNav` now shows its tooltip on hover and gets `aria-describedby`, even when the item first appears inside an already-collapsed `SideNav`, the common case for saved collapse state. Before, only an item that collapsed after it appeared got a tooltip. Fixes [#7692](https://github.com/meta/astryx/issues/7692).
+
+  A `Tooltip` with an `anchorRef` that renders inside the very element the ref points at, as `SideNavItem` does, now attaches however it mounted. The effect now re-checks the anchor once the commit has finished attaching refs; event listeners and the `aria-describedby` merge and restore are unchanged.
+
+- `TopNav` on narrow screens: a long `TopNavHeading` now gives way (it truncates with an ellipsis, or wraps when the heading is a link) instead of pushing the end content and the menu toggle past the edge of the bar, and the mobile drawer's close button is back on screen.
+- `Typeahead`: clearing the value while editing it now empties the input and reports `onChangeQuery('')`, instead of leaving the old label in a field with no value. Fixes [#7038](https://github.com/meta/astryx/issues/7038).
+
+#### Performance
+
+- Pages with many code blocks, such as a long Markdown document, paint sooner on first load: `CodeBlock` inserts its syntax-highlight rules before the first layout read instead of after it, which cut first paint by 16–19% in 100–500 KB test documents ([#7875](https://github.com/meta/astryx/pull/7875)). The rules and the highlighted output are unchanged.
+- Pages that update around a long `Markdown` document stay responsive: Markdown skips re-rendering its document when a parent re-renders without changing the text or any rendering prop, and a link handler passed as a new function on each render no longer forces that work. The rendered output is unchanged.
+
+#### Documentation
+
+- The `DropdownMenuItem` docs now explain when an item is an action or a destination, disabled items, and supporting content.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @aashish254
+- @cixzhang
+- @ejhammond
+- @HelloOjasMutreja
+- @josephfarina
+- @kyu-rong
+- @Pushpak731
+- @vjeux
+
+---
+
+# 0.7.2
+
+#### Experimental APIs
+
+- Drawer's full-viewport mobile coverage ships as experimental: `experimental={{isFullWidthOnMobile: true}}` fills the viewport below 640px instead of keeping the 56px page reveal. Anything inside Drawer's `experimental` prop may change or be removed in a patch release; omitting it keeps the stable behavior.
+
+#### New Components
+
+- Promote `Drawer` and `DrawerHeader` from the canary-only Lab package to Core, imported from `@astryxdesign/core/Drawer` or the package root. The stable package now ships the full-height side panel with modal and non-modal presentation, the shared dismissal stack, Dialog's `purpose` dismissal policy, a `DrawerHeader` whose close button appears when given `onOpenChange`, and Dialog-style container padding (`--spacing-4` by default, `padding` prop, or a theme's `drawer` padding), plus Core documentation and runnable examples. Canary users importing from `@astryxdesign/lab` switch to `@astryxdesign/core/Drawer`.
+
+#### New Features
+
+- An integration can set the command its users run the CLI with: a new `cliCommand` field in `astryx.integration.*`, such as `cliCommand: 'acme astryx'`. In a project that loads that integration, every command the CLI prints starts with it instead of the package-manager prefix (`npx astryx`, `pnpm exec astryx`): next-step hints, errors, suggestions, Doctor fixes, `--help`, the setup reminder, the agent-docs block, and doc text. If two loaded integrations set different commands, neither is used, and the new `cli-command` check in `astryx doctor` warns. An invalid `cliCommand` is ignored with an `invalid_cli_command` warning; the rest of the manifest still loads.
+  Docs, including an integration's, are now written with bare `astryx ...` commands, and `astryx docs` prefixes them for the project when it prints them. JSON output keeps every command bare, as before. The install-time setup reminder from `@astryxdesign/core` and `@astryxdesign/cli` names the command the project's package manager runs, instead of always `npx @astryxdesign/cli`.
+- Adds the `@astryx.diffViewer.*` keys to the `en` catalog so the lab `DiffViewer` reads its file-status badges, line counts, line-number button labels, per-line "Added"/"Removed" labels, and empty-state messages from the translation runtime. No existing string changes; locales without a translation fall back to English.
+- `Item` accepts `align="first-line"`, which centers each start and end slot on the label's first line. A small status dot, radio, checkbox, or timestamp beside a wrapping label now stays level with the first line, where `center` drops it to the middle of the row and `start` leaves it above the line. A slot taller than the first line moves the text down rather than leaving the row, and a one-line row with no description looks the same as `center`. `ListItem`, `RadioListItem`, and `CheckboxListItem` accept the same `align` and pass it to their row. Themes can style these rows through the `item` target's `align` axis. The default stays `center`, so existing rows don't change.
+- i18n catalog: add the English messages used by the Lab CommentComposer for its input, image upload, inline quote, emoji action, cancel action, and retry affordance.
+- i18n catalog: add the English messages used by the Lab CommentThread for replies, reactions, edit history, resolution, errors, comment actions, and the unsaved-draft warning it announces when a dismissal would discard a reply or edit.
+- i18n catalog: add the English messages used by the Lab Comments panel for its region, empty/loading states, pagination, and posting errors.
+- i18n catalog: add the English messages used by the Lab EmojiPicker so locale catalogs and provider overrides can replace its labels, search status, loading state, and group names.
+- `List`: add `edge` to choose where each row's text, dividers, and hover and selection backgrounds sit. `padded` (default) keeps today's look. `flush` drops the rows' side padding, so text and dividers start on the same line as the list header and a heading above, with no container needed. `outset` keeps backgrounds' room around the text while reaching into the padding of a Card, Section, or Dialog, so text lands on the heading's line. `bleed` reaches rows to the container's edges with square corners, like Table rows in a Card. `edgeCompensation="inline"` is deprecated in favor of `edge="outset"` and keeps working; its rows' outer room is no longer cut off by the list's swipe clip. Run `astryx upgrade` to rename it.
+- `Pagination`: `variant="compact"` shows first/last buttons around previous/next when `hasFirstLast` is `true` and the page count is known. Compact still omits them by default, and the `input` variant still shows them unless `hasFirstLast` is `false`.
+- `reset.css`: in Chromium, the dropdown marker of an `<input>` with a `list` sits in the middle of the field. Chromium sets the marker on the field's line-height, so above a line-height of 1 it sits low, and the reset makes every field inherit the page's 1.5: the marker sat 3.5px below the middle of a 40px field, and further down on taller lines. Date and time fields, whose calendar icon uses the same part, keep their icon where it was. To keep the old placement, add `input[list]::-webkit-calendar-picker-indicator { line-height: inherit; }` after the reset.
+- `SideNavItem`: nested items now span the full width of the nav list, like top-level items, so their hover and selected fill lines up with the rows above them. Before, a nested item started 24px in from the list edge. The indent now sits inside the row, one `--spacing-6` step per nesting level, so icons and labels stay exactly where they were. The indent area is now part of the nested row, so it shows hover feedback and clicking it activates the item. Content placed directly inside a `SideNavItem` that is not itself a `SideNavItem` is no longer inset by the children group. There is no supported way to keep the old inset look.
+- `TabMenu` passes host attributes and DOM event handlers to its trigger button. The trigger keeps its button semantics, tab stop, and menu disclosure attributes; a caller's `onClick` runs after the menu toggle.
+- Tables draw a line on every cell edge, not only between rows, on both `Markdown` and the RichText surfaces, and the grid closes at the table's rim. A reader following one row across never needed vertical lines, but someone editing a table has to aim at a cell and judge where a selection stops, and the empty 3×3 a toolbar insert produces was three horizontal rules with no sign it had three columns. The line is the same `--color-border` already used between rows, the rim merges with it into one rule rather than doubling at the edge, and both surfaces move together — the read and edit renderings match block for block, more closely than before.
+- `TreeList`: nested rows now span the full width of the list, like root rows, so their hover and selected fill lines up with the rows above them. Before, a nested row started at its indent. The indent now sits inside the row, so chevrons, icons and labels stay exactly where they were. The indent area is now part of the row, so it shows hover feedback, and clicking it activates the row: clicking a folder's indent toggles the folder, and clicking a row whose only action is its link anywhere outside its label follows the link, as Enter already did: modifier keys are kept, so Cmd/Ctrl-click opens a new tab, and a middle-click opens one too. Controls in a row's start or end content keep their own clicks, including role-based ones such as a `role="switch"` element, which no longer also toggle the row or run its `onClick`. Guide lines draw above the rows, so a hover or selected fill doesn't break them, and they let clicks pass through to the row underneath. The one exception is a row with keyboard focus: it draws above the guides so they never cut its focus ring, which means that if it is also filled (selected or hovered), its fill covers the guides at that row. Padding set on a row through the `tree-list-item` theme target or an item's `className`, `style` or `xstyle` still composes with the indent. `--tree-list-indent` still retunes the indent step. There is no supported way to keep the old inset rows.
+
+#### Fixes
+
+- Allow MetadataList label width without an explicit position while preserving single- and multi-column label defaults (#6310)
+- AppShell: defer hiding the mobile nav's Activity boundary until its close animation finishes (#5701)
+  `AppShell` mounts the mobile nav drawer inside a `React.Activity` boundary that flipped to `mode="hidden"` in the same commit as the drawer closing. React's `Activity` hides its subtree with `display: none !important` synchronously and re-runs the cleanup of every effect inside it, which cut off `MobileNav`'s own slide-out CSS transition and cancelled its delayed `dialog.close()` before either could run. The drawer still closed correctly (a safety-net effect force-closed the native dialog on that same cleanup), just with the close animation skipped entirely.
+
+  `AppShell` now holds the `Activity` boundary visible for a beat after the drawer closes, strictly longer than `MobileNav`'s own worst-case close delay, so `MobileNav`'s normal close effect gets a real chance to run its transition and its own timed `dialog.close()` before `Activity` ever hides the subtree.
+
+  `MobileNav` also keeps its dialog rendered from the commit that closes it until its delayed `close()` has run, instead of relying on the dialog's discrete `display` transition to do so. A browser that does not hold that transition (WebKit) dropped the dialog to `display: none` at once while it was still an open modal, so for about 200ms nothing was visible and the page stayed inert. The slide-out itself is unchanged.
+
+- `AspectRatio`'s `fit="cover"` and `fit="contain"` now fill the box on the documented Tailwind setups. The fit rules lived in `reset.css`, in the `reset` layer, and the setup guides put Tailwind's preflight in a layer above it, so preflight's `img, video { height: auto }` won and a fitted image kept its own aspect ratio. The fit sizing now ships with the component's own styles in `astryx-base`: above preflight, and below Tailwind's utilities, so a utility class on the child still wins. `reset.css` no longer carries AspectRatio rules.
+  With `fit="cover"` or `fit="contain"`, a direct child's own Astryx styles (an Astryx component's own size or `object-fit`) no longer override the fill. To keep a child's own size, set it with an inline style, unlayered CSS or a rule in a later layer, or leave `fit` unset.
+- The static `AvatarGroupOverflow` chip (no `onClick`) is exposed to assistive technology as an image named by its count label ("5 more"). Before, it was a span with an `aria-label` but no role, a name the generic role does not allow, so screen readers could skip the count. This meets WCAG 2.2 SC 4.1.2 Name, Role, Value. Nothing changes visually; the clickable chip stays a button, and a `role` passed by the caller still wins.
+- `Button` (and `IconButton`) no longer use the native `disabled` attribute while a busy state (`isLoading`, or a non-interruptible `clickAction` in flight) is the only reason the button can't be clicked. A natively disabled element can't hold focus, so the browser moved focus to `<body>` the instant an action started and never restored it — the classic reason busy state should be visual-only. Busy now uses `aria-disabled` (button stays focusable) with `aria-busy` and the spinner, matching the documented "Disabled vs Busy" API convention and the behavior input components already follow. `isDisabled` (and `isDisabled` together with a busy state) is unchanged — that still uses native `disabled`. `isInterruptible` is also unchanged.
+  `aria-disabled`, unlike native `disabled`, still lets the button dispatch a click — the busy guard already called `preventDefault()` to block the button's own action, but a click on a busy button could still bubble to a wrapping ancestor's own click handler (a clickable row, card, or backdrop), which the previous native-`disabled` behavior never allowed. `handleClick` now also calls `stopPropagation()` in that guard, containing an unavailable click at the Button boundary the way a natively disabled control always did.
+
+  The `href`-rendered anchor path had the same gap for keyboard activation: it only wired `onClick` to the busy guard, not `onKeyDown`, so a consumer's own `onKeyDown` still received Enter/Space on a busy-only anchor Button while it was announced `aria-disabled`. The anchor path now wires the same `handleKeyDown` suppression the button path already had, so Enter/Space are swallowed and every other key still reaches the consumer, on both render paths.
+
+- `ChatLayoutScrollButton`: the scroll-to-bottom pill now gives up keyboard focus, and refuses new focus, as soon as it starts to hide. Previously focus stayed on the fading pill for about half a second, until `visibility: hidden` applied, so it could sit on a control that was fading out or already transparent (WCAG 2.2 SC 2.4.7 Focus Visible). (#7738)
+- Preserve caller-provided IDs on CheckboxInput and keep labels associated with the native input.
+- CheckboxList keeps a caller's `aria-labelledby`. The group always replaced it with its own label id, so the caller's ids never reached the accessible name. The group is now named by its label and then the caller's ids, the same order RadioList and TimeInput use.
+- The setup reminder, the swizzle StyleX note, and one doctor line say only what is true
+- `CommandPaletteInput`: the query field now draws the shared keyboard focus ring. Previously it suppressed the browser outline without replacing it, so keyboard users could not see which field held focus.
+- Source builds through Next.js's Babel no longer fail with `Unknown property: L` (or `Zs`, `Letter`) when the app sets no browserslist or targets a browser without Unicode property escapes. `Avatar`'s initials and the Markdown parser's emphasis and heading-link rules now build their `\p{…}` regular expressions at runtime, as `NumberInput` already does, so there is no literal for Babel to rewrite. Matching is unchanged.
+- `DrawerHeader` now renders numeric zero `startContent` inside its start slot and preserves numeric zero `endContent` when no close button is present.
+- `Drawer` now slides from the correct logical edge when `dir="rtl"` is set directly on the drawer, matching inherited right-to-left regions.
+- `DropdownMenuDivider` now forwards host attributes and DOM handlers (`id`, `data-*`, `aria-*`, event handlers) to its separator, as other DOM-owning components do. Before, it accepted only `xstyle`, `className`, `style` and `ref` and dropped everything else, so a separator could not carry a test id or an accessible label. Its `role="separator"` and orientation stay component-owned.
+- DropdownMenu: load the touch bottom sheet only when a menu shows it
+  `DropdownMenu` imported its touch sheet (BottomSheet, its gestures, and the touch action list) up front, so every page with a dropdown shipped it, even when the menu only ever opens as an anchored popover. The sheet now loads on demand, the way `ContextMenu` already loads it. A popover-only dropdown's own code drops by about a third (about 23 KB gzipped). Bottom-sheet and adaptive menus behave as before. The sheet starts loading when the trigger mounts, and a menu opened from the keyboard before it arrives still focuses its first action once it loads.
+- `EmptyState` no longer leaves blank icon or action spacing when those optional slots receive a boolean or an empty string. An empty description also omits its theme target. The docs now describe configurable heading levels and map the container anatomy to the public theme target.
+- Keep `Field`'s horizontal-label layout marker authoritative when callers pass conflicting data attributes, and keep hidden descriptions visually hidden in that layout. Correct its custom label-icon type, all three status placements, complete anatomy, and guidance for controls that cannot safely use attached status.
+- `FieldStatus` (and any element using `useEntryAnimation`) no longer causes a hydration mismatch on server-rendered pages. An element that arrives in the server's HTML now hydrates without the entry style and never plays its entry animation, even when hydration runs after the page has painted; elements mounted after hydration still animate. `useEntryAnimation` no longer documents server rendering as unsupported.
+- Keep `FormLayout`'s direction metadata authoritative when callers pass conflicting data attributes.
+- `GridSpan` keeps its content inside the span. A child whose min-content width is wider than the span, such as a `Tokenizer` with a long token, used to stretch the span's column past the grid cell; it now gets the span's width and truncates the way it does outside a Grid (#7438)
+- Keep `Grid`'s theming metadata authoritative when callers pass conflicting data attributes.
+- `useHoverCard`: closing a hover card with `hide()` or Escape while the pointer rests on the card no longer leaves the next open stuck. The hook kept believing the pointer was still over the card, because a card closed that way unmounts without a `mouseleave`, so the trigger's next hover-open never closed on leave or after `hideDelay`. Both paths now clear that state, as the touch dismissal already did.
+- Compute ISO week numbers (`Calendar hasWeekNumbers`, `getWeekNumber`) on UTC anchors instead of local-time `Date` arithmetic. In timezones whose DST ends after New Year (Sydney, Auckland, Santiago), the local-millisecond difference between the week's Thursday and January 1 carried the DST offset, and in years whose January 1 is a Friday that extra hour rounded a whole week up: the entire ISO week 14 of April 2021 displayed as week 15. Week numbers are now identical in every timezone.
+- Anchored layers (`Popover`, `DropdownMenu`, and every component built on them) now keep their safe-area gutter and dynamic-viewport size cap in the shipped stylesheet. The compiled CSS referenced an undefined variable for the preferred value, so every browser used the fallback: on a phone with a dynamic toolbar or a notch, a tall layer could run past the visible screen or under a declared bottom bar. Desktop sizes are unchanged.
+- `createMarkdownFrontmatter` now hands its `parse` function a plain object, so a parser that returns the decoded fields unchanged (`parse: fields => fields`) is accepted as metadata. Before, the record had no prototype, failed the JSON-like metadata check, and the document fell back to readable text with its frontmatter still showing.
+- `MultiSelector`: the row action cell the keyboard reaches with the inline-end arrow draws the standard focus ring. Before, its outline read four CSS variables that nothing declared, so no ring showed on the active action cell.
+- PowerSearch: clear every filter with one press of the clear-all button instead of removing only the last filter.
+- Prevent pressing a built-in PowerSearch filter token with the mouse from opening search suggestions before the filter editor. Token editing, removal, and keyboard navigation retain their existing behavior.
+- Keep built-in PowerSearch value controls disabled in read-only filter editors, matching custom editors.
+- RadioList keeps a caller's `aria-labelledby`. The radiogroup always replaced it with its own label id, so the caller's ids never reached the accessible name. The group is now named by its label and then the caller's ids, the same order TimeInput uses.
+- Restore focus to the element that opened a Dialog when its content mounts in the open commit. The opener was captured in the Dialog's passive effect, which runs after a freshly mounted DialogHeader's autofocus effect had already moved focus to the dialog's own title — closing then restored focus to that detached title and the user's focus landed on `<body>`. The capture now runs in a layout effect, before any descendant's passive effect. (#5637)
+- `astryx search` finds more of what a reader means when the words differ from the catalog's.
+- `astryx search` ranks a match on more of your words above a shorter named entry.
+- `SideNavItem` keeps a caller's `className` on its row element (the link or button, and the collapsed rail item) next to its own classes. Before, the row's generated class replaced it, so a class passed to style the row (for example, a cursor while a row is dragged) never reached the DOM, even though `style`, ARIA, data attributes and handlers did.
+- Shrink Token's invisible remove-button target from 44px to 24px without changing the visible icon. Clicking adjacent text or values in PowerSearch now edits the filter instead of accidentally removing it.
+- DropdownMenu submenu flyouts close with their menu when it is light-dismissed: previously a submenu opened by tap or a fast click stayed open (and re-anchored to the viewport corner) after the menu was dismissed and reopened. A hover-open scheduled on a submenu trigger before the menu closed from elsewhere is also cancelled, so it can no longer reopen a flyout behind the dismissed menu
+- `Switch` now adds a caller's `aria-describedby` to the switch control, ahead of its own description, status, and disabled-reason ids. Before, the value landed on the field wrapper, so a hint rendered elsewhere on the page could not describe the switch to assistive technology.
+- `Switch` now puts a caller's `aria-labelledby` on the switch control. Before, the value landed on the field wrapper, so a visible title elsewhere in the row could not name the switch for assistive technology.
+- A truncated `Text` or `Heading` (`maxLines`) now re-measures when its content changes, not only when its box resizes. A fixed-width single-line status whose message changed kept showing the first message in its truncation tooltip, and a new short message could keep a tooltip while a new long one lacked one. `useTruncation` now also observes the element's text, so the tooltip text and the truncated state follow the current content.
+- `ToggleButton` keeps toggling when it also receives an `onClick`, for example from a wrapper that renders it as its trigger. That `onClick` used to replace the toggle's own click handling, so `onPressedChange` never ran and a `ToggleButtonGroup` member never asked its group to toggle (`pressedChangeAction` still ran). The caller's `onClick` now runs first and the toggle request follows. On a standalone `ToggleButton`, calling `preventDefault()` in that `onClick` cancels the request: neither `onPressedChange` nor `pressedChangeAction` runs.
+- `useTooltip` (and every component built on it, such as `Button`'s `tooltip` prop) now drops a show that is still waiting out its delay when `isEnabled` turns `false`. Before, hovering a trigger and then disabling its tooltip within the delay let the timer fire anyway: the tooltip opened after its triggers were turned off, with no pointer-leave listener left to close it. A pending hide still runs, and an enabled tooltip is unchanged.
+- Tooltip: an icon-only trigger now opens instead of throwing. The layer passed its trigger to `showPopover` as the invoker `source`, which the Popover API declares as an `HTMLElement`; a caller-rendered icon is an `SVGElement`, whose dictionary conversion throws before the popover opens, so the hint never appeared. An icon trigger now reaches `showPopover` without a source — positioning is unchanged, since the layer is anchored by its anchor-name pair, and only the invoker's focus order is given up.
+- A collapsed `TopNavMenu` or `TopNavMegaMenu` section in the mobile drawer is now `inert` and hidden from assistive technology, so Tab no longer moves focus onto links that are not shown and screen readers no longer list them under a section announced as collapsed.
+- An expanded `TopNavMenu` or `TopNavMegaMenu` section in the mobile drawer no longer clips the focus ring of its items. The section still clips while collapsed and while it animates open or closed.
+- `Typeahead`, `Tokenizer`, and `PowerSearch`: clear loading state and stop busy indicator when search source is replaced (#7457)
+
+#### Performance
+
+- `Text` and `Heading` with `maxLines` and `hasTruncateTooltip={false}` no longer measure their text or observe it for resizes and content changes. Only the tooltip uses that measurement, so with the tooltip off the text is cut by CSS alone, and a long table of truncated cells no longer pays a layout read per cell. Rendering is unchanged; with the tooltip enabled (the default) nothing changes.
+
+#### Documentation
+
+- `Avatar` and `AvatarGroup` docs list the numeric sizes `size` accepts (16, 20, 24, 32, 36, 40, 48, 60, 64, 72, 96, 128, 144, 180) instead of implying any pixel value, and say that an `AvatarGroup`'s size always overrides a child `Avatar`'s size, including the group's default.
+- Docs and CLI examples import each Core export from the path `astryx component <Name>` prints.
+- `ContextMenu` docs now state that data-driven `items` and compound `menuContent` are mutually exclusive choices instead of marking `items` as unconditionally required.
+- Document DropdownMenuGroup's complete wrapper props, group semantics, and non-interactive heading guidance.
+- Document FieldLabel's complete public prop surface, group-label semantics, and supporting descriptions.
+- Make `FormLayout` documentation match logical fractional grid tracks and viewport collapse, and make the public layout target discoverable from component anatomy.
+- Make `Grid` and `GridSpan` documentation match fractional track sizing, responsive repeat behavior, implicit rows, and explicit-column spans.
+- `useCombobox`, the single-select combobox hook exported from `@astryxdesign/core/Selector` that powers `Selector` and `CommandPalette`, now has hook docs, so `astryx hook useCombobox` and `astryx search combobox` return it with its options, its return fields, and how to wire `aria-activedescendant` while focus stays on the control.
+- The `useMultiCombobox` hook docs now say that ArrowDown or ArrowUp opening the list lands on the first or last option even with `hasSearch` or a disabled end option, and that the hook still handles Home and End with `hasSearch`, so a search input that keeps those keys for the caret stops them first and relies on PageUp and PageDown.
+- `useMultiCombobox`, the multi-select combobox hook exported from `@astryxdesign/core/MultiSelector` that powers `MultiSelector`, now has hook docs, so `astryx hook useMultiCombobox` and `astryx search combobox` return it with its options, including the grid rows with an action cell, its return fields, and how to wire `aria-activedescendant` while focus stays on the control.
+- InternationalizationProvider documentation now names its nonvisual provider boundary so the new component contract can map its anatomy without implying rendered DOM. (#6048)
+- `ListItem`'s docs now list `label` as a `ReactNode`, matching its props type: a string is truncated to one line, and any other node renders as given. They used to say `string`, which told readers a rich label had to be restructured away.
+
+#### Other Changes
+
+- `VStack` and `HStack` come from `@astryxdesign/core/VStack` and `@astryxdesign/core/HStack`, `Heading` from `@astryxdesign/core/Heading`, `Text` from `@astryxdesign/core/Text`, and `Theme` and `defineTheme` from `@astryxdesign/core/theme`.
+- This covers the guides, the `Card` docs, the next steps `astryx init` prints, the install example `astryx theme build` prints, the wiring example `theme add` prints, the build rules, the theme-module fix `astryx doctor` prints, and the annotated theme template.
+- Every path was already exported. Nothing else changes.
+- The "run init to finish setup" reminder no longer prints where agents already have the Astryx prompt. In a git repository it looks for init's block in the agent docs from the project up to the repository root, because coding agents read every agent doc in between, so a package in a monorepo that ran `init` at its root stays quiet. This holds for every command and for the reminder printed when `@astryxdesign/core` or `@astryxdesign/cli` is installed. Running the CLI from its own source checkout, inside that checkout, prints no reminder. A project with no block in reach still gets it, and `--json` never prints it.
+- `astryx swizzle` no longer says StyleX components "render unstyled (no error)" without a StyleX compiler. Importing them throws StyleX's "Unexpected 'stylex.create' call at runtime" error and the page does not render, and the note now says so.
+- In an integration package, where the package's own manifest loads, `astryx doctor`'s implicit-integrations line no longer says that "every loaded integration is named in astryx.config". It names the package's own manifest: as the only loaded integration, or beside the integrations astryx.config names.
+
+  Classification: contract-restoring. Only message text changes: JSON keys, check ids, statuses, and exit codes are unchanged. The doctor line's new text also appears in its `--json` `message`.
+
+- Internal groundwork for a sub-menu's header and footer: `DropdownMenu`'s Tab walk through its header, menu and footer moves, unchanged, into a module of its own, so another menu level with regions can share it. `DropdownMenu`'s behavior does not change.
+- Adjacent query words that join into a component, hook, or template name, or into a one-word keyword, match it: `table header cell with sort arrow` finds `TableHeaderCell`, `tree view folders` the `treeview` keyword, and a hook answers to its words without `use`. Most of a name, a name's leading words, or a run of its words also count for components and hooks, a step below the full name.
+- A query that is one camelCase identifier and matches nothing as typed is read as the words it spells, so an unknown API name such as `useTablePaginationState` reaches `useTablePagination`. In a query of several words each identifier stays one term.
+- When the whole query is an entry's name, these readings add no near siblings beside it. A match on a joined keyword never ranks above an entry the query names, and a match on part of another name does only when it spans more query words than that entry's name.
+- A gerund matches its verb (`spacing` and `space`, `dragging` and `drag`), and a plural can start a longer word through its singular (`tokens` and `Tokenizer`).
+- Core component docs declare more keywords: other libraries' names (`scrollarea`, `togglegroup`, `pageheader`, `splitpane`, `circularprogress`, `linearprogress`, `commandmenu`, `relativetime`, `sidesheet`, `descriptionlist`, `inlinecode`) and common glyph names on `Icon`, since any icon library's glyph renders through it.
+- The JSON shape is unchanged.
+- A match on part of a longer name that reads more of the query than the entry the query names is no longer held below it: `dropdown menu radio options` leads with `DropdownMenuRadioItem`, not `DropdownMenu`.
+- `useResizable` drops the `splitview` keyword, which put it ahead of the side-panels guide.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @azure-553
+- @cixzhang
+- @ernestt
+- @Geervan
+- @harjothkhara
+- @HelloOjasMutreja
+- @imdreamrunner
+- @josephfarina
+- @kentonquatman
+- @korkt-kim
+- @kyu-rong
+- @latxh
+- @ManoharPaturi
+- @nynexman4464
+- @potatowagon
+- @Pushpak731
+- @rapsealk
+- @vjeux
+- @WeAreResilience
+
+---
+
 # 0.7.1
 
 #### New Features
@@ -1080,7 +1563,7 @@ Thanks to everyone who contributed to this release:
 
   **The horizontal clip mirrors under `dir="rtl"`.** `clip-path: inset()` is physical — top/right/bottom/left, no logical form — while the row itself reverses. Left unflipped, the leading segment sits to the _right_ of the node in RTL and still clipped its right edge, so the hole opened at the join between steps instead of at the indicator. Measured before the fix: `con0 x=622, indicator x=606, clips RIGHT edge`. After: `clips LEFT edge`, with LTR unchanged. The block axis needs no handling — `dir` does not reverse it.
 
-  **One declaration covers both layers.** The gap has to reach the track (the segment's own background) and the accent fill (an absolutely placed `::before`). Spending it on each separately meant two declarations on two boxes, so a percentage resolved against a different containing block for each and stopped them ~1.2px apart. A single `clip-path: inset(…)` on the segment clips the element and its pseudo-element together against one reference box, so every accepted value behaves identically on both — which is what [#5824](https://github.com/facebook/astryx/pull/5824) requires of a public input across its full value domain. Clipping also cannot change layout, so the node the segment positions cannot move.
+  **One declaration covers both layers.** The gap has to reach the track (the segment's own background) and the accent fill (an absolutely placed `::before`). Spending it on each separately meant two declarations on two boxes, so a percentage resolved against a different containing block for each and stopped them ~1.2px apart. A single `clip-path: inset(…)` on the segment clips the element and its pseudo-element together against one reference box, so every accepted value behaves identically on both — which is what [#5824](https://github.com/meta/astryx/pull/5824) requires of a public input across its full value domain. Clipping also cannot change layout, so the node the segment positions cannot move.
 
   **No indicator, no gap.** `indicator="none"` renders no node, so a gap there is a hole in a track that is meant to be continuous.
 
@@ -1436,7 +1919,7 @@ Thanks to everyone who contributed to this release:
 
   `MetadataListItem` targets its wrapper `<div>` when stacked and its `<dt>` when inline. A `TypeaheadItem` backed by caller-supplied `item.element` remains unchanged and does not receive forwarded props because that value may not be a cloneable element.
 
-  This completes [#5254](https://github.com/facebook/astryx/issues/5254) after [#5288](https://github.com/facebook/astryx/pull/5288) by @lexs landed `List` and `Markdown` first, followed by [#5493](https://github.com/facebook/astryx/pull/5493) by @gonzoblasco for `TreeList`.
+  This completes [#5254](https://github.com/meta/astryx/issues/5254) after [#5288](https://github.com/meta/astryx/pull/5288) by @lexs landed `List` and `Markdown` first, followed by [#5493](https://github.com/meta/astryx/pull/5493) by @gonzoblasco for `TreeList`.
 
 - `Button` now reflects `elevation` as a theme target. The prop selected between four StyleX style objects but was missing from the sibling `themeProps('button')` call, so `data-elevation` never reached the DOM and no theme could style the axis — the same defect fixed on `Card` in #5491, and one `ButtonGroup` already had right. A button inside a `ButtonGroup` reports `none`, because the group owns the surface's elevation and the member paints flat. Every wrapper that forwards `ButtonProps` through to `Button` — `IconButton` — picks the reflection up with it. (`ToggleButton` does not: its props extend `BaseProps`, not `ButtonProps`, so it has no `elevation` to forward and keeps reporting `none`.) Nothing about the rendered button changes: 60 of 64 captured frames are byte-identical, and the four that differ do so only inside the loading spinner's own box. (#5552)
 - Calendar: announce a cleared range in the provider locale, wrap the two-month layout instead of overflowing a narrow viewport, keep the selected date visible under forced colors (#5453)
@@ -3177,7 +3660,7 @@ Thanks to everyone who contributed to this release:
   `height: '100%'`. With no sized parent, the skeleton collapsed to a zero-size
   (invisible) element. The doc now sets a `playground.defaults` of
   `width: 320` / `height: 80` so the shimmer placeholder renders visibly.
-- Update stale `facebookexperimental/xds` doc/JSDoc links to the current `facebook/astryx` namespace in source comments (theme/syntax `@see` references). The old org 301-redirects, so these weren't broken — just stale — and this matches the canonical org used elsewhere
+- Update stale `facebookexperimental/xds` doc/JSDoc links to the then-current `facebook/astryx` namespace in source comments (theme/syntax `@see` references). The old org 301-redirects, so these weren't broken — just stale — and this matches the canonical org used elsewhere
 - Document Table's `verticalAlign` and `textOverflow` props, which were supported by the component but missing from the docsite properties tab
 - Document TabList's `layout` prop ('hug' | 'fill') for tab sizing, which was supported by the component but missing from the docsite properties tab
 - Document Text's `justify` prop, which was supported by the component but missing from the docsite properties tab (same omission previously fixed for Heading) (#2847-adjacent)

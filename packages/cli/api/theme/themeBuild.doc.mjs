@@ -20,7 +20,7 @@ export const doc = {
   summary:
     'Compile a defineTheme() file to scoped CSS, a JS module, and type declarations, or check committed outputs for drift in CI.',
   description:
-    'The compiler behind `astryx theme build`. Reads a file that calls defineTheme() and ' +
+    'The compiler behind `{@command theme build}`. Reads a file that calls defineTheme() and ' +
     'writes a scoped CSS file, a JS module that re-exports the built theme, and a .d.ts ' +
     '(plus an optional .variants.d.ts when the theme adds custom prop values). It uses ' +
     "@astryxdesign/core's own generator, so the CSS matches what the <Theme> runtime emits. " +
@@ -58,13 +58,13 @@ export const doc = {
       name: 'options.out',
       type: 'string',
       description:
-        'Override the output CSS path. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file. A relative path must stay within cwd.',
+        'Override the output CSS path, relative or absolute; a build refuses a path outside cwd, and check mode refuses only a relative path that escapes cwd. The .js, .d.ts and any .variants.d.ts are written in the same directory, named after the theme (<name>.js), not after the CSS file.',
     },
     {
       name: 'options.check',
       type: 'boolean',
       description:
-        'Compile in memory and compare each output against what is on disk instead of writing: the CI drift guard.',
+        'Compile in memory and compare each output against what is on disk instead of writing: the CI drift guard. Because it writes nothing, it also compares outputs outside cwd; when those are stale, the report names the directory that contains them and the build and check commands to run from there, since a build refuses them and each output records the directory it was built from.',
       default: 'false',
     },
     {
@@ -77,7 +77,7 @@ export const doc = {
       name: 'ctx.cwd',
       type: 'string',
       description:
-        'Directory the theme file, a relative out path, and the returned output paths resolve against.',
+        'Directory the theme file, a relative out path, and the returned output paths resolve against. Every output a build writes is inside it, including the default outputs beside the theme file.',
       default: 'process.cwd()',
     },
   ],
@@ -105,7 +105,7 @@ export const doc = {
     },
     {
       code: 'ERR_PATH_TRAVERSAL',
-      when: 'the theme name contains a path separator or traversal marker, or a relative `out` path resolves outside cwd (including through a symlink)',
+      when: 'the theme name contains a path separator or traversal marker, or a written output resolves outside cwd (including through a symlink): an `out` path, relative or absolute, or the default outputs beside a theme file outside cwd. Check mode writes nothing, so it refuses only a relative `out` path that escapes cwd',
     },
     {
       code: 'ERR_CORE_NOT_FOUND',

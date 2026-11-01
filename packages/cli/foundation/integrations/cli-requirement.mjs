@@ -71,7 +71,43 @@ export const THEMES_CLI = '0.6.4';
  */
 export const SECTION_IDS_CLI = '0.6.4';
 
-const VERSION_RE = /^v?(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+/**
+ * The first stable CLI release that reads `stability` on a doc
+ * (spec:AST-017 FR21, FR27). Published 0.7.3 refuses the field on a page or
+ * block template, which it drops, and on a namespace doc, which hides every
+ * doc topic the package ships; component docs and guides keep loading and
+ * ignore it.
+ *
+ * Tied to the next patch slot: it must equal the first stable release that
+ * reads the field.
+ */
+export const STABILITY_CLI = '0.7.4';
+
+/**
+ * The first stable CLI release that reads a template's `icons` declaration
+ * (spec:AST-084 FR16). Published 0.7.3 refuses the field and drops that
+ * template.
+ *
+ * Tied to the next patch slot, with {@link STABILITY_CLI}.
+ */
+export const TEMPLATE_ICONS_CLI = '0.7.4';
+
+/**
+ * The first CLI release that reads a doc section's `before` and `after`.
+ * Earlier releases reject the fields and hide every doc topic the package
+ * ships.
+ */
+export const SECTION_POSITION_CLI = '0.7.4';
+
+/**
+ * The first stable CLI release that renders doc tokens (`{@command …}`,
+ * `{@pm …}`, `{@pm-only …}`) for the reader. Every earlier release prints
+ * them as written, so readers see raw tokens.
+ */
+export const DOC_TOKENS_CLI = '0.7.4';
+
+const VERSION_RE =
+  /^v?(\d+|[xX*])(?:\.(\d+|[xX*]))?(?:\.(\d+|[xX*]))?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /**
  * A version or partial version as MAJOR.MINOR.PATCH, a wildcard part as 0.
@@ -227,6 +263,39 @@ export function sectionIdsCliProblem(pkg) {
 }
 
 /**
+ * Why a package with a doc section that sets `before` or `after` would lose
+ * its doc topics on an older CLI, or null when its declared CLI range admits
+ * only CLIs that read the fields (spec:AST-046 FR11).
+ * @param {any} pkg package.json
+ * @returns {string | null}
+ */
+export function sectionPositionCliProblem(pkg) {
+  return cliRangeProblem(
+    pkg,
+    'has a doc section that sets `before` or `after`',
+    'rejects the fields, and can hide every doc topic the package ships',
+    SECTION_POSITION_CLI,
+  );
+}
+
+/**
+ * Why a package whose docs write doc tokens would show them raw on an older
+ * CLI, or null when its declared CLI range admits only CLIs that render
+ * them. Every release before the first that renders them prints a token as
+ * written.
+ * @param {any} pkg package.json
+ * @returns {string | null}
+ */
+export function docTokensCliProblem(pkg) {
+  return cliRangeProblem(
+    pkg,
+    'writes doc tokens (`{@command …}`, `{@pm …}` or `{@pm-only …}`) in its docs',
+    'prints each token as written, so readers see raw tokens instead of commands',
+    DOC_TOKENS_CLI,
+  );
+}
+
+/**
  * Why a package that ships a theme would lose its themes and doc topics on an
  * older CLI, or null when its declared CLI range admits only CLIs that read
  * typed theme descriptors. Published 0.6.3 rejects a themes root with no
@@ -291,4 +360,73 @@ export function withCliPeer(pkg, floor) {
  */
 export function withDocsTreeCli(pkg) {
   return withCliPeer(pkg, NAMESPACE_DOCS_CLI);
+}
+
+/**
+ * Why a package whose template or namespace doc sets `stability` would lose
+ * it on an older CLI, or null when its declared CLI range admits only CLIs
+ * that read the field.
+ * @param {any} pkg package.json
+ * @returns {string | null}
+ */
+export function stabilityCliProblem(pkg) {
+  return cliRangeProblem(
+    pkg,
+    'has a template or namespace doc that sets `stability`',
+    "rejects the field and drops that descriptor, and for a namespace doc hides the package's doc topics",
+    STABILITY_CLI,
+  );
+}
+
+/**
+ * Why a package with a template that declares `icons` would lose that
+ * template on an older CLI, or null when its declared CLI range admits only
+ * CLIs that read the field.
+ * @param {any} pkg package.json
+ * @returns {string | null}
+ */
+export function templateIconsCliProblem(pkg) {
+  return cliRangeProblem(
+    pkg,
+    'has a template that declares `icons`',
+    'rejects the field and drops that template',
+    TEMPLATE_ICONS_CLI,
+  );
+}
+
+/**
+ * The first stable CLI release that reads `experimental.iconSet` in a
+ * project's astryx.config (spec:AST-084 FR16). Published 0.7.3 refuses the
+ * config ("Unrecognized key"), so commands that load the project
+ * configuration, such as `doctor` and `discover`, fail in that project.
+ *
+ * Tied to the next patch slot, with {@link STABILITY_CLI}.
+ */
+export const CONFIG_ICON_SET_CLI = '0.7.4';
+
+/**
+ * Why an app project whose astryx.config sets `experimental.iconSet` would be
+ * refused by a CLI it may run, or null when the `@astryxdesign/cli` range it
+ * declares (in dependencies, devDependencies, optionalDependencies, or
+ * peerDependencies) admits only CLIs that read the key. A project that
+ * declares no range, or one that is not a version range (`workspace:`,
+ * `file:`, `link:`), gets null: nothing says which CLI it runs.
+ * @param {any} pkg the project's package.json
+ * @returns {string | null}
+ */
+export function projectIconSetCliWarning(pkg) {
+  const field = [
+    'dependencies',
+    'devDependencies',
+    'optionalDependencies',
+    'peerDependencies',
+  ].find(name => typeof pkg?.[name]?.[CLI_PACKAGE] === 'string');
+  if (!field) return null;
+  const range = pkg[field][CLI_PACKAGE];
+  if (range.includes(':')) return null;
+  const lowest = lowestAdmitted(range);
+  if (lowest != null && semverCompare(lowest, CONFIG_ICON_SET_CLI) >= 0) {
+    return null;
+  }
+  return `The project's ${CLI_PACKAGE} range "${range}" (${field}) admits a release before ${CONFIG_ICON_SET_CLI}, which refuses an astryx.config that sets \`experimental.iconSet\` ("Unrecognized key"), so commands that load the project configuration, such as \`doctor\` and \`discover\`, fail there. Require "${CLI_PACKAGE}": ">=${CONFIG_ICON_SET_CLI}".`;
 }

@@ -1,0 +1,40 @@
+{
+  "apiVersion": 1,
+  "type": "template.show",
+  "package": "@astryxdesign/core",
+  "data": {
+    "template": "settings-dialog",
+    "description": "<text>",
+    "type": "page",
+    "components": [
+      "AspectRatio",
+      "Card",
+      "Center",
+      "Dialog",
+      "Divider",
+      "Grid",
+      "IconButton",
+      "Kbd",
+      "Layout",
+      "List",
+      "SegmentedControl",
+      "SelectableCard",
+      "Selector",
+      "SideNav",
+      "Stack",
+      "Switch",
+      "TextInput",
+      "Token",
+      "Tooltip"
+    ],
+    "source": "<text>",
+    "demoMediaReplaced": 0
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

@@ -12,7 +12,7 @@ export const doc = {
   displayName: 'Provider and artifact identity',
   namespace: 'authoring',
   description:
-    'Separates stable provider/artifact identity from package instances and runtime lifecycle state. Provider identity names integration manifests and settles provider conflicts. Docs-tree nodes are identified by doc identity; the tree covers the CLI\'s own docs. Artifact, instance, and compiler-input identities are defined for every provider-owned artifact; no command reads them.',
+    "Separates stable provider/artifact identity from package instances and runtime lifecycle state. Provider identity names integration manifests and settles provider conflicts. Docs-tree nodes are identified by doc identity; the tree covers the CLI's docs and each integration's. Artifact IDs for kinds outside the docs tree, provider instances, and compiler-input entries are defined for every provider-owned artifact; no command builds them.",
   appliesTo:
     'Integration manifests, provider conflicts, and docs-tree node ids.',
   fields: [
@@ -41,14 +41,14 @@ export const doc = {
       name: 'ProviderInstance',
       type: '{ id; providerId; packageName; packageVersion; sourceDigest }',
       description:
-        'One immutable package version and source/content digest. Installed, configured, loaded, selected, and healthy state is a separate runtime overlay.',
+        'One immutable package version and source/content digest. It carries no installed, configured, loaded, selected, or healthy state.',
       required: true,
     },
     {
       name: 'AuthoredDocEntry',
       type: '{ id; provider; kind; stableName; source; authored }',
       description:
-        'Normalized compiler input. Discovery supplies stableName independently from the authored display name, source paths remain package-relative, and provider provenance plus the authored snapshot are immutable.',
+        'Normalized compiler input. `stableName`, the key in its doc ID, is given separately from the authored display name; source paths remain package-relative, and provider provenance plus the authored snapshot are immutable.',
       required: true,
     },
   ],

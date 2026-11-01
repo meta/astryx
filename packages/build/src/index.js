@@ -11,28 +11,87 @@
  *
  *   reset < astryx-base (library, prefix: 'astryx') < astryx-theme < product (prefix: 'x')
  *
+ * Library source is what each installed Astryx package publishes (its
+ * `files`), so a package linked from a workspace contributes what a registry
+ * install of it would.
+ *
  * The separate prefixes ensure atomic classes don't collide between
  * layers, which would break theme overrides. Generated replacement CSS is
  * parsed by the host PostCSS instance so consumers do not load a second copy.
+ * The library pass reads no Babel config file, so the app's own Babel config
+ * never transforms Astryx source; the product pass still loads it.
  */
 
 const path = require('node:path');
 const fs = require('node:fs');
 const babel = require('@babel/core');
 const stylexBabelPlugin = require('@stylexjs/babel-plugin');
-const {globSync} = require('fast-glob');
+const {escapePath, globSync} = require('fast-glob');
 const isGlob = require('is-glob');
 const globParent = require('glob-parent');
 
 const PLUGIN_NAME = '@astryxdesign/postcss-plugin';
 
-const LIBRARY_GLOB = 'node_modules/@astryxdesign/**/*.{ts,tsx}';
+const LIBRARY_SCOPE = 'node_modules/@astryxdesign';
+const LIBRARY_SOURCE = /\.tsx?$/;
 const LIBRARY_PATTERNS = [
   'node_modules/@astryxdesign/',
   'packages/core/',
   'packages/themes/',
 ];
 const STYLEX_IMPORT_SOURCE = '@stylexjs/stylex';
+
+/**
+ * Globs for the source each installed Astryx package publishes: each positive
+ * `files` entry is a directory (the files below it) or a file, while negated
+ * entries become discovery exclusions. Positive entries with glob characters
+ * are refused rather than approximated. A package's own `node_modules` is never
+ * scanned: in a workspace its links can lead back to the package (here, core's
+ * dev dependency `@astryxdesign/cli` links core again).
+ */
+function libraryGlobs(cwd) {
+  const include = [];
+  const ignore = [];
+  const scope = path.join(cwd, LIBRARY_SCOPE);
+  const seen = new Set();
+  for (const name of fs.existsSync(scope) ? fs.readdirSync(scope) : []) {
+    const dir = path.join(scope, name);
+    const manifest = path.join(dir, 'package.json');
+    if (!fs.existsSync(manifest)) continue;
+    const real = fs.realpathSync(dir);
+    if (seen.has(real)) continue;
+    seen.add(real);
+    const base = `${LIBRARY_SCOPE}/${name}`;
+    ignore.push(`${base}/**/node_modules/**`);
+    const {files} = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+    if (!Array.isArray(files)) {
+      include.push(`${base}/**/*.{ts,tsx}`);
+      continue;
+    }
+    for (const entry of files) {
+      if (entry.startsWith('!')) {
+        const excluded = entry.slice(1).replace(/^\.?\/|\/$/g, '');
+        if (excluded) ignore.push(`${base}/${excluded}`);
+        continue;
+      }
+      if (isGlob(entry)) {
+        throw new Error(
+          `@astryxdesign/build reads plain positive files entries only; @astryxdesign/${name} lists "${entry}"`,
+        );
+      }
+      const plain = entry.replace(/^\.?\/|\/$/g, '');
+      const target = path.join(dir, plain);
+      const isDirectory =
+        fs.existsSync(target) && fs.statSync(target).isDirectory();
+      include.push(
+        isDirectory
+          ? `${base}/${escapePath(plain)}/**/*.{ts,tsx}`
+          : `${base}/${escapePath(plain)}`,
+      );
+    }
+  }
+  return {include, ignore};
+}
 
 function parseDependency(fileOrGlob, cwd) {
   if (fileOrGlob.startsWith('!')) return null;
@@ -91,17 +150,18 @@ function createPlugin() {
     libraryPatterns = LIBRARY_PATTERNS,
     exclude = [],
   }) => {
-    const include = [
-      `${appDir}/**/*.{js,jsx,ts,tsx}`,
-      LIBRARY_GLOB,
-      ...extraInclude,
-    ];
+    const appInclude = `${appDir}/**/*.{js,jsx,ts,tsx}`;
 
     const excludeWithDefaults = ['**/*.d.ts', '**/*.flow', ...exclude];
 
     // Two babel configs — different classNamePrefix
     const libraryBabelConfig = {
       babelrc: false,
+      // Astryx source needs only the StyleX plugin. Without this, Babel also
+      // loads the app's root config (`next/babel` in the documented setup),
+      // and its preset-env rewrites package source the app cannot change,
+      // such as `\p{…}` regular expressions, before StyleX reads it.
+      configFile: false,
       parserOpts: {plugins: ['typescript', 'jsx']},
       plugins: withClassNamePrefix(babelPlugins, libraryPrefix),
     };
@@ -128,18 +188,26 @@ function createPlugin() {
           });
           if (styleXAtRule == null) return;
 
-          // Discover files
+          // Discover files: the app's own, and the source each installed
+          // Astryx package publishes
+          const library = libraryGlobs(cwd);
           const files = new Set();
-          for (const pattern of include) {
-            const matched = globSync(pattern, {
-              onlyFiles: true,
-              ignore: excludeWithDefaults,
-              cwd,
-            });
-            for (const f of matched) {
-              files.add(path.normalize(path.resolve(cwd, f)));
+          const discover = (patterns, ignore, keep) => {
+            for (const pattern of patterns) {
+              const matched = globSync(pattern, {onlyFiles: true, ignore, cwd});
+              for (const f of matched) {
+                if (keep(f)) files.add(path.normalize(path.resolve(cwd, f)));
+              }
             }
-          }
+          };
+          const include = [appInclude, ...library.include, ...extraInclude];
+          discover([appInclude], excludeWithDefaults, () => true);
+          discover(
+            library.include,
+            [...excludeWithDefaults, ...library.ignore],
+            f => LIBRARY_SOURCE.test(f),
+          );
+          discover(extraInclude, excludeWithDefaults, () => true);
 
           // Watch dependencies
           for (const pattern of include) {

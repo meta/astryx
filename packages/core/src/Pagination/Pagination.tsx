@@ -706,7 +706,9 @@ export function Pagination({
                   // needs to focus the dot, which some browsers (Safari) skip for
                   // buttons, so focus it explicitly.
                   onClick={e => e.currentTarget.focus()}
-                  disabled={isDisabled}
+                  // Disabled dots stay focusable (spec:AST-085 FR1); the page
+                  // only follows focus while enabled (handleDotsFocus).
+                  aria-disabled={isDisabled || undefined}
                   {...mergeProps(
                     themeProps('pagination-dot', {
                       active: isActive ? 'active' : null,

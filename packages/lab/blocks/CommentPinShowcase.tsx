@@ -7,7 +7,7 @@
  *   participant/thread/unread counts, and controlled selected/dimmed state
  *   that may be empty
  * @output A grouped pin with a three-circle participant cap and an unread
- *   badge, a resolved pin, and an unread margin pin; activating the selected
+ *   dot, a single pin, and an unread margin pin; activating the selected
  *   pin clears the selection, and non-selected pins dim only while another pin
  *   is selected
  * @position CommentPin docsite showcase and copyable Lab block
@@ -160,9 +160,8 @@ export default function CommentPinShowcase() {
             xstyle={styles.groupedMarker}
           />
           <CommentPin
-            label="Open resolved annotation from Mira"
+            label="Open annotation from Mira"
             participants={[PEOPLE.mira]}
-            isResolved
             isSelected={selected === 'resolved'}
             isDimmed={selected != null && selected !== 'resolved'}
             onClick={() => toggle('resolved')}

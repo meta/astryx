@@ -6,8 +6,8 @@ id: spec:AST-033
 authority: current
 archive_reason: null
 superseded_by: null
-approved_by: cixzhang
-approved_at: 2026-09-29
+approved_by: josephfarina
+approved_at: 2026-10-21
 phase: accepted
 owners: [cixzhang]
 affects_architecture: []
@@ -38,9 +38,18 @@ affects_consumer_docs: [docsite]
       "FR19",
       "FR20",
       "FR21",
-      "DEC-7"
+      "DEC-7",
+      "DEC-8"
     ]
   }
+}
+```
+
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["apps/docsite/**"]
 }
 ```
 
@@ -77,13 +86,17 @@ for each bug.
   readiness state, availability rule, or visibility rule. When no current upstream
   owner defines a needed fact, the Docsite reports or routes that authority gap
   rather than deciding it in view code.
-- **FR2 — Projections preserve catalog facts.** Gallery, sidebar, search, direct
+- **FR2 — Projections preserve catalog facts.** Gallery, sidebar, direct
   routes, detail pages, preview, playground handoff, and Docsite API projections
   MUST derive membership and canonical item facts from the generated registries. A
   surface MAY define local display order, shorten labels, or derive display-only
   groups from canonical fields with a deterministic fallback. Those presentation
   choices MUST NOT change catalog membership or be exported or reused as canonical
-  taxonomy.
+  taxonomy. Site search answers with the CLI's own search: the site's search
+  endpoint calls `search()` from the CLI package the site builds with and returns
+  its results in the CLI's order, so the site and `astryx search` give one answer.
+  The generated registries stay the source for the pages and links those results
+  open.
 - **FR3 — Availability and visibility are separate projections.** Availability
   means that a named Docsite operation has the source, loader, route, or handoff
   required to present an admitted item on the current content line. Visibility means
@@ -110,7 +123,11 @@ for each bug.
   docs, and Docsite-authored content remain workspace-backed on both targets where
   the pipeline currently declares that boundary. A projection MUST NOT describe
   workspace-backed content as release-pinned merely because the build target is
-  `latest`.
+  `latest`. Site search is workspace-backed on both targets: it runs the CLI the
+  site builds with, over the workspace docs and packages that CLI reads, the same
+  source as the site's CLI reference pages. On `latest` it leaves out
+  integrations without published docs, and a result whose page is not published
+  links to the nearest published index page.
 - **FR6 — Canary status is projected once at the owning level.** A surface SHOULD
   group canary status at the package or category level when children share it,
   instead of repeating a marker on every item. The install command, search result,
@@ -301,7 +318,7 @@ exact source already serving those public surfaces.
 
 | Contract  | Verification                                                                             | Representative states                                                                                                    | Mutation or failure expectation                                                                                                                           |
 | --------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR3   | generator/data-extraction tests plus cross-projection inventory                          | package, component, template, theme; gallery, sidebar, search, direct route, preview, playground                         | a local map changes membership or a canonical item fact, or availability and visibility collapse into one projection                                      |
+| FR1–FR3   | generator/data-extraction tests plus cross-projection inventory; search endpoint parity with `astryx search --json` | package, component, template, theme; gallery, sidebar, search, direct route, preview, playground                         | a local map changes membership or a canonical item fact, or availability and visibility collapse into one projection                                      |
 | FR4–FR6   | latest/canary generation and projection tests                                            | stable package, canary-only package, ready/unready item, overview-hidden item, invalid integration metadata              | latest exposes canary package docs, workspace-backed content is called release-pinned, a second readiness state appears, or projections disagree          |
 | FR7–FR9   | navigation-family checks plus real-browser navigation/history tests                      | direct link, modified click, new tab, deep link, primary selection, secondary tab/filter, canonicalization, Back/Forward | Docsite misclassifies a destination, canonical identity diverges, primary selections replace one another, or secondary state clutters history             |
 | FR10–FR12 | selection/transition tests plus real-browser visible-content checks                      | initial open, reopen, deep link, direct selection, pending previous/next, close, supersede, reject, unmount              | header/body/actions disagree, stale content paints without its owning pending state, or obsolete selection work commits after supersession                |
@@ -322,6 +339,8 @@ creating another catalog.
 
 Rejected: page-owned item lists, parallel membership/classification maps, and a
 generator inventing product policy absent an upstream owner.
+
+Site search is governed by DEC-8.
 
 ### DEC-2 — Browser history follows semantic weight
 
@@ -402,6 +421,20 @@ same Vercel paths and remain non-canonical.
 Rejected: continuing a second stable-app build on `gh-pages`, silently dropping
 old bookmarks, automatically redirecting every old deep path without recovery
 choice, and using the compatibility origin for visual or test evidence.
+
+### DEC-8 — Site search uses the CLI's search
+
+**Reference:** `spec:AST-033/DEC-8`
+**Decider:** `josephfarina`, `2026-10-21`
+
+Maintainer decision: site search uses the CLI's search instead of a separate index
+derived from the registries, and reads the workspace docs the site builds with on
+every target, so each search improvement reaches the live site. One ranking implementation means every search
+improvement reaches the site with no copy to keep in sync. A parity test holds the
+endpoint equal to `astryx search --json` for the site's project.
+
+Rejected: a site-owned index or ranking, and a browser copy of the CLI's search
+data that has to track every CLI release.
 
 ## Open questions
 

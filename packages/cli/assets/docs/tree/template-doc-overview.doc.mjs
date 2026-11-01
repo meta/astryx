@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/document-the-template/template-doc-overview`:
+ * @file `astryx docs authoring/building-blocks/templates/document-the-template/template-doc-overview`:
  * the source and doc file pair, the fields every template doc shares, and how
  * to check what Astryx lists.
  */
@@ -54,22 +54,11 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'These fields apply to every page and block. The page, block, and replacement guides add the fields unique to each.',
+          text: 'The fields below apply to every page and block. The page, block, and replacement guides add the fields unique to each.',
         },
         {
-          type: 'reference',
-          target: 'schema:template-doc',
-          projection: {
-            fields: [
-              'type',
-              'name',
-              'displayName',
-              'description',
-              'keywords',
-              'isReady',
-            ],
-          },
-          presentation: 'full',
+          type: 'prose',
+          text: 'Every field is in {@link schema:template-doc}.',
         },
         {
           type: 'list',
@@ -78,7 +67,7 @@ export const docs = {
             'Set `type` to the kind you chose in {@link generic:start-a-template}. It decides which other fields the doc accepts.',
             'The file name sets the template id ({@link generic:start-a-template}). Labels live in the doc: the terminal list prints `name`, and JSON listings print `displayName`. Changing either never changes the id.',
             'Write the description for someone choosing between templates. The Doc metadata category in {@link generic:template-grading-rubric} defines what a complete description covers.',
-            "Name the ideas the template serves in `keywords`: the domains, tasks, and other names a builder might use for it, in lowercase, such as `['monitoring', 'uptime', 'on-call']` for a service-health dashboard. `astryx search` matches them as it matches the description, and `astryx build` ranks page templates on them, so the description can stay about the layout.",
+            "Name the ideas the template serves in `keywords`: the domains, tasks, and other names a builder might use for it, in lowercase, such as `['monitoring', 'uptime', 'on-call']` for a service-health dashboard. How search and build use them is in {@link generic:field-reference}, so the description can stay about the layout.",
             'Add `isReady: false` as soon as you generate the doc, because a doc without `isReady` is listed as ready. Keep it until the template passes {@link generic:test-template-in-app} and the quality review.',
           ],
         },
@@ -99,7 +88,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx --json template --list --package @acme/astryx-templates',
+          code: 'astryx --json template --list --package @acme/astryx-templates',
         },
         {
           type: 'code',

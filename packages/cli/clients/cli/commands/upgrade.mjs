@@ -31,8 +31,9 @@ export function registerUpgrade(program) {
     action:
       /**
        * @param {import('../../../api/upgrade/upgrade.mjs').UpgradeOptions} options
+       * @param {import('commander').Command} command
        */
-      async options => {
+      async (options, command) => {
         const json = program.opts().json || false;
         const isList = Boolean(options.list);
         // Silence the logger for --list so the handler renders from the
@@ -42,16 +43,29 @@ export function registerUpgrade(program) {
 
         /** @type {import('../../../api/upgrade/upgrade.type.mjs').UpgradeListResponse | import('../../../api/upgrade/upgrade.type.mjs').UpgradeRegistryResponse | import('../../../api/upgrade/upgrade.type.mjs').UpgradeStatusResponse | import('../../../api/upgrade/upgrade.type.mjs').UpgradeRunResponse} */
         let result;
+        // `--path` shows its default in help, but a path nobody typed is the
+        // project's src, not one read from this folder: leave it unset.
+        const apiOptions =
+          command.getOptionValueSource('path') === 'default'
+            ? {...options, path: undefined}
+            : options;
         try {
-          result = await upgradeApi(options, {cwd: process.cwd()});
+          result = await upgradeApi(apiOptions, {cwd: process.cwd()});
         } catch (e) {
           // Re-enable the logger so the error is visible in text mode.
           // For --list the logger was silent; for other modes the API
           // already printed the error before throwing.
           logger.setSilent(json);
           if (e instanceof AstryxError) {
-            if (json) jsonError(e.message, undefined, e.code);
-            else {
+            if (json) {
+              // A failed migration still names the files it already changed.
+              jsonError(
+                e.message,
+                undefined,
+                e.code,
+                /** @type {any} */ (e).receipt,
+              );
+            } else {
               // The logger was silent only for --list; replay the error there.
               // Non-list failures were already printed by the API.
               if (isList) logger.error(e.message);

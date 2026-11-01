@@ -7,7 +7,7 @@ export const docs = {
   displayName: 'Metadata List',
   group: 'MetadataList',
   category: 'Table & List',
-  keywords: ["metadata","description","definition","keyvalue","properties","details","attributes","summary"],
+  keywords: ["metadata","description","definition","keyvalue","properties","details","attributes","summary","descriptionlist","descriptions"],
   theming: {
     targets: [
       {
@@ -43,8 +43,8 @@ export const docs = {
     {
       name: 'label',
       type: "{ position?: 'start' | 'top', width?: number | string }",
-      description: "Label display configuration. position controls label placement, width sets a custom label column width. Defaults to { position: 'top' } for multi-column layouts.",
-      default: "{ position: 'start' } (single-column) / { position: 'top' } (multi-column)",
+      description: "Label display configuration. position controls label placement, width sets a custom label column width. Defaults to { position: 'top' } for multi-column layouts. Position is ignored in horizontal mode, which always uses { position: 'top' }.",
+      default: "{ position: 'start' } (vertical single-column) / { position: 'top' } (multi-column or horizontal)",
     },
     {
       name: 'maxNumOfItems',

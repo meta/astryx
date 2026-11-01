@@ -4,43 +4,84 @@
 
 import {VStack} from '@astryxdesign/core/Layout';
 import {butterTheme} from '@astryxdesign/theme-butter/built';
-import {butterPalettes} from '@astryxdesign/theme-butter';
+import {palette as butterModePalettes} from '../../../../../../../packages/themes/butter/src/butterPalettes.generated';
 import {ThemePalettePreview} from '@/components/ThemePalettePreview';
+import type {TonalColor} from '@/components/ThemePalettePreview';
 
 const SARINA = "'Sarina', cursive";
 
-// 14 brand palettes shown in the design spec. Tonal ramps come straight
-// from the theme's pre-computed palette so the displayed strip exactly
-// matches the card / badge / banner tokens.
-const TONAL_COLORS = [
-  {name: 'Accent', sourceHex: '#225BFF', tones: butterPalettes.accent, dark: {sourceHex: '#FDEE8C', tones: butterPalettes.yellow}},
-  {name: 'Gray', sourceHex: '#868B99', tones: butterPalettes.neutral},
-  {name: 'Red', sourceHex: '#FF7553', tones: butterPalettes.red},
-  {name: 'Orange', sourceHex: '#FFA347', tones: butterPalettes.orange},
-  {name: 'Yellow', sourceHex: '#EDD64B', tones: butterPalettes.yellow, dark: {sourceHex: '#EDD64B', tones: {0:'#000000',5:'#161100',10:'#211b00',15:'#2c2600',20:'#383100',25:'#443c00',30:'#504700',35:'#5d5300',40:'#6a5f00',45:'#786b00',50:'#867800',55:'#948500',60:'#a29200',65:'#b19f00',70:'#bfac1a',75:'#ceba2c',80:'#ddc73c',85:'#ecd54a',90:'#fbe358',95:'#fff1bd',100:'#ffffff'}}},
-  {name: 'Green', sourceHex: '#5DCE5F', tones: butterPalettes.green},
-  {name: 'Cyan', sourceHex: '#60CFD3', tones: butterPalettes.cyan},
-  {name: 'Teal', sourceHex: '#6CD9A8', tones: butterPalettes.teal},
-  {name: 'Blue', sourceHex: '#5681FF', tones: butterPalettes.blue},
-  {name: 'Purple', sourceHex: '#B780F6', tones: butterPalettes.purple},
-  {name: 'Pink', sourceHex: '#F680E8', tones: butterPalettes.pink},
+// Pass Butter's reviewed mode-aware ramps so the preview and audit drawer show
+// the palette the maintained theme actually consumes, not the frozen public
+// compatibility snapshot.
+const TONAL_COLORS: TonalColor[] = [
   {
-    name: 'Error',
-    sourceHex: '#FF5947',
-    tones: butterPalettes.error,
+    name: 'Brand Blue',
+    sourceHex: '#225BFF',
+    tones: butterModePalettes.accent.light,
+    dark: {tones: butterModePalettes.accent.dark},
+  },
+  {
+    name: 'Butter Neutral',
+    sourceHex: '#79786A',
+    tones: butterModePalettes.neutral.light,
+    dark: {tones: butterModePalettes.neutral.dark},
+  },
+  {
+    name: 'Red',
+    sourceHex: '#FF7553',
     semantic: 'Error',
+    tones: butterModePalettes.red.light,
+    dark: {tones: butterModePalettes.red.dark},
   },
   {
-    name: 'Warning',
-    sourceHex: '#F8C726',
-    tones: butterPalettes.warning,
+    name: 'Orange',
+    sourceHex: '#FFA347',
+    tones: butterModePalettes.orange.light,
+    dark: {tones: butterModePalettes.orange.dark},
+  },
+  {
+    name: 'Butter Yellow',
+    sourceHex: '#FDEE8C',
     semantic: 'Warning',
+    tones: butterModePalettes.yellow.light,
+    dark: {tones: butterModePalettes.yellow.dark},
   },
   {
-    name: 'Success',
-    sourceHex: '#91D143',
-    tones: butterPalettes.success,
+    name: 'Green',
+    sourceHex: '#5DCE5F',
     semantic: 'Success',
+    tones: butterModePalettes.green.light,
+    dark: {tones: butterModePalettes.green.dark},
+  },
+  {
+    name: 'Cyan',
+    sourceHex: '#60CFD3',
+    tones: butterModePalettes.cyan.light,
+    dark: {tones: butterModePalettes.cyan.dark},
+  },
+  {
+    name: 'Teal',
+    sourceHex: '#6CD9A8',
+    tones: butterModePalettes.teal.light,
+    dark: {tones: butterModePalettes.teal.dark},
+  },
+  {
+    name: 'Blue',
+    sourceHex: '#5681FF',
+    tones: butterModePalettes.blue.light,
+    dark: {tones: butterModePalettes.blue.dark},
+  },
+  {
+    name: 'Purple',
+    sourceHex: '#B780F6',
+    tones: butterModePalettes.purple.light,
+    dark: {tones: butterModePalettes.purple.dark},
+  },
+  {
+    name: 'Pink',
+    sourceHex: '#F680E8',
+    tones: butterModePalettes.pink.light,
+    dark: {tones: butterModePalettes.pink.dark},
   },
 ];
 

@@ -14,7 +14,6 @@ export type CoreStatusMessageBinding =
   | 'Toast card'
   | 'FieldStatus announcement channel'
   | 'Spinner'
-  | 'ChatSystemMessage'
   | 'ProgressBar';
 
 export interface CoreStatusMessageBindingDefinition {
@@ -189,20 +188,6 @@ export const CORE_STATUS_MESSAGE_BINDING_STATES = [
     storyId: 'a11y-status-message-pattern--spinner-visible-label-mounted',
   },
   {
-    id: 'chat-system-status-mounted',
-    binding: 'ChatSystemMessage',
-    summary: 'a chat status notice is mounted with its live-region content',
-    facts: liveFacts({
-      role: 'status',
-      politeness: 'polite',
-      initialMessage: 'Conversation started',
-      message: 'Conversation started',
-      replacement: 'A file was shared',
-      semanticTransitions: ['replace', 'clear'],
-    }),
-    storyId: 'a11y-status-message-pattern--chat-system-status-mounted',
-  },
-  {
     id: 'progress-loading-to-complete',
     binding: 'ProgressBar',
     summary:
@@ -279,10 +264,10 @@ export const CORE_STATUS_MESSAGE_EXCLUSIONS = [
       'A composing control that marks Spinner aria-hidden owns the surrounding busy semantics; the decorative ring is not another status message.',
   },
   {
-    owner: 'ChatSystemMessage divider',
-    part: 'date or section separator',
+    owner: 'ChatSystemMessage',
+    part: 'chat notice or date separator',
     reason:
-      'A divider does not report success, results, waiting, progress, or an error. Its current forced status role is tracked as a separate ownership mismatch rather than adopted here.',
+      'spec:AST-086 FR4: a notice added to a chat log is delivered by the log, so neither the notice row nor the divider carries its own live role; a date or section separator is ordinary transcript content.',
   },
   {
     owner: 'ChatMessageList and streaming logs',

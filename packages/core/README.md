@@ -6,10 +6,10 @@ Core UI components, theme system, and utilities for the Astryx design system. Fo
 >
 > ```bash
 > npm install -D @astryxdesign/cli   # or: pnpm add -D / yarn add -D / bun add -d
-> npx astryx init                    # resolves to the CLI you just installed
+> npx @astryxdesign/cli init         # the CLI you just installed
 > ```
 >
-> `init` writes the Astryx component index into your `AGENTS.md`/`CLAUDE.md` so your agent discovers components, templates, and design tokens instead of guessing. Need a single command without installing? Use the scoped package directly — `npx @astryxdesign/cli <cmd>` (or `pnpm dlx`/`bunx @astryxdesign/cli`). Bare `npx astryx` only works once `@astryxdesign/cli` is a dependency; before that npm resolves it to an unrelated package. See [XDS CLI](#xds-cli).
+> `init` writes the Astryx component index into your `AGENTS.md`/`CLAUDE.md` so your agent discovers components, templates, and design tokens instead of guessing. Need a single command without installing? The same scoped command works: `npx @astryxdesign/cli <cmd>`. Always use the scoped name: the unscoped `astryx` resolves to an unrelated npm package until `@astryxdesign/cli` is a dependency. See [XDS CLI](#xds-cli).
 
 ## Component Docs
 
@@ -21,7 +21,7 @@ npx @astryxdesign/cli component Button        # full docs for a component
 npx @astryxdesign/cli component --list        # list all components
 ```
 
-> Use the scoped `@astryxdesign/cli` to run without installing; bare `npx astryx` only resolves once the CLI is a dependency.
+> Use the scoped `@astryxdesign/cli`: it runs with or without installing, while the unscoped `astryx` resolves to an unrelated npm package until the CLI is a dependency.
 
 ## Page Layouts
 
@@ -57,19 +57,19 @@ astryx discover                     # discover external Astryx packages
 astryx gap-report                   # report a missing capability
 ```
 
-> Prefix these with your runner: `npx astryx …` / `pnpm exec astryx …` once the CLI is installed, or `npx @astryxdesign/cli …` to run without installing.
+> Run these as `npx @astryxdesign/cli …`, or `pnpm exec astryx …` (or your package manager's equivalent) once the CLI is installed.
 
 ## Related Packages
 
 | Package                                                                                               | Description                                                   |
 | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [`@astryxdesign/cli`](https://github.com/facebook/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
-| [`@astryxdesign/theme-neutral`](https://github.com/facebook/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
+| [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
+| [`@astryxdesign/theme-neutral`](https://github.com/meta/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
 
 ## Resources
 
 - [Component Storybook](https://astryx.atmeta.com/storybook/)
-- [GitHub Repository](https://github.com/facebook/astryx)
+- [GitHub Repository](https://github.com/meta/astryx)
 
 ---
 
@@ -165,15 +165,18 @@ The `tailwind-theme.css` import maps system tokens to Tailwind utilities via `@t
 
 Some useful mappings:
 
-| Tailwind class                                            | Astryx token                                      |
-| --------------------------------------------------------- | ------------------------------------------------- |
-| `text-primary` / `text-secondary`                         | `--color-text-primary` / `--color-text-secondary` |
-| `bg-surface` / `bg-card` / `bg-body`                      | `--color-background-surface` / `card` / `body`    |
-| `border-border` / `border-strong`                         | `--color-border` / `--color-border-emphasized`    |
-| `bg-success` / `text-error` / `text-warning`              | Status tokens                                     |
-| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid` | Hue palette (×10 hues)                            |
-| `rounded-sm` / `rounded-md` / `rounded-lg`                | `--radius-inner` / `element` / `container`        |
-| `shadow-sm` / `shadow-md` / `shadow-lg`                   | `--shadow-low` / `med` / `high`                   |
+| Tailwind class                                               | Astryx token                                                     |
+| ------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `text-primary` / `text-secondary`                            | `--color-text-primary` / `--color-text-secondary`                |
+| `bg-surface` / `bg-card` / `bg-body`                         | `--color-background-surface` / `card` / `body`                   |
+| `border-border` / `border-strong`                            | `--color-border` / `--color-border-emphasized`                   |
+| `bg-info` / `bg-success` / `bg-warning` / `bg-error`         | Strong status fills (`--color-<status>`)                         |
+| `text-on-info` / `bg-info-muted` / `text-on-info-muted`      | Strong-fill content, pale fill, pale-fill content                |
+| `text-success` / `text-warning` / `text-error` / `text-info` | Status text on the page (`--color-text-*`; also `text-status-*`) |
+| `border-success` / `border-warning` / `border-error`         | Status borders (`--color-border-*`)                              |
+| `bg-blue-subtle` / `border-blue-ring` / `text-blue-vivid`    | Hue palette (×10 hues)                                           |
+| `rounded-sm` / `rounded-md` / `rounded-lg`                   | `--radius-inner` / `element` / `container`                       |
+| `shadow-sm` / `shadow-md` / `shadow-lg`                      | `--shadow-low` / `med` / `high`                                  |
 
 Spacing references `var(--spacing-1)` as the base unit, so `p-4` = 16px, matching Astryx's `--spacing-4`. Arbitrary values still work as an escape hatch: `bg-[var(--color-background-surface)]`.
 

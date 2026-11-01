@@ -92,7 +92,7 @@ describe('themeUse', () => {
   it('names theme add when the slug is not added', async () => {
     await expect(themeUse('missing', {cwd: tmpDir})).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_THEME',
-      message: expect.stringContaining('astryx theme add missing'),
+      message: expect.stringContaining(' theme add missing`'),
     });
   });
 });

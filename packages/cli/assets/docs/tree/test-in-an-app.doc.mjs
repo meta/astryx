@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/test-in-an-app`: install the packed
+ * @file `astryx docs authoring/ship/test-in-an-app`: install the packed
  * package in an app and run the commands its users run.
  */
 
@@ -27,14 +27,14 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: '# In the package\nnpm pack --pack-destination ..\n\n# In an app folder beside it\nnpm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz',
+          code: '# In the package\n{@pm-only npm "the tarball the registry receives" pack --pack-destination ..}\n\n# In an app folder beside it\n{@pm install @astryxdesign/core @astryxdesign/cli ../acme-astryx-widgets-1.0.0.tgz}',
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
-            "Install the CLI in the app too: `npx astryx` runs the CLI from the app's `node_modules`.",
-            'The app holds a copy, not a link. After each change, pack again and run the same `npm install`.',
+            "Install the CLI in the app too: `astryx` runs the CLI from the app's `node_modules`.",
+            'The app holds a copy, not a link. After each change, pack again and run the same `{@pm install}`.',
             'Reading your work inside the package shows your source. The app shows what npm would publish.',
           ],
         },
@@ -51,7 +51,7 @@ export const docs = {
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx component AcmeCarousel\nnpx astryx template --list --package @acme/astryx-widgets\nnpx astryx theme list --package @acme/astryx-widgets\nnpx astryx docs acme\nnpx astryx search deploying --type doc',
+          code: '{@command component AcmeCarousel}\n{@command template --list --package @acme/astryx-widgets}\n{@command theme list --package @acme/astryx-widgets}\n{@command docs acme}\n{@command search deploying --type doc}',
         },
         {
           type: 'table',
@@ -63,11 +63,11 @@ export const docs = {
             ],
             [
               '`template --list --package`',
-              'An `acme-dashboard` entry with `package: @acme/astryx-widgets`',
+              'An `acme-dashboard` entry whose `package` is `@acme/astryx-widgets`',
             ],
             [
               '`theme list --package`',
-              '`- ocean (maintained, @acme/astryx-widgets)`',
+              'An `ocean` entry whose `package` is `@acme/astryx-widgets`',
             ],
             ['`docs acme`', 'Your section, with guides such as `deploying`'],
             [
@@ -88,12 +88,12 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`npx astryx doctor` checks the whole app, including every package it loaded. `doctor integration validate` checks your package as the app installed it.',
+          text: '`{@command doctor}` checks the whole app, including every package it loaded. `doctor integration validate` checks your package as the app installed it.',
         },
         {
           type: 'code',
           lang: 'bash',
-          code: 'npx astryx doctor\nnpx astryx doctor integration validate @acme/astryx-widgets',
+          code: '{@command doctor}\n{@command doctor integration validate @acme/astryx-widgets}',
         },
         {
           type: 'code',

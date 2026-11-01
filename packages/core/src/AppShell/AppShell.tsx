@@ -33,6 +33,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
+  focusVars,
   fontWeightVars,
   radiusVars,
   spacingVars,
@@ -43,7 +44,20 @@ import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutPanel} from '../Layout/LayoutPanel';
 import {LayoutContent} from '../Layout/LayoutContent';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
+import {MAX_CLOSE_DELAY_MS as MOBILE_NAV_MAX_CLOSE_DELAY_MS} from '../MobileNav/MobileNav';
 import {SideNavRenderContext} from '../SideNav/SideNavRenderContext';
+import {SideNavShellContext, type SideNavShell} from '../SideNav/railMotion';
+import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
+import {
+  holdLayoutSwap,
+  landLayoutGlide,
+  layoutMotionFor,
+  playLayoutFrames,
+  playLayoutSwap,
+  reportLayoutChange,
+  type LayoutChange,
+  type LayoutSwap,
+} from '../motion/animatedLayout';
 import {TopNavRenderContext} from '../TopNav/TopNavRenderContext';
 import {TopNavMobileContentContext} from '../TopNav/TopNavMobileContentContext';
 import {AppShellMobileContext} from './AppShellMobileContext';
@@ -51,7 +65,10 @@ import type {AppShellMobileContextValue} from './AppShellMobileContext';
 import type {SpacingStep} from '../utils/types';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps, isRenderable} from '../utils';
-import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {
+  focusOutlineProps,
+  focusOutlineStyles,
+} from '../utils/focusOutline.stylex';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
@@ -64,6 +81,8 @@ import {
 import type {AppShellVariantMap} from './index';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {attachScrollKeyboardDelegation} from '../hooks/scrollKeyboardDelegation';
+import {observeMainOverflow} from './observeMainOverflow';
 const HasActivity = typeof React.Activity !== 'undefined';
 const ActivityWrapper = HasActivity
   ? ({
@@ -80,6 +99,20 @@ const ActivityWrapper = HasActivity
 // =============================================================================
 
 const MAIN_CONTENT_ID = 'astryx-app-shell-main';
+
+/**
+ * Extra time, on top of MobileNav's own worst-case close delay, that
+ * AppShell waits before flipping its `Activity` boundary to `'hidden'`.
+ *
+ * React's `Activity` hides its subtree with `display: none !important`
+ * synchronously in the same commit as the mode flip, and re-runs the
+ * cleanup of every effect inside it — which would otherwise clear
+ * MobileNav's own scheduled `dialog.close()` before it fires, or cut off
+ * its slide-out CSS transition before it plays (#5701). Waiting strictly
+ * longer than MobileNav's own cap, rather than the same duration, means
+ * this never turns into a race decided by browser timer-firing order.
+ */
+const ACTIVITY_HIDE_BUFFER_MS = 50;
 
 // =============================================================================
 // Types
@@ -343,13 +376,31 @@ const styles = stylex.create({
     fontWeight: fontWeightVars['--font-weight-semibold'],
     fontSize: typeScaleVars['--text-body-size'],
   },
-  // Programmatic focus target for the skip link. The main container is only
+  // Programmatic focus target for the skip link. While main fits, it is only
   // focusable via tabIndex={-1} (never tabbable), so a focus ring around the
   // entire content area would be noise rather than guidance — suppress it.
   mainFocusTarget: {
     outline: {
       default: null,
       ':focus': 'none',
+    },
+  },
+  // While main's focus ring shows, main follows the elevated surface's
+  // rounded top-start corner, so the ring keeps the surface's shape instead of
+  // drawing a square corner. Otherwise main keeps its corner and clips nothing.
+  mainElevatedCorner: {
+    borderStartStartRadius: {
+      default: null,
+      ':focus-visible': radiusVars['--radius-page'],
+    },
+  },
+  // While main scrolls its overflowing content it is a keyboard stop, and
+  // keyboard focus on it draws the standard ring, inset so the shell's own
+  // clipping cannot hide it.
+  mainScrollRegionInset: {
+    outlineOffset: {
+      default: '0',
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
   },
 
@@ -457,6 +508,19 @@ const styles = stylex.create({
  * </AppShell>
  * ```
  */
+
+/**
+ * The column beside the rail that holds `main`: its ancestor whose parent
+ * also holds the rail. The glide moves it; the rail's edge rides it.
+ */
+function columnOf(main: HTMLElement, rail: HTMLElement | null): HTMLElement {
+  let column = main;
+  while (column.parentElement != null && !column.parentElement.contains(rail)) {
+    column = column.parentElement;
+  }
+  return column;
+}
+
 export function AppShell({
   variant = 'elevated',
   banner,
@@ -525,6 +589,34 @@ export function AppShell({
   const [uncontrolledMobileOpen, setUncontrolledMobileOpen] = useState(false);
   const isMobileNavOpen = mobileNavConfig?.isOpen ?? uncontrolledMobileOpen;
 
+  // Holds the mobile nav's `Activity` boundary visible for a beat after a
+  // close, so MobileNav's own close effect gets a real chance to run its
+  // slide-out transition and schedule its delayed `dialog.close()` before
+  // Activity hides the subtree (#5701). Only the CLOSE is deferred: opening
+  // reads `isMobileNavOpen` directly below, so a controlled open is visible in
+  // the commit that carries it instead of one effect later.
+  const [isMobileNavCloseHeld, setIsMobileNavCloseHeld] =
+    useState(isMobileNavOpen);
+  // Arm the hold during render, from the open state itself, so no Effect has
+  // to copy props into state; the Effect below only owns the release timer.
+  if (isMobileNavOpen && !isMobileNavCloseHeld) {
+    setIsMobileNavCloseHeld(true);
+  }
+  useEffect(() => {
+    if (!HasActivity || isMobileNavOpen) {
+      return;
+    }
+    const delayMs = window.matchMedia('(prefers-reduced-motion: reduce)')
+      .matches
+      ? 0
+      : MOBILE_NAV_MAX_CLOSE_DELAY_MS + ACTIVITY_HIDE_BUFFER_MS;
+    const timeout = setTimeout(() => {
+      setIsMobileNavCloseHeld(false);
+    }, delayMs);
+    return () => clearTimeout(timeout);
+  }, [isMobileNavOpen]);
+  const isMobileNavActivityVisible = isMobileNavOpen || isMobileNavCloseHeld;
+
   const mobileNavOnOpenChange = mobileNavConfig?.onOpenChange;
   const setMobileNavOpen = useCallback(
     (open: boolean) => {
@@ -547,8 +639,104 @@ export function AppShell({
     document.getElementById(MAIN_CONTENT_ID)?.focus();
   }, []);
 
+  // Main draws its focus ring only for focus a Tab press moved onto it, and
+  // keeps it for as long as that focus stays, even once the content fits.
+  // Programmatic focus (the skip link, a script's focus() on a route change)
+  // draws none (FR4), even after keyboard input, where :focus-visible alone
+  // would match. See the effect below for how a Tab move is told apart.
+  const [isTabFocus, setIsTabFocus] = useState(false);
+  // A window or tab switch blurs main without moving focus off it: main stays
+  // the document's active element, and focus comes back to it with no Tab
+  // press. The ring holds across that round trip; any real focus move ends it.
+  const isMainAwayRef = useRef(false);
+  const handleMainBlur = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+      if (document.activeElement === event.currentTarget) {
+        isMainAwayRef.current = true;
+        return;
+      }
+      isMainAwayRef.current = false;
+      setIsTabFocus(false);
+    },
+    [],
+  );
+
   const isFill = height === 'fill';
   const isAuto = height === 'auto';
+
+  // With `fill`, main is the page's scroller. While its content overflows it
+  // must be reachable from the keyboard even when nothing inside it is
+  // focusable (AST-025 FR12): it joins the tab order, and Tab entry moves on
+  // to its first link or button when it has one. Only `fill` observes main
+  // (PR1); LayoutContent keeps owning main's overflow and styles.
+  const [isMainOverflowing, setIsMainOverflowing] = useState(false);
+  const isMainScrollRegion = isFill && isMainOverflowing;
+  // Main's node is owned through a ref, never React state. Under `fill` its
+  // overflow is observed while the node is attached, and while main is a
+  // scroll region the keyboard delegation is attached to it. The ref callback
+  // changes with `fill`, so switching modes detaches and re-attaches main in
+  // the same commit; a detached or replaced node releases both before the new
+  // node takes over.
+  const mainNodeRef = useRef<HTMLDivElement | null>(null);
+  const mainOverflowRef = useRef<{
+    node: HTMLDivElement;
+    stop: () => void;
+  } | null>(null);
+  const mainDelegationRef = useRef<{
+    node: HTMLDivElement;
+    release: () => void;
+  } | null>(null);
+  const isMainScrollRegionRef = useRef(isMainScrollRegion);
+  const syncMainDelegation = useCallback(() => {
+    const node = isMainScrollRegionRef.current ? mainNodeRef.current : null;
+    const current = mainDelegationRef.current;
+    if (current?.node === node) {
+      return;
+    }
+    current?.release();
+    mainDelegationRef.current =
+      node == null
+        ? null
+        : {node, release: attachScrollKeyboardDelegation(node, node)};
+  }, []);
+  const setMainNode = useCallback(
+    (node: HTMLDivElement | null) => {
+      mainNodeRef.current = node;
+      const observed = isFill ? node : null;
+      const current = mainOverflowRef.current;
+      if (current?.node !== observed) {
+        current?.stop();
+        mainOverflowRef.current =
+          observed == null
+            ? null
+            : {
+                node: observed,
+                stop: observeMainOverflow(observed, setIsMainOverflowing),
+              };
+        if (observed == null) {
+          setIsMainOverflowing(false);
+        }
+      }
+      syncMainDelegation();
+    },
+    [isFill, syncMainDelegation],
+  );
+  useEffect(() => {
+    isMainScrollRegionRef.current = isMainScrollRegion;
+    syncMainDelegation();
+  }, [isMainScrollRegion, syncMainDelegation]);
+  useEffect(
+    () => () => {
+      mainOverflowRef.current?.stop();
+      mainOverflowRef.current = null;
+      mainDelegationRef.current?.release();
+      mainDelegationRef.current = null;
+    },
+    [],
+  );
 
   // Nav style derived values
   const hasBanner = isRenderable(banner);
@@ -706,6 +894,150 @@ export function AppShell({
   ) : undefined;
 
   // =========================================================================
+  // While the inline side nav collapses or expands, the content area holds
+  // its own animated layout handle (`component:AppShell` FR17): the column
+  // beside the rail glides from its old place, and the content swaps its old
+  // wrap for its new one in place (`spec:AST-105` FR8), on the rail's clock
+  // (`component:SideNav` FR6).
+  const railRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  // Main's node goes to the glide above and to the overflow observation
+  // that, under `fill`, makes main a keyboard stop.
+  const mainRefs = useMergedRefs(mainRef, setMainNode);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const contentLayout = useAnimatedLayout({containerRef: shellRef});
+  const pendingContentRef = useRef<{
+    /** The column's glide, reported only for a spring motion. */
+    change: LayoutChange | null;
+    swap: LayoutSwap | null;
+    before: DOMRect;
+    /** The opacities the held and the entering wrap start from. */
+    held: number;
+    entering: number;
+  } | null>(null);
+  // The running swap: when it started and its wraps' starting opacities, so a
+  // change made during it starts its cross-fade from what the content shows.
+  const lastSwapRef = useRef<{
+    startedAt: number;
+    held: number;
+    entering: number;
+  } | null>(null);
+  const sideNavShell = useMemo<SideNavShell>(
+    () => ({
+      animatedLayout: contentLayout,
+      rail: () => railRef.current,
+      column: () =>
+        mainRef.current == null
+          ? null
+          : columnOf(mainRef.current, railRef.current),
+      landContent() {
+        if (mainRef.current != null) {
+          landLayoutGlide(columnOf(mainRef.current, railRef.current));
+        }
+      },
+      beforeRailChange() {
+        const main = mainRef.current;
+        if (main == null) {
+          return;
+        }
+        const motion = layoutMotionFor(main);
+        // Only a spring glides the column; under Reduce Motion the two wraps
+        // cross-fade over a steady surface (`design:reduced-motion` DR2).
+        let change: LayoutChange | null = null;
+        if (motion.kind === 'spring') {
+          change = reportLayoutChange(contentLayout, railRef);
+          change.measureBefore();
+        }
+        // At rest the copy (the wrap shown now) starts opaque and the entering
+        // wrap unseen; mid-swap the wrap in the DOM is the entering one and
+        // the copy's wrap is the one entering next, each at what it shows.
+        let held = 1;
+        let entering = 0;
+        const last = lastSwapRef.current;
+        if (last != null && motion.kind === 'spring') {
+          const elapsed =
+            Number(main.ownerDocument.timeline?.currentTime ?? 0) -
+            last.startedAt;
+          if (elapsed < motion.progress.durationMs) {
+            const p = 1 - motion.progress.remaining(elapsed);
+            held = last.entering + (1 - last.entering) * p;
+            entering = last.held * (1 - p);
+          }
+        }
+        lastSwapRef.current = null;
+        pendingContentRef.current = {
+          change,
+          swap: holdLayoutSwap(contentLayout, main, {isVisiblePart: true}),
+          before: main.getBoundingClientRect(),
+          held,
+          entering,
+        };
+      },
+      afterRailChange() {
+        const pending = pendingContentRef.current;
+        pendingContentRef.current = null;
+        const main = mainRef.current;
+        if (pending == null || main == null) {
+          return () => {};
+        }
+        pending.change?.animate();
+        // The column beside the rail, which the glide moves: the copy sits
+        // beside it, in its parent, and rides its glide.
+        const column = columnOf(main, railRef.current);
+        const after = main.getBoundingClientRect();
+        const isRtl = getComputedStyle(main).direction === 'rtl';
+        const travel = isRtl
+          ? pending.before.right - after.right
+          : pending.before.left - after.left;
+        // An expand slides the narrower column in from its old start, which
+        // opens a gap at its trailing edge: the content surface (the elevated
+        // backdrop, or the main element) reaches over it as it closes,
+        // whether or not the old wrap is held.
+        const cover: {element: Element; frames: (p: number) => Keyframe}[] = [];
+        const surface = backdropRef.current ?? main;
+        const color = getComputedStyle(surface).backgroundColor;
+        const isPainted = !/^rgba\(.*,\s*0\)$|^transparent$/.test(color);
+        const glides = layoutMotionFor(main).kind === 'spring';
+        if ((isRtl ? travel > 0 : travel < 0) && glides && isPainted) {
+          cover.push({
+            element: surface,
+            frames: p => ({
+              boxShadow: `${-travel * (1 - p)}px 0px 0px 0px ${color}`,
+            }),
+          });
+        }
+        if (pending.swap == null || column.parentElement == null) {
+          return playLayoutFrames(contentLayout, cover);
+        }
+        // Under Reduce Motion nothing glides: the old wrap's copy paints the
+        // surface it sat on, so that surface fades out with it where it was
+        // (`design:reduced-motion` DR2) instead of leaving a bare strip.
+        if (!glides && isPainted) {
+          pending.swap.copy.style.backgroundColor = color;
+        }
+        const {held, entering} = pending;
+        lastSwapRef.current = {
+          startedAt: Number(main.ownerDocument.timeline?.currentTime ?? 0),
+          held,
+          entering,
+        };
+        return playLayoutSwap(pending.swap, {
+          host: column.parentElement,
+          copy: p => ({opacity: held * (1 - p)}),
+          rideWith: {element: column, travel: {x: travel, y: 0}},
+          incoming: [
+            ...Array.from(main.children, element => ({
+              element,
+              frames: (p: number) => ({opacity: entering + (1 - entering) * p}),
+            })),
+            ...cover,
+          ],
+        });
+      },
+    }),
+    [contentLayout],
+  );
+
   // Build sideNav content
   //
   // In auto mode, the sideNav panel is not internally scrollable (the page
@@ -715,6 +1047,7 @@ export function AppShell({
   // =========================================================================
   const sideNavPanel = showSideNavInline ? (
     <LayoutPanel
+      ref={railRef}
       padding={0}
       hasDivider={navHasDividers}
       isScrollable={isFill}
@@ -724,7 +1057,7 @@ export function AppShell({
         isAuto && stickyBgStyle,
         isAuto && styles.panelAutoFill,
       ]}>
-      {sideNav}
+      <SideNavShellContext value={sideNavShell}>{sideNav}</SideNavShellContext>
     </LayoutPanel>
   ) : undefined;
 
@@ -739,17 +1072,115 @@ export function AppShell({
   // Build main content
   // =========================================================================
   const shouldElevateWithCorner = isElevated && hasTopNav && showSideNavInline;
+  // While main is a keyboard stop, a Tab keydown anywhere in the document
+  // (capture, so Shift+Tab from the page start counts too) marks the next
+  // focus move, and so does the window's focus event for keyboard focus that
+  // enters the document from outside (Tab or Shift+Tab from the page
+  // embedding this one), where the browser's own `:focus-visible` then tells
+  // a key from a pointer. A mark counts only once its event's dispatch has
+  // finished uncancelled (`eventPhase === 0`): the browser's own focus move
+  // follows that dispatch in the same task, while a focus() a page's handler
+  // calls during it is programmatic and draws no ring (FR4). The marks expire
+  // on a zero-delay timer, so a cancelled Tab, a Tab out of the document or a
+  // window focus with nothing focused leaves nothing for a later focus().
+  useEffect(() => {
+    if (!isMainScrollRegion) {
+      return;
+    }
+    let tabKeydown: KeyboardEvent | null = null;
+    let windowFocus: FocusEvent | null = null;
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const expireMarks = () => {
+      clearTimeout(expiry);
+      expiry = setTimeout(() => {
+        tabKeydown = null;
+        windowFocus = null;
+      }, 0);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      tabKeydown = event.key === 'Tab' ? event : null;
+      windowFocus = null;
+      expireMarks();
+    };
+    const onPointerDown = () => {
+      tabKeydown = null;
+      windowFocus = null;
+    };
+    const onWindowFocus = (event: FocusEvent) => {
+      windowFocus = event;
+      expireMarks();
+    };
+    const onFocusIn = (event: FocusEvent) => {
+      // Still dispatching: this focus move is a handler's focus(), so it
+      // reads no mark and leaves the mark for the browser's own move.
+      const tabDone = tabKeydown != null && tabKeydown.eventPhase === 0;
+      const focusDone = windowFocus != null && windowFocus.eventPhase === 0;
+      const arrivedByTab = tabDone && tabKeydown?.defaultPrevented === false;
+      const enteredDocument = focusDone;
+      if (tabDone) {
+        tabKeydown = null;
+      }
+      if (focusDone) {
+        windowFocus = null;
+      }
+      const main = mainNodeRef.current;
+      const isMain = event.target != null && event.target === main;
+      if (isMainAwayRef.current) {
+        // Focus comes back after a window or tab switch (main keeps the ring
+        // it had), or lands elsewhere (main's ring is over).
+        isMainAwayRef.current = false;
+        if (isMain && !arrivedByTab) {
+          return;
+        }
+        if (!isMain) {
+          setIsTabFocus(false);
+          return;
+        }
+      }
+      if (isMain) {
+        setIsTabFocus(
+          arrivedByTab || (enteredDocument && main.matches(':focus-visible')),
+        );
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('focusin', onFocusIn, true);
+    window.addEventListener('focus', onWindowFocus);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('focusin', onFocusIn, true);
+      window.removeEventListener('focus', onWindowFocus);
+      clearTimeout(expiry);
+    };
+  }, [isMainScrollRegion]);
+
+  // Tab focus on main draws the ring until main loses focus; programmatic
+  // focus never does (FR4).
+  const drawsMainFocusRing = isTabFocus;
 
   const mainInner = (
     <LayoutContent
+      ref={mainRefs}
       padding={contentPadding ?? 0}
       role="main"
       id={MAIN_CONTENT_ID}
       // Focusable skip-link target (WCAG 2.4.1) — without tabIndex, several
       // browsers won't move focus to the div when the skip link is activated.
-      tabIndex={-1}
+      // A keyboard stop only while it scrolls overflowing content.
+      tabIndex={isMainScrollRegion ? 0 : -1}
       isScrollable={isFill}
-      xstyle={[contentAreaStyle, styles.mainFocusTarget]}>
+      onBlur={handleMainBlur}
+      xstyle={[
+        contentAreaStyle,
+        drawsMainFocusRing &&
+          shouldElevateWithCorner &&
+          styles.mainElevatedCorner,
+        drawsMainFocusRing
+          ? [focusOutlineStyles.focusVisible, styles.mainScrollRegionInset]
+          : styles.mainFocusTarget,
+      ]}>
       {children}
     </LayoutContent>
   );
@@ -764,7 +1195,7 @@ export function AppShell({
           : styles.contentWrapper,
       )}>
       {shouldElevateWithCorner && (
-        <div {...stylex.props(styles.elevatedBackdrop)} />
+        <div ref={backdropRef} {...stylex.props(styles.elevatedBackdrop)} />
       )}
       {mainInner}
     </div>
@@ -864,7 +1295,8 @@ export function AppShell({
           !mobileNavDisabled &&
           mobileNavReactNode == null &&
           !mobileNavConfigContent && (
-            <ActivityWrapper mode={isMobileNavOpen ? 'visible' : 'hidden'}>
+            <ActivityWrapper
+              mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
               {/* SideNav drawer — always mounted so presence detection works.
                 Hidden when TopNav owns the drawer (combined mode passes
                 sideNav via TopNav's mobile content context instead). */}

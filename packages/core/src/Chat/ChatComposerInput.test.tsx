@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi, afterEach} from 'vitest';
+import {createRef, StrictMode, useLayoutEffect} from 'react';
+import {describe, it, expect, vi, afterEach, beforeEach} from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ChatComposer} from './ChatComposer';
@@ -12,6 +13,9 @@ import type {
 } from './ChatComposerInput';
 import {createStaticSource} from '../Typeahead/createStaticSource';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
+
+const announce = vi.hoisted(() => vi.fn());
+vi.mock('../hooks/useAnnounce', () => ({useAnnounce: () => announce}));
 
 // =============================================================================
 // Helpers
@@ -78,12 +82,6 @@ describe('ChatComposerInput', () => {
       ).toBeInTheDocument();
     });
 
-    it('renders disabled state', () => {
-      render(<ChatComposerInput isDisabled />);
-      const textbox = screen.getByRole('textbox');
-      expect(textbox).toHaveAttribute('contenteditable', 'false');
-    });
-
     it('marks the textbox as multiline', () => {
       render(<ChatComposerInput />);
       expect(screen.getByRole('textbox')).toHaveAttribute(
@@ -98,6 +96,170 @@ describe('ChatComposerInput', () => {
       render(<ChatComposerInput triggers={[createMentionTrigger()]} />);
       const combobox = screen.getByRole('combobox');
       expect(combobox).not.toHaveAttribute('aria-multiline');
+    });
+  });
+
+  describe('disabled editing', () => {
+    it('keeps focus, draft, description, and Tab entry when the composer disables it', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const view = (isDisabled: boolean, value = 'Draft') => (
+        <>
+          <button type="button">Before</button>
+          <p id="reason">Unavailable while sending</p>
+          <ChatComposer
+            isDisabled={isDisabled}
+            value={value}
+            onChange={onChange}
+            onSubmit={() => {}}
+            input={<ChatComposerInput aria-describedby="reason" />}
+          />
+        </>
+      );
+      const {rerender} = render(view(false));
+      await user.tab();
+      await user.tab();
+      const editor = screen.getByRole('textbox');
+      expect(editor).toHaveFocus();
+
+      rerender(view(true));
+      expect(screen.getByRole('textbox')).toBe(editor);
+      expect(editor).toHaveFocus();
+      expect(editor).toHaveTextContent('Draft');
+      expect(editor).toHaveAttribute('contenteditable', 'false');
+      expect(editor).toHaveAttribute('aria-disabled', 'true');
+      expect(editor).toHaveAccessibleDescription('Unavailable while sending');
+      screen.getByRole('button', {name: 'Before'}).focus();
+      await user.tab();
+      expect(editor).toHaveFocus();
+
+      rerender(view(true, 'External update'));
+      expect(editor).toHaveTextContent('External update');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('blocks input, submission, paste, drop, and consumer callbacks', () => {
+      const onInteraction = vi.fn();
+      render(
+        <ChatComposerInput
+          isDisabled
+          value="Draft"
+          onChange={onInteraction}
+          onSubmit={onInteraction}
+          onKeyDown={onInteraction}
+          onKeyDownCapture={onInteraction}
+          onInput={onInteraction}
+          onPaste={onInteraction}
+          onFiles={onInteraction}
+          onDrop={onInteraction}
+        />,
+      );
+      const editor = screen.getByRole('textbox');
+      fireEvent.keyDown(editor, {key: 'Enter'});
+      fireEvent.input(editor);
+      fireEvent.paste(editor, {
+        clipboardData: {files: [], getData: () => 'blocked'},
+      });
+      const file = new File(['content'], 'blocked.txt', {type: 'text/plain'});
+      fireEvent.paste(editor, {
+        clipboardData: {files: [file], getData: () => ''},
+      });
+      expect(
+        fireEvent.drop(editor, {
+          dataTransfer: {files: [file], types: ['Files']},
+        }),
+      ).toBe(false);
+      expect(editor).toHaveTextContent('Draft');
+      expect(onInteraction).not.toHaveBeenCalled();
+    });
+
+    it('blocks retained-handle mutations and token deletion until re-enabled', () => {
+      const handleRef = createRef<ChatComposerInputHandle>();
+      const onChange = vi.fn();
+      const view = (isDisabled: boolean) => (
+        <ChatComposerInput
+          isDisabled={isDisabled}
+          handleRef={handleRef}
+          onChange={onChange}
+        />
+      );
+      const {rerender} = render(view(false));
+      const editor = screen.getByRole('textbox');
+      const handle = handleRef.current!;
+      let tokenId: string | undefined;
+      act(() => {
+        tokenId = handle.insertToken({value: '@sam', label: 'Sam'});
+      });
+      window.getSelection()!.collapse(editor.lastChild, 1);
+      rerender(view(true));
+      onChange.mockClear();
+      // emitChange is itself silent while disabled, so the draft is checked
+      // directly: neither the value nor the editor's markup (the token) may
+      // change.
+      const valueBefore = handle.getValue();
+      const markupBefore = editor.innerHTML;
+
+      act(() => {
+        handle.insertText('blocked');
+        expect(
+          handle.insertToken({value: '@alex', label: 'Alex'}),
+        ).toBeUndefined();
+        handle.expandToken(tokenId!);
+      });
+      fireEvent.keyDown(editor, {key: 'Backspace'});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(handle.getValue()).toBe(valueBefore);
+      expect(editor.innerHTML).toBe(markupBefore);
+      handle.focus();
+      expect(editor).toHaveFocus();
+
+      rerender(view(false));
+      act(() => handle.insertText('enabled'));
+      expect(handle.getValue()).toContain('enabled');
+      expect(onChange).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes suggestions without selecting or reopening after re-enabling', async () => {
+      const user = userEvent.setup();
+      const onSelect = vi.fn(() => '@sam ');
+      const triggers = [createMentionTrigger({onSelect})];
+      const onDisabledCommit = vi.fn();
+      function Example({isDisabled = false}: {isDisabled?: boolean}) {
+        useLayoutEffect(() => {
+          if (isDisabled) {
+            const editor = screen.getByRole('combobox');
+            onDisabledCommit({
+              expanded: editor.getAttribute('aria-expanded'),
+              controls: editor.getAttribute('aria-controls'),
+              activeDescendant: editor.getAttribute('aria-activedescendant'),
+            });
+          }
+        }, [isDisabled]);
+        return (
+          <ChatComposerInput isDisabled={isDisabled} triggers={triggers} />
+        );
+      }
+      const {rerender} = render(<Example />);
+      const editor = screen.getByRole('combobox');
+      await user.type(editor, '@');
+      await screen.findByText('Cindy Zhang');
+      expect(editor).toHaveAttribute('aria-expanded', 'true');
+
+      rerender(<Example isDisabled />);
+      expect(onDisabledCommit).toHaveBeenCalledExactlyOnceWith({
+        expanded: 'false',
+        controls: null,
+        activeDescendant: null,
+      });
+      expect(
+        screen.queryByRole('option', {hidden: true}),
+      ).not.toBeInTheDocument();
+      await user.keyboard('{Enter}');
+      expect(onSelect).not.toHaveBeenCalled();
+      expect(editor).toHaveTextContent('@');
+
+      rerender(<Example />);
+      expect(editor).toHaveAttribute('aria-expanded', 'false');
     });
   });
 
@@ -582,20 +744,6 @@ describe('ChatComposerInput', () => {
       });
       expect(allowed).toBe(false);
       expect(onFiles).toHaveBeenCalledWith([file]);
-    });
-
-    it('does not emit dropped files while disabled', () => {
-      const onFiles = vi.fn();
-      render(<ChatComposerInput isDisabled onFiles={onFiles} />);
-      const textbox = screen.getByRole('textbox');
-      const file = new File(['content'], 'blocked.txt', {type: 'text/plain'});
-
-      const allowed = fireEvent.drop(textbox, {
-        dataTransfer: {files: [file], types: ['Files']},
-      });
-
-      expect(allowed).toBe(false);
-      expect(onFiles).not.toHaveBeenCalled();
     });
   });
 
@@ -1822,5 +1970,167 @@ describe('ChatComposerInput', () => {
 
       expect(spy.mock.calls.length).toBeGreaterThan(callsAfterOpen);
     });
+  });
+});
+
+describe('ChatComposerInput trigger loading announcement (spec:AST-086)', () => {
+  function typeAtEnd(editable: HTMLElement, text: string) {
+    editable.textContent = text;
+    const node = editable.firstChild!;
+    const range = document.createRange();
+    range.setStart(node, text.length);
+    range.collapse(true);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+    fireEvent.input(editable);
+  }
+
+  /**
+   * Lets a settled search apply, as the browser would before the next frame,
+   * then lets the loading announcement's two frames run.
+   */
+  async function nextFrame() {
+    await act(async () => {});
+    await act(async () => {
+      for (let frame = 0; frame < 2; frame++) {
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
+    });
+  }
+
+  /** An async source whose searches resolve only when the test says so. */
+  function createPendingSource() {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: async () => [],
+      search: async () =>
+        new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        }),
+    };
+    return {source, resolvers};
+  }
+
+  beforeEach(() => {
+    announce.mockClear();
+  });
+
+  it('shows the loading row without a live role (FR2)', () => {
+    const {source} = createPendingSource();
+    render(
+      <ChatComposerInput
+        triggers={[createMentionTrigger({searchSource: source})]}
+        debounceMs={0}
+      />,
+    );
+    const editable = screen.getByRole('combobox');
+    editable.focus();
+    typeAtEnd(editable, '@c');
+
+    const row = screen.getByText('Searching…');
+    expect(row).not.toHaveAttribute('role');
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('announces the loading text once per search, not on every keystroke (FR2, FR6)', async () => {
+    const {source, resolvers} = createPendingSource();
+    render(
+      <StrictMode>
+        <ChatComposerInput
+          triggers={[createMentionTrigger({searchSource: source})]}
+          debounceMs={0}
+        />
+      </StrictMode>,
+    );
+    const editable = screen.getByRole('combobox');
+    editable.focus();
+
+    typeAtEnd(editable, '@c');
+    await nextFrame();
+    typeAtEnd(editable, '@ci');
+    await nextFrame();
+    expect(announce.mock.calls).toEqual([['Searching…', 'polite']]);
+
+    await act(async () => {
+      resolvers.forEach(resolve =>
+        resolve([{id: 'cindy', label: 'Cindy Zhang'}]),
+      );
+    });
+    expect(screen.queryByText('Searching…')).toBeNull();
+
+    typeAtEnd(editable, '@cin');
+    await nextFrame();
+    expect(announce.mock.calls).toEqual([
+      ['Searching…', 'polite'],
+      ['Searching…', 'polite'],
+    ]);
+  });
+
+  it('announces nothing for a synchronous source, whose results are already listed (FR7)', async () => {
+    render(
+      <ChatComposerInput triggers={[createMentionTrigger()]} debounceMs={0} />,
+    );
+    const editable = screen.getByRole('combobox');
+    editable.focus();
+
+    typeAtEnd(editable, '@c');
+    await act(async () => {});
+    typeAtEnd(editable, '@ci');
+    await act(async () => {});
+
+    // jsdom gives the popover no semantics, so query the menu by its id.
+    const menu = document.getElementById(
+      editable.getAttribute('aria-controls')!,
+    );
+    expect(menu?.querySelector('[role="option"]')).toHaveTextContent(
+      'Cindy Zhang',
+    );
+    expect(screen.queryByText('Searching…')).toBeNull();
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('announces nothing for a search that settles before the row shows (FR7)', async () => {
+    const settled: SearchSource = {
+      bootstrap: async () => [],
+      search: async () => [{id: 'cindy', label: 'Cindy Zhang'}],
+    };
+    render(
+      <ChatComposerInput
+        triggers={[createMentionTrigger({searchSource: settled})]}
+        debounceMs={0}
+      />,
+    );
+    const editable = screen.getByRole('combobox');
+    editable.focus();
+
+    typeAtEnd(editable, '@c');
+    await nextFrame();
+    typeAtEnd(editable, '@ci');
+    await nextFrame();
+
+    expect(screen.queryByText('Searching…')).toBeNull();
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it("announces a trigger's own loadingText", async () => {
+    const {source} = createPendingSource();
+    render(
+      <ChatComposerInput
+        triggers={[
+          createMentionTrigger({
+            searchSource: source,
+            loadingText: 'Looking up people…',
+          }),
+        ]}
+        debounceMs={0}
+      />,
+    );
+    const editable = screen.getByRole('combobox');
+    editable.focus();
+    typeAtEnd(editable, '@c');
+    await nextFrame();
+
+    expect(announce.mock.calls).toEqual([['Looking up people…', 'polite']]);
   });
 });

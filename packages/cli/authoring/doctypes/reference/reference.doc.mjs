@@ -18,7 +18,8 @@ export const doc = {
     'accessibility, migration guides. Unlike ComponentDoc it is not tied to a component: ' +
     'drop a `.doc.mjs` in the docs directory and it shows up in `astryx docs`. Content is ' +
     'built from ordered sections of mixed content blocks.',
-  appliesTo: 'assets/docs/<topic>.doc.mjs',
+  appliesTo:
+    "<topic>.doc.{ts,mjs,js} in the folder the integration manifest's `docs` names",
   fields: [
     {
       name: 'type',
@@ -69,7 +70,7 @@ export const doc = {
       name: 'extends',
       type: 'string',
       description:
-        "Name of an existing topic this doc merges onto, section by section: a section whose title matches one in the base replaces it, a section the base does not have is appended. The topic keeps the base's title and description. For correcting or adding to a topic rather than owning it. Exclusive with `replaces`.",
+        "Name of an existing topic this doc merges onto, section by section. A section replaces the base section with the same `id`, or else the one with exactly its title when either of the two has no `id`. A key derived from a title counts only against an `id`: a section without an `id` also matches a base section whose `id` is the key its title derives, and a section with an `id` also matches a base section without one whose title derives that `id`. Two different `id`s never match, two sections without an `id` whose titles differ only in case or punctuation stay separate, and a section that matches none is appended. The topic keeps the base's title and description. For correcting or adding to a topic rather than owning it. Exclusive with `replaces`.",
       example: "'theme'",
     },
     {
@@ -83,7 +84,7 @@ export const doc = {
           name: 'sections[].id',
           type: 'string',
           description:
-            'Stable section anchor. New docs should set this instead of relying on a mutable title.',
+            'Stable section anchor. New docs should set this instead of relying on a mutable title. Published @astryxdesign/cli 0.6.3 and earlier reject the field and hide every doc topic the package ships, so `astryx integration verify` fails an integration that sets one until it declares an `@astryxdesign/cli` peer of `>=0.6.4`.',
         },
         {
           name: 'sections[].title',
@@ -109,7 +110,7 @@ export const doc = {
           name: 'sections[].previewType',
           type: 'ReferenceTokenPreviewType',
           description:
-            "Preview type for token tables in this section. When set, the docsite renders a visual preview column from the token's computed value. Omit for non-token sections.",
+            'Preview type for token tables in this section. The CLI rejects a value not in the list below and returns the value in `astryx docs --json`, but draws no preview from it. Omit for non-token sections.',
         },
       ],
     },
@@ -117,17 +118,17 @@ export const doc = {
       name: 'tokenCategory',
       type: 'string',
       description:
-        "Token category for foundational docs that map to a token section (e.g. 'color'). Lets the tokens overview link to this doc for detailed guidance.",
+        "Token category for foundational docs that map to a token section (e.g. 'color'). `astryx docs --json` returns it as authored; no tokens page links to the doc through it.",
     },
   ],
   examples: [
     {
       label: 'A reference doc with one section',
       code: `/** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
-export const docs = {
+export default {
   type: 'generic',
-  name: 'spacing',
-  title: 'Spacing',
+  name: 'acme-spacing',
+  title: 'Acme Spacing',
   description: 'Spacing tokens for gap, margin, and padding.',
   category: 'foundations',
   tokenCategory: 'spacing',
@@ -151,7 +152,7 @@ export const docs = {
     },
     {
       type: 'prose',
-      text: 'Each `sections[].content` is an ordered array of ReferenceContentBlock, the stable discriminated union of prose, heading, code, table, list, and token-ref, plus the reference block (ReferenceDocBlock). A read inlines a reference block the way it inlines a token-ref, so `astryx docs`, in text and in `--json`, returns only the stable block kinds. Docs-graph-only workflow and collection blocks are exported separately as GraphContentBlock and accepted by NamespaceDoc. choice, callout, and checklist remain invalid. ReferenceContentBlock is also reused by the `notes` field on SchemaDoc and CommandDoc. Inside text, `{@link <target>}` links another doc by identity (`[<provider>:]<kind>:<name>`): the CLI prints the command that opens it, and `astryx doctor` warns on one that names no doc.',
+      text: 'Each `sections[].content` is an ordered array of ReferenceContentBlock, the stable discriminated union of prose, heading, code, table, list, and token-ref, plus the reference block (ReferenceDocBlock). A read inlines a reference block the way it inlines a token-ref, so `astryx docs`, in text and in `--json`, returns only the stable block kinds. Docs-graph-only workflow and collection blocks are exported separately as GraphContentBlock and accepted by NamespaceDoc. choice, callout, and checklist remain invalid. ReferenceContentBlock is also reused by the `notes` field on SchemaDoc and CommandDoc. Inside text, `{@link <target>}` links another doc by identity (`[<provider>:]<kind>:<name>`): the CLI prints the command that opens it, and `astryx doctor` warns on one that names no doc. Write a CLI command in text, shell code, or a table cell as a bare `astryx` command: a text read adds the runner the reader uses in front of it, and `--json` returns it as written.',
     },
     {
       type: 'prose',
@@ -194,7 +195,7 @@ type ReferenceDocBlock = {
 
 type GraphContentBlock =
   | { type: 'workflow'; title?: string; steps: WorkflowStep[] }
-  | { type: 'collection'; source: {slot: string}; presentation?: 'list' | 'cards' | 'compact'; whenEmpty?: 'show' | 'omit' }
+  | { type: 'collection'; title?: string; source: {slot: string}; presentation?: 'list' | 'cards' | 'compact'; whenEmpty?: 'show' | 'omit' }
   | ReferenceDocBlock;`,
     },
     {
@@ -203,7 +204,7 @@ type GraphContentBlock =
     },
     {
       type: 'prose',
-      text: "A section may set `previewType` to render a visual preview column for token tables: one of 'swatch' | 'shadow-box' | 'radius-box' | 'spacing-bar' | 'size-bar' | 'border-line' | 'duration-bar' | 'easing-curve' | 'font-sample'.",
+      text: "A section may set `previewType`, a hint for previewing its token table, to one of 'swatch' | 'shadow-box' | 'radius-box' | 'spacing-bar' | 'size-bar' | 'border-line' | 'duration-bar' | 'easing-curve' | 'font-sample'; the CLI rejects any other value.",
     },
   ],
 };

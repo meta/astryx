@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs cli/integrations/templates/build-the-template/package-and-test/export-template-assets`:
+ * @file `astryx docs authoring/building-blocks/templates/build-the-template/package-and-test/export-template-assets`:
  * expose and include everything a copied template imports, and declare the
  * packages it needs.
  */
@@ -106,7 +106,7 @@ export const docs = {
           items: [
             '`integration add` appends the manifest and templates directory when a `files` list already exists. Add the other directories yourself.',
             'If `package.json` sets `sideEffects`, include CSS in it, as above, so bundlers keep side-effect stylesheet imports.',
-            'Run `npm pack --dry-run` and read the real file list instead of reasoning from the workspace.',
+            'Run `{@pm-only npm "the tarball the registry receives" pack --dry-run}` and read the real file list instead of reasoning from the workspace.',
           ],
         },
       ],

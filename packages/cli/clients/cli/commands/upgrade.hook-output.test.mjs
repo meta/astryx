@@ -12,6 +12,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {fileURLToPath} from 'node:url';
+import {CLI_VERSION} from '../../../test-utils/release-fixtures.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.resolve(__dirname, '..', 'bin', 'astryx.mjs');
@@ -41,7 +42,7 @@ beforeEach(() => {
   write('package.json', JSON.stringify({name: 'consumer', private: true}));
   write(
     'node_modules/@astryxdesign/core/package.json',
-    JSON.stringify({name: '@astryxdesign/core', version: '0.6.0'}),
+    JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
   );
   write(
     'src/panel.tsx',

@@ -729,7 +729,7 @@ describe('CommandPalette', () => {
       });
     });
 
-    it('does not announce on initial open (bootstrap)', async () => {
+    it('announces no result count on initial open (bootstrap)', async () => {
       render(
         <CommandPalette
           isOpen={true}
@@ -742,7 +742,9 @@ describe('CommandPalette', () => {
       await act(async () => {
         await new Promise(resolve => setTimeout(resolve, 50));
       });
-      expect(politeRegion()?.textContent ?? '').toBe('');
+      // The bootstrap's busy start may say "Loading" (spec:AST-086 FR3, FR8);
+      // its results are never counted aloud.
+      expect(['', 'Loading']).toContain(politeRegion()?.textContent ?? '');
     });
   });
 });

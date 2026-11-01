@@ -17,6 +17,7 @@ import {
   fireEvent,
   createEvent,
   act,
+  waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from './Button';
@@ -71,7 +72,7 @@ describe('Button', () => {
       'utf8',
     );
     expect(groupStylesSource).toContain(
-      "':where(.astryx-input-group > *):focus-visible'",
+      '`${DIRECT_INPUT_GROUP_ADDON}:focus-visible`',
     );
     expect(groupStylesSource).toMatch(
       /zIndex:\s*\{\s*default: null,\s*\[DIRECT_INPUT_GROUP_ADDON_FOCUS_VISIBLE\]: 2,/,
@@ -146,6 +147,13 @@ describe('Button', () => {
     expect(button).toBeDisabled();
     expect(button.className).toContain('styles.inactive');
     expect(button.className).toContain('styles.disabled');
+  });
+
+  it('keeps a caller-supplied aria-disabled and aria-busy', () => {
+    render(<Button label="Assign" aria-disabled="true" aria-busy={true} />);
+    const button = screen.getByRole('button', {name: 'Assign'});
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    expect(button).toHaveAttribute('aria-busy', 'true');
   });
 
   it('sets aria-busy synchronously while clickAction is pending', async () => {
@@ -643,7 +651,17 @@ describe('Button', () => {
     expect(liveRegion).toHaveTextContent('Loading');
   });
 
-  it('localizes the loading announcement through the i18n catalog', () => {
+  it('mounts the loading live region empty when first rendered loading, then fills it (spec:AST-086 FR3)', async () => {
+    render(<Button label="Submit" isLoading />);
+    const button = screen.getByRole('button');
+    // The Spinner also has role="status", so grab the live region explicitly.
+    const regions = button.querySelectorAll('[role="status"]');
+    const liveRegion = regions[regions.length - 1];
+    expect(liveRegion).toHaveTextContent('');
+    await waitFor(() => expect(liveRegion).toHaveTextContent('Loading'));
+  });
+
+  it('localizes the loading announcement through the i18n catalog', async () => {
     render(
       <InternationalizationProvider
         locale="fr"
@@ -655,7 +673,7 @@ describe('Button', () => {
     // The Spinner also has role="status", so grab the live region explicitly.
     const regions = button.querySelectorAll('[role="status"]');
     const liveRegion = regions[regions.length - 1];
-    expect(liveRegion).toHaveTextContent('Chargement');
+    await waitFor(() => expect(liveRegion).toHaveTextContent('Chargement'));
   });
 
   describe('in a narrow row', () => {

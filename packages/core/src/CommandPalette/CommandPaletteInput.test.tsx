@@ -8,12 +8,19 @@
  */
 
 import {createRef} from 'react';
-import {describe, it, expect, vi} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
+import {render, screen, fireEvent, act} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {CommandPaletteInput} from './CommandPaletteInput';
 import {CommandPaletteContext} from './CommandPaletteContext';
 import {Dialog} from '../Dialog';
 import type {CommandPaletteContextValue} from './CommandPaletteContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+
+beforeEach(() => {
+  __resetInteractionModalityForTest();
+});
 
 function makeContext(
   overrides: Partial<CommandPaletteContextValue> = {},
@@ -279,6 +286,45 @@ describe('CommandPaletteInput', () => {
     },
   );
 
+  it('draws the shared ring only when keyboard navigation acquired focus', () => {
+    render(<CommandPaletteInput hasAutoFocus={false} />);
+    const input = screen.getByRole('searchbox');
+    const ringClasses = stylex
+      .props(focusOutlineStyles.focusVisible)
+      .className!.split(' ');
+    const isRinged = () =>
+      ringClasses.every(className => input.classList.contains(className));
+
+    fireEvent.pointerDown(input);
+    fireEvent.focus(input);
+    expect(isRinged()).toBe(false);
+
+    fireEvent.blur(input);
+    fireEvent.keyDown(input, {key: 'Tab'});
+    fireEvent.focus(input);
+    expect(isRinged()).toBe(true);
+  });
+
+  it('preserves caller focus and blur handlers while tracking modality', () => {
+    const onFocus = vi.fn();
+    const onBlur = vi.fn();
+    render(
+      <CommandPaletteInput
+        hasAutoFocus={false}
+        onFocus={onFocus}
+        onBlur={onBlur}
+      />,
+    );
+    const input = screen.getByRole('searchbox');
+
+    fireEvent.keyDown(input, {key: 'Tab'});
+    fireEvent.focus(input);
+    fireEvent.blur(input);
+
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
   it('does not schedule focus when hasAutoFocus is false', async () => {
     const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
     render(<CommandPaletteInput hasAutoFocus={false} />);
@@ -331,7 +377,9 @@ describe('CommandPaletteInput popup context', () => {
       </CommandPaletteContext>,
     );
 
-    const spinner = screen.getByRole('status');
+    // The Spinner is decorative (spec:AST-086 FR8), so find it by its class.
+    const spinner = document.querySelector('.astryx-spinner') as HTMLElement;
+    expect(spinner).toHaveAttribute('aria-hidden', 'true');
     const trailingContent = screen.getByTestId('trailing-content');
     expect(trailingContent.parentElement?.firstElementChild).toContainElement(
       spinner,
@@ -481,8 +529,11 @@ describe('CommandPaletteInput popup context', () => {
       </CommandPaletteContext>,
     );
 
-    await vi.waitFor(() => {
-      expect(screen.getByRole('combobox')).toHaveFocus();
+    await act(async () => {
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => resolve()),
+      );
     });
+    expect(screen.getByRole('combobox')).toHaveFocus();
   });
 });

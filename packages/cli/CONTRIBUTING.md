@@ -10,7 +10,7 @@ The CLI is a thin wrapper around type-safe API functions. Each command follows t
 User calls API function        User runs CLI
         |                            |
         v                            v
-  api/component/component.mjs ◄─ clients/cli/commands/component/index.mjs
+  api/component/component.mjs ◄─ clients/cli/commands/component.mjs
         |                            |
         v                            v
   { type, data }              jsonOut(response) or formatText(data)

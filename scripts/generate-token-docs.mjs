@@ -122,6 +122,55 @@ const groups = [
       'Semantic colors for consistent theming. All colors use light-dark() for automatic mode switching.',
     headers: ['Token', 'Light', 'Dark'],
     formatRow: lightDarkRow,
+    // One line per status role (architecture:theme-tokens INV11), so a reader
+    // picks the token by the surface it sits on.
+    extraContent: [
+      {
+        type: 'prose',
+        text: 'Status roles: pick the token by the surface. `<status>` is info, success, warning, or error.',
+      },
+      {
+        type: 'table',
+        headers: ['Status role', 'Use it for', 'Pairs with'],
+        rows: [
+          [
+            '--color-text-<status>',
+            'Status text on the page or a card (4.5:1 or more).',
+            '—',
+          ],
+          [
+            '--color-icon-<status>',
+            'Status icons on the page or a card. Defaults to the text colour.',
+            '—',
+          ],
+          [
+            '--color-border-<status>',
+            'Status borders on the page or a card, such as an invalid field. Defaults to the text colour.',
+            '—',
+          ],
+          [
+            '--color-<status>',
+            'Strong status fill, such as a Badge or StatusDot.',
+            '--color-on-<status>',
+          ],
+          [
+            '--color-on-<status>',
+            'Text and icons on the strong fill (4.5:1 or more).',
+            '--color-<status>',
+          ],
+          [
+            '--color-<status>-muted',
+            'Pale status fill, such as a Banner.',
+            '--color-on-<status>-muted',
+          ],
+          [
+            '--color-on-<status>-muted',
+            'Text and icons on the pale fill (4.5:1 or more).',
+            '--color-<status>-muted',
+          ],
+        ],
+      },
+    ],
   },
   {
     key: 'data',
@@ -130,7 +179,7 @@ const groups = [
     file: DATA_TOKENS_SRC,
     title: 'Data Visualization Tokens',
     description:
-      'Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import dataVars from @astryxdesign/core/theme/dataTokens.stylex for CSS-capable code. Retaining any member emits the complete 56-variable group; an unused graph emits none.',
+      'Colors for charts and graphs: one categorical accent per series, a neutral for labels and reference lines, and sequential ramps from 5 (darkest) to 1 (lightest) for ordered scales and heatmaps. Import dataVars from @astryxdesign/core/theme/dataTokens.stylex for CSS-capable code. Source compilation emits the complete 56-variable group when any member is retained and none for an unused graph. Prebuilt CSS consumers load @astryxdesign/core/astryx.css, which defines the complete group for the already-compiled dataVars entry.',
     headers: ['Token', 'Light', 'Dark'],
     formatRow: lightDarkRow,
   },
@@ -209,7 +258,7 @@ const groups = [
     exportName: 'durationDefaults',
     title: 'Duration Tokens',
     description:
-      'Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio.',
+      "Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio. Of a theme's two `motion` knobs, `tempo` (0.75–1.5) scales every duration here; `character` leaves durations alone. A duration scale beats `tempo` for the bands it sets, and explicit `tokens` beat both. `tempo` leaves these unscaled: finger tracking, momentum, the rubber band, the on-screen keyboard, the press's onset delay, cancel distance and tap flash, hover-intent delays, gesture thresholds, Spinner's and Skeleton's loops, and the 200 ms Reduce Motion cap.",
     headers: ['Token', 'Value'],
     formatRow: (name, value) => [name, value],
   },
@@ -218,7 +267,8 @@ const groups = [
     previewType: 'easing-curve',
     exportName: 'easeDefaults',
     title: 'Easing Tokens',
-    description: 'Easing curves for animations and transitions.',
+    description:
+      "Easing curves for animations and transitions. Of a theme's two `motion` knobs, `character` sets `--ease-entrance` and `--ease-move`: `crisp` decelerates without overshoot, `expressive` overshoots slightly, and at `standard` both equal `--ease-standard`; `--ease-exit` keeps its own curve at every character. `tempo` leaves curves alone. A duration scale's own fields win over the knobs, and explicit `tokens` win over everything. No curve here shapes motion that follows a finger or the system (dragging, momentum, the rubber band, the on-screen keyboard), and the press's clocks, hover-intent delays and gesture thresholds keep their timing whatever the character.",
     headers: ['Token', 'Value'],
     formatRow: (name, value) => [name, value],
   },
@@ -285,6 +335,7 @@ for (const group of groups) {
   /** @type {import('@astryxdesign/cli/authoring').ReferenceContentBlock[]} */
   const content = [
     {type: 'prose', text: group.description},
+    ...(group.extraContent ?? []),
     {type: 'table', headers: group.headers, rows},
   ];
 
@@ -364,8 +415,7 @@ const usageDoc = {
   title: 'Usage in StyleX',
   placement: {parent: 'namespace:tokens', slot: 'guides', order},
   category: 'foundations',
-  description:
-    'How to import and use token variables in StyleX styles.',
+  description: 'How to import and use token variables in StyleX styles.',
   sections: [
     {
       title: 'Usage in StyleX',
@@ -422,13 +472,21 @@ const isCheck = process.argv.includes('--check');
 
 /** @type {Array<{path: string, output: string, label: string}>} */
 const allFiles = [
-  {path: namespacePath, output: namespaceOutput, label: 'tree/tokens.doc.mjs (namespace)'},
+  {
+    path: namespacePath,
+    output: namespaceOutput,
+    label: 'tree/tokens.doc.mjs (namespace)',
+  },
   ...childFiles.map(f => ({
     path: f.path,
     output: f.output,
     label: `tree/${f.slug}.doc.mjs (${f.tokenCount} tokens)`,
   })),
-  {path: usagePath, output: usageOutput, label: `tree/${usageSlug}.doc.mjs (usage)`},
+  {
+    path: usagePath,
+    output: usageOutput,
+    label: `tree/${usageSlug}.doc.mjs (usage)`,
+  },
 ];
 
 // A generated tokens guide no category writes any more (a renamed or removed
@@ -453,7 +511,10 @@ const orphans = [
     .map(file => resolve(TREE_DIR, file))
     .filter(filePath => {
       const base = filePath.replace(/\.doc\.(?:dense|zh)\.mjs$/, '.doc.mjs');
-      return orphanGuides.includes(base) || !treeFiles.includes(base.slice(TREE_DIR.length + 1));
+      return (
+        orphanGuides.includes(base) ||
+        !treeFiles.includes(base.slice(TREE_DIR.length + 1))
+      );
     }),
 ];
 
@@ -470,17 +531,23 @@ if (isCheck) {
     try {
       existing = readFileSync(filePath, 'utf-8');
     } catch {
-      console.error(`✗ ${label} does not exist. Run: node scripts/generate-token-docs.mjs`);
+      console.error(
+        `✗ ${label} does not exist. Run: node scripts/generate-token-docs.mjs`,
+      );
       failed = true;
       continue;
     }
     if (existing !== output) {
-      console.error(`✗ ${label} is out of date. Run: node scripts/generate-token-docs.mjs`);
+      console.error(
+        `✗ ${label} is out of date. Run: node scripts/generate-token-docs.mjs`,
+      );
       failed = true;
     }
   }
   if (failed) process.exit(1);
-  console.log(`✓ All token docs are up to date (${totalTokens} tokens, ${allFiles.length} files)`);
+  console.log(
+    `✓ All token docs are up to date (${totalTokens} tokens, ${allFiles.length} files)`,
+  );
 } else {
   for (const {path: filePath, output} of allFiles) {
     writeFileSync(filePath, output);

@@ -1,20 +1,19 @@
 ---
 schema_version: 3
-template_version: 6
+template_version: 7
 kind: component
 id: component:CheckIndicator
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: cixzhang
+approved_at: 2026-10-31
 owners: [cixzhang]
 review_triggers: [public-api, behavior, theming, accessibility, visual]
 verified_by:
   [
     packages/core/src/Indicator/Indicator.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
-    apps/storybook/stories/Indicator.stories.tsx,
   ]
 modules: []
 families: []
@@ -33,17 +32,17 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `CheckIndicator` is exported from `@astryxdesign/core/Indicator`; `state` is required, `size` defaults to `md`, `isDisabled` defaults to `false`, and `children` may replace the built-in mark.                                                            |
-| Behavior                | The component draws a decorative check glyph only when checked. Shallow-renderable `children` replace that glyph in either state; unchecked without replacement content renders no element.                                                                |
-| End-user impact         | People receive one selection cue from the owning control without a duplicate accessible object or an empty placeholder beside unselected rows.                                                                                                             |
-| Builder impact          | Builders may replace the named `check` indicator or compose host-owned classes and styling without taking over the owning control's semantics.                                                                                                             |
-| Compatibility/readiness | The released component and default state behavior remain unchanged. The checked glyph path currently drops the declared `ref`; this draft records that current-authority gap without choosing a new DOM or ref contract.                                   |
-| Review checks           | Reject lost `aria-hidden`, a mark in the unchecked default, a missing checked mark, dropped supported DOM/styling passthrough, changed replacement precedence, a new component-owned theme target, or any claim that the checked-path ref gap is resolved. |
-| Governing rules         | `architecture:public-component-api/INV1,INV5,INV6,INV8,INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:component-test-sufficiency/INV1–INV7,INV10–INV11`.                                                                         |
+| Area                    | Contract                                                                                                                                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Public contract         | `CheckIndicator` is exported from `@astryxdesign/core/Indicator`; `state` is required, `size` defaults to `md`, `isDisabled` defaults to `false`, and `children` may replace the built-in mark.                                                                    |
+| Behavior                | The component draws a decorative check glyph only when checked. Shallow-renderable `children` replace that glyph in either state; unchecked without replacement content renders no element.                                                                        |
+| End-user impact         | People receive one selection cue from the owning control without a duplicate accessible object or an empty placeholder beside unselected rows.                                                                                                                     |
+| Builder impact          | Builders may replace the named `check` indicator or compose host-owned classes and styling without taking over the owning control's semantics.                                                                                                                     |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The checked glyph path drops the declared `ref`; listed under Current-state impact, with the fix open (OQ1).                                                                                             |
+| Review checks           | Reject lost `aria-hidden`, a mark in the unchecked default, a missing checked mark, dropped supported DOM/styling passthrough, changed replacement precedence, a new component-owned theme target, or a checked path that still drops the ref once OQ1 is decided. |
+| Governing rules         | `architecture:public-component-api/INV1,INV5,INV6,INV8,INV9`; `architecture:component-theming-surface/INV3–INV6`; `architecture:component-test-sufficiency/INV1–INV7,INV10–INV11`.                                                                                 |
 
-This table is a review projection; the body below is authoritative only after owner approval.
+This table is a review projection; the body below is authoritative.
 
 ## Intent
 
@@ -52,7 +51,8 @@ Render the replaceable, decorative checkmark used by a host to show that one opt
 ## Compatibility and migration
 
 - Released default preserved: yes
-- Compatibility class: observational only; no runtime or public-type change
+- Compatibility class: records shipped behavior; no public prop, default,
+  export, or DOM change
 - Controlled/uncontrolled behavior: not applicable; `state` is supplied by the owner
 - Migration decision: none; the public component and `check` registry name remain unchanged
 
@@ -68,29 +68,29 @@ Consumer migration instructions belong in consumer docs and release notes.
 **Does not own / non-goals**
 
 - Selection role, accessible name, state, focus, keyboard, activation, or busy semantics — owned by the composing control.
-- Persistent checkbox or radio chrome — owned by `component:CheckboxIndicator` or `component:RadioIndicator`.
+- Persistent checkbox or radio chrome — owned by `component:CheckboxIndicator` or `component:Indicator`.
 - Row placement and logical-edge layout — owned by the host component.
 - The behavior or accessibility of consumer-supplied replacement content.
 
 ## Public concepts
 
-| Concept             | Closed values or states     | Meaning                                                                                                                                                                     | Availability by variant/orientation/state             | Default            | Owner                      | Stability                                  | Invalid-value behavior                             |
-| ------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------ | -------------------------- | ------------------------------------------ | -------------------------------------------------- |
-| state               | `unchecked`, `checked`      | Selects whether the built-in check glyph is absent or present.                                                                                                              | Every render path.                                    | required           | `component:CheckIndicator` | stable                                     | rejected by the public type                        |
-| size                | `sm`, `md`                  | Selects the shared indicator size; both current values use the `sm` Icon glyph.                                                                                             | Checked and replacement-content roots.                | `md`               | `component:CheckIndicator` | stable                                     | rejected by the public type                        |
-| disabled appearance | enabled, disabled           | Mirrors the owning control's disabled color without creating semantics.                                                                                                     | Checked and replacement-content roots.                | enabled            | `component:CheckIndicator` | stable                                     | boolean only                                       |
-| replacement content | shallow renderable or empty | Replaces the built-in mark in either state when `isRenderable(children)` returns true. React elements and containers take this branch even when descendants render nothing. | Every state; replacement content creates a span root. | built-in mark path | `component:CheckIndicator` | observed; empty-container policy unsettled | unsupported values follow React rendering behavior |
+| Concept             | Closed values or states     | Meaning                                                                                                                                                                     | Availability by variant/orientation/state             | Default            | Owner                      | Stability                                 | Invalid-value behavior                             |
+| ------------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------ | -------------------------- | ----------------------------------------- | -------------------------------------------------- |
+| state               | `unchecked`, `checked`      | Selects whether the built-in check glyph is absent or present.                                                                                                              | Every render path.                                    | required           | `component:CheckIndicator` | stable                                    | rejected by the public type                        |
+| size                | `sm`, `md`                  | Selects the shared indicator size; both current values use the `sm` Icon glyph.                                                                                             | Checked and replacement-content roots.                | `md`               | `component:CheckIndicator` | stable                                    | rejected by the public type                        |
+| disabled appearance | enabled, disabled           | Mirrors the owning control's disabled color without creating semantics.                                                                                                     | Checked and replacement-content roots.                | enabled            | `component:CheckIndicator` | stable                                    | boolean only                                       |
+| replacement content | shallow renderable or empty | Replaces the built-in mark in either state when `isRenderable(children)` returns true. React elements and containers take this branch even when descendants render nothing. | Every state; replacement content creates a span root. | built-in mark path | `component:CheckIndicator` | stable; empty-container policy open (OQ2) | unsupported values follow React rendering behavior |
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                              | Basis                                                                     | Draft review state |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------ |
-| FR1 | The component MUST render one decorative check glyph when `state="checked"` and no replacement content is present, and MUST set its own `aria-hidden="true"` after caller passthrough.                                                                                                                                                                           | shipped source; `architecture:public-component-api/INV5`                  | verify             |
-| FR2 | The default component MUST render no element when `state="unchecked"` and no replacement content is present.                                                                                                                                                                                                                                                     | shipped source, docs, tests, and stories                                  | verify             |
-| FR3 | The current implementation uses shallow `isRenderable(children)` replacement precedence in both states: nullish values, booleans, and the empty string keep the built-in state behavior; React elements and containers replace it even when descendants render nothing. This draft does not settle whether empty-container behavior should remain public policy. | shipped source and regression tests                                       | verify             |
-| FR4 | Every rendered root MUST preserve supported DOM props, `className`, `style`, and `xstyle` while keeping component-owned accessibility precedence. Under `architecture:public-component-api/INV8`, the declared ref also MUST reach the promised root; the replacement-content span does, but the checked Icon path currently drops it.                           | `architecture:public-component-api/INV5,INV6,INV8`; shipped source review | human decision     |
-| FR5 | The built-in checked mark MUST remain an Icon-owned painter on the same element as host-supplied classes; CheckIndicator MUST NOT add a wrapper or a distinct public target without an approved contract change.                                                                                                                                                 | shipped source; `architecture:component-theming-surface/INV3–INV5`        | verify             |
-| FR6 | Disabled color and replacement-content color MUST continue to use semantic tokens rather than raw color values.                                                                                                                                                                                                                                                  | shipped source; current token and theming architecture                    | verify             |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                    | Basis                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| FR1 | The component MUST render one decorative check glyph when `state="checked"` and no replacement content is present, and MUST set its own `aria-hidden="true"` after caller passthrough.                                                                                                                                                                       | shipped source; `architecture:public-component-api/INV5`           |
+| FR2 | The default component MUST render no element when `state="unchecked"` and no replacement content is present.                                                                                                                                                                                                                                                 | shipped source, docs, tests, and stories                           |
+| FR3 | Replacement uses shallow `isRenderable(children)` precedence in both states: nullish values, booleans, and the empty string keep the built-in state behavior; React elements and containers replace it even when descendants render nothing (OQ2).                                                                                                           | shipped source and regression tests                                |
+| FR4 | Every rendered root MUST preserve supported DOM props, `className`, `style`, and `xstyle` while keeping component-owned accessibility precedence, and the declared ref MUST reach the rendered root (`architecture:public-component-api/INV8`). Implementation gap: the replacement-content span receives the ref, but the checked Icon path drops it (OQ1). | `architecture:public-component-api/INV5,INV6,INV8`; current source |
+| FR5 | The built-in checked mark MUST remain an Icon-owned painter on the same element as host-supplied classes; CheckIndicator MUST NOT add a wrapper or a distinct public target without an approved contract change.                                                                                                                                             | shipped source; `architecture:component-theming-surface/INV3–INV5` |
+| FR6 | Disabled color and replacement-content color MUST continue to use semantic tokens rather than raw color values.                                                                                                                                                                                                                                              | shipped source; current token and theming architecture             |
 
 ### Allowed variation
 
@@ -126,7 +126,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Chrome           | CheckIndicator intentionally owns no persistent chrome. | observed shipped representation         | not applicable       | FR2, FR5           |
 | State mark       | Checked state renders the shared decorative check Icon. | Icon-owned current theming architecture | supporting state cue | FR1, FR5–FR6       |
 
-The shared `Indicator.doc.mjs` owns anatomy and targets for CheckboxIndicator, CheckIndicator, and RadioIndicator together. This component draft does not add an `anatomy-theming:v1` block while that shared consumer record remains the canonical cross-component inventory; the block is optional during migration. CheckIndicator owns no persistent chrome and delegates its built-in checked mark to Icon.
+The shared `Indicator.doc.mjs` lists anatomy and targets for CheckboxIndicator, CheckIndicator, and RadioIndicator together, so this record carries no anatomy-theming map. CheckIndicator owns no persistent chrome and delegates its built-in checked mark to Icon.
 
 ## Family and system relationships
 
@@ -136,23 +136,28 @@ The shared `Indicator.doc.mjs` owns anatomy and targets for CheckboxIndicator, C
 
 ## Verification map
 
-| Contract    | Verification                                                | Representative states                                                                   | Mutation or failure expectation                                                                                             | Audit section                   |
-| ----------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| FR1–FR3     | `Indicator.test.tsx` state and replacement-content cases    | checked, unchecked, empty scalar, visible child, numeric 0                              | Removing the glyph, adding unchecked chrome, or choosing the wrong children branch fails DOM assertions.                    | `audit:CheckIndicator/behavior` |
-| FR1, AR1    | `Indicator.test.tsx` decorative-contract cases              | glyph and replacement roots; hostile `aria-hidden` input                                | Removing or reordering owned `aria-hidden` exposes duplicate semantics.                                                     | `audit:CheckIndicator/a11y`     |
-| FR4         | `Indicator.test.tsx`, strict lint, and source review        | neutral DOM props on both roots; replacement-root class; checked-path style composition | Passthrough stops reaching a rendered root or the checked Icon stops receiving composed `className`, `style`, and `xstyle`. | `audit:CheckIndicator/api`      |
-| FR4 ref gap | source review                                               | checked Icon root and replacement-content span                                          | The declared ref remains `null` on the checked path while reaching the replacement span.                                    | `audit:CheckIndicator/api`      |
-| FR5–FR6     | source review, Icon target guards, and rendered evidence    | checked, disabled, replacement content; light/dark                                      | A wrapper separates the host target from the painter or semantic color stops reaching the mark.                             | `audit:CheckIndicator/theming`  |
-| All         | `Indicator.stories.tsx`, component-scoped axe and RTL audit | all states, sizes, disabled, replacement content                                        | A required rendered state is unreachable or gains an accessibility/RTL failure.                                             | `audit:CheckIndicator/testing`  |
+| Contract      | Verification                                                                                           | Representative states                                       | Mutation or failure expectation                                                                                                                                                                                                                                                                                               | Audit section                        |
+| ------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| FR1, FR2, FR3 | `Indicator.test.tsx` CheckIndicator state and replacement cases; falsy-children cases                  | Checked, unchecked, empty scalar, visible child, `0`        | Removing the glyph, adding unchecked chrome, or choosing the wrong children branch fails.                                                                                                                                                                                                                                     | `audit:CheckIndicator/behavior`      |
+| FR1, AR1      | `Indicator.test.tsx` decorative-contract cases                                                         | Glyph and replacement roots; a caller `aria-hidden={false}` | A root that a caller can expose fails. Evidence gap: no test asserts that replacement content is not the only state expression (AR2).                                                                                                                                                                                         | `audit:CheckIndicator/accessibility` |
+| FR4           | `Indicator.test.tsx` "forwards caller props and styling on both render paths"                          | Both render paths                                           | A caller DOM prop that stops reaching either root, or a `className` that stops reaching the replacement span, fails. Evidence gap: no test asserts `className`, `style`, or `xstyle` on the checked-glyph path, `style` or `xstyle` on the replacement span, or the ref on either path (the checked-path ref is the FR4 gap). | `audit:CheckIndicator/api`           |
+| FR5, FR6      | `themingTargets.test.ts`                                                                               | Checked glyph                                               | A rendered class absent from the documented targets fails. Evidence gap: no test asserts that no wrapper separates host classes from the Icon painter, or that disabled and replacement colors use semantic tokens.                                                                                                           | `audit:CheckIndicator/theming`       |
+| ORD1, PR1     | Covered by the FR1–FR4 rows. Evidence gap: no test asserts the absence of state, effects, or listeners | —                                                           | —                                                                                                                                                                                                                                                                                                                             | `audit:CheckIndicator/behavior`      |
+
+## Current-state impact
+
+- **Checked-path ref (FR4).** The declared ref is `null` when CheckIndicator
+  draws its checked glyph, against `architecture:public-component-api` INV8; the
+  fix is OQ1.
 
 ## Decision log
 
-None. This draft records only verified shipped behavior.
+No component-local decision.
 
 ## Open questions
 
 - **OQ1 — Should CheckIndicator preserve its declared `HTMLSpanElement` ref by owning a stable span root in the checked path, or should the public ref contract change to match the Icon-owned painter?** (`human-api`) The current checked path returns `null`; either correction changes a released DOM or ref contract.
-- **OQ2 — Should empty React containers continue to suppress the built-in state mark?** (`human-api`) This observational draft records the current shallow branch without approving it as future policy.
+- **OQ2 — Should empty React containers continue to suppress the built-in state mark?** (`human-api`) FR3 records that they do today.
 
 ## Content boundary
 

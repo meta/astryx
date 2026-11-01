@@ -11,7 +11,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, fireEvent, render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {useRef, useState} from 'react';
 import {
   MENU_PRESS_AUTOSCROLL_ZONE_PX,
@@ -145,7 +145,33 @@ describe('useMenuPress — tracking inside the menu', () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  it('moves the highlight as focus with preventScroll', () => {
+  it('hit-tests in the shadow root that holds the menu, not the document', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'open'});
+    const container = document.createElement('div');
+    shadow.append(container);
+    const onSelect = vi.fn();
+    render(<Harness onSelect={onSelect} />, {container});
+    const inShadow = (label: string) =>
+      within(container).getByRole('menuitem', {name: label});
+    // As in a browser: the document answers with the shadow host; only the
+    // shadow root knows the row under the point.
+    Object.assign(document, {elementFromPoint: () => host});
+    Object.assign(shadow, {elementFromPoint: () => inShadow('C')});
+    try {
+      const events = {...mouse(), composed: true, bubbles: true};
+      fireEvent.pointerDown(inShadow('A'), events);
+      fireEvent.pointerUp(inShadow('A'), events);
+      expect(onSelect).toHaveBeenCalledWith('C');
+      expect(onSelect).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (document as {elementFromPoint?: unknown}).elementFromPoint;
+      host.remove();
+    }
+  });
+
+  it('moves the highlight as focus with preventScroll and without :focus-visible', () => {
     render(<Harness />);
     const b = row('B');
     const focusSpy = vi.spyOn(b, 'focus');
@@ -153,7 +179,10 @@ describe('useMenuPress — tracking inside the menu', () => {
     expect(row('A')).toHaveFocus();
     fireEvent.pointerMove(b, touch());
     expect(b).toHaveFocus();
-    expect(focusSpy).toHaveBeenCalledWith({preventScroll: true});
+    expect(focusSpy).toHaveBeenCalledWith({
+      preventScroll: true,
+      focusVisible: false,
+    });
   });
 
   it('clears the highlight over a disabled row or a divider and acts on nothing there', () => {

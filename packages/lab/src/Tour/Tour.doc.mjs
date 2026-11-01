@@ -8,7 +8,7 @@ export const docs = {
   category: 'Feedback & Status',
   keywords: ["tour","nux","onboarding","walkthrough","product tour","coachmark","spotlight","guide","feature step","step"],
   description:
-    'A guided product tour (NUX / onboarding). Tour is a controller that steps a user through a sequence of spotlight callouts anchored to elements on the page. It renders no chrome itself; it owns the active-step state and shares it with declaratively-nested TourStep children (step order follows the children). Experimental: lands in lab first (facebook/astryx#4239).',
+    'A guided product tour (NUX / onboarding). Tour is a controller that steps a user through a sequence of spotlight callouts anchored to elements on the page. It renders no chrome itself; it owns the active-step state and shares it with declaratively-nested TourStep children (step order follows the children). Experimental: lands in lab first (meta/astryx#4239).',
   components: [
     {
       name: 'Tour',

@@ -10,6 +10,8 @@
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {TimeInput} from './TimeInput';
+import {InternationalizationProvider} from '../i18n';
+import type {ISOTimeString} from '../utils';
 import {resetDateSegmentProbe} from '../DateInput/nativeDateSegments';
 
 const HOVER_CAPABLE = /\(\s*hover\s*:\s*hover\s*\)/;
@@ -80,6 +82,25 @@ describe('TimeInput presentation', () => {
     }
   });
 
+  it("bottom-sheet follows the locale's hour cycle in its text and wheels", () => {
+    stubPointer(false);
+    render(
+      <InternationalizationProvider locale="de-DE">
+        <TimeInput
+          label="Start"
+          presentation="bottom-sheet"
+          value={'14:30' as ISOTimeString}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    const input = screen.getByRole('combobox', {name: 'Start'});
+    expect(input).toHaveValue('14:30');
+    fireEvent.click(input);
+    expect(screen.getByRole('listbox', {name: 'Hour'})).toBeInTheDocument();
+    expect(screen.queryByRole('listbox', {name: 'AM/PM'})).toBeNull();
+  });
+
   it('bottom-sheet renders the sheet field even on a fine pointer', () => {
     stubPointer(false);
     render(
@@ -94,6 +115,29 @@ describe('TimeInput presentation', () => {
     fireEvent.click(input);
     expect(screen.getByRole('listbox', {name: 'Hour'})).toBeInTheDocument();
     expect(screen.getByRole('listbox', {name: 'Minute'})).toBeInTheDocument();
+  });
+
+  it('bottom-sheet: a disabled field stays focusable and inert (AST-085 FR1, FR2)', () => {
+    stubPointer(false);
+    const onClick = vi.fn();
+    render(
+      <TimeInput
+        label="Start"
+        presentation="bottom-sheet"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    const input = screen.getByRole('combobox', {name: 'Start'});
+    expect(input).not.toHaveAttribute('disabled');
+    expect(input).toHaveAttribute('aria-disabled', 'true');
+    input.focus();
+    expect(input).toHaveFocus();
+    fireEvent.click(input);
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('listbox', {name: 'Hour'})).toBeNull();
+    expect(onClick).not.toHaveBeenCalled();
   });
 
   it('adaptive-bottom-sheet: typed on fine, sheet on coarse', () => {
