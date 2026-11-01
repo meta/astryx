@@ -73,6 +73,7 @@ import {
 } from '../Field';
 import {Token} from '../Token';
 import {Spinner} from '../Spinner';
+import {SpinnerOwnerContext} from '../Spinner/SpinnerOwnerContext';
 import {useEndLaneReserve} from './useEndLaneReserve';
 import {renderIconSlot, type IconType} from '../Icon';
 import {OverflowList} from '../OverflowList';
@@ -699,16 +700,19 @@ function EndLane({
   return (
     <div ref={laneRef} {...stylex.props(laneXStyle)}>
       {(isBusy || hasBusySlot) && (
-        <Spinner
-          // Remounts when a search starts, so the ring syncs its phase on
-          // mount exactly as a newly shown Spinner did before.
-          key={isBusy ? 'busy' : 'idle'}
-          size="sm"
-          aria-label={loadingLabel}
-          role="img"
-          aria-hidden={isBusy ? undefined : true}
-          xstyle={isBusy ? undefined : styles.idleSpinner}
-        />
+        // Named, never live: the tokenizer announces its search (FR8).
+        <SpinnerOwnerContext value={true}>
+          <Spinner
+            // Remounts when a search starts, so the ring syncs its phase on
+            // mount exactly as a newly shown Spinner did before.
+            key={isBusy ? 'busy' : 'idle'}
+            size="sm"
+            aria-label={loadingLabel}
+            role="img"
+            aria-hidden={isBusy ? undefined : true}
+            xstyle={isBusy ? undefined : styles.idleSpinner}
+          />
+        </SpinnerOwnerContext>
       )}
       {children}
     </div>

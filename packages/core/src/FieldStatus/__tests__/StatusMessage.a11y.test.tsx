@@ -46,6 +46,7 @@ async function renderState(
   await waitFor(() =>
     expect(document.querySelector('[data-a11y-ready="true"]')).not.toBeNull(),
   );
+  await waitFor(() => expect(subjectFor(state)).toBeInTheDocument());
 }
 
 function subjectFor(state: CoreStatusMessageBindingState): Element {
@@ -130,7 +131,7 @@ describe('Core status-message binding inventory', () => {
     ).toEqual([
       'FieldStatus announcement channel',
       'ProgressBar',
-      'Spinner',
+      'Spinner announcement channel',
       'Toast announcement channel',
       'Toast card',
     ]);

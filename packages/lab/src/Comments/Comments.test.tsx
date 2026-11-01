@@ -274,6 +274,10 @@ beforeAll(() => {
       if (selector === ':popover-open') {
         return popoverOpenState.get(this) ?? false;
       }
+      // showModal below marks the dialog open; jsdom has no modal top layer.
+      if (selector === ':modal') {
+        return this instanceof HTMLDialogElement && this.open;
+      }
       return originalMatches.call(this, selector);
     },
   });
@@ -1007,6 +1011,29 @@ describe('Comments threads', () => {
     expect(loadVersions).toHaveBeenCalledWith('root-1');
     expect(document.body.textContent).toContain('Previous wording');
     expect(document.body.textContent).toContain('Current version');
+  });
+
+  it('announces the history load through the shared dialog channel, then clears it (AST-086 FR8, FR14)', async () => {
+    const loadVersions = vi.fn(() => new Promise<never>(() => {}));
+    render(
+      <Sized>
+        <Comments comments={COMMENTS} loadVersions={loadVersions} />
+      </Sized>,
+    );
+    await click(screen.getByRole('button', {name: 'View edit history'}));
+    await flush();
+    const dialog = screen.getByRole('dialog');
+    const region = await waitFor(() => {
+      const regions = dialog.querySelectorAll(
+        ':scope > [data-astryx-modal-live-region="polite"]',
+      );
+      expect(regions).toHaveLength(1);
+      expect(regions[0]).toHaveTextContent('Loading edit history');
+      return regions[0];
+    });
+    await new Promise(resolve => setTimeout(resolve, 2100));
+    expect(region).toBeEmptyDOMElement();
+    expect(within(dialog).getByText('Loading edit history')).toBeVisible();
   });
 
   it('retries a comment that failed to send', async () => {
