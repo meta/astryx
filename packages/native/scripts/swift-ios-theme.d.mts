@@ -64,15 +64,26 @@ export declare function defineTheme(input: {
   tokens: Record<string, string | [string, string]>;
   localTokens?: Record<string, string | [string, string]>;
 }): Promise<DefinedTheme>;
+export interface RenderOptions {
+  source?: string;
+  regenerate?: string;
+  /** Collects one line per lossy conversion; omitted, each prints to stderr (G15). */
+  warnings?: string[];
+  /** Fails on any lossy conversion instead (G15). */
+  strict?: boolean;
+}
 export declare function renderSwiftTheme(
   theme: DefinedTheme,
-  options?: {
-    source?: string;
-    regenerate?: string;
-    warn?: (message: string) => void;
-  },
+  options?: RenderOptions,
 ): Promise<string>;
+export declare function strictError(warnings: string[]): Error;
+export declare function finishRun(
+  warnings: string[],
+  strict: boolean,
+  write: () => void,
+): void;
 export declare function publishedThemePackages(): PublishedThemePackage[];
 export declare function renderAll(
   load: ThemeLoader,
+  options?: {warnings?: string[]},
 ): Promise<Record<string, string>>;

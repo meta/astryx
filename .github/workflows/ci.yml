@@ -93,8 +93,9 @@ concurrency:
 
 jobs:
   # Admits the whole run under CI's ceiling of about ninety concurrent jobs
-  # (spec:AST-030 FR16, DEC-16). Every job here needs this one, directly or
-  # through the jobs it needs. Like every other job it skips for a draft or an
+  # (spec:AST-030 FR16, DEC-16). Every job here but build-storybook needs this
+  # one, directly or through the jobs it needs; build-storybook starts beside
+  # it, and every job that uses the build needs this one too. Like every other job it skips for a draft or an
   # unlabelled fork, which run no CI (FR17); the required contexts still report
   # through their own status rules. Otherwise it never fails, so each job's own
   # condition decides exactly as before. `peak` is the most jobs a run holds at once: a
@@ -979,7 +980,9 @@ jobs:
             await decideRunLabels({github, context, core});
 
   build-storybook:
-    needs: [admission]
+    # Starts beside admission instead of after it: it is one job, and every
+    # job that uses its build also needs admission, so the run's heavy legs
+    # still wait for room (spec:AST-030 FR16, DEC-16).
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled()) }}
     # Every browser lane waits for this job, and the package builds and the
     # Storybook build run side by side (build-packages-and-storybook.mjs).
@@ -1268,7 +1271,7 @@ jobs:
       # Advisory: a package over its budget is flagged in the job summary and
       # the PR report, and fails nothing.
       - name: Compare published package size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.head_file_present != 'false' && steps.package-size.outputs.measured == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
@@ -1309,8 +1312,14 @@ jobs:
       # committed at the merge base (read with git, no API calls). It reads the
       # dists built above and never fails the job; api-changes.json goes into
       # the pr-analysis artifact. With no merge base there is nothing to compare.
+      # A head cut before cli.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates cli.mjs
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request') && hashFiles('scripts/api-report/cli.mjs') == ''
+        run: echo "::notice::This pull request's head has no cli.mjs; merging main runs the API change report."
+
       - name: Report API changes
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request') && hashFiles('scripts/api-report/cli.mjs') != ''
         continue-on-error: true
         timeout-minutes: 2
         env:
@@ -1436,7 +1445,7 @@ jobs:
   # pr-a11y itself, so neither runs there.
   pr-a11y-shard:
     name: pr-a11y (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
     strategy:
       fail-fast: false
@@ -1787,7 +1796,7 @@ jobs:
   # pr-a11y.
   a11y-contracts-shard:
     name: Accessibility spec-test contracts (${{ matrix.shard }}/${{ strategy.job-total }})
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
     # Six legs: at three, the slowest leg took ~20 minutes, held by its longest
     # spec file; files longer than a leg's share are now cut across legs
@@ -1898,7 +1907,7 @@ jobs:
           delete-merged: true
 
   pr-interaction:
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
@@ -2016,7 +2025,7 @@ jobs:
   # required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
-    needs: [build-storybook]
+    needs: [admission, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
@@ -2874,8 +2883,14 @@ jobs:
             exit 1
           fi
 
+      # A head cut before rtl-scorecard-summary.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates rtl-scorecard-summary.mjs
+        if: ((always() && steps.rtl-scope.outputs.should_run == 'true' && matrix.parts == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')) && hashFiles('.github/scripts/rtl-scorecard-summary.mjs') == ''
+        run: echo "::notice::This pull request's head has no rtl-scorecard-summary.mjs; merging main runs the RTL scorecard summary."
+
       - name: Write scorecard summary
-        if: (always() && steps.rtl-scope.outputs.should_run == 'true' && matrix.parts == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
+        if: ((always() && steps.rtl-scope.outputs.should_run == 'true' && matrix.parts == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')) && hashFiles('.github/scripts/rtl-scorecard-summary.mjs') != ''
         run: |
           node .github/scripts/rtl-scorecard-summary.mjs \
             --report rtl-audit-report.json \
@@ -3000,8 +3015,14 @@ jobs:
             --package core \
             --filter "$FILTER"
 
+      # A head cut before rtl-scorecard-summary.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates rtl-scorecard-summary.mjs
+        if: ((always() && hashFiles('rtl-audit-report.json') != '') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')) && hashFiles('.github/scripts/rtl-scorecard-summary.mjs') == ''
+        run: echo "::notice::This pull request's head has no rtl-scorecard-summary.mjs; merging main runs the RTL scorecard summary."
+
       - name: Write scorecard summary
-        if: (always() && hashFiles('rtl-audit-report.json') != '') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
+        if: ((always() && hashFiles('rtl-audit-report.json') != '') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')) && hashFiles('.github/scripts/rtl-scorecard-summary.mjs') != ''
         run: |
           node .github/scripts/rtl-scorecard-summary.mjs \
             --report rtl-audit-report.json \
@@ -3144,6 +3165,34 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
+      # A scoped or always browser accessibility spec the change adds or
+      # modifies runs here by itself (spec:AST-030 FR12), so it is checked on
+      # its own pull request; audit and release-only specs still wait. No such
+      # file, no work.
+      - name: Find the changed browser accessibility specs
+        id: specs
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          list="$RUNNER_TEMP/changed-a11y-specs.txt"
+          : > "$list"
+          if [ -n "$FILES_PATH" ] && [ -f "$FILES_PATH" ]; then
+            # The same spec globs playwright.config.ts runs.
+            node --input-type=module -e '
+              import fs from "node:fs";
+              import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";
+              const paths = fs.readFileSync(process.argv[1], "utf8").split("\n");
+              for (const file of paths.filter(isA11ySpecFile)) console.log(file);
+            ' "$FILES_PATH" > "$list"
+          fi
+          echo "path=$list" >> "$GITHUB_OUTPUT"
+          if [ -s "$list" ]; then
+            echo "has_specs=true" >> "$GITHUB_OUTPUT"
+            echo "Changed browser accessibility specs:"; cat "$list"
+          else
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Skip when no component changed or the change is wide
         if: steps.touched.outputs.has_components != 'true'
         env:
@@ -3157,13 +3206,13 @@ jobs:
           fi
 
       - name: Setup Node and pnpm
-        if: steps.touched.outputs.has_components == 'true'
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.touched.outputs.has_components == 'true'
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
@@ -3171,7 +3220,7 @@ jobs:
 
       - name: Install Playwright
         id: playwright
-        if: steps.touched.outputs.has_components == 'true'
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # The same changed-component filters an opted-in pull request uses.
@@ -3217,6 +3266,22 @@ jobs:
             test -s "rtl-reports/$PACKAGE.json"
           done
 
+      # Only the changed spec files, in Chromium, with their routing lines read
+      # from this merge commit; a changed release-only or audit spec still
+      # waits. A failing or unfinished spec turns this advisory job red, and a
+      # file over the budget is reported as not run.
+      - name: Run the changed browser accessibility specs
+        id: changed-specs
+        if: always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'
+        # The runner runs at most four changed files and stops at eight
+        # minutes; this bounds a hung browser inside the job's 15 minutes.
+        timeout-minutes: 9
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          SPECS_PATH: ${{ steps.specs.outputs.path }}
+        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH"
+
       # The visual result comes from pr-visual, the one visual owner: its
       # default touched check, or its full check under ci:run-visual.
       - name: Download pr-visual's verdict
@@ -3250,7 +3315,7 @@ jobs:
             --out touched-components.json
 
       - name: Upload touched-components results
-        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true' || steps.specs.outputs.has_specs == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: touched-components
@@ -3258,6 +3323,7 @@ jobs:
             touched-components.json
             a11y-report.json
             rtl-reports/
+            pr-a11y-evidence/
           if-no-files-found: ignore
           retention-days: 7
 

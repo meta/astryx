@@ -18,6 +18,69 @@
     }
   },
   {
+    "component": "TopNav",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading",
+      "next": ".astryx-top-nav-item"
+    }
+  },
+  {
+    "component": "TopNavHeading",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading > :first-child",
+      "next": ".astryx-top-nav-heading > :last-child",
+      "subject": ".astryx-top-nav-heading"
+    }
+  },
+  {
+    "component": "TopNavItem",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-item:has-text(\"Dashboard\") > svg",
+      "next": ".astryx-top-nav-item:has-text(\"Dashboard\")"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--default",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-menu"},
+    "selectors": {
+      "overlay": ".astryx-popover",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "TopNavMegaMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {
+      "overlay": ".astryx-popover",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "TopNavMegaMenuItem",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D2"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {
+      "prev": ".astryx-top-nav-mega-menu-item > :first-child",
+      "next": ".astryx-top-nav-mega-menu-item > :last-child"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": []
+  },
+  {
     "component": "ButtonGroup",
     "storyId": "core-buttongroup--horizontal",
     "dims": ["D2"],
@@ -84,6 +147,15 @@
     "selectors": {
       "prev": ".astryx-checkbox-input",
       "next": "[data-testid=\"checkbox-end-content\"]"
+    }
+  },
+  {
+    "component": "GridSpan",
+    "storyId": "core-gridspan--span-matrix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[data-audit-case=\"rows\"]",
+      "next": "[data-audit-grid=\"rows\"] > :nth-child(4)"
     }
   },
   {
@@ -607,6 +679,15 @@
     }
   },
   {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
     "component": "DrawerHeader",
     "storyId": "core-drawerheader--audit",
     "dims": ["D2"],
@@ -614,5 +695,36 @@
       "prev": ".astryx-drawer-header .astryx-heading",
       "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
     }
+  },
+  {
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": ".astryx-blockquote"
+    }
+  },
+  {
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
+    }
+  },
+  {
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
+    }
+  },
+  {
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": []
   }
 ]

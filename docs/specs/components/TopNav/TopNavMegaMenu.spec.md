@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/TopNav/TopNavMegaMenu.test.tsx,
     apps/storybook/stories/TopNavMenu.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:overlay-dismissal]
@@ -166,13 +167,14 @@ map is recorded.
 
 ## Verification map
 
-| Contract          | Verification                                                        | Representative states                       | Mutation or failure expectation                      | Audit section                        |
-| ----------------- | ------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------- | ------------------------------------ |
-| FR1, FR5, AR1–AR2 | `TopNavMegaMenu.test.tsx` default-mode and popup-semantics suites   | Closed and open                             | A menu role, dialog wrapper, or broken link fails.   | `audit:TopNavMegaMenu/accessibility` |
-| FR2, FR3          | `TopNavMegaMenu.test.tsx` hover/click guard and dismissal suites    | Hover, click, leave, sibling, light dismiss | A lost guard or stale open state fails.              | `audit:TopNavMegaMenu/behavior`      |
-| FR4               | `TopNavMegaMenu.test.tsx` keyboard suite                            | Enter, Space, Escape                        | Toggling closed or lost focus return fails.          | `audit:TopNavMegaMenu/accessibility` |
-| FR8               | `TopNavMegaMenu.test.tsx` pass-through and owned-handler suites     | Bar and drawer                              | A replaced handler fails.                            | `audit:TopNavMegaMenu/behavior`      |
-| FR9–FR11, AR3     | `TopNavMegaMenu.test.tsx` mobile-bar, drawer, and focus-ring suites | Collapsed and expanded                      | Reachable collapsed content or a missing ring fails. | `audit:TopNavMegaMenu/behavior`      |
+| Contract          | Verification                                                                                                     | Representative states                              | Mutation or failure expectation                                              | Audit section                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------ |
+| FR1, FR5, AR1–AR2 | `TopNavMegaMenu.test.tsx` default-mode and popup-semantics suites                                                | Closed and open                                    | A menu role, dialog wrapper, or broken link fails.                           | `audit:TopNavMegaMenu/accessibility` |
+| FR2, FR3          | `TopNavMegaMenu.test.tsx` hover/click guard and dismissal suites                                                 | Hover, click, leave, sibling, light dismiss        | A lost guard or stale open state fails.                                      | `audit:TopNavMegaMenu/behavior`      |
+| FR4               | `TopNavMegaMenu.test.tsx` keyboard suite                                                                         | Enter, Space, Escape                               | Toggling closed or lost focus return fails.                                  | `audit:TopNavMegaMenu/accessibility` |
+| FR8               | `TopNavMegaMenu.test.tsx` pass-through and owned-handler suites                                                  | Bar and drawer                                     | A replaced handler fails.                                                    | `audit:TopNavMegaMenu/behavior`      |
+| FR9–FR11, AR3     | `TopNavMegaMenu.test.tsx` mobile-bar, drawer, and focus-ring suites                                              | Collapsed and expanded                             | Reachable collapsed content or a missing ring fails.                         | `audit:TopNavMegaMenu/behavior`      |
+| RTL relation      | RTL audit curated D4 target (`apps/storybook/rtl-audit/targets.json`) on `TopNavMenu / Mega menu` (panel opened) | An open start-aligned mega menu panel; LTR and RTL | A panel that does not move to the mirrored side of the page in RTL fails D4. | `audit:TopNavMegaMenu/i18n-rtl`      |
 
 Read from source, with no focused test yet: the visually hidden close button after the group (FR5); the forwarded `ref`, the `top-nav-mega-menu` target and its `mode` state, and the bar and drawer chevrons' turn (FR1, FR9); the drawer group's clipping while it expands and its height animation (FR9); where a click-open puts focus (FR5); the caller `preventDefault()` cancellation (FR8); anchoring below the enclosing `<nav>` and slot alignment (FR2); FR6; FR7; and the bar trigger's focus outline (FR11).
 
