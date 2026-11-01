@@ -1159,22 +1159,20 @@ export function CodeBlock({
             stylex.props(styles.headerTitle),
           )}>
           {canCollapse && (
-            <span {...stylex.props(styles.collapseChevron)}>
-              {/* The collapsed chevron points toward the inline end, so it
-                  mirrors in RTL (design:bidirectionality DR4). The mirror sits
-                  on a wrapper so the glyph's own rotation still eases: rotated
-                  down when expanded, a mirrored glyph still points down. */}
-              <span {...stylex.props(rtlStyles.mirror)}>
-                <Icon
-                  icon="chevronRight"
-                  size="xsm"
-                  color="inherit"
-                  xstyle={[
-                    styles.collapseChevronIcon,
-                    !isCollapsed && styles.collapseChevronExpanded,
-                  ]}
-                />
-              </span>
+            // The collapsed chevron points toward the inline end, so it mirrors
+            // in RTL (design:bidirectionality DR4). The mirror sits on this box
+            // so the glyph's own rotation still eases: rotated down when
+            // expanded, a mirrored glyph still points down.
+            <span {...stylex.props(styles.collapseChevron, rtlStyles.mirror)}>
+              <Icon
+                icon="chevronRight"
+                size="xsm"
+                color="inherit"
+                xstyle={[
+                  styles.collapseChevronIcon,
+                  !isCollapsed && styles.collapseChevronExpanded,
+                ]}
+              />
             </span>
           )}
           {title}
