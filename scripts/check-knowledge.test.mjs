@@ -1867,6 +1867,47 @@ describe('knowledge validation', () => {
     );
   });
 
+  it('checks a package architecture record under packages/<package>/specs/', async () => {
+    const root = fixtureRoot();
+    const template = fs.readFileSync(
+      path.join(root, 'docs/templates/knowledge/architecture.md'),
+      'utf8',
+    );
+    const slots = path.join(root, 'packages/native/specs/swift/slots.spec.md');
+    const writeSlots = (id, kind = 'architecture') => {
+      fs.mkdirSync(path.dirname(slots), {recursive: true});
+      fs.writeFileSync(
+        slots,
+        template
+          .replace('id: architecture:<surface>', `id: ${id}`)
+          .replace('kind: architecture', `kind: ${kind}`),
+      );
+    };
+    const packageProblems = async () =>
+      (await validateKnowledgeRoot(root)).filter(problem =>
+        problem.startsWith('packages/native/specs/'),
+      );
+    // Guidance Markdown that is not a `<slug>.spec.md` is not a candidate.
+    fs.mkdirSync(path.join(root, 'packages/native/specs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'packages/native/specs/README.md'),
+      '# Native specs\n',
+    );
+
+    writeSlots('architecture:native-swift-slots');
+    expect(await packageProblems()).toEqual([]);
+
+    writeSlots('architecture:swift-slots');
+    expect(await packageProblems()).toEqual([
+      'packages/native/specs/swift/slots.spec.md: id must be architecture:native-swift-slots to match its path.',
+    ]);
+
+    writeSlots('architecture:native-swift-slots', 'bogus');
+    expect(await packageProblems()).toContain(
+      'packages/native/specs/swift/slots.spec.md: a record under packages/native/specs/ must be kind: architecture.',
+    );
+  });
+
   it('rejects a nested component record instead of treating it as a module', async () => {
     const root = fixtureRoot();
     const componentDirectory = path.join(root, 'packages/core/src/Button');

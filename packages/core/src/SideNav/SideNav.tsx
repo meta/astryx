@@ -57,6 +57,7 @@ import {useTranslator} from '../i18n';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {getFocusableElements} from '../hooks/useFocusTrap';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
 import {readAccessibleName} from '../utils/accessibleName';
 import {
   moveFocusLeftBehind,
@@ -417,6 +418,19 @@ export interface SideNavProps extends BaseProps<HTMLElement> {
 // Component
 // =============================================================================
 
+/** Where focus was before a collapse, as the move after it needs it. */
+interface PendingRailFocus {
+  focus: FocusWithin;
+  /** Whether the rail keeps the row that held focus. */
+  isRowKept: boolean;
+  /** Kept rows before the row that held focus. */
+  keptBefore: number;
+  /** The name of the control outside the rows that held focus. */
+  outside: {name: string} | null;
+  /** Whether focus was on the collapse toggle. */
+  wasOnToggle: boolean;
+}
+
 /**
  * Sidebar navigation container for application pages.
  *
@@ -604,86 +618,77 @@ export function SideNav({
     }),
     [],
   );
-  const pendingFocusRef = useRef<{
-    focus: FocusWithin;
-    /** Whether the rail keeps the row that held focus. */
-    isRowKept: boolean;
-    /** Kept rows before the row that held focus. */
-    keptBefore: number;
-    /** The name of the control outside the rows that held focus. */
-    outside: {name: string} | null;
-    /** Whether focus was on the collapse toggle. */
-    wasOnToggle: boolean;
-  } | null>(null);
-  const noteRailFocus = useCallback((wasCollapsed: boolean) => {
-    pendingFocusRef.current = null;
-    const nav = navRef.current;
-    // The resize handle sits beside the nav, in the resize wrapper, and goes
-    // with a collapse its Enter starts.
-    const focus = wasCollapsed
-      ? null
-      : (noteFocusWithin(nav) ?? noteFocusWithin(resizeWrapperRef.current));
-    if (focus == null || nav == null) {
-      return;
-    }
-    const rows = railRows(nav, rowsRef.current);
-    // The innermost row holding focus, the last in document order: a nested
-    // row's parent holds it too.
-    let index = -1;
-    rows.forEach((row, at) => {
-      if (row.contains(focus.element)) {
-        index = at;
+  const noteRailFocus = useFocusLeavingChange(
+    collapsed,
+    (wasCollapsed: boolean): PendingRailFocus | null => {
+      const nav = navRef.current;
+      // The resize handle sits beside the nav, in the resize wrapper, and goes
+      // with a collapse its Enter starts.
+      const focus = wasCollapsed
+        ? null
+        : (noteFocusWithin(nav) ?? noteFocusWithin(resizeWrapperRef.current));
+      if (focus == null || nav == null) {
+        return null;
       }
-    });
-    let outside = null;
-    if (index < 0) {
-      const controls = controlsOutsideRows(nav, rows);
-      const at = controls.findIndex(control => control.contains(focus.element));
-      outside = at < 0 ? null : {name: controlName(controls[at])};
-    }
-    pendingFocusRef.current = {
-      focus,
-      outside,
-      wasOnToggle: [...togglesRef.current].some(toggle =>
-        toggle.contains(focus.element),
-      ),
-      isRowKept: index >= 0 && rowsRef.current.get(rows[index]) === true,
-      keptBefore: rows
-        .slice(0, Math.max(index, 0))
-        .filter(row => rowsRef.current.get(row) === true).length,
-    };
-  }, []);
-  useLayoutEffect(() => {
-    const pending = pendingFocusRef.current;
-    pendingFocusRef.current = null;
-    const nav = navRef.current;
-    if (pending == null || !collapsed || nav == null) {
-      return;
-    }
-    // Collapsed, every row the nav renders is one the rail keeps, in order.
-    const kept = railRows(nav, rowsRef.current);
-    const controlOf = (row: HTMLElement | undefined) =>
-      row == null ? undefined : getFocusableElements(row)[0];
-    const toggle = [...togglesRef.current].find(element =>
-      nav.contains(element),
-    );
-    let sameOutside: HTMLElement | undefined;
-    if (pending.wasOnToggle) {
-      sameOutside = toggle;
-    } else if (pending.outside != null) {
-      const controls = controlsOutsideRows(nav, kept);
-      sameOutside = controls.find(
-        control => controlName(control) === pending.outside?.name,
+      const rows = railRows(nav, rowsRef.current);
+      // The innermost row holding focus, the last in document order: a nested
+      // row's parent holds it too.
+      let index = -1;
+      rows.forEach((row, at) => {
+        if (row.contains(focus.element)) {
+          index = at;
+        }
+      });
+      let outside = null;
+      if (index < 0) {
+        const controls = controlsOutsideRows(nav, rows);
+        const at = controls.findIndex(control =>
+          control.contains(focus.element),
+        );
+        outside = at < 0 ? null : {name: controlName(controls[at])};
+      }
+      return {
+        focus,
+        outside,
+        wasOnToggle: [...togglesRef.current].some(toggle =>
+          toggle.contains(focus.element),
+        ),
+        isRowKept: index >= 0 && rowsRef.current.get(rows[index]) === true,
+        keptBefore: rows
+          .slice(0, Math.max(index, 0))
+          .filter(row => rowsRef.current.get(row) === true).length,
+      };
+    },
+    (pending: PendingRailFocus, isCollapsed: boolean) => {
+      const nav = navRef.current;
+      if (!isCollapsed || nav == null) {
+        return;
+      }
+      // Collapsed, every row the nav renders is one the rail keeps, in order.
+      const kept = railRows(nav, rowsRef.current);
+      const controlOf = (row: HTMLElement | undefined) =>
+        row == null ? undefined : getFocusableElements(row)[0];
+      const toggle = [...togglesRef.current].find(element =>
+        nav.contains(element),
       );
-    }
-    const target = pending.isRowKept
-      ? controlOf(kept[pending.keptBefore])
-      : (sameOutside ??
-        toggle ??
-        controlOf(kept[pending.keptBefore - 1]) ??
-        controlOf(kept[pending.keptBefore]));
-    moveFocusLeftBehind(pending.focus, target);
-  }, [collapsed]);
+      let sameOutside: HTMLElement | undefined;
+      if (pending.wasOnToggle) {
+        sameOutside = toggle;
+      } else if (pending.outside != null) {
+        const controls = controlsOutsideRows(nav, kept);
+        sameOutside = controls.find(
+          control => controlName(control) === pending.outside?.name,
+        );
+      }
+      const target = pending.isRowKept
+        ? controlOf(kept[pending.keptBefore])
+        : (sameOutside ??
+          toggle ??
+          controlOf(kept[pending.keptBefore - 1]) ??
+          controlOf(kept[pending.keptBefore]));
+      moveFocusLeftBehind(pending.focus, target);
+    },
+  );
   const beforeRailChange = useCallback(
     (wasCollapsed: boolean) => {
       noteRailFocus(wasCollapsed);

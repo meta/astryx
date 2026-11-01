@@ -32,6 +32,7 @@ const {
 const {
   COMPONENT_SPEC_ROOT,
   PLATFORM_SOURCE_ROOTS,
+  classifyPackageArchitectureRecordPath,
   classifyPlatformComponentSpecPath,
   componentSpecPathForSource,
   isComponentSpecRecordPath,
@@ -538,6 +539,7 @@ function isKnowledgeRecordPath(filePath) {
     filePath,
   );
   if (themeMatch) return themeMatch[1] === themeMatch[2];
+  if (classifyPackageArchitectureRecordPath(filePath)) return true;
   return isComponentSpecRecordPath(filePath);
 }
 
@@ -943,6 +945,25 @@ export function discoverThemeRecordCandidates(root = DEFAULT_ROOT) {
   return {records: records.sort(), problems};
 }
 
+/**
+ * Every package's own architecture records:
+ * `packages/<package>/specs/…/<slug>.spec.md`.
+ */
+export function discoverPackageArchitectureRecords(root = DEFAULT_ROOT) {
+  return immediateDirectories(path.join(root, 'packages'))
+    .flatMap(packageDirectory =>
+      matchingFilesRecursively(
+        path.join(packageDirectory, 'specs'),
+        (_name, candidate) =>
+          classifyPackageArchitectureRecordPath(
+            path.relative(root, candidate).split(path.sep).join('/'),
+          ) !== null,
+        {skipDirectory: isIgnoredComponentKnowledgeSegment},
+      ),
+    )
+    .sort();
+}
+
 export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
   const records = [];
 
@@ -971,6 +992,7 @@ export function discoverKnowledgeRecords(root = DEFAULT_ROOT) {
   );
 
   records.push(...discoverThemeRecordCandidates(root).records);
+  records.push(...discoverPackageArchitectureRecords(root));
 
   records.push(
     ...matchingFilesRecursively(
@@ -2297,6 +2319,21 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
         `${filePath}: active ${kind} records must use latest schema_version ${latestKindVersion} for that kind.`,
       );
     }
+    const packageRecord = classifyPackageArchitectureRecordPath(
+      filePath.split(path.sep).join('/'),
+    );
+    if (packageRecord) {
+      if (kind !== 'architecture') {
+        problems.push(
+          `${filePath}: a record under packages/${packageRecord.packageName}/specs/ must be kind: architecture.`,
+        );
+      }
+      if (document.frontmatter.get('id') !== packageRecord.id) {
+        problems.push(
+          `${filePath}: id must be ${packageRecord.id} to match its path.`,
+        );
+      }
+    }
     if (kind === 'component' || kind === 'module') {
       const designDecisions = parseDesignDecisionsBlock(content, filePath);
       problems.push(
@@ -2381,8 +2418,9 @@ export async function validateKnowledgeRoot(root = DEFAULT_ROOT) {
 
   for (const {filePath, document} of records) {
     if (document.frontmatter.get('authority') !== 'current') continue;
+    // An unknown kind is already reported above.
     const kindSchema = schema.kinds[document.frontmatter.get('kind')];
-    for (const field of kindSchema.referenceFields ?? []) {
+    for (const field of kindSchema?.referenceFields ?? []) {
       const references = document.frontmatter.get(field);
       if (!Array.isArray(references)) continue;
       for (const reference of references) {

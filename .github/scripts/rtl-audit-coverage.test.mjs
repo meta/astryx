@@ -20,9 +20,14 @@ import {
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
+  glyphRendersOnBlockAxis,
+  d1GlyphKey,
+  d1PairKey,
+  isUnchangedBlockAxisPair,
   finishFiniteAnimations,
   orderD1StoryCandidates,
   resolveD1Applicability,
+  resolveFilterRoutes,
   storyIdsForComponentFilters,
   unresolvedComponentFilters,
   validateStoryRtlAuditParameters,
@@ -1012,5 +1017,185 @@ describe('finishFiniteAnimations', () => {
 
   it('does nothing in a document without the Web Animations API', () => {
     expect(finishFiniteAnimations({})).toBe(0);
+  });
+});
+
+describe('glyphRendersOnBlockAxis', () => {
+  // CSS matrix(a, b, c, d) order: rotate(90deg) is [0, 1, -1, 0].
+  const identity = [1, 0, 0, 1];
+  const mirror = [-1, 0, 0, 1];
+  const quarterTurn = [0, 1, -1, 0];
+  const mirroredQuarterTurn = [0, 1, 1, 0]; // scaleX(-1) . rotate(90deg)
+  const negativeQuarterTurn = [0, -1, 1, 0]; // rotate(-90deg)
+
+  it('keeps an unrotated chevron on the inline axis, mirrored or not', () => {
+    expect(glyphRendersOnBlockAxis('right', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', mirror)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', identity)).toBe(false);
+    expect(glyphRendersOnBlockAxis('left', mirror)).toBe(false);
+  });
+
+  it('puts a chevron turned a quarter either way on the block axis', () => {
+    expect(glyphRendersOnBlockAxis('right', quarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', mirroredQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('right', negativeQuarterTurn)).toBe(true);
+    expect(glyphRendersOnBlockAxis('left', quarterTurn)).toBe(true);
+  });
+
+  it('keeps a half-turned chevron on the inline axis', () => {
+    expect(glyphRendersOnBlockAxis('right', [-1, 0, 0, -1])).toBe(false);
+  });
+
+  it('ignores a glyph with no horizontal direction or no matrix', () => {
+    expect(glyphRendersOnBlockAxis(null, quarterTurn)).toBe(false);
+    expect(glyphRendersOnBlockAxis('right', undefined)).toBe(false);
+  });
+});
+
+describe('isUnchangedBlockAxisPair', () => {
+  const down = {dir: 'right', matrix: [0, 1, -1, 0]}; // rotate(90deg)
+  const up = {dir: 'right', matrix: [0, -1, 1, 0]}; // rotate(-90deg)
+  const mirroredDown = {dir: 'right', matrix: [0, 1, 1, 0]};
+  const right = {dir: 'right', matrix: [1, 0, 0, 1]};
+
+  it('leaves an expanded chevron that points down in both directions', () => {
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(down, mirroredDown)).toBe(true);
+  });
+
+  it('judges a chevron that points down in LTR and up in RTL', () => {
+    expect(isUnchangedBlockAxisPair(down, up)).toBe(false);
+  });
+
+  it('judges a pair that is horizontal on either side or missing', () => {
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, right)).toBe(false);
+    expect(isUnchangedBlockAxisPair(down, undefined)).toBe(false);
+  });
+});
+
+describe('d1GlyphKey', () => {
+  const path = 'm9 18 6-6-6-6';
+  const expanded = [0, 1, -1, 0]; // rotate(90deg): points down
+  const collapsed = [1, 0, 0, 1]; // points right, never mirrored
+
+  it('keeps an expanded and a collapsed copy of one chevron apart', () => {
+    expect(d1GlyphKey('right', path, expanded)).not.toBe(
+      d1GlyphKey('right', path, collapsed),
+    );
+  });
+
+  it('still merges repeated copies on the same axis', () => {
+    expect(d1GlyphKey('right', path, collapsed)).toBe(
+      d1GlyphKey('right', path, [1, 0, 0, 1]),
+    );
+  });
+
+  it('leaves the collapsed copy judged when it never mirrors', () => {
+    // The expanded copy is unjudged; the collapsed copy, kept separately,
+    // is still a pair D1 judges (and fails, since RTL equals LTR).
+    const down = {dir: 'right', matrix: expanded};
+    const right = {dir: 'right', matrix: collapsed};
+    expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
+    expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+  });
+});
+
+describe('d1PairKey', () => {
+  const collapsed = {dir: 'right', aria: 'Toggle Docs', matrix: [1, 0, 0, 1]};
+  const expanded = {dir: 'right', aria: 'Toggle Docs', matrix: [0, 1, -1, 0]};
+
+  it('pairs a collapsed and an expanded chevron under one label apart', () => {
+    expect(d1PairKey(collapsed, 0)).not.toBe(d1PairKey(expanded, 1));
+  });
+
+  it('pairs the same labelled glyph across directions', () => {
+    const mirrored = {...collapsed, matrix: [-1, 0, 0, 1]};
+    expect(d1PairKey(collapsed, 0)).toBe(d1PairKey(mirrored, 3));
+  });
+
+  it('falls back to position for an unlabelled glyph', () => {
+    const bare = {dir: 'right', aria: '', matrix: [1, 0, 0, 1]};
+    expect(d1PairKey(bare, 2)).toBe('idx:2::inline');
+  });
+});
+
+describe('resolveFilterRoutes (filters resolve through the Storybook index)', () => {
+  // Core/Resizable's stories route to `core/resizable`, which no public
+  // component is called; ResizeHandle, the folder's export, has no title and
+  // its story file renders it. Core/Chat's stories route to `core/Chat`, also
+  // no public component, and Chat.stories.tsx never renders the scroll button.
+  const routes = [
+    {id: 'core-resizable--horizontal-split', component: 'core/resizable'},
+    {id: 'core-resizable--snap-points', component: 'core/resizable'},
+    {id: 'core-button--primary', component: 'core/Button'},
+    {id: 'core-chat--default', component: 'core/Chat'},
+  ];
+  const componentPaths = {
+    'core-resizable--horizontal-split':
+      '../../packages/core/src/Resizable/index.ts',
+    'core-resizable--snap-points': '../../packages/core/src/Resizable/index.ts',
+    'core-button--primary': '../../packages/core/src/Button/index.ts',
+    'core-chat--default': '../../packages/core/src/Chat/index.ts',
+  };
+  const owners = {
+    'core/resizehandle': {
+      component: 'core/ResizeHandle',
+      folder: 'packages/core/src/Resizable',
+    },
+    'core/chatlayoutscrollbutton': {
+      component: 'core/ChatLayoutScrollButton',
+      folder: 'packages/core/src/Chat',
+    },
+  };
+  const resolve = filters =>
+    resolveFilterRoutes({
+      routes,
+      filters,
+      knownComponents: [
+        'core/Button',
+        'core/ChatLayout',
+        'core/ChatLayoutScrollButton',
+        'core/ResizeHandle',
+      ],
+      componentPathOf: id => componentPaths[id],
+      ownerOf: filter => owners[filter] ?? null,
+      // Which story files use which component.
+      renders: (id, component) =>
+        id.startsWith('core-resizable--') && component === 'core/ResizeHandle',
+    });
+
+  it("audits a sub-component's stories under its own name (ResizeHandle → Core/Resizable)", () => {
+    const resolved = resolve(['core/resizehandle']);
+    expect(resolved.routes).toEqual([
+      {id: 'core-resizable--horizontal-split', component: 'core/ResizeHandle'},
+      {id: 'core-resizable--snap-points', component: 'core/ResizeHandle'},
+    ]);
+    expect(resolved.adopted).toEqual({
+      'core/ResizeHandle': [
+        'core-resizable--horizontal-split',
+        'core-resizable--snap-points',
+      ],
+    });
+  });
+
+  it('adopts only stories that render the component: ChatLayoutScrollButton adopts none of Core/Chat', () => {
+    const resolved = resolve(['core/chatlayoutscrollbutton']);
+    expect(resolved.routes).toEqual([]);
+    expect(resolved.adopted).toEqual({});
+  });
+
+  it('keeps a filter a story title names, unchanged', () => {
+    expect(resolve(['core/button']).routes).toEqual([
+      {id: 'core-button--primary', component: 'core/Button'},
+    ]);
+  });
+
+  it('selects nothing for a filter with no story, which stays a coverage gap', () => {
+    expect(resolve(['core/nosuchthing']).routes).toEqual([]);
+  });
+
+  it('is the whole route list when no filter is given', () => {
+    expect(resolve([]).routes).toBe(routes);
   });
 });
