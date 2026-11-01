@@ -51,8 +51,9 @@ export interface InitialFocusDateOptions {
  * When clamping forward to `min`, that month leads: the whole selectable window
  * runs ahead of it. When clamping back to `max`, the last pane lands on `max`'s
  * month instead — with `numberOfMonths={2}` opening on `[max, max + 1]` would
- * spend half the calendar on a month that is entirely out of bounds. That
- * shift never crosses `min`'s month.
+ * spend half the calendar on a month that is entirely out of bounds. The same
+ * shift applies when today is still inside `max`'s month, since that month is
+ * the first pane otherwise. The shift never crosses `min`'s month.
  */
 export function getInitialFocusDate(
   options: InitialFocusDateOptions,
@@ -74,7 +75,16 @@ export function getInitialFocusDate(
     return minDate;
   }
 
-  if (maxDate && plainDateIsAfter(today, maxDate)) {
+  // With several panes, today in `max`'s own month needs the same shift: the
+  // calendar would otherwise open on `[max, max + 1]`, and the second pane
+  // would hold no selectable day. A single pane keeps today itself.
+  const isTodayInMaxMonth =
+    maxDate != null &&
+    numberOfMonths > 1 &&
+    today.year === maxDate.year &&
+    today.month === maxDate.month;
+
+  if (maxDate && (plainDateIsAfter(today, maxDate) || isTodayInMaxMonth)) {
     const lastPaneOffset = Math.max(0, numberOfMonths - 1);
     const shifted = plainDateAddMonths(
       plainDateSetFirstOfMonth(maxDate),
