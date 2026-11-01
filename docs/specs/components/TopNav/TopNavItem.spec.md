@@ -164,12 +164,12 @@ is recorded.
 
 ## Verification map
 
-| Contract         | Verification                                                                                     | Representative states                      | Mutation or failure expectation                                       | Audit section                    |
-| ---------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------ | --------------------------------------------------------------------- | -------------------------------- |
-| FR1, ORD1        | `TopNav.test.tsx` TopNavItem anchor, `as`, LinkProvider tests                                    | Default, `as`, provider                    | Wrong element or lost precedence fails.                               | `audit:TopNavItem/behavior`      |
-| FR2–FR4, AR1–AR3 | `TopNav.test.tsx` TopNavItem state tests                                                         | Selected, disabled, icon only              | Missing attribute or a navigating disabled item fails.                | `audit:TopNavItem/accessibility` |
-| FR5              | `TopNav.test.tsx` disabled-navigation tests in both modes                                        | Default and drawer                         | Lost click forwarding or href handling fails.                         | `audit:TopNavItem/behavior`      |
-| RTL relation     | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example` | Two adjacent navigation items; LTR and RTL | An earlier item that is not at the inline start of the next fails D2. | `audit:TopNavItem/i18n-rtl`      |
+| Contract           | Verification                                                                                     | Representative states                            | Mutation or failure expectation                                      | Audit section                    |
+| ------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------ | -------------------------------------------------------------------- | -------------------------------- |
+| FR1, ORD1          | `TopNav.test.tsx` TopNavItem anchor, `as`, LinkProvider tests                                    | Default, `as`, provider                          | Wrong element or lost precedence fails.                              | `audit:TopNavItem/behavior`      |
+| FR2–FR4, AR1–AR3   | `TopNav.test.tsx` TopNavItem state tests                                                         | Selected, disabled, icon only                    | Missing attribute or a navigating disabled item fails.               | `audit:TopNavItem/accessibility` |
+| FR5                | `TopNav.test.tsx` disabled-navigation tests in both modes                                        | Default and drawer                               | Lost click forwarding or href handling fails.                        | `audit:TopNavItem/behavior`      |
+| RTL relation (FR1) | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example` | The `Dashboard` item's leading icon; LTR and RTL | A leading icon that is not at the inline start of its item fails D2. | `audit:TopNavItem/i18n-rtl`      |
 
 Pending conformance: the TopNavItem state test and the two disabled-navigation
 tests assert `tabIndex=-1` on a disabled item, pinning FR3's implementation

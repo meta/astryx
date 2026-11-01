@@ -630,8 +630,8 @@
     "storyId": "core-topnav--full-example",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-top-nav-item:has-text(\"Dashboard\")",
-      "next": ".astryx-top-nav-item:has-text(\"Reports\")"
+      "prev": ".astryx-top-nav-item:has-text(\"Dashboard\") > svg",
+      "next": ".astryx-top-nav-item:has-text(\"Dashboard\")"
     }
   },
   {
@@ -663,5 +663,10 @@
       "prev": ".astryx-top-nav-mega-menu-item > :first-child",
       "next": ".astryx-top-nav-mega-menu-item > :last-child"
     }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": []
   }
 ]
