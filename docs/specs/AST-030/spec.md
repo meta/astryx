@@ -754,7 +754,7 @@ waiting check counts. Every job ends within its fifteen-minute budget, so `main`
 fits within fifteen minutes. Nothing is reserved for `main` outside those
 minutes.
 
-CI can still pass ninety in three rare, bounded ways:
+CI can still pass ninety in four bounded ways, the first three rare:
 
 - A run that has waited its longest (fifteen minutes for `main`, twelve for a
   pull request) starts whatever the load, even while a `main` check waits. That
@@ -765,6 +765,10 @@ CI can still pass ninety in three rare, bounded ways:
   jobs until its next look.
 - A run starts when the GitHub API cannot be read, a rate limit included. It is
   over by at most its own jobs.
+- A waiting run's own jobs start before it finds room: its waiting job and, in
+  the CI workflow, its Storybook build. While runs wait at the ceiling, CI is
+  over by at most two jobs for each waiting run, for at most that run's wait
+  (twelve minutes for a pull request, fifteen for `main`).
 
 Rejected: a fixed reserve for `main` (it left about half the ceiling idle and
 stalled the pull-request queue); starting `main`'s checks at once (a burst would
