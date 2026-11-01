@@ -366,7 +366,11 @@ export function useTriggerMenu(
   // One catalog string serves the row and the announcement (FR7).
   const loadingText =
     state.activeTrigger?.loadingText ?? t('@astryx.chatTriggerMenu.searching');
-  useBusyAnnouncement(isLoadingRowShown, loadingText, editableRef);
+  const settleBusyAnnouncement = useBusyAnnouncement(
+    isLoadingRowShown,
+    loadingText,
+    editableRef,
+  );
 
   const triggerStartRef = useRef<number>(-1);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -552,6 +556,9 @@ export function useTriggerMenu(
       };
 
       const applyResults = (items: SearchableItem[]) => {
+        // Results that arrive before the busy start is heard withdraw it, so a
+        // search that settles on its first frame announces nothing (FR8).
+        settleBusyAnnouncement();
         const isHidden = isUnmatchedMultiWordQuery(trigger, items, false);
         setState(prev => ({
           ...prev,
@@ -620,6 +627,7 @@ export function useTriggerMenu(
       setAnchor,
       hidePopover,
       showPopover,
+      settleBusyAnnouncement,
     ],
   );
 
