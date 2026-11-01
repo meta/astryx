@@ -150,6 +150,49 @@
     }
   },
   {
+    "component": "ContextMenu",
+    "storyId": "core-contextmenu--bottom-sheet-submenu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"Back\"]",
+      "next": "h3:text-is(\"Share\")"
+    }
+  },
+  {
+    "component": "TableHeaderCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child"
+    }
+  },
+  {
+    "component": "TableCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child"
+    }
+  },
+  {
+    "component": "TableSelectionToolbar",
+    "storyId": "core-tableselection--bulk-actions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
+      "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
+    }
+  },
+  {
+    "component": "Table",
+    "storyId": "core-table--in-card",
+    "dims": []
+  },
+  {
     "component": "GridSpan",
     "storyId": "core-gridspan--span-matrix",
     "dims": ["D2"],
