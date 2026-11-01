@@ -156,6 +156,16 @@ export function FieldStatus(
   props: FieldStatusProps & {variant: 'tooltip'},
 ): React.JSX.Element;
 /**
+ * A status message component for form fields: an `attached` message under a
+ * field, or a `detached` one with its own status icon.
+ *
+ * @example
+ * ```
+ * <FieldStatus type="error" message="This field is required" />
+ * ```
+ */
+export function FieldStatus(props: FieldStatusProps): React.JSX.Element;
+/**
  * A status message component for form fields.
  *
  * The `detached` variant renders a leading status icon before the message so
@@ -189,7 +199,6 @@ export function FieldStatus(
  * />
  * ```
  */
-export function FieldStatus(props: FieldStatusProps): React.JSX.Element;
 export function FieldStatus({
   ref,
   type,
