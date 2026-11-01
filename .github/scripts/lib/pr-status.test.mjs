@@ -318,6 +318,36 @@ describe('buildVisualDeltas', () => {
     expect(section).toContain("3 more are in the run's visual report.");
   });
 
+  it('shows thumbnails for the frames publish-frames.mjs published, and only those', () => {
+    const section = buildVisualDeltas({
+      verdict: {
+        status: 'changed',
+        changes: [change('b', 50), change('a', 1)],
+        added: ['core-dialog--default__neutral-light'],
+      },
+      frames: {
+        imageBase: 'https://raw.example/frames',
+        published: [
+          'before/b.png',
+          'after/b.png',
+          'diff/b.png',
+          'after/core-dialog--default__neutral-light.png',
+        ],
+      },
+    });
+    expect(section).toContain('| Component · story | Before | After | Diff |');
+    expect(section).toContain(
+      '<img src="https://raw.example/frames/before/b.png" height="120" alt="before frame">',
+    );
+    expect(section).toContain(
+      '| Card · a (neutral, light) | not published | not published | not published |',
+    );
+    // An added shot has an after frame only.
+    expect(section).toContain(
+      '| — | <img src="https://raw.example/frames/after/core-dialog--default__neutral-light.png" height="120" alt="after frame"> | — |',
+    );
+  });
+
   it('is absent without changes, or when the visual run failed', () => {
     expect(buildVisualDeltas({verdict: {status: 'ok', changes: []}})).toBe('');
     expect(buildVisualDeltas({verdict: null})).toBe('');
@@ -408,7 +438,7 @@ describe('notRunLine', () => {
       notRunLine({
         jobs: [
           skipped('pr-rtl'),
-          {name: 'Stable visual regression', conclusion: 'success'},
+          {name: 'Stable visual scout (1/5)', conclusion: 'success'},
           {name: 'pr-a11y', conclusion: 'success'},
         ],
       }),
@@ -446,6 +476,34 @@ describe('notRunLine', () => {
       'Wide change (60 components): add `ci:run-visual` or `ci:run-rtl` to run them.\n\n',
     );
     expect(notRunLine({jobs: [], touched: wide})).toBe('');
+  });
+
+  it('decides visual by its label-gated scout, not the regression job the touched check may run', () => {
+    expect(
+      notRunLine({
+        jobs: [
+          skipped('Stable visual scout (1/5)'),
+          {name: 'Stable visual regression', conclusion: 'success'},
+          {name: 'pr-a11y', conclusion: 'success'},
+          {name: 'pr-rtl', conclusion: 'success'},
+        ],
+      }),
+    ).toBe('Not run on this PR: add `ci:run-visual` to run it.\n\n');
+  });
+
+  it('says the touched components were checked on a narrow change', () => {
+    expect(
+      notRunLine({
+        jobs: [
+          skipped('Stable visual scout (1/5)'),
+          skipped('pr-a11y (full audit)'),
+          skipped('pr-rtl (core)'),
+        ],
+        touched: {wideChange: false, componentCount: 2, components: []},
+      }),
+    ).toBe(
+      'Touched components checked; add `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` to run the full suites.\n\n',
+    );
   });
 
   it('leaves the line out when the Storybook build failed', () => {

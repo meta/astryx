@@ -29,7 +29,9 @@ const SUITES = [
     id: 'visual',
     label: 'Visual',
     short: 'Visual',
-    jobs: /^(Stable visual|visual-scout|pr-visual)/i,
+    // The label-gated scout decides whether visual ran by label: the
+    // touched-components check may run the regression job without it.
+    jobs: /^(Stable visual scout|visual-scout)/i,
   },
   {
     id: 'a11y',
@@ -310,14 +312,22 @@ function buildComponentTable({
 }
 
 /**
- * The changed shots, largest change first: up to VISUAL_FRAME_LIMIT rows
- * naming each shot and its change, inside one disclosure whose summary
- * carries the counts. The run's visual report holds the frames.
+ * The changed shots, largest change first: up to VISUAL_FRAME_LIMIT rows,
+ * inside one disclosure whose summary carries the counts. With `frames`
+ * (publish-frames.mjs's `imageBase` and the `<kind>/<key>.png` it published),
+ * each row shows its before/after/diff thumbnails, and only published frames;
+ * without it, each row names its change.
  */
-function buildVisualDeltas({verdict}) {
+/**
+ * The changed shots in report order: changed by pixels changed, largest first,
+ * then added, then removed. The report lists the first VISUAL_FRAME_LIMIT,
+ * and publish-frames.mjs publishes frames for the same ones, so thumbnails
+ * and rows cannot drift apart.
+ */
+function visualShots(verdict) {
   if (!verdict || verdict.status === 'skipped' || verdict.status === 'failed')
-    return '';
-  const all = [
+    return [];
+  return [
     ...[...(verdict.changes || [])]
       .sort((a, b) => Number(b.diffPixels ?? 0) - Number(a.diffPixels ?? 0))
       .map(change => ({...change, kinds: ['before', 'after', 'diff']})),
@@ -328,6 +338,10 @@ function buildVisualDeltas({verdict}) {
       kinds: ['before'],
     })),
   ];
+}
+
+function buildVisualDeltas({verdict, frames = null}) {
+  const all = visualShots(verdict);
   if (all.length === 0) return '';
   const rows = all.slice(0, VISUAL_FRAME_LIMIT);
   const unshown = all.length - rows.length;
@@ -348,8 +362,24 @@ function buildVisualDeltas({verdict}) {
       .join(', ');
     return variant ? `${story} (${variant})` : story;
   };
-  const header = '| Component · story | Change |\n|---|---|\n';
-  const line = row => `| ${label(row)} | ${changeText(row)} |`;
+  const published = new Set(frames?.published || []);
+  const base =
+    frames?.imageBase && published.size > 0
+      ? `${String(frames.imageBase).replace(/\/+$/, '')}/`
+      : null;
+  const frame = (row, kind) => {
+    if (!row.kinds.includes(kind)) return '—';
+    const file = `${kind}/${row.key}.png`;
+    if (!published.has(file)) return 'not published';
+    return `<img src="${base}${kind}/${encodeURIComponent(String(row.key))}.png" height="120" alt="${kind} frame">`;
+  };
+  const header = base
+    ? '| Component · story | Before | After | Diff |\n|---|---|---|---|\n'
+    : '| Component · story | Change |\n|---|---|\n';
+  const line = row =>
+    base
+      ? `| ${label(row)} | ${frame(row, 'before')} | ${frame(row, 'after')} | ${frame(row, 'diff')} |`
+      : `| ${label(row)} | ${changeText(row)} |`;
   // A shot key is `<package>-<component>--<story>__<theme>-<mode>`.
   const componentOf = row =>
     String(
@@ -449,12 +479,13 @@ function notRunLine({jobs, a11yReport, visualVerdict, touched = null}) {
       ? labels[0]
       : `${labels.slice(0, -1).join(', ')} or ${labels.at(-1)}`;
   // Too wide for the touched-components check: it says so, and names only
-  // the suites that did not run.
-  const lead =
-    touched?.wideChange === true
-      ? `Wide change (${num(touched.componentCount)} components)`
-      : 'Not run on this PR';
-  return `${lead}: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+  // the suites that did not run. A narrower change's touched components were
+  // checked, so the labels run the full suites.
+  if (touched?.wideChange === true)
+    return `Wide change (${num(touched.componentCount)} components): add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
+  if (touched)
+    return `Touched components checked; add ${list} to run the full suite${labels.length === 1 ? '' : 's'}.\n\n`;
+  return `Not run on this PR: add ${list} to run ${labels.length === 1 ? 'it' : 'them'}.\n\n`;
 }
 
 /** The compact report body, between the heading and the footer. */
@@ -466,6 +497,7 @@ function buildCompactReport({
   a11yReport = null,
   visualVerdict = null,
   packageSize = null,
+  visualFrames = null,
 }) {
   const origin =
     preview?.state === 'ready' ? preview.url : preview?.aliasOrigin || '';
@@ -475,10 +507,11 @@ function buildCompactReport({
     touched,
     a11yReport,
     visualVerdict,
-  })}${buildVisualDeltas({verdict: visualVerdict})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
+  })}${buildVisualDeltas({verdict: visualVerdict, frames: visualFrames})}${packagesLine(packageSize)}${notRunLine({jobs, a11yReport, visualVerdict, touched})}`;
 }
 
 module.exports = {
+  visualShots,
   SUITES,
   VISUAL_FRAME_LIMIT,
   baseJobName,
