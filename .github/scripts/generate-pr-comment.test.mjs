@@ -225,8 +225,29 @@ describe('comment length budget', () => {
           ],
         }),
       );
-      const out = runComment(baseAnalysis, ['--api-changes', apiChanges]);
+      const visual = path.join(dir, 'verdict.json');
+      fs.writeFileSync(
+        visual,
+        JSON.stringify({
+          status: 'failed',
+          counts: {total: 3, failed: 3},
+          failures: [],
+        }),
+      );
+      const out = runComment({...baseAnalysis, diffMode: 'two-dot'}, [
+        '--api-changes',
+        apiChanges,
+        '--source-conclusion',
+        'failure',
+        '--visual',
+        visual,
+      ]);
       expect(out.length).toBeLessThan(60_500);
+      // The short status lines survive; the API rows are what gets cut.
+      expect(out).toMatch(/CI concluded failure/);
+      expect(out).toMatch(/Approximate analysis/);
+      expect(out).toMatch(/could not be captured/);
+      expect(out).toMatch(/Not run on this PR/);
       expect(out).toMatch(/more lines did not fit GitHub's comment limit/);
       expect((out.match(/<details/g) || []).length).toBe(
         (out.match(/<\/details>/g) || []).length,
