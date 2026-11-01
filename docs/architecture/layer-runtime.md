@@ -513,8 +513,10 @@ layers use Layer rendering without joining Escape/platform dismissal.
   mouse, touch, or click event that starts inside a layer root (both
   `useLayer` renderers and the Dialog, Drawer, Lightbox, MobileNav,
   BottomSheetPanel, and ToastViewport content roots) runs the handlers inside
-  the layer, then stops propagating through the React tree: no ancestor of the
-  layer's JSX position receives it, including a caller's own element. A nested
+  the layer, then stops propagating through the React tree: no bubble-phase
+  handler on an ancestor of the layer's JSX position receives it, including a
+  caller's own element. An ancestor's capture-phase handler runs before the
+  stop and still receives it. A nested
   layer stops at its own root. The native event is not stopped, so document
   and window listeners and light dismiss still receive it. Keyboard, focus,
   input, wheel, and drag events are out of scope.
@@ -561,11 +563,12 @@ INV17 is not met yet. Implementation gap: not built. A press inside a layer
 still propagates through the React tree to the ancestors of the layer's JSX
 position; only Tooltip and HoverCard surfaces are guarded, and only against
 the Core containers that check them (`component:Tooltip` FR11,
-`component:HoverCard` FR11). Compatibility: closing the gap is a patch
-`[fix]`. Propagation across a layer boundary is not intended behavior, so a
-caller's ancestor handler receiving clicks from inside a layer is the defect;
-an app wrapper that relied on it attaches its handler to the layer content
-instead.
+`component:HoverCard` FR11). Compatibility: the owner ruled on 2026-11-01
+that closing the gap ships as a patch `[fix]` (`spec:AST-017` FR5's fix
+class): no record ever promised that a press inside a layer reaches the
+layer's JSX ancestors, so that propagation is the defect the fix removes, not
+a supported behavior with a migration. A handler that needs presses inside a
+layer belongs on the layer content.
 
 ## Change coupling
 
