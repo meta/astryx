@@ -123,8 +123,9 @@ export interface TopNavItemProps extends BaseProps<HTMLAnchorElement> {
   isSelected?: boolean;
   /**
    * Whether the nav item is disabled.
-   * A disabled item renders as a plain anchor without an href (and without
-   * target), so it cannot navigate and is removed from the tab order.
+   * A disabled item renders as an anchor without an href (and without
+   * target), so it cannot navigate; it keeps its Tab stop and is exposed as a
+   * disabled link.
    * @default false
    */
   isDisabled?: boolean;
