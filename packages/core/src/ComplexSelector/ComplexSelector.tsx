@@ -37,7 +37,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {mergeRefs} from '../utils/mergeRefs';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
-import {Field, inputWrapperStyles, type FieldStatusVariant} from '../Field';
+import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
 import {useTranslator} from '../i18n';
@@ -65,6 +65,7 @@ import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
 
 // The popup content's own block-size cap; the viewport cap is the layer
 // runtime's.
@@ -417,7 +418,7 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached' for input selectors; 'detached' for secondary and ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Tooltip text displayed next to the label. */
   labelTooltip?: string;
   /** Trigger and field size. */

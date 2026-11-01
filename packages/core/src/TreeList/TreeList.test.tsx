@@ -1736,6 +1736,67 @@ describe('TreeList', () => {
   });
 });
 
+// A slot is empty for exactly the values React renders as nothing.
+describe('TreeList empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])(
+    'a header of %s names nothing; the tree keeps its own label',
+    (_name, header) => {
+      render(
+        <TreeList
+          items={simpleItems}
+          header={header as ReactNode}
+          aria-label="Files"
+        />,
+      );
+      const tree = screen.getByRole('tree');
+      expect(tree).not.toHaveAttribute('aria-labelledby');
+      expect(tree).toHaveAccessibleName('Files');
+    },
+  );
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    const {container: withSlots} = render(
+      <TreeList
+        items={[
+          {
+            id: 'a',
+            label: 'Item A',
+            startContent: value as ReactNode,
+            endContent: value as ReactNode,
+          },
+        ]}
+      />,
+    );
+    const {container: without} = render(
+      <TreeList items={[{id: 'a', label: 'Item A'}]} />,
+    );
+    expect(html(withSlots)).toBe(html(without));
+  });
+
+  it('renders 0 as a header and in the start and end slots, as React does', () => {
+    render(
+      <TreeList
+        header={0}
+        items={[{id: 'a', label: 'Item A', startContent: 0, endContent: 0}]}
+      />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
+    expect(screen.getByRole('tree')).toHaveAttribute('aria-labelledby');
+  });
+});
+
 describe('TreeList collapse focus (AR2)', () => {
   function Example({isExpanded}: {isExpanded: boolean}) {
     return (

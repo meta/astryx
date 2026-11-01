@@ -1,0 +1,21 @@
+diff --git a/packages/core/src/Dialog/Dialog.test.tsx b/packages/core/src/Dialog/Dialog.test.tsx
+index b676be021577d..1a9bb5c430bcd 100644
+--- a/packages/core/src/Dialog/Dialog.test.tsx
++++ b/packages/core/src/Dialog/Dialog.test.tsx
+@@ -558,0 +743,16 @@ describe('Dialog', () => {
++        blur.mockRestore();
++      });
++
++      it('tracks its document while any Dialog there is mounted, and releases it after the last', () => {
++        const removeEventListener = vi.spyOn(
++          secondDocument,
++          'removeEventListener',
++        );
++        const removedModalityListeners = () =>
++          removeEventListener.mock.calls
++            .map(([type]) => type)
++            .filter(type => type === 'pointerdown' || type === 'keydown')
++            .sort();
++        const {rerender} = render(<SecondDocumentDialogs count={2} />);
++        fireEvent.pointerDown(secondDocument.body);
++        expect(getInteractionModality(secondDocument)).toBe('pointer');

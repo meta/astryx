@@ -210,6 +210,58 @@ removes them; remove an entry when you fix its import, and never add one.
 rewrites the list from the source (`--check` verifies it), for example after
 merging `main` into this rule's own branch or after a codemod.
 
+### `@astryx/no-raw-private-attribute`
+
+Reports a private `data-astryx-*` attribute written by hand outside its owner
+module (`architecture:public-component-api` INV23). Each private attribute has
+one owner module in the package that writes it,
+`packages/<package>/src/privateAttributes/<name>.stylex.ts`, named in camelCase
+(`focusOwner.stylex.ts` owns `data-astryx-focus-owner`), that writes its
+name and selectors once and exports ready-made styles, setter props and the
+runtime readers its package needs; every other file spreads those exports.
+
+```ts
+// flagged outside the owner module
+el.setAttribute('data-astryx-popover-fallback-close', '');
+const styles = stylex.create({
+  base: {transform: {default: null, '[data-astryx-press="on"]': 'scale(0.98)'}},
+});
+<div data-astryx-submenu-host="" />;
+style.setAttribute(dataAttr('theme-prose'), name);
+
+// fine: public attributes INV23 lists
+<div data-astryx-theme="dark" />;
+const scope = `[data-astryx-media="${surface}"]`;
+el.setAttribute(dataAttr('theme'), name);
+```
+
+It checks string literals in any position (object keys, call arguments,
+selectors inside `stylex.create` and `stylex.when.*`),
+template literals (including `data-${dataAttrNamespace}-…`), JSX attribute
+names, and `dataAttr()` calls. A name it cannot read (`data-astryx-${part}`,
+`dataAttr(name)`) is reported as `data-astryx-*`. Inside an owner module only
+its own attribute may be written, and the module may not export the raw name or
+a selector as a string: not as an exported or default-exported value, not inside
+an exported object, array or function's return value, and not through a module
+constant one of those uses, including a selector built from that constant in a
+template or with `+`. The name stays allowed there as an object key
+(setter props and `stylex.create` selectors) and as a call argument (a writer,
+or a `closest`/`matches` reader). An import of another package's owner module is
+reported. The public attributes INV23 lists are never reported: `theme`,
+`media`, `aspect-ratio-override`, `token`, `token-value`, `menu-press`,
+`pressable` and `edge-comp`, each after `data-astryx-`. `naming.ts`, which
+builds every name, is not checked.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). The repo config does
+not lint `.mjs` outside the CLI, so `.doc.mjs` text stays with public-API
+review. Sites that existed when the rule arrived are listed by file in
+`no-raw-private-attribute.baseline.json`, once per site, and that many stay
+allowed until they move into an owner module; remove an entry when you move its
+site, and never add one.
+`node internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
+
 ### `@astryx/no-core-internal-import`
 
 Reports imports of Core's internal subpaths (`@astryxdesign/core/internal` and

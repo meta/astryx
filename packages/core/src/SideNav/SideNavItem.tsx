@@ -564,12 +564,14 @@ export function SideNavItem({
   // focused row can hand focus to the toggle or the nearest row still in the
   // rail (`component:SideNav` AR3).
   const focusTargets = use(SideNavFocusTargetsContext);
+  // The collapsed rail renders a top-level row with an icon (FR2).
+  const isKeptInRail = !!icon && depth === 0;
   const rowRef = useCallback(
     (element: HTMLDivElement | null) =>
       element == null || focusTargets == null
         ? undefined
-        : focusTargets.registerRow(element),
-    [focusTargets],
+        : focusTargets.registerRow(element, isKeptInRail),
+    [focusTargets, isKeptInRail],
   );
   const rowTooltipRef = useMergedRefs(rowRef, railTooltip.ref);
 
