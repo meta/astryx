@@ -614,5 +614,14 @@
       "prev": ".astryx-diff-viewer-path",
       "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
     }
+  },
+  {
+    "component": "DrawerHeader",
+    "storyId": "core-drawerheader--audit",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-drawer-header .astryx-heading",
+      "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
+    }
   }
 ]

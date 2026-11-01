@@ -15,6 +15,7 @@ const {
   isLegacyComponentSpecPath,
   isPlatformComponentSpecPath,
   locateComponentKnowledgePath,
+  locatePlatformComponentSource,
 } = require('./knowledge-paths.cjs');
 
 const roots = [];
@@ -106,6 +107,27 @@ describe('component knowledge paths', () => {
       'docs/specs/components/Avatar.swift.spec.md',
     ]) {
       expect(isPlatformComponentSpecPath(filePath)).toBe(false);
+    }
+  });
+
+  it("locates a platform language's component code by its component root", () => {
+    expect(
+      locatePlatformComponentSource(
+        'packages/native/apple/Sources/Astryx/Avatar/AvatarStatusDot.swift',
+      ),
+    ).toEqual({
+      language: 'swift',
+      componentRoot: 'Avatar',
+      stem: 'AvatarStatusDot',
+    });
+    for (const filePath of [
+      'packages/native/apple/Sources/Astryx/Astryx.swift',
+      'packages/native/apple/Sources/Astryx/Avatar/Avatar.spec.md',
+      'packages/native/apple/Sources/Astryx/Avatar/tests/Avatar.swift',
+      'packages/native/apple/Tests/AstryxTests/AvatarTests.swift',
+      'packages/core/src/Avatar/Avatar.tsx',
+    ]) {
+      expect(locatePlatformComponentSource(filePath)).toBeNull();
     }
   });
 
