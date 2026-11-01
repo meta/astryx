@@ -786,6 +786,37 @@ async function reconcileSpecOwnerGate({
     ),
   ].sort();
   const textCache = new Map();
+  // The snapshot already read every changed Markdown record at the head; the
+  // same text is the spec content there, so the fingerprint reuses it. A
+  // renamed record's old path is absent at the head.
+  // Only a rename leaves its old path absent at the head: a copy's source
+  // stays, and a path another change re-adds is present.
+  const presentAtHead = new Set(
+    snapshot.files
+      .filter(file => file.status !== 'removed')
+      .map(file => file.filename),
+  );
+  const renamedAway = new Set(
+    snapshot.files
+      .filter(file => file.status === 'renamed' && file.previous_filename)
+      .map(file => file.previous_filename),
+  );
+  for (const record of records) {
+    if (!record.path.endsWith('.md') || record.headContent == null) continue;
+    textCache.set(
+      `${initialHead.toLowerCase()}\0${record.path}`,
+      Promise.resolve(record.headContent),
+    );
+    if (
+      renamedAway.has(record.previousPath) &&
+      !presentAtHead.has(record.previousPath)
+    ) {
+      textCache.set(
+        `${initialHead.toLowerCase()}\0${record.previousPath}`,
+        Promise.resolve(null),
+      );
+    }
+  }
   function specText(sha, filePath) {
     const key = `${sha.toLowerCase()}\0${filePath}`;
     if (!textCache.has(key)) {
@@ -805,30 +836,68 @@ async function reconcileSpecOwnerGate({
     );
     return fingerprintSpecContent(entries);
   }
+  // Each changed spec path's git blob at a commit, from a file list GitHub
+  // already returned: 'absent' for a removed file or a renamed file's old
+  // path. Equal blobs are equal bytes, so such a path's normalized text needs
+  // no read; a path the list does not name stays unknown and is read.
+  function specBlobs(changedFiles) {
+    const blobs = new Map();
+    // Only a rename leaves its old path absent; a copy's source stays and is
+    // unknown here. A path one change renames away and another re-adds is
+    // present: the file's own entry decides, so old paths are marked first.
+    // A path with no blob of its own stays unknown.
+    for (const file of changedFiles) {
+      if (
+        file.status === 'renamed' &&
+        file.previous_filename &&
+        isSpecPath(file.previous_filename)
+      ) {
+        blobs.set(file.previous_filename, 'absent');
+      }
+    }
+    for (const file of changedFiles) {
+      if (!isSpecPath(file.filename)) continue;
+      if (file.status === 'removed') blobs.set(file.filename, 'absent');
+      else if (file.sha) blobs.set(file.filename, file.sha);
+      else blobs.delete(file.filename);
+    }
+    return blobs;
+  }
+  const headBlobs = specBlobs(snapshot.files);
   // An approved commit's spec paths join the head's, so dropping an approved
   // change no longer matches. A failed comparison matches nothing.
-  async function specPathsAt(sha) {
+  async function specChangesAt(sha) {
     const {data} = await github.rest.repos.compareCommitsWithBasehead({
       owner,
       repo,
       basehead: `${pr.base.sha}...${sha}`,
     });
-    return (data.files ?? []).flatMap(file =>
-      [file.filename, file.previous_filename].filter(
-        filePath => filePath && isSpecPath(filePath),
+    const changedFiles = data.files ?? [];
+    return {
+      paths: changedFiles.flatMap(file =>
+        [file.filename, file.previous_filename].filter(
+          filePath => filePath && isSpecPath(filePath),
+        ),
       ),
-    );
+      blobs: specBlobs(changedFiles),
+    };
   }
   async function hasCurrentContent(sha) {
     try {
-      const paths = [
-        ...new Set([...specPaths, ...(await specPathsAt(sha))]),
-      ].sort();
-      const [atHead, atSha] = await Promise.all([
-        fingerprintAt(initialHead, paths),
-        fingerprintAt(sha, paths),
+      const atSha = await specChangesAt(sha);
+      const paths = [...new Set([...specPaths, ...atSha.paths])].sort();
+      // The fingerprints match exactly when every path's normalized text
+      // does, so only paths without a shared blob are read and compared.
+      const unsettled = paths.filter(filePath => {
+        const headBlob = headBlobs.get(filePath);
+        return headBlob === undefined || headBlob !== atSha.blobs.get(filePath);
+      });
+      if (unsettled.length === 0) return true;
+      const [atHead, atShaContent] = await Promise.all([
+        fingerprintAt(initialHead, unsettled),
+        fingerprintAt(sha, unsettled),
       ]);
-      return atHead.fingerprint === atSha.fingerprint;
+      return atHead.fingerprint === atShaContent.fingerprint;
     } catch (error) {
       core.warning(`Could not compare ${sha.slice(0, 7)}: ${error.message}`);
       return false;
