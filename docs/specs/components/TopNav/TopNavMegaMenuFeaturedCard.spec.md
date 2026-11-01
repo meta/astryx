@@ -30,7 +30,7 @@ system_specs: []
 | Behavior                | A promotional card for a mega menu's featured slot: optional image, title, description, an optional call-to-action link, then caller content.                     |
 | End-user impact         | Users see a highlighted destination; screen-reader users skip a decorative image unless `imageAlt` names it.                                                      |
 | Builder impact          | None.                                                                                                                                                             |
-| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps (see Current-state impact).                                                                   |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                                                    |
 | Review checks           | Reject an image without `imageAlt` that is exposed to assistive technology, or a link rendered when only one of `linkLabel` and `linkHref` is set.                |
 | Governing rules         | `design:bidirectionality` DR4; `architecture:interaction-modality`; `architecture:component-theming-surface`.                                                     |
 
@@ -126,11 +126,11 @@ anatomy-theming map is recorded.
 
 ## Verification map
 
-| Contract        | Verification                                                                  | Representative states          | Mutation or failure expectation                                        | Audit section                                    |
-| --------------- | ----------------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------- | ------------------------------------------------ |
-| FR1             | `TopNav.test.tsx` featured-card rest-forwarding test                          | Root props                     | Dropped props fail.                                                    | `audit:TopNavMegaMenuFeaturedCard/behavior`      |
-| FR2, FR3        | `TopNav.test.tsx` featured-card image tests                                   | With and without `imageAlt`    | Exposed decorative image or lost link fails.                           | `audit:TopNavMegaMenuFeaturedCard/accessibility` |
-| FR3 (RTL arrow) | `TopNav.test.tsx` featured-card arrow-mirror test, plus real-browser evidence | Link with a label, LTR and RTL | An arrow that points right in RTL, or a link name that changes, fails. | `audit:TopNavMegaMenuFeaturedCard/i18n-rtl`      |
+| Contract        | Verification                                                                  | Representative states          | Mutation or failure expectation                                                                                                                                                                       | Audit section                                    |
+| --------------- | ----------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| FR1             | `TopNav.test.tsx` featured-card rest-forwarding test                          | Root props                     | Dropped props fail.                                                                                                                                                                                   | `audit:TopNavMegaMenuFeaturedCard/behavior`      |
+| FR2, FR3        | `TopNav.test.tsx` featured-card image tests                                   | With and without `imageAlt`    | Exposed decorative image or lost link fails.                                                                                                                                                          | `audit:TopNavMegaMenuFeaturedCard/accessibility` |
+| FR3 (RTL arrow) | `TopNav.test.tsx` featured-card arrow-mirror test, plus real-browser evidence | Link with a label, LTR and RTL | An arrow that points right in RTL, or a link name that changes, fails. Gap: the unit test sees the mirror class but not the inline-block box the transform needs; the real-browser check covers that. | `audit:TopNavMegaMenuFeaturedCard/i18n-rtl`      |
 
 Read from source, with no focused test yet: the content order (FR1); the forwarded `ref` and the `top-nav-mega-menu-featured-card` target (FR1); that the link renders only when both `linkLabel` and `linkHref` are set (FR3); the image size (FR1), the `LinkProvider` link (FR3), and FR4.
 
