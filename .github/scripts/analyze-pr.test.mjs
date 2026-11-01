@@ -339,17 +339,12 @@ function fixtureBox(name) {
 
 describe('analyze-pr base and head sizes', () => {
   it('sizes a component whose bundle reaches a changed shared module', () => {
-    fs.mkdirSync(FIXTURE_ROOT, {recursive: true});
-    const box = fs.mkdtempSync(path.join(FIXTURE_ROOT, 'reach-'));
-    const repo = path.join(box, 'repo');
-    const scratch = path.join(box, 'tmp');
-    fs.mkdirSync(repo);
-    fs.mkdirSync(scratch);
+    const {box, repo, env} = fixtureBox('reach');
     const analyze = (...flags) =>
       execFileSync(
         process.execPath,
         [SCRIPT, '--base', 'main', '--head', 'HEAD', '--output', 'analysis.json', ...flags],
-        {cwd: repo, encoding: 'utf8', env: {...process.env, TMPDIR: scratch}},
+        {cwd: repo, encoding: 'utf8', env},
       );
     const write = (file, content) => {
       fs.mkdirSync(path.dirname(path.join(repo, file)), {recursive: true});
