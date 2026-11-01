@@ -327,9 +327,11 @@ struct AstryxButtonStyle: ButtonStyle {
     case .token:
       tokenBody(configuration, fill: background, edge: nil, keepsTapMinimum: true)
     case .solid(let role, let inBar):
+      // Drawn on the surface color, so a translucent token such as
+      // `color.neutral` reads as it does on a page, opaque over any content.
       tokenBody(
         configuration, fill: role.color(astryx.tokens), edge: astryx.tokens.color.borderEmphasized,
-        keepsTapMinimum: !inBar
+        underlay: astryx.tokens.color.backgroundSurface, keepsTapMinimum: !inBar
       )
     case .glass(.barItem), .glass(.barProminent):
       // `.barProminent` draws through SwiftUI's own style; this is only its
@@ -362,10 +364,11 @@ struct AstryxButtonStyle: ButtonStyle {
   /// The token look, and the solid fill with an edge (FR10).
   @ViewBuilder
   private func tokenBody(
-    _ configuration: Configuration, fill: Color, edge: Color?, keepsTapMinimum: Bool
+    _ configuration: Configuration, fill: Color, edge: Color?, underlay: Color? = nil, keepsTapMinimum: Bool
   ) -> some View {
     let drawn = label(configuration, padded: true)
       .background(shape.fill(fill))
+      .background { if let underlay { shape.fill(underlay) } }
       .overlay { if let edge { shape.strokeBorder(edge, lineWidth: 1) } }
       .astryxShadow(shadow, in: shape, borderWidth: edge == nil ? 0 : 1)
       .opacity(pressOpacity(configuration))

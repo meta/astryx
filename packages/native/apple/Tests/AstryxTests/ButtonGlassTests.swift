@@ -76,33 +76,45 @@ private func surface(
 @Test func aBarButtonDrawsNoFillOrPadding() {
   // FR7, FR11: the bar's glass is the only chrome, and no Astryx padding
   // can cut the label short.
-  let barItem = Pixels(barStyled(.secondary, surface: .glass(.barItem)))
-  let token = Pixels(barStyled(.secondary, surface: .token))
-  let neutral = rgba(Theme.default.light.color.neutral)
-  #expect(!close(barItem.at(1, barItem.height / 2), neutral))
+  let accent = Theme.default.light.color.accent
+  let barItem = Pixels(barStyled(surface: .glass(.barItem), background: accent))
+  let token = Pixels(barStyled(surface: .token, background: accent))
   #expect(barItem.at(1, barItem.height / 2)[3] == 0)
-  #expect(close(token.at(8, token.height / 2), neutral))
+  #expect(close(token.at(8, token.height / 2), rgba(accent)))
   #expect(barItem.width < token.width)
 }
 
 @MainActor
 @Test func aSolidFallbackDrawsTheFillWithAnEmphasizedEdge() {
   let tokens = Theme.default.light
-  let solid = Pixels(barStyled(.ghost, surface: .solid(.surface, inBar: false)))
+  let solid = Pixels(barStyled(surface: .solid(.surface, inBar: false)))
   #expect(close(solid.at(0, solid.height / 2), rgba(tokens.color.borderEmphasized)))
   #expect(close(solid.at(8, solid.height / 2), rgba(tokens.color.backgroundSurface)))
 }
 
+@MainActor
+@Test func aSolidNeutralFillIsOpaqueOverContent() {
+  // FR10's solid fill hides what is behind it: the translucent neutral token
+  // draws on the surface color, as it reads on a page.
+  let solid = Pixels(barStyled(surface: .solid(.neutral, inBar: false)).background(Color.black))
+  let pixel = solid.at(8, solid.height / 2)
+  // The light surface, tinted by neutral, not the black content behind it.
+  #expect(pixel[3] == 255)
+  #expect(pixel[0...2].allSatisfy { $0 > 200 })
+}
+
 /// A Button's style drawn alone at a given surface.
 @MainActor
-private func barStyled(_ variant: ButtonVariant, surface: ButtonSurface) -> some View {
+private func barStyled(
+  surface: ButtonSurface, background: Color? = nil
+) -> some View {
   let astryx = EnvironmentValues().astryx
   return SwiftUI.Button("Share") {}
     .buttonStyle(
       AstryxButtonStyle(
         astryx: astryx, height: astryx.tokens.size.elementMd, fillsWidth: false,
         foreground: astryx.tokens.color.textPrimary,
-        background: astryx.tokens.color.neutral, shadow: [], surface: surface
+        background: background ?? astryx.tokens.color.neutral, shadow: [], surface: surface
       )
     )
     .fixedSize()
