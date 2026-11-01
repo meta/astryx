@@ -419,10 +419,27 @@ describe('SegmentedControl Tab stop (spec:AST-085 FR1)', () => {
     await user.tab();
     expect(screen.getByRole('radio', {name: 'List'})).toHaveFocus();
     expect(onChange).not.toHaveBeenCalled();
-    // Arrows still move to enabled segments and select them.
+    // Arrows move from it to the enabled segment beside it and select it.
     await user.keyboard('{ArrowRight}');
-    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith('table');
+    expect(screen.getByRole('radio', {name: 'Table'})).toHaveFocus();
     expect(tabStops()).toHaveLength(1);
+  });
+
+  it('moves left from a disabled selected segment to the enabled segment beside it', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl label="View" value="list" onChange={onChange}>
+        <SegmentedControlItem value="grid" label="Grid" />
+        <SegmentedControlItem value="list" label="List" isDisabled />
+        <SegmentedControlItem value="table" label="Table" />
+      </SegmentedControl>,
+    );
+    screen.getByRole('radio', {name: 'List'}).focus();
+    await user.keyboard('{ArrowLeft}');
+    expect(onChange).toHaveBeenCalledWith('grid');
+    expect(screen.getByRole('radio', {name: 'Grid'})).toHaveFocus();
   });
 
   it('moves a fallen-back Tab stop to the segment selected later', () => {

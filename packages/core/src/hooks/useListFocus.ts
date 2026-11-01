@@ -767,16 +767,34 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
 
       const currentIndex = getCurrentIndex();
       const items = getItems();
+      let nextFrom = currentIndex === -1 ? 0 : currentIndex + 1;
+      let prevFrom = currentIndex === -1 ? items.length - 1 : currentIndex - 1;
+      // Focus on an owner-placed stop outside `items`, such as a disabled
+      // checked radio, moves to the enabled item beside it in document order.
+      const active = document.activeElement;
+      if (
+        currentIndex === -1 &&
+        tabStopOrder != null &&
+        active != null &&
+        listRef.current?.contains(active)
+      ) {
+        const after = items.findIndex(
+          item =>
+            (active.compareDocumentPosition(item) &
+              Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0,
+        );
+        nextFrom = after === -1 ? items.length : after;
+        prevFrom = nextFrom - 1;
+      }
 
       if (isNext) {
-        const from = currentIndex === -1 ? 0 : currentIndex + 1;
-        const next = findEnabledIndex(items, from, 1, wrap);
+        const next = findEnabledIndex(items, nextFrom, 1, wrap);
         if (next !== -1) {
           focusIndex(items, next);
         }
       } else if (isPrev) {
-        const from = currentIndex === -1 ? items.length - 1 : currentIndex - 1;
-        const prev = findEnabledIndex(items, from, -1, wrap);
+        const prev = findEnabledIndex(items, prevFrom, -1, wrap);
         if (prev !== -1) {
           focusIndex(items, prev);
         }
@@ -807,6 +825,7 @@ export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
       focusPage,
       onEscape,
       ownsEvent,
+      tabStopOrder,
     ],
   );
 
