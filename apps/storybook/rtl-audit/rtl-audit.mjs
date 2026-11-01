@@ -694,7 +694,7 @@ function positionalCard(component, storyId, ltrMeasure, rtlMeasure) {
         reason: grade.reason,
       });
     }
-    perEl.push({idx: i, cls: L.cls, expectation: grade.expectation, delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10, mirrored: grade.pass});
+    perEl.push({idx: i, cls: L.cls, expectation: grade.expectation, delta: grade.delta == null ? null : Math.round(grade.delta * 10) / 10, pass: grade.pass});
   }
   card.perEl = perEl;
   if (anyFail) {
