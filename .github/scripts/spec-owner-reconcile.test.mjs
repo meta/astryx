@@ -1380,6 +1380,72 @@ describe('spec owner workflow reconciliation', () => {
       });
     });
 
+    describe('renamed records', () => {
+      const moved = Array.from({length: 300}, (_, i) => ({
+        filename: `docs/specs/components/C${i}/C${i}.spec.md`,
+        previous_filename: `packages/core/src/C${i}/C${i}.spec.md`,
+        status: 'renamed',
+        changes: 0,
+        sha: `blob-${i}`,
+      }));
+      const baseTree = moved.map(file => ({
+        path: file.previous_filename,
+        type: 'blob',
+        sha: file.sha,
+      }));
+
+      async function reconcileCounting({tree, edited = null}) {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          comments: [ownerComment(`/approve-spec ${head}`)],
+        });
+        harness.github.rest.git = {
+          getTree: async () => {
+            if (!tree) throw new Error('Not available');
+            return {
+              data: {
+                tree: tree.map(entry =>
+                  entry.path === edited
+                    ? {...entry, sha: 'blob-edited'}
+                    : entry,
+                ),
+                truncated: false,
+              },
+            };
+          },
+        };
+        const counter = {reads: 0};
+        const getContent = harness.github.rest.repos.getContent;
+        harness.github.rest.repos.getContent = async input => {
+          counter.reads += 1;
+          return getContent(input);
+        };
+        await run(harness, context({runId: 100n}));
+        return {reads: counter.reads, gate: latestReviewGate(harness.state)};
+      }
+
+      it('reuses the head text as the base text of an unchanged rename', async () => {
+        const withoutTree = await reconcileCounting({tree: null});
+        const withTree = await reconcileCounting({tree: baseTree});
+
+        expect(withTree.gate).toEqual(withoutTree.gate);
+        expect(withTree.gate.state).toBe('success');
+        expect(withoutTree.reads - withTree.reads).toBe(300);
+      });
+
+      it('still reads the base text when the base changed the old path', async () => {
+        const withoutTree = await reconcileCounting({tree: null});
+        const oneEdited = await reconcileCounting({
+          tree: baseTree,
+          edited: moved[7].previous_filename,
+        });
+
+        expect(withoutTree.reads - oneEdited.reads).toBe(299);
+      });
+    });
+
     it('reads a spec wait as satisfied code review, not an older code wait', async () => {
       const harness = createHarness({
         headContent: currentRecord,
