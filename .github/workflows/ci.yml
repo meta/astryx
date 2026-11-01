@@ -1206,7 +1206,7 @@ jobs:
       # Advisory: a package over its budget is flagged in the job summary and
       # the PR report, and fails nothing.
       - name: Compare published package size
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.package-size.outputs.measured == 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.head_file_present != 'false' && steps.package-size.outputs.measured == 'true'
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_SHA: ${{ steps.merge-base.outputs.sha }}
@@ -1247,8 +1247,14 @@ jobs:
       # committed at the merge base (read with git, no API calls). It reads the
       # dists built above and never fails the job; api-changes.json goes into
       # the pr-analysis artifact. With no merge base there is nothing to compare.
+      # A head cut before cli.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates cli.mjs
+        if: hashFiles('scripts/api-report/cli.mjs') == ''
+        run: echo "::notice::This pull request's head has no cli.mjs; merging main runs the API change report."
+
       - name: Report API changes
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request'
+        if: (steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && github.event_name == 'pull_request') && hashFiles('scripts/api-report/cli.mjs') != ''
         continue-on-error: true
         timeout-minutes: 2
         env:
@@ -1672,8 +1678,14 @@ jobs:
       # `@pr-a11y` routing lines select it for this pull request. The runner and
       # routing lines come from the merge commit these steps come from, so an
       # older PR head is routed by current policy while specs run at that head.
+      # A head cut before a11y-pr-contracts.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates a11y-pr-contracts.mjs
+        if: hashFiles('.github/scripts/a11y-pr-contracts.mjs') == ''
+        run: echo "::notice::This pull request's head has no a11y-pr-contracts.mjs; merging main runs the browser accessibility specs."
+
       - name: Run browser accessibility specs
-        if: (!cancelled()) && steps.scope.outputs.has_components == 'true'
+        if: ((!cancelled()) && steps.scope.outputs.has_components == 'true') && hashFiles('.github/scripts/a11y-pr-contracts.mjs') != ''
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -2723,8 +2735,14 @@ jobs:
       # audit still checks D7's centering and hit-testing), so the step says
       # so and passes; a head that has the file always runs it, and a failure
       # fails. ci-rtl-d7.test.mjs keeps the path pointing at a real file.
+      # A head cut before rtl-audit-coarse-hit.browser.test.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates rtl-audit-coarse-hit.browser.test.mjs
+        if: hashFiles('.github/scripts/rtl-audit-coarse-hit.browser.test.mjs') == ''
+        run: echo "::notice::This pull request's head has no rtl-audit-coarse-hit.browser.test.mjs; merging main runs the D7 native target check."
+
       - name: Verify D7 native target regression
-        if: (matrix.package == 'core' && matrix.part == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
+        if: ((matrix.package == 'core' && matrix.part == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')) && hashFiles('.github/scripts/rtl-audit-coarse-hit.browser.test.mjs') != ''
         env:
           ASTRYX_RTL_BROWSER: '1'
         run: |
@@ -2812,8 +2830,14 @@ jobs:
             exit 1
           fi
 
+      # A head cut before rtl-scorecard-summary.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates rtl-scorecard-summary.mjs
+        if: hashFiles('.github/scripts/rtl-scorecard-summary.mjs') == ''
+        run: echo "::notice::This pull request's head has no rtl-scorecard-summary.mjs; merging main runs the RTL scorecard summary."
+
       - name: Write scorecard summary
-        if: (always() && steps.rtl-scope.outputs.should_run == 'true' && matrix.parts == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
+        if: ((always() && steps.rtl-scope.outputs.should_run == 'true' && matrix.parts == 1) && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')) && hashFiles('.github/scripts/rtl-scorecard-summary.mjs') != ''
         run: |
           node .github/scripts/rtl-scorecard-summary.mjs \
             --report rtl-audit-report.json \
@@ -2935,8 +2959,14 @@ jobs:
             --package core \
             --filter "$FILTER"
 
+      # A head cut before rtl-scorecard-summary.mjs existed cannot run the next step;
+      # say so (merging main runs it).
+      - name: Note a head that predates rtl-scorecard-summary.mjs
+        if: hashFiles('.github/scripts/rtl-scorecard-summary.mjs') == ''
+        run: echo "::notice::This pull request's head has no rtl-scorecard-summary.mjs; merging main runs the RTL scorecard summary."
+
       - name: Write scorecard summary
-        if: (always() && hashFiles('rtl-audit-report.json') != '') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')
+        if: ((always() && hashFiles('rtl-audit-report.json') != '') && (steps.scope.outputs.has_rtl_components == 'true' || steps.scope.outputs.has_rtl_harness == 'true' || steps.scope.outputs.force_full_component_audits == 'true')) && hashFiles('.github/scripts/rtl-scorecard-summary.mjs') != ''
         run: |
           node .github/scripts/rtl-scorecard-summary.mjs \
             --report rtl-audit-report.json \
