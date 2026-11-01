@@ -275,10 +275,6 @@ function isFocusable(element: HTMLElement): boolean {
  * ```
  */
 
-function stopPropagation(event: SyntheticEvent): void {
-  event.stopPropagation();
-}
-
 export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const {
     placement = 'above',
@@ -741,4 +737,10 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     show: showLayer,
     hide,
   };
+}
+
+// FR11: stops a press inside the open surface from reaching the trigger's
+// ancestors.
+function stopPropagation(event: SyntheticEvent): void {
+  event.stopPropagation();
 }

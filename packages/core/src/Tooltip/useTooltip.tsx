@@ -266,10 +266,6 @@ function isFocusable(element: HTMLElement): boolean {
  * ```
  */
 
-function stopPropagation(event: SyntheticEvent): void {
-  event.stopPropagation();
-}
-
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -673,4 +669,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     describedBy: layerId,
     renderTooltip,
   };
+}
+
+// FR11: stops a press inside the open surface from reaching the trigger's
+// ancestors.
+function stopPropagation(event: SyntheticEvent): void {
+  event.stopPropagation();
 }
