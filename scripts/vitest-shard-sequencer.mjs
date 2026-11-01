@@ -9,8 +9,8 @@
  * @position `sequence.sequencer` in vitest.config.ts, so every `--shard` run,
  *   the Main workflow's legs and pull requests' alike, splits the `node` project
  *   this way. Vitest's own split deals files out by a hash of their path, by
- *   count, so two of the slowest files can land in one leg while other legs
- *   idle: on `main` one leg drew both of the two slowest files, 830 s of test
+ *   count, so slow files can pile into one leg while other legs idle: on
+ *   `main` one leg drew the slowest and the fifth-slowest file, 830 s of test
  *   time against about 320 s for two other legs. This assigns every file to
  *   exactly one leg, slowest first, each to the leg with the least recorded
  *   time so far, so the slowest files each take a leg of their own and the
