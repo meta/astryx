@@ -4,17 +4,20 @@
 
 /**
  * @file useSheetGestures.ts
- * @input Uses React (useCallback, useEffect, useMemo, useRef, useState)
+ * @input Uses React (useCallback, useEffect, useMemo, useRef, useState) and
+ *   the gesture system's recognizers (../gestures)
  * @output Exports useSheetGestures hook, its option/result types, and the
  *   height and end-inset formats a host renders for the layout split
  * @position Internal to BottomSheet; not exported from the core entry point
  *
  * Drag + snap machinery for the bottom sheet. Tracks a pointer drag down the
- * block axis, translates the sliding surface live, and on release settles to
- * the detent nearest where the sheet would coast to at the finger's speed, or
- * dismisses when that is past the dismiss line. A slow drag projects onto
- * itself and places; a throw continues past the finger. This is the core
- * behavior split the sheet needs: DRAG places, SWIPE closes.
+ * block axis, moves the sliding surface live, and on release does what
+ * UISheetPresentationController does (sheetRelease.ts): it settles on the
+ * position nearest where the release projects at the finger's velocity, the
+ * dismissed position counting as one, on UIKit's release spring handed that
+ * velocity. A slow drag projects onto itself and places; a throw continues
+ * past the finger. This is the core behavior split the sheet needs: DRAG
+ * places, SWIPE closes.
  *
  * A settled detent is split across two properties: `settledLayoutOffset` is
  * the part the scrolling area gives up as layout height, and the remainder is
@@ -24,21 +27,29 @@
  * only a sliver of the sheet — keeps the full height and slides below the
  * viewport instead of reflowing to that sliver.
  *
- * A live drag writes that transform straight to the sheet element, once per
- * input sample, and renders nothing: React state changes when the drag begins
- * and ends, and in between only when the layout split changes (a drag that
- * crosses above its base detent restores the full height). That crossing
- * changes three things that only look right together: the transform, the
- * sheet's height and the scrolling area's end inset. The move writes all
- * three to the elements in the same task, so the browser paints them in one
- * frame, and the render it schedules catches the host up to the same values
- * whenever it commits; it never decides what the next frame shows. The live
- * offset is readable through `activeOffsetRef`. The host owns the element's
- * transform, height and end inset outside a drag and writes their resting
- * values after each commit (a host with a fixed height of its own keeps that
- * height, and the drag never writes it), so a settle animates from wherever the finger
- * left the sheet, and a release processed before the crossing move's render
- * commits still leaves the sheet drawn at its resting detent.
+ * The host owns the element's `transform` and writes the resting value after
+ * each commit. A gesture moves the sheet on the separate `translate` channel,
+ * relative to that resting transform, through the motion foundation's
+ * animator: a drag sets it once per input sample and renders nothing (React
+ * state changes when the drag begins and ends, and in between only when the
+ * layout split changes: a drag that crosses above its base detent restores
+ * the full height), and the release springs it on the compositor, as Web
+ * Animations baked from the spring, so the settle keeps its pace while the
+ * main thread is busy. That crossing changes three things that only look
+ * right together: the travel, the sheet's height and the scrolling area's end
+ * inset. The move writes all three to the elements in the same task, so the
+ * browser paints them in one frame, and the render it schedules catches the
+ * host up to the same values whenever it commits. A finger landing on a
+ * settling sheet catches it where the curve says it is. When the settle
+ * lands, the host writes the new resting transform and `translate` returns
+ * to zero in the same commit as the layout reconcile. Outside a drag the host
+ * also writes the resting height and end inset after each commit (a host with
+ * a fixed height of its own keeps that height, and the drag never writes it),
+ * so a release processed before the crossing move's render commits still
+ * leaves the sheet drawn at its resting detent. The live offset is readable
+ * through `activeOffsetRef`. Under the pointer presentation the release
+ * keeps the theme's duration and easing instead of UIKit's springs
+ * (releaseMotion.ts), on the same channel.
  *
  * Those are pixels, and the stops behind them are relative to the viewport, so
  * a sheet at rest re-resolves its detent on `resize` / `orientationchange`,
@@ -47,36 +58,57 @@
  * the pixels stop meaning the same thing when the viewport changes, the stop
  * the user chose does not.
  *
- * On touch, the scrolling body hands the gesture to the sheet at a scroll
- * edge — once every scroller under the finger, a box nested inside the body
- * and the body itself, is at the edge the pull opposes (see
- * scrollChainUnder). Two shapes, because the browser only offers one of them
- * a choice: a
- * finger that lands on an edge and pulls away from it promotes by cancelling
- * the first, still-cancelable touchmove; a finger that scrolls INTO the end of
- * the content mid-gesture cannot, since the browser has committed the gesture
- * to scrolling and every remaining event is non-cancelable. The second shape
- * needs no cancelling — the scroller is clamped at its end, so there is
- * nothing left to scroll — and instead anchors at the point where the content
- * ran out and drives the sheet from the travel beyond it.
+ * Every drag runs on the gesture system's recognizers (../gestures), which
+ * attach for every pointer (spec:AST-094 FR19) and report UIKit's numbers: a
+ * pan's translation from where it began, past its 10 px threshold (FR17),
+ * and its velocity, UIKit's filter over the events' own timestamps
+ * (spec:AST-100 FR4). A finger's or a pen's drag where the primary pointer
+ * is coarse tracks 1:1 and settles on UIKit's springs; a mouse anywhere, and
+ * a pen or a finger where the primary pointer is fine, keep the pointer
+ * presentation's tracking (the detent magnet, the stretch past the top) and
+ * the theme's release timing (FR13, spec:AST-017 FR59). Every release decides
+ * by FR36's rule: the travel so far plus the release velocity's projection,
+ * against the commit point. A vertical pan on the handle; on the scrolling body, a
+ * downward pan that begins only when nothing under the finger can scroll up
+ * (`scrollEdge`, the scrollers nested in the body included), and an upward
+ * one that does so at the bottom while a taller detent exists. At that edge a
+ * pull away from it is the sheet's from its first move: the moves the browser
+ * would rubber-band are held before the pan begins at its 10 px, so a slow
+ * pull moves the sheet as on iOS; a real scroll is never held (spec:AST-094
+ * FR19, DEC-18). Who gets a
+ * drag is decided once, when it begins (spec:AST-094 FR14): content scrolled
+ * to its end mid-gesture keeps the drag and rubber-bands, and the sheet grows
+ * only from a drag that begins at the edge. The host derives each surface's
+ * `touch-action`.
  *
- * Every gesture here is one finger. A second finger is a pinch, and pinch-zoom
- * belongs to the browser (WCAG 1.4.4): the surfaces declare `pinch-zoom` in
- * their `touch-action`, and a second finger — on either surface, in either
- * order — ends any drag in flight or armed (yieldToPinch), as does the
- * browser cancelling a handle drag to take the pinch. The sheet returns to
- * its detent and the pinch zooms the page.
+ * A drag begins on one finger. With a second finger down before it begins,
+ * wherever that one landed, the fingers are a pinch, and pinch-zoom belongs
+ * to the browser (WCAG 1.4.4): the sheet's pans give up and it holds its
+ * detent while the page zooms. A drag that has begun keeps its finger when
+ * another lands, neither cancelled nor redirected (spec:AST-094 FR10).
+ * Losing window focus or hiding the page cancels a drag in flight, back to
+ * the detent.
+ *
+ * A finger landing on a settling sheet catches it at the touch, where it is
+ * drawn: a watcher (a long press of no duration that never claims) reports
+ * the touch-down and the lift, and on iOS WebKit, which hit-tests a moving
+ * element where its animation started, the host sends the touch to where the
+ * sheet is drawn.
  *
  * Kept private to BottomSheet: a dismiss edge + detents on a bottom-anchored
  * surface are inherently sheet concepts. It is not a general primitive and is
  * intentionally not exported.
  *
  * SSR-safe: no window/document access at module scope; all measurement
- * happens inside handlers. Respects prefers-reduced-motion by skipping the
- * settle transition.
+ * happens inside handlers. Under prefers-reduced-motion every release and
+ * spring-back follows design:reduced-motion: the animator's own cross-fade
+ * replaces the travel (opacity only, 200 ms or less after a touch release or
+ * on a touch screen; at once with a mouse).
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/useSheetGestures.test.ts
+ * - /packages/core/src/BottomSheet/sheetRelease.ts
+ * - /packages/core/src/BottomSheet/releaseMotion.ts
  */
 
 import {
@@ -90,14 +122,36 @@ import {
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
-  type TouchEvent as ReactTouchEvent,
   type UIEvent as ReactUIEvent,
 } from 'react';
-
+import {getGestureHost} from '../gestures/GestureHost';
+import type {GestureRecognizer} from '../gestures/GestureRecognizer';
+import {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
+import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import type {GestureTouch, PointerKind} from '../gestures/types';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {playHaptic} from '../gestures/haptics';
+import {readTouchPresentation} from './sheetTouch';
+import {lockSheetSelection} from './sheetSelectionLock';
+import {
+  createAnimator,
+  type Animator,
+  type MotionHandle,
+} from '../motion/animator';
+import {rubberBand} from '../motion/rubberBand';
+import type {SpringDescription} from '../motion/spring';
+import {sheet as sheetTable} from '../motion/uikit/sheet';
+import {SHEET_DETENT_SPRING} from '../motion/uikit/springs';
+import {
+  createInteractiveTransition,
+  type MapLayer,
+  type ReleaseRule,
+} from '../motion/interactive';
+import {readReleaseMotion, type ReleaseMotion} from './releaseMotion';
+import {limitOvershoot, sheetReleaseRule} from './sheetRelease';
 import {
   computeDetentOffsets,
   peekOffsetFor,
-  resolveSettleOffset,
   scrimOpacityForOffset,
 } from './snapOffsets';
 
@@ -110,101 +164,117 @@ interface SheetDetents {
   peekOffset: number | null;
 }
 
-// A release is judged where the sheet WOULD come to rest, not where the
-// finger left it: the release position plus the distance a surface moving at
-// the finger's speed travels while it decelerates. The rate is UIKit's normal
-// scroll deceleration (0.998 per ms), so a throw ends where a thrown scroll
-// view would, and a slow release projects onto itself. A gesture shorter than
-// the travel floor projects nothing: a nudge has no throw to continue.
-const DECELERATION_RATE = 0.998;
-const PROJECTION_FACTOR = DECELERATION_RATE / (1 - DECELERATION_RATE); // ms
-const PROJECTION_MIN_TRAVEL = 48; // px traveled during the gesture
-// The release speed is the finger's speed over its last stretch, not between
-// its last two samples: one slow sample before the lift must not cancel a
-// throw, and a finger that paused before lifting has no speed at all.
-const VELOCITY_WINDOW_MS = 100;
-// On a slow drag below the shortest detent, dismiss once dragged past it by
-// more than this fraction of that detent's height; otherwise snap back to it.
-const DISMISS_OVERSHOOT_RATIO = 0.4;
-// Within this many px of a detent, the live drag is magnetically eased toward
-// it so it "clicks" into place instead of hovering just off the mark.
+// The sheet's moves run on the interactive-transition driver
+// (motion/interactive.ts): its travel channel drives, and the dim on the
+// dialog's ::backdrop is a layer mapped from it. The sheet decides its own
+// targets (sheetRelease.ts) and plays them with `to`, so the driver's own
+// release rule is never consulted.
+const settleOnly: ReleaseRule<'settle'> = ({position}) => ({
+  target: position,
+  motion: SHEET_DETENT_SPRING,
+  outcome: 'settle',
+});
+
+/** The handle of a move the driver settled at once, playing nothing. */
+function settledHandle(finished: Promise<boolean>): MotionHandle {
+  const handle: MotionHandle = {
+    properties: [],
+    finished,
+    started: Promise.resolve(performance.now()),
+    value: () => 0,
+    velocity: () => 0,
+    // It played nothing: no curve for a companion to follow.
+    curve: () => null,
+    retarget: () => handle,
+    stop: () => {},
+  };
+  return handle;
+}
+
+// Gone: the sheet's top at the bottom of the screen. A release under a finger
+// can carry the sheet there (sheetRelease.ts).
+function dismissedOffsetFor(
+  maxOffset: number,
+  shortestDetentHeight: number,
+): number {
+  return maxOffset + shortestDetentHeight;
+}
+// Where the scrim reaches clear: gone, under every pointer. UIKit's dim is
+// linear from the shortest detent to the dismissed position, and one release
+// rule decides every drag (spec:AST-094 FR36), so a dim that cleared sooner
+// would let a sheet spring back under a clear backdrop.
+function scrimClearOffset(
+  maxOffset: number,
+  shortestDetentHeight: number,
+): number {
+  return dismissedOffsetFor(maxOffset, shortestDetentHeight);
+}
+// The pointer presentation's drag (a mouse anywhere, and anything where the
+// primary pointer is fine) keeps the sheet's pointer tracking (spec:AST-094
+// FR13, spec:AST-017 FR59): within this many px of a detent the live drag
+// eases toward it, so it "clicks" into place instead of hovering just off the
+// mark. Under UIKit's presentation the sheet tracks 1:1, as UIKit's does.
 const MAGNET_RANGE = 40;
-// The touch path drives the sheet through the same machinery the pointer path
-// uses, by handing it a pointer-shaped object built from a `Touch`. On iOS
-// Safari that object is indistinguishable from the real thing: WebKit raises
-// PointerEvents for a finger under the SAME numeric id it puts in
-// `Touch.identifier`, so such a drag is keyed to a live pointer and the
-// handlers that guard a mouse drag fire against it. Mark the synthetic object
-// so they can tell the two apart.
-type SyntheticTouchPointer = ReactPointerEvent & {syntheticTouch?: true};
-
-function isSyntheticTouch(event: ReactPointerEvent): boolean {
-  return (event as SyntheticTouchPointer).syntheticTouch === true;
-}
-
-// Rubber-band factor for dragging up past fully-open, capped at OVERSCROLL_MAX
-// (the sheet reserves that much bottom padding for the lift to reveal).
+// Rubber-band factor for the pointer presentation's drag up past fully open.
+// Under UIKit's
+// presentation the stretch is UIKit's rubber band instead (spec:AST-094 FR3).
 const OVERSCROLL_RESISTANCE = 0.35;
-// SYNC: must match OVERSCROLL_PADDING in BottomSheetPanel.tsx (the reserved
-// bottom padding the lift reveals). Kept as a local const rather than a shared
-// import so it can be used inside stylex.create there.
+// How far any drag may lift the sheet past fully open: the bottom padding the
+// sheet reserves for the lift to reveal.
+// SYNC: must match OVERSCROLL_PADDING in BottomSheetPanel.tsx.
 const OVERSCROLL_MAX = 48;
-// Travel past the point where a scrolling gesture ran out of content before it
-// hands the sheet the rest of the pull. Small enough to feel continuous with
-// the scroll, large enough that a swipe merely coming to rest on the last pixel
-// doesn't start a drag on jitter.
-const CONTENT_END_HANDOFF_SLOP = 4;
-// How far a finger resting on the body must travel before the pull becomes a
-// sheet drag rather than a tap.
-//
-// This used to be zero: any downward movement promoted. A finger is never
-// still, so tapping a control inside the sheet drifted a pixel or two and
-// started a drag -- which suppresses the panel's transition, correctly, for as
-// long as the sheet is tracking the finger. The close that the tap triggered
-// then landed inside that window and cut instead of animating. A deliberate
-// pull was unaffected; only a tap, and only a tap inside the sheet, since the
-// scrim is outside the body and arms nothing.
-//
-// 8px is the conventional tap slop, a shade over iOS's own recognizer, and
-// well under what a real pull covers in its first frames.
-const DRAG_PROMOTION_SLOP = 8;
 
-// Short haptic tick on detent settle where supported. iOS Safari doesn't
-// expose navigator.vibrate, so this is a no-op there; skipped under
-// reduced-motion.
-function hapticTick(): void {
-  if (
-    typeof navigator === 'undefined' ||
-    typeof navigator.vibrate !== 'function'
-  ) {
-    return;
-  }
-  if (prefersReducedMotion()) {
-    return;
-  }
-  navigator.vibrate(8);
-}
-
-// Pull a value toward the nearest of `targets` when within MAGNET_RANGE, easing
-// the last stretch so the surface settles crisply onto a detent while dragging.
-function magnetize(value: number, targets: number[]): number {
+// Pull a value toward the nearest of `targets` when within MAGNET_RANGE,
+// easing the last stretch so the surface settles crisply onto a detent while
+// dragging.
+function magnetize(value: number, targets: ReadonlyArray<number>): number {
   let nearestTarget = targets[0];
   let nearestDist = Math.abs(value - nearestTarget);
-  for (const t of targets) {
-    const d = Math.abs(value - t);
-    if (d < nearestDist) {
-      nearestDist = d;
-      nearestTarget = t;
+  for (const target of targets) {
+    const distance = Math.abs(value - target);
+    if (distance < nearestDist) {
+      nearestDist = distance;
+      nearestTarget = target;
     }
   }
   if (nearestDist >= MAGNET_RANGE) {
     return value;
   }
-  // Ease-in over the range: pull grows as you approach (t^2), so the click
-  // feels magnetic near the detent but doesn't fight a deliberate drag-through.
+  // Ease-in over the range: the pull grows as the drag nears the detent
+  // (t^2), so it feels magnetic close by without fighting a drag-through.
   const t = nearestDist / MAGNET_RANGE;
   const pull = 1 - t * t;
   return value + (nearestTarget - value) * pull;
+}
+
+// The live offset for a mouse or pen drag at `raw` (spec:AST-017 FR59): a
+// damped, capped stretch up past fully open, 1:1 in the dismiss zone,
+// magnetic between detents.
+function pointerDragOffset(
+  raw: number,
+  offsets: ReadonlyArray<number>,
+): number {
+  if (raw < 0) {
+    return Math.max(-OVERSCROLL_MAX, raw * OVERSCROLL_RESISTANCE);
+  }
+  if (raw > offsets[offsets.length - 1]) {
+    return raw;
+  }
+  return magnetize(raw, offsets);
+}
+
+// The live offset for a finger's drag at `raw`: 1:1 between detents and into
+// the dismiss zone, as UIKit's sheet tracks (the release picks the detent),
+// and past fully open UIKit's rubber band over the sheet's height
+// (spec:AST-094 FR3), no farther than the reserve.
+function fingerDragOffset(raw: number, height: number): number {
+  if (raw >= 0) {
+    return raw;
+  }
+  return Math.max(
+    -OVERSCROLL_MAX,
+    rubberBand(raw, height, sheetTable.rubberBand.coefficient),
+  );
 }
 
 function preservationInsetForOffset(
@@ -256,95 +326,6 @@ function naturalEndGapFor(body: HTMLElement | null): number {
   return naturalMaxScrollTop - body.scrollTop;
 }
 
-// A box the user can scroll down the block axis: it has overflow to scroll and
-// an overflow mode that lets a finger or wheel do the scrolling.
-function isBlockScroller(element: HTMLElement): boolean {
-  if (element.scrollHeight - element.clientHeight <= 1) {
-    return false;
-  }
-  const {overflowY} = getComputedStyle(element);
-  return overflowY === 'auto' || overflowY === 'scroll';
-}
-
-/**
- * Whether a gesture that lands on `target` began inside another layer
- * rendered in this sheet's content — a `<dialog>` between the target and the
- * body. A sheet opened from inside a sheet's content, a Dialog opened there,
- * renders its dialog as a descendant of the host's body, so its pointer and
- * touch events bubble through the host's gesture listeners. That gesture is
- * the layer's own: the host must neither arm a drag on it nor take pointer
- * capture for it, which would cancel the drag the layer's own handle began
- * (`component:BottomSheet` FR7: a swipe reaches only the top sheet of a
- * stack; FR6: a covered sheet is blocked).
- */
-export function isInsideNestedLayer(
-  target: EventTarget | null,
-  body: HTMLElement,
-): boolean {
-  for (
-    let element = target instanceof Element ? target : null;
-    element != null && element !== body;
-    element = element.parentElement
-  ) {
-    if (element.localName === 'dialog') {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * The scrollers a gesture that lands on `target` can scroll, innermost first
- * and the body last: every scrollable box between the target and the body,
- * then the body itself.
- *
- * The body is where the hook listens, but it is not always what scrolls. A
- * host that pins a header and footer around a scrolling middle, or lays a
- * scrolling grid inside the sheet, moves that inner box's `scrollTop` and
- * never the body's. Reading the edge off the body alone then reports "at the
- * top" for every touch, so a pull meant to scroll the inner box back up
- * drags the sheet instead, and the box can never be scrolled back by hand.
- *
- * The browser scrolls the innermost box that has room, then chains outward,
- * so the sheet's turn comes only when every box in the chain is at the edge
- * the pull opposes: see `chainAtTop` and `chainAtBottom`.
- */
-export function scrollChainUnder(
-  target: EventTarget | null,
-  body: HTMLElement,
-): HTMLElement[] {
-  const chain: HTMLElement[] = [];
-  for (
-    let element = target instanceof Element ? target : null;
-    element != null && element !== body;
-    element = element.parentElement
-  ) {
-    if (element instanceof HTMLElement && isBlockScroller(element)) {
-      chain.push(element);
-    }
-  }
-  chain.push(body);
-  return chain;
-}
-
-function elementAtTop(element: HTMLElement): boolean {
-  return element.scrollTop <= 0;
-}
-
-function elementAtBottom(element: HTMLElement): boolean {
-  return element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
-}
-
-/** Nothing in the chain can scroll up any further, so a pull down is the sheet's. */
-function chainAtTop(chain: ReadonlyArray<HTMLElement>): boolean {
-  return chain.every(elementAtTop);
-}
-
-/** Nothing in the chain can scroll down any further, so a pull up is the sheet's. */
-function chainAtBottom(chain: ReadonlyArray<HTMLElement>): boolean {
-  return chain.every(elementAtBottom);
-}
-
 function visibleHeightForOffset(
   sheetHeight: number,
   offset: number,
@@ -393,10 +374,10 @@ export interface UseSheetGesturesOptions {
   onSnap?: (heightPx: number) => void;
   /**
    * Called with the scrim opacity the sheet should show (1 = fully visible,
-   * 0 = hidden) as the drag moves and on settle. Full while the sheet is at
-   * or above its mid detent, fading to 0 as it collapses onto the shortest
-   * "peek" detent — thinning to a faint glance state without fully clearing — and
-   * on the dismiss overshoot. Lets the owner mirror it onto the scrim.
+   * 0 = hidden) as the drag moves and on settle. Full at the shortest working
+   * detent and above; below it, linear in the sheet's position to 0 at the
+   * dismissed position (UIKit's dim), or to a faint glance state at a "peek"
+   * detent. Lets the owner mirror it onto the scrim.
    */
   onScrimOpacity?: (opacity: number) => void;
   /**
@@ -407,6 +388,20 @@ export interface UseSheetGesturesOptions {
    * @default false
    */
   hasFixedHeight?: boolean;
+  /**
+   * Given by a host whose scrim is a modal dialog's `::backdrop`. While true,
+   * the dim follows the sheet with no easing of its own: a gesture writes it
+   * at once, and a release plays it on the compositor in lockstep with the
+   * sheet. False hands it back, at the value last written.
+   */
+  onScrimTracking?: (tracking: boolean) => void;
+  /**
+   * Given with `onScrimTracking`: whether the dialog's `::backdrop` is the
+   * visible scrim at this moment. A stack shows one backdrop: a sheet stacked
+   * above another keeps a transparent one, and a sheet whose scrim another
+   * took over drops it, so neither plays the dim there. Omitted: always.
+   */
+  isScrimShown?: () => boolean;
 }
 
 export interface SheetContentProps {
@@ -414,26 +409,28 @@ export interface SheetContentProps {
 }
 
 export interface SheetHandleProps {
+  ref: (node: HTMLElement | null) => void;
   style: CSSProperties;
   onContextMenu: (event: ReactMouseEvent) => void;
-  onLostPointerCapture: (event: ReactPointerEvent) => void;
+  /** Keeps the focus where it is: the handle has no native focus action. */
   onPointerDown: (event: ReactPointerEvent) => void;
-  onPointerMove: (event: ReactPointerEvent) => void;
-  onPointerUp: (event: ReactPointerEvent) => void;
-  onPointerCancel: (event: ReactPointerEvent) => void;
-  onTouchStart: (event: ReactTouchEvent) => void;
-  onTouchMove: (event: ReactTouchEvent) => void;
 }
 
 export interface SheetBodyProps {
   ref: (node: HTMLElement | null) => void;
   onContextMenu: (event: ReactMouseEvent) => void;
-  onLostPointerCapture: (event: ReactPointerEvent) => void;
-  onPointerDown: (event: ReactPointerEvent) => void;
-  onPointerMove: (event: ReactPointerEvent) => void;
-  onPointerUp: (event: ReactPointerEvent) => void;
-  onPointerCancel: (event: ReactPointerEvent) => void;
   onScroll: (event: ReactUIEvent<HTMLElement>) => void;
+}
+
+/**
+ * A drag-dismissed sheet on its way off screen. The release spring carries it
+ * on the travel channel at the finger's velocity, so the host keeps
+ * `transform` as given (the resting value, which also holds off a stylesheet
+ * exit transform) and ends its exit when `finished` settles.
+ */
+export interface SheetGestureExit {
+  finished: Promise<boolean>;
+  transform: string;
 }
 
 export interface UseSheetGesturesResult {
@@ -443,21 +440,21 @@ export interface UseSheetGesturesResult {
    * rotation / viewport changes without re-measuring mid-drag.
    */
   sheetRef: (node: HTMLElement | null) => void;
-  /** Spread on the sliding surface: live translate + touch-action guard (pans are the sheet's, pinch-zoom is the browser's). */
+  /** Spread on the sliding surface: the resting transform, and `touch-action` (no page pan from it; pinch-zoom stays the browser's). */
   contentProps: SheetContentProps;
-  /** Spread on the grab-handle element: pointer drag handlers. */
+  /** Spread on the grab-handle element: its ref (the handle's pan attaches to it). */
   handleProps: SheetHandleProps;
   /**
-   * Spread on the scrollable body. An overscroll-at-top pull-down starts a
-   * sheet drag (a larger, more forgiving target when the content isn't itself
+   * Spread on the scrollable body. A pull at a scroll edge starts a sheet drag
+   * (a larger, more forgiving target when the content isn't itself
    * scrolling); normal scrolling passes through untouched.
    */
   bodyProps: SheetBodyProps;
   /**
    * The body element `bodyProps.ref` is attached to. The hook tracks the node
-   * anyway (it owns the non-passive touch listeners on it), so a host that
-   * also needs the element reads it here rather than wrapping `bodyProps.ref`
-   * in a second callback ref.
+   * anyway (its pans attach to it), so a host that also needs the element
+   * reads it here rather than wrapping `bodyProps.ref` in a second callback
+   * ref.
    */
   bodyElementRef: RefObject<HTMLElement | null>;
   /**
@@ -493,17 +490,27 @@ export interface UseSheetGesturesResult {
   sheetHeight: number;
   /** End padding that preserves the scroll position across height changes. */
   scrollPreservationInset: number;
-  /** Layout offset retained until the transform-only snap finishes. */
+  /**
+   * Layout offset retained while a release spring runs; null at rest. The
+   * host leaves the resting transform alone until it clears.
+   */
   settlingLayoutOffset: number | null;
   /**
-   * Reconciles the final layout once the transform-only snap finishes. The
-   * panel decides WHEN a snap is over (it owns the element and its computed
-   * transition), so completion cannot be driven from a `transitionend`
-   * listener alone: with transitions disabled — inline `transition: none`, a
-   * `0s` duration token, a test harness turning animation off — no event ever
-   * arrives and the scroll area would keep its full height forever.
+   * Reconciles the final layout once a release spring lands. The hook calls
+   * it itself when the spring's curve ends (a timer on the curve's length,
+   * not an animation event, so it lands with animations disabled too).
    */
   completeScrollAreaSettle: () => void;
+  /**
+   * Set while a drag-dismissed sheet is carried off screen by its release
+   * spring; null otherwise.
+   */
+  gestureExitRef: RefObject<SheetGestureExit | null>;
+  /**
+   * Call right after writing a resting transform to the sheet: folds the
+   * gesture's travel into it. A no-op while travel is animating.
+   */
+  resetTravel: () => void;
   /**
    * How much of `settledOffset` is expressed as layout height rather than as a
    * transform. Equals `settledOffset` at the resizing detents; 0 at fully open
@@ -512,11 +519,30 @@ export interface UseSheetGesturesResult {
   settledLayoutOffset: number;
 }
 
-function prefersReducedMotion(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) {
-    return false;
+/**
+ * Whether a gesture that lands on `target` began inside another layer
+ * rendered in this sheet's content — a `<dialog>` between the target and the
+ * body. A sheet opened from inside a sheet's content, a Dialog opened there,
+ * renders its dialog as a descendant of the host's body, so its touches reach
+ * the host's pans too. That gesture is the layer's own: the host's pans must
+ * not take it, which would cancel the drag the layer's own handle began
+ * (`component:BottomSheet` FR7: a swipe reaches only the top sheet of a
+ * stack; FR6: a covered sheet is blocked).
+ */
+export function isInsideNestedLayer(
+  target: EventTarget | null,
+  body: HTMLElement,
+): boolean {
+  for (
+    let element = target instanceof Element ? target : null;
+    element != null && element !== body;
+    element = element.parentElement
+  ) {
+    if (element.localName === 'dialog') {
+      return true;
+    }
   }
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return false;
 }
 
 /**
@@ -548,6 +574,8 @@ export function useSheetGestures({
   onSnap,
   onScrimOpacity,
   hasFixedHeight = false,
+  onScrimTracking,
+  isScrimShown,
 }: UseSheetGesturesOptions): UseSheetGesturesResult {
   const [dragOffset, setDragOffset] = useState(0);
   const [settledOffset, setSettledOffset] = useState(0);
@@ -649,11 +677,7 @@ export function useSheetGestures({
         targetLayoutOffset,
         naturalEndGap,
       );
-      if (
-        shouldAnimate &&
-        Math.abs(renderedOffset - targetOffset) > 0.5 &&
-        !prefersReducedMotion()
-      ) {
+      if (shouldAnimate && Math.abs(renderedOffset - targetOffset) > 0.5) {
         pendingScrollPreservationInsetRef.current = targetInset;
         settlingLayoutOffsetRef.current = layoutOffset;
         setSettlingLayoutOffset(layoutOffset);
@@ -664,7 +688,7 @@ export function useSheetGestures({
       setSettlingLayoutOffset(null);
       // Released on the detent, so there is no travel left to animate — but
       // the layout split may still differ from the one the drag rendered
-      // with (magnetize() lands a slow drag exactly on a detent). Swapping
+      // with (a drag that ends exactly on a detent). Swapping
       // height for transform is only invisible while transitions are off:
       // with them live, the composited transform would animate the whole
       // swap while the layout height jumped, throwing the sheet the wrong
@@ -698,35 +722,119 @@ export function useSheetGestures({
   const onSnapRef = useRef(onSnap);
   const onScrimOpacityRef = useRef(onScrimOpacity);
   const hasFixedHeightRef = useRef(hasFixedHeight);
+  const onScrimTrackingRef = useRef(onScrimTracking);
+  const isScrimShownRef = useRef(isScrimShown);
   useEffect(() => {
     onDismissRef.current = onDismiss;
     canDismissRef.current = canDismiss;
     onSnapRef.current = onSnap;
     onScrimOpacityRef.current = onScrimOpacity;
     hasFixedHeightRef.current = hasFixedHeight;
+    onScrimTrackingRef.current = onScrimTracking;
+    isScrimShownRef.current = isScrimShown;
   });
 
-  // Live drag bookkeeping (refs so pointermove doesn't churn renders).
+  // The scrim, while a gesture or its release moves it (`onScrimTracking`):
+  // the release plays the dim on the dialog's ::backdrop with the same clock
+  // as the sheet, each frame's value read from where the sheet is on its
+  // curve, as UIKit recomputes its dim from position every frame.
+  const scrimAnimatorRef = useRef<Animator | null>(null);
+  const isScrimTrackingRef = useRef(false);
+  // Whether the dim playing is a release's, which a close takes back.
+  const scrimOwnerRef = useRef<'release' | null>(null);
+  // Stops a release's dim where it is, and says where that was.
+  const stopScrimFollow = useCallback((): number | null => {
+    const scrim = scrimAnimatorRef.current;
+    if (scrim == null) {
+      return null;
+    }
+    const current = scrim.get('opacity');
+    scrim.dispose();
+    scrimAnimatorRef.current = null;
+    return current;
+  }, []);
+  // A gesture takes the dim: a release's dim still playing is picked up
+  // where it is, and the host stops easing it. Only under a finger (every
+  // touch device: one touch model), whose dimming view follows the sheet frame
+  // by frame; under a mouse the host keeps easing the dim toward each value,
+  // as today.
+  const beginScrimTracking = useCallback(() => {
+    if (!readTouchPresentation().isTouch) {
+      return;
+    }
+    scrimOwnerRef.current = null;
+    const current = stopScrimFollow();
+    if (current != null) {
+      onScrimOpacityRef.current?.(current);
+    }
+    if (!isScrimTrackingRef.current && onScrimTrackingRef.current != null) {
+      isScrimTrackingRef.current = true;
+      onScrimTrackingRef.current(true);
+    }
+  }, [stopScrimFollow]);
+  // The motion is over: the host gets the dim back at its final value.
+  const endScrimTracking = useCallback(
+    (dim: number) => {
+      scrimOwnerRef.current = null;
+      stopScrimFollow();
+      onScrimOpacityRef.current?.(dim);
+      if (isScrimTrackingRef.current) {
+        isScrimTrackingRef.current = false;
+        onScrimTrackingRef.current?.(false);
+      }
+    },
+    [stopScrimFollow],
+  );
+  // The sheet is closing: the host gets the dim back as it is, unpinned, so
+  // its own close fade runs; nothing is written over it.
+  const releaseScrimTracking = useCallback(() => {
+    scrimOwnerRef.current = null;
+    stopScrimFollow();
+    if (isScrimTrackingRef.current) {
+      isScrimTrackingRef.current = false;
+      onScrimTrackingRef.current?.(false);
+    }
+  }, [stopScrimFollow]);
+  // The dim's own animator on the dialog's ::backdrop, for a release or a
+  // presentation to play the dim on as a layer of the sheet's travel (the
+  // interactive-transition driver): only while the dim is tracked, and a
+  // fresh one each time, so a release's dim never outlives its run.
+  const scrimLayerAnimator = useCallback((): Animator | null => {
+    const dialog = sheetElRef.current?.closest('dialog');
+    // Only on the stack's visible backdrop: a transparent one stays clear.
+    if (
+      !isScrimTrackingRef.current ||
+      dialog == null ||
+      isScrimShownRef.current?.() === false
+    ) {
+      return null;
+    }
+    stopScrimFollow();
+    const scrim = createAnimator(dialog, {pseudoElement: '::backdrop'});
+    scrimAnimatorRef.current = scrim;
+    return scrim;
+  }, [stopScrimFollow]);
+  // The dim map of the last release, for a spring-back that interrupts it.
+  const lastDimForRef = useRef<((offset: number) => number) | null>(null);
+
+  // Live drag bookkeeping (refs so a move doesn't churn renders).
   const dragStateRef = useRef<{
-    // Whether the touch path drives this drag. Such a drag holds no pointer
-    // capture and takes its events from `touchmove`, so every real-pointer
-    // handler has to leave it alone.
-    syntheticTouch: boolean;
+    // The pan driving the drag; null while only a catch holds the sheet
+    // under a finger that has not moved past a pan's threshold yet.
+    pan: PanGestureRecognizer | null;
     /** The pointer's kind: a finger, a pen, or a mouse. */
     pointerType: string;
-    pointerId: number;
-    startCoord: number;
-    lastCoord: number;
-    lastTime: number;
-    // The finger's recent positions, oldest first, kept to VELOCITY_WINDOW_MS
-    // (and never fewer than two) for the release speed.
-    samples: {t: number; y: number}[];
-    velocity: number;
     height: number;
     baseOffset: number;
     baseLayoutOffset: number;
     renderedOffset: number;
+    // The layout split the drag asks the host for (setDragOffset) ...
     layoutOffset: number;
+    // ... and the one the sheet is drawn with: the move that changes the
+    // split writes the new height and end inset with its travel
+    // (writeLiveLayout), and a commit of the host re-pairs the travel with
+    // the split it rendered. The travel, a release and a cancel all read it.
+    committedLayoutOffset: number;
     naturalEndGap: number;
     hasTraveled: boolean;
   } | null>(null);
@@ -765,11 +873,28 @@ export function useSheetGestures({
       previousHeight === renderedHeight ? previousHeight : renderedHeight,
     );
   }, []);
+  // The gesture's share of the sheet's travel, on the `translate` channel:
+  // the motion foundation's animator, attached to the sheet by sheetRef. Zero
+  // at rest, and measured from the resting transform the host writes
+  // (`travelBaseRef`), so the two add up to the offset less the layout split.
+  const animatorRef = useRef<Animator | null>(null);
+  animatorRef.current ??= createAnimator(null);
+  const animator = animatorRef.current;
+  const travelBaseRef = useRef(0);
+  // The settle, return or exit running on the travel channel, if any.
+  const travelHandleRef = useRef<MotionHandle | null>(null);
+  // Which timing the gesture's release runs on: UIKit's springs under a
+  // finger, the theme's under a mouse. Read once per drag.
+  const releaseMotionRef = useRef<ReleaseMotion>({kind: 'uikit'});
+  // Set while a drag-dismissed sheet is carried off screen by its release
+  // spring (see SheetGestureExit).
+  const gestureExitRef = useRef<SheetGestureExit | null>(null);
   const sheetRef = useCallback(
     (node: HTMLElement | null) => {
       observerRef.current?.disconnect();
       observerRef.current = null;
       sheetElRef.current = node;
+      animator.attach(node);
       if (!node || typeof ResizeObserver === 'undefined') {
         if (node) {
           recordSheetHeight(node.getBoundingClientRect().height);
@@ -792,9 +917,41 @@ export function useSheetGestures({
       ro.observe(node);
       observerRef.current = ro;
     },
-    [recordSheetHeight],
+    [animator, recordSheetHeight],
   );
-  useEffect(() => () => observerRef.current?.disconnect(), []);
+  // While a finger drags the sheet under UIKit's presentation, or holds it
+  // after catching it mid-settle, no text selection starts under it and the
+  // touch callout is off: a finger held still on a caught sheet would
+  // otherwise start a text selection (on iOS, with its loupe) under the drag.
+  // Taken at the catch (the touch-down), before the long press would select,
+  // and released at the lift (sheetSelectionLock.ts: how each engine refuses
+  // one). The gesture host takes the same lock for the sheet's recognizers;
+  // the two release in whichever order they let go.
+  const selectionLockRef = useRef<(() => void) | null>(null);
+  const lockSelection = useCallback((target: EventTarget | null) => {
+    const element = sheetElRef.current;
+    if (element == null || selectionLockRef.current != null) {
+      return;
+    }
+    selectionLockRef.current = lockSheetSelection([element], target);
+  }, []);
+  const unlockSelection = useCallback(() => {
+    const release = selectionLockRef.current;
+    selectionLockRef.current = null;
+    release?.();
+  }, []);
+
+  // Unmount: the size observer, and the sheet's animator. Stopping it settles
+  // any travel still running as unfinished and clears its completion timer,
+  // so nothing completes on an unmounted sheet.
+  useEffect(
+    () => () => {
+      observerRef.current?.disconnect();
+      animator.stop();
+      unlockSelection();
+    },
+    [animator, unlockSelection],
+  );
 
   // Reset to the tallest detent each time the sheet re-opens.
   useEffect(() => {
@@ -818,8 +975,29 @@ export function useSheetGestures({
       setScrollPreservationInset(0);
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- resets gesture state on controlled reopen
       setSettlingLayoutOffset(null);
+      // The sheet's animator too, the compositor `translate` it moves: back
+      // to rest, with no exit pending.
+      gestureExitRef.current = null;
+      travelHandleRef.current = null;
+      animator.set({y: 0});
+      // And the dialog's ::backdrop dim: its animation stops, and the host
+      // gets its own easing back.
+      stopScrimFollow();
+      if (isScrimTrackingRef.current) {
+        isScrimTrackingRef.current = false;
+        onScrimTrackingRef.current?.(false);
+      }
     }
-  }, [isOpen, recordSettledLayoutOffset]);
+  }, [animator, isOpen, recordSettledLayoutOffset, stopScrimFollow]);
+
+  // Syncs the dialog's ::backdrop dim with a close: a release still playing
+  // it stops, and the host's easing comes back unpinned, so the host's close
+  // fade runs instead of the page staying dimmed until the dialog closes.
+  useEffect(() => {
+    if (!isOpen && scrimOwnerRef.current === 'release') {
+      releaseScrimTracking();
+    }
+  }, [isOpen, releaseScrimTracking]);
 
   // The fully-open height for detent math. Prefer the ResizeObserver-locked
   // value; fall back to a live measure of the tracked sheet element if the
@@ -943,7 +1121,7 @@ export function useSheetGestures({
       scrimOpacityForOffset(
         target,
         offsets,
-        maxOffset + shortestDetentHeight * DISMISS_OVERSHOOT_RATIO,
+        scrimClearOffset(maxOffset, shortestDetentHeight),
         peekOffset,
       ),
     );
@@ -979,22 +1157,152 @@ export function useSheetGestures({
     reanchorToSettledDetent();
   }, [reanchorToSettledDetent, snapHeights]);
 
-  // The one write a finger sample costs: the sheet's compositor transform,
-  // on the element, with no render between the input and the paint. The
-  // value matches what the host renders at rest (offset less the layout
-  // split), so a settle that follows continues from it.
+  // The one write a finger sample costs: the sheet's travel channel, with no
+  // render between the input and the paint. Added to the resting transform
+  // the drag began on, it makes the offset less the layout split: what the
+  // host renders at rest, so a settle that follows continues from it.
   const writeLiveTransform = useCallback(
     (offset: number, layoutOffset: number) => {
-      const element = sheetElRef.current;
-      if (element == null) {
-        return;
+      animator.set({y: offset - layoutOffset - travelBaseRef.current});
+    },
+    [animator],
+  );
+
+  // Whether a finger drives the current or last drag, so its release, and a
+  // spring-back after it, fade under reduced motion whatever the primary
+  // pointer (design:reduced-motion DR2).
+  const dragTouchRef = useRef(false);
+  // Moves the sheet to `offset` on the travel channel, holding the layout
+  // split it is rendered with (`layoutOffset`) until it lands; landing a
+  // settle reconciles the layout, and the host folds the travel into its new
+  // resting transform in the same commit. On the compositor: the curve is
+  // baked into Web Animations, so it keeps its pace while the main thread is
+  // busy. Under a finger, `spring` handed `velocity` (px/s; the speed on
+  // screen by default); under a mouse, the theme's timing.
+  const springTravel = useCallback(
+    (
+      offset: number,
+      layoutOffset: number,
+      spring: SpringDescription,
+      velocity?: number,
+      dimFor?: (offset: number) => number,
+      crossfadeAs?: 'exit',
+    ): MotionHandle => {
+      const base = layoutOffset + travelBaseRef.current;
+      const to = offset - base;
+      const motion = releaseMotionRef.current;
+      // One clock for the sheet and its dim.
+      const at = performance.now();
+      const from = animator.get('y', at);
+      // Under reduced motion the animator's own cross-fade replaces the
+      // travel (design:reduced-motion). A finger started it, so it fades
+      // whatever the primary pointer (DR2).
+      const touchRelease = dragTouchRef.current;
+      // The dim rides the same curve on the dialog's ::backdrop.
+      const layers: MapLayer[] = [];
+      if (dimFor != null) {
+        const scrim = scrimLayerAnimator();
+        if (scrim != null) {
+          scrimOwnerRef.current = 'release';
+          const map = (y: number) => dimFor(base + y);
+          // Starts from the dim on screen, so a reduced-motion fade does too.
+          scrim.set({opacity: map(from)});
+          layers.push({animator: scrim, property: 'opacity', map});
+        }
       }
-      const translation = offset - layoutOffset;
+      // Thrown up onto the tallest detent, the 80 % damped spring overshoots
+      // above it; the sheet extends only its reserve below the screen, so
+      // the hand-off is capped to keep the page from showing under it.
+      const handed = velocity ?? animator.getVelocity('y', at);
+      const v =
+        motion.kind === 'uikit' && offset === 0
+          ? limitOvershoot(
+              spring,
+              from,
+              to,
+              handed,
+              offscreenBlockEndInsetRef.current,
+            )
+          : handed;
+      const run = createInteractiveTransition({
+        driver: {animator, property: 'y'},
+        layers,
+        rule: settleOnly,
+      }).to(
+        to,
+        motion.kind === 'theme'
+          ? {durationMs: motion.durationMs, easing: motion.easing}
+          : spring,
+        {
+          velocity: motion.kind === 'theme' ? 0 : v,
+          touchRelease,
+          now: at,
+          ...(crossfadeAs == null ? {} : {crossfadeAs}),
+        },
+      );
+      const handle = run.handle ?? settledHandle(run.finished);
+      travelHandleRef.current = handle;
+      void handle.finished.then(finished => {
+        if (travelHandleRef.current !== handle) {
+          return;
+        }
+        travelHandleRef.current = null;
+        if (!finished) {
+          return;
+        }
+        if (dimFor != null) {
+          // Closed meanwhile: the release's dim isn't written back.
+          if (isOpenRef.current) {
+            endScrimTracking(dimFor(offset));
+          } else {
+            releaseScrimTracking();
+          }
+        }
+        if (settlingLayoutOffsetRef.current != null) {
+          completeScrollAreaSettle();
+        }
+      });
+      return handle;
+    },
+    [
+      animator,
+      completeScrollAreaSettle,
+      endScrimTracking,
+      releaseScrimTracking,
+      scrimLayerAnimator,
+    ],
+  );
+
+  // The host calls this right after it writes a resting transform: the travel
+  // that carried the sheet there is folded into that transform. Travel still
+  // animating keeps its channel.
+  const resetTravel = useCallback(() => {
+    if (travelHandleRef.current != null || animator.get('y') === 0) {
+      return;
+    }
+    animator.set({y: 0});
+  }, [animator]);
+
+  // Folds the travel into the element's transform: the host's own exit
+  // transition then runs from where the pointer left the sheet, as it does
+  // under a mouse. Written while the drag's `transition: none` is still on
+  // the element, so the fold does not animate.
+  const foldTravel = useCallback(() => {
+    const translation = travelBaseRef.current + animator.get('y');
+    const element = sheetElRef.current;
+    if (element != null) {
       element.style.transform =
         translation !== 0 ? `translateY(${translation}px)` : '';
-    },
-    [],
-  );
+    }
+    animator.set({y: 0});
+  }, [animator]);
+
+  // Whether a release can animate at all: UIKit's springs always can; the
+  // theme's timing not when it is zero (transitions turned off).
+  const releaseAnimates = useCallback(() => {
+    const motion = releaseMotionRef.current;
+    return motion.kind === 'uikit' || motion.durationMs > 0;
+  }, []);
 
   // A live drag's layout split moved. The transform written beside this call
   // is only correct on the new split, so the height and end inset that pair
@@ -1021,82 +1329,96 @@ export function useSheetGestures({
     [],
   );
 
-  const cancelDrag = useCallback(
-    (target?: HTMLElement) => {
-      const state = dragStateRef.current;
-      if (state == null) {
-        return;
-      }
-
-      // Clear first: releasePointerCapture() may synchronously dispatch
-      // lostpointercapture, which must observe that this drag is already done.
-      dragStateRef.current = null;
-      if (target?.hasPointerCapture?.(state.pointerId)) {
-        target.releasePointerCapture(state.pointerId);
-      }
-      setDragOffset(state.baseOffset);
-      setIsDragging(false);
-      setIsTraveling(false);
-      prepareScrollAreaSettle(
-        state.baseLayoutOffset,
+  const cancelDrag = useCallback(() => {
+    const state = dragStateRef.current;
+    if (state == null) {
+      return;
+    }
+    dragStateRef.current = null;
+    unlockSelection();
+    setDragOffset(state.baseOffset);
+    setIsDragging(false);
+    setIsTraveling(false);
+    prepareScrollAreaSettle(
+      state.baseLayoutOffset,
+      state.baseOffset,
+      state.baseLayoutOffset,
+      state.renderedOffset,
+      state.committedLayoutOffset,
+      state.naturalEndGap,
+      releaseAnimates(),
+    );
+    const cancelDimFor = (o: number) => {
+      const {offsets: stops, peekOffset: peek} = resolveDetents(state.height);
+      const shortest = stops[stops.length - 1];
+      return scrimOpacityForOffset(
+        o,
+        stops,
+        scrimClearOffset(
+          shortest,
+          visibleHeightForOffset(
+            state.height,
+            shortest,
+            offscreenBlockEndInsetRef.current,
+          ),
+        ),
+        peek,
+      );
+    };
+    if (settlingLayoutOffsetRef.current != null) {
+      springTravel(
         state.baseOffset,
-        state.baseLayoutOffset,
-        state.renderedOffset,
-        state.layoutOffset,
-        state.naturalEndGap,
-        true,
+        state.committedLayoutOffset,
+        SHEET_DETENT_SPRING,
+        undefined,
+        cancelDimFor,
       );
+    }
 
-      // An interrupted drag returns to its previous resting detent. Restore
-      // the matching scrim opacity as well so the modal shell cannot remain
-      // dimmed with its sheet translated out of view.
-      const {offsets, peekOffset} = resolveDetents(state.height);
-      const maxOffset = offsets[offsets.length - 1];
-      const shortestDetentHeight = visibleHeightForOffset(
-        state.height,
-        maxOffset,
-        offscreenBlockEndInsetRef.current,
+    // An interrupted drag returns to its previous resting detent. Restore
+    // the matching scrim opacity as well so the modal shell cannot remain
+    // dimmed with its sheet translated out of view.
+    const {offsets, peekOffset} = resolveDetents(state.height);
+    const maxOffset = offsets[offsets.length - 1];
+    const shortestDetentHeight = visibleHeightForOffset(
+      state.height,
+      maxOffset,
+      offscreenBlockEndInsetRef.current,
+    );
+    const clearOffset = scrimClearOffset(maxOffset, shortestDetentHeight);
+    if (settlingLayoutOffsetRef.current == null) {
+      endScrimTracking(
+        scrimOpacityForOffset(
+          state.baseOffset,
+          offsets,
+          clearOffset,
+          peekOffset,
+        ),
       );
-      const dismissOffset =
-        maxOffset + shortestDetentHeight * DISMISS_OVERSHOOT_RATIO;
+    } else {
       onScrimOpacityRef.current?.(
         scrimOpacityForOffset(
           state.baseOffset,
           offsets,
-          dismissOffset,
+          clearOffset,
           peekOffset,
         ),
       );
-    },
-    [prepareScrollAreaSettle, resolveDetents],
-  );
-
-  useEffect(() => {
-    // Only an open sheet can be dragged; a closed one listens to nothing.
-    if (!isOpen) {
-      return;
     }
-    const handleWindowBlur = () => cancelDrag();
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        cancelDrag();
-      }
-    };
-    window.addEventListener('blur', handleWindowBlur);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => {
-      window.removeEventListener('blur', handleWindowBlur);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-    };
-  }, [cancelDrag, isOpen]);
+  }, [
+    endScrimTracking,
+    prepareScrollAreaSettle,
+    releaseAnimates,
+    resolveDetents,
+    springTravel,
+    unlockSelection,
+  ]);
 
   const settleFromDrag = useCallback(
     (
       offset: number,
       velocity: number,
       height: number,
-      dir: number,
-      travel: number,
       baseOffset: number,
       baseLayoutOffset: number,
       renderedOffset: number,
@@ -1111,111 +1433,194 @@ export function useSheetGestures({
         maxOffset,
         offscreenBlockEndInsetRef.current,
       );
-      const dismissOffset =
-        maxOffset + shortestDetentHeight * DISMISS_OVERSHOOT_RATIO;
-      const projected =
-        travel > PROJECTION_MIN_TRAVEL
-          ? offset + velocity * PROJECTION_FACTOR
-          : offset;
-      const settleAt = (target: number) => {
-        // A peek keeps the full layout height and slides below the viewport;
-        // every taller detent resizes the scrolling area to what it shows.
-        const targetLayoutOffset = target === peekOffset ? 0 : target;
+      const dismissedOffset = dismissedOffsetFor(
+        maxOffset,
+        shortestDetentHeight,
+      );
+      // Where the scrim reaches clear, and the dim at any offset this release
+      // passes through.
+      const clearOffset = scrimClearOffset(maxOffset, shortestDetentHeight);
+      const dimFor = (o: number) =>
+        scrimOpacityForOffset(o, offsets, clearOffset, peekOffset);
+      lastDimForRef.current = dimFor;
+      // UIKit's rule for every pointer (sheetRelease.ts, spec:AST-094 FR36),
+      // as the interactive-transition driver's rule: offsets in, offsets out;
+      // what plays the settle follows the presentation (FR13).
+      const release = sheetReleaseRule(
+        {position: offset, finger: offset, velocity},
+        {
+          detents: offsets,
+          dismissedOffset: canDismissRef.current ? dismissedOffset : null,
+          startOffset: baseOffset,
+        },
+      );
+
+      if (release.outcome === 'dismiss') {
         prepareScrollAreaSettle(
           baseLayoutOffset,
-          target,
-          targetLayoutOffset,
-          renderedOffset,
-          layoutOffset,
+          baseOffset,
+          baseLayoutOffset,
+          baseLayoutOffset,
+          baseLayoutOffset,
           naturalEndGap,
-          true,
+          false,
         );
-        recordSettledLayoutOffset(targetLayoutOffset);
-        settledDetentIndexRef.current = Math.max(0, offsets.indexOf(target));
-        setSettledOffset(target);
-        onSnapRef.current?.(
-          visibleHeightForOffset(
-            height,
-            target,
-            offscreenBlockEndInsetRef.current,
-          ),
-        );
-        onScrimOpacityRef.current?.(
-          scrimOpacityForOffset(target, offsets, dismissOffset, peekOffset),
-        );
-        if (target !== baseOffset) {
-          hapticTick();
-        }
-      };
-
-      // A release that would coast past the dismiss line closes the sheet: a
-      // throw from anywhere, or a slow drag that already crossed it.
-      if (dir > 0 && projected > dismissOffset) {
-        if (canDismissRef.current) {
-          prepareScrollAreaSettle(
+        if (releaseMotionRef.current.kind === 'uikit') {
+          // The release spring carries the sheet off screen at the finger's
+          // velocity; the host's exit waits for it instead of running its own.
+          const handle = springTravel(
+            release.target,
             baseLayoutOffset,
-            baseOffset,
-            baseLayoutOffset,
-            baseLayoutOffset,
-            baseLayoutOffset,
-            naturalEndGap,
-            false,
+            release.motion,
+            velocity,
+            dimFor,
+            'exit',
           );
-          setTouchDragDismissal({isTouch, pending: true});
-          onDismissRef.current();
+          const base = travelBaseRef.current;
+          gestureExitRef.current = {
+            finished: handle.finished,
+            transform: base !== 0 ? `translateY(${base}px)` : 'none',
+          };
+          setDismissRequest(request => request + 1);
         } else {
-          settleAt(maxOffset);
+          // The host's own exit fades the dim from where it is.
+          endScrimTracking(dimFor(renderedOffset));
+          foldTravel();
         }
+        setTouchDragDismissal({isTouch, pending: true});
+        onDismissRef.current();
         return;
       }
-      // Settle to the detent nearest where the release would coast to, in the
-      // drag direction (never back past the starting detent), de-duped and
-      // direction-clamped by the util. A throw upward projects past the
-      // tallest detent and lands on it.
-      const target = resolveSettleOffset(
-        Math.min(Math.max(projected, 0), maxOffset),
-        offsets,
-        dir,
-        baseOffset,
+
+      const target = release.target;
+      // A peek keeps the full layout height and slides below the viewport;
+      // every taller detent resizes the scrolling area to what it shows.
+      const targetLayoutOffset = target === peekOffset ? 0 : target;
+      prepareScrollAreaSettle(
+        baseLayoutOffset,
+        target,
+        targetLayoutOffset,
+        renderedOffset,
+        layoutOffset,
+        naturalEndGap,
+        releaseAnimates(),
       );
-      settleAt(target);
+      if (settlingLayoutOffsetRef.current != null) {
+        springTravel(target, layoutOffset, release.motion, velocity, dimFor);
+      } else {
+        endScrimTracking(dimFor(target));
+      }
+      recordSettledLayoutOffset(targetLayoutOffset);
+      settledDetentIndexRef.current = Math.max(0, release.index);
+      setSettledOffset(target);
+      onSnapRef.current?.(
+        visibleHeightForOffset(
+          height,
+          target,
+          offscreenBlockEndInsetRef.current,
+        ),
+      );
+      onScrimOpacityRef.current?.(dimFor(target));
+      if (target !== baseOffset) {
+        // A short tick where the platform vibrates (gestures/haptics.ts).
+        playHaptic('impactLight');
+      }
     },
-    [prepareScrollAreaSettle, recordSettledLayoutOffset, resolveDetents],
+    [
+      endScrimTracking,
+      foldTravel,
+      prepareScrollAreaSettle,
+      recordSettledLayoutOffset,
+      releaseAnimates,
+      resolveDetents,
+      springTravel,
+    ],
   );
 
-  const beginDrag = useCallback(
-    (event: ReactPointerEvent, sheetHeight: number, startCoord?: number) => {
-      const target = event.currentTarget as HTMLElement;
-      const syntheticTouch = isSyntheticTouch(event);
-      // Never capture for a touch drag. The id came from `Touch.identifier`,
-      // which on iOS names a live pointer: the capture succeeds, WebKit takes
-      // it straight back for its own gesture handling, and the
-      // `lostpointercapture` a millisecond later cancels the drag that just
-      // started. Touch drags need no capture — the listener is on the
-      // scroller itself.
-      if (!syntheticTouch) {
-        target.setPointerCapture?.(event.pointerId);
+  // A drag-dismissed sheet whose host keeps it open (a controlled `open` that
+  // stays true) springs back to where it rests, as a UIKit sheet does when
+  // its dismissal is declined. This syncs the sheet's animator (the
+  // compositor `translate`) with the declined request; the cleanup stops the
+  // spring it started if the effect runs again or the sheet unmounts.
+  const [dismissRequest, setDismissRequest] = useState(0);
+  useLayoutEffect(() => {
+    if (dismissRequest === 0 || gestureExitRef.current == null || !isOpen) {
+      return;
+    }
+    gestureExitRef.current = null;
+    const handle = springTravel(
+      settledOffset,
+      settledLayoutOffsetRef.current,
+      SHEET_DETENT_SPRING,
+      undefined,
+      lastDimForRef.current ?? undefined,
+    );
+    return () => {
+      if (travelHandleRef.current === handle) {
+        animator.stop(['y']);
       }
-      // `startCoord` lets a body-overscroll drag anchor at the original
-      // pointer-down position (not the promotion point), so the first frame's
-      // delta reflects the full pull distance.
-      const start = startCoord ?? event.clientY;
+    };
+  }, [animator, dismissRequest, isOpen, settledOffset, springTravel]);
+
+  const beginDrag = useCallback(
+    (
+      pointerType: string,
+      sheetHeight: number,
+      target: EventTarget | null,
+    ): boolean => {
+      // A closing sheet is not grabbed: its exit owns the surface.
+      if (!isOpenRef.current) {
+        return false;
+      }
+      dragTouchRef.current = pointerType === 'touch';
       const naturalEndGap = naturalEndGapFor(bodyNodeRef.current);
-      const baseLayoutOffset = settledLayoutOffsetRef.current;
+      let baseOffset = settledOffset;
+      let baseLayoutOffset = settledLayoutOffsetRef.current;
+      if (travelHandleRef.current != null) {
+        // A finger landing on a settling sheet catches it where the curve has
+        // it on screen (never a layout read), and the drag continues from
+        // there. The settle is abandoned in place, so the host's layout split
+        // and the drag's both start from the catch point.
+        travelHandleRef.current = null;
+        animator.stop(['y']);
+        baseLayoutOffset = settlingLayoutOffsetRef.current ?? baseLayoutOffset;
+        baseOffset =
+          baseLayoutOffset + travelBaseRef.current + animator.get('y');
+        settlingLayoutOffsetRef.current = null;
+        setSettlingLayoutOffset(null);
+        pendingScrollPreservationInsetRef.current = null;
+        recordSettledLayoutOffset(baseLayoutOffset);
+        setSettledOffset(baseOffset);
+      } else {
+        // At rest the host's transform holds the detent's translation; the
+        // drag travels from it.
+        travelBaseRef.current = settledOffset - baseLayoutOffset;
+      }
+      activeOffsetRef.current = baseOffset;
+      beginScrimTracking();
+      // Read before this drag turns transitions off (releaseMotion.ts).
+      releaseMotionRef.current = readReleaseMotion(
+        sheetElRef.current,
+        pointerType,
+      );
+      // Selection and the callout go off with UIKit's presentation, the same
+      // answer as the tracking and the release: a finger where the primary
+      // pointer is fine keeps the browser's (spec:AST-094 FR19).
+      // The touch's target joins the lock: WebKit makes every input
+      // selectable, out of reach of the sheet's lock, and the content's pans
+      // bring the gesture host no lock of their own (spec:AST-094 FR41).
+      if (releaseMotionRef.current.kind === 'uikit') {
+        lockSelection(target);
+      }
       dragStateRef.current = {
-        syntheticTouch,
-        pointerType: syntheticTouch ? 'touch' : event.pointerType,
-        pointerId: event.pointerId,
-        startCoord: start,
-        lastCoord: event.clientY,
-        lastTime: event.timeStamp,
-        samples: [{t: event.timeStamp, y: event.clientY}],
-        velocity: 0,
+        pan: null,
+        pointerType,
         height: sheetHeight,
-        baseOffset: settledOffset,
+        baseOffset,
         baseLayoutOffset,
-        renderedOffset: settledOffset,
+        renderedOffset: baseOffset,
         layoutOffset: baseLayoutOffset,
+        committedLayoutOffset: baseLayoutOffset,
         naturalEndGap,
         hasTraveled: false,
       };
@@ -1228,99 +1633,63 @@ export function useSheetGestures({
       );
       // Seed dragOffset at the resting detent so flipping isDragging doesn't
       // jump the sheet to fully-open for one frame.
-      setDragOffset(settledOffset);
+      setDragOffset(baseOffset);
       setIsDragging(true);
+      return true;
     },
-    [settledOffset, updateScrollPreservationInset],
+    [
+      animator,
+      beginScrimTracking,
+      lockSelection,
+      recordSettledLayoutOffset,
+      settledOffset,
+      updateScrollPreservationInset,
+    ],
   );
 
-  const handlePointerDown = useCallback(
-    (event: ReactPointerEvent) => {
-      if (event.button !== 0 || !event.isPrimary) {
-        return;
-      }
-      // The handle has no native focus action. Prevent pointer-down from
-      // moving focus off a form control on a tap; once the pointer actually
-      // moves, BottomSheet dismisses the keyboard as sheet travel begins.
-      event.preventDefault();
-      beginDrag(event, measureHeight());
-    },
-    [beginDrag, measureHeight],
-  );
-
-  const handleContextMenu = useCallback(
-    (event: ReactMouseEvent) => {
-      if (dragStateRef.current == null) {
-        return;
-      }
-      event.preventDefault();
-      cancelDrag(event.currentTarget as HTMLElement);
-    },
-    [cancelDrag],
-  );
-
-  const handleLostPointerCapture = useCallback(
-    (event: ReactPointerEvent) => {
-      // A touch drag never took capture, so this is WebKit reclaiming its own
-      // pointer for the finger doing the dragging — not the drag losing its
-      // grip.
-      if (dragStateRef.current?.syntheticTouch) {
-        return;
-      }
-      if (dragStateRef.current?.pointerId === event.pointerId) {
-        cancelDrag();
-      }
-    },
-    [cancelDrag],
-  );
-
-  const handlePointerMove = useCallback(
-    (event: ReactPointerEvent) => {
+  // The sheet at the drag's base plus the pan's translation, every move.
+  const moveDrag = useCallback(
+    (translation: number) => {
       const state = dragStateRef.current;
-      if (!state || state.pointerId !== event.pointerId) {
+      if (!state) {
         return;
-      }
-      // Same finger, real pointer event: the touch path already drove this
-      // move. Let it own the drag rather than driving it twice.
-      if (state.syntheticTouch && !isSyntheticTouch(event)) {
-        return;
-      }
-      const delta = event.clientY - state.startCoord;
-      const dt = event.timeStamp - state.lastTime;
-      if (dt > 0) {
-        state.lastCoord = event.clientY;
-        state.lastTime = event.timeStamp;
-        state.samples.push({t: event.timeStamp, y: event.clientY});
-        // Drop what fell out of the window while a partner remains: a throw
-        // that begins after a rest reads its own speed, not the average since
-        // touch-down.
-        while (
-          state.samples.length > 2 &&
-          event.timeStamp - state.samples[0].t > VELOCITY_WINDOW_MS
-        ) {
-          state.samples.shift();
-        }
-        const first = state.samples[0];
-        // A lone partner older than the window says only where the finger
-        // rested; the move it precedes is read as if it took the window.
-        const span = Math.min(event.timeStamp - first.t, VELOCITY_WINDOW_MS);
-        state.velocity = span > 0 ? (event.clientY - first.y) / span : 0;
       }
       const {offsets, peekOffset} = resolveDetents(state.height);
 
-      const raw = state.baseOffset + delta;
-      const maxDetentOffset = offsets[offsets.length - 1];
-      let next: number;
-      if (raw < 0) {
-        // Up past fully-open: damped + capped rubber-band; springs back on release.
-        next = Math.max(-OVERSCROLL_MAX, raw * OVERSCROLL_RESISTANCE);
-      } else if (raw > maxDetentOffset) {
-        // In the dismiss zone: no magnet, so it doesn't fight a drag-to-close.
-        next = raw;
-      } else {
-        // Between detents: magnetically ease toward a nearby one.
-        next = magnetize(raw, offsets);
-      }
+      // A trackpad's pull carries the sheet at most its height below its
+      // base: off screen, never past it (spec:AST-094 FR43, DEC-24).
+      const isScroll = state.pan?.trackedTouches[0]?.scrollType != null;
+      const raw = isScroll
+        ? Math.min(
+            state.baseOffset + translation,
+            state.baseOffset + state.height,
+          )
+        : state.baseOffset + translation;
+      // A sheet a swipe never dismisses (a form or required sheet) stretches
+      // on the record's band below its lowest rest, for a finger and a
+      // trackpad alike (the same travel, the same stretch; spec:AST-094 FR3,
+      // FR43).
+      // Otherwise, under UIKit's presentation (a finger or a pen where the
+      // primary pointer is coarse, the same answer as the release's): 1:1
+      // between detents and into the dismiss zone, as UIKit's sheet tracks
+      // (the release, not the drag, picks the detent), and past fully open
+      // the record's rubber band (spec:AST-094 FR3). Otherwise the pointer
+      // presentation's tracking (FR13, spec:AST-017 FR59).
+      const restOffset = offsets[offsets.length - 1];
+      // The band is a finger's and a trackpad's only (spec:AST-094 FR43): a
+      // mouse and a pen keep their tracking (spec:AST-017 FR59).
+      const bandsBelowRest = isScroll || state.pointerType === 'touch';
+      const next =
+        bandsBelowRest && !canDismissRef.current && raw > restOffset
+          ? restOffset +
+            rubberBand(
+              raw - restOffset,
+              state.height,
+              sheetTable.rubberBand.coefficient,
+            )
+          : releaseMotionRef.current.kind === 'uikit'
+            ? fingerDragOffset(raw, state.height)
+            : pointerDragOffset(raw, offsets);
       // Dragging above the base restores the full layout height below the
       // viewport; otherwise keep whatever layout the base detent settled with
       // (0 at a peek, so a peek drag stays transform-only).
@@ -1339,12 +1708,13 @@ export function useSheetGestures({
       writeLiveTransform(next, layoutOffset);
       if (hasLayoutChanged) {
         // The layout split moved. The new height and end inset are written
-        // with the transform, in this task: a render scheduled normally can
-        // commit after the next paint, and the transform alone on the old
+        // with the travel, in this task: a render scheduled normally can
+        // commit after the next paint, and the travel alone on the old
         // height would put the sheet the whole split away from the finger
         // for that frame. The host still renders them from state, reading
         // the offset it has to pair with the height from here.
         writeLiveLayout(state.height, layoutOffset);
+        state.committedLayoutOffset = layoutOffset;
         setDragOffset(next);
       }
       if (!state.hasTraveled && next !== state.baseOffset) {
@@ -1361,10 +1731,13 @@ export function useSheetGestures({
         floorOffset,
         offscreenBlockEndInsetRef.current,
       );
-      const dismissOffset =
-        floorOffset + shortestDetentHeight * DISMISS_OVERSHOOT_RATIO;
       onScrimOpacityRef.current?.(
-        scrimOpacityForOffset(next, offsets, dismissOffset, peekOffset),
+        scrimOpacityForOffset(
+          next,
+          offsets,
+          scrimClearOffset(floorOffset, shortestDetentHeight),
+          peekOffset,
+        ),
       );
     },
     [
@@ -1375,371 +1748,321 @@ export function useSheetGestures({
     ],
   );
 
+  // The host committed a drag's layout split (the panel derives it from
+  // these, as here). The move that changed the split already wrote it with
+  // its travel; a commit that renders another split (a render committing
+  // after a later move) re-pairs the travel with it before it paints, so the
+  // sheet stays under the finger.
+  useLayoutEffect(() => {
+    const state = dragStateRef.current;
+    if (!isDragging || state == null) {
+      return;
+    }
+    const committed = dragOffset < settledOffset ? 0 : settledLayoutOffset;
+    if (committed !== state.committedLayoutOffset) {
+      state.committedLayoutOffset = committed;
+      writeLiveTransform(state.renderedOffset, committed);
+    }
+  }, [
+    dragOffset,
+    isDragging,
+    settledLayoutOffset,
+    settledOffset,
+    writeLiveTransform,
+  ]);
+
+  // The release: where the pan's translation left the sheet, at the pan's
+  // velocity (px/s, UIKit's filter over the events' own timestamps).
   const endDrag = useCallback(
-    (event: ReactPointerEvent) => {
+    (translation: number, velocity: number) => {
       const state = dragStateRef.current;
-      if (!state || state.pointerId !== event.pointerId) {
+      if (!state) {
         return;
       }
-      // `pointercancel` fires for the finger the moment WebKit claims the
-      // gesture; ending a touch drag on it settles the sheet mid-pull. The
-      // touchend handler is what finishes a touch drag.
-      if (state.syntheticTouch && !isSyntheticTouch(event)) {
-        return;
-      }
-      const target = event.currentTarget as HTMLElement;
-      const delta = event.clientY - state.startCoord;
-      const offset = Math.max(0, state.baseOffset + delta);
-      const dir = delta === 0 ? 0 : delta > 0 ? 1 : -1;
-      // A finger that rested before lifting released nothing in motion.
-      const velocity =
-        event.timeStamp - state.lastTime < VELOCITY_WINDOW_MS
-          ? state.velocity
-          : 0;
+      const offset = Math.max(0, state.baseOffset + translation);
+      // Today's inputs, for a release under a mouse: the drag's direction and
+      // travel, and the release velocity, the same filter as every pointer's.
       dragStateRef.current = null;
-      if (!state.syntheticTouch) {
-        target.releasePointerCapture?.(event.pointerId);
-      }
+      unlockSelection();
       setIsDragging(false);
       setIsTraveling(false);
       settleFromDrag(
         offset,
         velocity,
         state.height || 1,
-        dir,
-        Math.abs(delta),
         state.baseOffset,
         state.baseLayoutOffset,
         state.renderedOffset,
-        state.layoutOffset,
+        state.committedLayoutOffset,
         state.naturalEndGap,
         state.pointerType === 'touch',
       );
     },
-    [settleFromDrag],
+    [settleFromDrag, unlockSelection],
   );
 
-  // Pointer path for the body at-top pull-down (desktop / mouse). Touch uses
-  // the non-passive listener below, since pointer events are cancelled once a
-  // native pan starts.
-  const armedBodyRef = useRef<{
-    pointerId: number;
-    startCoord: number;
-    scrollers: HTMLElement[];
-  } | null>(null);
-
-  const handleBodyPointerDown = useCallback((event: ReactPointerEvent) => {
-    if (event.button !== 0 || !event.isPrimary) {
-      return;
-    }
-    const body = event.currentTarget as HTMLElement;
-    // A gesture inside a layer this sheet hosts belongs to that layer.
-    if (isInsideNestedLayer(event.target, body)) {
-      armedBodyRef.current = null;
-      return;
-    }
-    const scrollers = scrollChainUnder(event.target, body);
-    if (!chainAtTop(scrollers)) {
-      armedBodyRef.current = null;
-      return;
-    }
-    armedBodyRef.current = {
-      pointerId: event.pointerId,
-      startCoord: event.clientY,
-      scrollers,
-    };
-  }, []);
-
-  const handleBodyPointerMove = useCallback(
-    (event: ReactPointerEvent) => {
-      if (dragStateRef.current) {
-        handlePointerMove(event);
-        return;
+  // The kind of pointer each recognizer took last, read as its gesture
+  // begins: a finger's release fades under reduced motion whatever the
+  // primary pointer (design:reduced-motion DR2).
+  const [pointerKinds] = useState(
+    () => new WeakMap<GestureRecognizer, PointerKind>(),
+  );
+  // And the touch's target, for the drag's selection lock (see `beginDrag`).
+  const [touchTargets] = useState(
+    () => new WeakMap<GestureRecognizer, EventTarget | null>(),
+  );
+  const notePointer = useCallback(
+    (recognizer: GestureRecognizer, touch: GestureTouch): boolean => {
+      // A touch inside a layer this sheet hosts in its content (a sheet or a
+      // Dialog opened from it) is that layer's (see `isInsideNestedLayer`).
+      const body = bodyNodeRef.current;
+      const target = touch.target instanceof Node ? touch.target : null;
+      if (
+        body != null &&
+        target != null &&
+        body.contains(target) &&
+        isInsideNestedLayer(target, body)
+      ) {
+        return false;
       }
-      const armed = armedBodyRef.current;
-      if (!armed || armed.pointerId !== event.pointerId) {
-        return;
-      }
-      const delta = event.clientY - armed.startCoord;
-      if (delta > DRAG_PROMOTION_SLOP && chainAtTop(armed.scrollers)) {
-        // Downward pull at the top: promote to a sheet drag, anchored at the
-        // original pointer-down position so the pull distance carries over.
-        armedBodyRef.current = null;
-        beginDrag(event, measureHeight(), armed.startCoord);
-        handlePointerMove(event);
-      } else if (delta < 0) {
-        // Upward move = the user is scrolling; disarm so we don't hijack it.
-        armedBodyRef.current = null;
+      // The recognizers serve every pointer, a mouse, a pen and a finger,
+      // and a trackpad's scroll (spec:AST-094 FR19, FR43).
+      pointerKinds.set(recognizer, touch.pointerType);
+      touchTargets.set(
+        recognizer,
+        touch.target instanceof EventTarget ? touch.target : null,
+      );
+      return true;
+    },
+    [pointerKinds, touchTargets],
+  );
+  // A closing sheet starts no drag: its exit owns the surface.
+  const canDrag = useCallback(() => isOpenRef.current, []);
+  // A drag begins only on a lone finger: with a second one down, wherever it
+  // landed, the fingers are a pinch, and pinch-zoom is the browser's (WCAG
+  // 1.4.4). The host counts the fingers on the screen, whatever they touch.
+  // A drag that has begun keeps its finger when another lands
+  // (spec:AST-094 FR10).
+  const canBegin = useCallback(() => {
+    if (!canDrag()) {
+      return false;
+    }
+    const doc =
+      sheetElRef.current?.ownerDocument ??
+      (typeof document === 'undefined' ? null : document);
+    return doc == null || getGestureHost(doc).fingersDown() <= 1;
+  }, [canDrag]);
+
+  // One listener for the sheet's pans: whichever began drives the drag.
+  const onPan = useCallback(
+    (pan: PanGestureRecognizer) => {
+      switch (pan.state) {
+        case 'began': {
+          // A catch already holds the sheet under this finger (see the
+          // watcher below); otherwise the drag starts here.
+          if (
+            dragStateRef.current == null &&
+            !beginDrag(
+              pointerKinds.get(pan) ?? 'touch',
+              measureHeight(),
+              touchTargets.get(pan) ?? null,
+            )
+          ) {
+            return;
+          }
+          const state = dragStateRef.current;
+          if (state == null) {
+            return;
+          }
+          state.pan = pan;
+          moveDrag(pan.translation().y);
+          return;
+        }
+        case 'changed':
+          if (dragStateRef.current?.pan === pan) {
+            moveDrag(pan.translation().y);
+          }
+          return;
+        case 'ended':
+          if (dragStateRef.current?.pan === pan) {
+            endDrag(pan.translation().y, pan.velocity().y);
+          }
+          return;
+        case 'possible':
+        case 'failed':
+          return;
+        case 'cancelled':
+          // The browser or the page taking the touch, a context menu: not a
+          // release, so back to the detent.
+          if (dragStateRef.current?.pan === pan) {
+            cancelDrag();
+          }
+          return;
+        default:
+          return;
       }
     },
-    [beginDrag, handlePointerMove, measureHeight],
+    [
+      beginDrag,
+      cancelDrag,
+      endDrag,
+      measureHeight,
+      moveDrag,
+      pointerKinds,
+      touchTargets,
+    ],
   );
 
-  const handleBodyEnd = useCallback(
-    (event: ReactPointerEvent) => {
-      armedBodyRef.current = null;
-      // The pointerup/pointercancel for a finger already driving a touch drag
-      // arrives here carrying that drag's own id; touchend ends those.
-      if (dragStateRef.current?.syntheticTouch) {
-        return;
-      }
-      if (dragStateRef.current) {
-        endDrag(event);
+  // The handle: a vertical pan, for every pointer (spec:AST-094 FR19) and for
+  // a trackpad's scroll (FR43). A control's drag, so text selection and the
+  // touch callout are off under the finger.
+  const handleElRef = useRef<HTMLElement | null>(null);
+  useGestureRecognizer(
+    handleElRef,
+    () =>
+      new PanGestureRecognizer({
+        // A trackpad's scroll pulls the sheet; a mouse wheel's notches stay
+        // with the page and never move it (spec:AST-094 FR43, DEC-24).
+        allowedScrollTypes: ['continuous'],
+        name: 'BottomSheet.handle',
+        direction: 'vertical',
+        maximumNumberOfTouches: 1,
+        selectionLock: lockSheetSelection,
+        shouldBegin: canBegin,
+        shouldReceiveTouch: notePointer,
+      }),
+    onPan,
+  );
+  // The body, pulled down where nothing under the pointer can scroll up: the
+  // sheet collapses toward its shortest detent or away.
+  useGestureRecognizer(
+    bodyNodeRef,
+    () =>
+      new PanGestureRecognizer({
+        // A trackpad's scroll pulls the sheet; a mouse wheel's notches stay
+        // with the page and never move it (spec:AST-094 FR43, DEC-24).
+        allowedScrollTypes: ['continuous'],
+        name: 'BottomSheet.bodyDown',
+        direction: 'down',
+        maximumNumberOfTouches: 1,
+        scrollEdge: true,
+        shouldBegin: canBegin,
+        shouldReceiveTouch: notePointer,
+      }),
+    onPan,
+  );
+  // The body, pulled up where nothing under the finger can scroll down, while
+  // a taller detent exists: at the tallest, an upward pull is the content's
+  // (promoting it would trade the scroll for a pull the release throws
+  // back). A finger that scrolls the content into its end mid-gesture keeps
+  // it: who gets the drag is decided when it begins (spec:AST-094 FR14).
+  useGestureRecognizer(
+    bodyNodeRef,
+    () =>
+      new PanGestureRecognizer({
+        // A trackpad's scroll pulls the sheet; a mouse wheel's notches stay
+        // with the page and never move it (spec:AST-094 FR43, DEC-24).
+        allowedScrollTypes: ['continuous'],
+        name: 'BottomSheet.bodyUp',
+        direction: 'up',
+        maximumNumberOfTouches: 1,
+        scrollEdge: true,
+        shouldBegin: () => canBegin() && activeOffsetRef.current > 0,
+        shouldReceiveTouch: notePointer,
+      }),
+    onPan,
+  );
+  // The catch: a finger landing on a settling sheet stops it where it is
+  // drawn, at the touch, and a pan that begins under it drags it from there;
+  // held still and lifted, it settles from where it was caught. A watcher
+  // reports the touch and the lift: it never claims, prevents nothing,
+  // leaves the sheet's styles alone and, recognized at every touch-down,
+  // never cancels the touches of what is under it, so a control in the sheet
+  // still gets its click.
+  useGestureRecognizer(
+    sheetElRef,
+    () =>
+      new LongPressGestureRecognizer({
+        name: 'BottomSheet.catch',
+        minimumPressDuration: 0,
+        claimsTouches: false,
+        cancelsTouchesInView: false,
+        shouldReceiveTouch: notePointer,
+      }),
+    press => {
+      switch (press.state) {
+        case 'began':
+          if (
+            travelHandleRef.current != null &&
+            dragStateRef.current == null &&
+            canDrag()
+          ) {
+            beginDrag(
+              pointerKinds.get(press) ?? 'touch',
+              measureHeight(),
+              touchTargets.get(press) ?? null,
+            );
+          }
+          return;
+        case 'ended':
+          if (
+            dragStateRef.current != null &&
+            dragStateRef.current.pan == null
+          ) {
+            endDrag(0, 0);
+          }
+          return;
+        case 'cancelled':
+          if (
+            dragStateRef.current != null &&
+            dragStateRef.current.pan == null
+          ) {
+            cancelDrag();
+          }
+          return;
+        case 'possible':
+        case 'changed':
+        case 'failed':
+          return;
       }
     },
-    [endDrag],
+    {manageStyle: false},
   );
 
-  // Non-passive touchmove is the reliable scroll<->drag handoff on touch:
-  // preventDefault() at a scroll edge stops the native scroll and drives the
-  // sheet drag through the pointer math (Touch adapted to the fields it reads).
-  //
-  // Every touch on the body is tracked, not only the ones that begin at an
-  // edge: a gesture that starts mid-content and scrolls to the end has to hand
-  // off too, and by then it is far too late to arm from `touchstart`.
-  const touchDragRef = useRef<{
-    id: number;
-    startY: number;
-    // The boxes this touch can scroll (see scrollChainUnder); their edges
-    // decide the handoff for the rest of the touch.
-    scrollers: HTMLElement[];
-    top: boolean;
-    bottom: boolean;
-    // Where the finger was when the scroller ran out of content, or null while
-    // it can still scroll. A mid-gesture handoff drives the sheet from travel
-    // BEYOND this point, so the part of the swipe that legitimately scrolled
-    // doesn't move the sheet as well.
-    contentEndY: number | null;
-    // Whether the drag in flight was promoted from `contentEndY` rather than
-    // armed at `touchstart`. That drag never cancelled the native scroll, so
-    // it has to yield again if the finger comes back down.
-    promotedAtContentEnd: boolean;
-  } | null>(null);
-  const previousTouchHandlersRef = useRef<{
-    start: (e: TouchEvent) => void;
-    move: (e: TouchEvent) => void;
-    end: (e: TouchEvent) => void;
-  } | null>(null);
-
-  // A second finger is a pinch, and pinch-zoom is the browser's. Whichever
-  // surface it lands on and whichever finger came first, drop every armed
-  // hand-off and any drag in flight so nothing claims (or preventDefault()s)
-  // the gesture; the sheet returns to its detent.
-  const yieldToPinch = useCallback(
-    (target?: HTMLElement) => {
-      touchDragRef.current = null;
-      armedBodyRef.current = null;
-      cancelDrag(target);
+  // A context menu interrupts the drag: back to the detent.
+  const handleContextMenu = useCallback(
+    (event: ReactMouseEvent) => {
+      const state = dragStateRef.current;
+      if (state == null) {
+        return;
+      }
+      event.preventDefault();
+      if (state.pan != null) {
+        // Turning a recognizer off mid-gesture cancels it (its listener
+        // cancels the drag).
+        state.pan.setEnabled(false);
+        state.pan.setEnabled(true);
+      }
+      cancelDrag();
     },
     [cancelDrag],
   );
 
-  const beginDragRef = useRef(beginDrag);
-  const cancelDragRef = useRef(cancelDrag);
-  const yieldToPinchRef = useRef(yieldToPinch);
-  const pointerMoveRef = useRef(handlePointerMove);
-  const endDragRef = useRef(endDrag);
-  const measureHeightRef = useRef(measureHeight);
-  useEffect(() => {
-    beginDragRef.current = beginDrag;
-    cancelDragRef.current = cancelDrag;
-    yieldToPinchRef.current = yieldToPinch;
-    pointerMoveRef.current = handlePointerMove;
-    endDragRef.current = endDrag;
-    measureHeightRef.current = measureHeight;
-  });
+  // The handle has no native focus action: a press on it keeps the focus
+  // where it is (a form control's keyboard stays up); once the sheet travels,
+  // BottomSheet dismisses the keyboard.
+  const handleHandlePointerDown = useCallback((event: ReactPointerEvent) => {
+    if (event.button !== 0 || !event.isPrimary) {
+      return;
+    }
+    event.preventDefault();
+  }, []);
 
+  const handleRef = useCallback((node: HTMLElement | null) => {
+    handleElRef.current = node;
+  }, []);
   const bodyRef = useCallback((node: HTMLElement | null) => {
-    const asPointer = (touch: Touch, target: HTMLElement) =>
-      ({
-        syntheticTouch: true,
-        pointerId: touch.identifier,
-        clientY: touch.clientY,
-        timeStamp: Date.now(),
-        currentTarget: target,
-        setPointerCapture: () => {},
-        releasePointerCapture: () => {},
-      }) as unknown as ReactPointerEvent;
-
-    const onTouchStart = (event: TouchEvent) => {
-      const body = event.currentTarget as HTMLElement;
-      if (event.touches.length > 1) {
-        yieldToPinchRef.current(body);
-        return;
-      }
-      const touch = event.changedTouches[0];
-      // Record where the gesture began and whether it began at a scroll edge.
-      // At the top, a pull DOWN hands off (collapse); at the bottom, a pull UP
-      // hands off (expand). A gesture that starts mid-content is an ordinary
-      // scroll, but it is tracked all the same: the scroller can run out of
-      // content while the finger is still down (see onTouchMove). A touch
-      // inside a layer this sheet hosts is that layer's, never tracked here.
-      if (!touch || isInsideNestedLayer(event.target, body)) {
-        touchDragRef.current = null;
-        return;
-      }
-      const scrollers = scrollChainUnder(event.target, body);
-      const top = chainAtTop(scrollers);
-      // The bottom edge hands off so the sheet can EXPAND, so it is only a
-      // handoff when a taller detent exists. Already at the tallest, an
-      // upward pull has nowhere to travel: promoting it would trade the
-      // user's scroll for a rubber-band the release throws straight back, and
-      // — because promotion preventDefault()s the rest of the gesture — would
-      // strand the scroller for as long as the finger stays down, so reversing
-      // downward to scroll back would collapse the sheet instead. Leave the
-      // gesture with the content.
-      const bottom = chainAtBottom(scrollers) && activeOffsetRef.current > 0;
-      touchDragRef.current = {
-        id: touch.identifier,
-        startY: touch.clientY,
-        scrollers,
-        top,
-        bottom,
-        contentEndY: null,
-        promotedAtContentEnd: false,
-      };
-    };
-
-    const onTouchMove = (event: TouchEvent) => {
-      const scroller = event.currentTarget as HTMLElement;
-      // `touches` lists every finger on the screen, so this also catches a
-      // second finger that landed outside the body (on the handle, or off the
-      // sheet), where no listener here saw it arrive.
-      if (event.touches.length > 1) {
-        yieldToPinchRef.current(scroller);
-        return;
-      }
-      const armed = touchDragRef.current;
-      if (dragStateRef.current) {
-        const t = [...event.changedTouches].find(
-          x => x.identifier === dragStateRef.current?.pointerId,
-        );
-        if (!t) {
-          return;
-        }
-        if (armed?.promotedAtContentEnd && armed.contentEndY != null) {
-          if (t.clientY >= armed.contentEndY) {
-            // Back at the point where the content ran out. This drag never
-            // cancelled the native scroll — it couldn't, the events were no
-            // longer cancelable — so the scroller is about to move again. Hand
-            // the gesture back rather than driving the sheet and the content
-            // at once; a later pull past the end promotes again.
-            armed.contentEndY = null;
-            armed.promotedAtContentEnd = false;
-            cancelDragRef.current(scroller);
-            return;
-          }
-          // Deliberately NOT preventDefault()ed: the scroller is clamped at
-          // its end, so there is no scrolling left to cancel, and claiming the
-          // gesture would strand the content for as long as the finger is down.
-          pointerMoveRef.current(asPointer(t, scroller));
-          return;
-        }
-        event.preventDefault();
-        pointerMoveRef.current(asPointer(t, scroller));
-        return;
-      }
-      if (!armed) {
-        return;
-      }
-      const t = [...event.changedTouches].find(x => x.identifier === armed.id);
-      if (!t) {
-        return;
-      }
-      const delta = t.clientY - armed.startY;
-      // Promote to a sheet drag on a pull that opposes the armed edge and can
-      // no longer scroll that way: at the top, a downward pull (delta > 0)
-      // collapses; at the bottom, an upward pull (delta < 0) expands. The
-      // opposite direction is a real scroll, so disarm and let it through.
-      const pullDownAtTop =
-        armed.top && delta > DRAG_PROMOTION_SLOP && chainAtTop(armed.scrollers);
-      const pullUpAtBottom =
-        armed.bottom &&
-        delta < -DRAG_PROMOTION_SLOP &&
-        chainAtBottom(armed.scrollers);
-      if (pullDownAtTop || pullUpAtBottom) {
-        event.preventDefault();
-        touchDragRef.current = null;
-        beginDragRef.current(
-          asPointer(t, scroller),
-          measureHeightRef.current(),
-          armed.startY,
-        );
-        pointerMoveRef.current(asPointer(t, scroller));
-        return;
-      }
-      if ((armed.top && delta < 0) || (armed.bottom && delta > 0)) {
-        // Scrolling away from the armed edge; hand back to native scroll. The
-        // touch stays tracked: this is the swipe that may reach the far edge.
-        armed.top = false;
-        armed.bottom = false;
-      }
-      // Reaching the end of the content mid-gesture. Arming at `touchstart`
-      // cannot see this, and re-arming for a preventDefault() promotion would
-      // be useless anyway: once the browser has committed the gesture to
-      // scrolling, every remaining touchmove is non-cancelable. Nothing needs
-      // cancelling either — the scroller is clamped at its maximum, so further
-      // upward travel scrolls nothing. Anchor at the point where the content
-      // ran out and give the sheet everything past it, so the pull continues
-      // into the sheet with no jump and no lost scrolling.
-      if (activeOffsetRef.current > 0 && chainAtBottom(armed.scrollers)) {
-        if (armed.contentEndY == null) {
-          armed.contentEndY = t.clientY;
-        } else if (armed.contentEndY - t.clientY >= CONTENT_END_HANDOFF_SLOP) {
-          armed.promotedAtContentEnd = true;
-          beginDragRef.current(
-            asPointer(t, scroller),
-            measureHeightRef.current(),
-            armed.contentEndY,
-          );
-          pointerMoveRef.current(asPointer(t, scroller));
-        }
-      } else {
-        armed.contentEndY = null;
-      }
-    };
-
-    const onTouchEnd = (event: TouchEvent) => {
-      touchDragRef.current = null;
-      const pointerId = dragStateRef.current?.pointerId;
-      if (pointerId == null) {
-        return;
-      }
-      const t = [...event.changedTouches].find(
-        touch => touch.identifier === pointerId,
-      );
-      const target = event.currentTarget as HTMLElement;
-      if (t) {
-        endDragRef.current(asPointer(t, target));
-      } else if (event.touches.length === 0) {
-        // Some interrupted multi-touch sequences omit the active touch from
-        // changedTouches. If no fingers remain, the drag cannot finish later.
-        cancelDragRef.current(target);
-      }
-    };
-
-    const prev = bodyNodeRef.current;
-    if (prev && previousTouchHandlersRef.current) {
-      const h = previousTouchHandlersRef.current;
-      prev.removeEventListener('touchstart', h.start);
-      prev.removeEventListener('touchmove', h.move);
-      prev.removeEventListener('touchend', h.end);
-      prev.removeEventListener('touchcancel', h.end);
-    }
     bodyNodeRef.current = node;
-    if (node) {
-      node.addEventListener('touchstart', onTouchStart, {passive: true});
-      node.addEventListener('touchmove', onTouchMove, {passive: false});
-      node.addEventListener('touchend', onTouchEnd, {passive: true});
-      node.addEventListener('touchcancel', onTouchEnd, {passive: true});
-      previousTouchHandlersRef.current = {
-        start: onTouchStart,
-        move: onTouchMove,
-        end: onTouchEnd,
-      };
-    } else {
-      previousTouchHandlersRef.current = null;
-    }
   }, []);
 
   const reconcileScrollPreservationInset = useCallback(
@@ -1773,56 +2096,9 @@ export function useSheetGestures({
     [reconcileScrollPreservationInset],
   );
 
-  // A second pointer on either surface is a pinch: yield before either
-  // surface's primary-pointer handling sees it.
-  const handleHandlePointerDown = useCallback(
-    (event: ReactPointerEvent) => {
-      if (!event.isPrimary) {
-        yieldToPinch(event.currentTarget as HTMLElement);
-        return;
-      }
-      handlePointerDown(event);
-    },
-    [handlePointerDown, yieldToPinch],
-  );
-  const handleBodyPointerDownOrPinch = useCallback(
-    (event: ReactPointerEvent) => {
-      if (!event.isPrimary) {
-        yieldToPinch(event.currentTarget as HTMLElement);
-        return;
-      }
-      handleBodyPointerDown(event);
-    },
-    [handleBodyPointerDown, yieldToPinch],
-  );
-  // A finger that started on the handle reports every finger on the screen,
-  // so a second one landing anywhere (off the sheet included) is seen here,
-  // usually before the browser gets round to cancelling the handle pointer.
-  const handleHandleTouch = useCallback(
-    (event: ReactTouchEvent) => {
-      if (event.touches.length > 1) {
-        yieldToPinch(event.currentTarget as HTMLElement);
-      }
-    },
-    [yieldToPinch],
-  );
-  // The handle allows only pinch-zoom, so the browser cancels a handle drag's
-  // pointer when it takes a pinch. That is not a release: return to the
-  // detent rather than settling from wherever the finger had got to.
-  const handleHandlePointerCancel = useCallback(
-    (event: ReactPointerEvent) => {
-      const state = dragStateRef.current;
-      if (state?.pointerId !== event.pointerId || state.syntheticTouch) {
-        return;
-      }
-      cancelDrag(event.currentTarget as HTMLElement);
-    },
-    [cancelDrag],
-  );
-
-  // The resting transform; a drag in flight writes its own to the element
-  // (writeLiveTransform) and a host that owns the element's transform must not
-  // render this over it while `isDragging`.
+  // The resting transform, for a host that renders before it measures; a
+  // gesture moves the sheet on the travel channel instead (writeLiveTransform,
+  // springTravel).
   const activeOffset = isDragging ? dragOffset : settledOffset;
 
   const contentProps = useMemo<SheetContentProps>(
@@ -1842,7 +2118,9 @@ export function useSheetGestures({
           isOpen && (isDragging || isScrollAreaReconciling)
             ? 'none'
             : undefined,
-        // One-finger drags are the sheet's; a pinch stays the browser's.
+        // No page pan from the sheet itself (its drags are the recognizers'
+        // on the handle and the body, which the host styles); a pinch stays
+        // the browser's.
         touchAction: 'pinch-zoom',
         overscrollBehavior: 'contain',
       },
@@ -1852,47 +2130,21 @@ export function useSheetGestures({
 
   const handleProps = useMemo<SheetHandleProps>(
     () => ({
-      style: {touchAction: 'pinch-zoom', cursor: 'grab'},
+      ref: handleRef,
+      style: {cursor: 'grab'},
       onContextMenu: handleContextMenu,
-      onLostPointerCapture: handleLostPointerCapture,
       onPointerDown: handleHandlePointerDown,
-      onPointerMove: handlePointerMove,
-      onPointerUp: endDrag,
-      onPointerCancel: handleHandlePointerCancel,
-      onTouchStart: handleHandleTouch,
-      onTouchMove: handleHandleTouch,
     }),
-    [
-      endDrag,
-      handleContextMenu,
-      handleHandlePointerCancel,
-      handleHandlePointerDown,
-      handleHandleTouch,
-      handleLostPointerCapture,
-      handlePointerMove,
-    ],
+    [handleContextMenu, handleHandlePointerDown, handleRef],
   );
 
   const bodyProps = useMemo<SheetBodyProps>(
     () => ({
       ref: bodyRef,
       onContextMenu: handleContextMenu,
-      onLostPointerCapture: handleLostPointerCapture,
-      onPointerDown: handleBodyPointerDownOrPinch,
-      onPointerMove: handleBodyPointerMove,
-      onPointerUp: handleBodyEnd,
-      onPointerCancel: handleBodyEnd,
       onScroll: handleBodyScroll,
     }),
-    [
-      bodyRef,
-      handleBodyEnd,
-      handleBodyPointerDownOrPinch,
-      handleBodyPointerMove,
-      handleBodyScroll,
-      handleContextMenu,
-      handleLostPointerCapture,
-    ],
+    [bodyRef, handleBodyScroll, handleContextMenu],
   );
 
   return {
@@ -1912,5 +2164,7 @@ export function useSheetGestures({
     settlingLayoutOffset,
     settledLayoutOffset,
     completeScrollAreaSettle,
+    gestureExitRef,
+    resetTravel,
   };
 }

@@ -49,6 +49,12 @@ import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 
+// SelectorBottomSheet loads the sheet lazily. Load it here, untimed, so a bottom-sheet test's
+// findByRole waits only for the render, never for a cold import.
+beforeAll(async () => {
+  await import('../BottomSheet/BottomSheet');
+});
+
 /**
  * Enters a search query as one change. Typing it key by key can land several
  * keystrokes in one frame, whose result announcements are then joined into

@@ -211,6 +211,11 @@ const styles = stylex.create({
       transitionDuration: `var(--_sheet-scrim-duration, ${durationVars['--duration-medium']})`,
       transitionTimingFunction: easeVars['--ease-standard'],
       transitionBehavior: 'allow-discrete',
+      // The backdrop keeps its own compositing layer while the sheet is open.
+      // A release plays the dim on the compositor; a backdrop given a layer
+      // only for that animation is re-rastered as it gets one and again as it
+      // loses it, which costs a frame on a software GPU.
+      willChange: 'opacity',
       '@media (prefers-reduced-motion: reduce)': {
         transitionDuration: 'var(--_sheet-scrim-duration, 0.01s)',
       },
@@ -501,6 +506,12 @@ function StandaloneBottomSheet({
       writeScrimOpacity(dialogRef.current, opacity, scrimWriteRef.current),
     [],
   );
+  // The same rule for the dim a release plays on the backdrop itself: only
+  // the stack's visible backdrop carries it.
+  const isScrimShown = useCallback(() => {
+    const view = stackViewRef.current;
+    return !(view.isStacked && !view.ownsScrim) && !view.isScrimTakenOver;
+  }, []);
   const handleScrimOpacity = useCallback((opacity: number) => {
     // Only the sheet whose backdrop is the visible scrim thins it; a sheet
     // stacked above it has a transparent backdrop that a drag must not reveal.
@@ -512,6 +523,24 @@ function StandaloneBottomSheet({
       '--_sheet-scrim-opacity',
       String(opacity),
     );
+  }, []);
+  // While the sheet's gesture or its release moves the dim, the backdrop
+  // follows it with no easing of its own (the release plays it in lockstep
+  // with the sheet). The pin is lifted only after a style flush has applied
+  // the last value, so that value does not ease in again.
+  const handleScrimTracking = useCallback((tracking: boolean) => {
+    const dialog = dialogRef.current;
+    if (dialog == null) {
+      return;
+    }
+    if (tracking) {
+      dialog.style.setProperty('--_sheet-scrim-duration', '0s');
+      return;
+    }
+    if (typeof getComputedStyle === 'function') {
+      void getComputedStyle(dialog, '::backdrop').opacity;
+    }
+    dialog.style.removeProperty('--_sheet-scrim-duration');
   }, []);
 
   // A sheet joins the registry for as long as it is presented. For a modal
@@ -832,6 +861,8 @@ function StandaloneBottomSheet({
         xstyle={xstyle}
         onDismiss={dismissOnLightInteraction}
         onScrimOpacity={handleScrimOpacity}
+        onScrimTracking={hasScrim ? handleScrimTracking : undefined}
+        isScrimShown={hasScrim ? isScrimShown : undefined}
         onElementChange={handlePanelElementChange}
         onMotionStart={handleMotionStart}
         onMotionComplete={handleMotionComplete}>

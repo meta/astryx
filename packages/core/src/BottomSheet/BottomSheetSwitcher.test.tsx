@@ -32,6 +32,74 @@ import {BottomSheetSwitcher} from './BottomSheetSwitcher';
 // dialogs are modal, standing in for the `:modal` pseudo-class jsdom cannot
 // match.
 const modalDialogs = new WeakSet<HTMLDialogElement>();
+
+// Input reaches a sheet as in a browser: a mouse (the stubbed primary pointer
+// is fine) through the handle's own pointer listeners (spec:AST-017 FR59), on
+// explicit timestamps that start past the previous test's. A press is sent
+// with its first move, where the test put it: a mouse moves the sheet from
+// the first pixel.
+let timeBase = 0;
+let pendingPress: {y: number; time: number} | null = null;
+beforeEach(() => {
+  timeBase += 1_000_000;
+  pendingPress = null;
+  // A test that ends mid-drag leaves its pointer down in the host: losing
+  // window focus cancels every contact in flight.
+  window.dispatchEvent(new Event('blur'));
+  // jsdom has no hit test; null keeps a touch where it was sent.
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: () => null,
+  });
+});
+
+function mouse(
+  target: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  y: number,
+  time: number,
+): boolean {
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: 1,
+    pointerType: 'mouse',
+    isPrimary: true,
+    clientX: 50,
+    clientY: y,
+    button: type === 'pointermove' ? -1 : 0,
+    buttons: type === 'pointerup' ? 0 : 1,
+  });
+  Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
+  return fireEvent(target, event);
+}
+
+function fireTimedPointer(
+  target: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  {time, y}: {time: number; y: number},
+): boolean {
+  if (type === 'pointerdown') {
+    pendingPress = {y, time};
+    return true;
+  }
+  if (pendingPress != null) {
+    const landing = pendingPress;
+    pendingPress = null;
+    // Every pointer's pan begins past its threshold (spec:AST-094 FR17,
+    // FR19, FR43), a mouse's too: the press lands that far behind the first
+    // move, so the positions a test moves to are the drag's.
+    mouse(
+      target,
+      'pointerdown',
+      landing.y - Math.sign(y - landing.y) * PAN_THRESHOLD,
+      landing.time,
+    );
+  }
+  return mouse(target, type, y, time);
+}
+const PAN_THRESHOLD = 10;
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
     this: HTMLDialogElement,
@@ -771,18 +839,8 @@ describe('BottomSheetSwitcher', () => {
       throw new Error('sheet handle not found');
     }
 
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 100,
-      timeStamp: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {
-      pointerId: 1,
-      clientY: 600,
-      timeStamp: 16,
-    });
+    fireTimedPointer(handle, 'pointerdown', {time: 0, y: 100});
+    fireTimedPointer(handle, 'pointermove', {time: 16, y: 600});
     const detailsDialog = getSheetDialog('details-sheet');
     expect(
       detailsDialog.style.getPropertyValue('--_sheet-scrim-opacity'),
@@ -794,11 +852,7 @@ describe('BottomSheetSwitcher', () => {
     expect(detailsDialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
     expect(getActiveDialog()).toHaveStyle({'--_sheet-scrim-opacity': '0'});
 
-    fireEvent.pointerMove(handle, {
-      pointerId: 1,
-      clientY: 680,
-      timeStamp: 32,
-    });
+    fireTimedPointer(handle, 'pointermove', {time: 32, y: 680});
     expect(detailsDialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
     expect(getActiveDialog()).toHaveStyle({'--_sheet-scrim-opacity': '0'});
   });
@@ -968,14 +1022,9 @@ describe('BottomSheetSwitcher', () => {
     }
 
     fireEvent.click(dialog);
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-    fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+    fireTimedPointer(handle, 'pointerdown', {time: 0, y: 0});
+    fireTimedPointer(handle, 'pointermove', {time: 16, y: 120});
+    fireTimedPointer(handle, 'pointerup', {time: 32, y: 120});
 
     expect(onActiveSheetChange).not.toHaveBeenCalled();
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
@@ -1038,14 +1087,9 @@ describe('BottomSheetSwitcher', () => {
     fireEvent.click(dialog);
     fireEvent.keyDown(dialog, {key: 'Escape'});
     fireEvent(dialog, new Event('cancel', {cancelable: true}));
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: 120});
-    fireEvent.pointerUp(handle, {pointerId: 1, clientY: 120});
+    fireTimedPointer(handle, 'pointerdown', {time: 0, y: 0});
+    fireTimedPointer(handle, 'pointermove', {time: 16, y: 120});
+    fireTimedPointer(handle, 'pointerup', {time: 32, y: 120});
 
     expect(onActiveSheetChange).not.toHaveBeenCalled();
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
@@ -1069,17 +1113,17 @@ describe('BottomSheetSwitcher', () => {
       throw new Error('sheet handle not found');
     }
 
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-    });
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: 300});
-    expect(panel.style.transform).toBe('translateY(300px)');
+    fireTimedPointer(handle, 'pointerdown', {time: 0, y: 0});
+    fireTimedPointer(handle, 'pointermove', {time: 16, y: 300});
+    // The drag moves the sheet on its travel channel (`translate`).
+    expect(panel.style.translate).toBe('0px 300px');
 
     expect(fireEvent.contextMenu(handle)).toBe(false);
 
+    // Back to the detent on the detent spring (jsdom: its end at once). At
+    // rest an identity leaves the element (the animator writes no inline
+    // `translate: 0px 0px`, which would make the panel a containing block).
+    expect(panel.style.translate).toBe('');
     expect(panel.style.transform).toBe('');
     expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
     expect(onActiveSheetChange).not.toHaveBeenCalled();

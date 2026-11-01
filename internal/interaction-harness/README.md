@@ -324,3 +324,33 @@ not widen the gaps there, and every gap past `maxGapMs` is a `WheelPacingError`.
 The WebKit input command is reached through Playwright's in-process server
 object, so it needs a locally launched browser (the default), not `connect()`.
 Firefox has no touch input path and no project.
+
+WebKit's touches carry their real dispatch time, so a velocity reaches the
+page only as well as the dispatch keeps pace. `play` sends each event at its
+scripted time, and never sooner after the one before it than the script spaces
+them: a stall stretches one gap instead of sending the events behind it
+together. With `{checkPacing: true}`, `play` then reads the `timeStamp`s the
+page received and throws `TouchPacingError` where they decide a release: an
+event missing, either of the last two move intervals (what a release velocity
+reads) more than `TOUCH_PACING_TOLERANCE_MS` (4 ms) off the script, or the
+lift `TOUCH_LIFT_STILLNESS_MS` (40 ms) or more after the last move. A
+gesture's first moves and its lift reach the page with its own handling time
+(a burst after `touchstart`, a lift a frame late), and no release reads them.
+The page's own handling can also hold an event the release reads: WebKit
+dispatches an event only once the main thread is free, so a listener that
+blocks widens the gap after it as a stalled runner does. `play` times how
+long the page held each event, from its stamp until a listener on the window
+that runs after the page's own; an off-pace interval or lift that time
+explains throws `TouchPageStallError`, the page's stall, and the rest
+`TouchPacingError`.
+On one worker of a loaded machine, 440 gaps over 40 flicks moved at most 4 ms;
+under eight workers, 4% of flicks had a gap further off, up to 21 ms. Wrap a
+proof whose outcome follows a velocity in
+`retakeOnTouchPacing(testInfo, attempt)`:
+`attempt` builds the state, plays with `checkPacing` and asserts, and runs once
+more only on a `TouchPacingError` (never on a `TouchPageStallError`), listed as
+a `touch-retake` annotation; a second one fails the test with that cause.
+
+A tap that must click uses `driver.tap` in both engines. WebKit synthesises no
+click from a scripted touch sequence, so a proof that needs that click skips
+with `test.skip(!driver.synthesizesClicks, SCRIPTED_CLICK_SKIP)`.

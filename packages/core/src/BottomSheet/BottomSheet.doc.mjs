@@ -159,7 +159,7 @@ export const docs = {
       name: 'snapPoints',
       type: 'ReadonlyArray<number | string>',
       description:
-        "Extra heights the sheet can rest at when dragged; its own height is always the tallest stop, and omitting this gives a sheet that only opens and closes. Each stop is the sheet's visible height: a number is a viewport fraction (0.5 is half the screen), '50%' the same in CSS, '320px' an absolute length. A stop of a quarter of the sheet or less is a peek: it slides away instead of reflowing, and thins the scrim.",
+        "Extra heights the sheet can rest at when dragged; its own height is always the tallest stop, and omitting this gives a sheet that only opens and closes. Each stop is the sheet's visible height: a number is a viewport fraction (0.5 is half the screen), '50%' the same in CSS, '320px' an absolute length. A stop of a quarter of the sheet or less is a peek: it slides away instead of reflowing, and thins the scrim. A released drag, under a finger or a mouse, goes where an iOS sheet would: to the stop nearest where its speed carries it (a quick flick goes at least to the next stop), dismissal included. Under a finger it settles on iOS's spring; under a mouse, on the theme's motion.",
     },
     {
       name: 'hasScrim',

@@ -209,28 +209,51 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     const handle = sheet.querySelector<HTMLElement>(
       '.astryx-bottom-sheet > div[aria-hidden="true"]',
     )!;
-    fireEvent.pointerDown(handle, {
-      pointerId: 1,
-      clientY: 0,
-      button: 0,
-      isPrimary: true,
-      pointerType: 'touch',
-    });
-    fireEvent.pointerMove(handle, {
-      pointerId: 1,
-      clientY: 40,
-      pointerType: 'touch',
-    });
-    fireEvent.pointerMove(handle, {
-      pointerId: 1,
-      clientY: 120,
-      pointerType: 'touch',
-    });
-    fireEvent.pointerUp(handle, {
-      pointerId: 1,
-      clientY: 120,
-      pointerType: 'touch',
-    });
+    // jsdom lays nothing out: give the sheet the box a phone gives it, since
+    // the release decides against the sheet's height.
+    vi.spyOn(handle.parentElement!, 'getBoundingClientRect').mockReturnValue(
+      DOMRect.fromRect({x: 0, y: 60, width: 390, height: 784}),
+    );
+    // A finger on a touchscreen, as the browser sends it: each pointer event
+    // with its touch event, through the sheet's gesture recognizers.
+    const finger = (
+      type: 'pointerdown' | 'pointermove' | 'pointerup',
+      clientY: number,
+    ) => {
+      const touchType = {
+        pointerdown: 'touchstart',
+        pointermove: 'touchmove',
+        pointerup: 'touchend',
+      }[type];
+      const touch = new Event(touchType, {bubbles: true, cancelable: true});
+      const contact = {identifier: 1, clientX: 50, clientY, target: handle};
+      Object.defineProperties(touch, {
+        changedTouches: {value: [contact]},
+        touches: {value: type === 'pointerup' ? [] : [contact]},
+      });
+      const pointer = new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 1,
+        pointerType: 'touch',
+        isPrimary: true,
+        clientX: 50,
+        clientY,
+        button: type === 'pointermove' ? -1 : 0,
+        buttons: type === 'pointerup' ? 0 : 1,
+      });
+      if (type === 'pointerup') {
+        fireEvent(handle, touch);
+        fireEvent(handle, pointer);
+      } else {
+        fireEvent(handle, pointer);
+        fireEvent(handle, touch);
+      }
+    };
+    finger('pointerdown', 0);
+    finger('pointermove', 40);
+    finger('pointermove', 120);
+    finger('pointerup', 120);
     discard = await screen.findByRole('alertdialog', {
       name: 'Discard changes?',
     });

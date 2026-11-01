@@ -9,7 +9,7 @@
  * @position Chromium proof for useSheetGestures' live transform path
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -53,12 +53,36 @@ async function openSheet(page: Page) {
   return {dialog, sheet};
 }
 
-function tyOf(transform: string): number {
-  const match = /translateY\((-?[\d.]+)px\)/.exec(transform);
-  return match ? Number(match[1]) : 0;
+// The sheet's travel, inline: its resting transform plus the travel channel
+// a drag moves it on (`translate`), written per move.
+async function inlineTravel(sheet: Locator): Promise<number> {
+  return sheet.evaluate(el => {
+    const {style} = el as HTMLElement;
+    const resting = /translateY\((-?[\d.]+)px\)/.exec(style.transform);
+    const [, travel = '0'] = style.translate.split(' ');
+    return (
+      (resting == null ? 0 : Number(resting[1])) +
+      (Number.parseFloat(travel) || 0)
+    );
+  });
 }
 
-test('a drag writes the transform per move and renders nothing between', async ({
+// The same as drawn, from the computed style: a release animates the travel
+// channel on the compositor.
+async function drawnTravel(sheet: Locator): Promise<number> {
+  return sheet.evaluate(el => {
+    const computed = getComputedStyle(el);
+    const resting =
+      computed.transform === 'none' ? 0 : new DOMMatrix(computed.transform).m42;
+    const travel =
+      computed.translate === 'none'
+        ? 0
+        : Number.parseFloat(computed.translate.split(' ')[1] ?? '0') || 0;
+    return resting + travel;
+  });
+}
+
+test('a drag writes its travel per move and renders nothing between', async ({
   page,
 }) => {
   await page.addInitScript(COMMIT_COUNTER);
@@ -86,9 +110,7 @@ test('a drag writes the transform per move and renders nothing between', async (
       type: 'touchMove',
       touchPoints: [{x, y: handleY + i * 5}],
     });
-    trail.push(
-      tyOf(await sheet.evaluate(el => (el as HTMLElement).style.transform)),
-    );
+    trail.push(await inlineTravel(sheet));
     await page.waitForTimeout(16);
   }
   const commitsDuring = await page.evaluate(
@@ -99,7 +121,7 @@ test('a drag writes the transform per move and renders nothing between', async (
         }
       ).__REACT_DEVTOOLS_GLOBAL_HOOK__.commits,
   );
-  // The transform followed the finger (inline, written per move; the first
+  // The travel followed the finger (inline, written per move; the first
   // samples ease out of the magnet around the resting detent) ...
   expect(trail[trail.length - 1]).toBeGreaterThanOrEqual(100);
   expect(trail.filter((ty, i) => i === 0 || ty >= trail[i - 1]).length).toBe(
@@ -112,18 +134,12 @@ test('a drag writes the transform per move and renders nothing between', async (
     type: 'touchEnd',
     touchPoints: [],
   });
-  // The release animates back from where the finger left the sheet: the
-  // computed transform is still off rest a frame later, and at rest after the
-  // transition.
+  // The release animates back from where the finger left the sheet: still
+  // off rest as drawn a frame later, and at rest once it lands.
   await page.waitForTimeout(40);
-  const midway = await sheet.evaluate(el => getComputedStyle(el).transform);
-  const midwayTy = /matrix\(1, 0, 0, 1, 0, (-?[\d.]+)\)/.exec(midway);
-  expect(midwayTy, midway).not.toBeNull();
-  expect(Number(midwayTy?.[1])).toBeGreaterThan(5);
+  expect(await drawnTravel(sheet)).toBeGreaterThan(5);
   await expect
-    .poll(async () => sheet.evaluate(el => getComputedStyle(el).transform), {
-      timeout: 2_000,
-    })
-    .toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/);
+    .poll(async () => Math.abs(await drawnTravel(sheet)), {timeout: 2_000})
+    .toBeLessThan(0.5);
   await expect(page.getByRole('dialog', {name: 'Nearby places'})).toBeVisible();
 });

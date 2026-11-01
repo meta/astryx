@@ -73,9 +73,29 @@ beforeEach(() => {
   );
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
   window.scrollTo = vi.fn();
+  vi.useFakeTimers({toFake: ['performance', 'setTimeout', 'clearTimeout']});
 });
 
 afterEach(() => {
+  // A test that ends mid-drag lifts its pointer where it is, and losing
+  // window focus cancels every touch in flight; what the gesture host defers
+  // to the next task (a mouse drag's selection hold lifts one task after its
+  // press ends) runs on this test's clock, so the next test does not inherit
+  // it.
+  if (pressed != null) {
+    const {target, y, pointerType} = pressed;
+    act(() => {
+      mouse(target, 'pointerup', y, 100_000, pointerType);
+    });
+  }
+  window.dispatchEvent(new Event('blur'));
+  if (pointerUsed) {
+    pointerUsed = false;
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+  }
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -227,42 +247,234 @@ function getHandle(): HTMLElement {
   return handle;
 }
 
-// Drive a pointer drag on the grab handle. jsdom PointerEvents don't carry
-// clientY, so dispatch plain events with the coords the handlers read.
+// Input reaches the sheet as in a browser: a mouse (the stubbed primary
+// pointer is fine) through the handle's and the body's own pointer listeners
+// (spec:AST-017 FR59), a finger (a stubbed coarse primary pointer) through
+// the document's gesture host, on explicit timestamps. The host outlives a test and its clock never runs backwards,
+// so every test's times start past the previous test's.
+let timeBase = 0;
+beforeEach(() => {
+  timeBase += 1_000_000;
+  pendingPress = null;
+  // A test that ends mid-drag leaves its pointer down in the host: losing
+  // window focus cancels every contact in flight.
+  window.dispatchEvent(new Event('blur'));
+  // jsdom has no hit test; the host asks for one only on iOS WebKit, while
+  // the animator moves an element. Null keeps the touch where it was sent.
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: () => null,
+  });
+});
+
+function mouse(
+  target: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  y: number,
+  time: number,
+  pointerType: 'mouse' | 'touch' | 'pen' = 'mouse',
+): boolean {
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: 1,
+    pointerType,
+    isPrimary: true,
+    clientX: 50,
+    clientY: y,
+    button: type === 'pointermove' ? -1 : 0,
+    buttons: type === 'pointerup' ? 0 : 1,
+  });
+  Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
+  pressed =
+    type === 'pointerdown'
+      ? {target, y, pointerType}
+      : type === 'pointerup'
+        ? null
+        : pressed;
+  pointerUsed = true;
+  return fireEvent(target, event);
+}
+// Whether a test pressed a pointer (its host work deferred to the next task
+// must run before the next test), and the one it left pressed.
+let pointerUsed = false;
+let pressed: {
+  target: Element;
+  y: number;
+  pointerType: 'mouse' | 'touch' | 'pen';
+} | null = null;
+
+// A finger where a test stubs a coarse primary pointer, else a mouse. jsdom
+// lacks TouchEvent: the touch events carry the fields the host reads.
+function contact(
+  target: Element,
+  type: 'pointerdown' | 'pointermove' | 'pointerup',
+  y: number,
+  time: number,
+): boolean {
+  if (!matchMedia('(pointer: coarse)').matches) {
+    return mouse(target, type, y, time);
+  }
+  const touchType = {
+    pointerdown: 'touchstart',
+    pointermove: 'touchmove',
+    pointerup: 'touchend',
+  }[type];
+  const event = new Event(touchType, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+  });
+  const touch = {identifier: 1, clientX: 50, clientY: y, target};
+  Object.defineProperties(event, {
+    changedTouches: {value: [touch]},
+    touches: {value: type === 'pointerup' ? [] : [touch]},
+    timeStamp: {value: timeBase + time},
+  });
+  return fireEvent(target, event);
+}
+
+// A finger's pan reports UIKit's translation, which leaves out the travel
+// before the pan begins: its press lands that far behind its first move, so
+// the positions a test moves to are the drag's (one that never moves lifts
+// where it landed). A mouse moves the sheet from the first pixel and lands
+// where the test puts it.
+const PAN_THRESHOLD = 10;
+let pendingPress: {y: number; time: number} | null = null;
+
+// Drive a drag on the grab handle, 16 ms between its events. A named
+// pointer kind sends pointer events of that kind: a finger or a pen where the
+// primary pointer is fine takes the pointer listeners, as a mouse does
+// (spec:AST-017 FR59).
 function drag(
   handle: HTMLElement,
   points: {y: number}[],
-  pointerType: 'mouse' | 'touch' | 'pen' = 'mouse',
+  pointerType?: 'mouse' | 'touch' | 'pen',
 ) {
-  const [down, ...rest] = points;
-  fireEvent.pointerDown(handle, {
-    pointerId: 1,
-    clientY: down.y,
-    button: 0,
-    isPrimary: true,
-    pointerType,
-  });
-  for (const p of rest) {
-    fireEvent.pointerMove(handle, {pointerId: 1, clientY: p.y, pointerType});
+  if (pointerType != null) {
+    // Every pointer's pan begins past its threshold (spec:AST-094 FR17,
+    // FR19, FR43): the press lands that far behind the first move. A finger
+    // on a touchscreen whose primary pointer is fine sends its touches after
+    // its pointer events.
+    const fire = (
+      type: 'pointerdown' | 'pointermove' | 'pointerup',
+      y: number,
+      time: number,
+    ) => {
+      mouse(handle, type, y, time, pointerType);
+      if (pointerType === 'touch') {
+        const touchType = {
+          pointerdown: 'touchstart',
+          pointermove: 'touchmove',
+          pointerup: 'touchend',
+        }[type];
+        const event = new Event(touchType, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        });
+        const touch = {identifier: 7, clientX: 50, clientY: y, target: handle};
+        Object.defineProperties(event, {
+          changedTouches: {value: [touch]},
+          touches: {value: type === 'pointerup' ? [] : [touch]},
+          timeStamp: {value: timeBase + time},
+        });
+        fireEvent(handle, event);
+      }
+    };
+    const direction =
+      points.length > 1 ? Math.sign(points[1].y - points[0].y) : 0;
+    points.forEach((point, i) =>
+      fire(
+        i === 0 ? 'pointerdown' : 'pointermove',
+        i === 0 ? point.y - direction * PAN_THRESHOLD : point.y,
+        i * 16,
+      ),
+    );
+    fire('pointerup', points[points.length - 1].y, points.length * 16);
+    return;
   }
-  const last = points[points.length - 1];
-  fireEvent.pointerUp(handle, {pointerId: 1, clientY: last.y, pointerType});
+  points.forEach((point, i) =>
+    fireTimedPointer(handle, i === 0 ? 'pointerdown' : 'pointermove', {
+      time: i * 16,
+      y: point.y,
+    }),
+  );
+  fireTimedPointer(handle, 'pointerup', {
+    time: points.length * 16,
+    y: points[points.length - 1].y,
+  });
+}
+
+// The sheet's translation: its resting transform plus the travel channel
+// useSheetGestures moves a dragged or settling sheet on (`translate`).
+function translationOf(sheet: HTMLElement): number {
+  const resting = /translateY\((-?[\d.]+)px\)/.exec(sheet.style.transform);
+  const [, travel = '0px'] = sheet.style.translate.split(' ');
+  return (
+    (resting == null ? 0 : Number.parseFloat(resting[1])) +
+    Number.parseFloat(travel)
+  );
+}
+
+// Gives the open sheet the border box of a Tall sheet in an 800px window:
+// 784px, 736px of it visible (the 48px reserve sits below the fold), so it is
+// gone 736px down.
+function measureTallSheet() {
+  vi.spyOn(getSheet(), 'getBoundingClientRect').mockReturnValue(
+    rect({top: 16, bottom: 800}),
+  );
+}
+
+// What the panel's stylesheet gives the sheet's transform in a browser (jsdom
+// applies no StyleX): under a mouse, a release plays this timing on the
+// animator (releaseMotion.ts).
+function giveThemeTransition(sheet: HTMLElement) {
+  sheet.style.transitionProperty = 'transform';
+  sheet.style.transitionDuration = '410ms';
+  sheet.style.transitionTimingFunction = 'cubic-bezier(0.24, 1, 0.4, 1)';
+}
+
+// A slow drag on the handle that rests before the lift: released at rest.
+function dragSlowly(handle: HTMLElement, y: number) {
+  fireTimedPointer(handle, 'pointerdown', {time: 0, y: 0});
+  fireTimedPointer(handle, 'pointermove', {time: 1000, y});
+  fireTimedPointer(handle, 'pointerup', {time: 2000, y});
+}
+
+// A release springs on the motion foundation's animator: its clock is
+// performance.now() and its curve ends on a timer, both faked for this file.
+// This lets a spring land and the sheet reconcile its layout.
+async function landSpring() {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
 }
 
 function fireTimedPointer(
   target: Element,
   type: 'pointerdown' | 'pointermove' | 'pointerup',
   {time, y}: {time: number; y: number},
-) {
-  const event = new Event(type, {bubbles: true, cancelable: true});
-  Object.defineProperties(event, {
-    button: {value: 0},
-    clientY: {value: y},
-    isPrimary: {value: true},
-    pointerId: {value: 1},
-    timeStamp: {value: time},
-  });
-  return fireEvent(target, event);
+): boolean {
+  if (type === 'pointerdown') {
+    pendingPress = {y, time};
+    return true;
+  }
+  if (pendingPress != null) {
+    const landing = pendingPress;
+    pendingPress = null;
+    // Every pointer's pan begins past its threshold (spec:AST-094 FR17,
+    // FR19, FR43), a mouse's too.
+    const behind = PAN_THRESHOLD;
+    contact(
+      target,
+      'pointerdown',
+      landing.y - Math.sign(y - landing.y) * behind,
+      landing.time,
+    );
+  }
+  return contact(target, type, y, time);
 }
 
 describe('BottomSheet', () => {
@@ -531,6 +743,7 @@ describe('BottomSheet', () => {
 
     fireEvent.click(dialog);
     expect(onOpenChange).toHaveBeenCalledTimes(1);
+    measureTallSheet();
     drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
     expect(onOpenChange).toHaveBeenCalledTimes(2);
     expect(onOpenChange).toHaveBeenNthCalledWith(2, false);
@@ -983,7 +1196,9 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
+      measureTallSheet();
+      // Released at rest more than halfway from open to gone (736px).
+      dragSlowly(getHandle(), 400);
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
@@ -1045,7 +1260,7 @@ describe('BottomSheet', () => {
   });
 
   describe('swipe to dismiss', () => {
-    it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the pointer (FR6, FR7)", () => {
+    it("a sheet opened from inside another sheet's content drags to dismiss by its own handle, and the covered host neither drags nor takes the touch (FR6, FR7)", () => {
       const onInnerOpenChange = vi.fn();
       const onOuterOpenChange = vi.fn();
       render(
@@ -1071,25 +1286,87 @@ describe('BottomSheet', () => {
       const innerHandle = innerDialog.querySelector<HTMLElement>(
         '.astryx-bottom-sheet > [aria-hidden="true"]',
       )!;
-      // `setPointerCapture` is a prototype stub here, so record who captures.
-      const captured: Element[] = [];
-      const capture = vi
-        .spyOn(Element.prototype, 'setPointerCapture')
-        .mockImplementation(function (this: Element) {
-          captured.push(this);
-        });
+      const innerPanel = innerDialog.querySelector<HTMLElement>(
+        '.astryx-bottom-sheet',
+      )!;
+      // jsdom lays nothing out: each sheet gets a phone-sized box, which its
+      // drag reads.
+      for (const panel of [outerPanel, innerPanel]) {
+        vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue(
+          rect({top: 16, bottom: 800}),
+        );
+      }
       drag(innerHandle, [{y: 0}, {y: 40}, {y: 120}], 'touch');
-      capture.mockRestore();
       // The inner sheet's own drag ran to its dismissal.
       expect(onInnerOpenChange).toHaveBeenCalledWith(false);
-      // The covered host saw the same pointer bubble up and did nothing with
-      // it: no drag of its own (its panel keeps its resting transform) and no
-      // pointer capture, which would have cancelled the inner handle's drag.
+      // The covered host's body pans saw the same touch and left it to the
+      // inner sheet: no drag of its own (its panel keeps its resting
+      // transform), which would have cancelled the inner handle's drag.
       expect(onOuterOpenChange).not.toHaveBeenCalled();
-      expect(captured).toContain(innerHandle);
-      expect(captured).not.toContain(outerBody);
+      expect(outerBody.contains(innerHandle)).toBe(true);
       expect(outerPanel.style.transform).toBe('');
     });
+
+    it.each(['form', 'required'] as const)(
+      "a %s sheet a finger pulls 30 to 240 px below its rest stretches on FR3's rubber band, and springs back (spec:AST-094 FR3, FR43)",
+      async purpose => {
+        // A finger: a coarse primary pointer (and no reduced motion).
+        vi.stubGlobal(
+          'matchMedia',
+          vi.fn((query: string) => ({
+            matches:
+              query.includes('pointer: coarse') &&
+              !query.includes('prefers-reduced-motion'),
+            media: query,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            addListener: vi.fn(),
+            removeListener: vi.fn(),
+          })),
+        );
+        const onOpenChange = vi.fn();
+        render(
+          <BottomSheet
+            isOpen
+            purpose={purpose}
+            onOpenChange={onOpenChange}
+            label="Edit profile">
+            Content
+          </BottomSheet>,
+        );
+        measureTallSheet();
+        // The record's band over the sheet's 784 px height.
+        const height = 784;
+        const band = (x: number) =>
+          (1 - 1 / ((x * 0.55) / height + 1)) * height;
+        let time = 0;
+        for (const travel of [30, 60, 120, 240]) {
+          fireTimedPointer(getHandle(), 'pointerdown', {time, y: 0});
+          fireTimedPointer(getHandle(), 'pointermove', {
+            time: time + 100,
+            y: travel / 2,
+          });
+          fireTimedPointer(getHandle(), 'pointermove', {
+            time: time + 200,
+            y: travel,
+          });
+          // The drag moved the sheet, on the band: less than the finger did.
+          const pulled = translationOf(getSheet());
+          expect(pulled).toBeGreaterThan(0);
+          expect(pulled).toBeCloseTo(band(travel), 3);
+          expect(pulled).toBeLessThan(travel);
+          // Let go still: it springs back to rest, and stays open.
+          fireTimedPointer(getHandle(), 'pointerup', {
+            time: time + 700,
+            y: travel,
+          });
+          await landSpring();
+          expect(translationOf(getSheet())).toBeCloseTo(0, 3);
+          time += 5000;
+        }
+        expect(onOpenChange).not.toHaveBeenCalled();
+      },
+    );
 
     it('requests close when dragged past the dismiss threshold', () => {
       const onOpenChange = vi.fn();
@@ -1098,10 +1375,140 @@ describe('BottomSheet', () => {
           Content
         </BottomSheet>,
       );
-      // No measured height in jsdom (0) -> any downward drag dismisses via
-      // the distance branch (offset > 0.25) once released downward.
-      drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}]);
+      measureTallSheet();
+      // Released at rest more than halfway from open to gone (736px): the
+      // nearest position is gone.
+      dragSlowly(getHandle(), 400);
       expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('pins the scrim easing while a drag moves the dim, and hands it back when the sheet lands', async () => {
+      // A finger, on any touch device (useSheetGestures.ts).
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: query.includes('pointer: coarse'),
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        })),
+      );
+      vi.stubGlobal('CSS', {
+        supports: (condition: string) =>
+          condition.includes('-webkit-touch-callout'),
+        escape: (value: string) => value,
+      });
+      render(
+        <BottomSheet isOpen onOpenChange={vi.fn()} label="Filters">
+          Content
+        </BottomSheet>,
+      );
+      measureTallSheet();
+      // A sheet takes a finger once its entrance has landed.
+      await landSpring();
+      const dialog = screen.getByRole('dialog');
+      const handle = getHandle();
+      fireTimedPointer(handle, 'pointerdown', {time: 0, y: 0});
+      fireTimedPointer(handle, 'pointermove', {time: 1000, y: 200});
+      // The dim follows the finger with no easing of its own.
+      expect(dialog.style.getPropertyValue('--_sheet-scrim-duration')).toBe(
+        '0s',
+      );
+      // Gone is 736px below open (the sheet's visible height): the dim is
+      // linear in position to there.
+      expect(
+        Number(dialog.style.getPropertyValue('--_sheet-scrim-opacity')),
+      ).toBeCloseTo((736 - 200) / 736, 2);
+      fireTimedPointer(handle, 'pointerup', {time: 2000, y: 200});
+      await landSpring();
+      // Back at rest the host's own easing is restored, for its open and
+      // close fades, at the dim the sheet came to rest with.
+      expect(dialog.style.getPropertyValue('--_sheet-scrim-duration')).toBe('');
+      expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
+    });
+
+    it('under a finger, a release on a sheet stacked above another plays no dim on its transparent backdrop (one scrim per stack)', async () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches: query.includes('pointer: coarse'),
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+        })),
+      );
+      vi.stubGlobal('CSS', {
+        supports: (condition: string) =>
+          condition.includes('-webkit-touch-callout'),
+        escape: (value: string) => value,
+      });
+      // jsdom has no Web Animations: record what plays on each ::backdrop.
+      const backdrops: Element[] = [];
+      Object.defineProperty(Element.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: function (
+          this: Element,
+          _keyframes: Keyframe[],
+          options?: KeyframeAnimationOptions & {pseudoElement?: string},
+        ) {
+          if (options?.pseudoElement === '::backdrop') {
+            backdrops.push(this);
+          }
+          return {cancel: vi.fn(), startTime: 0} as unknown as Animation;
+        },
+      });
+      function Two({isOrderOpen}: {isOrderOpen: boolean}) {
+        return (
+          <>
+            <BottomSheet isOpen onOpenChange={vi.fn()} label="Orders">
+              List
+            </BottomSheet>
+            <BottomSheet
+              isOpen={isOrderOpen}
+              onOpenChange={vi.fn()}
+              label="Order">
+              Detail
+            </BottomSheet>
+          </>
+        );
+      }
+      const {rerender} = render(<Two isOrderOpen={false} />);
+      const panelOf = (label: string) =>
+        screen
+          .getByRole('dialog', {name: label, hidden: true})
+          .querySelector<HTMLElement>('.astryx-bottom-sheet') as HTMLElement;
+      const handleOf = (label: string) =>
+        panelOf(label).querySelector<HTMLElement>(
+          '[aria-hidden="true"]',
+        ) as HTMLElement;
+      const releaseOn = async (label: string) => {
+        vi.spyOn(panelOf(label), 'getBoundingClientRect').mockReturnValue(
+          rect({top: 16, bottom: 800}),
+        );
+        fireTimedPointer(handleOf(label), 'pointerdown', {time: 0, y: 0});
+        fireTimedPointer(handleOf(label), 'pointermove', {time: 50, y: 120});
+        fireTimedPointer(handleOf(label), 'pointerup', {time: 66, y: 140});
+        await landSpring();
+      };
+      // On its own the sheet's backdrop is the scrim: the release plays the
+      // dim there.
+      await releaseOn('Orders');
+      const orders = screen.getByRole('dialog', {name: 'Orders', hidden: true});
+      expect(backdrops).toContain(orders);
+      backdrops.length = 0;
+      // A sheet opened over it stacks on top with a transparent backdrop: its
+      // release moves only the sheet, and the page keeps the one dim.
+      rerender(<Two isOrderOpen />);
+      await landSpring();
+      backdrops.length = 0;
+      await releaseOn('Order');
+      expect(backdrops).toEqual([]);
+      delete (Element.prototype as {animate?: unknown}).animate;
     });
 
     it('restores the sheet when a context menu interrupts an active drag', () => {
@@ -1114,17 +1521,14 @@ describe('BottomSheet', () => {
       const handle = getHandle();
       const dialog = screen.getByRole('dialog');
 
-      fireEvent.pointerDown(handle, {
-        pointerId: 1,
-        clientY: 0,
-        button: 0,
-        isPrimary: true,
-      });
-      fireEvent.pointerMove(handle, {pointerId: 1, clientY: 300});
-      expect(getSheet().style.transform).toBe('translateY(300px)');
+      fireTimedPointer(handle, 'pointerdown', {time: 0, y: 0});
+      fireTimedPointer(handle, 'pointermove', {time: 16, y: 300});
+      expect(translationOf(getSheet())).toBe(300);
 
       expect(fireEvent.contextMenu(handle)).toBe(false);
 
+      // Back to the detent on the detent spring (jsdom: its end at once).
+      expect(translationOf(getSheet())).toBe(0);
       expect(getSheet().style.transform).toBe('');
       expect(dialog).toHaveStyle({'--_sheet-scrim-opacity': '1'});
       expect(onOpenChange).not.toHaveBeenCalled();
@@ -1164,7 +1568,7 @@ describe('BottomSheet', () => {
       }
     });
 
-    it('keeps the full layout height at the peek detent', () => {
+    it('keeps the full layout height at the peek detent', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1193,7 +1597,7 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 600});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 600});
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
 
       // A glance state does not reflow the content into a sliver: the sheet
       // keeps its full layout height and slides below the viewport instead.
@@ -1205,13 +1609,13 @@ describe('BottomSheet', () => {
       // reason — there is no shortened layout to restore first.
       fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 600});
       fireTimedPointer(getHandle(), 'pointermove', {time: 4000, y: 400});
-      expect(sheet.style.transform).toBe('translateY(424px)');
+      expect(translationOf(sheet)).toBe(424);
       expect(sheet.style.height).toBe('784px');
       expect(getBody().style.paddingBlockEnd).toBe('');
 
       // Releasing at the taller p50 detent resizes the scrolling area.
       fireTimedPointer(getHandle(), 'pointerup', {time: 5000, y: 400});
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
       expect(sheet.style.height).toBe('448px');
       expect(sheet.style.transform).toBe('');
     });
@@ -1245,7 +1649,7 @@ describe('BottomSheet', () => {
       // so the release has no travel left to animate and reconciles at once.
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
-      expect(sheet.style.transform).toBe('translateY(336px)');
+      expect(translationOf(sheet)).toBe(336);
       expect(sheet.style.height).toBe('784px');
 
       // Hold the reconciliation frame so the intermediate render is visible
@@ -1263,6 +1667,7 @@ describe('BottomSheet', () => {
       // would lurch away from the detent before coming back to it.
       expect(sheet.style.height).toBe('448px');
       expect(sheet.style.transform).toBe('');
+      expect(translationOf(sheet)).toBe(0);
       expect(sheet.style.transition).toBe('none');
 
       // Transitions come back for the next gesture.
@@ -1270,7 +1675,7 @@ describe('BottomSheet', () => {
       expect(sheet.style.transition).toBe('');
     });
 
-    it('restores the layout height in the same task as the transform when a drag crosses its detent, without a synchronous render', async () => {
+    it('restores the layout height in the same task as the travel when a drag crosses its detent, without a synchronous render', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1317,7 +1722,12 @@ describe('BottomSheet', () => {
         }
       });
       mutations.observe(sheet, {childList: true, subtree: true});
-      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+      // The press lands one pan threshold below the drag's start, as every
+      // pointer's pan begins past its threshold (spec:AST-094 FR17, FR43):
+      // the positions below are the drag's.
+      act(() => {
+        mouse(getHandle(), 'pointerdown', 336 + PAN_THRESHOLD, 3000);
+      });
 
       // Each finger sample arrives outside act(), as a browser delivers it:
       // a render React schedules for later is still pending when this task
@@ -1326,29 +1736,34 @@ describe('BottomSheet', () => {
       const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
       reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
       const sampleAt = (time: number, y: number) => {
-        const event = new Event('pointermove', {bubbles: true});
-        Object.defineProperties(event, {
-          clientY: {value: y},
-          isPrimary: {value: true},
-          pointerId: {value: 1},
-          timeStamp: {value: time},
+        const event = new PointerEvent('pointermove', {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+          clientX: 50,
+          clientY: y,
+          buttons: 1,
         });
+        Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
         getHandle().dispatchEvent(event);
         return {
           height: sheet.style.height,
-          transform: sheet.style.transform,
+          translation: translationOf(sheet),
           inset: getBody().style.paddingBlockEnd,
         };
       };
-      let above: {height: string; transform: string; inset: string};
-      let below: {height: string; transform: string; inset: string};
+      let above: {height: string; translation: number; inset: string};
+      let below: {height: string; translation: number; inset: string};
       const commitsBeforeCrossing = commits;
       let commitsInCrossingTasks: number;
       try {
-        // Up past the detent: the transform is written for the full height
-        // (no layout split), so the full height has to be there too.
+        // Up past the detent: the travel is written for the full height (no
+        // layout split), so the full height has to be there too.
         above = sampleAt(4000, 136);
-        // Back down past it: the split returns with the transform.
+        // Back down past it: the split returns with the travel.
         below = sampleAt(5000, 436);
         // React committed nothing inside those input tasks: the elements were
         // written directly, not through a forced synchronous render.
@@ -1358,18 +1773,20 @@ describe('BottomSheet', () => {
       }
       await act(async () => {});
 
-      expect(above.transform).toMatch(/^translateY\(/);
+      // Drawn above the detent, between it and fully open.
+      expect(above.translation).toBeGreaterThan(0);
+      expect(above.translation).toBeLessThan(336);
       expect(above.height).toBe('784px');
       // The scrolling area keeps its scroll position across the taller
       // height: its end inset lands with it.
       expect(above.inset).toBe('336px');
-      expect(below.transform).toBe('translateY(100px)');
+      expect(below.translation).toBe(100);
       expect(below.height).toBe('448px');
       expect(below.inset).toBe('');
       expect(commitsInCrossingTasks).toBe(0);
       // The scheduled render caught up to the values already on screen.
       expect(sheet.style.height).toBe('448px');
-      expect(sheet.style.transform).toBe('translateY(100px)');
+      expect(translationOf(sheet)).toBe(100);
       // Nothing in the sheet was replaced along the way.
       mutations.disconnect();
       expect(replacedNodes).toEqual([]);
@@ -1405,11 +1822,16 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
       expect(sheet.style.height).toBe('448px');
-      fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 336});
+      // The press lands one pan threshold below the drag's start (every
+      // pointer's pan begins past its threshold, spec:AST-094 FR17, FR43).
+      act(() => {
+        mouse(getHandle(), 'pointerdown', 336 + PAN_THRESHOLD, 3000);
+      });
 
-      // A 3px nudge up crosses the detent, and the finger lifts before the
-      // render that move scheduled has committed: both arrive in one task,
-      // outside act(), as a browser can deliver them.
+      // A 3px nudge up past the pan's start crosses the detent, and the
+      // finger lifts before the render that move scheduled has committed:
+      // both arrive in one task, outside act(), as a browser can deliver
+      // them.
       const reactGlobals = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
       const wasActEnvironment = reactGlobals.IS_REACT_ACT_ENVIRONMENT;
       reactGlobals.IS_REACT_ACT_ENVIRONMENT = false;
@@ -1418,14 +1840,19 @@ describe('BottomSheet', () => {
         time: number,
         y: number,
       ) => {
-        const event = new Event(type, {bubbles: true, cancelable: true});
-        Object.defineProperties(event, {
-          button: {value: 0},
-          clientY: {value: y},
-          isPrimary: {value: true},
-          pointerId: {value: 1},
-          timeStamp: {value: time},
+        const event = new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 1,
+          pointerType: 'mouse',
+          isPrimary: true,
+          clientX: 50,
+          clientY: y,
+          button: type === 'pointermove' ? -1 : 0,
+          buttons: type === 'pointerup' ? 0 : 1,
         });
+        Object.defineProperty(event, 'timeStamp', {value: timeBase + time});
         getHandle().dispatchEvent(event);
       };
       let heightAboveDetent: string;
@@ -1433,10 +1860,13 @@ describe('BottomSheet', () => {
         dispatch('pointermove', 4000, 333);
         heightAboveDetent = sheet.style.height;
         dispatch('pointerup', 4500, 333);
+        // That pointer lifted: nothing is left pressed for the next test.
+        pressed = null;
       } finally {
         reactGlobals.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
       }
       await act(async () => {});
+      await landSpring();
 
       // The crossing move drew the sheet at its full height...
       expect(heightAboveDetent).toBe('784px');
@@ -1444,6 +1874,7 @@ describe('BottomSheet', () => {
       // offset, and no end inset left over from the drag.
       expect(sheet.style.height).toBe('448px');
       expect(sheet.style.transform).toBe('');
+      expect(translationOf(sheet)).toBe(0);
       expect(getBody().style.paddingBlockEnd).toBe('');
     });
 
@@ -1550,7 +1981,7 @@ describe('BottomSheet', () => {
       });
     });
 
-    it('uses transforms while dragging and resizes to the visible snapped height', () => {
+    it('uses transforms while dragging and resizes to the visible snapped height', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1577,17 +2008,20 @@ describe('BottomSheet', () => {
         );
       });
 
+      giveThemeTransition(sheet);
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 240});
 
-      expect(sheet.style.transform).toBe('translateY(240px)');
+      expect(translationOf(sheet)).toBe(240);
       expect(sheet.style.height).toBe('784px');
       expect(sheet.style.transition).toBe('none');
 
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 240});
-      // Release remains transform-only until the snap finishes.
-      // p50 is a visible 400px sheet: 784 - 48 - 400 = 336px offset.
-      expect(sheet.style.transform).toBe('translateY(336px)');
+      // Release remains transform-only until the snap finishes: the settle
+      // runs on the travel channel (jsdom has no Web Animations, so its end
+      // value is what shows). p50 is a visible 400px sheet: 784 - 48 - 400 =
+      // 336px offset.
+      expect(translationOf(sheet)).toBe(336);
       expect(sheet.style.height).toBe('784px');
       expect(sheet.style.transition).toBe('');
       const reconciliationFrames: FrameRequestCallback[] = [];
@@ -1595,8 +2029,9 @@ describe('BottomSheet', () => {
         reconciliationFrames.push(callback);
         return reconciliationFrames.length;
       });
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
       expect(sheet.style.transform).toBe('');
+      expect(translationOf(sheet)).toBe(0);
       expect(sheet.style.height).toBe('448px');
       // The transform reset is transition-free so it cannot produce a second
       // fly-in animation after the snap has already reached its destination.
@@ -1615,7 +2050,7 @@ describe('BottomSheet', () => {
       });
       fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 240});
       fireTimedPointer(getHandle(), 'pointermove', {time: 4000, y: 140});
-      expect(sheet.style.transform).toBe('translateY(236px)');
+      expect(translationOf(sheet)).toBe(236);
       expect(sheet.style.height).toBe('784px');
       expect(getBody().style.paddingBlockEnd).toBe('336px');
 
@@ -1623,12 +2058,12 @@ describe('BottomSheet', () => {
       // translates only the distance traveled from that detent. The temporary
       // scroll-preservation inset leaves with the temporary expanded layout.
       fireTimedPointer(getHandle(), 'pointermove', {time: 5000, y: 340});
-      expect(sheet.style.transform).toBe('translateY(100px)');
+      expect(translationOf(sheet)).toBe(100);
       expect(sheet.style.height).toBe('448px');
       expect(getBody().style.paddingBlockEnd).toBe('');
     });
 
-    it('reconciles the snapped height immediately when transitions are disabled', () => {
+    it('reconciles the snapped height when the spring lands, with transitions disabled', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1657,12 +2092,15 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 240});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 240});
+      // The settle is a spring, not a CSS transition: it does not wait for a
+      // transitionend that never comes.
+      await landSpring();
 
       expect(sheet.style.transform).toBe('');
       expect(sheet.style.height).toBe('448px');
     });
 
-    it('restores the maximum height before an upward drag and reconciles at snap', () => {
+    it('restores the maximum height before an upward drag and reconciles at snap', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1688,30 +2126,31 @@ describe('BottomSheet', () => {
       });
 
       // Start at the middle 400px detent.
+      giveThemeTransition(sheet);
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 240});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 240});
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
       expect(sheet.style.height).toBe('448px');
 
       // The upward gesture renders the full 784px surface below the viewport
       // and translates it to preserve the visible top edge.
       fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 240});
       fireTimedPointer(getHandle(), 'pointermove', {time: 4000, y: 0});
-      expect(sheet.style.transform).toBe('translateY(96px)');
+      expect(translationOf(sheet)).toBe(96);
       expect(sheet.style.height).toBe('784px');
       expect(getBody().style.paddingBlockEnd).toBe('336px');
 
       // Release first animates only the transform, keeping the source layout
       // and scroll range fixed for the entire snap.
       fireTimedPointer(getHandle(), 'pointerup', {time: 5000, y: 0});
-      expect(sheet.style.transform).toBe('');
+      expect(translationOf(sheet)).toBe(0);
       expect(sheet.style.height).toBe('784px');
       expect(getBody().style.paddingBlockEnd).toBe('336px');
 
-      // At transition end, height and preservation spacing reconcile in one
-      // render with the same visible geometry.
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      // When the spring lands, height and preservation spacing reconcile in
+      // one render with the same visible geometry.
+      await landSpring();
       expect(sheet.style.transform).toBe('');
       expect(sheet.style.height).toBe('');
       expect(getBody().style.paddingBlockEnd).toBe('336px');
@@ -1728,7 +2167,7 @@ describe('BottomSheet', () => {
       expect(body.style.paddingBlockEnd).toBe('');
     });
 
-    it('keeps the settled height stable while dismissing', () => {
+    it('keeps the settled height stable while dismissing', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1748,14 +2187,14 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 240});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 240});
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
       expect(sheet.style.height).toBe('448px');
 
       // A later dismiss stays transform-only and preserves that settled
       // scroll-area height throughout the exit.
       fireTimedPointer(getHandle(), 'pointerdown', {time: 3000, y: 240});
       fireTimedPointer(getHandle(), 'pointermove', {time: 4000, y: 1000});
-      expect(sheet.style.transform).toBe('translateY(760px)');
+      expect(translationOf(sheet)).toBe(760);
       expect(sheet.style.height).toBe('448px');
       fireTimedPointer(getHandle(), 'pointerup', {time: 5000, y: 1000});
       expect(sheet.style.height).toBe('448px');
@@ -1769,7 +2208,7 @@ describe('BottomSheet', () => {
       expect(sheet.style.height).toBe('448px');
     });
 
-    it('re-resolves the settled detent when the window resizes', () => {
+    it('re-resolves the settled detent when the window resizes', async () => {
       const observers = mockResizeObserverInstances();
       mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1803,7 +2242,7 @@ describe('BottomSheet', () => {
         reconciliationFrames.push(callback);
         return reconciliationFrames.length;
       });
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
       act(() => reconciliationFrames.splice(0).forEach(frame => frame(0)));
       // 448px of layout height shows 400px of sheet: half the 800px window.
       expect(sheet.style.height).toBe('448px');
@@ -1834,7 +2273,7 @@ describe('BottomSheet', () => {
       expect(sheet.style.transition).toBe('');
     });
 
-    it('keeps its detents when the keyboard shrinks the visual viewport', () => {
+    it('keeps its detents when the keyboard shrinks the visual viewport', async () => {
       const observers = mockResizeObserverInstances();
       const viewport = mockVisualViewport(800);
       mockWindowHeight(800);
@@ -1862,7 +2301,7 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 336});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 336});
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
       expect(sheet.style.height).toBe('448px');
 
       // The keyboard opens: the visual viewport shrinks, the layout viewport
@@ -1879,7 +2318,7 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointermove', {time: 4000, y: 288});
       fireTimedPointer(getHandle(), 'pointerup', {time: 5000, y: 288});
       // The peek of an 800px window: 736 - 112 = 624px of travel.
-      expect(sheet.style.transform).toBe('translateY(624px)');
+      expect(translationOf(sheet)).toBe(624);
     });
   });
 
@@ -1916,56 +2355,56 @@ describe('BottomSheet', () => {
       return {sheet, view};
     }
 
-    function dragHandleTo(y: number) {
+    async function dragHandleTo(y: number) {
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y});
-      fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
+      await landSpring();
     }
 
-    it('has no stops of its own, so a released drag springs back', () => {
+    it('has no stops of its own, so a released drag springs back', async () => {
       const onOpenChange = vi.fn();
       const {sheet} = renderTallSheet(undefined, onOpenChange);
 
       // 200px down is well short of the dismiss threshold, and there is no
       // stop to catch it, so the sheet returns to fully open.
-      dragHandleTo(200);
+      await dragHandleTo(200);
 
       expect(sheet.style.transform).toBe('');
       expect(sheet.style.height).toBe('');
       expect(onOpenChange).not.toHaveBeenCalled();
     });
 
-    it('rests at a stop given as a fraction of the viewport', () => {
+    it('rests at a stop given as a fraction of the viewport', async () => {
       const {sheet} = renderTallSheet([0.5]);
 
       // Half of the 800px window is 400px of visible sheet: 736 - 400 = 336px
       // of travel, taken as layout height once the snap lands.
-      dragHandleTo(336);
+      await dragHandleTo(336);
 
       expect(sheet.style.height).toBe('448px');
       expect(sheet.style.transform).toBe('');
     });
 
-    it('reads a percentage as the same stop as the fraction', () => {
+    it('reads a percentage as the same stop as the fraction', async () => {
       const {sheet} = renderTallSheet(['50%']);
-      dragHandleTo(336);
+      await dragHandleTo(336);
       expect(sheet.style.height).toBe('448px');
     });
 
-    it('rests at a stop given as an absolute px length', () => {
+    it('rests at a stop given as an absolute px length', async () => {
       const {sheet} = renderTallSheet(['320px']);
 
       // A 320px stop sits 736 - 320 = 416px down, whatever the window does.
-      dragHandleTo(416);
+      await dragHandleTo(416);
 
       expect(sheet.style.height).toBe('368px');
       expect(sheet.style.transform).toBe('');
     });
 
-    it('re-anchors to the same stop when the points change under a resting sheet', () => {
+    it('re-anchors to the same stop when the points change under a resting sheet', async () => {
       const {sheet, view} = renderTallSheet([0.5]);
-      dragHandleTo(336);
+      await dragHandleTo(336);
       expect(sheet.style.height).toBe('448px');
 
       // Without an inline height the sheet renders its natural 92dvh budget.
@@ -1997,7 +2436,7 @@ describe('BottomSheet', () => {
       expect(sheet.style.transform).toBe('');
     });
 
-    it('ignores a stop it cannot resolve, and warns which one', () => {
+    it('ignores a stop it cannot resolve, and warns which one', async () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       // 200 is the px mistake: a bare number is a fraction, never a length.
       const {sheet} = renderTallSheet([0.5, 200]);
@@ -2007,7 +2446,7 @@ describe('BottomSheet', () => {
       ).toBe(true);
 
       // The stop it could read still works.
-      dragHandleTo(336);
+      await dragHandleTo(336);
       expect(sheet.style.height).toBe('448px');
       warn.mockRestore();
     });
@@ -2398,7 +2837,7 @@ describe('BottomSheet', () => {
       expect(body.scrollTop).toBe(0);
     });
 
-    it('does not accommodate the keyboard at a shorter Tall detent', () => {
+    it('does not accommodate the keyboard at a shorter Tall detent', async () => {
       mockIOSWebKit();
       const observers = mockResizeObserverInstances();
       const viewport = mockVisualViewport(800);
@@ -2430,7 +2869,7 @@ describe('BottomSheet', () => {
       fireTimedPointer(getHandle(), 'pointerdown', {time: 0, y: 0});
       fireTimedPointer(getHandle(), 'pointermove', {time: 1000, y: 240});
       fireTimedPointer(getHandle(), 'pointerup', {time: 2000, y: 240});
-      fireEvent.transitionEnd(sheet, {propertyName: 'transform'});
+      await landSpring();
       // Settled at the p50 detent: 400px of visible sheet plus the 48px
       // border-box reserve held below the viewport.
       expect(sheet.style.transform).toBe('');
@@ -2642,16 +3081,11 @@ describe('BottomSheet', () => {
         '348px',
       );
 
-      const pointerDownAllowed = fireEvent.pointerDown(getHandle(), {
-        pointerId: 1,
-        clientY: 0,
-        button: 0,
-        isPrimary: true,
-      });
+      const pointerDownAllowed = mouse(getHandle(), 'pointerdown', 0, 0);
       expect(pointerDownAllowed).toBe(false);
       expect(document.activeElement).toBe(input);
 
-      fireEvent.pointerMove(getHandle(), {pointerId: 1, clientY: 40});
+      mouse(getHandle(), 'pointermove', 40, 16);
 
       expect(document.activeElement).toBe(sheet);
       expect(positioner.style.getPropertyValue('--_sheet-keyboard-lift')).toBe(
@@ -3404,6 +3838,7 @@ describe('BottomSheet', () => {
       stubReducedMotion(false);
       render(<Controlled />);
       const dialog = screen.getByRole('dialog');
+      measureTallSheet();
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       // Exiting: a transform end does not close the dialog, the fade does.
       fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
@@ -3434,6 +3869,7 @@ describe('BottomSheet', () => {
       }
       render(<Reopenable />);
       const dialog = screen.getByRole('dialog');
+      measureTallSheet();
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'touch');
       fireEvent.transitionEnd(getSheet(), {propertyName: 'opacity'});
       expect(dialog).not.toHaveAttribute('open');
@@ -3488,6 +3924,7 @@ describe('BottomSheet', () => {
       stubReducedMotion(false);
       render(<Controlled />);
       const dialog = screen.getByRole('dialog');
+      measureTallSheet();
       drag(getHandle(), [{y: 0}, {y: 40}, {y: 120}], 'mouse');
       fireEvent.transitionEnd(getSheet(), {propertyName: 'transform'});
       expect(dialog).not.toHaveAttribute('open');
