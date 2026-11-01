@@ -175,7 +175,9 @@ jobs:
           xargs -0 -r ./node_modules/.bin/prettier --list-different --ignore-unknown \
             < "$RUNNER_TEMP/changed-files" > "$RUNNER_TEMP/unformatted" || status=$?
           if [ -s "$RUNNER_TEMP/unformatted" ]; then
-            fix="pnpm exec prettier --write $(tr '\n' ' ' < "$RUNNER_TEMP/unformatted")"
+            # Quote each path so the printed command pastes into a shell even
+            # for a path with parentheses, such as a Next.js route group.
+            fix="pnpm exec prettier --write $(sed "s/'/'\\\\''/g; s/.*/'&'/" "$RUNNER_TEMP/unformatted" | tr '\n' ' ')"
             echo 'These changed files are not formatted with the repository'"'"'s Prettier settings:'
             sed 's/^/  /' "$RUNNER_TEMP/unformatted"
             echo 'Format them, commit, and push again:'
