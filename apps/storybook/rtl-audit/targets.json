@@ -87,6 +87,49 @@
     }
   },
   {
+    "component": "ContextMenu",
+    "storyId": "core-contextmenu--bottom-sheet-submenu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"Back\"]",
+      "next": "h3:text-is(\"Share\")"
+    }
+  },
+  {
+    "component": "TableHeaderCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child"
+    }
+  },
+  {
+    "component": "TableCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child"
+    }
+  },
+  {
+    "component": "TableSelectionToolbar",
+    "storyId": "core-tableselection--bulk-actions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
+      "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
+    }
+  },
+  {
+    "component": "Table",
+    "storyId": "core-table--in-card",
+    "dims": []
+  },
+  {
     "component": "GridSpan",
     "storyId": "core-gridspan--span-matrix",
     "dims": ["D2"],
@@ -616,6 +659,15 @@
     }
   },
   {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
     "component": "DrawerHeader",
     "storyId": "core-drawerheader--audit",
     "dims": ["D2"],
@@ -625,46 +677,34 @@
     }
   },
   {
-    "component": "ContextMenu",
-    "storyId": "core-contextmenu--bottom-sheet-submenu",
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": ".astryx-blockquote"
+    }
+  },
+  {
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": ["D2"],
     "selectors": {
-      "prev": "button[aria-label=\"Back\"]",
-      "next": "h3:text-is(\"Share\")"
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
     }
   },
   {
-    "component": "TableHeaderCell",
-    "storyId": "core-table--in-card",
-    "dims": ["D2", "D8"],
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
+    "dims": ["D4"],
     "selectors": {
-      "prev": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child",
-      "next": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:last-child",
-      "subject": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child"
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
     }
   },
   {
-    "component": "TableCell",
-    "storyId": "core-table--in-card",
-    "dims": ["D2", "D8"],
-    "selectors": {
-      "prev": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child",
-      "next": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:last-child",
-      "subject": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child"
-    }
-  },
-  {
-    "component": "TableSelectionToolbar",
-    "storyId": "core-tableselection--bulk-actions",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
-      "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
-    }
-  },
-  {
-    "component": "Table",
-    "storyId": "core-table--in-card",
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": []
   }
 ]
