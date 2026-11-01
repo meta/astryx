@@ -280,6 +280,12 @@ describe('per-component results', () => {
     });
     expect(a11yResult(badge, report, newViolations).result).toBe('pass');
     expect(a11yResult(tokenizer, report, newViolations).result).toBe('not-run');
+    // An audit that failed before writing its report fails every owner.
+    expect(a11yResult(button, null, [], 'failure')).toEqual({
+      result: 'fail',
+      detail: 'the accessibility audit failed before its report',
+    });
+    expect(a11yResult(button, null, [], 'success').result).toBe('not-run');
     expect(a11yResult(button, null, []).result).toBe('not-run');
   });
 
@@ -311,6 +317,22 @@ describe('per-component results', () => {
     expect(rtlResult(ownerIdentity('core/Toolbar'), reports).result).toBe(
       'not-run',
     );
+    // The audit's coverage gap fails, and an audit that crashed before its
+    // report fails rather than reading not-run.
+    expect(
+      rtlResult(button, [
+        {
+          autoDiscovery: {
+            results: [{component: 'core/Button', verdict: 'N-A'}],
+          },
+          coverage: {
+            results: [{component: 'core/Button', status: 'coverage-gap'}],
+          },
+        },
+      ]),
+    ).toEqual({result: 'fail', detail: 'RTL coverage-gap'});
+    expect(rtlResult(button, [], 'failure').result).toBe('fail');
+    expect(rtlResult(button, [], 'success').result).toBe('not-run');
     // A curated target's card counts: not-RTL fails, RTL-ready passes.
     expect(
       rtlResult(button, [
@@ -425,6 +447,10 @@ describe('pr-touched-components routing', () => {
     const report = step('Report per-component results');
     expect(report.env.VISUAL_JOB).toBe('${{ needs.pr-visual.result }}');
     expect(report.run).toContain('--visual-job "$VISUAL_JOB"');
+    expect(report.env.A11Y_STEP).toBe('${{ steps.a11y.outcome }}');
+    expect(report.env.RTL_STEP).toBe('${{ steps.rtl.outcome }}');
+    expect(report.run).toContain('--a11y-step "$A11Y_STEP"');
+    expect(report.run).toContain('--rtl-step "$RTL_STEP"');
     expect(report.run).toContain(
       '--baseline-manifest .github/visual-baseline/manifest.json',
     );

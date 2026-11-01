@@ -17,17 +17,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createRequire} from 'node:module';
-import componentPackages from '../../scripts/component-packages.cjs';
+import {changedFolderMembers} from './a11y-pr-scope.mjs';
 
 const require = createRequire(import.meta.url);
 const {diffAgainstBaseline} = require('./lib/a11y-baseline.js');
-const {
-  componentPackage,
-  componentExportsFromBarrel,
-  documentedComponentNames,
-  flatPackageComponentNames,
-  nestedPackageComponentNames,
-} = componentPackages;
 
 const SUITES = ['visual', 'a11y', 'rtl'];
 
@@ -94,50 +87,14 @@ const strings = value =>
 
 /**
  * The public components a changed multi-component folder (such as Chat or
- * Table) implements. The analysis leaves those folders unresolved; this
- * expands only the changed folder, as the accessibility scope does, without
- * reading Storybook.
+ * Table) implements, through the accessibility scope's own expansion, with
+ * the folder each one belongs to.
  */
 export function expandFolderOwners(sources, repoRoot = process.cwd()) {
-  const members = [];
-  const publicByPackage = new Map();
-  for (const source of sources) {
-    const [shortPackage, directory, extra] = source.split('/');
-    const pkg = componentPackage(shortPackage);
-    if (
-      !pkg ||
-      extra !== undefined ||
-      !/^[A-Za-z0-9_.-]+$/.test(directory ?? '')
-    ) {
-      continue;
-    }
-    const sourceRoot = path.join(repoRoot, pkg.src);
-    const changedDirectory = path.join(sourceRoot, directory);
-    if (!fs.existsSync(changedDirectory)) continue;
-    const names = documentedComponentNames(changedDirectory);
-    if (names.length === 0) continue;
-    if (!publicByPackage.has(shortPackage)) {
-      publicByPackage.set(
-        shortPackage,
-        new Set(
-          pkg.layout === 'flat'
-            ? flatPackageComponentNames(repoRoot, pkg)
-            : nestedPackageComponentNames(repoRoot, pkg),
-        ),
-      );
-    }
-    const exports = componentExportsFromBarrel(
-      path.join(sourceRoot, 'index.ts'),
-      sourceRoot,
-    );
-    for (const name of names) {
-      if (!publicByPackage.get(shortPackage).has(name)) continue;
-      if (exports.get(name)?.startsWith(`${changedDirectory}${path.sep}`)) {
-        members.push({owner: `${shortPackage}/${name}`, folder: directory});
-      }
-    }
-  }
-  return members;
+  return changedFolderMembers(sources, repoRoot).map(member => ({
+    owner: member.owner,
+    folder: member.directory,
+  }));
 }
 
 /**
@@ -299,9 +256,24 @@ export function visualResult(
   return {result: 'pass'};
 }
 
-/** The accessibility result for one owner: new violations fail it. */
-export function a11yResult(identity, report, newViolations) {
-  if (report == null) return {result: 'not-run'};
+/**
+ * The accessibility result for one owner: new violations fail it, and an
+ * audit that failed before writing its report fails every owner.
+ */
+export function a11yResult(
+  identity,
+  report,
+  newViolations,
+  stepOutcome = null,
+) {
+  if (report == null) {
+    return stepOutcome === 'failure'
+      ? {
+          result: 'fail',
+          detail: 'the accessibility audit failed before its report',
+        }
+      : {result: 'not-run'};
+  }
   const audited = Object.keys(report.components ?? {}).some(component =>
     namesOwner(component, identity),
   );
@@ -337,7 +309,7 @@ const CURATED_VERDICT = {
  * The RTL result for one owner, across every package report: the automatic
  * sections and the curated targets' cards.
  */
-export function rtlResult(identity, reports) {
+export function rtlResult(identity, reports, stepOutcome = null) {
   const results = reports.flatMap(report => [
     ...RTL_SECTIONS.flatMap(section => report?.[section]?.results ?? []),
     ...(report?.curated?.results ?? []).map(card => ({
@@ -346,7 +318,22 @@ export function rtlResult(identity, reports) {
     })),
   ]);
   const mine = results.filter(result => namesOwner(result.component, identity));
-  if (mine.length === 0) return {result: 'not-run'};
+  // The audit's own coverage: no applicable dimension and no verified-N/A
+  // reason is a gap, which the audit signals as a failure.
+  const coverage = reports
+    .flatMap(report => report?.coverage?.results ?? [])
+    .find(entry => namesOwner(entry.component, identity));
+  if (
+    coverage?.status === 'coverage-gap' ||
+    coverage?.status === 'stale-verified-na'
+  ) {
+    return {result: 'fail', detail: `RTL ${coverage.status}`};
+  }
+  if (mine.length === 0) {
+    return stepOutcome === 'failure'
+      ? {result: 'fail', detail: 'the RTL audit failed before its report'}
+      : {result: 'not-run'};
+  }
   if (mine.every(result => result.verdict === 'N-A')) {
     return {result: 'not-run', detail: 'no RTL check applies'};
   }
@@ -367,6 +354,8 @@ export function buildTouchedReport({
   visualShots = {},
   visualJobResult = null,
   a11yReport,
+  a11yStep = null,
+  rtlStep = null,
   a11yBaseline,
   rtlReports,
 }) {
@@ -383,8 +372,8 @@ export function buildTouchedReport({
       visualShots,
       visualJobResult,
     );
-    const a11y = a11yResult(identity, a11yReport, newViolations);
-    const rtl = rtlResult(identity, rtlReports);
+    const a11y = a11yResult(identity, a11yReport, newViolations, a11yStep);
+    const rtl = rtlResult(identity, rtlReports, rtlStep);
     const details = Object.entries({visual, a11y, rtl})
       .filter(([, value]) => value.detail)
       .map(([suite, value]) => `${suite}: ${value.detail}`);
@@ -583,6 +572,8 @@ export function main(argv = process.argv.slice(2)) {
       visualShots: readJson(arg(argv, 'visual-manifest'))?.shots ?? {},
       visualJobResult: arg(argv, 'visual-job') ?? null,
       a11yReport: readJson(arg(argv, 'a11y')),
+      a11yStep: arg(argv, 'a11y-step') ?? null,
+      rtlStep: arg(argv, 'rtl-step') ?? null,
       a11yBaseline: readJson(arg(argv, 'a11y-baseline')),
       rtlReports,
     });

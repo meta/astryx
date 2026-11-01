@@ -392,6 +392,7 @@ describe('notRunLine', () => {
           {name: 'Stable visual regression', conclusion: 'success'},
           {name: 'pr-a11y', conclusion: 'success'},
         ],
+        visualVerdict: {status: 'pass'},
       }),
     ).toBe('Not run on this PR: add `ci:run-rtl` to run it.\n\n');
   });
@@ -436,6 +437,31 @@ describe('notRunLine', () => {
     );
     expect(
       notRunLine({jobs, visualVerdict: {status: 'pass', context: {}}}),
+    ).toBe('');
+  });
+
+  it('names ci:run-visual when pr-visual succeeded but compared nothing', () => {
+    expect(
+      notRunLine({
+        jobs: [
+          {name: 'pr-visual', conclusion: 'success'},
+          skipped('Stable visual scout (1/4)'),
+          {name: 'pr-a11y', conclusion: 'success'},
+          {name: 'pr-rtl', conclusion: 'success'},
+        ],
+        visualVerdict: null,
+      }),
+    ).toBe('Not run on this PR: add `ci:run-visual` to run it.\n\n');
+    // A failed pr-visual is GitHub's to show, not a not-run.
+    expect(
+      notRunLine({
+        jobs: [
+          {name: 'pr-visual', conclusion: 'failure'},
+          {name: 'pr-a11y', conclusion: 'success'},
+          {name: 'pr-rtl', conclusion: 'success'},
+        ],
+        visualVerdict: null,
+      }),
     ).toBe('');
   });
 

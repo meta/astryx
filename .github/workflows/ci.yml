@@ -3075,6 +3075,7 @@ jobs:
 
       # The same changed-component filters an opted-in pull request uses.
       - name: Accessibility audit for the touched components
+        id: a11y
         if: steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners != ''
         run: |
           COMPONENTS=$(node .github/scripts/a11y-pr-scope.mjs analysis.json)
@@ -3091,6 +3092,7 @@ jobs:
       # A failed accessibility audit must not skip RTL: each suite reports
       # its own result.
       - name: RTL audit for the touched components
+        id: rtl
         if: always() && steps.playwright.outcome == 'success' && steps.touched.outputs.has_components == 'true' && steps.touched.outputs.rtl_packages != ''
         env:
           PACKAGES: ${{ steps.touched.outputs.rtl_packages }}
@@ -3129,6 +3131,8 @@ jobs:
         env:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           VISUAL_JOB: ${{ needs.pr-visual.result }}
+          A11Y_STEP: ${{ steps.a11y.outcome }}
+          RTL_STEP: ${{ steps.rtl.outcome }}
         run: |
           node .github/scripts/touched-components.mjs report \
             --analysis analysis.json \
@@ -3138,7 +3142,9 @@ jobs:
             --baseline-manifest .github/visual-baseline/manifest.json \
             --a11y a11y-report.json \
             --a11y-baseline .github/a11y-baseline.json \
+            --a11y-step "$A11Y_STEP" \
             --rtl-dir rtl-reports \
+            --rtl-step "$RTL_STEP" \
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 

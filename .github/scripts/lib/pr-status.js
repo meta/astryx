@@ -63,6 +63,13 @@ function baseJobName(name) {
  * jobs was skipped by its run condition (the label was absent). A suite with
  * no jobs in the run is unknown (null).
  */
+/** Whether every job of the suite that ran succeeded (none failed). */
+function suiteSucceeded(suite, jobs) {
+  return (jobs || [])
+    .filter(job => suite.jobs.test(baseJobName(job.name)))
+    .every(job => ['success', 'skipped'].includes(job.conclusion));
+}
+
 function suiteRunState(suite, jobs) {
   const own = (jobs || []).filter(job =>
     suite.jobs.test(baseJobName(job.name)),
@@ -445,6 +452,17 @@ function notRunLine({jobs, a11yReport, visualVerdict}) {
   if (build && ['failure', 'cancelled'].includes(build.conclusion)) return '';
   const notRun = SUITES.filter(suite => {
     const state = suiteRunState(suite, jobs);
+    // pr-visual's default check runs on every pull request; when it compared
+    // nothing (no touched component has a baseline shot) it leaves no
+    // verdict, and visual did not run.
+    if (
+      suite.id === 'visual' &&
+      state === 'ran' &&
+      !visualVerdict &&
+      suiteSucceeded(suite, jobs)
+    ) {
+      return true;
+    }
     if (state !== null) return state === 'not-run';
     if (jobs) return false;
     if (suite.id === 'visual') return !visualVerdict;
