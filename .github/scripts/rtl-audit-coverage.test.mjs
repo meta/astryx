@@ -9,8 +9,10 @@ import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
 import componentPackages from '../../scripts/component-packages.cjs';
 import {
+  assertSelectorParses,
   AUDITED_PACKAGE_NAMES,
   AUDITED_STORY_PREFIXES,
+  bindDetectorValue,
   buildAuditedComponentRoster,
   buildComponentCoverage,
   buildD1Target,
@@ -19,20 +21,21 @@ import {
   classifyLogicalGroupedCorners,
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
-  filterStoryRoutesByPackages,
-  assertSelectorParses,
-  bindDetectorValue,
+  compareTargets,
   d1GlyphKey,
   d1PairKey,
-  glyphRendersOnBlockAxis,
-  isUnchangedBlockAxisPair,
+  filterStoryRoutesByPackages,
   finishFiniteAnimations,
+  firstUnsortedTarget,
+  glyphRendersOnBlockAxis,
   gradeDirectionalPair,
   gradePositionedPair,
   ignoredStoryIdentities,
+  isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   resolveFilterRoutes,
+  sortTargets,
   storyIdsForComponentFilters,
   unresolvedComponentFilters,
   validateStoryRtlAuditParameters,
@@ -1419,5 +1422,39 @@ describe('gradeDirectionalPair (D2 order, D3 scroll direction)', () => {
   it('fails a relationship already wrong in LTR, or wrong in both', () => {
     expect(gradeDirectionalPair(false, true)).toBe('fail');
     expect(gradeDirectionalPair(false, false)).toBe('fail');
+  });
+});
+
+describe('curated target order (targets.json)', () => {
+  it('sorts by component, then story, case-insensitively and stably', () => {
+    const targets = [
+      {component: 'Table', storyId: 'core-table--b'},
+      {component: 'button', storyId: 'core-button--a'},
+      {component: 'Table', storyId: 'core-table--a', dims: ['D2']},
+      {component: 'Table', storyId: 'core-table--a', dims: []},
+    ];
+    expect(firstUnsortedTarget(targets)).toBe(1);
+    expect(sortTargets(targets)).toEqual([
+      targets[1],
+      targets[2],
+      targets[3],
+      targets[0],
+    ]);
+    expect(compareTargets(targets[2], targets[3])).toBe(0);
+  });
+
+  it('keeps apps/storybook/rtl-audit/targets.json sorted (fix: sort-targets.mjs --fix)', () => {
+    const targets = JSON.parse(
+      fs.readFileSync(
+        new URL('../../apps/storybook/rtl-audit/targets.json', import.meta.url),
+        'utf8',
+      ),
+    );
+    const index = firstUnsortedTarget(targets);
+    expect(
+      index === -1
+        ? null
+        : `${targets[index].component} / ${targets[index].storyId}`,
+    ).toBeNull();
   });
 });

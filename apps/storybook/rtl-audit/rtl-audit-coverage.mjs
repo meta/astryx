@@ -430,6 +430,38 @@ function validatePhysicalPosition(value, storyId) {
   return {physical: value.physical, within: value.within.trim()};
 }
 
+/**
+ * Canonical order for curated RTL targets: by component, then story id
+ * (case-insensitive), keeping entries with the same key in file order. A sorted
+ * `targets.json` lets parallel pull requests add targets in different places
+ * instead of all appending at the end.
+ */
+export function compareTargets(left, right) {
+  const key = target => [
+    String(target.component).toLowerCase(),
+    String(target.storyId).toLowerCase(),
+  ];
+  const [lc, ls] = key(left);
+  const [rc, rs] = key(right);
+  return lc < rc ? -1 : lc > rc ? 1 : ls < rs ? -1 : ls > rs ? 1 : 0;
+}
+
+/** Index of the first target out of canonical order, or -1 when sorted. */
+export function firstUnsortedTarget(targets) {
+  for (let i = 1; i < targets.length; i++) {
+    if (compareTargets(targets[i - 1], targets[i]) > 0) return i;
+  }
+  return -1;
+}
+
+/** The targets in canonical order (a stable sort). */
+export function sortTargets(targets) {
+  return targets
+    .map((target, index) => ({target, index}))
+    .sort((a, b) => compareTargets(a.target, b.target) || a.index - b.index)
+    .map(({target}) => target);
+}
+
 /** Selected owners for which the canonical Storybook route has no story. */
 export function unresolvedComponentFilters(routes, filters) {
   return filters.filter(

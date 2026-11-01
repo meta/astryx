@@ -1,5 +1,15 @@
 [
   {
+    "component": "AlertDialog",
+    "storyId": "core-alertdialog--delete",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Delete item\")"},
+    "selectors": {
+      "prev": "[role=\"alertdialog\"] button:has-text(\"Cancel\")",
+      "next": "[role=\"alertdialog\"] button:has-text(\"Delete\") >> nth=-1"
+    }
+  },
+  {
     "component": "AppShell",
     "storyId": "core-appshell--top-nav-with-side-nav",
     "dims": ["D4"],
@@ -7,6 +17,35 @@
       "overlay": ".astryx-app-shell-sidenav",
       "overlayRoot": ".astryx-app-shell"
     }
+  },
+  {
+    "component": "AspectRatio",
+    "storyId": "core-aspectratio--height-driven",
+    "dims": []
+  },
+  {
+    "component": "AvatarGroupOverflow",
+    "storyId": "core-avatargroupoverflow--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-avatar-group > .astryx-avatar:first-child",
+      "next": ".astryx-avatar-group-overflow"
+    }
+  },
+  {
+    "component": "BaseTypeahead",
+    "storyId": "core-basetypeahead--logical-dropdown-placement",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": "[role=\"listbox\"]",
+      "overlayRoot": "[data-base-typeahead-anchor=\"true\"]"
+    }
+  },
+  {
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
+    "selectors": {"subject": ".astryx-blockquote"}
   },
   {
     "component": "Button",
@@ -18,69 +57,6 @@
     }
   },
   {
-    "component": "TopNav",
-    "storyId": "core-topnav--full-example",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-top-nav-heading",
-      "next": ".astryx-top-nav-item"
-    }
-  },
-  {
-    "component": "TopNavHeading",
-    "storyId": "core-topnav--full-example",
-    "dims": ["D2", "D8"],
-    "selectors": {
-      "prev": ".astryx-top-nav-heading > :first-child",
-      "next": ".astryx-top-nav-heading > :last-child",
-      "subject": ".astryx-top-nav-heading"
-    }
-  },
-  {
-    "component": "TopNavItem",
-    "storyId": "core-topnav--full-example",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-top-nav-item:has-text(\"Dashboard\") > svg",
-      "next": ".astryx-top-nav-item:has-text(\"Dashboard\")"
-    }
-  },
-  {
-    "component": "TopNavMenu",
-    "storyId": "core-topnavmenu--default",
-    "dims": ["D4"],
-    "setup": {"click": "button.astryx-top-nav-menu"},
-    "selectors": {
-      "overlay": ".astryx-popover",
-      "overlayRoot": "body"
-    }
-  },
-  {
-    "component": "TopNavMegaMenu",
-    "storyId": "core-topnavmenu--mega-menu",
-    "dims": ["D4"],
-    "setup": {"click": "button.astryx-top-nav-mega-menu"},
-    "selectors": {
-      "overlay": ".astryx-popover",
-      "overlayRoot": "body"
-    }
-  },
-  {
-    "component": "TopNavMegaMenuItem",
-    "storyId": "core-topnavmenu--mega-menu",
-    "dims": ["D2"],
-    "setup": {"click": "button.astryx-top-nav-mega-menu"},
-    "selectors": {
-      "prev": ".astryx-top-nav-mega-menu-item > :first-child",
-      "next": ".astryx-top-nav-mega-menu-item > :last-child"
-    }
-  },
-  {
-    "component": "TopNavMenu",
-    "storyId": "core-topnavmenu--mega-menu",
-    "dims": []
-  },
-  {
     "component": "ButtonGroup",
     "storyId": "core-buttongroup--horizontal",
     "dims": ["D2"],
@@ -90,32 +66,135 @@
     }
   },
   {
-    "component": "CommandPalette",
-    "storyId": "core-commandpalette--default",
+    "component": "Calendar",
+    "storyId": "core-calendar--default",
     "dims": ["D2"],
-    "setup": {
-      "click": "button:has-text(\"Open Command Palette\")"
-    },
     "selectors": {
-      "prev": ".astryx-command-palette-input > span:first-child",
-      "next": ".astryx-command-palette-input > input[role=\"combobox\"]"
+      "prev": "button[aria-label=\"Previous month\"]",
+      "next": "button[aria-label=\"Next month\"]"
     }
   },
   {
-    "component": "CommandPaletteInput",
-    "storyId": "core-commandpaletteinput--standalone",
-    "dims": ["D2"],
+    "component": "Carousel",
+    "storyId": "core-carousel--default",
+    "dims": ["D3"],
     "selectors": {
-      "prev": ".astryx-command-palette-input > span:first-child",
-      "next": "[data-testid=\"input-end-content\"]"
+      "scroller": "[aria-roledescription=\"carousel\"] > div:first-child",
+      "nextButton": "button[aria-label=\"Scroll right\"]"
     }
   },
   {
     "component": "Center",
     "storyId": "core-center--padding-per-edge",
     "dims": ["D8"],
+    "selectors": {"subject": ".astryx-center"}
+  },
+  {
+    "component": "Chart",
+    "storyId": "charts-chart--playground",
+    "dims": ["D2"],
+    "setup": {"args": {"legendPosition": "start"}},
+    "selectors": {"prev": "[role=\"list\"]", "next": "svg[role=\"img\"]"}
+  },
+  {
+    "component": "Chart",
+    "storyId": "lab-chart--line-chart",
+    "dims": ["D2"],
     "selectors": {
-      "subject": ".astryx-center"
+      "prev": "foreignObject > div > div:first-child",
+      "next": "foreignObject > div > div:last-child"
+    }
+  },
+  {
+    "component": "ChartLegend",
+    "storyId": "charts-chrome-legend--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"listitem\"]:first-child",
+      "next": "[role=\"listitem\"]:last-child"
+    }
+  },
+  {
+    "component": "Chat",
+    "storyId": "core-chat--mixed-content",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-message-bubble[data-sender=\"assistant\"]",
+      "next": ".astryx-chat-message-bubble[data-sender=\"user\"]"
+    }
+  },
+  {
+    "component": "ChatEmojiPicker",
+    "storyId": "lab-chatadditions--emoji-picker",
+    "dims": ["D2"],
+    "setup": {"click": "#storybook-root button >> nth=0"},
+    "selectors": {
+      "prev": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(1)",
+      "next": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(2)"
+    }
+  },
+  {
+    "component": "ChatMessage",
+    "storyId": "core-chatmessage--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "section[aria-label=\"Density precedence\"] article[data-sender=\"assistant\"] .astryx-chat-message-bubble",
+      "next": "section[aria-label=\"Density precedence\"] article[data-sender=\"user\"] .astryx-chat-message-bubble"
+    }
+  },
+  {
+    "component": "ChatMessageBubble",
+    "storyId": "core-chatmessagebubble--states",
+    "dims": ["D9"],
+    "selectors": {
+      "groups": [
+        {
+          "name": "assistant",
+          "logicalSide": "inline-start",
+          "first": "[data-testid=\"assistant-group-first\"]",
+          "middle": "[data-testid=\"assistant-group-middle\"]",
+          "last": "[data-testid=\"assistant-group-last\"]"
+        },
+        {
+          "name": "user",
+          "logicalSide": "inline-end",
+          "first": "[data-testid=\"user-group-first\"]",
+          "middle": "[data-testid=\"user-group-middle\"]",
+          "last": "[data-testid=\"user-group-last\"]"
+        }
+      ]
+    }
+  },
+  {
+    "component": "ChatReactionBar",
+    "storyId": "lab-chatadditions--reactions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-reaction-bar button:has-text(\"🎉\")",
+      "next": ".astryx-chat-reaction-bar button:has-text(\"👀\")"
+    }
+  },
+  {
+    "component": "ChatSendButton",
+    "storyId": "core-chatcomposer--with-streaming",
+    "dims": []
+  },
+  {
+    "component": "ChatTypingIndicator",
+    "storyId": "lab-chatadditions--typing-and-unread",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-typing-indicator > span:first-child",
+      "next": ".astryx-chat-typing-indicator span:has-text(\"Ana and 2 others\")"
+    }
+  },
+  {
+    "component": "ChatUnreadDivider",
+    "storyId": "lab-chatadditions--typing-and-unread",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-chat-unread-divider > span:first-child",
+      "next": ".astryx-chat-unread-divider span:text-is(\"New\")"
     }
   },
   {
@@ -150,6 +229,76 @@
     }
   },
   {
+    "component": "CodeBlock",
+    "storyId": "core-codeblock--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-code-block-title",
+      "next": ".astryx-code-block-copy-button"
+    }
+  },
+  {
+    "component": "CodeBlock",
+    "storyId": "core-codeblock--end-content",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[aria-label=\"Run in terminal\"]",
+      "next": ".astryx-code-block-copy-button"
+    }
+  },
+  {
+    "component": "CodeBlock",
+    "storyId": "core-codeblock--end-content-headerless",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[aria-label=\"Run in terminal\"]",
+      "next": ".astryx-code-block-copy-button"
+    }
+  },
+  {
+    "component": "CommandPalette",
+    "storyId": "core-commandpalette--default",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Open Command Palette\")"},
+    "selectors": {
+      "prev": ".astryx-command-palette-input > span:first-child",
+      "next": ".astryx-command-palette-input > input[role=\"combobox\"]"
+    }
+  },
+  {
+    "component": "CommandPaletteFooter",
+    "storyId": "core-commandpalettefooter--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-command-palette-footer > span:first-child",
+      "next": ".astryx-command-palette-footer > span:last-child"
+    }
+  },
+  {
+    "component": "CommandPaletteInput",
+    "storyId": "core-commandpaletteinput--standalone",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-command-palette-input > span:first-child",
+      "next": "[data-testid=\"input-end-content\"]"
+    }
+  },
+  {
+    "component": "CommandPaletteItem",
+    "storyId": "core-commandpaletteitem--states",
+    "dims": []
+  },
+  {
+    "component": "ComplexSelector",
+    "storyId": "core-complexselector--controlled-toolbar-trigger",
+    "dims": ["D4"],
+    "setup": {"click": "button[aria-haspopup=\"dialog\"]"},
+    "selectors": {
+      "overlay": ".astryx-complex-selector-popup",
+      "overlayRoot": "button[aria-haspopup=\"dialog\"]"
+    }
+  },
+  {
     "component": "ContextMenu",
     "storyId": "core-contextmenu--bottom-sheet-submenu",
     "dims": ["D2"],
@@ -157,208 +306,6 @@
       "prev": "button[aria-label=\"Back\"]",
       "next": "h3:text-is(\"Share\")"
     }
-  },
-  {
-    "component": "TableHeaderCell",
-    "storyId": "core-table--in-card",
-    "dims": ["D2", "D8"],
-    "selectors": {
-      "prev": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child",
-      "next": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:last-child",
-      "subject": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child"
-    }
-  },
-  {
-    "component": "TableCell",
-    "storyId": "core-table--in-card",
-    "dims": ["D2", "D8"],
-    "selectors": {
-      "prev": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child",
-      "next": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:last-child",
-      "subject": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child"
-    }
-  },
-  {
-    "component": "TableSelectionToolbar",
-    "storyId": "core-tableselection--bulk-actions",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
-      "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
-    }
-  },
-  {
-    "component": "Table",
-    "storyId": "core-table--in-card",
-    "dims": []
-  },
-  {
-    "component": "GridSpan",
-    "storyId": "core-gridspan--span-matrix",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[data-audit-case=\"rows\"]",
-      "next": "[data-audit-grid=\"rows\"] > :nth-child(4)"
-    }
-  },
-  {
-    "component": "PowerSearch",
-    "storyId": "core-powersearch--with-date-filters",
-    "dims": ["D2"],
-    "setup": {
-      "click": [
-        "button:has-text(\"Created: is between\")",
-        "button[aria-label=\"Open calendar\"]"
-      ]
-    },
-    "selectors": {
-      "prev": "button[aria-label=\"Previous month\"]",
-      "next": "button[aria-label=\"Next month\"]"
-    }
-  },
-  {
-    "component": "RadioList",
-    "storyId": "core-radiolist--rich-content",
-    "dims": ["D2", "D7"],
-    "minimumTargetSize": {"width": 24, "height": 24},
-    "sizes": ["sm", "md"],
-    "selectors": {
-      "prev": "input[aria-label=\"Pro\"]",
-      "next": "[data-testid=\"radio-end-content\"]",
-      "inputSelector": "input[type=\"radio\"]"
-    }
-  },
-  {
-    "component": "SegmentedControl",
-    "storyId": "core-segmentedcontrol--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "button[role=\"radio\"][data-value=\"grid\"]",
-      "next": "button[role=\"radio\"][data-value=\"table\"]"
-    }
-  },
-  {
-    "component": "Switch",
-    "storyId": "core-switch--default",
-    "dims": ["D7"],
-    "minimumTargetSize": {"width": 24, "height": 24},
-    "sizes": ["sm", "md"],
-    "selectors": {
-      "inputSelector": "input[type=\"checkbox\"]"
-    }
-  },
-  {
-    "component": "Calendar",
-    "storyId": "core-calendar--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "button[aria-label=\"Previous month\"]",
-      "next": "button[aria-label=\"Next month\"]"
-    }
-  },
-  {
-    "component": "DateInput",
-    "storyId": "core-dateinput--clearable",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "button[aria-label=\"Open calendar\"]",
-      "next": "button[aria-label=\"Clear Event date\"]"
-    }
-  },
-  {
-    "component": "LayoutContent",
-    "storyId": "core-layout--content-width-with-start-panel",
-    "dims": ["D8"],
-    "selectors": {
-      "subject": ".astryx-layout-content"
-    }
-  },
-  {
-    "component": "LayoutPanel",
-    "storyId": "core-layout--content-width-with-start-panel",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-layout-panel",
-      "next": ".astryx-layout-content"
-    }
-  },
-  {
-    "component": "ResizeHandle",
-    "storyId": "core-resizable--horizontal-split",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": ".astryx-resize-handle",
-      "overlayRoot": ".astryx-layout"
-    }
-  },
-  {
-    "component": "Layout",
-    "storyId": "core-layout--content-width-with-start-panel",
-    "dims": []
-  },
-  {
-    "component": "Carousel",
-    "storyId": "core-carousel--default",
-    "dims": ["D3"],
-    "selectors": {
-      "scroller": "[aria-roledescription=\"carousel\"] > div:first-child",
-      "nextButton": "button[aria-label=\"Scroll right\"]"
-    }
-  },
-  {
-    "component": "ScrollableArea",
-    "storyId": "core-scrollablearea--rtl-behavior-probe",
-    "dims": ["D3"],
-    "selectors": {
-      "scroller": "[data-rtl-scroll-probe]",
-      "nextButton": "[data-rtl-scroll-button]"
-    }
-  },
-  {
-    "component": "ChatMessageBubble",
-    "storyId": "core-chatmessagebubble--states",
-    "dims": ["D9"],
-    "selectors": {
-      "groups": [
-        {
-          "name": "assistant",
-          "logicalSide": "inline-start",
-          "first": "[data-testid=\"assistant-group-first\"]",
-          "middle": "[data-testid=\"assistant-group-middle\"]",
-          "last": "[data-testid=\"assistant-group-last\"]"
-        },
-        {
-          "name": "user",
-          "logicalSide": "inline-end",
-          "first": "[data-testid=\"user-group-first\"]",
-          "middle": "[data-testid=\"user-group-middle\"]",
-          "last": "[data-testid=\"user-group-last\"]"
-        }
-      ]
-    }
-  },
-  {
-    "component": "Chat",
-    "storyId": "core-chat--mixed-content",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-chat-message-bubble[data-sender=\"assistant\"]",
-      "next": ".astryx-chat-message-bubble[data-sender=\"user\"]"
-    }
-  },
-  {
-    "component": "ChatMessage",
-    "storyId": "core-chatmessage--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "section[aria-label=\"Density precedence\"] article[data-sender=\"assistant\"] .astryx-chat-message-bubble",
-      "next": "section[aria-label=\"Density precedence\"] article[data-sender=\"user\"] .astryx-chat-message-bubble"
-    }
-  },
-  {
-    "component": "ChatSendButton",
-    "storyId": "core-chatcomposer--with-streaming",
-    "dims": []
   },
   {
     "component": "ContextMenuItem",
@@ -370,6 +317,58 @@
     }
   },
   {
+    "component": "DateInput",
+    "storyId": "core-dateinput--clearable",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[aria-label=\"Open calendar\"]",
+      "next": "button[aria-label=\"Clear Event date\"]"
+    }
+  },
+  {"component": "Dialog", "storyId": "core-dialog--default", "dims": []},
+  {
+    "component": "DialogHeader",
+    "storyId": "core-dialog--default",
+    "dims": ["D2"],
+    "setup": {"click": "button:has-text(\"Open Modal\")"},
+    "selectors": {
+      "prev": ".astryx-dialog-header-title-block",
+      "next": ".astryx-dialog-header-end-content"
+    }
+  },
+  {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
+    "component": "Drawer",
+    "storyId": "core-drawer--sides",
+    "dims": ["D4"],
+    "setup": {"click": "button:has-text(\"Open from end\")"},
+    "selectors": {"overlay": "dialog[data-side=\"end\"]", "overlayRoot": "body"}
+  },
+  {
+    "component": "DrawerHeader",
+    "storyId": "core-drawerheader--audit",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-drawer-header .astryx-heading",
+      "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
+    }
+  },
+  {
+    "component": "DropdownMenu",
+    "storyId": "core-dropdownmenu--alignment-end",
+    "dims": ["D4"],
+    "setup": {"click": "button:has-text(\"Row actions\")"},
+    "selectors": {"overlay": ".astryx-dropdown-menu", "overlayRoot": "body"}
+  },
+  {
     "component": "DropdownMenuCheckboxItem",
     "storyId": "core-dropdownmenu--lab-checkbox-items",
     "dims": ["D2"],
@@ -379,39 +378,22 @@
     }
   },
   {
-    "component": "Stack",
-    "storyId": "core-stack--horizontal",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-stack > :first-child",
-      "next": ".astryx-stack > :nth-child(2)"
-    }
-  },
-  {
-    "component": "StackItem",
-    "storyId": "core-stack--stack-item-fill-size",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-stack-item:first-child",
-      "next": ".astryx-stack-item:last-child"
-    }
-  },
-  {
-    "component": "HStack",
-    "storyId": "core-aspectratio--height-driven",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-stack > :first-child",
-      "next": ".astryx-stack > :nth-child(2)"
-    }
-  },
-  {
-    "component": "VStack",
-    "storyId": "core-spinner--narrow-flex-host",
+    "component": "DropdownMenuSubMenu",
+    "storyId": "core-dropdownmenusubmenu--row-states",
     "dims": ["D4"],
+    "setup": {"click": "[role=\"menuitem\"]:has-text(\"Share\")"},
     "selectors": {
-      "overlay": "#storybook-root .astryx-stack > .astryx-stack:first-child",
-      "overlayRoot": "#storybook-root .astryx-stack:has(> .astryx-stack)"
+      "overlay": "[data-testid=\"dropdown-menu-submenu-flyout\"]",
+      "overlayRoot": "[role=\"menu\"]"
+    }
+  },
+  {
+    "component": "FileInput",
+    "storyId": "core-fileinput--with-error-status",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-file-input > .astryx-icon:not(.astryx-input-status-icon)",
+      "next": ".astryx-file-input > .astryx-input-status-icon"
     }
   },
   {
@@ -424,42 +406,44 @@
     }
   },
   {
-    "component": "Spinner",
-    "storyId": "core-spinner--narrow-flex-host",
-    "dims": []
-  },
-  {
-    "component": "AspectRatio",
-    "storyId": "core-aspectratio--height-driven",
-    "dims": []
-  },
-  {
-    "component": "Stack",
-    "storyId": "core-stack--stack-item-fill-size",
-    "dims": []
-  },
-  {
-    "component": "DropdownMenu",
-    "storyId": "core-dropdownmenu--alignment-end",
-    "dims": ["D4"],
-    "setup": {
-      "click": "button:has-text(\"Row actions\")"
-    },
+    "component": "GridSpan",
+    "storyId": "core-gridspan--span-matrix",
+    "dims": ["D2"],
     "selectors": {
-      "overlay": ".astryx-dropdown-menu",
-      "overlayRoot": "body"
+      "prev": "[data-audit-case=\"rows\"]",
+      "next": "[data-audit-grid=\"rows\"] > :nth-child(4)"
     }
   },
   {
-    "component": "DropdownMenuSubMenu",
-    "storyId": "core-dropdownmenusubmenu--row-states",
-    "dims": ["D4"],
-    "setup": {
-      "click": "[role=\"menuitem\"]:has-text(\"Share\")"
-    },
+    "component": "HStack",
+    "storyId": "core-aspectratio--height-driven",
+    "dims": ["D2"],
     "selectors": {
-      "overlay": "[data-testid=\"dropdown-menu-submenu-flyout\"]",
-      "overlayRoot": "[role=\"menu\"]"
+      "prev": ".astryx-stack > :first-child",
+      "next": ".astryx-stack > :nth-child(2)"
+    }
+  },
+  {
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": []
+  },
+  {
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix-and-suffix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-input-group > .astryx-input-group-text:first-child",
+      "next": ".astryx-input-group > .astryx-input-group-text:last-child"
+    }
+  },
+  {
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
     }
   },
   {
@@ -469,22 +453,12 @@
     "setup": {
       "click": ["button:has-text(\"end\")", "button:has-text(\"Trigger\")"]
     },
-    "selectors": {
-      "overlay": "[popover]:popover-open",
-      "overlayRoot": "body"
-    }
+    "selectors": {"overlay": "[popover]:popover-open", "overlayRoot": "body"}
   },
   {
-    "component": "Lightbox",
-    "storyId": "core-lightbox--gallery",
-    "dims": ["D2"],
-    "setup": {
-      "click": "img, [role=button]"
-    },
-    "selectors": {
-      "prev": "button[aria-label=\"Previous\"]",
-      "next": "button[aria-label=\"Next\"]"
-    }
+    "component": "Layout",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": []
   },
   {
     "component": "Layout",
@@ -496,23 +470,31 @@
     }
   },
   {
-    "component": "Resizable",
-    "storyId": "core-resizable--horizontal-split",
-    "dims": ["D4"],
+    "component": "LayoutContent",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D8"],
+    "selectors": {"subject": ".astryx-layout-content"}
+  },
+  {
+    "component": "LayoutPanel",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D2"],
     "selectors": {
-      "overlay": ".astryx-resize-handle",
-      "overlayRoot": ".astryx-layout"
+      "prev": ".astryx-layout-panel",
+      "next": ".astryx-layout-content"
     }
   },
   {
-    "component": "Stepper",
-    "storyId": "core-stepper--default-horizontal",
+    "component": "Lightbox",
+    "storyId": "core-lightbox--gallery",
     "dims": ["D2"],
+    "setup": {"click": "img, [role=button]"},
     "selectors": {
-      "prev": ".astryx-stepper > li:first-child",
-      "next": ".astryx-stepper > li:last-child"
+      "prev": "button[aria-label=\"Previous\"]",
+      "next": "button[aria-label=\"Next\"]"
     }
   },
+  {"component": "List", "storyId": "core-list--interactive", "dims": []},
   {
     "component": "ListItem",
     "storyId": "core-list--interactive",
@@ -520,6 +502,15 @@
     "selectors": {
       "prev": ".astryx-list-item:first-child > :first-child",
       "next": ".astryx-list-item:first-child > :last-child"
+    }
+  },
+  {
+    "component": "LogStream",
+    "storyId": "lab-logstream--terminal-build",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span:text-is(\"12:04:38.207\")",
+      "next": "span:text-is(\"12:04:38.207\") + span"
     }
   },
   {
@@ -541,6 +532,137 @@
     }
   },
   {
+    "component": "MobileNav",
+    "storyId": "core-mobilenav--default",
+    "dims": ["D4"],
+    "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
+    "selectors": {
+      "overlay": "[class*=\"astryx-mobile-nav\"] > div:first-child",
+      "overlayRoot": "body"
+    }
+  },
+  {
+    "component": "MobilePowerSearch",
+    "storyId": "lab-mobilepowersearch--touch-flow",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-token:has-text(\"Status\")",
+      "next": ".astryx-token:has-text(\"Priority\")"
+    }
+  },
+  {
+    "component": "MobileTokenizer",
+    "storyId": "lab-mobiletokenizer--touch-flow",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-token:has-text(\"Design\")",
+      "next": ".astryx-token:has-text(\"Eng\")"
+    }
+  },
+  {
+    "component": "MoreMenu",
+    "storyId": "core-moremenu--default",
+    "dims": ["D4"],
+    "setup": {"click": "button[aria-label=\"More options\"]"},
+    "selectors": {
+      "overlay": "[role=\"menu\"]",
+      "overlayRoot": "button[aria-label=\"More options\"]"
+    }
+  },
+  {
+    "component": "MultiSelector",
+    "storyId": "core-multiselector--default",
+    "dims": ["D4"],
+    "setup": {"click": "[role=\"combobox\"]"},
+    "selectors": {
+      "overlay": ".astryx-multi-selector-popup",
+      "overlayRoot": "[role=\"combobox\"]"
+    }
+  },
+  {
+    "component": "NavHeadingMenu",
+    "storyId": "core-navmenu--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
+      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
+    }
+  },
+  {
+    "component": "NumberInput",
+    "storyId": "core-numberinput--with-number-steppers",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "input[role=\"spinbutton\"]",
+      "next": "button[aria-label=\"Increment Quantity\"]"
+    }
+  },
+  {
+    "component": "Outline",
+    "storyId": "core-outline--controlled",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-outline > div[aria-hidden=\"true\"]",
+      "next": ".astryx-outline > ul"
+    }
+  },
+  {
+    "component": "OverflowList",
+    "storyId": "core-overflowlist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-overflow-list > button:first-child",
+      "next": ".astryx-overflow-list button:has-text(\"more\")"
+    }
+  },
+  {
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
+    }
+  },
+  {
+    "component": "Popover",
+    "storyId": "core-popover--default",
+    "dims": ["D4"],
+    "setup": {"click": "button:has-text(\"Settings\")"},
+    "selectors": {
+      "overlay": ".astryx-popover",
+      "overlayRoot": "button:has-text(\"Settings\")"
+    }
+  },
+  {
+    "component": "PowerSearch",
+    "storyId": "core-powersearch--with-date-filters",
+    "dims": ["D2"],
+    "setup": {
+      "click": [
+        "button:has-text(\"Created: is between\")",
+        "button[aria-label=\"Open calendar\"]"
+      ]
+    },
+    "selectors": {
+      "prev": "button[aria-label=\"Previous month\"]",
+      "next": "button[aria-label=\"Next month\"]"
+    }
+  },
+  {"component": "RadioList", "storyId": "core-radiolist--default", "dims": []},
+  {
+    "component": "RadioList",
+    "storyId": "core-radiolist--rich-content",
+    "dims": ["D2", "D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
+    "sizes": ["sm", "md"],
+    "selectors": {
+      "prev": "input[aria-label=\"Pro\"]",
+      "next": "[data-testid=\"radio-end-content\"]",
+      "inputSelector": "input[type=\"radio\"]"
+    }
+  },
+  {
     "component": "RadioListItem",
     "storyId": "core-radiolist--default",
     "dims": ["D2"],
@@ -549,6 +671,95 @@
       "next": ".astryx-radio-list-item:first-child span:text-is(\"Email\")"
     }
   },
+  {
+    "component": "Resizable",
+    "storyId": "core-resizable--horizontal-split",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-resize-handle",
+      "overlayRoot": ".astryx-layout"
+    }
+  },
+  {
+    "component": "ResizeHandle",
+    "storyId": "core-resizable--horizontal-split",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-resize-handle",
+      "overlayRoot": ".astryx-layout"
+    }
+  },
+  {
+    "component": "richtext/RichTextEditor",
+    "storyId": "richtext-richtexteditor--error-status",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-rich-text-editor > div:first-child > div:last-child",
+      "overlayRoot": ".astryx-rich-text-editor"
+    }
+  },
+  {
+    "component": "richtext/RichTextEditorAutoLinkPlugin",
+    "storyId": "richtext-richtexteditor--with-auto-link",
+    "dims": []
+  },
+  {
+    "component": "richtext/RichTextEditorToolbar",
+    "storyId": "richtext-richtexteditor--with-toolbar",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"group\"][aria-label=\"Formatting actions\"] button:first-of-type",
+      "next": "[role=\"group\"][aria-label=\"Formatting actions\"] button:last-of-type"
+    }
+  },
+  {
+    "component": "richtext/RichTextView",
+    "storyId": "richtext-richtexteditor--markdown-serializers",
+    "dims": []
+  },
+  {
+    "component": "ScrollableArea",
+    "storyId": "core-scrollablearea--rtl-behavior-probe",
+    "dims": ["D3"],
+    "selectors": {
+      "scroller": "[data-rtl-scroll-probe]",
+      "nextButton": "[data-rtl-scroll-button]"
+    }
+  },
+  {
+    "component": "SegmentedControl",
+    "storyId": "core-segmentedcontrol--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "button[role=\"radio\"][data-value=\"grid\"]",
+      "next": "button[role=\"radio\"][data-value=\"table\"]"
+    }
+  },
+  {
+    "component": "SegmentedControl",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": []
+  },
+  {
+    "component": "SegmentedControlItem",
+    "storyId": "core-segmentedcontrol--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"radio\"] svg.astryx-icon",
+      "next": "[role=\"radio\"] span:text-is(\"Grid\")"
+    }
+  },
+  {
+    "component": "Selector",
+    "storyId": "core-selector--default",
+    "dims": ["D4"],
+    "setup": {"click": "[role=\"combobox\"]"},
+    "selectors": {
+      "overlay": ".astryx-selector-popup",
+      "overlayRoot": "[role=\"combobox\"]"
+    }
+  },
+  {"component": "Selector", "storyId": "core-selector--with-icons", "dims": []},
   {
     "component": "SelectorOption",
     "storyId": "core-selector--with-icons",
@@ -560,109 +771,28 @@
     }
   },
   {
-    "component": "TypeaheadItem",
-    "storyId": "core-typeahead--item-with-icon",
-    "dims": ["D2"],
-    "setup": {"click": "[role=\"combobox\"]"},
-    "selectors": {
-      "prev": ".astryx-typeahead-item > :first-child",
-      "next": ".astryx-typeahead-item > :last-child"
-    }
-  },
-  {
-    "component": "List",
-    "storyId": "core-list--interactive",
+    "component": "SideNav",
+    "storyId": "core-sidenav--collapsible-sidebar",
     "dims": []
   },
   {
-    "component": "RadioList",
-    "storyId": "core-radiolist--default",
-    "dims": []
-  },
-  {
-    "component": "Selector",
-    "storyId": "core-selector--with-icons",
-    "dims": []
-  },
-  {
-    "component": "Typeahead",
-    "storyId": "core-typeahead--item-with-icon",
-    "dims": []
-  },
-  {
-    "component": "Switch",
-    "storyId": "core-switch--on",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": ".astryx-switch-thumb",
-      "overlayRoot": ".astryx-switch"
-    }
-  },
-  {
-    "component": "TabList",
-    "storyId": "core-tablist--overflow",
-    "dims": ["D3"],
-    "selectors": {
-      "scroller": ".astryx-tab-strip",
-      "nextButton": ".astryx-tab-scroll-button"
-    }
-  },
-  {
-    "component": "BaseTypeahead",
-    "storyId": "core-basetypeahead--logical-dropdown-placement",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": "[role=\"listbox\"]",
-      "overlayRoot": "[data-base-typeahead-anchor=\"true\"]"
-    }
-  },
-  {
-    "component": "Typeahead",
-    "storyId": "core-typeahead--rtl-end-lane",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": "button[aria-label=\"Clear selection\"]",
-      "overlayRoot": ".astryx-typeahead"
-    }
-  },
-  {
-    "component": "Tokenizer",
-    "storyId": "core-tokenizer--rtl-end-lane",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": "button[aria-label=\"Clear all\"]",
-      "overlayRoot": ".astryx-tokenizer"
-    }
-  },
-  {
-    "component": "Tooltip",
-    "storyId": "core-tooltip--rtl-logical-placement",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": ".astryx-tooltip",
-      "overlayRoot": "button:has-text(\"RTL placement target\")"
-    }
-  },
-  {
-    "component": "Toast",
-    "storyId": "core-toast--logical-placement",
-    "dims": ["D4"],
-    "setup": {
-      "click": "button:has-text(\"Show toast\")"
-    },
-    "selectors": {
-      "overlay": "[data-toast-id]",
-      "overlayRoot": "body"
-    }
-  },
-  {
-    "component": "InputGroup",
-    "storyId": "core-inputgroup--with-prefix-and-suffix",
+    "component": "SideNav",
+    "storyId": "core-sidenav--default",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-input-group > .astryx-input-group-text:first-child",
-      "next": ".astryx-input-group > .astryx-input-group-text:last-child"
+      "prev": "a.astryx-side-nav-item[href=\"/projects\"] > svg.astryx-icon",
+      "next": "a.astryx-side-nav-item[href=\"/projects\"] .astryx-badge"
     }
+  },
+  {
+    "component": "SideNav",
+    "storyId": "core-sidenav--section-end-content",
+    "dims": []
+  },
+  {
+    "component": "SideNavCollapseButton",
+    "storyId": "core-sidenav--collapsible-sidebar",
+    "dims": []
   },
   {
     "component": "SideNavHeading",
@@ -693,27 +823,134 @@
     }
   },
   {
-    "component": "SideNavCollapseButton",
-    "storyId": "core-sidenav--collapsible-sidebar",
+    "component": "Spinner",
+    "storyId": "core-spinner--narrow-flex-host",
     "dims": []
   },
   {
-    "component": "SideNav",
-    "storyId": "core-sidenav--section-end-content",
-    "dims": []
-  },
-  {
-    "component": "SideNav",
-    "storyId": "core-sidenav--collapsible-sidebar",
-    "dims": []
-  },
-  {
-    "component": "NumberInput",
-    "storyId": "core-numberinput--with-number-steppers",
+    "component": "Stack",
+    "storyId": "core-stack--horizontal",
     "dims": ["D2"],
     "selectors": {
-      "prev": "input[role=\"spinbutton\"]",
-      "next": "button[aria-label=\"Increment Quantity\"]"
+      "prev": ".astryx-stack > :first-child",
+      "next": ".astryx-stack > :nth-child(2)"
+    }
+  },
+  {
+    "component": "Stack",
+    "storyId": "core-stack--stack-item-fill-size",
+    "dims": []
+  },
+  {
+    "component": "StackItem",
+    "storyId": "core-stack--stack-item-fill-size",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stack-item:first-child",
+      "next": ".astryx-stack-item:last-child"
+    }
+  },
+  {
+    "component": "Stat",
+    "storyId": "lab-stat--showcase",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "span:text-is(\"$1.28M\")",
+      "next": "span:text-is(\"$1.28M\") + span"
+    }
+  },
+  {
+    "component": "Step",
+    "storyId": "core-stepper--default-horizontal",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-step:first-child .astryx-step-indicator",
+      "next": ".astryx-step:first-child .astryx-step-label"
+    }
+  },
+  {
+    "component": "Stepper",
+    "storyId": "core-stepper--default-horizontal",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-stepper > li:first-child",
+      "next": ".astryx-stepper > li:last-child"
+    }
+  },
+  {
+    "component": "Switch",
+    "storyId": "core-switch--default",
+    "dims": ["D7"],
+    "minimumTargetSize": {"width": 24, "height": 24},
+    "sizes": ["sm", "md"],
+    "selectors": {"inputSelector": "input[type=\"checkbox\"]"}
+  },
+  {
+    "component": "Switch",
+    "storyId": "core-switch--on",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-switch-thumb",
+      "overlayRoot": ".astryx-switch"
+    }
+  },
+  {
+    "component": "Tab",
+    "storyId": "core-tablist--with-icons",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab svg",
+      "next": ".astryx-tab span:text-is(\"Home\")"
+    }
+  },
+  {"component": "Table", "storyId": "core-table--in-card", "dims": []},
+  {
+    "component": "TableCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card tbody tr:first-child > .astryx-table-cell:first-child"
+    }
+  },
+  {
+    "component": "TableHeaderCell",
+    "storyId": "core-table--in-card",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child",
+      "next": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:last-child",
+      "subject": "div:nth-child(2) > .astryx-card .astryx-table-header-cell:first-child"
+    }
+  },
+  {
+    "component": "TableSelectionToolbar",
+    "storyId": "core-tableselection--bulk-actions",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
+      "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
+    }
+  },
+  {
+    "component": "TabList",
+    "storyId": "core-tablist--overflow",
+    "dims": ["D3"],
+    "selectors": {
+      "scroller": ".astryx-tab-strip",
+      "nextButton": ".astryx-tab-scroll-button"
+    }
+  },
+  {"component": "TabList", "storyId": "core-tablist--with-icons", "dims": []},
+  {"component": "TabList", "storyId": "core-tablist--with-menu", "dims": []},
+  {
+    "component": "TabMenu",
+    "storyId": "core-tablist--with-menu",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-tab-menu span:text-is(\"More\")",
+      "next": ".astryx-tab-menu .astryx-icon"
     }
   },
   {
@@ -735,67 +972,16 @@
     }
   },
   {
-    "component": "CodeBlock",
-    "storyId": "core-codeblock--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-code-block-title",
-      "next": ".astryx-code-block-copy-button"
-    }
+    "component": "Toast",
+    "storyId": "core-toast--logical-placement",
+    "dims": ["D4"],
+    "setup": {"click": "button:has-text(\"Show toast\")"},
+    "selectors": {"overlay": "[data-toast-id]", "overlayRoot": "body"}
   },
   {
-    "component": "CodeBlock",
-    "storyId": "core-codeblock--end-content",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[aria-label=\"Run in terminal\"]",
-      "next": ".astryx-code-block-copy-button"
-    }
-  },
-  {
-    "component": "CodeBlock",
-    "storyId": "core-codeblock--end-content-headerless",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[aria-label=\"Run in terminal\"]",
-      "next": ".astryx-code-block-copy-button"
-    }
-  },
-  {
-    "component": "FileInput",
-    "storyId": "core-fileinput--with-error-status",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-file-input > .astryx-icon:not(.astryx-input-status-icon)",
-      "next": ".astryx-file-input > .astryx-input-status-icon"
-    }
-  },
-  {
-    "component": "Tab",
-    "storyId": "core-tablist--with-icons",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-tab svg",
-      "next": ".astryx-tab span:text-is(\"Home\")"
-    }
-  },
-  {
-    "component": "TabMenu",
-    "storyId": "core-tablist--with-menu",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-tab-menu span:text-is(\"More\")",
-      "next": ".astryx-tab-menu .astryx-icon"
-    }
-  },
-  {
-    "component": "SegmentedControlItem",
-    "storyId": "core-segmentedcontrol--with-icons",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[role=\"radio\"] svg.astryx-icon",
-      "next": "[role=\"radio\"] span:text-is(\"Grid\")"
-    }
+    "component": "ToggleButton",
+    "storyId": "core-togglebutton--group-single",
+    "dims": []
   },
   {
     "component": "ToggleButtonGroup",
@@ -807,334 +993,93 @@
     }
   },
   {
-    "component": "TabList",
-    "storyId": "core-tablist--with-icons",
+    "component": "Tokenizer",
+    "storyId": "core-tokenizer--rtl-end-lane",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": "button[aria-label=\"Clear all\"]",
+      "overlayRoot": ".astryx-tokenizer"
+    }
+  },
+  {
+    "component": "Tooltip",
+    "storyId": "core-tooltip--rtl-logical-placement",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-tooltip",
+      "overlayRoot": "button:has-text(\"RTL placement target\")"
+    }
+  },
+  {
+    "component": "TopNav",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading",
+      "next": ".astryx-top-nav-item"
+    }
+  },
+  {
+    "component": "TopNavHeading",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": ".astryx-top-nav-heading > :first-child",
+      "next": ".astryx-top-nav-heading > :last-child",
+      "subject": ".astryx-top-nav-heading"
+    }
+  },
+  {
+    "component": "TopNavItem",
+    "storyId": "core-topnav--full-example",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-top-nav-item:has-text(\"Dashboard\") > svg",
+      "next": ".astryx-top-nav-item:has-text(\"Dashboard\")"
+    }
+  },
+  {
+    "component": "TopNavMegaMenu",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {"overlay": ".astryx-popover", "overlayRoot": "body"}
+  },
+  {
+    "component": "TopNavMegaMenuFeaturedCard",
+    "storyId": "core-topnavmenu--featured-card-link-arrow",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-top-nav-mega-menu-featured-card a > span",
+      "overlayRoot": ".astryx-top-nav-mega-menu-featured-card a"
+    }
+  },
+  {
+    "component": "TopNavMegaMenuItem",
+    "storyId": "core-topnavmenu--mega-menu",
+    "dims": ["D2"],
+    "setup": {"click": "button.astryx-top-nav-mega-menu"},
+    "selectors": {
+      "prev": ".astryx-top-nav-mega-menu-item > :first-child",
+      "next": ".astryx-top-nav-mega-menu-item > :last-child"
+    }
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--default",
+    "dims": ["D4"],
+    "setup": {"click": "button.astryx-top-nav-menu"},
+    "selectors": {"overlay": ".astryx-popover", "overlayRoot": "body"}
+  },
+  {
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--featured-card-link-arrow",
     "dims": []
   },
   {
-    "component": "TabList",
-    "storyId": "core-tablist--with-menu",
+    "component": "TopNavMenu",
+    "storyId": "core-topnavmenu--mega-menu",
     "dims": []
-  },
-  {
-    "component": "SegmentedControl",
-    "storyId": "core-segmentedcontrol--with-icons",
-    "dims": []
-  },
-  {
-    "component": "ToggleButton",
-    "storyId": "core-togglebutton--group-single",
-    "dims": []
-  },
-  {
-    "component": "Outline",
-    "storyId": "core-outline--controlled",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-outline > div[aria-hidden=\"true\"]",
-      "next": ".astryx-outline > ul"
-    }
-  },
-  {
-    "component": "Popover",
-    "storyId": "core-popover--default",
-    "dims": ["D4"],
-    "setup": {
-      "click": "button:has-text(\"Settings\")"
-    },
-    "selectors": {
-      "overlay": ".astryx-popover",
-      "overlayRoot": "button:has-text(\"Settings\")"
-    }
-  },
-  {
-    "component": "Selector",
-    "storyId": "core-selector--default",
-    "dims": ["D4"],
-    "setup": {
-      "click": "[role=\"combobox\"]"
-    },
-    "selectors": {
-      "overlay": ".astryx-selector-popup",
-      "overlayRoot": "[role=\"combobox\"]"
-    }
-  },
-  {
-    "component": "MultiSelector",
-    "storyId": "core-multiselector--default",
-    "dims": ["D4"],
-    "setup": {
-      "click": "[role=\"combobox\"]"
-    },
-    "selectors": {
-      "overlay": ".astryx-multi-selector-popup",
-      "overlayRoot": "[role=\"combobox\"]"
-    }
-  },
-  {
-    "component": "ComplexSelector",
-    "storyId": "core-complexselector--controlled-toolbar-trigger",
-    "dims": ["D4"],
-    "setup": {
-      "click": "button[aria-haspopup=\"dialog\"]"
-    },
-    "selectors": {
-      "overlay": ".astryx-complex-selector-popup",
-      "overlayRoot": "button[aria-haspopup=\"dialog\"]"
-    }
-  },
-  {
-    "component": "SideNav",
-    "storyId": "core-sidenav--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "a.astryx-side-nav-item[href=\"/projects\"] > svg.astryx-icon",
-      "next": "a.astryx-side-nav-item[href=\"/projects\"] .astryx-badge"
-    }
-  },
-  {
-    "component": "Chart",
-    "storyId": "lab-chart--line-chart",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "foreignObject > div > div:first-child",
-      "next": "foreignObject > div > div:last-child"
-    }
-  },
-  {
-    "component": "Chart",
-    "storyId": "charts-chart--playground",
-    "dims": ["D2"],
-    "setup": {
-      "args": {
-        "legendPosition": "start"
-      }
-    },
-    "selectors": {
-      "prev": "[role=\"list\"]",
-      "next": "svg[role=\"img\"]"
-    }
-  },
-  {
-    "component": "Step",
-    "storyId": "core-stepper--default-horizontal",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-step:first-child .astryx-step-indicator",
-      "next": ".astryx-step:first-child .astryx-step-label"
-    }
-  },
-  {
-    "component": "OverflowList",
-    "storyId": "core-overflowlist--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-overflow-list > button:first-child",
-      "next": ".astryx-overflow-list button:has-text(\"more\")"
-    }
-  },
-  {
-    "component": "DialogHeader",
-    "storyId": "core-dialog--default",
-    "dims": ["D2"],
-    "setup": {"click": "button:has-text(\"Open Modal\")"},
-    "selectors": {
-      "prev": ".astryx-dialog-header-title-block",
-      "next": ".astryx-dialog-header-end-content"
-    }
-  },
-  {
-    "component": "AlertDialog",
-    "storyId": "core-alertdialog--delete",
-    "dims": ["D2"],
-    "setup": {"click": "button:has-text(\"Delete item\")"},
-    "selectors": {
-      "prev": "[role=\"alertdialog\"] button:has-text(\"Cancel\")",
-      "next": "[role=\"alertdialog\"] button:has-text(\"Delete\") >> nth=-1"
-    }
-  },
-  {
-    "component": "MobileNav",
-    "storyId": "core-mobilenav--default",
-    "dims": ["D4"],
-    "setup": {"click": "button[aria-label=\"Open Navigation\"]"},
-    "selectors": {
-      "overlay": "[class*=\"astryx-mobile-nav\"] > div:first-child",
-      "overlayRoot": "body"
-    }
-  },
-  {
-    "component": "MoreMenu",
-    "storyId": "core-moremenu--default",
-    "dims": ["D4"],
-    "setup": {"click": "button[aria-label=\"More options\"]"},
-    "selectors": {
-      "overlay": "[role=\"menu\"]",
-      "overlayRoot": "button[aria-label=\"More options\"]"
-    }
-  },
-  {
-    "component": "Dialog",
-    "storyId": "core-dialog--default",
-    "dims": []
-  },
-  {
-    "component": "NavHeadingMenu",
-    "storyId": "core-navmenu--with-icons",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-nav-heading-menu-item svg.astryx-icon >> nth=0",
-      "next": ".astryx-nav-heading-menu-item span.astryx-text:text-is(\"Profile\")"
-    }
-  },
-  {
-    "component": "ChartLegend",
-    "storyId": "charts-chrome-legend--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[role=\"listitem\"]:first-child",
-      "next": "[role=\"listitem\"]:last-child"
-    }
-  },
-  {
-    "component": "Drawer",
-    "storyId": "core-drawer--sides",
-    "dims": ["D4"],
-    "setup": {
-      "click": "button:has-text(\"Open from end\")"
-    },
-    "selectors": {
-      "overlay": "dialog[data-side=\"end\"]",
-      "overlayRoot": "body"
-    }
-  },
-  {
-    "component": "richtext/RichTextEditor",
-    "storyId": "richtext-richtexteditor--error-status",
-    "dims": ["D4"],
-    "selectors": {
-      "overlay": ".astryx-rich-text-editor > div:first-child > div:last-child",
-      "overlayRoot": ".astryx-rich-text-editor"
-    }
-  },
-  {
-    "component": "richtext/RichTextEditorToolbar",
-    "storyId": "richtext-richtexteditor--with-toolbar",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "[role=\"group\"][aria-label=\"Formatting actions\"] button:first-of-type",
-      "next": "[role=\"group\"][aria-label=\"Formatting actions\"] button:last-of-type"
-    }
-  },
-  {
-    "component": "richtext/RichTextEditorAutoLinkPlugin",
-    "storyId": "richtext-richtexteditor--with-auto-link",
-    "dims": []
-  },
-  {
-    "component": "richtext/RichTextView",
-    "storyId": "richtext-richtexteditor--markdown-serializers",
-    "dims": []
-  },
-  {
-    "component": "AvatarGroupOverflow",
-    "storyId": "core-avatargroupoverflow--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-avatar-group > .astryx-avatar:first-child",
-      "next": ".astryx-avatar-group-overflow"
-    }
-  },
-  {
-    "component": "ChatReactionBar",
-    "storyId": "lab-chatadditions--reactions",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-chat-reaction-bar button:has-text(\"\ud83c\udf89\")",
-      "next": ".astryx-chat-reaction-bar button:has-text(\"\ud83d\udc40\")"
-    }
-  },
-  {
-    "component": "ChatUnreadDivider",
-    "storyId": "lab-chatadditions--typing-and-unread",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-chat-unread-divider > span:first-child",
-      "next": ".astryx-chat-unread-divider span:text-is(\"New\")"
-    }
-  },
-  {
-    "component": "ChatTypingIndicator",
-    "storyId": "lab-chatadditions--typing-and-unread",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-chat-typing-indicator > span:first-child",
-      "next": ".astryx-chat-typing-indicator span:has-text(\"Ana and 2 others\")"
-    }
-  },
-  {
-    "component": "ChatEmojiPicker",
-    "storyId": "lab-chatadditions--emoji-picker",
-    "dims": ["D2"],
-    "setup": {"click": "#storybook-root button >> nth=0"},
-    "selectors": {
-      "prev": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(1)",
-      "next": ".astryx-chat-emoji-picker > div:nth-child(2) > button:nth-child(2)"
-    }
-  },
-  {
-    "component": "Stat",
-    "storyId": "lab-stat--showcase",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "span:text-is(\"$1.28M\")",
-      "next": "span:text-is(\"$1.28M\") + span"
-    }
-  },
-  {
-    "component": "TransferList",
-    "storyId": "lab-transferlist--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-transfer-list-panel >> nth=0",
-      "next": ".astryx-transfer-list-panel >> nth=1"
-    }
-  },
-  {
-    "component": "TransferListSelector",
-    "storyId": "lab-transferlistselector--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-complex-selector button span:text-is(\"3 visible fields\")",
-      "next": ".astryx-complex-selector-indicator-icon"
-    }
-  },
-  {
-    "component": "LogStream",
-    "storyId": "lab-logstream--terminal-build",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": "span:text-is(\"12:04:38.207\")",
-      "next": "span:text-is(\"12:04:38.207\") + span"
-    }
-  },
-  {
-    "component": "MobileTokenizer",
-    "storyId": "lab-mobiletokenizer--touch-flow",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-token:has-text(\"Design\")",
-      "next": ".astryx-token:has-text(\"Eng\")"
-    }
-  },
-  {
-    "component": "MobilePowerSearch",
-    "storyId": "lab-mobilepowersearch--touch-flow",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-token:has-text(\"Status\")",
-      "next": ".astryx-token:has-text(\"Priority\")"
-    }
   },
   {
     "component": "Tour",
@@ -1157,80 +1102,54 @@
     }
   },
   {
-    "component": "CommandPaletteItem",
-    "storyId": "core-commandpaletteitem--states",
+    "component": "TransferList",
+    "storyId": "lab-transferlist--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-transfer-list-panel >> nth=0",
+      "next": ".astryx-transfer-list-panel >> nth=1"
+    }
+  },
+  {
+    "component": "TransferListSelector",
+    "storyId": "lab-transferlistselector--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-complex-selector button span:text-is(\"3 visible fields\")",
+      "next": ".astryx-complex-selector-indicator-icon"
+    }
+  },
+  {
+    "component": "Typeahead",
+    "storyId": "core-typeahead--item-with-icon",
     "dims": []
   },
   {
-    "component": "CommandPaletteFooter",
-    "storyId": "core-commandpalettefooter--default",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-command-palette-footer > span:first-child",
-      "next": ".astryx-command-palette-footer > span:last-child"
-    }
-  },
-  {
-    "component": "DiffViewer",
-    "storyId": "lab-diffviewer--character-highlight",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-diff-viewer-path",
-      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
-    }
-  },
-  {
-    "component": "DrawerHeader",
-    "storyId": "core-drawerheader--audit",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-drawer-header .astryx-heading",
-      "next": ".astryx-drawer-header button[aria-label=\"Close\"]"
-    }
-  },
-  {
-    "component": "Blockquote",
-    "storyId": "core-blockquote--default",
-    "dims": ["D8"],
-    "selectors": {
-      "subject": ".astryx-blockquote"
-    }
-  },
-  {
-    "component": "InputGroupText",
-    "storyId": "core-inputgroup--with-prefix",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-input-group-text",
-      "next": ".astryx-text-input"
-    }
-  },
-  {
-    "component": "Overlay",
-    "storyId": "core-overlay--bottom-strip",
+    "component": "Typeahead",
+    "storyId": "core-typeahead--rtl-end-lane",
     "dims": ["D4"],
     "selectors": {
-      "overlay": ".astryx-overlay-scrim .astryx-stack",
-      "overlayRoot": ".astryx-overlay"
+      "overlay": "button[aria-label=\"Clear selection\"]",
+      "overlayRoot": ".astryx-typeahead"
     }
   },
   {
-    "component": "InputGroup",
-    "storyId": "core-inputgroup--with-prefix",
-    "dims": []
+    "component": "TypeaheadItem",
+    "storyId": "core-typeahead--item-with-icon",
+    "dims": ["D2"],
+    "setup": {"click": "[role=\"combobox\"]"},
+    "selectors": {
+      "prev": ".astryx-typeahead-item > :first-child",
+      "next": ".astryx-typeahead-item > :last-child"
+    }
   },
   {
-    "component": "TopNavMegaMenuFeaturedCard",
-    "storyId": "core-topnavmenu--featured-card-link-arrow",
+    "component": "VStack",
+    "storyId": "core-spinner--narrow-flex-host",
     "dims": ["D4"],
     "selectors": {
-      "overlay": ".astryx-top-nav-mega-menu-featured-card a > span",
-      "overlayRoot": ".astryx-top-nav-mega-menu-featured-card a"
+      "overlay": "#storybook-root .astryx-stack > .astryx-stack:first-child",
+      "overlayRoot": "#storybook-root .astryx-stack:has(> .astryx-stack)"
     }
-  },
-  {
-    "component": "TopNavMenu",
-    "storyId": "core-topnavmenu--featured-card-link-arrow",
-    "dims": []
   }
 ]
