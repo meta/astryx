@@ -750,13 +750,22 @@ async function reconcileSpecOwnerGate({
   // The snapshot already read every changed Markdown record at the head; the
   // same text is the spec content there, so the fingerprint reuses it. A
   // renamed record's old path is absent at the head.
+  // A path another change re-adds at the head is present there, not absent.
+  const presentAtHead = new Set(
+    snapshot.files
+      .filter(file => file.status !== 'removed')
+      .map(file => file.filename),
+  );
   for (const record of records) {
     if (!record.path.endsWith('.md') || record.headContent == null) continue;
     textCache.set(
       `${initialHead.toLowerCase()}\0${record.path}`,
       Promise.resolve(record.headContent),
     );
-    if (record.previousPath !== record.path) {
+    if (
+      record.previousPath !== record.path &&
+      !presentAtHead.has(record.previousPath)
+    ) {
       textCache.set(
         `${initialHead.toLowerCase()}\0${record.previousPath}`,
         Promise.resolve(null),
@@ -788,13 +797,19 @@ async function reconcileSpecOwnerGate({
   // no read; a path the list does not name stays unknown and is read.
   function specBlobs(changedFiles) {
     const blobs = new Map();
+    // A path one change renames away and another re-adds is present: the
+    // file's own entry decides, so old paths are marked first. A path with
+    // no blob of its own stays unknown.
     for (const file of changedFiles) {
       if (file.previous_filename && isSpecPath(file.previous_filename)) {
         blobs.set(file.previous_filename, 'absent');
       }
+    }
+    for (const file of changedFiles) {
       if (!isSpecPath(file.filename)) continue;
       if (file.status === 'removed') blobs.set(file.filename, 'absent');
       else if (file.sha) blobs.set(file.filename, file.sha);
+      else blobs.delete(file.filename);
     }
     return blobs;
   }

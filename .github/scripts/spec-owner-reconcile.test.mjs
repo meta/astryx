@@ -1449,6 +1449,43 @@ describe('spec owner workflow reconciliation', () => {
         expect(counter.reads).toBe(601);
       });
 
+      it('resets when a path renamed away is re-added with other text', async () => {
+        // docs/specs/a moves to docs/specs/b, and docs/specs/c takes its
+        // place at docs/specs/a, with text that changed since the approval.
+        const a = 'docs/specs/a/spec.md';
+        const swap = sha => [
+          {
+            filename: a,
+            previous_filename: 'docs/specs/c/spec.md',
+            status: 'renamed',
+            changes: 2,
+            sha,
+          },
+          {
+            filename: 'docs/specs/b/spec.md',
+            previous_filename: a,
+            status: 'renamed',
+            changes: 0,
+            sha: 'blob-b',
+          },
+        ];
+        const harness = createHarness({
+          changedFiles: swap('blob-a-now'),
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${a}`]: changedRecord},
+          filesAt: {[oldHead]: swap('blob-a-approved')},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
+      });
+
       it("still resets when a moved file's text changed", async () => {
         const target = moved[7];
         const harness = createHarness({
