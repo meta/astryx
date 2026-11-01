@@ -547,6 +547,18 @@ describe('pr-touched-components routing', () => {
     );
   });
 
+  it('reads the accessibility baseline from the head that built the audited Storybook', () => {
+    const baseline = step("Check out the head's accessibility baseline");
+    expect(baseline.with).toMatchObject({
+      ref: '${{ github.event.pull_request.head.sha }}',
+      path: '.head-baseline',
+      'sparse-checkout': '.github/a11y-baseline.json',
+    });
+    expect(step('Report per-component results').run).toContain(
+      '--a11y-baseline .head-baseline/.github/a11y-baseline.json',
+    );
+  });
+
   it('records an RTL failure without failing the job, as pr-rtl keeps RTL findings soft', () => {
     const report = {
       components: [
