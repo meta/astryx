@@ -10,8 +10,11 @@
 
 export {
   createAnimatedLayout,
+  holdLayoutEdge,
   holdLayoutExit,
   playLayoutChange,
+  playLayoutEdge,
   releaseLayoutExit,
   reportLayoutChange,
+  reportLayoutEdge,
 } from '../animatedLayout';
