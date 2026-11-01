@@ -401,6 +401,16 @@ export function validateStoryRtlAuditParameters(value, storyId) {
   return result;
 }
 
+/**
+ * Grade a curated order (D2) or scroll-direction (D3) pair. The relationship
+ * must hold in LTR and reverse in RTL. A relationship that keeps its LTR
+ * physical order in RTL is the RTL defect these checks exist for, so it fails
+ * rather than grading `partial` (INV3); so does one already wrong in LTR.
+ */
+export function gradeDirectionalPair(ltrOk, rtlOk) {
+  return ltrOk && rtlOk ? 'pass' : 'fail';
+}
+
 // rtlAudit.D5 declares a region whose positioned elements stay physical
 // (DR5); it never turns D5 off for the story.
 function validatePhysicalPosition(value, storyId) {

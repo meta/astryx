@@ -428,6 +428,41 @@ describe("a close plays the content's exit (spec:AST-105 FR4)", () => {
     expect(groupOf()).toBeNull();
   });
 
+  it('moves focus inside a collapsing TreeList branch to its row while the group plays its exit (component:TreeList AR2)', async () => {
+    const example = (isExpanded: boolean) => (
+      <Area withHandle>
+        {layout => (
+          <TreeList
+            items={[
+              {
+                id: 'src',
+                label: 'src',
+                isExpanded,
+                children: [{id: 'index', label: 'index.ts'}],
+              },
+            ]}
+            animatedLayout={layout}
+          />
+        )}
+      </Area>
+    );
+    const {rerender} = render(example(true));
+    stubGeometry();
+    const groupOf = () =>
+      document.querySelector<HTMLElement>(
+        '[data-tree-id="src"] > [role="group"]',
+      );
+    vi.spyOn(groupOf() as HTMLElement, 'getBoundingClientRect').mockReturnValue(
+      new DOMRect(0, 40, 400, 40),
+    );
+    document.querySelector<HTMLElement>('[data-tree-id="index"]')?.focus();
+    rerender(example(false));
+    await flush();
+    // The group is still there for its exit, inert, so focus left it.
+    expect(groupOf()).toHaveAttribute('inert');
+    expect(document.querySelector('[data-tree-id="src"]')).toHaveFocus();
+  });
+
   it('collapses a row with an expanded child as one change: only the outer group exits, and the child goes with it', async () => {
     const user = userEvent.setup();
     render(
