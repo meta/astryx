@@ -57,6 +57,13 @@ function animationRecorder(): void {
     // Where the run began, as the engine had it when it finished.
     finishStart: number | null;
   }[] = [];
+  // Start events that found no animation to record (see `onStart`).
+  const unread: {
+    at: number;
+    target: EventTarget | null;
+    type: string;
+    name: string;
+  }[] = [];
   // Each recorded animation's entry.
   const entries = new WeakMap<Animation, (typeof log)[number]>();
   // Entries whose start time has not resolved yet (still pending when seen).
@@ -174,8 +181,41 @@ function animationRecorder(): void {
   // first seen a frame later, it would read as started by the watched action.
   record();
   frame(tick);
+  // A start event with nothing left to read: a CSS animation shorter than the
+  // gap between two of the page's frames can start and finish inside it, and
+  // WebKit sends its start event only at the next frame, when
+  // `getAnimations()` no longer lists a finished animation that fills
+  // nothing. No object is left to record, so the event is kept: a wait that
+  // finds nothing names what it missed.
+  const onStart = (event: Event) => {
+    record();
+    const target = event.target;
+    const pseudo = (event as AnimationEvent).pseudoElement || '';
+    const name =
+      event.type === 'animationstart'
+        ? (event as AnimationEvent).animationName
+        : (event as TransitionEvent).propertyName;
+    const seen = log.some(entry => {
+      const effect = entry.animation.effect as KeyframeEffect | null;
+      const a = entry.animation as unknown as {
+        animationName?: string;
+        transitionProperty?: string;
+      };
+      return (
+        effect?.target === target &&
+        (effect?.pseudoElement || '') === pseudo &&
+        (a.animationName ?? a.transitionProperty) === name
+      );
+    });
+    if (!seen) {
+      unread.push({at: performance.now(), target, type: event.type, name});
+      if (unread.length > 500) {
+        unread.splice(0, unread.length - 500);
+      }
+    }
+  };
   for (const type of ['animationstart', 'transitionrun', 'transitionstart']) {
-    document.addEventListener(type, record, true);
+    document.addEventListener(type, onStart, true);
   }
   // A script animation is recorded as it is made: WebKit can start and finish
   // a short one between two frames of a fresh page.
@@ -190,6 +230,7 @@ function animationRecorder(): void {
   };
   w.__harnessAnimations = {
     log,
+    unread,
     record,
     // Record first, then stamp strictly after the newest entry: a step that
     // changed style just before has its transition created by that read,
@@ -205,6 +246,7 @@ function animationRecorder(): void {
     // they keep alive; later waits record afresh.
     release: () => {
       log.length = 0;
+      unread.length = 0;
       unstarted = [];
     },
   };
@@ -914,6 +956,11 @@ async function withinTimeout<T>(
  * the page's first contact with this module, take `watchAnimations(locator)`
  * before the action instead.
  *
+ * In WebKit a CSS animation shorter than a gap between two of the page's
+ * frames can start and finish inside it: its start event comes at the next
+ * frame, when nothing is left to record, and the wait's error names it (a
+ * starved page's frames can come a second apart).
+ *
  * A run going backward is read when it was reversed before it started. The
  * recorder keeps one entry per `Animation` object, so an animation reversed
  * or replayed mid-run is misread: a watch taken before the reversal rejects,
@@ -1130,11 +1177,40 @@ export async function waitForAnimation(
       return found;
     }
     if (Date.now() > deadline) {
+      // Start events on the element that found nothing to read: animations
+      // that started and finished between two of the page's frames.
+      const missed = await locator
+        .evaluate((element, watchedFrom) => {
+          const recorder = (
+            window as unknown as {
+              __harnessAnimations: {
+                unread: {
+                  at: number;
+                  target: EventTarget | null;
+                  name: string;
+                }[];
+                armedAt: () => number;
+              };
+            }
+          ).__harnessAnimations;
+          const after = watchedFrom ?? recorder.armedAt();
+          return recorder.unread
+            .filter(
+              u =>
+                u.at >= after &&
+                u.target instanceof Node &&
+                (u.target === element || element.contains(u.target)),
+            )
+            .map(u => u.name);
+        }, since ?? null)
+        .catch(() => [] as string[]);
       throw new Error(
-        'waitForAnimation: no animation started on the element, none running ' +
-          'and none recorded since the last wait. If the action is the ' +
-          "page's first contact with the harness, take " +
-          'watchAnimations(locator) before it.',
+        missed.length > 0
+          ? `waitForAnimation: the element's ${missed.join(', ')} started and finished between two of the page's frames: its start event came after it had finished, with nothing left to read (WebKit sends it at the next frame; README: engine limits). Make the animation last longer than the page's frame gaps under load.`
+          : 'waitForAnimation: no animation started on the element, none running ' +
+              'and none recorded since the last wait. If the action is the ' +
+              "page's first contact with the harness, take " +
+              'watchAnimations(locator) before it.',
       );
     }
     await new Promise(resolve => setTimeout(resolve, 4));

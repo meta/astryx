@@ -2793,10 +2793,13 @@ test.describe('animation state', () => {
   }) => {
     await fixture(page);
     const box = page.locator('#box');
+    // Long enough to be running at a frame of a starved page, whose frames
+    // can come a second apart: a shorter one can start and finish between
+    // two of them (the case below).
     await page.addStyleTag({
       content:
         '@keyframes enter { from { opacity: 0 } to { opacity: 1 } }' +
-        ' .entering { animation: enter 60ms linear }',
+        ' .entering { animation: enter 1500ms linear }',
     });
     const watch = await watchAnimations(box);
     // The page's time origin, where a lost start lands, is well before the
@@ -2816,14 +2819,68 @@ test.describe('animation state', () => {
     await expect
       .poll(() => box.evaluate(el => el.classList.contains('entering')))
       .toBe(false);
+    const removedSeenAt = await page.evaluate(
+      () => performance.timeOrigin + performance.now(),
+    );
     const [entrance] = await watch.started();
     expect(entrance.kind).toBe('CSSAnimation');
     expect(entrance.finishedAt).not.toBeNull();
-    // It started on a frame after the trigger, not at the page's time origin.
+    // It started on a frame after the trigger, not at the page's time origin,
+    // and ran its whole duration before the page removed the class.
     expect(entrance.from).toBeGreaterThan(triggeredAt - 17);
-    expect(entrance.from).toBeLessThan(triggeredAt + 500);
-    expect(entrance.to - entrance.from).toBeCloseTo(60, 3);
+    expect(entrance.from + 1500).toBeLessThanOrEqual(removedSeenAt + 1);
+    expect(entrance.to - entrance.from).toBeCloseTo(1500, 3);
     expect(entrance.finishedAt ?? 0).toBeGreaterThanOrEqual(entrance.to - 1);
+  });
+
+  test("a CSS animation that starts and finishes between two of the page's frames is named, not reported as never started", async ({
+    page,
+    browserName,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes blink { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .blinking { animation: blink 30ms linear }',
+    });
+    const watch = await watchAnimations(box);
+    // The style is read at once, so the animation exists as the class lands,
+    // and the main thread then stays busy past its end: no frame runs inside
+    // it, as on a starved page whose frames come further apart.
+    await box.evaluate(el => {
+      el.classList.add('blinking');
+      void getComputedStyle(el).opacity;
+      const end = performance.now() + 150;
+      while (performance.now() < end) {
+        // the page's frames wait
+      }
+    });
+    const outcome = await watch.started({timeout: 1_000}).then(
+      started => started.map(a => a.name),
+      (error: Error) => error.message,
+    );
+    if (browserName === 'chromium') {
+      // Chromium starts a pending animation at the next frame, so it runs
+      // then and is recorded.
+      expect(outcome).toEqual(['blink']);
+      return;
+    }
+    // WebKit can start it as it was made: its start event then comes at the
+    // next frame, after it finished, when no animation is left to read, and
+    // the wait names it. When it starts it at the next frame instead, it runs
+    // then and is recorded. Either way it is never reported as never started.
+    if (Array.isArray(outcome)) {
+      expect(outcome).toEqual(['blink']);
+    } else {
+      expect(outcome).toMatch(
+        /the element's blink started and finished between two of the page's frames/,
+      );
+    }
+    test.info().annotations.push({
+      type: 'between-frames',
+      description: Array.isArray(outcome) ? 'recorded' : 'named',
+    });
   });
 
   test('a CSS animation or transition whose element the page removes at its end is dated from its start', async ({
