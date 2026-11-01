@@ -417,7 +417,7 @@ describe('useTypeahead', () => {
       const typeAll = (
         labels: ReadonlyArray<string>,
         keys: ReadonlyArray<string>,
-      ) => {
+      ): number | undefined => {
         const {onMatch, api} = setupLabels(labels);
         keys.forEach(k => api.onKeyDown(key(k)));
         return onMatch.mock.calls.at(-1)?.[0];
@@ -442,7 +442,7 @@ describe('useTypeahead', () => {
       const typeAll = (
         labels: ReadonlyArray<string>,
         keys: ReadonlyArray<string>,
-      ) => {
+      ): number | undefined => {
         const {onMatch, api} = setupLabels(labels);
         keys.forEach(k => api.onKeyDown(key(k)));
         return onMatch.mock.calls.at(-1)?.[0];

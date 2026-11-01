@@ -15,7 +15,7 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
-import {useCollator} from '../i18n';
+import {useCollator} from '../i18n/useCollator';
 
 export interface UseTypeaheadOptions {
   /**
