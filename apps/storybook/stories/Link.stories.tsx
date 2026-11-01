@@ -209,6 +209,14 @@ export const InlineFlow: Story = {
           </HStack>
         </Link>
       </div>
+      <div data-inline-flow="span-stack-child">
+        <Link href="/work-items" color="secondary">
+          <HStack as="span" gap={1} vAlign="center">
+            <Icon icon="chevronLeft" size="sm" color="inherit" />
+            Back to work items
+          </HStack>
+        </Link>
+      </div>
     </div>
   ),
 };

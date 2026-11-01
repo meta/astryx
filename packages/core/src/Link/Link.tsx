@@ -57,13 +57,15 @@ const styles = stylex.create({
   // Link's text behaves as inline text: it truncates with an ancestor Text
   // clamp and, when it wraps, shares its first and last lines with the words
   // around it (`component:Link` FR6). Content with a block-level element (a
-  // Stack, a paragraph) gets a flex box instead, because an inline element
+  // block HTML element, or a Stack rendered as any element, `HStack
+  // as="span"` included) gets a flex box instead, because an inline element
   // paints no focus outline around a block child (AR5). Decided in CSS, not
-  // by reading children.
+  // by reading children; a phrasing element made block by styling alone is
+  // not detected (FR6 records the gap).
   base: {
     display: {
       default: 'inline',
-      ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr))':
+      ':has(:is(div, p, ul, ol, dl, table, figure, section, article, header, footer, nav, aside, form, h1, h2, h3, h4, h5, h6, pre, blockquote, hr, .astryx-stack))':
         'inline-flex',
     },
     alignItems: 'center',

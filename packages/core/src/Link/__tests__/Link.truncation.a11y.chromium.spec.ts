@@ -127,37 +127,42 @@ test("an external Link's icon stays on its last line", async ({page}) => {
   expect(measured.iconMiddle).toBeLessThan(measured.lastLineBottom);
 });
 
-test('keyboard focus paints the outline around a Link with a block child', async ({
-  page,
-}) => {
-  await page.goto(`${storybook.origin}/${INLINE_FLOW}`);
-  const link = page.locator('[data-inline-flow="block-child"] a');
-  await expect(link).toBeVisible();
-  // Tab through the story's links until the back link holds focus.
-  for (let i = 0; i < 4; i++) {
-    await page.keyboard.press('Tab');
-  }
-  await expect(link).toBeFocused();
-  const measured = await link.evaluate(el => {
-    const style = getComputedStyle(el);
-    const box = el.getBoundingClientRect();
-    const child = (
-      el.querySelector('.astryx-stack') as HTMLElement
-    ).getBoundingClientRect();
-    return {
-      outlineStyle: style.outlineStyle,
-      outlineWidth: parseFloat(style.outlineWidth),
-      pieces: el.getClientRects().length,
-      covers:
-        box.left <= child.left + 0.5 &&
-        box.right >= child.right - 0.5 &&
-        box.top <= child.top + 0.5 &&
-        box.bottom >= child.bottom - 0.5,
-    };
+for (const [slot, presses] of [
+  ['block-child', 4],
+  ['span-stack-child', 5],
+] as const) {
+  test(`keyboard focus paints the outline around a Link with a ${slot}`, async ({
+    page,
+  }) => {
+    await page.goto(`${storybook.origin}/${INLINE_FLOW}`);
+    const link = page.locator(`[data-inline-flow="${slot}"] a`);
+    await expect(link).toBeVisible();
+    // Tab through the story's links until the back link holds focus.
+    for (let i = 0; i < presses; i++) {
+      await page.keyboard.press('Tab');
+    }
+    await expect(link).toBeFocused();
+    const measured = await link.evaluate(el => {
+      const style = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      const child = (
+        el.querySelector('.astryx-stack') as HTMLElement
+      ).getBoundingClientRect();
+      return {
+        outlineStyle: style.outlineStyle,
+        outlineWidth: parseFloat(style.outlineWidth),
+        pieces: el.getClientRects().length,
+        covers:
+          box.left <= child.left + 0.5 &&
+          box.right >= child.right - 0.5 &&
+          box.top <= child.top + 0.5 &&
+          box.bottom >= child.bottom - 0.5,
+      };
+    });
+    expect(measured.outlineStyle).not.toBe('none');
+    expect(measured.outlineWidth).toBeGreaterThan(0);
+    // One box around the whole block, so the outline paints around it.
+    expect(measured.pieces).toBe(1);
+    expect(measured.covers).toBe(true);
   });
-  expect(measured.outlineStyle).not.toBe('none');
-  expect(measured.outlineWidth).toBeGreaterThan(0);
-  // One box around the whole block, so the outline paints around it.
-  expect(measured.pieces).toBe(1);
-  expect(measured.covers).toBe(true);
-});
+}
