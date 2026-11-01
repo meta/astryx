@@ -118,11 +118,11 @@ prove the record stays current.
 ## Current state
 
 - The `Astryx` product in `packages/native/apple` holds the SwiftUI views
-  Avatar, AvatarStatusDot, Banner, Button, Card, Heading, Icon, Text,
-  TextInput, and Thumbnail.
+  Avatar, AvatarStatusDot, Banner, Button, Card, Heading, Icon, Item,
+  Text, TextInput, and Thumbnail.
 - Unit tests assert the accessible names and traits that Avatar,
   AvatarStatusDot, Banner, Button, Heading, Icon, TextInput, and Thumbnail set,
-  and Button's Loading value; Card and Text have no accessibility assertions.
+  Item's selected trait, and Button's Loading value; Card and Text have no accessibility assertions.
   X2 is tested in part (Thumbnail's disabled buttons stay mounted and inert),
   and so is X6 (Reduce Motion and Bold Text, and AvatarStatusDot's status
   shown by shape as well as color). X3 has no tests,
