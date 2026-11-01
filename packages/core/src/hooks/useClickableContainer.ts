@@ -109,6 +109,9 @@ export function innermostInteractive(
  * instance, has no ref to hand the hook but needs the identical rule. Sharing
  * the walk keeps one definition of "this click belongs to something else"
  * instead of a short hand-rolled selector list per caller.
+ *
+ * A press inside an open Tooltip or HoverCard surface also answers true: it
+ * belongs to that surface, not the container around its trigger.
  */
 export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
   return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
