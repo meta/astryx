@@ -160,6 +160,37 @@
     }
   },
   {
+    "component": "LayoutContent",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D8"],
+    "selectors": {
+      "subject": ".astryx-layout-content"
+    }
+  },
+  {
+    "component": "LayoutPanel",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-layout-panel",
+      "next": ".astryx-layout-content"
+    }
+  },
+  {
+    "component": "ResizeHandle",
+    "storyId": "core-resizable--horizontal-split",
+    "dims": ["D4"],
+    "selectors": {
+      "overlay": ".astryx-resize-handle",
+      "overlayRoot": ".astryx-layout"
+    }
+  },
+  {
+    "component": "Layout",
+    "storyId": "core-layout--content-width-with-start-panel",
+    "dims": []
+  },
+  {
     "component": "Carousel",
     "storyId": "core-carousel--default",
     "dims": ["D3"],
@@ -616,6 +647,15 @@
     }
   },
   {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
     "component": "DrawerHeader",
     "storyId": "core-drawerheader--audit",
     "dims": ["D2"],
@@ -625,34 +665,34 @@
     }
   },
   {
-    "component": "LayoutContent",
-    "storyId": "core-layout--content-width-with-start-panel",
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
     "dims": ["D8"],
     "selectors": {
-      "subject": ".astryx-layout-content"
+      "subject": ".astryx-blockquote"
     }
   },
   {
-    "component": "LayoutPanel",
-    "storyId": "core-layout--content-width-with-start-panel",
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-layout-panel",
-      "next": ".astryx-layout-content"
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
     }
   },
   {
-    "component": "ResizeHandle",
-    "storyId": "core-resizable--horizontal-split",
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
     "dims": ["D4"],
     "selectors": {
-      "overlay": ".astryx-resize-handle",
-      "overlayRoot": ".astryx-layout"
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
     }
   },
   {
-    "component": "Layout",
-    "storyId": "core-layout--content-width-with-start-panel",
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": []
   }
 ]
