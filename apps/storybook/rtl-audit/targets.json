@@ -392,6 +392,49 @@
     }
   },
   {
+    "component": "SideNavHeading",
+    "storyId": "core-sidenav--default",
+    "dims": ["D2", "D8"],
+    "selectors": {
+      "prev": ".astryx-side-nav-heading .astryx-nav-icon",
+      "next": ".astryx-side-nav-heading span:text-is(\"My App\")",
+      "subject": ".astryx-side-nav-heading"
+    }
+  },
+  {
+    "component": "SideNavItem",
+    "storyId": "core-sidenav--default",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-side-nav-item svg.astryx-icon",
+      "next": ".astryx-side-nav-item span:text-is(\"Dashboard\")"
+    }
+  },
+  {
+    "component": "SideNavSection",
+    "storyId": "core-sidenav--section-end-content",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-side-nav-section span:text-is(\"Projects\")",
+      "next": ".astryx-side-nav-section .astryx-badge"
+    }
+  },
+  {
+    "component": "SideNavCollapseButton",
+    "storyId": "core-sidenav--collapsible-sidebar",
+    "dims": []
+  },
+  {
+    "component": "SideNav",
+    "storyId": "core-sidenav--section-end-content",
+    "dims": []
+  },
+  {
+    "component": "SideNav",
+    "storyId": "core-sidenav--collapsible-sidebar",
+    "dims": []
+  },
+  {
     "component": "NumberInput",
     "storyId": "core-numberinput--with-number-steppers",
     "dims": ["D2"],
@@ -616,6 +659,15 @@
     }
   },
   {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
     "component": "DrawerHeader",
     "storyId": "core-drawerheader--audit",
     "dims": ["D2"],
@@ -625,46 +677,34 @@
     }
   },
   {
-    "component": "SideNavHeading",
-    "storyId": "core-sidenav--default",
-    "dims": ["D2", "D8"],
+    "component": "Blockquote",
+    "storyId": "core-blockquote--default",
+    "dims": ["D8"],
     "selectors": {
-      "prev": ".astryx-side-nav-heading .astryx-nav-icon",
-      "next": ".astryx-side-nav-heading span:text-is(\"My App\")",
-      "subject": ".astryx-side-nav-heading"
+      "subject": ".astryx-blockquote"
     }
   },
   {
-    "component": "SideNavItem",
-    "storyId": "core-sidenav--default",
+    "component": "InputGroupText",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": ["D2"],
     "selectors": {
-      "prev": ".astryx-side-nav-item svg.astryx-icon",
-      "next": ".astryx-side-nav-item span:text-is(\"Dashboard\")"
+      "prev": ".astryx-input-group-text",
+      "next": ".astryx-text-input"
     }
   },
   {
-    "component": "SideNavSection",
-    "storyId": "core-sidenav--section-end-content",
-    "dims": ["D2"],
+    "component": "Overlay",
+    "storyId": "core-overlay--bottom-strip",
+    "dims": ["D4"],
     "selectors": {
-      "prev": ".astryx-side-nav-section span:text-is(\"Projects\")",
-      "next": ".astryx-side-nav-section .astryx-badge"
+      "overlay": ".astryx-overlay-scrim .astryx-stack",
+      "overlayRoot": ".astryx-overlay"
     }
   },
   {
-    "component": "SideNavCollapseButton",
-    "storyId": "core-sidenav--collapsible-sidebar",
-    "dims": []
-  },
-  {
-    "component": "SideNav",
-    "storyId": "core-sidenav--section-end-content",
-    "dims": []
-  },
-  {
-    "component": "SideNav",
-    "storyId": "core-sidenav--collapsible-sidebar",
+    "component": "InputGroup",
+    "storyId": "core-inputgroup--with-prefix",
     "dims": []
   }
 ]

@@ -159,6 +159,42 @@ function isPlatformComponentSpecPath(filePath) {
 }
 
 /**
+ * A package's own architecture record:
+ * `packages/<package>/specs/…/<slug>.spec.md`. Its id is `architecture:`
+ * followed by the package name, each directory between `specs/` and the file,
+ * and the slug, joined by hyphens
+ * (`packages/native/specs/swift/accessibility.spec.md` is
+ * `architecture:native-swift-accessibility`). Null for any other path.
+ */
+function classifyPackageArchitectureRecordPath(filePath) {
+  const match = /^packages\/([^/]+)\/specs\/(.+)$/.exec(
+    normalizePath(filePath),
+  );
+  if (!match) return null;
+  const segments = match[2].split('/');
+  const fileName = segments.pop();
+  if (
+    !/^[a-z0-9][a-z0-9-]*\.spec\.md$/.test(fileName) ||
+    fileName.endsWith('.generated.spec.md') ||
+    segments.some(
+      segment =>
+        segment.startsWith('.') || isIgnoredComponentKnowledgeSegment(segment),
+    )
+  ) {
+    return null;
+  }
+  const slug = fileName.slice(0, -'.spec.md'.length);
+  return {
+    packageName: match[1],
+    id: `architecture:${[match[1], ...segments, slug].join('-')}`,
+  };
+}
+
+function isPackageArchitectureRecordPath(filePath) {
+  return classifyPackageArchitectureRecordPath(filePath) !== null;
+}
+
+/**
  * A platform language's component code file:
  * `<source root>/<Module>/<ComponentRoot>/…/<file>`. Returns the language,
  * component root, and file stem; null for any other path, a spec file, or a
@@ -349,11 +385,13 @@ module.exports = {
   PLATFORM_SOURCE_ROOTS,
   PLATFORM_SPEC_LANGUAGES,
   classifyComponentKnowledgePath,
+  classifyPackageArchitectureRecordPath,
   classifyPlatformComponentSpecPath,
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
   isLegacyComponentSpecPath,
+  isPackageArchitectureRecordPath,
   isPlatformComponentSpecPath,
   locateComponentKnowledgePath,
   locatePlatformComponentSource,
