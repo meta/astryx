@@ -782,11 +782,20 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Layer for dropdown. The list is a manual popover (see usePopover below):
   // while it is open, a press on the combobox itself (its input or its
   // buttons) or in the list is inside, and a press anywhere else closes it
-  // (component:BaseTypeahead FR12). The watch starts when the list shows,
-  // stops when it hides, and stops itself if the field unmounts while open.
-  // An outside press hides the popover element directly, which useLayer
-  // reconciles like the browser's own light dismiss.
+  // (component:BaseTypeahead FR12). The watch starts when the list shows and
+  // stops when it hides or the field unmounts. An outside press hides the
+  // popover element directly, which useLayer reconciles like the browser's
+  // own light dismiss.
   const stopOutsidePressRef = useRef<(() => void) | null>(null);
+  // The watch holds listeners on the field's document, an external system;
+  // a field unmounted while its list is open removes them here.
+  useEffect(
+    () => () => {
+      stopOutsidePressRef.current?.();
+      stopOutsidePressRef.current = null;
+    },
+    [],
+  );
   const handleLayerShow = useCallback(() => {
     onOpenChange?.(true);
     stopOutsidePressRef.current?.();

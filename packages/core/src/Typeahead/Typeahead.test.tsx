@@ -19,7 +19,14 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  cleanup,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
@@ -505,6 +512,17 @@ describe('BaseTypeahead press inside and outside', () => {
     fireEvent.pointerDown(elsewhere, {composed: true});
     fireEvent.pointerCancel(elsewhere, {composed: true});
     expect(input).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('removes its document listeners when the field unmounts with the list open', async () => {
+    const input = await openList();
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    const remove = vi.spyOn(document, 'removeEventListener');
+    cleanup();
+    for (const type of ['pointerdown', 'pointerup', 'pointercancel']) {
+      expect(remove).toHaveBeenCalledWith(type, expect.any(Function), true);
+    }
+    remove.mockRestore();
   });
 
   it('keeps the list open on a press in its input inside a shadow root', async () => {

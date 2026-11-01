@@ -15,14 +15,12 @@
  * follows closes the layer if it is outside too, and a pointercancel (the
  * browser took the gesture for a scroll or a pinch) forgets it. Inside is
  * judged on the event's composed path, so a field or list inside a shadow
- * root, which the document sees as its shadow host, is still inside. The watch
- * also stops itself at the first press after its owner leaves the document, so
- * an owner unmounted while its layer is open needs no cleanup of its own.
+ * root, which the document sees as its shadow host, is still inside.
  */
 
 /**
  * Watch the owner's document for a press outside, until the returned function
- * is called or the owner leaves the document.
+ * is called. The caller stops it when its layer hides and when it unmounts.
  *
  * @param owner - The element that owns the layer (the field); its document is
  *   watched.
@@ -40,10 +38,6 @@ export function watchOutsidePress(
 
   // Capture phase, so a press whose target stops propagation is still seen.
   const handleDown = (event: PointerEvent) => {
-    if (!owner.isConnected) {
-      stop();
-      return;
-    }
     startedOutside = !isInside(event.composedPath());
   };
   const handleUp = (event: PointerEvent) => {
@@ -57,14 +51,12 @@ export function watchOutsidePress(
     startedOutside = false;
   };
 
-  function stop() {
-    doc.removeEventListener('pointerdown', handleDown, true);
-    doc.removeEventListener('pointerup', handleUp, true);
-    doc.removeEventListener('pointercancel', handleCancel, true);
-  }
-
   doc.addEventListener('pointerdown', handleDown, true);
   doc.addEventListener('pointerup', handleUp, true);
   doc.addEventListener('pointercancel', handleCancel, true);
-  return stop;
+  return () => {
+    doc.removeEventListener('pointerdown', handleDown, true);
+    doc.removeEventListener('pointerup', handleUp, true);
+    doc.removeEventListener('pointercancel', handleCancel, true);
+  };
 }
