@@ -6,4 +6,6 @@
 
 Before, a disabled radio rendered native `disabled`, so Tab skipped a group disabled without a reason and a screen reader moving by focus never reached it. Now it takes focus and is announced as disabled. Accessibility target: `spec:AST-085` FR1–FR4 (disabled controls stay focusable) and the WAI-ARIA radio group pattern.
 
-@cixzhang
+@korkt-kim also proposed keeping a disabled radio focusable and inert in #9301.
+
+@cixzhang @duytbp
