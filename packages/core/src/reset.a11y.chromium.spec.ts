@@ -5,8 +5,8 @@
  * @file reset.a11y.chromium.spec.ts
  * @input packages/core/src/reset.css, alone on a blank Chromium page
  * @output Browser evidence that the reset reaches ::before, ::after,
- *   ::placeholder, the search field's cancel button and the dropdown marker
- *   of a field with a list
+ *   ::placeholder, the search field's cancel button, the dropdown marker of
+ *   a field with a list and the row of a date or time field
  * @position reset.css integration proof. A pseudo-element inside :where() is
  *   invalid, and the forgiving list drops it without an error, so only a
  *   shipping engine shows which of the reset's rules still match.
@@ -204,6 +204,44 @@ test('the dropdown marker of a field with a list sits in its middle', async ({
   );
   const markerMiddle = (inkRows[0] + inkRows[inkRows.length - 1] + 1) / 2;
   expect(Math.abs(markerMiddle - png.height / 2)).toBeLessThanOrEqual(1);
+});
+
+test('a date or time field is as tall as a text field with the same styles', async ({
+  page,
+}) => {
+  // Chromium pads the row of editable date and time fields 1px top and
+  // bottom, inside the input where the field's own padding rule cannot reach.
+  const types = ['text', 'date', 'time', 'datetime-local', 'month', 'week'];
+  await page.evaluate(fieldTypes => {
+    const fields = document.createElement('div');
+    fields.id = 'fields';
+    for (const type of fieldTypes) {
+      const input = document.createElement('input');
+      input.type = type;
+      fields.append(input);
+    }
+    document.body.append(fields);
+  }, types);
+  await page.addStyleTag({
+    content: `
+      #fields input {
+        display: block;
+        padding: 7px 11px;
+        border: 1px solid;
+        line-height: 1.5;
+      }
+    `,
+  });
+  const heights = await page
+    .locator('#fields input')
+    .evaluateAll(inputs =>
+      inputs.map(input => [
+        input.getAttribute('type'),
+        input.getBoundingClientRect().height,
+      ]),
+    );
+  const textHeight = heights[0][1];
+  expect(heights).toEqual(types.map(type => [type, textHeight]));
 });
 
 test('a later layer and an unlayered rule still override the reset', async ({
