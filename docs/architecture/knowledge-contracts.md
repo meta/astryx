@@ -206,7 +206,9 @@ Every record is either:
   separable delta that violates current authority or requires a new human decision
   is removed or split before review asks the primary change to carry new authority.
   A specification is the path for an intentional durable decision, not the default
-  remedy for unrelated scope discovered during review.
+  remedy for unrelated scope discovered during review. An added or changed public
+  API row that no current record decides is the exception: it goes to human
+  review for an owner's decision instead (change coupling step 6).
 - **INV16 — Specs govern; generated review context only informs.** Committed current
   component, module, family, design, theme, architecture, and system records own
   intended product behavior. Reviewer-generated summaries, sections, checklists,
@@ -580,7 +582,12 @@ Before any component, module, family, design, theme, or architecture record beco
    Review may request that contraction without deciding the tagalong's semantics,
    then continue reviewing the remaining change. A `novel-human` delta enters a
    private human hold only when it is the primary intent, is inseparable from it,
-   or the author or owner explicitly chooses to pursue it.
+   or the author or owner explicitly chooses to pursue it. An added or changed
+   row of a pull request's public API changes
+   (`architecture:public-component-api` INV24) that is `novel-human` instead
+   sends the pull request to human review with that row listed, whether or not
+   it is separable; an owner of that record accepts, splits, or removes it, and
+   review never requests changes for that row alone.
 7. A bug fix is `preserves` only when it restores existing current authority
    without changing public API or public behavior beyond that contract. Any
    separable API, visual, layout, or interaction tagalong follows step 5 or 6
@@ -611,8 +618,11 @@ Review and build should converge on the smallest ideal change that can land:
    specification unless changing policy is itself an intentional, separately
    reviewable goal.
 4. For an unsettled but separable delta, remove or split it. Continue the primary
-   change without asking the contributor to solve adjacent system design.
-5. Escalate only a surviving, intentional `novel-human` delta. Record only the
+   change without asking the contributor to solve adjacent system design. An
+   undeclared public API row is the exception: it goes to human review for an
+   owner to accept, split, or remove (change coupling step 6).
+5. Escalate only a surviving, intentional `novel-human` delta or an undeclared
+   public API row. Record only the
    exact decision needed for that delta; adjacent module behavior may stay
    uncontracted.
 
@@ -627,7 +637,9 @@ contraction. It does not merely report that authority is missing.
    specification.
 2. A reviewer or agent applies the contraction path above. Only a surviving,
    intentional `novel-human` question proceeds; the contributor does not invent
-   the answer or specify unrelated adjacent behavior.
+   the answer or specify unrelated adjacent behavior. An undeclared public API
+   row also proceeds, as change coupling step 6 describes, rather than being
+   removed or split by review.
 3. An authorized owner answers in the pull-request review.
 4. A maintainer or agent records that ruling in the canonical owning record.
    - Prefer a commit in the same pull request when maintainers can update the
@@ -830,7 +842,7 @@ authority.
 When an otherwise reviewable change carries a separable contradiction or unsettled
 decision, remove or split that delta and keep the primary intent moving. Recommend
 a specification only when the surviving delta is intentionally pursued as durable
-behavior, not because review discovered adjacent incompleteness.
+behavior, not because review discovered adjacent incompleteness. An undeclared public API row is the exception: change coupling step 6 sends it to human review for an owner's decision, and review does not remove or split it.
 
 Rejected: turning every uncontracted tagalong into a specification project, because
 that makes a narrow repair absorb unrelated design work and leaves the contributor
@@ -1068,8 +1080,9 @@ requested changes and can reply /approve-spec <sha>`. An approved spec change
   changed paths and the fingerprint, and say why an earlier act no longer
   counts: the spec changed after approval, it was revoked, or the command was
   malformed.
-- **Mirror.** `spec-owner-approval` reports the spec half with a minimal
-  description while branch protection still requires it; it decides nothing
+- **Decision record.** `spec-owner-approval` reports the spec half with a
+  minimal description, and the other writers of `review-required` read the
+  spec half from it. It is not a required check and decides nothing
   `review-required` does not already show.
 - **Event coverage.** Every pull-request event, same-repository review, and
   owner command re-evaluates the gate, and each evaluation publishes a terminal

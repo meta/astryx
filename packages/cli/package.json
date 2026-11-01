@@ -107,6 +107,7 @@
     "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "astryx": "node clients/cli/bin/astryx.mjs",
     "postinstall": "node scripts/postinstall.mjs",
     "test": "cd ../.. && vitest run packages/cli",

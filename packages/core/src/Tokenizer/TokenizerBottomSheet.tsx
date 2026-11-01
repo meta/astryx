@@ -35,6 +35,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {AlertDialog} from '../AlertDialog/AlertDialog';
 import {BottomSheet} from '../BottomSheet/BottomSheet';
@@ -328,8 +329,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // trigger's press — so an open sheet with no confirmation pending carries
   // no closed dialog (`architecture:component-style-authoring` INV7). Dialog
   // has an entrance animation and no exit, so a close is its unmount; the
-  // sheet then places focus itself, in the Effect below, once the modal is
-  // gone and the sheet's content can take focus again: on the search field
+  // close handler commits that unmount at once and then places focus itself,
+  // now that the modal is gone and the sheet's content can take focus again
+  // (`architecture:react-component-runtime` INV2): on the search field
   // after a confirmed clear — the clear is spent, and the search field is
   // where the next selection starts (FR24, `spec:AST-085` FR4) — and back on
   // Clear all after a cancel. A confirmed clear is announced there too — a
@@ -341,25 +343,17 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // dialog, so FR14 routes the words into it while the sheet is open.
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const clearAllRef = useRef<HTMLButtonElement>(null);
-  const afterConfirmationRef = useRef<'search' | 'clear-all' | null>(null);
   const announce = useAnnounce();
   const closeClearConfirmation = (confirmed: boolean) => {
-    afterConfirmationRef.current = confirmed ? 'search' : 'clear-all';
-    setIsClearConfirmationOpen(false);
-  };
-  useEffect(() => {
-    if (isClearConfirmationOpen || afterConfirmationRef.current == null) {
-      return;
-    }
-    const destination = afterConfirmationRef.current;
-    afterConfirmationRef.current = null;
-    if (destination === 'search') {
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves into the sheet and the words are routed into it
+    flushSync(() => setIsClearConfirmationOpen(false));
+    if (confirmed) {
       searchRef.current?.focus();
       announce(t('@astryx.tokenizer.allRemoved'));
     } else {
       clearAllRef.current?.focus();
     }
-  }, [announce, isClearConfirmationOpen, t]);
+  };
   const selectedIds = useMemo(() => new Set(value.map(v => v.id)), [value]);
 
   // ---- sheet session ----

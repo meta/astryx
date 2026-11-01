@@ -215,11 +215,20 @@ those contracts.
   transient copy of the old content (`spec:AST-105` FR8). Two Core components hold their own handle
   for their own change: AppShell's content area and the SideNav rail, during a
   side nav collapse or expand (`component:AppShell` FR17, `component:SideNav`
-  FR6), each making its copy through the swap. The module may also play
+  FR6), each making its copy through the swap. A resize controller also holds
+  its own handle for a LayoutPanel's collapse and open, with no copy
+  (`component:Resizable` FR8). The module may also play
   caller-supplied frames on elements the page already renders, on the one
   shared motion, with no copy, releasing them when the motion ends; AppShell's
   content surface uses this to cover an expand's gap when its old wrap is not
-  copied. Neither is public
+  copied. The module also produces `spec:AST-105` FR9's edge reveal, the one
+  edge reveal in Core: Collapsible, TreeList and Table's row expansion
+  (`component:Table` FR15) use its block-end form, the SideNav rail
+  uses its inline-edge two-state form and keeps only its labels' and icons'
+  fades of its own, and a resizable LayoutPanel's pane uses it on collapse and
+  open, moving the content on its moving edge's side, the resize controller measuring the pane's box before and after its
+  collapse state commits and playing from the edge its direction names
+  (`component:Resizable` FR8, `component:LayoutPanel` FR7). None of these is public
   (`architecture:component-style-authoring` INV7). The module follows INV3
   and INV5.
 - **INV13 — One shared set of internal touch modules.** Core's touch
