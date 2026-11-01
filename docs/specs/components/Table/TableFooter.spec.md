@@ -15,7 +15,6 @@ verified_by:
     packages/core/src/Table/Table.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
-    apps/storybook/rtl-audit/verified-not-applicable.json,
   ]
 modules: []
 families: []
@@ -129,12 +128,11 @@ anatomy of its own, so no anatomy-theming block is declared here.
 
 ## Verification map
 
-| Contract     | Verification                                                                       | Representative states     | Mutation or failure expectation                                                                                                                                                                                                | Audit section                |
-| ------------ | ---------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
-| FR1, AR1     | `Table.test.tsx` section rest-forwarding test; `themingTargets.test.ts`            | Inside a plain `table`    | A missing `tfoot` fails. Gap: no test renders TableFooter inside a Table, asserts its `table-footer` class, or asserts that it adds no role or styles. `themingTargets.test.ts` catches only a renamed or undocumented target. | `audit:TableFooter/anatomy`  |
-| FR2, ORD1    | `Table.test.tsx` section rest-forwarding test                                      | `data-testid`, `id`       | A dropped `data-testid` or `id` fails. Gap: no test covers `ref`, event props, `className`, `style`, or `xstyle`.                                                                                                              | `audit:TableFooter/api`      |
-| PR1          | Source review                                                                      | Every state               | Gap: no automated check fails if TableFooter adds state or a listener.                                                                                                                                                         | `audit:TableFooter/behavior` |
-| RTL relation | Verified-N/A declaration (`apps/storybook/rtl-audit/verified-not-applicable.json`) | None: no story renders it | Gap: no story renders TableFooter, so the audit cannot detect a direction-sensitive change in it; the declaration rests on source review (the same plain section wrapper as TableBody, which the `Children mode` route scans). | `audit:TableFooter/i18n-rtl` |
+| Contract  | Verification                                                            | Representative states  | Mutation or failure expectation                                                                                                                                                                                                | Audit section                |
+| --------- | ----------------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- |
+| FR1, AR1  | `Table.test.tsx` section rest-forwarding test; `themingTargets.test.ts` | Inside a plain `table` | A missing `tfoot` fails. Gap: no test renders TableFooter inside a Table, asserts its `table-footer` class, or asserts that it adds no role or styles. `themingTargets.test.ts` catches only a renamed or undocumented target. | `audit:TableFooter/anatomy`  |
+| FR2, ORD1 | `Table.test.tsx` section rest-forwarding test                           | `data-testid`, `id`    | A dropped `data-testid` or `id` fails. Gap: no test covers `ref`, event props, `className`, `style`, or `xstyle`.                                                                                                              | `audit:TableFooter/api`      |
+| PR1       | Source review                                                           | Every state            | Gap: no automated check fails if TableFooter adds state or a listener.                                                                                                                                                         | `audit:TableFooter/behavior` |
 
 ## Decision log
 

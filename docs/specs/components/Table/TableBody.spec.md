@@ -15,8 +15,6 @@ verified_by:
     packages/core/src/Table/Table.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
     scripts/check-knowledge.mjs,
-    apps/storybook/rtl-audit/verified-not-applicable.json,
-    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: []
@@ -130,12 +128,11 @@ anatomy of its own, so no anatomy-theming block is declared here.
 
 ## Verification map
 
-| Contract     | Verification                                                                                                                                                                                                       | Representative states                          | Mutation or failure expectation                                                                                                                                                                                | Audit section              |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| FR1, AR1     | `Table.test.tsx` children-mode section tests; `themingTargets.test.ts`                                                                                                                                             | Children mode                                  | A missing `tbody` in the table's children fails. Gap: no test asserts the `table-body` class or that TableBody adds no role or styles. `themingTargets.test.ts` catches only a renamed or undocumented target. | `audit:TableBody/anatomy`  |
-| FR2, ORD1    | `Table.test.tsx` section rest-forwarding test                                                                                                                                                                      | `data-testid`, `id`                            | A dropped `data-testid` or `id` fails. Gap: no test covers `ref`, event props, `className`, `style`, or `xstyle`.                                                                                              | `audit:TableBody/api`      |
-| PR1          | Source review                                                                                                                                                                                                      | Every state                                    | Gap: no automated check fails if TableBody adds state or a listener.                                                                                                                                           | `audit:TableBody/behavior` |
-| RTL relation | Verified-N/A declaration (`apps/storybook/rtl-audit/verified-not-applicable.json`) plus a route-only RTL audit target (`apps/storybook/rtl-audit/targets.json`) that scans the `Children mode` story for TableBody | The `Table / Children mode` story, LTR and RTL | An unmirrored directional icon, a logical-anchor placement with a physical transform, or a contextual directional decoration that the audit detects on TableBody in that story reports the declaration stale.  | `audit:TableBody/i18n-rtl` |
+| Contract  | Verification                                                           | Representative states | Mutation or failure expectation                                                                                                                                                                                | Audit section              |
+| --------- | ---------------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| FR1, AR1  | `Table.test.tsx` children-mode section tests; `themingTargets.test.ts` | Children mode         | A missing `tbody` in the table's children fails. Gap: no test asserts the `table-body` class or that TableBody adds no role or styles. `themingTargets.test.ts` catches only a renamed or undocumented target. | `audit:TableBody/anatomy`  |
+| FR2, ORD1 | `Table.test.tsx` section rest-forwarding test                          | `data-testid`, `id`   | A dropped `data-testid` or `id` fails. Gap: no test covers `ref`, event props, `className`, `style`, or `xstyle`.                                                                                              | `audit:TableBody/api`      |
+| PR1       | Source review                                                          | Every state           | Gap: no automated check fails if TableBody adds state or a listener.                                                                                                                                           | `audit:TableBody/behavior` |
 
 ## Decision log
 

@@ -643,20 +643,5 @@
       "prev": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] span:text-is(\"1 selected\")",
       "next": "[role=\"toolbar\"][aria-label=\"Bulk actions\"] button:has-text(\"Unselect All\")"
     }
-  },
-  {
-    "component": "TableHeader",
-    "storyId": "core-table--children-mode",
-    "dims": []
-  },
-  {
-    "component": "TableBody",
-    "storyId": "core-table--children-mode",
-    "dims": []
-  },
-  {
-    "component": "TableRow",
-    "storyId": "core-table--children-mode",
-    "dims": []
   }
 ]
