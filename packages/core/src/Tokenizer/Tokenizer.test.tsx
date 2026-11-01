@@ -165,6 +165,38 @@ describe('Tokenizer minQueryLength', () => {
   });
 });
 
+// component:Tokenizer FR25: a press in the field keeps the list open.
+describe('Tokenizer press inside and outside', () => {
+  it('keeps the list open on a press in its input and closes it on a press elsewhere', async () => {
+    render(
+      <>
+        <Tokenizer
+          label="People"
+          searchSource={userSource}
+          value={[]}
+          onChange={() => {}}
+          debounceMs={0}
+        />
+        <p>Elsewhere</p>
+      </>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    fireEvent.change(input, {target: {value: 'Ali'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    fireEvent.pointerDown(input);
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.pointerDown(screen.getByText('Elsewhere'));
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+});
+
 describe('Tokenizer', () => {
   it('forwards DOM props and ref to the combobox input while preserving focus callbacks', () => {
     const ref = createRef<HTMLInputElement>();

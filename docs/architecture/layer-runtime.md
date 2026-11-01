@@ -297,6 +297,13 @@ during a press so native light dismissal does not mistake them for outside
 interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
+A text field that owns a layer (a combobox's list) cannot be an invoker, so its
+layer is a manual popover: a press on the field, its tokens or its buttons, or in
+the layer, is inside; a press anywhere else closes it, and Escape stays on the
+shared stack. Implementation gap: this outside-press check is the third copy,
+beside `useTouchTrigger`'s tap dismissal and ContextMenu's, until one shared
+helper serves all three (`architecture:react-component-runtime` INV16).
+
 ### Current dismissal plumbing
 
 `family:overlay-dismissal` owns the shipped Escape/platform-close membership
