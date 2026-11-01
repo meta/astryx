@@ -63,7 +63,8 @@ deciding_specs: [spec:AST-038, spec:AST-059]
       "INV11",
       "INV12",
       "INV14",
-      "INV15"
+      "INV15",
+      "INV17"
     ],
     "layout": ["INV3", "INV11", "INV12"]
   }
@@ -71,7 +72,8 @@ deciding_specs: [spec:AST-038, spec:AST-059]
 ```
 
 This record describes the layer runtime shipped on current `main`, except
-INV14 and INV15, which state required ownership the runtime does not yet meet;
+INV14, INV15, and INV17, which state required ownership the runtime does not
+yet meet;
 Current gaps lists where it falls short. Other accepted but unimplemented
 changes live in `spec:AST-003`; they are not current architecture.
 
@@ -507,6 +509,15 @@ layers use Layer rendering without joining Escape/platform dismissal.
   any surface that lifts uses this module and never its own copy, and layers
   that do not lift do not use it. It is internal and unexported
   (`spec:AST-017` FR21).
+- **INV17 — A click inside a layer stops at the layer root.** A pointer,
+  mouse, touch, or click event that starts inside a layer root (both
+  `useLayer` renderers and the Dialog, Drawer, Lightbox, MobileNav,
+  BottomSheetPanel, and ToastViewport content roots) runs the handlers inside
+  the layer, then stops propagating through the React tree: no ancestor of the
+  layer's JSX position receives it, including a caller's own element. A nested
+  layer stops at its own root. The native event is not stopped, so document
+  and window listeners and light dismiss still receive it. Keyboard, focus,
+  input, wheel, and drag events are out of scope.
 
 This record does not make future eligible-owner, branch-association, global-host,
 or browser-support requirements current. It does not own component focus entry or
@@ -546,6 +557,16 @@ keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules
 above are the stack's, the mounting under them is this gap's.
 
+INV17 is not met yet. Implementation gap: not built. A press inside a layer
+still propagates through the React tree to the ancestors of the layer's JSX
+position; only Tooltip and HoverCard surfaces are guarded, and only against
+the Core containers that check them (`component:Tooltip` FR11,
+`component:HoverCard` FR11). Compatibility: closing the gap is a patch
+`[fix]`. Propagation across a layer boundary is not intended behavior, so a
+caller's ancestor handler receiving clicks from inside a layer is the defect;
+an app wrapper that relied on it attaches its handler to the layer content
+instead.
+
 ## Change coupling
 
 - A change to `useLayer` hosting or lifecycle verifies safe inline placement,
@@ -565,6 +586,9 @@ above are the stack's, the mounting under them is this gap's.
   Escape/platform delivery changes.
 - A local outside, backdrop, touch, hover, or swipe change preserves the owning
   component's policy and verifies interactions with nested surfaces.
+- A change to a layer content root or to the INV17 seam verifies that a press
+  inside each kind of root reaches no ancestor handler and still reaches
+  document listeners and light dismiss.
 - A Toast host change preserves queued and visible toasts, timers, focus handoff,
   theme context, and ordering.
 - A CommandPalette host change preserves native modality, search state, focus
@@ -592,6 +616,11 @@ above are the stack's, the mounting under them is this gap's.
   transitions of a layer and its content across the re-placement's display
   reset.
 - `Layer/gestureCounter.ts` owns physical pointer/key gesture identity.
+- One shared seam in the layer runtime owns INV17's stop on every layer content
+  root. It stops propagation through the React tree only. React's
+  `stopPropagation()` also stops the native event in React 19, which would
+  break ContextMenu's outside `mousedown`, Typeahead's pending click, and the
+  layer's keep-open `pointerup`, so the seam never stops the native event.
 - `Layer/layerStack.ts`, `Layer/useLayerDismissal.ts`, and
   `Layer/LayerDepthContext.tsx` own current registration, presence, ordering, and
   Escape/platform routing.
@@ -646,6 +675,7 @@ this current architecture record.
 | INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests                                                                                                                                                                                                  | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
 | INV10        | `LayerProvider.tsx`, `LayerProvider.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, and `ToastViewport.modalHost.test.tsx`                                                                                                                                                      | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, or a default provider renders differently from no provider                                                                                                                                                                                                                                                                           |
 | INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module                                                                                                                          | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                                                                                                                                                                                                                                     |
+| INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers        | A click inside a layer root that reaches an ancestor handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                                 |
 
 Current unit coverage proves emitted styles, reducers, state transitions, and DOM
 placement. Native Popover, `<dialog>`, focus, top-layer ordering, and rendered
