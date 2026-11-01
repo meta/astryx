@@ -3,8 +3,8 @@
 /**
  * @file vitest.config.ts
  * @input Uses vitest/config, @vitejs/plugin-react
- * @output Vitest configuration with jsdom, coverage, test setup, and the two
- *   test projects (`ui`, `node`)
+ * @output Vitest configuration with jsdom, coverage, test setup, the two
+ *   test projects (`ui`, `node`), and the sequencer that splits `--shard` legs
  * @position Root test config and the actual test entry point. The two projects
  *   under `test.projects` decide which files run where via their per-project
  *   include lists. The root-level `test` options (globals, environment,
@@ -22,6 +22,7 @@ import path from 'node:path';
 import {configDefaults, defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import stylexResolution from './scripts/stylex-module-resolution.cjs';
+import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
@@ -85,6 +86,10 @@ export default defineConfig({
     // (e.g. Chat composer tests with contentEditable + popover portals in
     // jsdom). Vitest 4 removed `poolOptions`; per-worker argv is now top-level.
     execArgv: ['--max-old-space-size=4096'],
+    // A `--shard` leg of the `node` project runs files chosen by their
+    // recorded time, not by count, so the slowest files never share a leg
+    // (scripts/vitest-shard-sequencer.mjs, spec:AST-030 FR22).
+    sequence: {sequencer: DurationShardSequencer},
     // Test projects (migrated from vitest.workspace.ts). Partitioning rule
     // (nothing can fall through):
     //   - `ui`   = packages/core + packages/lab + packages/charts + packages/richtext
