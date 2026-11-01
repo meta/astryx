@@ -184,6 +184,8 @@ Apple Human Interface Guidelines (`spec:AST-093` FR3).
 Theme values read (`spec:AST-093` FR4): `color.accent`, `color.onAccent`,
 `color.error`, `color.onError`, `color.neutral`, `color.textPrimary`,
 `color.backgroundSurface` and `color.borderEmphasized` (the solid fallback),
+the native theme's `material` intent, including an `ios` entry's `material`
+(`spec:AST-082` FR10; ORD2),
 `size.elementSm`, `size.elementMd`, `size.elementLg`, `radius.element`,
 `space` steps for padding, `font.label` and `font.family.body`, the
 `shadow.low`, `shadow.med`, and `shadow.high` layers, and the Dynamic Type
