@@ -642,5 +642,15 @@
       "prev": "button[aria-label=\"Collapse sidebar\"]",
       "next": "button[aria-label=\"Help\"]"
     }
+  },
+  {
+    "component": "SideNav",
+    "storyId": "core-sidenav--section-end-content",
+    "dims": []
+  },
+  {
+    "component": "SideNav",
+    "storyId": "core-sidenav--collapsible-sidebar",
+    "dims": []
   }
 ]
