@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/Grid/Grid.test.tsx,
     apps/storybook/stories/Grid.stories.tsx,
     packages/core/src/theme/themingTargets.test.ts,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:layout-primitives]
@@ -137,12 +138,13 @@ its own, so no anatomy-theming block is declared here.
 
 ## Verification map
 
-| Contract | Verification                                                         | Representative states              | Mutation or failure expectation                                                                                                                                                                             | Audit section             |
-| -------- | -------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| FR1, FR2 | `Grid.test.tsx` GridSpan suite                                       | Numeric, full, row, combined, none | A wrong inline `grid-column` or `grid-row`, or a span set when none is given, fails. Gap: the `grid-span` target, the one-track inner grid, the zero minimum width, and the full height have no unit check. | `audit:GridSpan/layout`   |
-| FR3      | `Grid.test.tsx` GridSpan ref and passthrough tests                   | Ref; extra props                   | A dropped ref or `aria-label` fails. Gap: the ref test accepts any element, and spans winning over caller `style` and the styling-input merge have no check.                                                | `audit:GridSpan/api`      |
-| AR2      | `Grid.stories.tsx` long-content play and AuditMatrix full-span check | Long shrinkable child; full span   | Content escaping its track or a full span missing explicit columns fails the play.                                                                                                                          | `audit:GridSpan/layout`   |
-| AR1, PR1 | `serverSafeComponents.test.ts`; source review                        | Every state                        | A client API added without a client directive fails `serverSafeComponents.test.ts`. Gap: a client API added together with a client directive passes, and no automated check fails if GridSpan adds a role.  | `audit:GridSpan/behavior` |
+| Contract     | Verification                                                                                     | Representative states                                     | Mutation or failure expectation                                                                                                                                                                             | Audit section             |
+| ------------ | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| FR1, FR2     | `Grid.test.tsx` GridSpan suite                                                                   | Numeric, full, row, combined, none                        | A wrong inline `grid-column` or `grid-row`, or a span set when none is given, fails. Gap: the `grid-span` target, the one-track inner grid, the zero minimum width, and the full height have no unit check. | `audit:GridSpan/layout`   |
+| FR3          | `Grid.test.tsx` GridSpan ref and passthrough tests                                               | Ref; extra props                                          | A dropped ref or `aria-label` fails. Gap: the ref test accepts any element, and spans winning over caller `style` and the styling-input merge have no check.                                                | `audit:GridSpan/api`      |
+| AR2          | `Grid.stories.tsx` long-content play and AuditMatrix full-span check                             | Long shrinkable child; full span                          | Content escaping its track or a full span missing explicit columns fails the play.                                                                                                                          | `audit:GridSpan/layout`   |
+| AR1, PR1     | `serverSafeComponents.test.ts`; source review                                                    | Every state                                               | A client API added without a client directive fails `serverSafeComponents.test.ts`. Gap: a client API added together with a client directive passes, and no automated check fails if GridSpan adds a role.  | `audit:GridSpan/behavior` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Grid / With grid span` | A two-column span beside a single-track item; LTR and RTL | A span that is not at the inline start of the item after it fails D2.                                                                                                                                       | `audit:GridSpan/i18n-rtl` |
 
 ## Decision log
 
