@@ -9,12 +9,16 @@
  * keys (`transitionDuration`), not CSS declarations. Everything here reads
  * that shape.
  *
- * Usage: node scripts/generate-motion-audit.mjs
+ * Usage: pnpm -F @astryxdesign/sandbox generate:motion-audit writes the file,
+ * formatted as the repository formats it, so a run whose counts are current
+ * leaves the tree clean; `check:motion-audit` (`--check`) compares instead,
+ * and fails when the checked-in file is not what a run would write.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
+import {format, resolveConfig} from 'prettier';
 
 // This script sits inside the lab it feeds, so everything the lab needs is in
 // one directory: the pages, the shared modules, the generated data, and the
@@ -39,7 +43,15 @@ for (const pkg of PACKAGES) {
 
 // --- collect ---------------------------------------------------------------
 
-const SKIP_DIRS = new Set(['__tests__', '__snapshots__', 'node_modules']);
+// `generated-locales` holds Core's locale modules, which `pnpm install` writes and
+// git ignores: counting them would make the audit depend on how the checkout
+// was installed.
+const SKIP_DIRS = new Set([
+  '__tests__',
+  '__snapshots__',
+  'node_modules',
+  'generated-locales',
+]);
 const isSource = f =>
   /\.(ts|tsx|css)$/.test(f) && !/\.(test|stories)\.tsx?$/.test(f);
 
@@ -447,10 +459,30 @@ export const ANIMATING_COMPONENTS: ReadonlyArray<string> = ${JSON.stringify(anim
 export const STATIC_COMPONENTS: ReadonlyArray<string> = ${JSON.stringify(staticComponents)};
 `;
 
-fs.mkdirSync(path.dirname(OUT), {recursive: true});
-fs.writeFileSync(OUT, out);
-console.log(
-  `[motion-audit] core@${version} (core+lab): ${counts.hardcodedTotal} hardcoded, ` +
-    `${counts.filesWithoutReducedMotion} files without reduced motion, ` +
-    `${counts.transformTransitions} transform transitions -> ${path.relative(APP, OUT)}`,
-);
+// The checked-in file is formatted, so what a run writes is formatted too.
+const expected = await format(out, {
+  ...(await resolveConfig(OUT)),
+  filepath: OUT,
+});
+
+if (process.argv.slice(2).includes('--check')) {
+  const actual = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
+  if (actual !== expected) {
+    console.error(
+      `[motion-audit] ${path.relative(APP, OUT)} is not what a run writes now. ` +
+        'Run `pnpm -F @astryxdesign/sandbox generate:motion-audit` and commit the result.',
+    );
+    process.exit(1);
+  }
+  console.log(
+    `[motion-audit] ${path.relative(APP, OUT)} matches core@${version} (core+lab)`,
+  );
+} else {
+  fs.mkdirSync(path.dirname(OUT), {recursive: true});
+  fs.writeFileSync(OUT, expected);
+  console.log(
+    `[motion-audit] core@${version} (core+lab): ${counts.hardcodedTotal} hardcoded, ` +
+      `${counts.filesWithoutReducedMotion} files without reduced motion, ` +
+      `${counts.transformTransitions} transform transitions -> ${path.relative(APP, OUT)}`,
+  );
+}

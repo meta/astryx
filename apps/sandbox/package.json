@@ -7,6 +7,7 @@
     "build:deps": "pnpm -F @astryxdesign/theme-neutral build && pnpm -F @astryxdesign/theme-matcha build && pnpm -F @astryxdesign/theme-stone build && pnpm -F @astryxdesign/theme-gothic build && pnpm -F @astryxdesign/theme-chocolate build && pnpm -F @astryxdesign/theme-y2k build && pnpm -F @astryxdesign/theme-butter build",
     "generate:theme-family": "pnpm exec astryx theme build --family src/themes/theme-family/ocean.ts src/themes/theme-family/ocean-calm.ts src/themes/theme-family/ocean-calm-deep.ts src/themes/theme-family/ocean-midnight.ts --family-key sandbox-ocean-family",
     "generate:motion-audit": "node \"src/app/(sandbox)/pages/motion-lab/generate-motion-audit.mjs\"",
+    "check:motion-audit": "node \"src/app/(sandbox)/pages/motion-lab/generate-motion-audit.mjs\" --check",
     "generate:changelog": "node scripts/generate-changelog.js",
     "generate:cli": "node scripts/generate-cli-registry.mjs",
     "generate:xle": "node scripts/generate-xle-registry.mjs && node scripts/generate-xle-tokenizer.mjs",
@@ -47,6 +48,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
     "commander": "^12.1.0",
+    "prettier": "catalog:",
     "typescript": "^6.0.3",
     "vite": "catalog:",
     "vitest": "^4.1.11"
