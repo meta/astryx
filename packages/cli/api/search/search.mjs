@@ -19,11 +19,7 @@ import {
   runWithDocPackageManager,
 } from '../../foundation/env/package-manager.mjs';
 import {withListingCache} from '../../foundation/fs/listing-cache.mjs';
-import {
-  gatherCandidates,
-  gatherCandidatesReused,
-  loadSearchData,
-} from './_adapter.mjs';
+import {gatherCandidatesReused, loadSearchData} from './_adapter.mjs';
 import {rankLexical} from './_lexical.mjs';
 import {checkSearchArgs} from './_result.mjs';
 import {runTree} from '../../foundation/route/route.mjs';
@@ -76,7 +72,10 @@ async function searchRead(query, options) {
             await runTree(
               SEARCH_TREE,
               {query, options},
-              {...(await gatherCandidatesReused(options)), data: loadSearchData()},
+              {
+                ...(await gatherCandidatesReused(options)),
+                data: loadSearchData(),
+              },
             )
           ),
           options.cwd ?? process.cwd(),
@@ -87,7 +86,9 @@ async function searchRead(query, options) {
 
 /**
  * The lexical ranker alone: keyword and fuzzy scoring of every candidate.
- * `build` ranks from it.
+ * `build` ranks from it. It ranks the candidates search gathers, reused the
+ * same way: a later query in the same folder, for the same `type`, gathers
+ * again only when an input changed.
  *
  * @param {string} query
  * @param {{cwd?: string, type?: 'component'|'hook'|'doc'|'template'|'theme', limit?: number}} [options]
@@ -109,7 +110,7 @@ export async function searchCore(query, options = {}) {
 async function searchCoreRead(query, options) {
   return withListingCache(async () =>
     linkSearchResponse(
-      rankLexical(query, options, await gatherCandidates(options)),
+      rankLexical(query, options, await gatherCandidatesReused(options)),
       options.cwd ?? process.cwd(),
     ),
   );
