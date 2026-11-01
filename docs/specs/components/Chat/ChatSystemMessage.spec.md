@@ -164,17 +164,18 @@ migration, so the map is deferred.
 
 | Contract | Verification                                                                                     | Representative states                       | Mutation or failure expectation                          | Audit section                           |
 | -------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------- | -------------------------------------------------------- | --------------------------------------- |
-| FR1      | `ChatSystemMessage.test.tsx` children, no-divider, and icon tests                                | default; default with icon                  | Missing content or icon, or a drawn rule, fails.         | `audit:ChatSystemMessage/behavior`      |
+| FR1      | `ChatSystemMessage.test.tsx` children and icon tests                                             | default; default with icon                  | Missing content or icon fails.                           | `audit:ChatSystemMessage/behavior`      |
 | FR2, AR2 | `ChatSystemMessage.test.tsx` divider, separator-name, divider-icon, and numeric-zero label tests | divider; divider with icon                  | A missing separator, wrong name, or rendered icon fails. | `audit:ChatSystemMessage/accessibility` |
 | FR3, AR1 | `ChatSystemMessage.test.tsx` no-live-role tests                                                  | both variants                               | A live role on the root fails.                           | `audit:ChatSystemMessage/accessibility` |
 | FR4      | `ChatSystemMessage.test.tsx` "preserves the complete root passthrough seam" for each variant     | ref, data, ARIA, role, class, style, xstyle | A dropped input fails.                                   | `audit:ChatSystemMessage/public-api`    |
-| FR5      | `ChatSystemMessage.test.tsx` variant test; `themingTargets.test.ts`                              | both variants                               | A missing target or reflected variant fails.             | `audit:ChatSystemMessage/theming`       |
+| FR5      | `ChatSystemMessage.test.tsx` variant test; `themingTargets.test.ts`                              | both variants                               | A missing reflected variant fails.                       | `audit:ChatSystemMessage/theming`       |
 | FR1      | `ChatSystemMessage.a11y.chromium.spec.ts` 320px coarse-pointer reflow test                       | long content at 320 CSS px                  | Horizontal overflow fails.                               | `audit:ChatSystemMessage/responsive`    |
 
 Read from source, with no focused test yet:
 
-- FR1: centering, the icon rendering before the content, and the icon not
-  shrinking.
+- FR1: centering, no divider rule in the default row, the icon rendering
+  before the content, and the icon not shrinking.
+- FR5: the `chat-system-message` target on the root.
 - PR1, AR3: no state, Effect, or interaction of the component's own.
 
 ## Decision log
