@@ -613,11 +613,13 @@ export async function reconcilePrComment({
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
   packageSizePath = 'pr-analysis/package-size.json',
+  apiChangesPath = 'pr-analysis/api-changes.json',
   visualFrames = null,
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
   createIfMissing = true,
   fallbackMessage,
+  touchedPath = 'touched-components/touched-components.json',
   generator = GENERATOR,
   execute = execFileSync,
 }) {
@@ -704,11 +706,23 @@ export async function reconcilePrComment({
       })
         ? ['--package-size', packageSizePath]
         : []),
+      // Part of the analysis artifact, which pr-meta.json ties to this head.
+      ...(fs.existsSync(apiChangesPath)
+        ? ['--api-changes', apiChangesPath]
+        : []),
       // No report means the audit did not run (it runs on main and release
       // checks, or with the ci:run-a11y label); the comment says so.
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
       ...(framesPath ? ['--visual-frames', framesPath] : []),
+      ...(trustedHeadReport({
+        reportPath: touchedPath,
+        label: 'touched-components report',
+        identity,
+        core,
+      })
+        ? ['--touched', touchedPath]
+        : []),
       ...(preview ? ['--preview', previewPath] : []),
       ...(jobs ? ['--jobs', jobsPath] : []),
       '--source-conclusion',

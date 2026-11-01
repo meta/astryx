@@ -13,6 +13,11 @@ import path from 'node:path';
 import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
 
+// The raw file host is offline here, so jobs read their helpers through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
+
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = fs.readFileSync(
   path.join(root, '.github/workflows/review-signal.yml'),
@@ -23,6 +28,7 @@ const script = parsed.jobs.flag.steps.find(
   step => step.name === 'Detect signals and route',
 ).with.script;
 const HELPER_PATH = '.github/scripts/review-signal-decision.cjs';
+const BACKOFF_PATH = '.github/scripts/lib/rate-limit-backoff.cjs';
 const WORKFLOW_SHA = '1'.repeat(40);
 const OLD_BASE = '2'.repeat(40);
 const HEAD = '3'.repeat(40);
@@ -66,7 +72,11 @@ async function runSignal({
     graphql: vi.fn(),
   };
   const getContent = vi.fn(async ({path: filePath, ref}) => {
-    if (filePath === HELPER_PATH) {
+    if (filePath === BACKOFF_PATH) {
+      if (ref !== WORKFLOW_SHA) {
+        throw new Error(`Unexpected content read: ${ref}:${filePath}`);
+      }
+    } else if (filePath === HELPER_PATH) {
       if (ref !== WORKFLOW_SHA || helperMissing) {
         throw Object.assign(new Error('Not Found'), {status: 404});
       }

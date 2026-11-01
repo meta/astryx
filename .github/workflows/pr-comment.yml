@@ -62,6 +62,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {resolveWorkflowRunPullRequest} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -158,6 +161,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {reconcilePrComment} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -336,6 +342,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {confirmOrStandDown} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href
@@ -388,6 +397,18 @@ jobs:
         with:
           name: pr-size-base
           path: pr-size-base
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      # The touched-components check's per-component results (or its wide-
+      # change flag); absent when the check did not run.
+      - name: Download the touched-components report from the CI run
+        if: steps.identity.outputs.valid == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: touched-components
+          path: touched-components
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
@@ -478,6 +499,9 @@ jobs:
         with:
           retries: 3
           script: |
+            // Wait out the repository's shared API rate limit (lib/rate-limit-backoff.cjs).
+            require(require('node:path').join(process.env.GITHUB_WORKSPACE, '.github/scripts/lib/rate-limit-backoff.cjs'))
+              .installRateLimitBackoff({github, core});
             const {pathToFileURL} = require('node:url');
             const {reconcilePrComment} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/.github/scripts/lib/pr-preview.mjs`).href

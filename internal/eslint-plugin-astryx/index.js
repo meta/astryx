@@ -23,6 +23,7 @@
  * - no-light-dark-outside-theme: Flags CSS light-dark() in component source (a light/dark decision belongs to the theme layer, where a token pair reaches both schemes in every theme)
  * - no-core-internal-import: Keeps Core's internal subpaths (@astryxdesign/core/internal/*) inside Core and Lab
  * - no-internal-barrel-import: Flags a package-internal relative import that resolves to a folder's index (a barrel) instead of the defining module
+ * - no-raw-private-attribute: Flags a private data-astryx-* attribute written by hand outside its owner module in packages/<package>/src/privateAttributes (INV23 lists the public ones)
  * - no-raw-color: Flags a raw colour value (hex, rgb(), hsl(), oklch(), …) anywhere in component source, including inside light-dark()/color-mix(), behind a const, in a template literal, or as a var() fallback — the shapes no-hardcoded-styles cannot see
  *
  * Philosophy: Strict for agents (CI), lenient for humans (local dev)
@@ -64,6 +65,7 @@ import i18nKeyFormatRule from './i18n-key-format.js';
 import requireTableSectionRule from './require-table-section.js';
 import noLightDarkOutsideThemeRule from './no-light-dark-outside-theme.js';
 import noRawColorRule from './no-raw-color.js';
+import noRawPrivateAttributeRule from './no-raw-private-attribute.js';
 
 // =============================================================================
 // Rule: no-hardcoded-styles
@@ -368,6 +370,7 @@ const plugin = {
     'require-table-section': requireTableSectionRule,
     'no-light-dark-outside-theme': noLightDarkOutsideThemeRule,
     'no-raw-color': noRawColorRule,
+    'no-raw-private-attribute': noRawPrivateAttributeRule,
   },
   configs: {},
 };

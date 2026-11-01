@@ -279,14 +279,13 @@ test.describe('touch input', () => {
     // on a few moves (in a container capped at 3 CPUs, where the quota stalls
     // the process for about 100 ms at a time), so a take is off pace when
     // more than half its moves are. It is re-taken once, as wheel bursts are,
-    // and a second such take fails. The limits, both from real-time input
-    // under CPU starvation: a pacer the cap throttles falls behind and never
-    // waits, so no pacing check can see a slow pacer there (under a 3-CPU cap
-    // with 16 workers, sending each step at twice its time failed none of 20
-    // runs); and there the quota slows most sends past the step's spacing,
-    // which reads exactly like a harness whose send is slow, so the real test
-    // fails 10 of 40 runs under that cap (the CI lane's 4 CPUs with one
-    // worker passed 10 of 10).
+    // and a second such take fails. Under CPU starvation (a 3-CPU cap with 16
+    // workers, with the software compositor's threads matched to the cap by
+    // LP_NUM_THREADS), a pacer the cap throttles falls behind and need not
+    // wait, so the pacing check can miss a slow pacer there (sending each step
+    // at twice its time failed 8 of 20 runs), and the quota slows some sends
+    // past the step's spacing, which reads like a harness whose send is slow
+    // (the real test passed 40 of 40 there, re-taken 9 times).
     for (const attempt of [1, 2] as const) {
       const {played, answeredAt, playStart, log} = await take();
       const {moves} = checkInput(log);
