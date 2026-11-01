@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon",
-    "matchCount": 223,
+    "matchCount": 224,
     "results": [
       {
         "domain": "component",
@@ -37,6 +37,17 @@
         "description": "<text>",
         "import": "@astryxdesign/core/IconButton",
         "command": "astryx component IconButton",
+        "mentions": []
+      },
+      {
+        "domain": "component",
+        "name": "InfoTip",
+        "package": "@astryxdesign/core",
+        "score": "<text>",
+        "reason": "<text>",
+        "description": "<text>",
+        "import": "@astryxdesign/core/InfoTip",
+        "command": "astryx component InfoTip",
         "mentions": []
       },
       {
@@ -231,18 +242,6 @@
         "displayName": "<text>",
         "kind": "block",
         "command": "astryx template ChatComposerFooterActions --type block",
-        "mentions": []
-      },
-      {
-        "domain": "template",
-        "name": "ChatComposerFullFeatured",
-        "package": "@astryxdesign/core",
-        "score": "<text>",
-        "reason": "<text>",
-        "description": "<text>",
-        "displayName": "<text>",
-        "kind": "block",
-        "command": "astryx template ChatComposerFullFeatured --type block",
         "mentions": []
       }
     ]

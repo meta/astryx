@@ -2234,5 +2234,9 @@
   "@astryx.comments.postFailed": {
     "defaultMessage": "Your comment couldn't be posted.",
     "description": "Error shown above the new-comment composer of a lab Comments panel when posting failed; the draft is kept and a Retry action follows."
+  },
+  "@astryx.infoTip.label": {
+    "defaultMessage": "More information",
+    "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
   }
 }

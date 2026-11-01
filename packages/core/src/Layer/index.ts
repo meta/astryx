@@ -45,6 +45,7 @@ export type {
   UseTouchTriggerOptions,
   UseTouchTriggerReturn,
 } from './useTouchTrigger';
+export type {LayerPressTrigger} from './usePressPin';
 
 // Layer provider
 export {LayerProvider} from './LayerProvider';

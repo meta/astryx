@@ -389,6 +389,11 @@
       "types": "./dist/Icon/index.d.ts",
       "default": "./dist/Icon/index.js"
     },
+    "./InfoTip": {
+      "source": "./src/InfoTip/index.ts",
+      "types": "./dist/InfoTip/index.d.ts",
+      "default": "./dist/InfoTip/index.js"
+    },
     "./IconButton": {
       "source": "./src/IconButton/index.ts",
       "types": "./dist/IconButton/index.d.ts",

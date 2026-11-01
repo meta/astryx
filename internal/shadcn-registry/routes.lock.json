@@ -466,6 +466,13 @@
       "aliases": []
     },
     {
+      "name": "component-info-tip",
+      "path": "components/info-tip",
+      "aliases": [
+        "components/lab/info-tip"
+      ]
+    },
+    {
       "name": "component-input-group",
       "path": "components/input-group",
       "aliases": []
@@ -598,11 +605,6 @@
     {
       "name": "component-lab-emoji-picker",
       "path": "components/lab/emoji-picker",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-info-tip",
-      "path": "components/lab/info-tip",
       "aliases": []
     },
     {
