@@ -93,8 +93,9 @@ concurrency:
 
 jobs:
   # Admits the whole run under CI's ceiling of about ninety concurrent jobs
-  # (spec:AST-030 FR16, DEC-16). Every job here needs this one, directly or
-  # through the jobs it needs. Like every other job it skips for a draft or an
+  # (spec:AST-030 FR16, DEC-16). Every job here but build-storybook needs this
+  # one, directly or through the jobs it needs; build-storybook starts beside
+  # it, and every job that uses the build needs this one too. Like every other job it skips for a draft or an
   # unlabelled fork, which run no CI (FR17); the required contexts still report
   # through their own status rules. Otherwise it never fails, so each job's own
   # condition decides exactly as before. `peak` is the most jobs a run holds at once: a

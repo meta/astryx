@@ -5,7 +5,8 @@
 # (a `concurrency` group serializes runs, it does not count jobs), so each run
 # waits for room before its jobs start:
 #
-# - ci.yml's `admission` job, which every other ci.yml job needs, and the Main
+# - ci.yml's `admission` job, which every other ci.yml job but the Storybook
+#   build needs (that build starts beside it, and every job using it waits), and the Main
 #   workflow's `main-commit` job run this first. A step that uses this action
 #   MUST be named "Wait for room under the CI ceiling": a waiting `main` run is
 #   found by that name.
@@ -167,12 +168,10 @@ runs:
                     .flatMap(job => job.steps ?? [])
                     .find(step => step.name === STEP);
                   if (wait?.status === 'in_progress') {
-                    // Still waiting for room. A pull-request run holds only
-                    // the job that waits; a `main` run holds its whole peak,
-                    // ahead of this one.
-                    // A waiting pull-request run holds what it runs: the job
-                    // that waits and its Storybook build, which starts beside
-                    // it.
+                    // Still waiting for room. A `main` run holds its whole
+                    // peak, ahead of this one. A pull-request run holds what
+                    // it runs: the job that waits and its Storybook build,
+                    // which starts beside it.
                     const holds = isMain(run) ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
                     if (isMain(run) && !main) mainWaiting = true;
                     large += holds;

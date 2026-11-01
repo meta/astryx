@@ -746,9 +746,10 @@ and each CI or Main run's jobs once, so it costs two run listings plus one call
 per active CI or Main run. A pull request looks at most twice, and a run starts
 rather than spend a low API budget. A `main` full check, release re-check or
 baseline capture (every dispatch of the CI workflow) goes first: while one
-waits, pull-request runs wait too. Every job ends within its fifteen-minute
-budget, so `main` fits within fifteen minutes. Nothing is reserved for `main`
-outside those minutes.
+waits, pull-request runs wait too, all but their Storybook builds, which the
+waiting check counts. Every job ends within its fifteen-minute budget, so `main`
+fits within fifteen minutes. Nothing is reserved for `main` outside those
+minutes.
 
 CI can still pass ninety in three rare, bounded ways:
 
