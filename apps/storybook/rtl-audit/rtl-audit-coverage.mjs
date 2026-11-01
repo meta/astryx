@@ -560,6 +560,21 @@ export function d1GlyphKey(dir, pathSig, matrix) {
 }
 
 /**
+ * The key D1 pairs an LTR glyph with its RTL counterpart by: the enclosing
+ * control's accessible label when it has one, else the glyph's position, plus
+ * the axis it renders on. A collapsed and an expanded chevron under one label
+ * (a tree toggle) are then judged as separate pairs, so an unjudged expanded
+ * copy cannot stand in for a collapsed copy that never mirrors.
+ */
+export function d1PairKey(glyph, index) {
+  const axis = glyphRendersOnBlockAxis(glyph.dir, glyph.matrix)
+    ? 'block'
+    : 'inline';
+  const label = glyph.aria && glyph.aria.trim();
+  return (label ? 'aria:' + label : 'idx:' + index) + '::' + axis;
+}
+
+/**
  * Is this LTR/RTL pair one D1 leaves unjudged: a horizontal glyph that renders
  * pointing the SAME way along the block axis in both directions (an expanded
  * disclosure, down in both)? A glyph that points down in LTR and up in RTL

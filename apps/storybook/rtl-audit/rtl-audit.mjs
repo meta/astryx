@@ -68,6 +68,7 @@ import {
   filterStoryRoutesByPackages,
   finishFiniteAnimations,
   d1GlyphKey,
+  d1PairKey,
   glyphRendersOnBlockAxis,
   isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
@@ -753,7 +754,7 @@ async function autoD1(
   // Pair LTR<->RTL directional icons by aria-context (fallback: positional
   // index) and evaluate EACH pair, so a two-button name-swap (prev/next) is
   // seen per-button rather than washed out by a global multiset.
-  const keyOf = (i, idx) => (i.aria && i.aria.trim() ? 'aria:' + i.aria.trim() : 'idx:' + idx);
+  const keyOf = d1PairKey;
   const ltrBy = new Map();
   ltr.forEach((i, idx) => ltrBy.set(keyOf(i, idx), i));
   const rtlBy = new Map();

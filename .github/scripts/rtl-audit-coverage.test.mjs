@@ -22,6 +22,7 @@ import {
   filterStoryRoutesByPackages,
   glyphRendersOnBlockAxis,
   d1GlyphKey,
+  d1PairKey,
   isUnchangedBlockAxisPair,
   finishFiniteAnimations,
   orderD1StoryCandidates,
@@ -1096,5 +1097,24 @@ describe('d1GlyphKey', () => {
     const right = {dir: 'right', matrix: collapsed};
     expect(isUnchangedBlockAxisPair(down, down)).toBe(true);
     expect(isUnchangedBlockAxisPair(right, right)).toBe(false);
+  });
+});
+
+describe('d1PairKey', () => {
+  const collapsed = {dir: 'right', aria: 'Toggle Docs', matrix: [1, 0, 0, 1]};
+  const expanded = {dir: 'right', aria: 'Toggle Docs', matrix: [0, 1, -1, 0]};
+
+  it('pairs a collapsed and an expanded chevron under one label apart', () => {
+    expect(d1PairKey(collapsed, 0)).not.toBe(d1PairKey(expanded, 1));
+  });
+
+  it('pairs the same labelled glyph across directions', () => {
+    const mirrored = {...collapsed, matrix: [-1, 0, 0, 1]};
+    expect(d1PairKey(collapsed, 0)).toBe(d1PairKey(mirrored, 3));
+  });
+
+  it('falls back to position for an unlabelled glyph', () => {
+    const bare = {dir: 'right', aria: '', matrix: [1, 0, 0, 1]};
+    expect(d1PairKey(bare, 2)).toBe('idx:2::inline');
   });
 });
