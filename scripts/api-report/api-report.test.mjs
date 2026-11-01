@@ -173,6 +173,20 @@ describe('API changes', () => {
     expect(md).toContain('`<Chip size="sm" />`');
   });
 
+  it('summarizes a package with no report at the merge base as a new report', () => {
+    const [change] = computeChanges([
+      {pkg: '@fixture/demo', base: null, head: report, committed: report},
+    ]);
+    expect(change).toMatchObject({
+      baseline: true,
+      rows: [],
+      counts: {added: 0, changed: 0, removed: 0},
+    });
+    expect(renderChanges([change])).toBe(
+      '**API changes:** @fixture/demo new report\n',
+    );
+  });
+
   it('renders nothing when the API is unchanged and the committed report is current', () => {
     const changes = computeChanges([
       {pkg: '@fixture/demo', base: report, head: report, committed: report},

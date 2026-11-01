@@ -172,9 +172,15 @@ export function usageFor(pkg, row) {
 export function computeChanges(packages) {
   return packages
     .map(({pkg, base, head, committed}) => {
-      const d = diffReports(base, head);
+      // With no report at the merge base there is nothing to compare: the
+      // package's report is new, and every row would read as added.
+      const baseline = base == null;
+      const d = baseline
+        ? {added: [], changed: [], removed: []}
+        : diffReports(base, head);
       return {
         pkg,
+        baseline,
         stale: committed != null && committed !== head,
         missing: committed == null,
         counts: {
@@ -206,9 +212,13 @@ const short = pkg => pkg.replace(/^@astryxdesign\//, '');
  * @returns {string} empty when nothing changed and every report is current
  */
 export function renderChanges(changes) {
-  const touched = changes.filter(c => c.rows.length || c.stale || c.missing);
+  const touched = changes.filter(
+    c => c.rows.length || c.stale || c.missing || c.baseline,
+  );
   if (!touched.length) return '';
   const parts = touched.map(c => {
+    if (c.baseline && !c.missing)
+      return `${short(c.pkg)} new report${c.stale ? ' (stale: run `pnpm api:report`)' : ''}`;
     const counts = c.rows.length
       ? ` +${c.counts.added} · ~${c.counts.changed} · −${c.counts.removed}`
       : ' no changes';
