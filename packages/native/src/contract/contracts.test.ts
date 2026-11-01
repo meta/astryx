@@ -207,6 +207,45 @@ describe('native contracts', () => {
     );
   });
 
+  it('gives Item typed text and content slots, a press, and a link, and leaves swipes on the web', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const item = contracts.find(contract => contract.name === 'Item');
+    expect(item).toBeDefined();
+    expect(item!.core.label).toMatchObject({
+      type: {kind: 'string'},
+      optional: false,
+    });
+    expect(item!.core.description?.type).toEqual({kind: 'string'});
+    for (const slot of ['marker', 'startContent', 'endContent']) {
+      expect(item!.core[slot]?.type).toEqual({kind: 'content'});
+    }
+    expect(Object.keys(item!.core)).toEqual(
+      expect.arrayContaining([
+        'align',
+        'density',
+        'labelLines',
+        'descriptionLines',
+        'layout',
+        'onClick',
+        'href',
+        'isHighlighted',
+        'isSelected',
+        'isDisabled',
+      ]),
+    );
+    expect(item!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining([
+        'swipeActions',
+        'swipeBehavior',
+        'target',
+        'rel',
+        'data-testid',
+        'as',
+        'interactiveRef',
+      ]),
+    );
+  });
+
   it('reports naming and portability errors', () => {
     const bad: ComponentContract = {
       name: 'Bad',

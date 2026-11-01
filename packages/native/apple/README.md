@@ -28,6 +28,7 @@ apple/
 │   │   ├── Localization/
 │   │   ├── Icon/          # Icon
 │   │   ├── Avatar/        # Avatar
+│   │   ├── Item/          # Item
 │   │   ├── Text/          # Text
 │   │   ├── Heading/       # Heading
 │   │   ├── Button/        # Button
