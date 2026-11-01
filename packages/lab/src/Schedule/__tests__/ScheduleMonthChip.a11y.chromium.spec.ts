@@ -12,6 +12,7 @@
  */
 
 import {expect, test, type Page} from '@playwright/test';
+import {pinStoryClock} from './pinStoryClock';
 import {
   finishEvidence,
   openStory,
@@ -20,6 +21,8 @@ import {
   WIDE,
   type Evidence,
 } from './timeGridProbe';
+
+pinStoryClock(test);
 
 const STORY = 'lab-schedule--month-overflow';
 const NARROW_MONTH = {width: 800, height: 900};

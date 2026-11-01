@@ -12,6 +12,7 @@
  */
 
 import {expect, test} from '@playwright/test';
+import {pinStoryClock} from './pinStoryClock';
 import pixelmatch from 'pixelmatch';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
@@ -31,6 +32,8 @@ import {
   WIDE,
   type Evidence,
 } from './timeGridProbe';
+
+pinStoryClock(test);
 
 // Linux Chromium paints classic 15px scrollbars once Playwright's
 // `--hide-scrollbars` is dropped: the Windows / "always show scroll bars"

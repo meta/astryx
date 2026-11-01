@@ -14,6 +14,7 @@
  */
 
 import {expect, test, type Page} from '@playwright/test';
+import {pinStoryClock} from './pinStoryClock';
 import {
   finishEvidence,
   openStory,
@@ -22,6 +23,8 @@ import {
   WIDE,
   type Evidence,
 } from './timeGridProbe';
+
+pinStoryClock(test);
 
 const STORY = 'lab-schedule--month-event-popover';
 const WEDNESDAY = 'Wednesday, May 13, 2026';
