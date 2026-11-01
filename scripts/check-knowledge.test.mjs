@@ -7,6 +7,7 @@ import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
   composeKnowledgeSchemas,
+  collectConcernMatches,
   collectGlobalReviewMatches,
   discoverKnowledgeRecords,
   extractKnowledgeClaims,
@@ -415,6 +416,149 @@ describe('global review applicability', () => {
     expect(parseReviewApplicabilityBlock(record).problems.join('\n')).toMatch(
       /repeats JSON field "public-api"/,
     );
+  });
+
+  it('keeps the same key in two different objects', () => {
+    const record = currentRecord.replace(
+      '# Fixture system spec',
+      '# Fixture system spec\n\n<!-- review-applicability:v1 -->\n```json\n{"scope":"global","concerns":{"a":{"names":["x"],"claims":["FR1"]},"b":{"names":["y"],"claims":["FR2"]}}}\n```',
+    );
+    const parsed = parseReviewApplicabilityBlock(record);
+    expect(parsed.problems).toEqual([]);
+    expect(validateReviewApplicability(parsed.config, record)).toEqual([]);
+  });
+
+  it('accepts a concerns map with or without triggers', () => {
+    const concerns = {
+      'slot-presence': {
+        names: ['isRenderable'],
+        patterns: ["typeof [\\w.]+ !== 'boolean'"],
+        claims: ['FR1'],
+      },
+    };
+    expect(
+      validateReviewApplicability({scope: 'global', concerns}, currentRecord),
+    ).toEqual([]);
+    expect(
+      validateReviewApplicability(
+        {scope: 'global', triggers: {'public-api': ['FR2']}, concerns},
+        currentRecord,
+      ),
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      'neither triggers nor concerns',
+      {scope: 'global'},
+      /triggers, concerns, or both/,
+    ],
+    [
+      'an unknown block key',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['x'], claims: ['FR1']}},
+        extra: 1,
+      },
+      /and nothing else/,
+    ],
+    [
+      'an empty concerns map',
+      {scope: 'global', concerns: {}},
+      /at least one concern/,
+    ],
+    [
+      'a concern without names or patterns',
+      {scope: 'global', concerns: {a: {claims: ['FR1']}}},
+      /at least one name or pattern/,
+    ],
+    [
+      'a concern name that is not an identifier',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['is renderable'], claims: ['FR1']}},
+      },
+      /not an identifier/,
+    ],
+    [
+      'an invalid pattern',
+      {scope: 'global', concerns: {a: {patterns: ['('], claims: ['FR1']}}},
+      /invalid pattern/,
+    ],
+    [
+      'a concern claim the record lacks',
+      {scope: 'global', concerns: {a: {names: ['x'], claims: ['FR99']}}},
+      /references missing claim "FR99"/,
+    ],
+    [
+      'an unknown concern key',
+      {
+        scope: 'global',
+        concerns: {a: {names: ['x'], claims: ['FR1'], owner: 'y'}},
+      },
+      /claims with names, patterns, or both/,
+    ],
+  ])('rejects concerns with %s', (_name, config, expected) => {
+    expect(
+      validateReviewApplicability(config, currentRecord).join('\n'),
+    ).toMatch(expected);
+  });
+
+  it('routes each claim whose concern matches an added line, with the evidence', () => {
+    const record = {
+      path: 'docs/specs/AST-900/spec.md',
+      content: currentRecord.replace(
+        '# Fixture system spec',
+        `# Fixture system spec\n\n<!-- review-applicability:v1 -->\n\n\`\`\`json\n${JSON.stringify(
+          {
+            scope: 'global',
+            concerns: {
+              'slot-presence': {
+                names: ['isRenderable'],
+                patterns: ["typeof [\\w.]+ !== 'boolean'"],
+                claims: ['FR1'],
+              },
+              'unrelated-concern': {names: ['useScrollLock'], claims: ['FR2']},
+            },
+          },
+        )}\n\`\`\`\n`,
+      ),
+    };
+    const added = [
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 3,
+        text: 'const x = 1;',
+      },
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 4,
+        text: "  const hasLabel = label !== '' && label != null && typeof label !== 'boolean';",
+      },
+      {
+        file: 'packages/core/src/Badge/Badge.tsx',
+        line: 5,
+        text: 'isRenderableish(x);',
+      },
+    ];
+    const matches = collectConcernMatches([record], added, null);
+    expect(matches).toEqual([
+      expect.objectContaining({
+        recordId: 'spec:AST-900',
+        concern: 'slot-presence',
+        claimId: 'FR1',
+        claim: 'Public API stays stable.',
+        utilities: ['isRenderable'],
+        evidence: [
+          expect.objectContaining({
+            line: 4,
+            matched: "typeof label !== 'boolean'",
+          }),
+        ],
+      }),
+    ]);
+    expect(matches[0].matchReason).toContain('(shared: isRenderable)');
+    expect(collectConcernMatches([record], [], null)).toEqual([]);
   });
 
   it('keeps the canonical claim title when a verification table repeats its id', () => {

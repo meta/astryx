@@ -24,6 +24,7 @@ const {
   buildVisualDeltas,
   previewLine,
   packagesLine,
+  apiChangesLine,
   notRunLine,
   SUITES,
   VISUAL_FRAME_LIMIT,
@@ -448,6 +449,113 @@ describe('packagesLine', () => {
       'no measurement of the merge base',
     );
     expect(packagesLine(null)).toBe('');
+  });
+});
+
+describe('apiChangesLine', () => {
+  const pkg = (name, rows, extra = {}) => ({
+    pkg: `@astryxdesign/${name}`,
+    baseline: false,
+    stale: false,
+    missing: false,
+    counts: {
+      added: rows.filter(row => row.change === 'added').length,
+      changed: rows.filter(row => row.change === 'changed').length,
+      removed: rows.filter(row => row.change === 'removed').length,
+    },
+    rows,
+    ...extra,
+  });
+  const row = (change, item, extra = {}) => ({
+    change,
+    entry: '.',
+    section: 'Components',
+    item,
+    member: null,
+    line: `${item} line`,
+    usage: `<${item.split(' ').at(-1)} />`,
+    ...extra,
+  });
+
+  it("renders with the API report step's own renderer: counts on one line, rows with usage in a closed disclosure", () => {
+    const out = apiChangesLine({
+      version: 1,
+      packages: [
+        pkg(
+          'core',
+          [
+            row('added', 'component AppShell'),
+            row('changed', 'component Button', {
+              before: "size = 'md'",
+              line: "size = 'sm'",
+            }),
+            row('removed', 'hook useToast'),
+          ],
+          {stale: true},
+        ),
+        pkg('lab', []),
+        pkg('richtext', [], {missing: true}),
+        pkg('charts', [], {baseline: true}),
+      ],
+    });
+    expect(out.split('\n')[0]).toBe(
+      '**API changes:** `core` +1 · ~1 · −1 (report stale: run `pnpm api:report`); `richtext` no changes (report not committed: run `pnpm api:report`); `charts` new report',
+    );
+    expect(out).toContain(
+      '<details><summary>3 API changes (advisory)</summary>',
+    );
+    expect(out).toContain('| Package | Where | Signature | Usage |');
+    expect(out).toContain(
+      "| ~ | `core` | `. · Components · component Button` | `size = 'md'` → `size = 'sm'` | `<Button />` |",
+    );
+    expect(out).not.toContain('`lab`');
+    expect(out.endsWith('</details>\n\n')).toBe(true);
+  });
+
+  it('renders every string from the file as a code span: no HTML, markup or link', () => {
+    const out = apiChangesLine({
+      packages: [
+        pkg('www.evil.example', [
+          row('added', '<img src=x onerror=alert(1)>', {
+            line: 'a | b [link](https://evil.example) `tick`',
+            usage: 'https://evil.example',
+            // A row's own `pkg` never replaces the code-spanned name.
+            pkg: '[evil](https://evil.example)',
+          }),
+        ]),
+      ],
+    });
+    expect(out).toContain('**API changes:** `www.evil.example` +1');
+    expect(out).toContain('`` a \\| b [link](https://evil.example) `tick` ``');
+    expect(out).toContain('`https://evil.example` |');
+    // Outside code spans, no URL, tag or link syntax remains.
+    const outside = out.replace(/(`+)[\s\S]*?\1/g, '');
+    expect(outside).not.toMatch(/https?:|www\.|<img|\]\(/);
+  });
+
+  it('prompts for a report that neither the merge base nor the head commits', () => {
+    expect(
+      apiChangesLine({
+        version: 1,
+        packages: [pkg('core', [], {baseline: true, missing: true})],
+      }),
+    ).toBe(
+      '**API changes:** `core` no changes (report not committed: run `pnpm api:report`)\n\n',
+    );
+  });
+
+  it('lists at most 150 rows and counts the rest', () => {
+    const rows = Array.from({length: 160}, (_, i) => row('added', `item ${i}`));
+    const out = apiChangesLine({packages: [pkg('core', rows)]});
+    expect(out.match(/^\| \+ \| `core` \|/gm)).toHaveLength(150);
+    expect(out).toContain('…and 10 more;');
+  });
+
+  it('is absent when no package has a change or a report to refresh, or without a file', () => {
+    expect(
+      apiChangesLine({version: 1, packages: [pkg('core', []), pkg('lab', [])]}),
+    ).toBe('');
+    expect(apiChangesLine(null)).toBe('');
   });
 });
 
