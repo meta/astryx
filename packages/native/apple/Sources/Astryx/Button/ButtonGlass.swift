@@ -121,8 +121,10 @@ extension View {
 /// for this, so it looks among its UIKit ancestors for a navigation bar, a
 /// toolbar, or the host SwiftUI gives each bar item (on iOS 26 the bottom bar
 /// is a floating container, not a toolbar), checked whenever it moves or lays
-/// out. The host's name is not an API, so FR7's capture gate checks the
-/// navigation bar and the bottom bar on each new iOS.
+/// out. A bar, once found, holds: the bar re-hosts a prominent item where its
+/// ancestors no longer show the bar, and letting go would flip the Button
+/// back and forth. The host's name is not an API, so FR7's capture gate
+/// checks the navigation bar and the bottom bar on each new iOS.
 struct ButtonBarProbe: UIViewRepresentable {
   let report: (Bool) -> Void
 
@@ -140,7 +142,7 @@ struct ButtonBarProbe: UIViewRepresentable {
 
   final class ProbeView: UIView {
     var report: ((Bool) -> Void)?
-    private var reported: Bool?
+    private var found = false
 
     override func didMoveToWindow() {
       super.didMoveToWindow()
@@ -158,21 +160,19 @@ struct ButtonBarProbe: UIViewRepresentable {
     }
 
     private func check() {
+      guard !found else { return }
       var node = superview
-      var inBar = false
       while let view = node {
         if view is UINavigationBar || view is UIToolbar
           || String(describing: type(of: view)).hasPrefix("UIKitBarItemHost") {
-          inBar = true
-          break
+          found = true
+          let report = report
+          // Reported after this layout pass, never during it.
+          Task { @MainActor in report?(true) }
+          return
         }
         node = view.superview
       }
-      guard inBar != reported else { return }
-      reported = inBar
-      let report = report
-      // Reported after this layout pass, never during it.
-      Task { @MainActor in report?(inBar) }
     }
   }
 }
