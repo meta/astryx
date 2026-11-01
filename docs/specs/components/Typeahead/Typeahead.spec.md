@@ -18,6 +18,7 @@ verified_by:
     packages/core/src/Token/Token.test.tsx,
     packages/core/src/Icon/Icon.test.tsx,
     scripts/check-knowledge.mjs,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:input-fields, family:overlay-dismissal]
@@ -225,12 +226,13 @@ normalize targets.
 
 ## Verification map
 
-| Contract            | Verification                                                                          | Representative states                                              | Mutation or failure expectation                                                             | Audit section             |
-| ------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | ------------------------- |
-| FR1, FR6            | `Typeahead.test.tsx`, owner tests, and Typeahead composition source                   | Standalone/InputGroup, empty, editing, selected, clear, start icon | A documented composed part disappears, gains the wrong owner, or misreports Field presence. | `audit:Typeahead/anatomy` |
-| FR2                 | Source inspection, target inventories, empty-state test, and `TypeaheadItem.test.tsx` | Input, open Dropdown, empty search, default item                   | A current target is missed, invented, or documented on an element that does not carry it.   | `audit:Typeahead/theming` |
-| FR3, FR4, FR5       | BaseTypeahead source and result/group/selection tests                                 | Default/custom result, grouped result, selected row                | The record hides the outer/inner asymmetry or claims reachability that current code lacks.  | `audit:Typeahead/theming` |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                         | Canonical anatomy and current target inventory                     | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.  | `audit:Typeahead/theming` |
+| Contract                     | Verification                                                                                                                            | Representative states                                              | Mutation or failure expectation                                                             | Audit section                  |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | ------------------------------ |
+| FR1, FR6                     | `Typeahead.test.tsx`, owner tests, and Typeahead composition source                                                                     | Standalone/InputGroup, empty, editing, selected, clear, start icon | A documented composed part disappears, gains the wrong owner, or misreports Field presence. | `audit:Typeahead/anatomy`      |
+| FR2                          | Source inspection, target inventories, empty-state test, and `TypeaheadItem.test.tsx`                                                   | Input, open Dropdown, empty search, default item                   | A current target is missed, invented, or documented on an element that does not carry it.   | `audit:Typeahead/theming`      |
+| FR3, FR4, FR5                | BaseTypeahead source and result/group/selection tests                                                                                   | Default/custom result, grouped result, selected row                | The record hides the outer/inner asymmetry or claims reachability that current code lacks.  | `audit:Typeahead/theming`      |
+| Theming anatomy map          | `scripts/check-knowledge.mjs`                                                                                                           | Canonical anatomy and current target inventory                     | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.  | `audit:Typeahead/theming`      |
+| RTL relation (TypeaheadItem) | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Typeahead / Parts / TypeaheadItem with icon` (results opened) | Icon, label and description in an open result; LTR and RTL         | A result icon that is not at the inline start of its content fails D2.                      | `audit:TypeaheadItem/i18n-rtl` |
 
 Existing tests directly assert Empty state and TypeaheadItem target presence,
 selected-value Token behavior, result semantics, selection state, and standalone
