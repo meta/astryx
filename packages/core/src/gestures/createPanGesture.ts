@@ -8,19 +8,18 @@
  * @position Public face of packages/core/src/gestures. It reports a drag as
  *   values and hands out no recognizer; `usePanGesture` is its React layer.
  *
- * Under it is a `PanGestureRecognizer` on the document's gesture host, so
- * the drag claims its touch at UIKit's 10 pt and the host writes the
- * element's `touch-action` for the axis. `translation` is the recognizer's
+ * Under it is the internal `createPan` (createPan.ts), a
+ * `PanGestureRecognizer` on the document's gesture host, so the drag claims
+ * its touch at UIKit's 10 pt and the host writes the element's
+ * `touch-action` for the axis. `translation` is the recognizer's
  * own: the travel the drag needed to begin is not part of it, so an element
  * that follows it does not jump (measured in the UIKit lab). Importing this
  * module does no DOM work; the host is reached only when a pan is created.
- * SYNC: When modified, update ../hooks/usePanGesture.ts, its .doc.mjs and
- * __tests__/createPanGesture.test.tsx.
+ * SYNC: When modified, update ../hooks/usePanGesture.ts, its .doc.mjs,
+ * createPan.ts and __tests__/createPanGesture.test.tsx.
  */
 
-import {getGestureHost} from './GestureHost';
-import {PanGestureRecognizer} from './PanGestureRecognizer';
-import type {Point} from './types';
+import {createPan} from './createPan';
 
 /** Where a drag is: it began, moved, ended at the release, or was cancelled. */
 export type PanGestureState = 'began' | 'changed' | 'ended' | 'cancelled';
@@ -51,8 +50,6 @@ export interface PanGesture {
   destroy(): void;
 }
 
-const ZERO = {x: 0, y: 0};
-
 /**
  * Report drags on `element` as values.
  * @example
@@ -72,41 +69,11 @@ export function createPanGesture(
   options: PanGestureOptions,
 ): PanGesture {
   const {axis, onPan} = options;
-  const recognizer = new PanGestureRecognizer({
-    name: 'pan',
-    direction: axis === 'x' ? 'horizontal' : axis === 'y' ? 'vertical' : 'any',
-  });
-  const along = (point: Point) =>
-    axis === 'x'
-      ? {x: point.x, y: 0}
-      : axis === 'y'
-        ? {x: 0, y: point.y}
-        : {x: point.x, y: point.y};
-  recognizer.addListener(() => {
-    const state = recognizer.state;
-    if (
-      state !== 'began' &&
-      state !== 'changed' &&
-      state !== 'ended' &&
-      state !== 'cancelled'
-    ) {
-      return;
-    }
-    onPan({
-      state,
-      translation: along(recognizer.translation()),
-      velocity:
-        state === 'cancelled' ? {...ZERO} : along(recognizer.velocity()),
-    });
-  });
-  let detach: (() => void) | null = getGestureHost(
-    element.ownerDocument,
-  ).attach(element, recognizer);
-  return {
-    destroy() {
-      const current = detach;
-      detach = null;
-      current?.();
+  // The public event is the record's values only (spec:AST-107 FR1).
+  return createPan(element, {
+    axis,
+    onPan: ({state, translation, velocity}) => {
+      onPan({state, translation, velocity});
     },
-  };
+  });
 }

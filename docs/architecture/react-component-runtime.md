@@ -257,7 +257,13 @@ those contracts.
   (`spec:AST-105` FR1); a pull that a scroll area hands over only at its
   edge (`spec:AST-094` FR14, FR19); a snap-point drag whose release can
   dismiss its surface, judged by the use's measured projection (`spec:AST-094`
-  FR36); a drag on one element that moves another (a sheet's handle and
+  FR36); a drag's own pointer and scroll filter, claim distance and begin
+  gate, and a snap-point drag's own model of where a drag draws its element
+  and where a release lands (a row's swipe: no mouse drag, UIKit's dead zone,
+  tracking spring and release rule for a finger, and a full swipe reached by
+  position only, `spec:AST-057` AR2, FR5); a drag drawn into one custom
+  property that every part of its component reads (`spec:AST-057` FR2); a
+  drag on one element that moves another (a sheet's handle and
   scrolling body move the sheet; its dim is the layer runtime's backdrop
   tint, `architecture:layer-runtime` INV14); the animator's jobs beyond the
   public handle: a motion role other than `springs.stateChange`

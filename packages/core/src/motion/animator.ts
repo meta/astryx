@@ -337,6 +337,15 @@ export interface AnimatorOptions {
    * default. A call from rest reads the start the browser gave it there.
    */
   requestFrame?: (callback: () => void) => void;
+  /**
+   * Renders `x` into this custom property instead of `translate`, for an
+   * element whose parts all read one value (a row's swipe travel,
+   * `spec:AST-057` FR2): a `<length>` in px, or a plain `<number>`. The
+   * property is registered as inherited so it interpolates, and it animates
+   * on the main thread, not the compositor; every other channel renders as
+   * usual.
+   */
+  customProperty?: {name: string; syntax: '<length>' | '<number>'};
 }
 
 /**
@@ -920,6 +929,39 @@ const REDUCED_TRANSITION: SpringTransition = {
   spring: {duration: 0.5, bounce: 0},
 };
 
+/** Custom properties registered so far (once per document's window). */
+const registeredProperties = new Set<string>();
+
+/**
+ * Registers `name` as an inherited `<length>` (initially 0px) or `<number>`
+ * (initially 0) so keyframes interpolate it; an unregistered custom property
+ * animates in steps. A property the page already registered is left as it
+ * is.
+ */
+function registerCustomProperty(
+  name: string,
+  syntax: '<length>' | '<number>',
+): void {
+  if (
+    registeredProperties.has(name) ||
+    typeof CSS === 'undefined' ||
+    typeof CSS.registerProperty !== 'function'
+  ) {
+    return;
+  }
+  registeredProperties.add(name);
+  try {
+    CSS.registerProperty({
+      name,
+      syntax,
+      inherits: true,
+      initialValue: syntax === '<length>' ? '0px' : '0',
+    });
+  } catch {
+    // Already registered, by the page or an earlier bundle.
+  }
+}
+
 /**
  * Creates an animator for `element` (or for an element attached later).
  *
@@ -962,6 +1004,31 @@ export function createMotionAnimator(
           });
         };
   const pseudoElement = options.pseudoElement;
+  const customProperty = options.customProperty;
+  if (customProperty != null) {
+    registerCustomProperty(customProperty.name, customProperty.syntax);
+  }
+  /** Whether a channel renders into the custom property. */
+  const isCustom = (channel: Channel) =>
+    customProperty != null && channel === 'translate';
+  /** The CSS property a channel renders into. */
+  const cssName = (channel: Channel): string =>
+    customProperty != null && channel === 'translate'
+      ? customProperty.name
+      : channel;
+  /** The custom property's unit: px for a length, none for a number. */
+  const customUnit = customProperty?.syntax === '<number>' ? '' : 'px';
+  /** A channel's text in a keyframe. */
+  const textOf = (
+    channel: Channel,
+    value: (property: MotionProperty) => number,
+  ): string =>
+    isCustom(channel)
+      ? `${round(value('x'), customUnit === '' ? 5 : 3)}${customUnit}`
+      : format(channel, value);
+  /** What the channel's inline value is at identity. */
+  const identityOf = (channel: Channel): string =>
+    isCustom(channel) ? `0${customUnit}` : IDENTITY_TEXT[channel];
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4).
   const prefersReducedMotion = defaultPrefersReducedMotion;
@@ -1182,14 +1249,16 @@ export function createMotionAnimator(
       return;
     }
     touched.add(channel);
-    const text = inlineText(channel, value);
+    const text = isCustom(channel)
+      ? textOf(channel, value)
+      : inlineText(channel, value);
     // An unchanged value is not written: a style write invalidates the
     // element, and WebKit can repaint sticky content stale when that lands in
     // the frame a scroll commits.
-    if (target.style.getPropertyValue(channel) !== text) {
-      target.style.setProperty(channel, text);
+    if (target.style.getPropertyValue(cssName(channel)) !== text) {
+      target.style.setProperty(cssName(channel), text);
     }
-    if (release && text === IDENTITY_TEXT[channel]) {
+    if (release && text === identityOf(channel)) {
       // Identity leaves the element when nothing else would move it.
       releaseIdentity(channel);
     }
@@ -1285,7 +1354,7 @@ export function createMotionAnimator(
       }
     }
     const moving = properties.filter(p => segments.has(p));
-    if (channel === 'translate') {
+    if (channel === 'translate' && !isCustom(channel)) {
       // The animation built below starts from the value at `time` (its first
       // keyframe); a rebase or a retarget builds a new one, so a new start.
       hitTested = {x: valueAt('x', time), y: valueAt('y', time)};
@@ -1410,18 +1479,24 @@ export function createMotionAnimator(
       if (jumpTimes.has(t)) {
         keyframes.push({
           offset,
-          [channel]: format(channel, p => valueBefore(p, t)),
+          [cssName(channel)]: textOf(channel, p => valueBefore(p, t)),
         });
       }
       keyframes.push({
         offset,
-        [channel]: format(channel, p =>
+        [cssName(channel)]: textOf(channel, p =>
           t >= end ? finalValue(p) : curveAt(p, t),
         ),
       });
     }
-    keyframes.push({offset: 1, [channel]: format(channel, finalValue)});
-    promote(channel);
+    keyframes.push({
+      offset: 1,
+      [cssName(channel)]: textOf(channel, finalValue),
+    });
+    // A custom property animates on the main thread: nothing to promote.
+    if (!isCustom(channel)) {
+      promote(channel);
+    }
     const animation = target.animate(keyframes, {
       duration: span,
       // The last keyframes hold the end state (END_HOLD_MS); filling both
@@ -1700,7 +1775,9 @@ export function createMotionAnimator(
     if (pseudoElement != null) {
       return;
     }
-    if (target.style.getPropertyValue(channel) !== IDENTITY_TEXT[channel]) {
+    if (
+      target.style.getPropertyValue(cssName(channel)) !== identityOf(channel)
+    ) {
       return;
     }
     // Read with every other channel the same commit leaves at identity: one
@@ -1728,20 +1805,21 @@ export function createMotionAnimator(
     const channels = [...releasing].filter(
       channel =>
         !running.has(channel) &&
-        element?.style.getPropertyValue(channel) === IDENTITY_TEXT[channel],
+        element?.style.getPropertyValue(cssName(channel)) ===
+          identityOf(channel),
     );
     releasing.clear();
     if (element == null || channels.length === 0) {
       return;
     }
     for (const channel of channels) {
-      element.style.removeProperty(channel);
+      element.style.removeProperty(cssName(channel));
     }
     const style = element.ownerDocument.defaultView?.getComputedStyle(element);
     for (const channel of channels) {
-      const underneath = style?.getPropertyValue(channel);
+      const underneath = style?.getPropertyValue(cssName(channel));
       if (underneath != null && !isIdentityText(channel, underneath)) {
-        element.style.setProperty(channel, IDENTITY_TEXT[channel]);
+        element.style.setProperty(cssName(channel), identityOf(channel));
       }
     }
   };
