@@ -1,0 +1,7 @@
+---
+'@astryxdesign/core': patch
+---
+
+[feat] Tooltip (and `useTooltip`) take `triggerBehavior` (type `TooltipTriggerBehavior`): `adaptive`, the default and the released behavior, where hover and focus preview the tooltip and a tap opens it unless the trigger performs an action of its own; `hover`, where hover and focus preview it and no touch or pen tap opens it; or `toggle`, where hover and focus still preview it and a click, a tap, Enter, or Space on a button trigger pins it open, and the same press closes it. A pinned tooltip stays until Escape, a second press, a press outside, or focus leaving, and it takes Escape before the layer beneath it. The press stops at its trigger, so a clickable row, card, or label around it does nothing, and the trigger's own handlers still run. With `anchorRef`, or `useTooltip` with a caller's trigger, nothing is rendered around the trigger to stop it: the trigger's own `onClick` runs, Astryx clickable rows, cards, and containers ignore the press, and a plain `onClick` element around the trigger receives it unless the trigger's `onClick` stops it. The trigger reports `aria-expanded` and `aria-controls`, and the tooltip's text is announced once when it pins, inside a modal too (`component:Tooltip` FR9 and FR10). A trigger that is not a button gets a development warning and keeps tap-only opening; `touchTrigger` decides taps only under `adaptive`; `hover` and `toggle` ignore it.
+
+@vjeux

@@ -2,8 +2,9 @@
 
 /**
  * @file useAnnounceRenderedText.adopters.test.tsx
- * @input Every core component that announces its own rendered content, with
- *   the shared own-content module replaced by a recorder
+ * @input Every core component that announces its own rendered content
+ *   (Tooltip, when a press pins it, among them), with the
+ *   shared own-content module replaced by a recorder
  * @output architecture:react-component-runtime INV10 test: each adopter hands
  *   its own-content announcement to the shared module and announces none of it
  *   itself
@@ -67,6 +68,7 @@ const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
 const {TokenizerWithPresentation} =
   await import('../internal/tokenizer-presentation');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
+const {Tooltip} = await import('../Tooltip');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
 
@@ -163,6 +165,18 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     );
     fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
     await expectDelegated('No results found');
+  },
+  'Tooltip/useTooltip.tsx': async () => {
+    // A tooltip a press pinned says its own text (component:Tooltip FR10).
+    render(
+      <Tooltip
+        content="Billed on the first of each month"
+        triggerBehavior="toggle">
+        <button type="button">About billing</button>
+      </Tooltip>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
+    await expectDelegated('Billed on the first of each month');
   },
   'Tokenizer/TokenizerBottomSheet.tsx': async () => {
     // The sheet's own content is a caller's `emptySearchText` element; the

@@ -26,12 +26,12 @@ import {
   type LayerAlignment,
   type LayerPlacement,
 } from '../Layer/useLayer';
-import {
-  useTouchTrigger,
-  type LayerTouchTrigger,
-} from '../Layer/useTouchTrigger';
+import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
+import {usePressPin, type LayerTriggerBehavior} from '../Layer/usePressPin';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -83,6 +83,15 @@ export type TooltipFocusTrigger = 'auto' | 'always' | 'never';
  */
 export type TooltipTouchTrigger = LayerTouchTrigger;
 
+/**
+ * How the trigger opens the tooltip: `adaptive` (the default) previews it on
+ * hover and focus and opens it on a tap unless the trigger acts; `hover`
+ * previews it on hover and focus, and no touch or pen tap opens it; `toggle`
+ * pins it on a click, tap, Enter, or Space on a button trigger
+ * (component:Tooltip FR5, FR9).
+ */
+export type TooltipTriggerBehavior = LayerTriggerBehavior;
+
 export interface TooltipOptions {
   /**
    * Position placement relative to anchor
@@ -123,14 +132,35 @@ export interface TooltipOptions {
    * - `auto`: tap opens the tooltip, unless the trigger performs an action of
    *   its own (a button, a link, a form control) — that tap belongs to the
    *   control, and a hint about a control the user just operated is noise
-   * - `tap`: tap always opens the tooltip. This is what an info icon rendered
-   *   as a button wants: it looks like an action to the DOM, but revealing the
-   *   tooltip is the only thing it does
+   * - `tap`: tap always opens the tooltip, even on a trigger that acts
    * - `none`: touch never opens the tooltip
+   *
+   * It decides only under `triggerBehavior="adaptive"`, the default.
    *
    * @default 'auto'
    */
   touchTrigger?: TooltipTouchTrigger;
+
+  /**
+   * How the trigger opens the tooltip:
+   * - `adaptive` (the default): hover and focus preview it; a tap opens it
+   *   unless the trigger performs an action of its own (`touchTrigger`
+   *   decides while it remains)
+   * - `hover`: hover and focus preview it; no touch or pen tap opens it
+   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
+   *   tooltip open and the same press closes it; hover and keyboard focus
+   *   still preview it. A pinned tooltip stays until Escape, a second press,
+   *   a press outside, or focus leaving. Astryx clickable rows and cards
+   *   ignore the pinning press; the `Tooltip` component also stops it at a
+   *   child trigger, and a hook caller stops a plain `onClick` ancestor itself.
+   *   The trigger reports `aria-expanded` and `aria-controls`, and the
+   *   tooltip's text is announced once when it pins. Use it for a trigger
+   *   whose information lives only in the tooltip, such as an info icon.
+   *   `touchTrigger` is ignored.
+   *
+   * @default 'adaptive'
+   */
+  triggerBehavior?: TooltipTriggerBehavior;
 
   /**
    * Whether the tooltip is enabled.
@@ -274,6 +304,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideDelay = 0,
     focusTrigger = 'auto',
     touchTrigger = 'auto',
+    triggerBehavior = 'adaptive',
     isEnabled = true,
     isOpen,
     isDefaultOpen = false,
@@ -331,22 +362,44 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideLayer();
   }, [clearTimeouts, hideLayer]);
 
+  // A press pins the tooltip under `triggerBehavior="toggle"` (FR9, FR10). The pin
+  // also owns the tooltip's touch trigger, so this is the one call that wires
+  // both (`architecture:react-component-runtime` INV16).
   const {
-    isTouchPointerRef,
-    isTouchInteraction,
-    handlePointerEnter,
-    handlePointerDown: handleTouchPointerDown,
-    clearTapOpen,
-  } = useTouchTrigger({
+    isToggleTrigger,
+    isHeldOpen: isPressHeldOpen,
+    attach: attachPressPin,
+    unpin: unpinPress,
+    isPinShown,
+    touch: {
+      isTouchPointerRef,
+      isTouchInteraction,
+      handlePointerEnter,
+      handlePointerDown: handleTouchPointerDown,
+      clearTapOpen,
+    },
+  } = usePressPin({
+    triggerBehavior,
     touchTrigger,
     isEnabled,
-    isControlled: isOpen !== undefined,
-    isOpen: isLayerOpen,
-    layerId: layerId,
+    isOpen,
+    isLayerOpen,
+    layerId,
     triggerRef,
+    component: 'Tooltip',
     show: showNow,
     hide: hideNow,
+    report: next => (next ? onShow?.() : onHide?.()),
   });
+
+  // A pinned tooltip's own rendered text is said once when it pins (FR10,
+  // spec:AST-086 FR12).
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useAnnounceRenderedText(contentRef, isPinShown, 'pinned');
+  const contentRefs = useMergedRefs<HTMLDivElement>(
+    contentRef,
+    registerLayerSurface,
+  );
 
   // Schedule show with delay (suppressed when isOpen is false)
   const scheduleShow = useCallback(() => {
@@ -375,7 +428,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // trigger onto the tooltip surface without the tooltip vanishing — required
   // for WCAG 1.4.13 (Content on Hover or Focus: hoverable).
   const scheduleHide = useCallback(() => {
-    if (isOpen === true) {
+    // A pinned tooltip stays when the pointer or focus leaves (FR9).
+    if (isOpen === true || isPressHeldOpen()) {
       return;
     }
     clearTimeouts();
@@ -383,7 +437,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideTimeoutRef.current = setTimeout(() => {
       hideLayer();
     }, effectiveHideDelay);
-  }, [isOpen, clearTimeouts, hideLayer, hideDelay]);
+  }, [isOpen, isPressHeldOpen, clearTimeouts, hideLayer, hideDelay]);
 
   // Cancel a pending hide (e.g. the pointer entered the tooltip surface).
   const cancelHide = useCallback(() => {
@@ -452,6 +506,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     [isEnabled, isTouchInteraction, clearTimeouts, showLayer],
   );
 
+  // A pinned tooltip's focus-leave close is the pin's own: it listens on the
+  // trigger whatever `focusTrigger` is. This schedules the unpinned hide,
+  // which a held tooltip skips.
   const handleFocusOut = useCallback(() => {
     scheduleHide();
   }, [scheduleHide]);
@@ -465,6 +522,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // tooltip at all), so the touch path answers it first.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      // A press on a toggle trigger pins or closes through its click (FR9):
+      // it neither hides the preview here nor waits for a tap verdict.
+      if (isToggleTrigger(triggerRef.current)) {
+        return;
+      }
       if (handleTouchPointerDown(event)) {
         return;
       }
@@ -474,7 +536,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       clearTimeouts();
       hideLayer();
     },
-    [handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
+    [isToggleTrigger, handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
   );
 
   // Interaction ref that handles event listeners only
@@ -518,8 +580,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       }
 
       triggerRef.current = el;
+      attachPressPin(el);
     },
     [
+      attachPressPin,
       focusTrigger,
       handleMouseEnter,
       handleMouseLeave,
@@ -607,6 +671,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     onDismiss: () => {
       clearTimeouts();
       clearTapOpen();
+      unpinPress();
       if (isOpen !== undefined) {
         onHide?.();
         return;
@@ -642,8 +707,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // ancestors, portaled or not. A registered surface counts as
         // something else in the shared interactive-ancestor walk, so a
         // clickable container around the trigger leaves the press alone while
-        // document listeners still see it.
-        <div ref={registerLayerSurface} {...stylex.props(styles.content)}>
+        // document listeners still see it. The pin's announcement reads the
+        // same element's text (contentRefs).
+        <div ref={contentRefs} {...stylex.props(styles.content)}>
           {children}
         </div>,
         renderProps,
@@ -656,6 +722,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       popoverXstyle,
       cancelHide,
       scheduleHide,
+      contentRefs,
     ],
   );
 
