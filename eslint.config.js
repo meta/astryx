@@ -289,10 +289,17 @@ export default defineConfig(
     },
   },
   // Core's internal subpaths (`@astryxdesign/core/internal/*`) and its
-  // gesture, motion and touch-support source are for Core and Lab only.
+  // gesture, motion and touch-support source are for Core and Lab only, and
+  // for the docsite's presented hit-testing lab page: Astryx's own check of
+  // the gesture host on a phone, through `internal/touch`, not a consumer.
   {
     files: ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
-    ignores: ['packages/core/**', 'packages/lab/**', '**/dist/**'],
+    ignores: [
+      'packages/core/**',
+      'packages/lab/**',
+      'apps/docsite/src/app/lab/presented-hit-testing/**',
+      '**/dist/**',
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },

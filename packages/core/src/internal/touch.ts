@@ -2,14 +2,18 @@
 
 /**
  * @file touch.ts
- * @input The gesture core: the arena, the recognizers, and their geometry
+ * @input The gesture core: the arena, the recognizers, and their geometry;
+ *   the gesture host, Core's animator and the iOS WebKit check
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
- *   for Lab components, re-exported by name
+ *   for Lab components, re-exported by name, and the host, the animator and
+ *   the engine check the docsite's presented hit-testing lab page drives
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise
  *   (spec:AST-017 FR21), versioned in lockstep with Core, and allowed only in
  *   Core and Lab by the `@astryx/no-core-internal-import` lint rule
- *   (architecture:react-component-runtime INV13). Core components import the
+ *   (architecture:react-component-runtime INV13), and in the docsite's
+ *   presented hit-testing lab page, Astryx's own check of that behavior on
+ *   a phone, which `eslint.config.js` names. Core components import the
  *   same modules by relative path. Named re-exports only, never a gathering
  *   object: a bundler keeps one copy per page and only what a component uses
  *   (architecture:component-style-authoring INV6). Importing it attaches no
@@ -21,6 +25,7 @@
  */
 
 export {browserClock, GestureArena} from '../gestures/GestureArena';
+export {GestureHost} from '../gestures/GestureHost';
 export {
   ALL_NATIVE_TOUCH,
   GestureRecognizer,
@@ -37,5 +42,8 @@ export {
   unwrapAngle,
 } from '../gestures/geometry';
 export {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
+export {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 export {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 export {DEFAULT_ENVIRONMENT} from '../gestures/types';
+export {createAnimator} from '../motion/animator';
+export {isIosWebKit} from '../utils/touchQueries';
