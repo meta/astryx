@@ -297,11 +297,16 @@ describe.each(Object.entries(WORKFLOWS))(
           );
         }
       } else {
-        const commands = runLines(join);
+        // deploy.yml passes each result through the step's environment;
+        // main-unit-run.test.mjs runs its pass and fail cases.
+        const step = join.steps.find(
+          candidate => candidate.name === 'Assert every push gate succeeded',
+        );
         for (const lane of lanes) {
-          expect(commands, `join does not assert ${lane}`).toContain(
-            `needs.${lane}.result }}" = "success"`,
-          );
+          expect(
+            Object.values(step.env),
+            `join does not assert ${lane}`,
+          ).toContain(`\${{ needs.${lane}.result }}`);
         }
       }
     });
@@ -708,9 +713,11 @@ describe('deploy.yml push gating', () => {
     ]);
     const join = workflow.jobs.test.steps.find(
       step => step.name === 'Assert every push gate succeeded',
-    ).run;
+    );
     for (const owner of ['test-ui', 'test-node', 'typecheck']) {
-      expect(join).toContain(`needs.${owner}.result`);
+      expect(Object.values(join.env)).toContain(
+        `\${{ needs.${owner}.result }}`,
+      );
     }
   });
 

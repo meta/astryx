@@ -156,12 +156,13 @@ runs:
           const MAX_WAITING = 10;
           const PHASE = process.env.PHASE || 'whole';
           // The most jobs a run holds at once, by workflow: ci.yml's
-          // release-check and Main's unit run from their `peak`
+          // release-check and Main's runs (a push's fast checks or a unit run)
+          // from their `peak`
           // (ci-admission.test.mjs), a pull-request ci.yml run from its
           // measured most, every other workflow's run one or two slim jobs.
           const ESTIMATE = {
             '.github/workflows/ci.yml': run => (run.event === 'workflow_dispatch' ? 37 : 16),
-            '.github/workflows/deploy.yml': () => 14,
+            '.github/workflows/deploy.yml': run => (run.event === 'push' ? 4 : 14),
             '.github/workflows/review-signal.yml': () => 2,
           };
           const estimate = run => (ESTIMATE[run.path] ?? (() => 1))(run);

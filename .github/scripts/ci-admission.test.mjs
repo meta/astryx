@@ -271,14 +271,31 @@ describe('peaks', () => {
     expect(estimateOf('ci.yml')).toContain(`'workflow_dispatch' ? ${peak} :`);
   });
 
-  it("gives Main's unit run a peak that covers all its jobs beside main-commit", () => {
-    const held = Object.keys(main.jobs)
-      .filter(name => name !== 'main-commit' && name !== 'test')
-      .map(name => legs(main.jobs[name]))
-      .reduce((sum, count) => sum + count, 0);
-    const peak = stepOf(main.jobs['main-commit']).with.peak;
-    expect(peak).toBeGreaterThanOrEqual(held);
-    expect(estimateOf('deploy.yml')).toContain(`() => ${peak},`);
+  it("gives Main's unit run a peak that covers all its jobs, and a push one for its fast checks", () => {
+    const [, push, unit] = /&& (\d+) \|\| (\d+)/
+      .exec(stepOf(main.jobs['main-commit']).with.peak)
+      .map(Number);
+    const held = names =>
+      names
+        .map(name => legs(main.jobs[name]))
+        .reduce((sum, count) => sum + count, 0);
+    // A dispatched unit run holds every job beside main-commit and the join.
+    expect(unit).toBeGreaterThanOrEqual(
+      held(
+        Object.keys(main.jobs).filter(
+          name => name !== 'main-commit' && name !== 'test',
+        ),
+      ),
+    );
+    // A push skips the unit legs (spec:AST-030 FR21).
+    const fast = Object.keys(main.jobs).filter(
+      name => main.jobs[name].if !== "github.event_name != 'push'",
+    );
+    expect(push).toBeGreaterThanOrEqual(fast.length);
+    expect(push).toBeLessThan(unit);
+    expect(estimateOf('deploy.yml')).toContain(
+      `run => (run.event === 'push' ? ${push} : ${unit}),`,
+    );
   });
 
   it('gives a pull request a peak that covers every job it starts at once', () => {
