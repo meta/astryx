@@ -22,6 +22,7 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
+import {inPresentationOrder} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -124,7 +125,10 @@ interface Frame {
   readonly data: string;
 }
 
-/** Compositor frames, captured off the main thread. */
+/**
+ * Compositor frames, captured off the main thread, in the order the page
+ * presented them.
+ */
 async function startScreencast(page: Page) {
   const cdp = await page.context().newCDPSession(page);
   const frames: Frame[] = [];
@@ -157,7 +161,15 @@ async function startScreencast(page: Page) {
       await cdp.detach();
       // A lost acknowledgement stalls the screencast and thins the frames.
       expect(ackFailures).toEqual([]);
-      return frames;
+      // Chromium encodes each frame off its main thread and can send a slow
+      // one after the next: on a loaded runner, the frame that applied a new
+      // value arrived after the first frame that moved. Frames go by the
+      // swap timestamp each one carries, and a frame repeating one already
+      // kept goes; a frame that shows the fill behind an earlier one still
+      // has its own later timestamp, so it stays and fails the trace.
+      return inPresentationOrder(frames).filter(
+        (frame, i, ordered) => i === 0 || frame.t > ordered[i - 1].t,
+      );
     },
   };
 }
