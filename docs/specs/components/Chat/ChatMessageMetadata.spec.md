@@ -44,7 +44,7 @@ system_specs: [spec:AST-029]
 | Behavior                | The row renders its present slots in timestamp, footer, status order, with a separator only between present slots; user sender reverses the flex row. Five delivery statuses have localized icon-and-text displays. |
 | End-user impact         | Readers see a compact line of time, extra details, and delivery status in reading order, with a dot only between items that show something and a caption beside each status icon.                                   |
 | Builder impact          | None.                                                                                                                                                                                                               |
-| Compatibility/readiness | Records shipped behavior; no public change. No implementation gap; two owner questions stay open.                                                                                                                   |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap, listed under Current-state impact; two owner questions stay open.                                                                               |
 | Review checks           | Reject a lost visible zero, stranded separator, omitted translated status label, dropped root passthrough, or claim that a static DOM attribute proves an AT announcement.                                          |
 | Governing rules         | `architecture:public-component-api/INV1, INV3, INV5–INV9`; `architecture:component-test-sufficiency/INV1–INV7`; `spec:AST-029/FR2–FR5`.                                                                             |
 
@@ -67,6 +67,13 @@ bubble surface, the transcript, or the footer control owner.
 - Migration decision: none
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+## Current-state impact
+
+- **The status label may not be read.** The status span carries a translated
+  `aria-label` but no role. WAI-ARIA 1.2 prohibits naming an element with the
+  generic role, so assistive technology may ignore that label and read only
+  the visible caption (FR6).
 
 ## Ownership boundary
 
@@ -104,14 +111,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                    | Basis                             |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------- |
-| FR1 | The root appears when at least one slot passes the shared scalar-presence predicate or `status` is present. Non-scalar values are treated as present without inspecting their inner content.                 | Current source and tests          |
-| FR2 | Accepted slot values render in timestamp, footer, status order with dots between values considered present; numeric `0` is visible in either slot, and non-scalar nodes remain opaque.                       | Current source and tests          |
-| FR3 | A `user` message reverses row direction; `assistant`, `system`, and absent context use the forward path.                                                                                                     | Current source                    |
-| FR4 | Status selects one of four registry icons (`delivered` and `read` share `checkDouble`) and localized labels; failure uses the error text token, and sending has a CSS pulse suppressed under reduced motion. | Current source and locale catalog |
-| FR5 | The root merges the target, default StyleX output, and consumer `xstyle`, `className`, and `style`; accepted neutral DOM/ARIA inputs and `ref` reach that root.                                              | Current source and tests          |
-| FR6 | A status item has a translated title and author-supplied `aria-label`, an icon and visible localized text. The row declares no live-region role or imperative announcement.                                  | Current source and tests          |
+| ID  | Invariant                                                                                                                                                                                                                                                     | Basis                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| FR1 | The root appears when at least one slot passes the shared scalar-presence predicate or `status` is present. Non-scalar values are treated as present without inspecting their inner content.                                                                  | Current source and tests          |
+| FR2 | Accepted slot values render in timestamp, footer, status order with dots between values considered present; numeric `0` is visible in either slot, and non-scalar nodes remain opaque.                                                                        | Current source and tests          |
+| FR3 | A `user` message reverses row direction; `assistant`, `system`, and absent context use the forward path.                                                                                                                                                      | Current source                    |
+| FR4 | Status selects one of four registry icons (`delivered` and `read` share `checkDouble`) and localized labels; failure uses the error text token, and sending has a CSS pulse suppressed under reduced motion.                                                  | Current source and locale catalog |
+| FR5 | The root merges the target, default StyleX output, and consumer `xstyle`, `className`, and `style`; accepted neutral DOM/ARIA inputs and `ref` reach that root.                                                                                               | Current source and tests          |
+| FR6 | A status item has a translated title, an icon, and visible localized text. The row declares no live-region role or imperative announcement. Implementation gap: the status span also carries a translated `aria-label` without a role (Current-state impact). | Current source and tests          |
 
 ### Allowed variation
 
@@ -180,11 +187,11 @@ No component-local design decision is recorded.
 
 ## Verification map
 
-| Contract      | Verification                                                                                                                                                                  | Representative states                          | Mutation or failure expectation                                                    | Audit section                          |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------- |
-| FR1–FR2       | `ChatMessageMetadata.test.tsx` separator, empty-row, and numeric-zero tests; `ChatMessageMetadata.a11y.chromium.spec.ts` `narrow-overflow` and `status-*` cases               | empty scalar; zero; timestamp, footer, status  | A stray separator, a blank row, or a hidden zero fails.                            | `audit:ChatMessageMetadata/behavior`   |
-| FR5           | `ChatMessageMetadata.test.tsx` `forwards rest props (data-*, aria-*, id) to the root element`                                                                                 | data and id props                              | A dropped prop fails.                                                              | `audit:ChatMessageMetadata/public-api` |
-| FR3, FR4, FR6 | `ChatMessageMetadata.a11y.chromium.spec.ts` status and RTL sender-ordering tests; `ChatMessageBubble.test.tsx` "renders status" and "renders timestamp and status on one row" | each status; user and assistant in LTR and RTL | A wrong sender order, a missing caption or title, or a dropped status label fails. | `audit:ChatMessageMetadata/behavior`   |
+| Contract      | Verification                                                                                                                                                                  | Representative states                          | Mutation or failure expectation                                                                                                   | Audit section                          |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| FR1–FR2       | `ChatMessageMetadata.test.tsx` separator, empty-row, and numeric-zero tests; `ChatMessageMetadata.a11y.chromium.spec.ts` `narrow-overflow` and `status-*` cases               | empty scalar; zero; timestamp, footer, status  | A stray separator, a blank row, or a hidden zero fails.                                                                           | `audit:ChatMessageMetadata/behavior`   |
+| FR5           | `ChatMessageMetadata.test.tsx` `forwards rest props (data-*, aria-*, id) to the root element`                                                                                 | data and id props                              | A dropped prop fails.                                                                                                             | `audit:ChatMessageMetadata/public-api` |
+| FR3, FR4, FR6 | `ChatMessageMetadata.a11y.chromium.spec.ts` status and RTL sender-ordering tests; `ChatMessageBubble.test.tsx` "renders status" and "renders timestamp and status on one row" | each status; user and assistant in LTR and RTL | A wrong sender order, or a missing caption or title, fails; the bubble tests also pin the status `aria-label` behind the FR6 gap. | `audit:ChatMessageMetadata/behavior`   |
 
 Read from source, with no focused test yet:
 
