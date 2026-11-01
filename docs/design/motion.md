@@ -62,6 +62,24 @@ The source wiki does not establish responsive-path, interruption, or
 input-specific motion rules beyond the principles above. Those concerns remain
 open for separately evidenced decisions.
 
+### Hover-summoned layer entrance
+
+This rule is DEC-2, pending owner review. A layer is hover-summoned when it
+opens because a hover-capable pointer rested on its trigger and no press or key
+started the opening: a tooltip, a hover card, or a menu, flyout, or popover that
+opens on hover.
+
+- A hover-summoned layer appears at once, or with an entrance that does not
+  travel and runs no longer than the shortest timed hover or press response.
+- The same layer opened by a press or a key keeps its own entrance.
+- The entrance follows the input that opened the layer, not a per-surface
+  setting.
+
+Verification is a real-browser measurement of the entrance when the same layer
+opens by hover, by a press, and by a key. It fails when the hover open's
+entrance travels or runs longer than the shortest timed hover or press response,
+or when the press or key open loses the layer's own entrance.
+
 ## Accessibility intent
 
 Motion must not be required to perceive status, hierarchy, or completion. Reduced
@@ -89,6 +107,20 @@ No component links are asserted in this seed draft.
 No repository design decision has approved this record yet. It distills motion
 intent from the public Design Conventions wiki without copying duration values,
 CSS properties, or audit mechanics.
+
+### DEC-2 — A hover-summoned layer enters as local feedback
+
+**Reference:** `design:motion/DEC-2`
+**Decider:** pending owner review
+
+A pointer has already waited out the hover dwell when a hover-summoned layer
+opens, so a full entrance on top makes every hover reveal feel slow, and a
+pointer sweeping across several hover triggers replays that entrance each time.
+The entrance therefore appears at once or runs no longer than the shortest timed
+hover or press response, and the input that opened the layer decides it, so no
+surface tunes a duration of its own.
+
+Rejected: the same entrance for every input, which stacks the full entrance on the dwell; a duration chosen per surface, which restates a timing value at every call site.
 
 ## Open questions
 
