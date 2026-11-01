@@ -87,6 +87,7 @@ import {
   type ReactNode,
   type SyntheticEvent,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
@@ -335,7 +336,12 @@ export function BottomSheetSwitcher({
   // for it; with the host closed the flow simply reads as closed.
   const host = use(BottomSheetHostContext);
   const isHostOpen = host?.isOpen ?? true;
-  const activeSheet = isHostOpen ? activeSheetProp : null;
+  // A flow with an active sheet on the server reads as closed until
+  // hydration, and opens in the render after it, the first one that can enter
+  // its native host: a <dialog> painted open with aria-modal before it is
+  // modal claims a state it does not have (`component:BottomSheet` FR17).
+  const isHydrating = useIsHydrating();
+  const activeSheet = isHostOpen && !isHydrating ? activeSheetProp : null;
   // Every sheet host applies the switcher's dialog surface to its own dialog.
   const dialogProps = useShallowStable<BottomSheetSwitcherDialogProps>({
     ...restDialogProps,
