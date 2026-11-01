@@ -17,10 +17,10 @@ private func surface(
 
 @Test func everyVariantMapsToItsGlassInABarAndFloating() {
   // FR8's table: a set variant keeps its meaning; only secondary and ghost
-  // share the bar's glass.
-  #expect(surface(.primary, .bar) == .glass(.prominent(.accent)))
+  // share the bar's glass, and in a bar primary and destructive tint it.
+  #expect(surface(.primary, .bar) == .glass(.barProminent(.accent)))
   #expect(surface(.primary, .floating) == .glass(.prominent(.accent)))
-  #expect(surface(.destructive, .bar) == .glass(.prominent(.error)))
+  #expect(surface(.destructive, .bar) == .glass(.barProminent(.error)))
   #expect(surface(.destructive, .floating) == .glass(.prominent(.error)))
   #expect(surface(.secondary, .bar) == .glass(.barItem))
   #expect(surface(.secondary, .floating) == .glass(.regular))
