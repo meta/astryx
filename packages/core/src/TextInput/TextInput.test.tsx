@@ -124,6 +124,28 @@ describe('TextInput', () => {
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLInputElement));
   });
 
+  it('gives controlRef the control box the input sits inside', () => {
+    let box: HTMLDivElement | null = null;
+    render(
+      <TextInput
+        controlRef={el => {
+          if (el != null) {
+            box = el;
+          }
+        }}
+        label="Name"
+        value=""
+        onChange={() => {}}
+      />,
+    );
+
+    expect(box).toBeInstanceOf(HTMLDivElement);
+    expect(box).toBe(screen.getByRole('textbox').parentElement);
+    // The border lives on the box, so anchoring to it lines an overlay up
+    // with the field a person sees rather than with the inset text.
+    expect(box).toHaveClass('astryx-text-input');
+  });
+
   it('visually hides label when isLabelHidden is true', () => {
     render(
       <TextInput label="Search" isLabelHidden value="" onChange={() => {}} />,
