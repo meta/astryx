@@ -93,6 +93,13 @@ struct DemoApp: App {
 core's default theme. Either way they follow Dark Mode and the person's text
 size.
 
+On iOS and iPadOS 26 and later, a `Button` in a navigation bar or toolbar draws
+no fill of its own, so the bar's Liquid Glass shows, and `astryxFloating()` on
+a container of controls over scrolling content gives its Buttons the system's
+glass. A `variant` keeps its meaning in glass, and Reduce Transparency or
+Increase Contrast draws a solid token fill instead. Elsewhere, and on macOS,
+Buttons keep their token look.
+
 ## Theme tokens
 
 Components read every color, size, and font from the `astryx` environment
