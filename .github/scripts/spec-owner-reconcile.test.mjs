@@ -1390,13 +1390,15 @@ describe('spec owner workflow reconciliation', () => {
       const tooLarge =
         '⏳ Too large to reconcile automatically: a maintainer can run the Review signal workflow for this PR';
 
-      // The job's request count, as lib/rate-limit-backoff.cjs keeps it.
+      // The job's request count, as lib/rate-limit-backoff.cjs keeps it: a
+      // request counts once it reaches the client, a tick after the call.
       function countRequests(harness) {
         const counter = {requests: 0, waits: 0};
         const repos = harness.github.rest.repos;
         for (const name of ['getContent', 'compareCommitsWithBasehead']) {
           const method = repos[name];
           repos[name] = async input => {
+            await Promise.resolve();
             counter.requests += 1;
             return method(input);
           };
@@ -1415,6 +1417,7 @@ describe('spec owner workflow reconciliation', () => {
 
         await commentRun(harness, ownerComment(`/approve-spec ${head}`));
 
+        // Parallel reads stop at the budget too, not one batch past it.
         expect(counter.requests).toBe(300);
         expect(latestReviewGate(harness.state)).toMatchObject({
           state: 'pending',
@@ -1424,6 +1427,76 @@ describe('spec owner workflow reconciliation', () => {
           state: 'pending',
           description:
             'Mirrors review-required · spec too large to reconcile automatically',
+        });
+      });
+
+      it('stops parallel reads at the budget, not a batch past it', async () => {
+        const harness = createHarness({
+          changedFiles: moved,
+          headContent: currentRecord,
+          baseContent: currentRecord,
+        });
+        const counter = countRequests(harness);
+
+        await reconcileSpecOwnerGate({
+          github: harness.github,
+          context: context({runId: 100n}),
+          core: harness.core,
+          workspace,
+          env,
+          requestBudget: 100,
+        });
+
+        expect(counter.requests).toBe(100);
+        expect(latestReviewGate(harness.state).description).toBe(tooLarge);
+      });
+
+      describe("after a maintainer's dispatch decided the head", () => {
+        const dispatched = trustedStatus({
+          runId: 50,
+          state: 'success',
+          description: 'Mirrors review-required · spec ok (@cixzhang)',
+        });
+
+        function harnessAfterDispatch() {
+          const harness = createHarness({
+            changedFiles: moved,
+            headContent: currentRecord,
+            baseContent: currentRecord,
+            statuses: [dispatched],
+          });
+          harness.github.rest.actions = {
+            getWorkflowRun: async ({run_id: id}) => ({
+              data: {
+                event: id === 50 ? 'workflow_dispatch' : 'pull_request_target',
+              },
+            }),
+          };
+          countRequests(harness);
+          return harness;
+        }
+
+        it('keeps that decision on a later event that is not an owner act', async () => {
+          const harness = harnessAfterDispatch();
+
+          await run(harness, context({runId: 100n, action: 'labeled'}));
+
+          expect(latestReviewGate(harness.state).state).toBe('success');
+          expect(latestGateStatus(harness.state)).toMatchObject({
+            state: 'success',
+            description: dispatched.description,
+          });
+        });
+
+        it("still waits for a dispatch after an owner's command", async () => {
+          const harness = harnessAfterDispatch();
+
+          await commentRun(harness, ownerComment(`/revoke-spec`));
+
+          expect(latestReviewGate(harness.state)).toMatchObject({
+            state: 'pending',
+            description: tooLarge,
+          });
         });
       });
 

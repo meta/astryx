@@ -15,6 +15,7 @@ const {
   parseOwnerCommandTarget,
   canonicalRunUrl,
   describeOwnerCommandProblem,
+  newestDecisionRun,
   newestGateRun,
   parseOwnerCommandIntent,
   parseAuthority,
@@ -106,18 +107,21 @@ async function reconcileWithinBudget({
   const requestCount = () =>
     (requestCounter ?? github.__rateLimitBackoff)?.requests ?? null;
   // Checked before each file read and comparison, the calls that grow with
-  // the pull request.
+  // the pull request. Reads start in parallel batches before the job's count
+  // sees them, so each checked call is also counted here as it starts.
+  let countAtFirstCheck = null;
+  let checkedCalls = 0;
   function spendRequest() {
-    const requests = requestCount();
-    if (
-      requests != null &&
-      context.eventName !== 'workflow_dispatch' &&
-      requests >= requestBudget
-    ) {
+    const observed = requestCount();
+    if (observed == null || context.eventName === 'workflow_dispatch') return;
+    countAtFirstCheck ??= observed;
+    const spent = Math.max(observed, countAtFirstCheck + checkedCalls);
+    if (spent >= requestBudget) {
       throw new RequestBudgetExceeded(
-        `Stopped after ${requests} GitHub API requests (budget ${requestBudget}).`,
+        `Stopped after ${spent} GitHub API requests (budget ${requestBudget}).`,
       );
     }
+    checkedCalls += 1;
   }
   const {owner, repo} = context.repo;
   const repository = `${owner}/${repo}`;
@@ -735,11 +739,44 @@ async function reconcileWithinBudget({
   // From here a run can reach the request budget. It then says so on both
   // statuses, so an owner's command never reads as taken, and leaves the
   // decision to a maintainer's dispatch.
+  async function keepDispatchedDecision() {
+    const prior = newestDecisionRun(
+      await listStatuses(initialHead),
+      repository,
+      runId,
+    );
+    if (!prior) return false;
+    const {data: priorRun} = await github.rest.actions.getWorkflowRun({
+      owner,
+      repo,
+      run_id: Number(prior.runId),
+    });
+    if (priorRun.event !== 'workflow_dispatch') return false;
+    await createStatus({
+      sha: initialHead,
+      context: GATE_STATUS_CONTEXT,
+      state: prior.status.state,
+      description: prior.status.description,
+      targetUrl: prior.status.target_url,
+    });
+    if (await restoreNewerStatus(initialHead)) return true;
+    await publishReviewGate(initialHead, readSpecGate([prior.status]));
+    core.info(
+      `Kept the decision of run ${prior.runId}, a maintainer's dispatch.`,
+    );
+    return true;
+  }
   budget.onExceeded = async () => {
     core.warning(
       `Stopped after ${requestCount()} GitHub API requests: this pull request is too large to reconcile automatically. Run the Review signal workflow with pr=${pullNumber} to decide it.`,
     );
     if (!(await isPublishable(initialHead))) return;
+    // A maintainer's dispatch decided this head; only an owner's review or
+    // command can change that decision, so any other event keeps it.
+    const isOwnerAct =
+      context.eventName === 'pull_request_review' ||
+      context.eventName === 'issue_comment';
+    if (!isOwnerAct && (await keepDispatchedDecision())) return;
     await createStatus({
       sha: initialHead,
       context: GATE_STATUS_CONTEXT,
