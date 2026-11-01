@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] A focused `DropdownMenu` row stays visible under forced colors (Windows High Contrast and similar modes). Rows show focus with a translucent background, which forced colors replace with the page color, so a keyboard user could not tell which row Enter would activate. In forced-colors mode only, the focused row now receives an inset system `Highlight` outline while the browser preserves legible text, icons, markers, and end content on action, destructive, checkbox, radio, and sub-menu rows; nothing changes outside that mode. The same rows render in `ContextMenu` and breadcrumb menus.
+[fix] A keyboard-focused `DropdownMenu` row now shows the standard focus ring, drawn inside the row, in every color mode. Rows showed focus only with a translucent background, which forced colors (Windows High Contrast and similar modes) replace with the page color, so a keyboard user there could not tell which row Enter would activate. The ring follows the last input: it appears after keyboard navigation, not on the row under the mouse. Action, destructive, checkbox, radio and sub-menu rows all show it, including in `ContextMenu` and breadcrumb menus.
 
 @cixzhang

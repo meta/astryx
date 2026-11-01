@@ -4,8 +4,8 @@
  * @file DropdownMenuForcedColors.test.tsx
  * @input vitest, @testing-library/react, DropdownMenu row components, the
  *   forced-colors CSS helper
- * @output Asserts every focusable menu row keeps a focus indicator under
- *   forced colors
+ * @output Asserts every focusable menu row draws the standard focus ring,
+ *   inset by its own width, which forced colors keep
  * @position Component-local; the real-engine frames live in
  *   __tests__/DropdownMenuAudit.a11y.chromium.spec.ts
  *
@@ -13,11 +13,12 @@
  * drive — with a translucent overlay background. Forced colors replace that
  * background with the page color, so a focused row would look like its
  * neighbours and a keyboard user in a high-contrast mode could not tell which
- * row Enter will activate (WCAG 2.4.7). The focused row receives an inset
- * system-color outline while its content remains under user-agent control, so
- * labels, icons, and end content stay perceptible. jsdom cannot render forced
- * colors, so these assert the compiled rule each focusable row carries; the
- * Chromium spec observes the rendered result.
+ * row Enter will activate (WCAG 2.4.7). Every row therefore draws the
+ * standard focus ring after keyboard input, inset by the ring's own width, in
+ * every color mode; forced colors keep an outline where they drop the
+ * overlay, and leave labels, icons, and end content under user-agent control.
+ * jsdom cannot render forced colors, so these assert the compiled rules each
+ * focusable row carries; the Chromium spec observes the rendered result.
  */
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
@@ -57,16 +58,22 @@ beforeEach(() => {
 });
 
 /**
- * The declarations the row's own classes apply on `:focus` under forced
- * colors, joined into one string.
+ * The declarations the row's own classes apply, joined into one string: on
+ * `:focus-visible` (the ring), or unconditionally.
  */
-function forcedColorsFocusDeclarations(row: HTMLElement): string {
+function rowDeclarations(
+  row: HTMLElement,
+  condition: ':focus-visible' | '' = ':focus-visible',
+): string {
   const css = getAllInjectedCss();
   const declarations: string[] = [];
   for (const className of Array.from(row.classList)) {
     const escaped = className.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp(
-      `\\.${escaped}:focus-visible[^{,]*\\{([^}]*)\\}`,
+      condition === ''
+        ? // StyleX may raise a rule's priority with `:not(#\#)` suffixes.
+          `\\.${escaped}(?::not\\(#\\\\#\\))*\\s*\\{([^}]*)\\}`
+        : `\\.${escaped}:focus-visible[^{,]*\\{([^}]*)\\}`,
       'g',
     );
     for (const match of css.matchAll(pattern)) {
@@ -77,12 +84,16 @@ function forcedColorsFocusDeclarations(row: HTMLElement): string {
 }
 
 function expectSystemFocusOutline(row: HTMLElement) {
-  const declarations = forcedColorsFocusDeclarations(row);
+  const declarations = rowDeclarations(row);
   expect(declarations).toContain('outline-width: var(--focus-outline-width)');
   expect(declarations).toContain('outline-style: var(--focus-outline-style)');
   expect(declarations).toContain('outline-color: var(--focus-outline-color)');
   expect(declarations).not.toContain('background-color: highlight');
   expect(declarations).not.toContain('color: highlighttext');
+  // Inset by the ring's own width, from the token rather than a fixed length.
+  expect(rowDeclarations(row, '').replace(/\s+/g, '')).toContain(
+    'outline-offset:calc(-1*var(--focus-outline-width))',
+  );
 }
 
 async function openMenu() {
@@ -90,7 +101,7 @@ async function openMenu() {
   await user.click(screen.getByRole('button', {name: /Actions/}));
 }
 
-describe('forced colors: a focused menu row keeps a visible indicator (WCAG 2.4.7)', () => {
+describe('a focused menu row draws the standard focus ring, kept under forced colors (WCAG 2.4.7)', () => {
   it('an action row paints the outline on focus', async () => {
     render(
       <DropdownMenu button={{label: 'Actions'}}>

@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit DropdownMenu
 
 /**
  * @file DropdownMenuAudit.a11y.chromium.spec.ts
@@ -151,13 +152,15 @@ const CASES: Case[] = [
   c(
     'checkbox-rows',
     'lab-checkbox-items',
-    'keyboard-open',
+    // The story's play opens its own menu; Enter on the trigger would close it.
+    'story-play',
     'Selected — aria-checked backs the shared checkbox indicator',
   ),
   c(
     'checkbox-rows-dark',
     'lab-checkbox-items',
-    'keyboard-open',
+    // The story's play opens its own menu; Enter on the trigger would close it.
+    'story-play',
     'Selected — aria-checked backs the shared checkbox indicator',
     {mode: 'dark'},
   ),
@@ -553,11 +556,19 @@ function assertClaimedState(
   }
   if (state.startsWith('checkbox-rows')) {
     expectAnchored();
+    // Show archived, Show drafts, Sync folders, and the disabled managed row.
     expect(rows.map(row => row.role)).toEqual([
       'menuitemcheckbox',
       'menuitemcheckbox',
+      'menuitemcheckbox',
+      'menuitemcheckbox',
     ]);
-    expect(rows.map(row => row.checked)).toEqual(['false', 'true']);
+    expect(rows.map(row => row.checked)).toEqual([
+      'false',
+      'true',
+      'true',
+      'true',
+    ]);
     return;
   }
   if (state === 'radio-rows') {
@@ -946,7 +957,8 @@ async function capture(page: Page, scenario: Case) {
     if (scenario.forcedColors === 'after') {
       expect(focusIndicator?.style).toBe('solid');
       expect(focusIndicator?.width ?? 0).toBeGreaterThanOrEqual(2);
-      expect(focusIndicator?.offset).toBe('-2px');
+      // Inset by the ring's own width (the focus-outline-width token).
+      expect(focusIndicator?.offset).toBe(`-${focusIndicator?.width}px`);
       expect(focusIndicator?.color).toBe(focusIndicator?.expectedHighlight);
     }
     if (scenario.forcedColors === 'before-control') {
