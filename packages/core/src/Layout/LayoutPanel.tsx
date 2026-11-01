@@ -42,6 +42,8 @@ import {
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {focusForLastInput} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {themeProps} from '../utils/themeProps';
 import {
   paddingStyles,
@@ -287,6 +289,9 @@ export function LayoutPanel({
   // ref-form controller holds, or the `resizable` props' own, whether the
   // hook's or a hand-built object.
   const elementRef = useRef<HTMLDivElement>(null);
+  // The ring on the handle follows the last input
+  // (`architecture:interaction-modality` INV1).
+  const {ref: modalityRef} = useInteractionModalityTracking();
   const isRegionCollapsed =
     resizable == null ? isHeldCollapsed : resizable._isCollapsed;
   const [isSettledCollapsed, setIsSettledCollapsed] =
@@ -301,7 +306,11 @@ export function LayoutPanel({
     const element = elementRef.current;
     const active = element?.ownerDocument.activeElement;
     if (element != null && active != null && element.contains(active)) {
-      (paneLink.focusTarget() ?? resizeHandleBeside(element, area))?.focus();
+      const target =
+        paneLink.focusTarget() ?? resizeHandleBeside(element, area);
+      if (target != null) {
+        focusForLastInput(target);
+      }
     }
     // eslint-disable-next-line @eslint-react/set-state-in-effect -- the panel goes inert only after focus inside it has moved to its ResizeHandle (read from the DOM in this commit); inert in the collapsing commit would drop that focus to the page first
     setIsSettledCollapsed(true);
@@ -334,7 +343,7 @@ export function LayoutPanel({
 
   return (
     <div
-      ref={useMergedRefs(ref, elementRef, lendRef)}
+      ref={useMergedRefs(ref, elementRef, lendRef, modalityRef)}
       role={role}
       aria-label={label}
       {...mergeProps(
