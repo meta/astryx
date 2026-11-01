@@ -272,7 +272,7 @@ those contracts.
   comes through a public constructor whose module imports these modules
   statically; the component imports none of them, so only an app that
   imports the constructor ships them (`architecture:public-component-api`
-  INV19). `Item`'s swipe actions come from `createSwipeActions`
+  INV19). `Item`'s swipe actions come from `createSwipe`
   (`spec:AST-057` FR10); the one `import()` of swipe code is `Item`'s loader
   for its deprecated `swipeActions` prop (`spec:AST-057` DEP-0017). There is no
   install call, no public entry, and no public installed check; tests reset

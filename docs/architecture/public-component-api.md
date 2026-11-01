@@ -185,14 +185,14 @@ guidance owns the process used to propose and test APIs.
   picking a specific prop or label of a subcomponent). Build compositions
   instead. Compositions must follow the component's anatomy; never expose a way
   to compose or render a slot not described in the anatomy; and slots must have
-  components. Config objects are fine: plain data that describes actions or options (for example the `{label, icon, onActivate}` entries passed to `createSwipeActions`) is not a slot. 'Slots must have components' applies to rendered content slots, places that accept arbitrary nodes; such a slot must be a part named in the component's anatomy, and the caller fills it with a component. This extends INV3's rule that a parent does not duplicate a
+  components. Config objects are fine: plain data that describes actions or options (for example the `{label, icon, onActivate}` entries passed to `createSwipe`) is not a slot. 'Slots must have components' applies to rendered content slots, places that accept arbitrary nodes; such a slot must be a part named in the component's anatomy, and the caller fills it with a component. This extends INV3's rule that a parent does not duplicate a
   composed child's state; a slot's styling follows INV15 and
   `architecture:component-theming-surface`. See
   [Slots and composition](../contributing/api-conventions.md#slots-and-composition).
 - **INV19 — Resource cost is weighed against the feature.** Balance resource load against feature
   functionality and cross-platform concerns. If a feature has a large resource
   cost, consider plugging the behavior in, as `Item`'s swipe actions plug in
-  through `swipe={createSwipeActions(…)}` (`spec:AST-057` DEC-8). Named props for features are also
+  through `swipe={createSwipe(…)}` (`spec:AST-057` DEC-8). Named props for features are also
   fine (like `collapsible`).
 - **INV20 — Variants, not visual booleans.** Avoid boolean flags that only swap visuals; prefer variants. This
   applies INV2's naming and INV4's caller-owned intent to visual choices; see
