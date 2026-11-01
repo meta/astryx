@@ -370,7 +370,7 @@ export interface RichTextEditorProps extends Omit<
    *   info-tip button that reveals the message
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusVariant | 'tooltip';
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`).

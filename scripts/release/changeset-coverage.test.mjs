@@ -125,7 +125,7 @@ function repo(overrides = {}) {
     'packages/core/src/Button/Button.test.tsx': 'test();\n',
     'packages/core/src/Button/Button.a11y.chromium.spec.ts': 'test();\n',
     'packages/core/src/Button/Button.stories.tsx': 'export default {};\n',
-    'packages/core/src/Button/Button.spec.md': '# Button spec\n',
+    'docs/specs/components/Button/Button.spec.md': '# Button spec\n',
     'packages/core/src/Button/__fixtures__/data.ts': 'export {};\n',
     'packages/core/CHANGELOG.md': '# Changelog\n',
     'packages/themes/stone/package.json': manifest(
@@ -221,7 +221,7 @@ describe('classifyPath — what ships to consumers', () => {
     ['packages/core/src/Button/Button.test.tsx', /test/],
     ['packages/core/src/Button/Button.a11y.chromium.spec.ts', /test/],
     ['packages/core/src/Button/Button.stories.tsx', /story/],
-    ['packages/core/src/Button/Button.spec.md', /spec record/],
+    ['docs/specs/components/Button/Button.spec.md', /outside/],
     ['packages/core/src/Button/__fixtures__/data.ts', /fixture/],
     ['packages/cli/api/doctor/doctor.test.mjs', /test/],
     ['packages/cli/test/__golden__/docs-list.json', /test/],
@@ -239,6 +239,35 @@ describe('classifyPath — what ships to consumers', () => {
     const result = classifyPath(file, at(files));
     expect(result.ships).toBe(false);
     expect(result.reason).toMatch(reason);
+  });
+
+  it('exempts a package-root API report that files does not pack, despite its exclusion globs', () => {
+    const negated = repo({
+      'packages/core/package.json': manifest('@astryxdesign/core', {
+        files: ['dist', 'src', '!**/*.test.*'],
+      }),
+    });
+    const result = classifyPath('packages/core/api-report.md', at(negated));
+    expect(result).toEqual({
+      ships: false,
+      reason: 'API report, outside the tarball',
+    });
+    expect(
+      classifyPath('packages/core/src/Button/Button.tsx', at(negated)).ships,
+    ).toBe(true);
+  });
+
+  it('ships an API report that files packs', () => {
+    const packed = repo({
+      'packages/core/package.json': manifest('@astryxdesign/core', {
+        files: ['dist', 'api-report.md'],
+      }),
+    });
+    expect(classifyPath('packages/core/api-report.md', at(packed))).toEqual({
+      ships: true,
+      package: '@astryxdesign/core',
+      surface: 'docs',
+    });
   });
 
   it('treats a Changesets-ignored package as exempt even when it is not private', () => {
@@ -689,7 +718,7 @@ describe('rule 1 — a shipped change names its package', () => {
       'apps/sandbox/src/App.tsx': 'export const x = 1;\n',
       'apps/docsite/pages/index.tsx': 'export const y = 1;\n',
       'packages/core/src/Button/Button.test.tsx': 'test(2);\n',
-      'packages/core/src/Button/Button.spec.md': '# Button spec v2\n',
+      'docs/specs/components/Button/Button.spec.md': '# Button spec v2\n',
       'packages/core/src/Button/__fixtures__/data.ts': 'export const d = 1;\n',
       'packages/core/CHANGELOG.md': '# Changelog\n\n## 0.6.7\n',
       'packages/cli/test/__golden__/docs-list.json': DOCS_LIST_GOLDEN.replace(

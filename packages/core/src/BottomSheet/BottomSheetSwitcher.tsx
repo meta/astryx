@@ -67,7 +67,7 @@
  * - /packages/core/src/BottomSheet/BottomSheetStacking.test.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcherContext.ts
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs
- * - /packages/core/src/BottomSheet/BottomSheetSwitcher.spec.md
+ * - /docs/specs/components/BottomSheet/BottomSheetSwitcher.spec.md
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.test.tsx
  * - /packages/core/src/BottomSheet/index.ts
  * - /apps/storybook/stories/BottomSheetSwitcher.stories.tsx

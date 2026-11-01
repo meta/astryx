@@ -279,14 +279,13 @@ test.describe('touch input', () => {
     // on a few moves (in a container capped at 3 CPUs, where the quota stalls
     // the process for about 100 ms at a time), so a take is off pace when
     // more than half its moves are. It is re-taken once, as wheel bursts are,
-    // and a second such take fails. The limits, both from real-time input
-    // under CPU starvation: a pacer the cap throttles falls behind and never
-    // waits, so no pacing check can see a slow pacer there (under a 3-CPU cap
-    // with 16 workers, sending each step at twice its time failed none of 20
-    // runs); and there the quota slows most sends past the step's spacing,
-    // which reads exactly like a harness whose send is slow, so the real test
-    // fails 10 of 40 runs under that cap (the CI lane's 4 CPUs with one
-    // worker passed 10 of 10).
+    // and a second such take fails. Under CPU starvation (a 3-CPU cap with 16
+    // workers, with the software compositor's threads matched to the cap by
+    // LP_NUM_THREADS), a pacer the cap throttles falls behind and need not
+    // wait, so the pacing check can miss a slow pacer there (sending each step
+    // at twice its time failed 8 of 20 runs), and the quota slows some sends
+    // past the step's spacing, which reads like a harness whose send is slow
+    // (the real test passed 40 of 40 there, re-taken 9 times).
     for (const attempt of [1, 2] as const) {
       const {played, answeredAt, playStart, log} = await take();
       const {moves} = checkInput(log);
@@ -2793,10 +2792,13 @@ test.describe('animation state', () => {
   }) => {
     await fixture(page);
     const box = page.locator('#box');
+    // Long enough to be running at a frame of a starved page, whose frames
+    // can come a second apart: a shorter one can start and finish between
+    // two of them (the case below).
     await page.addStyleTag({
       content:
         '@keyframes enter { from { opacity: 0 } to { opacity: 1 } }' +
-        ' .entering { animation: enter 60ms linear }',
+        ' .entering { animation: enter 1500ms linear }',
     });
     const watch = await watchAnimations(box);
     // The page's time origin, where a lost start lands, is well before the
@@ -2816,14 +2818,187 @@ test.describe('animation state', () => {
     await expect
       .poll(() => box.evaluate(el => el.classList.contains('entering')))
       .toBe(false);
+    const removedSeenAt = await page.evaluate(
+      () => performance.timeOrigin + performance.now(),
+    );
     const [entrance] = await watch.started();
     expect(entrance.kind).toBe('CSSAnimation');
     expect(entrance.finishedAt).not.toBeNull();
-    // It started on a frame after the trigger, not at the page's time origin.
+    // It started on a frame after the trigger, not at the page's time origin,
+    // and ran its whole duration before the page removed the class.
     expect(entrance.from).toBeGreaterThan(triggeredAt - 17);
-    expect(entrance.from).toBeLessThan(triggeredAt + 500);
-    expect(entrance.to - entrance.from).toBeCloseTo(60, 3);
+    expect(entrance.from + 1500).toBeLessThanOrEqual(removedSeenAt + 1);
+    expect(entrance.to - entrance.from).toBeCloseTo(1500, 3);
     expect(entrance.finishedAt ?? 0).toBeGreaterThanOrEqual(entrance.to - 1);
+  });
+
+  test("a CSS animation that starts and finishes between two of the page's frames is named, not reported as never started", async ({
+    page,
+    browserName,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes blink { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .blinking { animation: blink 30ms linear }',
+    });
+    const watch = await watchAnimations(box);
+    // The style is read at once, so the animation exists as the class lands,
+    // and the main thread then stays busy past its end: no frame runs inside
+    // it, as on a starved page whose frames come further apart.
+    await box.evaluate(el => {
+      el.classList.add('blinking');
+      void getComputedStyle(el).opacity;
+      const end = performance.now() + 150;
+      while (performance.now() < end) {
+        // the page's frames wait
+      }
+    });
+    const outcome = await watch.started({timeout: 1_000}).then(
+      started => started.map(a => a.name),
+      (error: Error) => error.message,
+    );
+    if (browserName === 'chromium') {
+      // Chromium starts a pending animation at the next frame, so it runs
+      // then and is recorded.
+      expect(outcome).toEqual(['blink']);
+      return;
+    }
+    // WebKit can start it as it was made: its start event then comes at the
+    // next frame, after it finished, when no animation is left to read, and
+    // the wait names it. When it starts it at the next frame instead, it runs
+    // then and is recorded. Either way it is never reported as never started.
+    if (Array.isArray(outcome)) {
+      expect(outcome).toEqual(['blink']);
+    } else {
+      expect(outcome).toMatch(
+        /the element's blink started and finished between two of the page's frames/,
+      );
+    }
+    test.info().annotations.push({
+      type: 'between-frames',
+      description: Array.isArray(outcome) ? 'recorded' : 'named',
+    });
+  });
+
+  test('a start event that finds nothing to read is named for a replay, for an exit the page removed, and once for a transition; a run the document still lists is never named', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await page.addStyleTag({
+      content:
+        '@keyframes blink { from { opacity: 0 } to { opacity: 1 } }' +
+        ' .blink-long { animation: blink 300ms linear }' +
+        ' .blink-paused { animation: blink 300ms linear paused }',
+    });
+    const betweenFrames =
+      "started and finished between two of the page's frames";
+    // A run of the animation the page's frames see, recorded and finished:
+    // a later run of it on the same element is a new run.
+    const first = await watchAnimations(box);
+    await box.evaluate(el => el.classList.add('blink-long'));
+    expect((await first.started()).map(a => a.name)).toEqual(['blink']);
+    await box.evaluate(el => {
+      (window as unknown as {__first: Animation}).__first =
+        el.getAnimations()[0];
+    });
+    await waitForRest(box);
+    // The same run replayed with play(): still listed, so its start event is
+    // never read as one that started and finished between two frames. (The
+    // engine's own start event may come too; this one comes at once.)
+    const replayed = await watchAnimations(box);
+    await box.evaluate(el => {
+      (window as unknown as {__first: Animation}).__first.play();
+      el.dispatchEvent(
+        new AnimationEvent('animationstart', {animationName: 'blink'}),
+      );
+    });
+    expect(
+      await replayed.started({timeout: 500}).then(
+        started => `recorded ${started.map(a => a.name).join(', ')}`,
+        (error: Error) => error.message,
+      ),
+    ).not.toContain(betweenFrames);
+    await waitForRest(box);
+    await box.evaluate(el => el.classList.remove('blink-long'));
+    // Each case sends the events an engine sends for a run that started and
+    // finished between two frames (WebKit sends them at the next frame, when
+    // the run is no longer listed), so the recorder has nothing to read.
+    const missed = async (
+      send: 'replay' | 'removed exit' | 'transition',
+    ): Promise<string> => {
+      const watch = await watchAnimations(box);
+      await box.evaluate((el, which) => {
+        if (which === 'replay') {
+          el.dispatchEvent(
+            new AnimationEvent('animationstart', {animationName: 'blink'}),
+          );
+          el.dispatchEvent(
+            new AnimationEvent('animationend', {animationName: 'blink'}),
+          );
+        } else if (which === 'removed exit') {
+          const child = document.createElement('div');
+          el.append(child);
+          child.dispatchEvent(
+            new AnimationEvent('animationstart', {
+              animationName: 'blink',
+              bubbles: true,
+            }),
+          );
+          child.dispatchEvent(
+            new AnimationEvent('animationend', {
+              animationName: 'blink',
+              bubbles: true,
+            }),
+          );
+          child.remove();
+        } else {
+          for (const type of ['transitionrun', 'transitionstart']) {
+            el.dispatchEvent(
+              new TransitionEvent(type, {propertyName: 'opacity'}),
+            );
+          }
+          el.dispatchEvent(
+            new TransitionEvent('transitionend', {propertyName: 'opacity'}),
+          );
+        }
+      }, send);
+      return watch.started({timeout: 500}).then(
+        started => `recorded ${started.map(a => a.name).join(', ')}`,
+        (error: Error) => error.message,
+      );
+    };
+    // A replay of the finished run: the earlier run does not answer for it.
+    expect(await missed('replay')).toContain(
+      "the element's blink started and finished between two of the page's frames",
+    );
+    // An exit the page removed, watched through its container.
+    expect(await missed('removed exit')).toContain(
+      "the element's blink started and finished between two of the page's frames",
+    );
+    // A transition sends two start events, and is named once.
+    expect(await missed('transition')).toContain(
+      "the element's opacity started and finished between two of the page's frames",
+    );
+    // A run that starts paused is listed, never recorded: its start event is
+    // not one that found nothing to read.
+    const paused = await watchAnimations(box);
+    await box.evaluate(el => {
+      el.classList.add('blink-paused');
+      void getComputedStyle(el).opacity;
+      el.dispatchEvent(
+        new AnimationEvent('animationstart', {animationName: 'blink'}),
+      );
+    });
+    expect(
+      await paused.started({timeout: 500}).then(
+        started => `recorded ${started.map(a => a.name).join(', ')}`,
+        (error: Error) => error.message,
+      ),
+    ).not.toContain(betweenFrames);
+    await box.evaluate(el => el.classList.remove('blink-paused'));
   });
 
   test('a CSS animation or transition whose element the page removes at its end is dated from its start', async ({

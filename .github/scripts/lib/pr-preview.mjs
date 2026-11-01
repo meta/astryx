@@ -8,6 +8,9 @@ import process from 'node:process';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 
+const require = createRequire(import.meta.url);
+const ciImpact = require('./ci-impact.js');
+
 const {previewLine} = createRequire(import.meta.url)('./pr-status.js');
 
 export const PR_ANALYSIS_MARKER = '<!-- astryx-pr-analysis -->';
@@ -113,6 +116,206 @@ export async function headPreview({
     : {state: 'unknown', sha};
 }
 
+/** Pull-request CI runs sampled for the CI-impact baseline. */
+const CI_HISTORY_RUNS = 20;
+
+/**
+ * Recent pull-request CI runs: the latest CI_HISTORY_RUNS successful runs with
+ * their jobs' timings, and how many runs did work (succeeded or failed) in the
+ * seven whole days before today. Read once a day: the
+ * comment job keeps it as an artifact and passes it back in `cached`.
+ */
+export async function ciHistory({
+  github,
+  owner,
+  repo,
+  cached,
+  now = new Date(),
+}) {
+  if (cached?.runs) return cached;
+  // The seven whole days before today (UTC), so runs a day divides seven
+  // days of runs by seven.
+  const day = offset =>
+    new Date(now.getTime() - offset * 24 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
+  const window = `${day(7)}..${day(1)}`;
+  // Runs that did work: a draft's or an out-of-scope run concludes skipped.
+  const count = async status =>
+    (
+      await github.rest.actions.listWorkflowRuns({
+        owner,
+        repo,
+        workflow_id: 'ci.yml',
+        event: 'pull_request',
+        status,
+        created: window,
+        per_page: 1,
+      })
+    ).data.total_count;
+  const runsLast7Days = (await count('success')) + (await count('failure'));
+  const {data: recent} = await github.rest.actions.listWorkflowRuns({
+    owner,
+    repo,
+    workflow_id: 'ci.yml',
+    event: 'pull_request',
+    status: 'success',
+    per_page: CI_HISTORY_RUNS,
+  });
+  const runs = [];
+  for (const run of recent.workflow_runs.slice(0, CI_HISTORY_RUNS)) {
+    const jobs = await sourceRunJobs({github, owner, repo, runId: run.id});
+    if (jobs)
+      runs.push({
+        run_started_at: run.run_started_at,
+        updated_at: run.updated_at,
+        jobs,
+      });
+  }
+  return {runs, runsLast7Days};
+}
+
+async function workflowAt({
+  github,
+  owner,
+  repo,
+  ref,
+  file = '.github/workflows/ci.yml',
+}) {
+  try {
+    const {data} = await github.rest.repos.getContent({
+      owner,
+      repo,
+      path: file,
+      ref,
+    });
+    // Loaded here, not at the top: the PR Comment workflow's resolve and
+    // spec-only jobs import this module without installing dependencies.
+    const {default: yaml} = await import('yaml');
+    return yaml.parse(Buffer.from(data.content, 'base64').toString('utf8'));
+  } catch (error) {
+    // A workflow the pull request adds has no base, one it removes no head.
+    if (error?.status === 404 || /Not Found|404/.test(String(error?.message)))
+      return null;
+    throw error;
+  }
+}
+
+/**
+ * The CI impact of a pull request that changes CI, or null for any other.
+ * Reads the changed files, CI's workflow at the merge base and the head, the
+ * source run, and the history (computed here only when `historyPath` holds
+ * none, then written there for the comment job to keep).
+ */
+export async function gatherCiImpact({
+  github,
+  owner,
+  repo,
+  identity,
+  jobs,
+  historyPath,
+}) {
+  // The file list decides whether this is a CI change at all (one read for
+  // every pull request); unreadable, the section is left out.
+  let names;
+  try {
+    const files = await github.paginate(github.rest.pulls.listFiles, {
+      owner,
+      repo,
+      pull_number: identity.prNumber,
+      per_page: 100,
+    });
+    names = files.map(file => file.filename);
+  } catch {
+    return null;
+  }
+  if (!ciImpact.isCiChange(names)) return null;
+  try {
+    const cached =
+      historyPath && fs.existsSync(historyPath) ? readJSON(historyPath) : null;
+    const history = await ciHistory({github, owner, repo, cached});
+    if (historyPath && !cached) {
+      fs.mkdirSync(path.dirname(historyPath), {recursive: true});
+      fs.writeFileSync(historyPath, JSON.stringify(history));
+    }
+    // The before side is the merge base, the tree the head was cut from.
+    const {data: comparison} =
+      await github.rest.repos.compareCommitsWithBasehead({
+        owner,
+        repo,
+        basehead: `${identity.baseSha}...${identity.headSha}`,
+      });
+    const mergeBase = comparison.merge_base_commit.sha;
+    const [base, head] = await Promise.all([
+      workflowAt({github, owner, repo, ref: mergeBase}),
+      workflowAt({github, owner, repo, ref: identity.headSha}),
+    ]);
+    const {data: run} = await github.rest.actions.getWorkflowRun({
+      owner,
+      repo,
+      run_id: identity.sourceRunId,
+    });
+    // Every other changed workflow: when it runs and on which runners; its
+    // minutes are not measured (the history covers CI's own workflow).
+    const otherWorkflows = [];
+    for (const file of names.filter(
+      name =>
+        /^\.github\/workflows\/[^/]+\.ya?ml$/.test(name) &&
+        name !== '.github/workflows/ci.yml',
+    )) {
+      const [before, after] = await Promise.all([
+        workflowAt({github, owner, repo, ref: mergeBase, file}),
+        workflowAt({github, owner, repo, ref: identity.headSha, file}),
+      ]);
+      otherWorkflows.push(
+        ciImpact.describeWorkflow(
+          file.replace('.github/workflows/', ''),
+          before,
+          after,
+        ),
+      );
+    }
+    const started = Date.parse(run.run_started_at ?? '');
+    const finished = Date.parse(run.updated_at ?? '');
+    const impact = ciImpact.estimateImpact({
+      diff: ciImpact.diffWorkflow(base, head),
+      history: ciImpact.summarizeHistory(history),
+      currentJobs: jobs,
+      // Time to green compares like with like: a run that failed or was
+      // cancelled has no time to green.
+      currentWallMinutes:
+        run.conclusion === 'success' &&
+        Number.isFinite(started) &&
+        Number.isFinite(finished)
+          ? (finished - started) / 60000
+          : null,
+    });
+    return {
+      ...impact,
+      otherWorkflows,
+      // Composite actions and CI scripts change what jobs do, but this run's
+      // minutes are not compared with theirs: named, not measured.
+      unmeasuredFiles: names.filter(
+        name =>
+          ciImpact.CI_PATH.test(name) &&
+          !/^\.github\/workflows\/[^/]+\.ya?ml$/.test(name),
+      ),
+      flags: [
+        ...impact.flags,
+        ...otherWorkflows
+          .filter(workflow => workflow.nonStandard)
+          .map(
+            workflow =>
+              `${ciImpact.inlineName(workflow.file)} moves a job onto a non-standard runner`,
+          ),
+      ],
+    };
+  } catch {
+    // A CI change whose impact could not be read says so.
+    return {unavailable: true};
+  }
+}
+
 /**
  * The frames publish-frames.mjs published, written for the generator, only
  * when their URL is this pull request's assets branch for this exact head and
@@ -163,6 +366,8 @@ export async function sourceRunJobs({github, owner, repo, runId}) {
       name: job.name,
       status: job.status,
       conclusion: job.conclusion,
+      started_at: job.started_at,
+      completed_at: job.completed_at,
       steps: (job.steps || []).map(step => ({
         name: step.name,
         conclusion: step.conclusion,
@@ -613,11 +818,14 @@ export async function reconcilePrComment({
   metadataPath = 'pr-analysis/pr-meta.json',
   baseStatsPath = 'pr-size-base/size-base.json',
   packageSizePath = 'pr-analysis/package-size.json',
+  apiChangesPath = 'pr-analysis/api-changes.json',
   visualFrames = null,
   a11yPath = 'a11y/a11y-report.json',
   visualPath = 'trusted-visual/verdict.json',
+  ciHistoryPath = 'ci-history/ci-history.json',
   createIfMissing = true,
   fallbackMessage,
+  touchedPath = 'touched-components/touched-components.json',
   generator = GENERATOR,
   execute = execFileSync,
 }) {
@@ -678,6 +886,16 @@ export async function reconcilePrComment({
       repo,
       runId: identity.sourceRunId,
     });
+    const impact = await gatherCiImpact({
+      github,
+      owner,
+      repo,
+      identity,
+      jobs,
+      historyPath: ciHistoryPath,
+    });
+    const impactPath = path.join(inputs, 'ci-impact.json');
+    if (impact) fs.writeFileSync(impactPath, JSON.stringify(impact));
     // Frames only from this PR's assets branch for this exact head.
     const framesPath = trustedFrames({frames: visualFrames, identity, inputs});
     const previewPath = path.join(inputs, 'preview.json');
@@ -704,13 +922,26 @@ export async function reconcilePrComment({
       })
         ? ['--package-size', packageSizePath]
         : []),
+      // Part of the analysis artifact, which pr-meta.json ties to this head.
+      ...(fs.existsSync(apiChangesPath)
+        ? ['--api-changes', apiChangesPath]
+        : []),
       // No report means the audit did not run (it runs on main and release
       // checks, or with the ci:run-a11y label); the comment says so.
       ...(fs.existsSync(a11yPath) ? ['--a11y', a11yPath] : []),
       ...(fs.existsSync(visualPath) ? ['--visual', visualPath] : []),
       ...(framesPath ? ['--visual-frames', framesPath] : []),
+      ...(trustedHeadReport({
+        reportPath: touchedPath,
+        label: 'touched-components report',
+        identity,
+        core,
+      })
+        ? ['--touched', touchedPath]
+        : []),
       ...(preview ? ['--preview', previewPath] : []),
       ...(jobs ? ['--jobs', jobsPath] : []),
+      ...(impact ? ['--ci-impact', impactPath] : []),
       '--source-conclusion',
       identity.sourceConclusion,
       '--run-url',

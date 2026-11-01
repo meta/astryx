@@ -31,7 +31,9 @@ export const END_INSET_MS = 0.5;
  * Page side: records every animation the document runs, from its first frame
  * or its creation (a frame loop on the page's real requestAnimationFrame, and
  * the CSS animation and transition events), so an animation that starts and
- * ends before a test looks is still seen, with the time it finished. Each
+ * ends before a test looks is still seen, with the time it finished (from its
+ * finish event, or from a CSS run's end event when the page cancels it there
+ * before the finish event comes). Each
  * entry keeps the animation's start time too: a page that cancels a finished
  * animation (an entrance whose class is removed on `animationend`) nulls its
  * `startTime`.
@@ -41,6 +43,11 @@ function animationRecorder(): void {
   if (w.__harnessAnimations) {
     return;
   }
+  // The run a CSS animation or transition event names.
+  const cssRunName = (event: Event) =>
+    event.type.startsWith('animation')
+      ? (event as AnimationEvent).animationName
+      : (event as TransitionEvent).propertyName;
   // The page's real frames, even when a timer gate already holds its callbacks.
   const frame = (
     (
@@ -56,6 +63,16 @@ function animationRecorder(): void {
     startedAt: number | null;
     // Where the run began, as the engine had it when it finished.
     finishStart: number | null;
+  }[] = [];
+  // Start events that found no animation to record (see `onStart`), with
+  // the target's ancestors as they were: an exit the page removes at its end
+  // is still named for the container it left.
+  const unread: {
+    at: number;
+    target: EventTarget | null;
+    ancestors: Element[];
+    type: string;
+    name: string;
   }[] = [];
   // Each recorded animation's entry.
   const entries = new WeakMap<Animation, (typeof log)[number]>();
@@ -78,6 +95,45 @@ function animationRecorder(): void {
         .endTime ?? 0,
     );
     return Number(animation.startTime) - end / Math.abs(rate);
+  };
+  // Dates a recorded run's finish as the engine has it now. Its start time is
+  // usually still set (the finish listener, added as the animation was made,
+  // runs before the page's own, and the end-event listener below runs in the
+  // capture phase), and the run ended where that start puts its end, through
+  // the rate. Without one, the start the recorder holds stands in, kept as
+  // the run ran (after a pause, a seek or a rate change). A run that ends as
+  // it starts (one reversed from rest) can finish before any start resolves:
+  // it then began where the finish event's timeline time `at` puts its start.
+  // Read later, the start time can say otherwise (WebKit resolves or moves it
+  // a frame later), and the finish event itself arrives late (a frame or more
+  // after a finish() call).
+  const dateFinish = (
+    entry: {
+      animation: Animation;
+      finishedAt: number | null;
+      startedAt: number | null;
+      finishStart: number | null;
+    },
+    at: number | null,
+  ) => {
+    const animation = entry.animation;
+    const end = Number(
+      (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+        .endTime ?? 0,
+    );
+    const speed = Math.abs(animation.playbackRate || 1);
+    entry.finishStart =
+      playStart(animation) ??
+      entry.startedAt ??
+      (at == null ? null : at - end / speed);
+    entry.finishedAt =
+      entry.finishStart == null
+        ? performance.now()
+        : entry.finishStart + end / speed;
+    if (entry.startedAt == null) {
+      // Cancelled before a frame read its start: back from where it ended.
+      entry.startedAt = entry.finishStart ?? entry.finishedAt - end / speed;
+    }
   };
   const remember = (animation: Animation) => {
     const recorded = entries.get(animation);
@@ -119,35 +175,8 @@ function animationRecorder(): void {
       unstarted.push(entry);
     }
     animation.addEventListener('finish', event => {
-      const end = Number(
-        (animation.effect as KeyframeEffect | null)?.getComputedTiming()
-          .endTime ?? 0,
-      );
-      const speed = Math.abs(animation.playbackRate || 1);
-      // The run as the engine has it at its finish: this listener, added as
-      // the animation was made, runs before the page's own, so its start time
-      // is usually still set, and the run ended where that start puts its
-      // end, through the rate. Without one, the start the recorder holds
-      // stands in, kept as the run ran (after a pause, a seek or a rate
-      // change): in Chromium a CSS animation or transition whose element the
-      // page removes on its end event is cancelled before this runs. A run that ends as it starts (one reversed from rest) can finish
-      // before any start resolves: it then began where the event's timeline
-      // time puts its start. Read later, the start time can say otherwise
-      // (WebKit resolves or moves it a frame later), and the event itself
-      // arrives late (a frame or more after a finish() call).
       const at = (event as AnimationPlaybackEvent).timelineTime;
-      entry.finishStart =
-        playStart(animation) ??
-        entry.startedAt ??
-        (at == null ? null : Number(at) - end / speed);
-      entry.finishedAt =
-        entry.finishStart == null
-          ? performance.now()
-          : entry.finishStart + end / speed;
-      if (entry.startedAt == null) {
-        // Cancelled before a frame read its start: back from where it ended.
-        entry.startedAt = entry.finishStart ?? entry.finishedAt - end / speed;
-      }
+      dateFinish(entry, at == null ? null : Number(at));
     });
     log.push(entry);
     if (log.length > 5000) {
@@ -174,8 +203,110 @@ function animationRecorder(): void {
   // first seen a frame later, it would read as started by the watched action.
   record();
   frame(tick);
+  // A start event with nothing left to read: a CSS animation shorter than the
+  // gap between two of the page's frames can start and finish inside it, and
+  // WebKit sends its start event only at the next frame, when
+  // `getAnimations()` no longer lists a finished animation that fills
+  // nothing. No object is left to record, so the event is kept: a wait that
+  // finds nothing names what it missed.
+  // Whether a recorded entry is the run a CSS animation or transition event
+  // is about: the same element (and pseudo-element) and name.
+  const isRunOf = (entry: {animation: Animation}, event: Event) => {
+    const effect = entry.animation.effect as KeyframeEffect | null;
+    const a = entry.animation as unknown as {
+      animationName?: string;
+      transitionProperty?: string;
+    };
+    return (
+      effect?.target === event.target &&
+      (effect?.pseudoElement || '') ===
+        ((event as AnimationEvent).pseudoElement || '') &&
+      (a.animationName ?? a.transitionProperty) === cssRunName(event)
+    );
+  };
+  const onStart = (event: Event) => {
+    record();
+    // Only a live run answers: a replay of an animation that finished on the
+    // same element is a new run, and missed if nothing recorded it. A run the
+    // document still lists, running or paused, answers too: one that starts
+    // paused is never recorded, and one replayed with play() keeps the
+    // finish of its first run.
+    const live =
+      log.some(
+        entry =>
+          entry.finishedAt == null &&
+          entry.animation.playState !== 'idle' &&
+          isRunOf(entry, event),
+      ) ||
+      document
+        .getAnimations()
+        .some(
+          animation =>
+            (animation.playState === 'running' ||
+              animation.playState === 'paused') &&
+            isRunOf({animation}, event),
+        );
+    if (!live) {
+      const ancestors: Element[] = [];
+      for (
+        let node = event.target instanceof Element ? event.target : null;
+        node != null;
+        node = node.parentElement
+      ) {
+        ancestors.push(node);
+      }
+      unread.push({
+        at: performance.now(),
+        target: event.target,
+        ancestors,
+        type: event.type,
+        name: cssRunName(event),
+      });
+      if (unread.length > 500) {
+        unread.splice(0, unread.length - 500);
+      }
+    }
+  };
   for (const type of ['animationstart', 'transitionrun', 'transitionstart']) {
-    document.addEventListener(type, record, true);
+    document.addEventListener(type, onStart, true);
+  }
+  // Whether a run stands at its end in the direction it plays: finished, or
+  // still reading `running` with its current time there, to a microsecond
+  // (Chromium read 0.00000003 ms for a reversed run at its start). Chromium
+  // can send a CSS run's end event a frame before the run itself finishes.
+  const atEnd = (animation: Animation) => {
+    if (animation.playState === 'finished') {
+      return true;
+    }
+    if (animation.playState !== 'running' || animation.currentTime == null) {
+      return false;
+    }
+    const time = Number(animation.currentTime);
+    const end = Number(
+      (animation.effect as KeyframeEffect | null)?.getComputedTiming()
+        .endTime ?? 0,
+    );
+    return animation.playbackRate < 0 ? time <= 0.001 : time >= end - 0.001;
+  };
+  // A CSS run's end event, read before the page's own listeners (this one is
+  // on the document, in the capture phase), while the run still has its start
+  // time. A page that removes the element at its end cancels a run whose end
+  // event came before it finished, and a cancelled run never finishes: under
+  // load, a CSS exit reversed partway sent `transitionend` at current time 0,
+  // still `running`, and was cancelled a frame later with no finish event.
+  const onEnd = (event: Event) => {
+    for (const entry of log) {
+      if (
+        entry.finishedAt == null &&
+        atEnd(entry.animation) &&
+        isRunOf(entry, event)
+      ) {
+        dateFinish(entry, null);
+      }
+    }
+  };
+  for (const type of ['animationend', 'transitionend']) {
+    document.addEventListener(type, onEnd, true);
   }
   // A script animation is recorded as it is made: WebKit can start and finish
   // a short one between two frames of a fresh page.
@@ -190,6 +321,7 @@ function animationRecorder(): void {
   };
   w.__harnessAnimations = {
     log,
+    unread,
     record,
     // Record first, then stamp strictly after the newest entry: a step that
     // changed style just before has its transition created by that read,
@@ -205,6 +337,7 @@ function animationRecorder(): void {
     // they keep alive; later waits record afresh.
     release: () => {
       log.length = 0;
+      unread.length = 0;
       unstarted = [];
     },
   };
@@ -914,6 +1047,11 @@ async function withinTimeout<T>(
  * the page's first contact with this module, take `watchAnimations(locator)`
  * before the action instead.
  *
+ * In WebKit a CSS animation shorter than a gap between two of the page's
+ * frames can start and finish inside it: its start event comes at the next
+ * frame, when nothing is left to record, and the wait's error names it (a
+ * starved page's frames can come a second apart).
+ *
  * A run going backward is read when it was reversed before it started. The
  * recorder keeps one entry per `Animation` object, so an animation reversed
  * or replayed mid-run is misread: a watch taken before the reversal rejects,
@@ -1130,11 +1268,46 @@ export async function waitForAnimation(
       return found;
     }
     if (Date.now() > deadline) {
+      // Start events on the element that found nothing to read: animations
+      // that started and finished between two of the page's frames.
+      const missed = await locator
+        .evaluate(
+          (element, watchedFrom) => {
+            const recorder = (
+              window as unknown as {
+                __harnessAnimations: {
+                  unread: {
+                    at: number;
+                    ancestors: Element[];
+                    name: string;
+                  }[];
+                  armedAt: () => number;
+                };
+              }
+            ).__harnessAnimations;
+            const after = watchedFrom ?? recorder.armedAt();
+            // Matched through the ancestors kept at the event, as the log is:
+            // an exit the page removed is still named for its container. A
+            // missed transition sends two start events; it is named once.
+            return [
+              ...new Set(
+                recorder.unread
+                  .filter(u => u.at >= after && u.ancestors.includes(element))
+                  .map(u => u.name),
+              ),
+            ];
+          },
+          since ?? null,
+          {timeout: 1_000},
+        )
+        .catch(() => [] as string[]);
       throw new Error(
-        'waitForAnimation: no animation started on the element, none running ' +
-          'and none recorded since the last wait. If the action is the ' +
-          "page's first contact with the harness, take " +
-          'watchAnimations(locator) before it.',
+        missed.length > 0
+          ? `waitForAnimation: the element's ${missed.join(', ')} started and finished between two of the page's frames: its start event came after it had finished, with nothing left to read (WebKit sends it at the next frame; README: engine limits). Make the animation last longer than the page's frame gaps under load.`
+          : 'waitForAnimation: no animation started on the element, none running ' +
+              'and none recorded since the last wait. If the action is the ' +
+              "page's first contact with the harness, take " +
+              'watchAnimations(locator) before it.',
       );
     }
     await new Promise(resolve => setTimeout(resolve, 4));

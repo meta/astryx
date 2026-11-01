@@ -122,6 +122,21 @@ export interface UseListFocusOptions {
 }
 
 /**
+ * Options only Core components pass; this module's internal export, not
+ * re-exported from `hooks/index.ts`, so not public API.
+ */
+export interface InternalListFocusOptions extends UseListFocusOptions {
+  /**
+   * With `hasRovingTabIndex`, keeps one tab stop while every item is disabled:
+   * returns the elements that share it, the stop first. The hook gives the
+   * first `tabindex="0"` and the rest `tabindex="-1"`. For a group that stays
+   * focusable while disabled, so its disabled reason is reachable by keyboard.
+   * Unset (the default): no item holds the stop while every item is disabled.
+   */
+  disabledTabStop?: (list: HTMLElement) => ReadonlyArray<HTMLElement>;
+}
+
+/**
  * Return type for useListFocus hook
  */
 export interface UseListFocusReturn<T extends HTMLElement = HTMLElement> {
@@ -326,6 +341,16 @@ function shouldDeferToCaret(target: EventTarget | null, key: string): boolean {
 export function useListFocus<T extends HTMLElement = HTMLElement>(
   options: UseListFocusOptions = {},
 ): UseListFocusReturn<T> {
+  return useInternalListFocus<T>(options);
+}
+
+/**
+ * {@link useListFocus} with the Core-only {@link InternalListFocusOptions}.
+ * Not re-exported from `hooks/index.ts`.
+ */
+export function useInternalListFocus<T extends HTMLElement = HTMLElement>(
+  options: InternalListFocusOptions = {},
+): UseListFocusReturn<T> {
   const {
     itemSelector = '[role="menuitem"]',
     boundarySelector,
@@ -335,6 +360,7 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
     hasHomeEnd = true,
     hasPaging = false,
     hasRovingTabIndex = false,
+    disabledTabStop,
     hasCaretGuard = false,
   } = options;
 
@@ -462,6 +488,17 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
     const items = getItems();
     const enabled = items.filter(el => !isItemDisabled(el));
     if (enabled.length === 0) {
+      const listEl = listRef.current;
+      if (listEl == null || disabledTabStop == null) {
+        return;
+      }
+      const [stop, ...others] = disabledTabStop(listEl);
+      if (stop != null) {
+        setTabIndex(stop, 0);
+      }
+      for (const el of others) {
+        setTabIndex(el, -1);
+      }
       return;
     }
     const current = enabled.find(el => el.getAttribute('tabindex') === '0');
@@ -469,7 +506,7 @@ export function useListFocus<T extends HTMLElement = HTMLElement>(
     for (const el of items) {
       setTabIndex(el, el === tabbable ? 0 : -1);
     }
-  }, [getItems, isItemDisabled, setTabIndex]);
+  }, [getItems, isItemDisabled, setTabIndex, disabledTabStop]);
 
   // Keep the tab stop valid across renders (items added/removed, disabled
   // toggled). Runs after every commit but only when roving tabindex is on.
