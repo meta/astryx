@@ -180,9 +180,10 @@ replace component-owned semantic or interaction props.
   is inside its child group, however it collapses (an `items` change, an
   ancestor collapsing), focus moves to that row, the outermost one when nested
   rows collapse together, including while the group plays its exit (FR9). The
-  row then holds the Tab stop unless it is disabled; a disabled row takes focus
-  but leaves the Tab stop where it is (AR1). Focus anywhere else is not moved
-  (WCAG 2.2 SC 2.4.3).
+  row then holds the Tab stop unless it is disabled; a disabled row takes focus,
+  and the Tab stop stays with the enabled row that holds it or, when the
+  collapse removed that row, goes to the tree's first enabled row (AR1). Focus
+  anywhere else is not moved (WCAG 2.2 SC 2.4.3).
 
 ## Design relationships
 

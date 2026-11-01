@@ -1920,6 +1920,35 @@ describe('TreeList collapse focus (AR2)', () => {
     expect(row('readme')).toHaveAttribute('tabindex', '0');
   });
 
+  it('hands the Tab stop to the first enabled row when a disabled row collapses away the child that held it', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    // The keyboard path: arrowing past the disabled row onto its child gives
+    // the child the stop.
+    row('readme')?.focus();
+    fireEvent.keyDown(row('readme') as HTMLElement, {key: 'ArrowDown'});
+    expect(row('index')).toHaveFocus();
+    expect(row('index')).toHaveAttribute('tabindex', '0');
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
   it('moves no focus that is outside the collapsing branch', () => {
     const {rerender} = render(<Example isExpanded />);
     row('readme')?.focus();
