@@ -63,8 +63,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Option role, highlight, selection, and keyboard behavior — owned by
   `component:BaseTypeahead`'s result row.
 - Caller-provided `item.element` content.
-- The `group` prop's grouping, which BaseTypeahead reads; TypeaheadItem ignores
-  it.
+- Grouping. The `group` prop has no effect: TypeaheadItem ignores it, and
+  BaseTypeahead groups results by `item.auxiliaryData.group`.
 
 ## Public concepts
 

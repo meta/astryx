@@ -42,7 +42,7 @@ system_specs: [spec:AST-020/FR15, spec:AST-085, spec:AST-086, spec:AST-092]
 | Behavior                | A bare combobox input searches after a grapheme threshold and debounce, rejects stale responses, and shows a named listbox of options with keyboard and pointer selection; a completed empty search shows one disabled option.     |
 | End-user impact         | People find and pick a result by typing; screen-reader users hear result counts. An Escape-dismissed list can reopen when a late response lands, and a natively disabled input loses its Tab stop.                                 |
 | Builder impact          | Direct callers own the visible wrapper, label, and focus ring; Typeahead and Tokenizer compose it.                                                                                                                                 |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The Escape reopen, caller handlers while disabled, and native `disabled` are listed under Current-state impact.                                                          |
+| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. The Escape reopen, caller handlers while disabled, and native `disabled`, and the result content order are listed under Current-state impact.                            |
 | Review checks           | Reject stale results replacing newer ones, an invalid listbox, a busy state without one Spinner, dropped BaseProps, or a popup past the viewport gutters.                                                                          |
 | Governing rules         | `spec:AST-020` FR15; `spec:AST-085` FR1, FR2; `spec:AST-086`; `spec:AST-092`; `family:overlay-dismissal`; `architecture:public-component-api`; `architecture:layer-runtime`.                                                       |
 
@@ -89,18 +89,18 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept         | Closed values or states                  | Meaning                                                      | Availability by state      | Default                          | Owner                        | Stability | Invalid-value behavior                                                          |
-| --------------- | ---------------------------------------- | ------------------------------------------------------------ | -------------------------- | -------------------------------- | ---------------------------- | --------- | ------------------------------------------------------------------------------- |
-| selection       | `T` or `null`                            | Caller-controlled selected result                            | all states                 | required                         | `component:BaseTypeahead`    | stable    | caller retains control                                                          |
-| search source   | `search`, `bootstrap`, optional `cancel` | Supplies query and focus results                             | enabled input              | required                         | `component:BaseTypeahead`    | stable    | rejected work clears current results                                            |
-| focus bootstrap | on or off                                | Offers bootstrap results before query input                  | empty focused input        | off                              | `component:BaseTypeahead`    | stable    | off keeps the menu closed                                                       |
-| query threshold | non-negative number                      | Minimum visible-character count before search                | non-empty query            | `1`                              | `component:BaseTypeahead`    | stable    | below threshold cancels work and closes results                                 |
-| debounce        | milliseconds                             | Delays query search                                          | typed query                | `150`                            | `component:BaseTypeahead`    | stable    | non-positive runs immediately                                                   |
-| result cap      | number                                   | Limits fetched results shown                                 | completed search/bootstrap | `10`                             | `component:BaseTypeahead`    | stable    | source order is preserved                                                       |
-| result content  | default, `renderItem`, or `item.element` | Chooses content inside the stable option row                 | result present             | default TypeaheadItem            | caller and component         | stable    | `item.element` takes precedence                                                 |
-| disabled state  | native or focusable-disabled             | Blocks query mutation; native disabled blocks all activation | disabled                   | native disabled                  | component and caller wrapper | stable    | a list open before focusable-disabled applied picks nothing and can still close |
-| popup width     | intrinsic or fixed pixels                | Sets result popup width before viewport clamping             | popup present              | intrinsic, at least anchor width | `component:BaseTypeahead`    | stable    | viewport fit wins                                                               |
-| size            | `sm`, `md`, `lg`                         | Selects option-row padding                                   | popup options              | `md`                             | `component:BaseTypeahead`    | stable    | TypeScript rejects other values                                                 |
+| Concept         | Closed values or states                  | Meaning                                                      | Availability by state      | Default                          | Owner                        | Stability | Invalid-value behavior                                                                        |
+| --------------- | ---------------------------------------- | ------------------------------------------------------------ | -------------------------- | -------------------------------- | ---------------------------- | --------- | --------------------------------------------------------------------------------------------- |
+| selection       | `T` or `null`                            | Caller-controlled selected result                            | all states                 | required                         | `component:BaseTypeahead`    | stable    | caller retains control                                                                        |
+| search source   | `search`, `bootstrap`, optional `cancel` | Supplies query and focus results                             | enabled input              | required                         | `component:BaseTypeahead`    | stable    | rejected work clears current results                                                          |
+| focus bootstrap | on or off                                | Offers bootstrap results before query input                  | empty focused input        | off                              | `component:BaseTypeahead`    | stable    | off keeps the menu closed                                                                     |
+| query threshold | non-negative number                      | Minimum visible-character count before search                | non-empty query            | `1`                              | `component:BaseTypeahead`    | stable    | below threshold cancels work and closes results                                               |
+| debounce        | milliseconds                             | Delays query search                                          | typed query                | `150`                            | `component:BaseTypeahead`    | stable    | non-positive runs immediately                                                                 |
+| result cap      | number                                   | Limits fetched results shown                                 | completed search/bootstrap | `10`                             | `component:BaseTypeahead`    | stable    | source order is preserved                                                                     |
+| result content  | default, `renderItem`, or `item.element` | Chooses content inside the stable option row                 | result present             | default TypeaheadItem            | caller and component         | stable    | `item.element` takes precedence, except that a caller `renderItem` replaces it (the ORD1 gap) |
+| disabled state  | native or focusable-disabled             | Blocks query mutation; native disabled blocks all activation | disabled                   | native disabled                  | component and caller wrapper | stable    | a list open before focusable-disabled applied picks nothing and can still close               |
+| popup width     | intrinsic or fixed pixels                | Sets result popup width before viewport clamping             | popup present              | intrinsic, at least anchor width | `component:BaseTypeahead`    | stable    | viewport fit wins                                                                             |
+| size            | `sm`, `md`, `lg`                         | Selects option-row padding                                   | popup options              | `md`                             | `component:BaseTypeahead`    | stable    | TypeScript rejects other values                                                               |
 
 ## Behavioral and layout contract
 
@@ -142,7 +142,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 ### Transformation and precedence order
 
 - **ORD1 — Result content.** `item.element` → caller `renderItem` →
-  TypeaheadItem.
+  TypeaheadItem. Implementation gap: a caller `renderItem` replaces
+  `item.element`, which only the default TypeaheadItem renders.
 - **ORD2 — Input props.** Consumer rest props → defined legacy aliases (`inputId`,
   `ariaDescribedBy`, `ariaLabelledBy`, `inputTabIndex`) → component-owned
   semantics and handlers → component styles → consumer class/style escape
@@ -268,6 +269,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
+- **Result content order (ORD1).** A caller `renderItem` replaces
+  `item.element`, which only the default TypeaheadItem renders, although the
+  `SearchableItem.element` docs give `item.element` priority.
 - **Escape reopen (FR3).** A list a person dismissed with Escape reopens when a
   pending response lands.
 - **Disabled input (FR9).** The default disabled mode is native `disabled`,
