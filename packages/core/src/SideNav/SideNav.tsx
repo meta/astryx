@@ -507,7 +507,14 @@ export function SideNav({
   // it through AppShell's own handle (`component:AppShell` FR17); outside,
   // SideNav holds its own over its parent.
   const shell = use(SideNavShellContext);
-  const ownLayout = useMemo(() => createRailLayout(() => navRef.current), []);
+  // A resizable rail's wrapper holds the nav and the handle; outside AppShell
+  // it is the rail the motion moves and lays its copy beside (FR6).
+  const resizeWrapperRef = useRef<HTMLDivElement>(null);
+  const ownRail = useCallback(
+    () => resizeWrapperRef.current ?? navRef.current,
+    [],
+  );
+  const ownLayout = useMemo(() => createRailLayout(ownRail), [ownRail]);
   const railSnapshotRef = useRef<RailSnapshot | null>(null);
   const motionRef = useRef<{rail: RailMotion; endContent: () => void} | null>(
     null,
@@ -521,7 +528,7 @@ export function SideNav({
       running?.endContent();
       motionRef.current = null;
       railSnapshotRef.current = snapshotRail(
-        shell?.rail() ?? navRef.current,
+        shell?.rail() ?? ownRail(),
         shell?.animatedLayout ?? ownLayout,
         shown,
         wasCollapsed,
@@ -536,7 +543,7 @@ export function SideNav({
       }
       shell?.beforeRailChange();
     },
-    [shell, ownLayout],
+    [shell, ownLayout, ownRail],
   );
   useLayoutEffect(() => {
     const snapshot = railSnapshotRef.current;
@@ -549,13 +556,13 @@ export function SideNav({
     motionRef.current = {
       rail: playRail(
         snapshot,
-        shell?.rail() ?? navRef.current,
+        shell?.rail() ?? ownRail(),
         shell?.animatedLayout ?? ownLayout,
         shell?.column() ?? null,
       ),
       endContent,
     };
-  }, [collapsed, shell, ownLayout]);
+  }, [collapsed, shell, ownLayout, ownRail]);
   // An unmount mid-motion removes the copy at once.
   useLayoutEffect(
     () => () => {
@@ -597,7 +604,6 @@ export function SideNav({
     }),
     [],
   );
-  const resizeWrapperRef = useRef<HTMLDivElement>(null);
   const pendingFocusRef = useRef<{
     focus: FocusWithin;
     /** Whether the rail keeps the row that held focus. */
