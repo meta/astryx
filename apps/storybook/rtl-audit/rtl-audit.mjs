@@ -68,6 +68,10 @@ import {
   filterStoryRoutesByPackages,
   resolveFilterRoutes,
   finishFiniteAnimations,
+  d1GlyphKey,
+  d1PairKey,
+  glyphRendersOnBlockAxis,
+  isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   validateStoryRtlAuditParameters,
@@ -375,6 +379,8 @@ async function iconPath(page, sel) {
 // Ambiguous glyphs are treated as NON-DIRECTIONAL (err toward not flagging).
 const DETECTOR = /* js */ `
 (() => {
+  const glyphRendersOnBlockAxis = ${glyphRendersOnBlockAxis.toString()};
+  const d1GlyphKey = ${d1GlyphKey.toString()};
   // Known directional path signatures (whitespace-normalized, lowercased).
   const LEFT_PATHS = new Set([
     'm15 6l-6 6 6 6',        // core defaultIcons chevronLeft
@@ -469,14 +475,15 @@ const DETECTOR = /* js */ `
     // icon has a real box and IS scanned.
     const box = svg.getBoundingClientRect();
     if (box.width < 1 || box.height < 1) continue;
-    // dedupe by (direction + path signature) so a repeated glyph (e.g. many
-    // tree rows) is reported once
-    const key = dir + '::' + dcat;
+    // dedupe by (direction + path signature + rendered axis) so a repeated
+    // glyph (e.g. many tree rows) is reported once, while an expanded copy and
+    // a collapsed copy of one chevron are both kept
+    const matrix = composedMatrixFor(svg);
+    const key = d1GlyphKey(dir, dcat, matrix);
     if (seenPaths.has(key)) continue;
     seenPaths.add(key);
     const btn = svg.closest('button,[role=button],a');
     const aria = btn ? (btn.getAttribute('aria-label') || '') : '';
-    const matrix = composedMatrixFor(svg);
     const flip =
       Math.abs(matrix[0] + 1) < 0.01 && Math.abs(matrix[1]) < 0.01 &&
       Math.abs(matrix[2]) < 0.01 && Math.abs(matrix[3] - 1) < 0.01;
@@ -749,7 +756,7 @@ async function autoD1(
   // Pair LTR<->RTL directional icons by aria-context (fallback: positional
   // index) and evaluate EACH pair, so a two-button name-swap (prev/next) is
   // seen per-button rather than washed out by a global multiset.
-  const keyOf = (i, idx) => (i.aria && i.aria.trim() ? 'aria:' + i.aria.trim() : 'idx:' + idx);
+  const keyOf = d1PairKey;
   const ltrBy = new Map();
   ltr.forEach((i, idx) => ltrBy.set(keyOf(i, idx), i));
   const rtlBy = new Map();
@@ -760,6 +767,7 @@ async function autoD1(
   let anyUnhandled = false; // at least one directional icon neither flips nor swaps
   let anyDoubleFlip = false;
   const perIcon = [];
+  let blockAxisOnly = 0; // unmirrored glyphs that point up or down in both directions
   for (const k of keys) {
     const L = ltrBy.get(k), R = rtlBy.get(k);
     // transform-mirror: the glyph's COMPOSED transform under RTL equals its LTR
@@ -780,6 +788,17 @@ async function autoD1(
     const doubleFlip =
       L && R && L.flip && R.flip &&
       L.matrix.every((v, i) => Math.abs(v - R.matrix[i]) < 0.01);
+    // A horizontal glyph turned a quarter turn (an expanded disclosure) points
+    // up or down. Pointing the same way along the block axis in BOTH
+    // directions, it carries no inline meaning (DR5): leaving it unmirrored is
+    // correct, so it is not judged. One that flips between down and up is
+    // still judged; a mirrored one renders the same and counts as handled.
+    const blockAxis = !mirrored && !swapped && isUnchangedBlockAxisPair(L, R);
+    if (blockAxis) {
+      blockAxisOnly++;
+      perIcon.push({icon: k, ltrDir: L.dir, rtlDir: R.dir, ltrMatrix: L.matrix, rtlMatrix: R.matrix, blockAxis: true});
+      continue;
+    }
     if (mirrored || swapped) anyMirrored = true;
     else if (doubleFlip) { anyDoubleFlip = true; anyUnhandled = true; }
     else anyUnhandled = true;
@@ -789,7 +808,10 @@ async function autoD1(
   // A component is RTL-ready for D1 iff EVERY directional icon is handled
   // (flips or swaps) and none double-flips. Any unhandled directional icon =>
   // not-RTL (the "shipped without RTL handling" signal).
-  if (!anyUnhandled && anyMirrored) {
+  if (!anyUnhandled && !anyMirrored && blockAxisOnly > 0) {
+    card.verdict = 'N-A';
+    card.notes.push('every directional glyph points along the block axis in both directions (rotated a quarter turn)');
+  } else if (!anyUnhandled && anyMirrored) {
     card.verdict = 'pass';
     card.notes.push('every directional icon mirrors (transform-flip and/or name-swap)');
   } else if (anyDoubleFlip) {
@@ -797,7 +819,7 @@ async function autoD1(
     card.notes.push('double-flip: a directional icon is flipped in BOTH LTR and RTL (nets to no mirror)');
   } else {
     card.verdict = 'fail';
-    const bad = perIcon.filter(p => !p.mirrored && !p.swapped).map(p => p.icon);
+    const bad = perIcon.filter(p => !p.blockAxis && !p.mirrored && !p.swapped).map(p => p.icon);
     card.notes.push(`directional glyph never mirrors: ${bad.join(', ')}`);
   }
   card.perIcon = perIcon;

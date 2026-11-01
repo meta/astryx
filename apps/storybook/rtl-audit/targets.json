@@ -616,6 +616,15 @@
     }
   },
   {
+    "component": "DiffViewer",
+    "storyId": "lab-diffviewer--character-highlight",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": ".astryx-diff-viewer-path",
+      "next": ".astryx-diff-viewer-header span:text-is(\"+10\")"
+    }
+  },
+  {
     "component": "DrawerHeader",
     "storyId": "core-drawerheader--audit",
     "dims": ["D2"],
