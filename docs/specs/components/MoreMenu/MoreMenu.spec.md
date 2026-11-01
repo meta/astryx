@@ -21,6 +21,7 @@ verified_by:
     packages/core/src/Icon/Icon.test.tsx,
     packages/core/src/List/List.test.tsx,
     scripts/check-knowledge.mjs,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:overlay-dismissal]
@@ -239,6 +240,7 @@ presentation.
 | AR1                 | `MoreMenu.test.tsx` label, popup, and pointer-focus tests; the menu-button pattern binding `MenuButton.a11y.test.tsx` and `MenuButton.a11y.chromium.spec.ts`, which render MoreMenu states; `DropdownMenu.test.tsx` ArrowDown and ArrowUp trigger-key tests on the shared Button trigger path | Default and custom-icon triggers; closed/open; Enter, Space, ArrowDown, ArrowUp | The trigger loses its label, `aria-haspopup="menu"`, `aria-expanded` or `aria-controls`, or an Enter or Space open does not land on the first enabled row | `audit:MoreMenu/accessibility` |
 | Layer relationships | `MoreMenu.test.tsx`, `DropdownMenu.test.tsx`, and current layer/dismissal records                                                                                                                                                                                                             | Light dismiss, Escape, pointer, touch                                           | Documentation gives MoreMenu a parallel runtime or misstates the current dismissal owner.                                                                 | `audit:MoreMenu/behavior`      |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                                 | Canonical anatomy and current target                                            | Missing, extra, prefixed, stale, or unclassified mappings fail repository validation.                                                                     | `audit:MoreMenu/theming`       |
+| RTL relation        | RTL audit curated D4 target (`apps/storybook/rtl-audit/targets.json`) on `MoreMenu / Default` (menu opened)                                                                                                                                                                                   | The open menu against its trigger; LTR and RTL                                  | A menu that does not move to the mirrored side of its trigger in RTL fails D4.                                                                            | `audit:MoreMenu/i18n-rtl`      |
 
 Read from source, with no focused test yet:
 

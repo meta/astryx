@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/theme/themingTargets.test.ts,
     packages/cli/foundation/discovery/theming-targets.test.mjs,
     scripts/check-knowledge.mjs,
+    apps/storybook/rtl-audit/targets.json,
   ]
 parent_component: component:Dialog
 references:
@@ -158,13 +159,14 @@ For this slot-targeted prop, `inline` means the slot's logical inline-end edge,
 
 ## Verification map
 
-| Contract            | Verification                                                                    | Representative states                                                     | Mutation or failure expectation                                                              |
-| ------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| FR1–FR3, FR9–FR10   | Target tests, target inventory, generated probe theme, and source inspection    | title only, title/subtitle, start content, end content, close action      | A target is missing, undocumented, duplicated, or moved away from its owning painter.        |
-| FR4–FR5             | Existing content and close-button tests                                         | end content only; close only; both                                        | The close action or slot content disappears, reorders, or gains another wrapper.             |
-| FR6–FR7             | Focused end-slot class-selection assertions                                     | close only; end content only; both; explicit `inline`, `block`, and `all` | An omitted prop changes released geometry, or an explicit value selects the wrong axes.      |
-| FR8                 | Source inspection, RTL CI, interaction tests, and focused real-browser geometry | LTR and RTL; custom end control; close action                             | Physical margins, caller-controlled amounts, or hit-target changes enter the implementation. |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                   | all five module anatomy entries and targets                               | Anatomy, docs, runtime targets, and the module map drift.                                    |
+| Contract            | Verification                                                                                                | Representative states                                                     | Mutation or failure expectation                                                              |
+| ------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| FR1–FR3, FR9–FR10   | Target tests, target inventory, generated probe theme, and source inspection                                | title only, title/subtitle, start content, end content, close action      | A target is missing, undocumented, duplicated, or moved away from its owning painter.        |
+| FR4–FR5             | Existing content and close-button tests                                                                     | end content only; close only; both                                        | The close action or slot content disappears, reorders, or gains another wrapper.             |
+| FR6–FR7             | Focused end-slot class-selection assertions                                                                 | close only; end content only; both; explicit `inline`, `block`, and `all` | An omitted prop changes released geometry, or an explicit value selects the wrong axes.      |
+| FR8                 | Source inspection, RTL CI, interaction tests, and focused real-browser geometry                             | LTR and RTL; custom end control; close action                             | Physical margins, caller-controlled amounts, or hit-target changes enter the implementation. |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                                               | all five module anatomy entries and targets                               | Anatomy, docs, runtime targets, and the module map drift.                                    |
+| RTL relation        | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Dialog / Default` (dialog opened) | Title block and close control; LTR and RTL                                | A title that is not at the inline start of the close control fails D2.                       | `audit:DialogHeader/i18n-rtl` |
 
 ## Decision log
 
