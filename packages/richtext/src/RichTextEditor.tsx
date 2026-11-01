@@ -456,6 +456,16 @@ export interface RichTextEditorProps extends Omit<
    * languages (spec:AST-061).
    */
   codeLanguages?: ReadonlyArray<CodeLanguage>;
+  /**
+   * Whether tables keep merged cells: cells that span columns or rows
+   * (`colSpan`, `rowSpan`), which content made elsewhere can hold. By default
+   * the editor splits each merged cell into single cells as it loads, with
+   * the content in the first. GFM has no merged cells, so `getMarkdown()` and
+   * `editorStateJSONToMarkdown` write a merged cell's content in its top-left
+   * cell and leave the cells it covers empty.
+   * @default false
+   */
+  hasCellMerge?: boolean;
   /** Whether to automatically focus the editor on mount. @default false */
   hasAutoFocus?: boolean;
   /**
@@ -530,6 +540,7 @@ export const RichTextEditor = function RichTextEditor({
   transformers = DEFAULT_TRANSFORMERS,
   markdownExtensions,
   codeLanguages,
+  hasCellMerge = false,
   hasAutoFocus = false,
   tabEscapeHint: tabEscapeHintFromProps,
   maxLength,
@@ -712,9 +723,12 @@ export const RichTextEditor = function RichTextEditor({
               {/* Tab keeps its editor meaning inside a table (indent, and
                   Escape then Tab to leave the editor); arrow keys move
                   between cells. GFM tables have no merged cells or cell
-                  colors, and a wide table scrolls inside its own wrapper. */}
+                  colors: merged cells are split into single cells unless
+                  hasCellMerge keeps them, and Markdown export writes a
+                  merged cell's content in its top-left cell. A wide table
+                  scrolls inside its own wrapper. */}
               <TablePlugin
-                hasCellMerge={false}
+                hasCellMerge={hasCellMerge}
                 hasCellBackgroundColor={false}
                 hasTabHandler={false}
                 hasHorizontalScroll

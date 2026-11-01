@@ -205,11 +205,62 @@ function oneLine(markdown: string): string {
   return joined;
 }
 
+/** One position of a table's grid and the cell over it. */
+interface GridSlot {
+  readonly cell: TableCellNode;
+  /** Whether this is the cell's top-left position, where its content goes. */
+  readonly isOrigin: boolean;
+}
+
+/** A cell's span: a value below 2, or not a number, spans one. */
+function spanOf(value: number): number {
+  return value > 1 ? value : 1;
+}
+
+/**
+ * The table laid out on its grid, row by row. A merged cell covers every
+ * position its column and row spans reach, and a row span stops at the last
+ * row. A position no cell reaches, past the end of a short row, is empty.
+ */
+function $tableGrid(table: TableNode): Array<Array<GridSlot | undefined>> {
+  const rows = table.getChildren().filter($isTableRowNode);
+  const grid: Array<Array<GridSlot | undefined>> = rows.map(() => []);
+  rows.forEach((row, rowIndex) => {
+    let column = 0;
+    for (const cell of row.getChildren().filter($isTableCellNode)) {
+      while (grid[rowIndex][column] !== undefined) {
+        column++;
+      }
+      const colSpan = spanOf(cell.getColSpan());
+      const rowSpan = Math.min(
+        spanOf(cell.getRowSpan()),
+        rows.length - rowIndex,
+      );
+      for (let rowOffset = 0; rowOffset < rowSpan; rowOffset++) {
+        for (let columnOffset = 0; columnOffset < colSpan; columnOffset++) {
+          grid[rowIndex + rowOffset][column + columnOffset] = {
+            cell,
+            isOrigin: rowOffset === 0 && columnOffset === 0,
+          };
+        }
+      }
+      column += colSpan;
+    }
+  });
+  return grid;
+}
+
 /**
  * GFM pipe tables. The header row is the first row and renders as header
  * cells; delimiter-row colons set each column's alignment; rows shorter than
  * the widest row gain empty cells, so no cell is dropped. Export writes the
  * canonical form: outer pipes, one space of padding, and three-dash delimiters.
+ *
+ * GFM has no merged cells, so a merged cell exports as the cells it covers:
+ * its content in the top-left one and the rest empty. Every row is written
+ * with every column, so each cell stays in its column when the Markdown is
+ * read again, and each column takes the alignment of the header-row cell over
+ * it. The Markdown reads back with the cells split.
  */
 export const TABLE: MultilineElementTransformer = {
   dependencies: [TableNode, TableRowNode, TableCellNode],
@@ -217,14 +268,17 @@ export const TABLE: MultilineElementTransformer = {
     if (!$isTableNode(node)) {
       return null;
     }
-    const rows = node.getChildren().filter($isTableRowNode);
+    const grid = $tableGrid(node);
+    const columns = Math.max(0, ...grid.map(row => row.length));
     const lines: Array<string> = [];
-    rows.forEach((row, rowIndex) => {
-      const cells = row.getChildren().filter($isTableCellNode);
-      lines.push(`| ${cells.map(cellMarkdown).join(' | ')} |`);
+    grid.forEach((row, rowIndex) => {
+      const slots = Array.from({length: columns}, (_, column) => row[column]);
+      lines.push(
+        `| ${slots.map(slot => (slot?.isOrigin ? cellMarkdown(slot.cell) : '')).join(' | ')} |`,
+      );
       if (rowIndex === 0) {
         lines.push(
-          `| ${cells.map(cell => delimiterFor(cell.getFormatType())).join(' | ')} |`,
+          `| ${slots.map(slot => delimiterFor(slot?.cell.getFormatType() ?? '')).join(' | ')} |`,
         );
       }
     });

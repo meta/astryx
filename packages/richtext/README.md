@@ -22,6 +22,12 @@ editor required). The server-safe serializers are also available from
 Markdown imported into the editor exports back byte for byte when nothing was
 edited.
 
+Tables are GFM tables. Content made elsewhere can hold merged cells (`colSpan`,
+`rowSpan`); the editor and the view split them into single cells unless you
+pass `hasCellMerge` to both. Markdown has no merged cells, so the Markdown
+export writes a merged cell's content in its top-left cell and leaves the
+cells it covers empty.
+
 ## Built on Lexical
 
 RichText is built on [Lexical](https://lexical.dev) and does not hide it:

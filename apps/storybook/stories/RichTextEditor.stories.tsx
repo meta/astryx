@@ -12,10 +12,20 @@ import {
   type RichTextEditorRef,
 } from '@astryxdesign/richtext';
 import type {EditorState} from 'lexical';
+import {createHeadlessEditor} from '@lexical/headless';
+import {
+  $createTableCellNode,
+  $createTableNode,
+  $createTableRowNode,
+  TableCellHeaderStates,
+  TableCellNode,
+  TableNode,
+  TableRowNode,
+} from '@lexical/table';
 import {objectiveC} from '@astryxdesign/core/CodeBlock/languages/objective-c';
 import {thrift} from '@astryxdesign/core/CodeBlock/languages/thrift';
 import {BOLD_STAR, ITALIC_STAR, UNORDERED_LIST} from '@lexical/markdown';
-import {$getRoot} from 'lexical';
+import {$createParagraphNode, $createTextNode, $getRoot} from 'lexical';
 import {
   LONG_DOCUMENT_COPIES,
   MarkdownParitySandbox,
@@ -641,6 +651,87 @@ export const CodeLanguageModules: Story = {
       <div data-testid="unlisted">
         <RichTextView value={THRIFT_FENCE} />
       </div>
+    </div>
+  ),
+};
+
+/**
+ * Serialized state for a table with merged cells, as content made outside
+ * RichText can hold it: "Ada" spans two rows and "Grace Hopper" spans two
+ * columns. The header row has no merged cell, so splitting the merges leaves
+ * no header cell empty.
+ */
+const MERGED_TABLE = (() => {
+  const editor = createHeadlessEditor({
+    nodes: [TableNode, TableRowNode, TableCellNode],
+    onError(error: Error) {
+      throw error;
+    },
+  });
+  const rows: Array<Array<[text: string, colSpan: number, rowSpan: number]>> = [
+    [
+      ['Name', 1, 1],
+      ['Family name', 1, 1],
+      ['Notes', 1, 1],
+    ],
+    [
+      ['Ada', 1, 2],
+      ['Lovelace', 1, 1],
+      ['Wrote the first published program', 1, 1],
+    ],
+    [
+      ['Byron', 1, 1],
+      ['Her family name at birth', 1, 1],
+    ],
+    [
+      ['Grace Hopper', 2, 1],
+      ['Built an early compiler', 1, 1],
+    ],
+  ];
+  editor.update(
+    () => {
+      const table = $createTableNode();
+      rows.forEach((cells, rowIndex) => {
+        const row = $createTableRowNode();
+        for (const [text, colSpan, rowSpan] of cells) {
+          const cell = $createTableCellNode(
+            rowIndex === 0
+              ? TableCellHeaderStates.ROW
+              : TableCellHeaderStates.NO_STATUS,
+            colSpan,
+          );
+          cell.setRowSpan(rowSpan);
+          cell.append($createParagraphNode().append($createTextNode(text)));
+          row.append(cell);
+        }
+        table.append(row);
+      });
+      $getRoot().clear().append(table);
+    },
+    {discrete: true},
+  );
+  return JSON.stringify(editor.getEditorState().toJSON());
+})();
+
+/**
+ * Content made elsewhere can hold merged table cells. With `hasCellMerge` the
+ * editor and the view keep them; by default each is split into single cells.
+ * Markdown has no merged cells, so the export below writes a merged cell's
+ * content in its top-left cell and leaves the cells it covers empty.
+ */
+export const MergedTableCells: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 16, maxWidth: 560}}>
+      <RichTextEditor
+        label="hasCellMerge"
+        defaultValue={MERGED_TABLE}
+        hasCellMerge
+      />
+      <RichTextEditor label="Default" defaultValue={MERGED_TABLE} />
+      <RichTextView value={MERGED_TABLE} hasCellMerge />
+      <pre style={{margin: 0, whiteSpace: 'pre-wrap'}}>
+        {editorStateJSONToMarkdown(MERGED_TABLE)}
+      </pre>
     </div>
   ),
 };
