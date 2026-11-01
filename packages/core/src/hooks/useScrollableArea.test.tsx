@@ -30,6 +30,7 @@ const testStyles = stylex.create({
 interface FixtureProps {
   axis?: ScrollAxis;
   chaining?: ScrollOverscroll;
+  keyboardOwner?: 'viewport' | 'contentOrViewport';
   stickyContainment?: ScrollStickyContainment;
   externalRef?: Ref<HTMLDivElement>;
   onScroll?: React.UIEventHandler<HTMLDivElement>;
@@ -38,6 +39,7 @@ interface FixtureProps {
 function Fixture({
   axis = 'inline',
   chaining = 'allow',
+  keyboardOwner = 'viewport',
   stickyContainment,
   externalRef,
   onScroll,
@@ -45,7 +47,7 @@ function Fixture({
   const {getViewportProps, getContentProps, state} = useScrollableArea({
     axis,
     keyboardAccess: {
-      owner: 'viewport',
+      owner: keyboardOwner,
       label: 'Scrollable results',
       role: 'region',
     },
@@ -350,8 +352,8 @@ describe('useScrollableArea', () => {
     expect(viewport.getAttribute('style')).toContain('clip');
 
     rerender(<Fixture stickyContainment="always" />);
-    expect(viewport.getAttribute('style')).toContain('auto');
-    expect(viewport.getAttribute('style')).toContain('hidden');
+    expect(viewport.getAttribute('style')).toContain('--x-overflowX: auto');
+    expect(viewport.getAttribute('style')).toContain('--x-overflowY: hidden');
   });
 
   it('activates only the overflowing physical axis when both are requested', () => {
@@ -688,6 +690,52 @@ describe('useScrollableArea', () => {
       inlineReversed: true,
       blockReversed: false,
     });
+    expect(getLogicalAxisMapping('sideways-lr', 'rtl')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: false,
+      blockReversed: false,
+    });
+    expect(getLogicalAxisMapping('sideways-rl', 'ltr')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: false,
+      blockReversed: true,
+    });
+    expect(getLogicalAxisMapping('sideways-rl', 'rtl')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: true,
+      blockReversed: true,
+    });
+    expect(getLogicalAxisMapping('vertical-rl', 'rtl')).toEqual({
+      inline: 'y',
+      block: 'x',
+      inlineReversed: true,
+      blockReversed: true,
+    });
+    expect(getLogicalAxisMapping('horizontal-tb', 'rtl')).toEqual({
+      inline: 'x',
+      block: 'y',
+      inlineReversed: true,
+      blockReversed: false,
+    });
+  });
+
+  it('normalizes reversed inline offsets in sideways writing modes', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    viewport.style.writingMode = 'sideways-lr';
+    setGeometry(viewport, {scrollHeight: 300, scrollTop: -200});
+
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: true,
+    });
   });
 
   it('measures both requested axes independently in vertical writing mode', () => {
@@ -753,7 +801,7 @@ describe('useScrollableArea', () => {
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
 
-    viewport.focus();
+    void act(() => viewport.focus());
     expect(document.activeElement).toBe(viewport);
     setGeometry(viewport, {scrollWidth: 100});
     void act(() => viewport.dispatchEvent(new Event('scroll')));
@@ -762,6 +810,28 @@ describe('useScrollableArea', () => {
     expect(viewport).toHaveAttribute('tabindex', '-1');
     expect(document.activeElement).toBe(viewport);
   });
+
+  it.each(['viewport', 'contentOrViewport'] as const)(
+    'drops the retained %s tab stop once the blurred viewport stays fitting',
+    keyboardOwner => {
+      render(<Fixture keyboardOwner={keyboardOwner} />);
+      const viewport = screen.getByTestId('viewport');
+      makeMeasurable(viewport);
+      setGeometry(viewport, {scrollWidth: 180});
+      void act(() => viewport.dispatchEvent(new Event('scroll')));
+      flushFrame();
+
+      void act(() => viewport.focus());
+      setGeometry(viewport, {scrollWidth: 100});
+      void act(() => viewport.dispatchEvent(new Event('scroll')));
+      flushFrame();
+      expect(viewport).toHaveAttribute('tabindex', '-1');
+      expect(document.activeElement).toBe(viewport);
+
+      void act(() => viewport.blur());
+      expect(viewport).not.toHaveAttribute('tabindex');
+    },
+  );
 
   it('composes caller refs and handlers without losing behavior', () => {
     const externalRef = vi.fn();
@@ -832,5 +902,168 @@ describe('useScrollableArea', () => {
     );
     expect(findNearestScrollOwner(descendant, 'block')).toBe(outer);
     expect(findNearestScrollOwner(descendant, 'inline')).toBeNull();
+  });
+
+  it('resolves the nearest effective owner per axis and unregisters on unmount', () => {
+    function DoubleBlockFixture() {
+      const outer = useScrollableArea({
+        axis: 'block',
+        keyboardAccess: {owner: 'content'},
+      });
+      const inner = useScrollableArea({
+        axis: 'block',
+        keyboardAccess: {owner: 'content'},
+      });
+      return (
+        <div
+          data-testid="outer-owner"
+          {...outer.getViewportProps({style: {overflowY: 'auto'}})}>
+          <div {...outer.getContentProps()}>
+            <div
+              data-testid="inner-owner"
+              {...inner.getViewportProps({style: {overflowY: 'auto'}})}>
+              <div {...inner.getContentProps()}>
+                <span data-testid="deep-descendant" />
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const {unmount} = render(<DoubleBlockFixture />);
+    const outer = screen.getByTestId('outer-owner');
+    const inner = screen.getByTestId('inner-owner');
+    const descendant = screen.getByTestId('deep-descendant');
+    makeMeasurable(outer);
+    makeMeasurable(inner);
+    setGeometry(outer, {scrollHeight: 240});
+    setGeometry(inner, {scrollHeight: 300});
+
+    void act(() => {
+      outer.dispatchEvent(new Event('scroll'));
+      inner.dispatchEvent(new Event('scroll'));
+    });
+    flushFrame();
+
+    expect(findNearestScrollOwner(descendant, 'block')).toBe(inner);
+
+    unmount();
+    expect(getRegisteredScrollOwnerState(inner)).toBeUndefined();
+    expect(getRegisteredScrollOwnerState(outer)).toBeUndefined();
+  });
+
+  it('composes caller content props and consumes content xstyle', () => {
+    const contentRef = vi.fn();
+    const onClick = vi.fn();
+    function ContentFixture() {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'content'},
+      });
+      return (
+        <div {...area.getViewportProps({style: {overflowX: 'auto'}})}>
+          <div
+            data-testid="styled-content"
+            {...area.getContentProps<HTMLDivElement>({
+              ref: contentRef,
+              onClick,
+              className: 'consumer-content',
+              style: {color: 'red'},
+              xstyle: testStyles.viewport,
+            })}>
+            Content
+          </div>
+        </div>
+      );
+    }
+
+    render(<ContentFixture />);
+    const content = screen.getByTestId('styled-content');
+    expect(content).not.toHaveAttribute('xstyle');
+    expect(content).toHaveClass('consumer-content');
+    const expectedClasses = (stylex.props(testStyles.viewport).className ?? '')
+      .split(' ')
+      .filter(Boolean);
+    expect(expectedClasses.length).toBeGreaterThan(0);
+    for (const token of expectedClasses) {
+      expect(content).toHaveClass(token);
+    }
+    expect(content.style.color).toBe('red');
+    expect(content).toHaveAttribute('data-scroll-content');
+    content.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(contentRef).toHaveBeenCalledWith(content);
+  });
+
+  it('preserves the last valid state while the viewport is unmeasurable', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 180, scrollLeft: 40});
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: false,
+    });
+
+    // A collapsed box zeroes every metric; an unguarded remeasure would
+    // publish inactive state instead of preserving the last valid one.
+    setGeometry(viewport, {
+      clientWidth: 0,
+      clientHeight: 0,
+      scrollWidth: 0,
+      scrollHeight: 0,
+      scrollLeft: 0,
+    });
+    void act(() => viewport.dispatchEvent(new Event('scroll')));
+    flushFrame();
+    expect(state().inline).toEqual({
+      isScrollable: true,
+      atStart: false,
+      atEnd: false,
+    });
+  });
+
+  it('coalesces repeated invalidations into one animation frame', () => {
+    render(<Fixture />);
+    const viewport = screen.getByTestId('viewport');
+    makeMeasurable(viewport);
+    setGeometry(viewport, {scrollWidth: 180});
+
+    void act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+      viewport.dispatchEvent(new Event('scroll'));
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(frames).toHaveLength(1);
+  });
+
+  it('keeps behavior-owned accessibility over conflicting caller props', () => {
+    function ConflictFixture() {
+      const area = useScrollableArea({
+        axis: 'inline',
+        keyboardAccess: {owner: 'viewport', label: 'Owned name'},
+      });
+      return (
+        <div
+          data-testid="conflict-viewport"
+          {...area.getViewportProps<HTMLDivElement>({
+            role: 'list',
+            'aria-label': 'Caller name',
+            tabIndex: 5,
+          })}>
+          <div {...area.getContentProps()}>Content</div>
+        </div>
+      );
+    }
+
+    render(<ConflictFixture />);
+    const viewport = screen.getByTestId('conflict-viewport');
+    expect(viewport).toHaveAttribute('role', 'group');
+    expect(viewport).toHaveAccessibleName('Owned name');
+    expect(viewport).not.toHaveAttribute('tabindex');
   });
 });

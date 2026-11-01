@@ -10,6 +10,7 @@ export const docs = {
     description: 'Provides a native scroll viewport and a real observed content box. The viewport enters the tab order only while a requested logical axis is effectively scrollable, and containment applies only to effective axes.',
     bestPractices: [
       {guidance: true, description: 'Give every area a concise label that identifies the content keyboard users will scroll.'},
+      {guidance: true, description: 'Keep the default `role="group"` for ordinary scroll containers. Choose `role="region"` only when the area is significant enough to appear in screen-reader landmark navigation — every `region` adds an entry to that list.'},
       {guidance: true, description: 'Choose `inline`, `block`, or `both` from content intent; the component maps the logical axes through writing mode and direction.'},
       {guidance: true, description: 'Keep the default `overscroll="allow"` for nested areas unless the interaction deliberately needs containment.'},
       {guidance: true, description: 'Use `useScrollableArea` instead when a component already owns both a viewport and a suitable content box, or when children must remain direct flex/grid items or retain a definite percentage block-size basis.'},
@@ -28,7 +29,7 @@ export const docs = {
   props: [
     {name: 'axis', type: "'inline' | 'block' | 'both'", description: 'Logical axis or axes where native scrolling is allowed.', default: "'block'"},
     {name: 'label', type: 'string', description: 'Accessible name for the viewport when it becomes keyboard scrollable.', required: true},
-    {name: 'role', type: "'group' | 'region'", description: 'Semantics for the named viewport.', default: "'group'"},
+    {name: 'role', type: "'group' | 'region'", description: 'Semantics for the named viewport; use `region` only for areas that belong in landmark navigation.', default: "'group'"},
     {name: 'overscroll', type: "'allow' | 'contain'", description: 'Whether effective axes continue scrolling an ancestor at their edge.', default: "'allow'"},
     {name: 'width', type: 'SizeValue', description: 'Width of the viewport; a number is interpreted as pixels, a string is used as-is.'},
     {name: 'height', type: 'SizeValue', description: 'Height of the viewport; a number is interpreted as pixels, a string is used as-is.'},
@@ -44,7 +45,7 @@ export const docs = {
     {name: 'paddingBlockEnd', type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10', description: 'Logical block-end content padding; overrides broader padding values.'},
     {name: 'isFullBleed', type: 'boolean', description: 'Lets the viewport escape inherited container padding without changing content padding.', default: 'false'},
     {name: 'children', type: 'ReactNode', description: 'Content rendered inside the observed content box.'},
-    {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX sizing and native scrollbar presentation overrides for the viewport.'},
+    {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX sizing and native scrollbar presentation overrides for the viewport. Must be a `stylex.create()` value, not an inline style object.'},
   ],
   playground: {
     defaults: {
@@ -79,7 +80,7 @@ export const docsDense = {
   propDescriptions: {
     axis: "logical scroll intent: 'inline' | 'block' (default) | 'both'",
     label: 'required accessible viewport name',
-    role: "named viewport semantics: 'group' (default) | 'region'",
+    role: "named viewport semantics: 'group' (default) | 'region' (landmark-navigation entries only)",
     overscroll: "edge behavior: 'allow' (default) | 'contain' on effective axes only",
     width: 'viewport width',
     height: 'viewport height',

@@ -40,6 +40,17 @@ const styles = stylex.create({
   containerViewport: {
     blockSize: 180,
   },
+  narrowHost: {
+    inlineSize: 280,
+    padding: spacingVars['--spacing-2'],
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colorVars['--color-border-emphasized'],
+  },
+  narrowViewport: {
+    inlineSize: '100%',
+    blockSize: 140,
+  },
   contentPadding: {
     padding: spacingVars['--spacing-3'],
   },
@@ -329,9 +340,31 @@ export const ConditionalKeyboardAccess: Story = {
       expect(getComputedStyle(viewport).overflowY).toBe('auto');
       expect(viewport).toHaveAttribute('tabindex', '0');
     });
-    await userEvent.click(button);
+
+    // A focused native scroll container is the keyboard-scrolling contract;
+    // synthetic key events are untrusted and cannot drive native scrolling,
+    // so prove the live scroll machinery with a programmatic scroll and leave
+    // trusted arrow/PageDown verification to manual and AT passes (AST-009).
+    viewport.focus();
+    expect(document.activeElement).toBe(viewport);
+    expect(viewport).toHaveAttribute('data-scroll-block-start', 'true');
+    viewport.scrollTop = 40;
+    await waitFor(() => {
+      expect(viewport).not.toHaveAttribute('data-scroll-block-start');
+    });
+
+    // Losing overflow while focused keeps focus without a future tab stop
+    // (button.click() is programmatic, so the viewport stays focused).
+    button.click();
     await waitFor(() => {
       expect(getComputedStyle(viewport).overflowY).toBe('clip');
+      expect(viewport).toHaveAttribute('tabindex', '-1');
+    });
+    expect(document.activeElement).toBe(viewport);
+
+    // Blurring the fitting viewport drops the retained tab stop entirely.
+    viewport.blur();
+    await waitFor(() => {
       expect(viewport).not.toHaveAttribute('tabindex');
     });
   },
@@ -642,6 +675,28 @@ function RTLBehaviorProbeStory() {
 
 export const RTLBehaviorProbe: Story = {
   render: () => <RTLBehaviorProbeStory />,
+  play: async ({canvasElement}) => {
+    const button = canvasElement.querySelector<HTMLButtonElement>(
+      '[data-rtl-scroll-button="true"]',
+    );
+    const viewport = canvasElement.querySelector<HTMLElement>(
+      '[data-rtl-scroll-probe="true"]',
+    );
+    expect(button).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    if (button == null || viewport == null) {
+      return;
+    }
+
+    await waitFor(() => {
+      expect(viewport).toHaveAttribute('data-scrollable-inline', 'true');
+      expect(viewport).toHaveAttribute('data-scroll-inline-start', 'true');
+    });
+    await userEvent.click(button);
+    await waitFor(() => {
+      expect(viewport).not.toHaveAttribute('data-scroll-inline-start');
+    });
+  },
   parameters: {controls: {disable: true}},
 };
 
@@ -681,6 +736,32 @@ function TransformedClipDemo() {
 
 export const TransformedClippedAncestor: Story = {
   render: () => <TransformedClipDemo />,
+  parameters: {controls: {disable: true}},
+};
+
+export const NarrowContainer: Story = {
+  render: () => (
+    <div {...stylex.props(styles.canvas)}>
+      <div {...stylex.props(styles.narrowHost)}>
+        <ScrollableArea
+          axis="block"
+          label="Narrow activity"
+          data-evidence="narrow-container"
+          xstyle={[styles.viewport, styles.narrowViewport]}>
+          <VStack gap={2} xstyle={styles.contentPadding}>
+            <Text>
+              Percentage-width viewport inside a 280px container, with a long
+              unbroken token below.
+            </Text>
+            <p {...stylex.props(styles.copy)}>
+              LongUnbrokenIdentifier_0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz
+            </p>
+            <Rows count={6} />
+          </VStack>
+        </ScrollableArea>
+      </div>
+    </div>
+  ),
   parameters: {controls: {disable: true}},
 };
 

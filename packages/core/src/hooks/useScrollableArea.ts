@@ -49,10 +49,17 @@ import {
   unregisterScrollOwner,
 } from './scrollOwnerRegistry';
 
+/** Logical axis or axes where native scrolling is requested. */
 export type ScrollAxis = 'inline' | 'block' | 'both';
+/** Whether effective axes pass scroll gestures to ancestors at an edge. */
 export type ScrollOverscroll = 'allow' | 'contain';
+/** Whether a fitting viewport deliberately remains a Sticky containing boundary. */
 export type ScrollStickyContainment = 'whenScrollable' | 'always';
 
+/**
+ * Where keyboard scrolling is reached: caller-owned content, a named viewport,
+ * or a named viewport that delegates forward Tab entry into its content.
+ */
 export type ScrollKeyboardAccess =
   | {owner: 'content'}
   | {owner: 'viewport'; label: string; role?: 'group' | 'region'}
@@ -62,21 +69,27 @@ export type ScrollKeyboardAccess =
       role?: 'group' | 'region';
     };
 
+/** Effective ownership and logical edge state for one requested axis. */
 export interface ScrollAxisState {
   isScrollable: boolean;
   atStart: boolean;
   atEnd: boolean;
 }
 
+/** Per-axis effective scroll state published by the hook. */
 export interface ScrollableAreaState {
   inline: ScrollAxisState;
   block: ScrollAxisState;
 }
 
 export interface UseScrollableAreaOptions {
+  /** Logical axis or axes where scrolling is allowed. */
   axis: ScrollAxis;
+  /** Keyboard reachability owner; a named viewport joins the tab order while effective. */
   keyboardAccess: ScrollKeyboardAccess;
+  /** Edge propagation on effective axes. @default 'allow' */
   overscroll?: ScrollOverscroll;
+  /** Sticky containment while fitting. @default 'whenScrollable' */
   stickyContainment?: ScrollStickyContainment;
 }
 
@@ -193,6 +206,19 @@ function useStableComposedRef(
  * Adds axis-aware scroll behavior to caller-owned viewport and content boxes.
  * The returned prop getters compose refs and preserve caller props, so spread
  * order cannot detach measurement or override behavior-owned accessibility.
+ *
+ * @example
+ * ```
+ * const {getViewportProps, getContentProps, state} = useScrollableArea({
+ *   axis: 'block',
+ *   keyboardAccess: {owner: 'viewport', label: 'Activity history'},
+ * });
+ * return (
+ *   <div {...getViewportProps({xstyle: styles.viewport})}>
+ *     <div {...getContentProps()}>{children}</div>
+ *   </div>
+ * );
+ * ```
  */
 export function useScrollableArea({
   axis,
@@ -206,6 +232,7 @@ export function useScrollableArea({
   const [overflow, setOverflow] =
     useState<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
   const [mapping, setMapping] = useState<LogicalAxisMapping>(INITIAL_MAPPING);
+  const [isViewportFocused, setViewportFocused] = useState(false);
   const stateRef = useRef<ScrollableAreaState>(INITIAL_STATE);
   const measureRef = useRef<(() => void) | null>(null);
 
@@ -217,6 +244,23 @@ export function useScrollableArea({
   }, []);
   const getComposedViewportRef = useStableComposedRef(viewportRef);
   const getComposedContentRef = useStableComposedRef(contentRef);
+
+  useIsomorphicLayoutEffect(() => {
+    if (viewport == null) {
+      return;
+    }
+    const syncFocus = () => {
+      setViewportFocused(document.activeElement === viewport);
+    };
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- adopt focus that landed before the listeners attached
+    setViewportFocused(document.activeElement === viewport);
+    viewport.addEventListener('focusin', syncFocus);
+    viewport.addEventListener('focusout', syncFocus);
+    return () => {
+      viewport.removeEventListener('focusin', syncFocus);
+      viewport.removeEventListener('focusout', syncFocus);
+    };
+  }, [viewport]);
 
   useIsomorphicLayoutEffect(() => {
     if (viewport == null || content == null) {
@@ -517,10 +561,7 @@ export function useScrollableArea({
       ) as ScrollableElementProps<E>;
       const viewportIsKeyboardOwner = keyboardAccess.owner !== 'content';
       const keepsProgrammaticFocus =
-        (!viewportIsKeyboardOwner || !hasEffectiveAxis) &&
-        viewport != null &&
-        typeof document !== 'undefined' &&
-        document.activeElement === viewport;
+        (!viewportIsKeyboardOwner || !hasEffectiveAxis) && isViewportFocused;
       const behaviorStyle: CSSProperties = {...styledProps.style};
       const containInline =
         overscroll === 'contain' && state.inline.isScrollable;
@@ -573,13 +614,13 @@ export function useScrollableArea({
     [
       axis,
       getComposedViewportRef,
+      isViewportFocused,
       keyboardAccess,
       mapping,
       overflow,
       overscroll,
       state,
       stickyContainment,
-      viewport,
     ],
   );
 
@@ -587,9 +628,14 @@ export function useScrollableArea({
     <E extends HTMLElement>(
       props: ScrollableElementProps<E> = {},
     ): ScrollableElementProps<E> => {
+      const {xstyle, ...domProps} = props;
+      const styledProps = mergeProps(
+        domProps,
+        stylex.props(xstyle),
+      ) as ScrollableElementProps<E>;
       const result: ScrollableElementProps<E> = {
-        ...props,
-        ref: getComposedContentRef(props.ref),
+        ...styledProps,
+        ref: getComposedContentRef(styledProps.ref),
         'data-scroll-content': '',
       };
       return result;
