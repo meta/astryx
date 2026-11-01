@@ -29,12 +29,12 @@ permissions: {}
 # person's run of main's tip queue there, one at a time (spec:AST-030 FR21).
 # A person's dispatch that names an older `sha` validates it in a group of its
 # own, so it never replaces or cancels another run. Only a release re-check,
-# which the release re-check workflow sends with the workflow token and without
-# `sha`, cancels the running unit run: it is itself a full validation of main's
-# tip, so the cancelled run's commits stay covered (spec:AST-030 FR22).
+# which the release re-check workflow sends with the workflow token, naming
+# main's tip, cancels the running unit run: it is itself a full validation of
+# that commit, so the cancelled run's commits stay covered (spec:AST-030 FR22).
 concurrency:
   group: "${{ github.event_name == 'push' && 'main-validation' || (inputs.sha != '' && github.triggering_actor != 'github-actions[bot]' && format('main-validation-sha-{0}', github.run_id)) || 'main-unit-tests' }}"
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && inputs.sha == '' && github.triggering_actor == 'github-actions[bot]' }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && github.triggering_actor == 'github-actions[bot]' }}
 
 jobs:
   # The one commit every lane and leg of this run tests. A push validates the
@@ -89,6 +89,12 @@ jobs:
               }
             }
             core.setOutput('sha', sha);
+
+      # Marks a release re-check, so the re-check workflow can tell its runs
+      # from main's hourly check of the same commit.
+      - name: Mark a release re-check
+        if: github.event_name == 'workflow_dispatch' && inputs.recheck
+        run: echo 'Release re-check'
 
       # A `main` full check waits for room under CI's ceiling before its legs
       # start (spec:AST-030 FR16, DEC-16); every other job here needs this one.

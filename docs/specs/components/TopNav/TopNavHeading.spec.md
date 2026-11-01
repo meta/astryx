@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/TopNav/TopNav.test.tsx,
     apps/storybook/stories/TopNav.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families:
@@ -188,12 +189,13 @@ is recorded.
 
 ## Verification map
 
-| Contract          | Verification                                                                | Representative states                 | Mutation or failure expectation               | Audit section                       |
-| ----------------- | --------------------------------------------------------------------------- | ------------------------------------- | --------------------------------------------- | ----------------------------------- |
-| FR1–FR3, AR1      | `TopNav.test.tsx` TopNavHeading render and logo-name tests                  | Each configuration                    | A wrong element or unnamed logo link fails.   | `audit:TopNavHeading/behavior`      |
-| FR4, FR7, AR2–AR3 | `TopNav.test.tsx` menu popover semantics tests                              | Whole trigger; links plus trigger     | A modal wrapper or misplaced menu role fails. | `audit:TopNavHeading/accessibility` |
-| FR5, FR8          | `TopNav.test.tsx` hover/click guard tests                                   | Hover-open, click, late click, Escape | Losing the guard or focus return fails.       | `audit:TopNavHeading/behavior`      |
-| FR10              | `TopNav.test.tsx` TopNavHeading menu-popover suite (touch and mouse slides) | Touch and mouse slides across items   | Removing the adoption fails the slide tests.  | —                                   |
+| Contract          | Verification                                                                                            | Representative states                                                   | Mutation or failure expectation                                                                                                     | Audit section                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| FR1–FR3, AR1      | `TopNav.test.tsx` TopNavHeading render and logo-name tests                                              | Each configuration                                                      | A wrong element or unnamed logo link fails.                                                                                         | `audit:TopNavHeading/behavior`      |
+| FR4, FR7, AR2–AR3 | `TopNav.test.tsx` menu popover semantics tests                                                          | Whole trigger; links plus trigger                                       | A modal wrapper or misplaced menu role fails.                                                                                       | `audit:TopNavHeading/accessibility` |
+| FR5, FR8          | `TopNav.test.tsx` hover/click guard tests                                                               | Hover-open, click, late click, Escape                                   | Losing the guard or focus return fails.                                                                                             | `audit:TopNavHeading/behavior`      |
+| FR10              | `TopNav.test.tsx` TopNavHeading menu-popover suite (touch and mouse slides)                             | Touch and mouse slides across items                                     | Removing the adoption fails the slide tests.                                                                                        | —                                   |
+| RTL relation      | RTL audit curated D2 and D8 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example` | Heading logo and title, with 0px start and 8px end padding; LTR and RTL | A logo that is not at the inline start of the title, or an end padding that stays on the same physical side in RTL, fails D2 or D8. | `audit:TopNavHeading/i18n-rtl`      |
 
 Read from source, with no focused test yet: that clicking the block itself opens the menu in the menu-without-hrefs configuration (FR2); the `dialogLabel` fallback name of the menu (FR7); that the rest of the block opens the menu in the links-plus-trigger configuration (FR2); the `top-nav-heading` target (FR1); line truncation, part order, and `headerEndContent` (FR1); `as` and `LinkProvider` rendering (FR3); the chevron button's size (FR4); FR6; the popover's placement (FR7); and FR9.
 

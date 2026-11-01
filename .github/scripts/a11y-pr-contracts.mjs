@@ -34,7 +34,16 @@
  * the PR's component scope.
  *
  * Unknown scope (no merge base, no changed-file list) runs every scoped spec,
- * never fewer. Locally, `pnpm test:a11y-contract:pr origin/main --dry-run`
+ * never fewer.
+ *
+ * `--changed-only <file>` (the default touched-components check, spec:AST-030
+ * FR12): run only the browser specs the pull request adds or modifies, listed
+ * one per line in <file>. It reads no component scope or title, runs no
+ * component audit, and widens to nothing else; a changed `release-only` or
+ * `audit` spec still waits for the release check or its audit pull request.
+ * To stay inside the job's 15-minute budget it runs at most
+ * CHANGED_SPEC_LIMIT files, in path order, and stops after
+ * CHANGED_SPEC_BUDGET_MS; the rest are reported as not run, never as passed. Locally, `pnpm test:a11y-contract:pr origin/main --dry-run`
  * prints what a PR from this branch would run.
  *
  * The CI step loads this file from the merge commit its steps come from
@@ -286,6 +295,42 @@ export function selectSpecs({
   return selected;
 }
 
+/** The most changed spec files the default check runs (spec:AST-030 FR12). */
+export const CHANGED_SPEC_LIMIT = 4;
+
+/** The changed-spec run's wall-clock bound, inside the job's 15 minutes. */
+export const CHANGED_SPEC_BUDGET_MS = 8 * 60 * 1000;
+
+/**
+ * Split a changed-only selection at the limit: the first files, in path order,
+ * run; the rest are not run, with the label that runs them.
+ * @param {{file: string, reason: string}[]} selected
+ * @param {number} [limit]
+ */
+export function withinBudget(selected, limit = CHANGED_SPEC_LIMIT) {
+  const ordered = [...selected].sort((a, b) => a.file.localeCompare(b.file));
+  return {
+    run: ordered.slice(0, limit),
+    notRun: ordered.slice(limit).map(({file}) => ({
+      file,
+      reason: `over the default check's ${limit}-file budget; add ci:run-a11y to run it`,
+    })),
+  };
+}
+
+/**
+ * The changed-only selection: of the specs the routing selects, only those the
+ * pull request itself adds or modifies, each because it changed.
+ * @param {{file: string, reason: string}[]} selected
+ * @param {string[]} changedPaths
+ */
+export function changedOnly(selected, changedPaths) {
+  const changed = new Set(changedPaths);
+  return selected
+    .filter(({file}) => changed.has(file))
+    .map(({file}) => ({file, reason: 'spec changed'}));
+}
+
 /**
  * Path segments that never hold knowledge records. Mirrors
  * `IGNORED_COMPONENT_KNOWLEDGE_SEGMENTS` in `knowledge-paths.cjs` (a test
@@ -468,20 +513,39 @@ function main() {
     process.argv.slice(2).find(arg => !arg.startsWith('-')) ||
     (process.env.GITHUB_ACTIONS ? undefined : 'origin/main');
   const policySha = process.env.WORKFLOW_SHA;
+  const changedOnlyIndex = process.argv.indexOf('--changed-only');
+  const changedOnlyFile =
+    changedOnlyIndex === -1 ? null : process.argv[changedOnlyIndex + 1];
   const specs = listSpecs(root).map(file => ({
     file,
     routing: parseRouting(readPolicySource(root, file, policySha)),
   }));
-  const changedPaths = isPullRequest ? changedSinceMergeBase(base) : [];
-  const components = isPullRequest ? readComponents(root) : [];
-  const title = isPullRequest ? (process.env.PR_TITLE ?? '') : '';
-  const selected = selectSpecs({
+  const changedPaths =
+    changedOnlyFile != null
+      ? fs.readFileSync(changedOnlyFile, 'utf8').split('\n').filter(Boolean)
+      : isPullRequest
+        ? changedSinceMergeBase(base)
+        : [];
+  const components =
+    isPullRequest && changedOnlyFile == null ? readComponents(root) : [];
+  const title =
+    isPullRequest && changedOnlyFile == null
+      ? (process.env.PR_TITLE ?? '')
+      : '';
+  const routed = selectSpecs({
     specs,
-    isPullRequest,
+    // The changed-only run is always a pull request's.
+    isPullRequest: isPullRequest || changedOnlyFile != null,
     changedPaths,
     components,
     title,
   });
+  const budgeted =
+    changedOnlyFile != null
+      ? withinBudget(changedOnly(routed, changedPaths))
+      : {run: routed, notRun: []};
+  const selected = budgeted.run;
+  const notRun = budgeted.notRun;
   const [audited] = auditedComponents(title);
   const auditConfigFile = '.github/a11y-audit-axe.json';
   const plan = planFor(
@@ -506,6 +570,7 @@ function main() {
         components,
         audit: plan && {component: audited, ...plan},
         selected,
+        notRun,
       },
       null,
       2,
@@ -515,6 +580,9 @@ function main() {
     `PR accessibility specs: ${selected.length} of ${specs.length} discovered.`,
   );
   for (const {file, reason} of selected) console.log(`  ${file}  (${reason})`);
+  for (const {file, reason} of notRun) {
+    console.log(`::notice title=Not run::${file}: ${reason}`);
+  }
   if (process.argv.includes('--dry-run')) return 0;
 
   let status = 0;
@@ -546,6 +614,11 @@ function main() {
       process.env.GITHUB_ACTIONS ? 'list,json,github' : 'list,json',
       '--output',
       'pr-a11y-output',
+      // The changed-only run stops at its budget: an interrupted spec fails
+      // the run, so a spec that did not finish is never read as passed.
+      ...(changedOnlyFile != null
+        ? ['--global-timeout', String(CHANGED_SPEC_BUDGET_MS)]
+        : []),
       '--project',
       'chromium',
     ],

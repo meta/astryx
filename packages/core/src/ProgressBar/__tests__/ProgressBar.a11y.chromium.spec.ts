@@ -87,6 +87,93 @@ async function runState(
   });
 }
 
+test('ProgressBar marks have a name before the tooltip loads', async ({
+  page,
+}) => {
+  let releaseTooltip!: () => void;
+  const tooltipReady = new Promise<void>(resolve => {
+    releaseTooltip = resolve;
+  });
+  const chunkPattern = /\/ProgressBarMarkTooltip-[^/]+\.js$/;
+  const chunkRequested = page.waitForRequest(chunkPattern);
+  await page.route(chunkPattern, async route => {
+    await tooltipReady;
+    await route.continue();
+  });
+
+  try {
+    await page.goto(storyUrl('core-progressbar--with-target-mark'), {
+      waitUntil: 'domcontentloaded',
+    });
+    await chunkRequested;
+    const mark = page.locator('#storybook-root .astryx-progress-bar-mark');
+    await expect(mark).toBeVisible();
+    await expect(mark).not.toHaveAttribute('aria-describedby');
+    const cdp = await page.context().newCDPSession(page);
+    const subject = await createChromiumHarness({
+      page,
+      cdp,
+      subject: mark,
+    }).subject();
+    expect(await subject.computed()).toMatchObject({
+      role: 'image',
+      name: 'Goal',
+      description: '',
+    });
+    await page.keyboard.press('Tab');
+    await expect(mark).toBeFocused();
+    expect(await subject.computed()).toMatchObject({
+      role: 'image',
+      name: 'Goal',
+    });
+  } finally {
+    releaseTooltip();
+    await page.unrouteAll({behavior: 'wait'});
+  }
+});
+
+test('ProgressBar marks keep their names when tabbed to or hovered', async ({
+  page,
+}) => {
+  await page.goto(storyUrl('core-progressbar--with-multiple-marks'));
+  const marks = page.locator('#storybook-root .astryx-progress-bar-mark');
+  const labels = ['Q1 target', 'Q2 target', 'Stretch goal'];
+  await expect(marks).toHaveCount(labels.length);
+  const cdp = await page.context().newCDPSession(page);
+
+  for (const [index, label] of labels.entries()) {
+    const mark = marks.nth(index);
+    await expect(mark).toHaveAttribute('aria-describedby', /.+/);
+    const subject = await createChromiumHarness({
+      page,
+      cdp,
+      subject: mark,
+    }).subject();
+    expect(await subject.computed()).toMatchObject({
+      role: 'image',
+      name: label,
+    });
+    await page.keyboard.press('Tab');
+    await expect(mark).toBeFocused();
+    const tooltip = page.getByRole('tooltip').filter({hasText: label});
+    await expect(tooltip).toBeVisible();
+    expect(await subject.computed()).toMatchObject({
+      role: 'image',
+      name: label,
+    });
+    await page.keyboard.press('Escape');
+    await expect(tooltip).not.toBeVisible();
+    await expect(mark).toBeFocused();
+  }
+
+  await page.getByText('Quarterly milestones', {exact: true}).click();
+  await marks.first().hover();
+  const tooltip = page.getByRole('tooltip').filter({hasText: labels[0]});
+  await expect(tooltip).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(tooltip).not.toBeVisible();
+});
+
 // Checking coverage runs every state again, which on a loaded runner nears
 // the per-test timeout as one test. It runs as one serial part per state,
 // sharing their results, then one check over all of them.

@@ -90,22 +90,27 @@ jobs:
             };
             const byBot = runs => runs.filter(run => run.actor?.login === BOT);
             // Whether a lane is due for the tip. A cancelled run was replaced
-            // and never ran. A release-check that checked out a newer commit
+            // while waiting, or stopped by a release re-check of main's tip,
+            // which is itself a full check. A release-check that checked out a newer commit
             // than it was asked to check (a merge landed between the tip read
             // and the dispatch) fails its release-authority job and is no check
-            // of that commit; it still holds the window. A unit run tests its
-            // own event's commit, so its result is always that commit's.
+            // of that commit; it still holds the window. A unit run counts only
+            // for the commit it names (FR21).
             const authorityRefused = async run => {
               const {data: {jobs}} = await github.rest.actions.listJobsForWorkflowRun({
                 ...context.repo, run_id: run.id, filter: 'latest', per_page: 100,
               });
               return jobs.some(job => job.name === 'release-authority' && job.conclusion === 'failure');
             };
-            // The commit a Main run tests: the one its name gives when it was
-            // dispatched with `sha`, otherwise its event's commit (FR22).
-            const tested = run => /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ?? run.head_sha;
+            // The commit a Main run names (`Main validation of <sha>`, a
+            // dispatch with `sha`; FR22).
+            // A run without one tests main's tip when it starts, which can be
+            // later than its event's commit, so it covers no commit; the
+            // release receipt reads the name the same way (FR21).
+            const tested = run => /^Main validation of ([0-9a-f]{40})$/.exec(run.display_title ?? '')?.[1] ?? null;
             const covered = async (runs, checkAuthority) => {
-              for (const run of runs.filter(item => item.conclusion !== 'cancelled' && tested(item) === tip)) {
+              // A release-check (checkAuthority) is of its event commit; a unit run of the commit it names.
+              for (const run of runs.filter(item => item.conclusion !== 'cancelled' && (checkAuthority ? item.head_sha : tested(item)) === tip)) {
                 if (!checkAuthority || run.status !== 'completed' || run.conclusion === 'success' || !(await authorityRefused(run))) return true;
               }
               return false;
@@ -141,7 +146,8 @@ jobs:
             // runs in a group of its own (deploy.yml).
             const named = run => /^Main validation of /.test(run.display_title ?? '');
             const newest = allUnits.find(run => !(named(run) && (run.triggering_actor ?? run.actor)?.login !== BOT));
-            const incomplete = newest?.status === 'completed' && INCOMPLETE.includes(newest.conclusion);
+            // A tip that already has a run naming it is covered: nothing to redo.
+            const incomplete = newest?.status === 'completed' && INCOMPLETE.includes(newest.conclusion) && !(await covered(allUnits, false));
             if (incomplete) unit = true;
 
             // ci.yml queues release-checks in one group (one running, one

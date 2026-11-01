@@ -66,6 +66,12 @@ import {
   componentFromTarget,
   evaluateDirectionalDecorations,
   filterStoryRoutesByPackages,
+  resolveFilterRoutes,
+  finishFiniteAnimations,
+  d1GlyphKey,
+  d1PairKey,
+  glyphRendersOnBlockAxis,
+  isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   validateStoryRtlAuditParameters,
@@ -87,6 +93,7 @@ import {
 } from './rtl-audit-shards.mjs';
 
 const {
+  componentExportsFromBarrel,
   componentPackage,
   flatPackageComponentNames,
   nestedPackageComponentNames,
@@ -213,6 +220,12 @@ async function settle(page) {
       content:
         '*,*::before,*::after{animation-duration:0s!important;transition-duration:0s!important;animation-delay:0s!important;caret-color:transparent!important}',
     })
+    .catch(() => {});
+  // Transitions a story started before the style above (an entrance on mount)
+  // keep their own duration: finish them so both directions measure the
+  // resting layout.
+  await page
+    .evaluate(`(${finishFiniteAnimations.toString()})(document)`)
     .catch(() => {});
   await page.waitForTimeout(200);
 }
@@ -366,6 +379,8 @@ async function iconPath(page, sel) {
 // Ambiguous glyphs are treated as NON-DIRECTIONAL (err toward not flagging).
 const DETECTOR = /* js */ `
 (() => {
+  const glyphRendersOnBlockAxis = ${glyphRendersOnBlockAxis.toString()};
+  const d1GlyphKey = ${d1GlyphKey.toString()};
   // Known directional path signatures (whitespace-normalized, lowercased).
   const LEFT_PATHS = new Set([
     'm15 6l-6 6 6 6',        // core defaultIcons chevronLeft
@@ -460,14 +475,15 @@ const DETECTOR = /* js */ `
     // icon has a real box and IS scanned.
     const box = svg.getBoundingClientRect();
     if (box.width < 1 || box.height < 1) continue;
-    // dedupe by (direction + path signature) so a repeated glyph (e.g. many
-    // tree rows) is reported once
-    const key = dir + '::' + dcat;
+    // dedupe by (direction + path signature + rendered axis) so a repeated
+    // glyph (e.g. many tree rows) is reported once, while an expanded copy and
+    // a collapsed copy of one chevron are both kept
+    const matrix = composedMatrixFor(svg);
+    const key = d1GlyphKey(dir, dcat, matrix);
     if (seenPaths.has(key)) continue;
     seenPaths.add(key);
     const btn = svg.closest('button,[role=button],a');
     const aria = btn ? (btn.getAttribute('aria-label') || '') : '';
-    const matrix = composedMatrixFor(svg);
     const flip =
       Math.abs(matrix[0] + 1) < 0.01 && Math.abs(matrix[1]) < 0.01 &&
       Math.abs(matrix[2]) < 0.01 && Math.abs(matrix[3] - 1) < 0.01;
@@ -740,7 +756,7 @@ async function autoD1(
   // Pair LTR<->RTL directional icons by aria-context (fallback: positional
   // index) and evaluate EACH pair, so a two-button name-swap (prev/next) is
   // seen per-button rather than washed out by a global multiset.
-  const keyOf = (i, idx) => (i.aria && i.aria.trim() ? 'aria:' + i.aria.trim() : 'idx:' + idx);
+  const keyOf = d1PairKey;
   const ltrBy = new Map();
   ltr.forEach((i, idx) => ltrBy.set(keyOf(i, idx), i));
   const rtlBy = new Map();
@@ -751,6 +767,7 @@ async function autoD1(
   let anyUnhandled = false; // at least one directional icon neither flips nor swaps
   let anyDoubleFlip = false;
   const perIcon = [];
+  let blockAxisOnly = 0; // unmirrored glyphs that point up or down in both directions
   for (const k of keys) {
     const L = ltrBy.get(k), R = rtlBy.get(k);
     // transform-mirror: the glyph's COMPOSED transform under RTL equals its LTR
@@ -771,6 +788,17 @@ async function autoD1(
     const doubleFlip =
       L && R && L.flip && R.flip &&
       L.matrix.every((v, i) => Math.abs(v - R.matrix[i]) < 0.01);
+    // A horizontal glyph turned a quarter turn (an expanded disclosure) points
+    // up or down. Pointing the same way along the block axis in BOTH
+    // directions, it carries no inline meaning (DR5): leaving it unmirrored is
+    // correct, so it is not judged. One that flips between down and up is
+    // still judged; a mirrored one renders the same and counts as handled.
+    const blockAxis = !mirrored && !swapped && isUnchangedBlockAxisPair(L, R);
+    if (blockAxis) {
+      blockAxisOnly++;
+      perIcon.push({icon: k, ltrDir: L.dir, rtlDir: R.dir, ltrMatrix: L.matrix, rtlMatrix: R.matrix, blockAxis: true});
+      continue;
+    }
     if (mirrored || swapped) anyMirrored = true;
     else if (doubleFlip) { anyDoubleFlip = true; anyUnhandled = true; }
     else anyUnhandled = true;
@@ -780,7 +808,10 @@ async function autoD1(
   // A component is RTL-ready for D1 iff EVERY directional icon is handled
   // (flips or swaps) and none double-flips. Any unhandled directional icon =>
   // not-RTL (the "shipped without RTL handling" signal).
-  if (!anyUnhandled && anyMirrored) {
+  if (!anyUnhandled && !anyMirrored && blockAxisOnly > 0) {
+    card.verdict = 'N-A';
+    card.notes.push('every directional glyph points along the block axis in both directions (rotated a quarter turn)');
+  } else if (!anyUnhandled && anyMirrored) {
     card.verdict = 'pass';
     card.notes.push('every directional icon mirrors (transform-flip and/or name-swap)');
   } else if (anyDoubleFlip) {
@@ -788,7 +819,7 @@ async function autoD1(
     card.notes.push('double-flip: a directional icon is flipped in BOTH LTR and RTL (nets to no mirror)');
   } else {
     card.verdict = 'fail';
-    const bad = perIcon.filter(p => !p.mirrored && !p.swapped).map(p => p.icon);
+    const bad = perIcon.filter(p => !p.blockAxis && !p.mirrored && !p.swapped).map(p => p.icon);
     card.notes.push(`directional glyph never mirrors: ${bad.join(', ')}`);
   }
   card.perIcon = perIcon;
@@ -1186,6 +1217,64 @@ function matchesFilter(component) {
   return !FILTER.length || FILTER.includes(normalized) || FILTER.includes(name);
 }
 
+const storyFileSources = new Map();
+
+/** Whether a story file (an index `importPath`) uses a component by name. */
+function storyFileUses(importPath, component) {
+  if (!importPath) return false;
+  const file = path.join(PROJECT_ROOT, 'apps/storybook', importPath);
+  if (!storyFileSources.has(file)) {
+    let source = '';
+    try {
+      source = fs.readFileSync(file, 'utf8');
+    } catch {}
+    storyFileSources.set(file, source);
+  }
+  const name = component.split('/').at(-1);
+  return new RegExp(`\\b${name}\\b`).test(storyFileSources.get(file));
+}
+
+function readVerifiedNa() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
+    if (!Array.isArray(parsed)) throw new Error('verified-not-applicable registry must be a JSON array');
+    return {verifiedNa: parsed, verifiedNaError: null};
+  } catch (error) {
+    return {verifiedNa: [], verifiedNaError: String(error).slice(0, 200)};
+  }
+}
+
+/**
+ * A filter's public component and the source folder that implements it, from
+ * its package's barrel (`core/resizehandle` → core/ResizeHandle in
+ * packages/core/src/Resizable), or null.
+ */
+function sourceOwnerOf(filter, publicComponentsByPackage) {
+  const [packageName, requested] = filter.includes('/')
+    ? filter.split('/')
+    : [null, filter];
+  for (const name of packageName ? [packageName] : ACTIVE_PACKAGE_NAMES) {
+    const pkg = componentPackage(name);
+    if (!pkg) continue;
+    const component = (publicComponentsByPackage[name] ?? []).find(
+      candidate => candidate.toLowerCase() === requested,
+    );
+    if (!component) continue;
+    const sourceRoot = path.join(PROJECT_ROOT, pkg.src);
+    const implementation = componentExportsFromBarrel(
+      path.join(sourceRoot, 'index.ts'),
+      sourceRoot,
+    ).get(component);
+    if (!implementation) continue;
+    const folder = path
+      .relative(PROJECT_ROOT, path.dirname(implementation))
+      .split(path.sep)
+      .join('/');
+    return {component: `${name}/${component}`, folder};
+  }
+  return null;
+}
+
 function belongsToActivePackage(route) {
   return filterStoryRoutesByPackages([route], ACTIVE_PACKAGE_NAMES).length === 1;
 }
@@ -1260,15 +1349,62 @@ async function cleanupRuntime() {
     targets,
     publicComponentsByPackage,
   }).filter(belongsToActivePackage);
-  const scopedStoryRoutes = storyRoutes.filter(route => matchesFilter(route.component));
-  if (scopedStoryRoutes.length === 0) {
-    throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
+  // Filters resolve through the index: a sub-component whose stories carry
+  // its parent folder's non-component title (ResizeHandle under
+  // Core/Resizable) audits them under its own name.
+  const resolvedFilters = resolveFilterRoutes({
+    routes: storyRoutes,
+    filters: FILTER,
+    knownComponents: Object.entries(publicComponentsByPackage).flatMap(
+      ([packageName, names]) => names.map(name => `${packageName}/${name}`),
+    ),
+    componentPathOf: id => entries[id]?.componentPath,
+    ownerOf: filter => sourceOwnerOf(filter, publicComponentsByPackage),
+    renders: (id, component) => storyFileUses(entries[id]?.importPath, component),
+  });
+  // A curated target on an adopted story checks the adopting component.
+  const adoptedBy = new Map(
+    Object.entries(resolvedFilters.adopted).flatMap(([component, storyIds]) =>
+      storyIds.map(id => [id, component]),
+    ),
+  );
+  const scopedStoryRoutes = resolvedFilters.routes;
+  for (const [component, storyIds] of Object.entries(resolvedFilters.adopted)) {
+    console.error(`NOTE ${component}: audits its folder's stories ${storyIds.join(', ')}`);
   }
   const auditedComponents = buildAuditedComponentRoster({
     sourceComponents,
     storyComponents: scopedStoryRoutes.map(route => route.component),
     filters: FILTER,
   });
+  if (scopedStoryRoutes.length === 0) {
+    if (FILTER.length === 0 || SHARD !== null) {
+      throw new Error(`no runnable stories resolved for ${ACTIVE_PACKAGE_NAMES.join(',')} scope`);
+    }
+    // A filtered run whose components have no story renders nothing, but its
+    // components are still in scope: write the coverage report, where each
+    // reads as a coverage gap or its verified N/A (INV5), instead of crashing.
+    const {verifiedNa, verifiedNaError} = readVerifiedNa();
+    const coverage = buildComponentCoverage({components: auditedComponents, verifiedNa});
+    if (verifiedNaError) coverage.registryError = verifiedNaError;
+    fs.writeFileSync(
+      OUT,
+      `${JSON.stringify(
+        {
+          generatedAt: new Date().toISOString(),
+          scope: {packages: ACTIVE_PACKAGE_NAMES, filters: FILTER},
+          coverage,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    console.error(`NOTE no stories for ${FILTER.join(',')}; WROTE ${OUT} with coverage only`);
+    console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+    process.exitCode =
+      coverage.gaps > 0 || coverage.staleVerifiedNa > 0 || coverage.registryError != null ? 1 : 0;
+    return;
+  }
 
   // The audit's plan: D1 uses one deterministic representative story per
   // component. Repository story-file/export order preserves the existing
@@ -1291,11 +1427,9 @@ async function cleanupRuntime() {
   const storyTargets = scopedStoryRoutes.map(({id, component}) => ({id, comp: component}));
   const curatedTargets = [];
   for (const t of targets) {
-    const component = componentFromTarget(
-      t,
-      AUDITED_PACKAGE_NAMES,
-      publicComponentsByPackage,
-    );
+    const component =
+      adoptedBy.get(t.storyId) ??
+      componentFromTarget(t, AUDITED_PACKAGE_NAMES, publicComponentsByPackage);
     if (!belongsToActivePackage({component, id: t.storyId})) continue;
     if (!matchesFilter(component)) continue;
     if (!entries[t.storyId]) {
@@ -1461,15 +1595,7 @@ async function cleanupRuntime() {
     }
   }
 
-  let verifiedNa = [];
-  let verifiedNaError = null;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(VERIFIED_NA_PATH, 'utf8'));
-    if (!Array.isArray(parsed)) throw new Error('verified-not-applicable registry must be a JSON array');
-    verifiedNa = parsed;
-  } catch (error) {
-    verifiedNaError = String(error).slice(0, 200);
-  }
+  const {verifiedNa, verifiedNaError} = readVerifiedNa();
 
   const coverage = buildComponentCoverage({
     components: auditedComponents,

@@ -566,7 +566,7 @@ describe('ProgressBar', () => {
       expect(styleClasses(accentMarks[1])).toBe(styleClasses(errorMarks[1]));
     });
 
-    it('renders every mark as a focusable trigger (label is required, never decorative)', () => {
+    it('renders every mark as a named, focusable image before its tooltip opens', () => {
       const {container} = render(
         <ProgressBar
           value={50}
@@ -579,10 +579,8 @@ describe('ProgressBar', () => {
       // aria-hidden and is always keyboard-focusable to reveal its label.
       expect(mark).not.toHaveAttribute('aria-hidden');
       expect(mark).toHaveAttribute('tabindex', '0');
-      // The name comes from the Tooltip (aria-describedby), not a role/label on
-      // the tick itself, so the progressbar's own subtree stays clean.
-      expect(mark).not.toHaveAttribute('role');
-      expect(mark).not.toHaveAttribute('aria-label');
+      expect(mark).toHaveAttribute('role', 'img');
+      expect(mark).toHaveAttribute('aria-label', 'Goal');
     });
 
     it('reveals a labeled mark via a focusable Tooltip trigger', async () => {
@@ -593,8 +591,8 @@ describe('ProgressBar', () => {
           marks={[{value: 80, label: 'Goal'}]}
         />,
       );
-      // Focusable so keyboard users can reveal the label; named via the
-      // Tooltip's aria-describedby rather than a labeled child of the bar.
+      // Focusable so keyboard users can reveal the label visually; the tick
+      // itself owns its name independently of the Tooltip's description.
       // The Tooltip loads lazily (Suspense), so re-query the live element and
       // wait for it to attach aria-describedby.
       const mark0 = container.querySelector<HTMLElement>(MARK)!;

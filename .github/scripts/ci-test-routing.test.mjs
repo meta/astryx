@@ -30,6 +30,7 @@ import path from 'node:path';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
+import {matrixFor} from './ci-matrix.mjs';
 import componentPackages from '../../scripts/component-packages.cjs';
 
 const {COMPONENT_PACKAGE_NAMES} = componentPackages;
@@ -512,25 +513,26 @@ describe('ci.yml RTL package sharding', () => {
   });
 
   it('runs one bounded shard for every canonical component package', () => {
-    const legs = shard.strategy.matrix.include;
-    expect([...new Set(legs.map(leg => leg.package))]).toEqual([
-      ...COMPONENT_PACKAGE_NAMES,
-    ]);
-    // Each package's parts are numbered 1..parts exactly once.
-    for (const name of COMPONENT_PACKAGE_NAMES) {
-      const parts = legs.filter(leg => leg.package === name);
-      expect(parts.map(leg => leg.part)).toEqual(
-        Array.from({length: parts[0].parts}, (_, index) => index + 1),
-      );
-      expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
+    // A release-check splits Core wider than a pull request (FR23).
+    for (const event of ['pull_request', 'workflow_dispatch']) {
+      const legs = matrixFor(shard.strategy.matrix.include, event);
+      expect([...new Set(legs.map(leg => leg.package))]).toEqual([
+        ...COMPONENT_PACKAGE_NAMES,
+      ]);
+      // Each package's parts are numbered 1..parts exactly once.
+      for (const name of COMPONENT_PACKAGE_NAMES) {
+        const parts = legs.filter(leg => leg.package === name);
+        expect(parts.map(leg => leg.part)).toEqual(
+          Array.from({length: parts[0].parts}, (_, index) => index + 1),
+        );
+        expect(new Set(parts.map(leg => leg.parts)).size).toBe(1);
+      }
     }
     // Standard runner for pull requests; a dispatched release gate takes the
     // paid release pool (ci-free-runners.test.mjs).
     expect(shard['runs-on']).toContain("|| 'ubuntu-latest'");
-    // Pull requests get the 15-minute PR budget; the full release roster, 30.
-    expect(shard['timeout-minutes']).toBe(
-      "${{ github.event_name == 'workflow_dispatch' && 30 || 15 }}",
-    );
+    // Every leg, the release roster's included, keeps the 15-minute budget.
+    expect(shard['timeout-minutes']).toBe(15);
     expect(shard['continue-on-error']).not.toBe(true);
     const scope = shard.steps.find(
       step => step.name === 'Resolve RTL shard scope',
@@ -783,7 +785,8 @@ describe('ci.yml interaction proofs', () => {
   it('runs the interaction config in Chromium against the exact PR head', () => {
     // One fixed runner: out of scope, every step after the scope step skips.
     expect(KNOWN_RUNNERS.has(job['runs-on']), job['runs-on']).toBe(true);
-    expect(job.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(job.needs).toEqual(['admission', 'build-storybook']);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&

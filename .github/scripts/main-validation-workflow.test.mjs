@@ -83,10 +83,12 @@ describe('main validation dispatch', () => {
         group: 'main-unit-tests',
         cancel: false,
       });
-    expect(concurrencyFor({recheck: true})).toEqual({
-      group: 'main-unit-tests',
-      cancel: true,
-    });
+    // A release re-check names main's tip and takes the unit-run group.
+    for (const options of [{recheck: true}, {recheck: true, sha: OLDER}])
+      expect(concurrencyFor(options)).toEqual({
+        group: 'main-unit-tests',
+        cancel: true,
+      });
     // A person's re-check waits like any other validation.
     expect(concurrencyFor({recheck: true, actor: 'someone'})).toEqual({
       group: 'main-unit-tests',
