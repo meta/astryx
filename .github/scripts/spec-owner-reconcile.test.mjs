@@ -241,19 +241,21 @@ function createHarness({
           state.calls.push(`status:${input.context}:${input.state}`);
           return {data: status};
         },
-        getContent: async ({ref, path: filePath}) => ({
-          data: {
-            content: Buffer.from(
-              `${ref}:${filePath}` in contentAt
-                ? contentAt[`${ref}:${filePath}`]
-                : ref in contentAt
-                  ? contentAt[ref]
-                  : ref === state.pr.head.sha
-                    ? headContent
-                    : baseContent,
-            ).toString('base64'),
-          },
-        }),
+        getContent: async ({ref, path: filePath}) => {
+          const text =
+            `${ref}:${filePath}` in contentAt
+              ? contentAt[`${ref}:${filePath}`]
+              : ref in contentAt
+                ? contentAt[ref]
+                : ref === state.pr.head.sha
+                  ? headContent
+                  : baseContent;
+          // null: the path is absent at that commit.
+          if (text === null) {
+            throw Object.assign(new Error('Not Found'), {status: 404});
+          }
+          return {data: {content: Buffer.from(text).toString('base64')}};
+        },
       },
     },
     graphql: async query => {
@@ -1447,6 +1449,36 @@ describe('spec owner workflow reconciliation', () => {
 
         expect(latestReviewGate(harness.state).state).toBe('success');
         expect(counter.reads).toBe(601);
+      });
+
+      it('resets when the head copies a record the approval renamed', async () => {
+        // The approved commit moved docs/specs/x to docs/specs/y; the head
+        // copies it instead, so docs/specs/x is still there.
+        const x = 'docs/specs/x/spec.md';
+        const moveOrCopy = status => [
+          {
+            filename: 'docs/specs/y/spec.md',
+            previous_filename: x,
+            status,
+            changes: 0,
+            sha: 'blob-y',
+          },
+        ];
+        const harness = createHarness({
+          changedFiles: moveOrCopy('copied'),
+          headContent: currentRecord,
+          baseContent: currentRecord,
+          contentAt: {[`${oldHead}:${x}`]: null},
+          filesAt: {[oldHead]: moveOrCopy('renamed')},
+          comments: [ownerComment(`/approve-spec ${oldHead}`)],
+        });
+
+        await run(harness, context({runId: 100n}));
+
+        expect(latestReviewGate(harness.state)).toMatchObject({
+          state: 'pending',
+          description: waiting,
+        });
       });
 
       it('resets when a path renamed away is re-added with other text', async () => {
