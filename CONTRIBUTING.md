@@ -935,8 +935,7 @@ Storybook story for anything you added or altered.
 - **Every pull request runs a touched-components check** (visual,
   accessibility and RTL for only the components it changes): its visual part
   runs in the visual job, and accessibility and RTL in one job on a standard
-  runner. It also runs any browser accessibility spec file the change adds or
-  modifies, by itself, so a new spec is checked on its own pull request. It
+  runner. It also runs up to four browser accessibility spec files the change adds or modifies, by themselves, so a new spec is checked on its own pull request (an `audit` or `release-only` spec still waits for its audit pull request or the release check). It
   skips a wide change, one that touches more than five components
   or changes shared styles (themes, tokens, shared `.stylex.ts` files); add
   the `ci:run-*` labels for those. It is advisory: no required check waits for

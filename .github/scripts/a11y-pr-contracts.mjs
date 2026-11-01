@@ -39,8 +39,11 @@
  * `--changed-only <file>` (the default touched-components check, spec:AST-030
  * FR12): run only the browser specs the pull request adds or modifies, listed
  * one per line in <file>. It reads no component scope or title, runs no
- * component audit, and widens to nothing else; a changed `release-only` spec
- * still waits for the release check. Locally, `pnpm test:a11y-contract:pr origin/main --dry-run`
+ * component audit, and widens to nothing else; a changed `release-only` or
+ * `audit` spec still waits for the release check or its audit pull request.
+ * To stay inside the job's 15-minute budget it runs at most
+ * CHANGED_SPEC_LIMIT files, in path order, and stops after
+ * CHANGED_SPEC_BUDGET_MS; the rest are reported as not run, never as passed. Locally, `pnpm test:a11y-contract:pr origin/main --dry-run`
  * prints what a PR from this branch would run.
  *
  * The CI step loads this file from the merge commit its steps come from
@@ -292,6 +295,29 @@ export function selectSpecs({
   return selected;
 }
 
+/** The most changed spec files the default check runs (spec:AST-030 FR12). */
+export const CHANGED_SPEC_LIMIT = 4;
+
+/** The changed-spec run's wall-clock bound, inside the job's 15 minutes. */
+export const CHANGED_SPEC_BUDGET_MS = 8 * 60 * 1000;
+
+/**
+ * Split a changed-only selection at the limit: the first files, in path order,
+ * run; the rest are not run, with the label that runs them.
+ * @param {{file: string, reason: string}[]} selected
+ * @param {number} [limit]
+ */
+export function withinBudget(selected, limit = CHANGED_SPEC_LIMIT) {
+  const ordered = [...selected].sort((a, b) => a.file.localeCompare(b.file));
+  return {
+    run: ordered.slice(0, limit),
+    notRun: ordered.slice(limit).map(({file}) => ({
+      file,
+      reason: `over the default check's ${limit}-file budget; add ci:run-a11y to run it`,
+    })),
+  };
+}
+
 /**
  * The changed-only selection: of the specs the routing selects, only those the
  * pull request itself adds or modifies, each because it changed.
@@ -514,8 +540,12 @@ function main() {
     components,
     title,
   });
-  const selected =
-    changedOnlyFile != null ? changedOnly(routed, changedPaths) : routed;
+  const budgeted =
+    changedOnlyFile != null
+      ? withinBudget(changedOnly(routed, changedPaths))
+      : {run: routed, notRun: []};
+  const selected = budgeted.run;
+  const notRun = budgeted.notRun;
   const [audited] = auditedComponents(title);
   const auditConfigFile = '.github/a11y-audit-axe.json';
   const plan = planFor(
@@ -540,6 +570,7 @@ function main() {
         components,
         audit: plan && {component: audited, ...plan},
         selected,
+        notRun,
       },
       null,
       2,
@@ -549,6 +580,9 @@ function main() {
     `PR accessibility specs: ${selected.length} of ${specs.length} discovered.`,
   );
   for (const {file, reason} of selected) console.log(`  ${file}  (${reason})`);
+  for (const {file, reason} of notRun) {
+    console.log(`::notice title=Not run::${file}: ${reason}`);
+  }
   if (process.argv.includes('--dry-run')) return 0;
 
   let status = 0;
@@ -580,6 +614,11 @@ function main() {
       process.env.GITHUB_ACTIONS ? 'list,json,github' : 'list,json',
       '--output',
       'pr-a11y-output',
+      // The changed-only run stops at its budget: an interrupted spec fails
+      // the run, so a spec that did not finish is never read as passed.
+      ...(changedOnlyFile != null
+        ? ['--global-timeout', String(CHANGED_SPEC_BUDGET_MS)]
+        : []),
       '--project',
       'chromium',
     ],

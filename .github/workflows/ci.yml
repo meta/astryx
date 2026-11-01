@@ -3155,7 +3155,13 @@ jobs:
           list="$RUNNER_TEMP/changed-a11y-specs.txt"
           : > "$list"
           if [ -n "$FILES_PATH" ] && [ -f "$FILES_PATH" ]; then
-            grep -E '^(packages/[^/]+/src/.+\.a11y\.(chromium|browser)\.spec\.ts|internal/a11y-spec/src/.+\.chromium\.spec\.ts)$' "$FILES_PATH" > "$list" || true
+            # The same spec globs playwright.config.ts runs.
+            node --input-type=module -e '
+              import fs from "node:fs";
+              import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";
+              const paths = fs.readFileSync(process.argv[1], "utf8").split("\n");
+              for (const file of paths.filter(isA11ySpecFile)) console.log(file);
+            ' "$FILES_PATH" > "$list"
           fi
           echo "path=$list" >> "$GITHUB_OUTPUT"
           if [ -s "$list" ]; then
@@ -3239,11 +3245,15 @@ jobs:
           done
 
       # Only the changed spec files, in Chromium, with their routing lines read
-      # from this merge commit; a changed release-only spec still waits for the
-      # release check. A failing spec turns this advisory job red.
+      # from this merge commit; a changed release-only or audit spec still
+      # waits. A failing or unfinished spec turns this advisory job red, and a
+      # file over the budget is reported as not run.
       - name: Run the changed browser accessibility specs
         id: changed-specs
         if: always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'
+        # The runner runs at most four changed files and stops at eight
+        # minutes; this bounds a hung browser inside the job's 15 minutes.
+        timeout-minutes: 9
         env:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           WORKFLOW_SHA: ${{ github.sha }}

@@ -23,6 +23,7 @@ import {
   auditArgs,
   auditedComponents,
   auditPlan,
+  CHANGED_SPEC_LIMIT,
   changedOnly,
   changedSinceMergeBase,
   kebab,
@@ -32,7 +33,13 @@ import {
   isKnowledgeRecord,
   selectSpecs,
   specOwners,
+  withinBudget,
 } from './a11y-pr-contracts.mjs';
+import {
+  A11Y_SPEC_GLOBS,
+  WEBKIT_A11Y_SPEC_GLOBS,
+  isA11ySpecFile,
+} from './lib/a11y-spec-files.mjs';
 
 const root = path.resolve(import.meta.dirname, '../..');
 
@@ -63,10 +70,13 @@ describe('changedOnly (the default check runs changed specs)', () => {
     'packages/core/src/__tests__/DisabledFocus.a11y.chromium.spec.ts';
   const RELEASE =
     'packages/core/src/Table/__tests__/TableFull.a11y.chromium.spec.ts';
+  const AUDIT =
+    'packages/core/src/Drawer/__tests__/DrawerAudit.a11y.chromium.spec.ts';
   const specs = [
     spec(NEW_SPEC),
     spec(ALWAYS, ['// @pr-a11y always']),
     spec(RELEASE, ['// @pr-a11y release-only']),
+    spec(AUDIT, ['// @pr-a11y audit Drawer']),
     spec(BINDING),
   ];
   const run = changed =>
@@ -94,8 +104,66 @@ describe('changedOnly (the default check runs changed specs)', () => {
     expect(run([RELEASE])).toEqual([]);
   });
 
+  it('leaves a changed audit spec to its own component-audit pull request', () => {
+    expect(run([AUDIT])).toEqual([]);
+  });
+
+  it('runs at most the budget of files, in path order, and reports the rest as not run', () => {
+    const files = Array.from(
+      {length: CHANGED_SPEC_LIMIT + 2},
+      (_, i) => `packages/core/src/C${i}/__tests__/C${i}.a11y.chromium.spec.ts`,
+    );
+    const {run: ran, notRun} = withinBudget(
+      [...files].reverse().map(file => ({file, reason: 'spec changed'})),
+    );
+    expect(ran.map(({file}) => file)).toEqual(
+      [...files].sort().slice(0, CHANGED_SPEC_LIMIT),
+    );
+    expect(notRun).toHaveLength(2);
+    expect(notRun[0].reason).toContain('ci:run-a11y');
+  });
+
   it('widens to nothing else: a changed component folder selects no spec', () => {
     expect(run(['packages/core/src/Chat/ChatSendButton.tsx'])).toEqual([]);
+  });
+});
+
+describe('a11y-spec-files (one spec list for Playwright and the touched check)', () => {
+  it('is the list playwright.config.ts runs', () => {
+    const config = fs.readFileSync(
+      path.join(root, 'playwright.config.ts'),
+      'utf8',
+    );
+    expect(config).toContain('testMatch: [...A11Y_SPEC_GLOBS]');
+    expect(config).toContain('testMatch: [...WEBKIT_A11Y_SPEC_GLOBS]');
+    expect(A11Y_SPEC_GLOBS).toEqual(
+      expect.arrayContaining([...WEBKIT_A11Y_SPEC_GLOBS]),
+    );
+  });
+
+  it('matches each kind of browser accessibility spec and nothing else', () => {
+    expect(isA11ySpecFile(BINDING)).toBe(true);
+    expect(
+      isA11ySpecFile(
+        'packages/core/src/Dialog/DialogSecondDocument.a11y.browser.spec.ts',
+      ),
+    ).toBe(true);
+    expect(
+      isA11ySpecFile('internal/a11y-spec/src/patterns/menu.chromium.spec.ts'),
+    ).toBe(true);
+    expect(isA11ySpecFile('packages/core/src/Chat/ChatSendButton.tsx')).toBe(
+      false,
+    );
+    expect(
+      isA11ySpecFile(
+        'packages/core/src/Chat/__tests__/ChatSendButton.a11y.test.tsx',
+      ),
+    ).toBe(false);
+    expect(
+      isA11ySpecFile(
+        'internal/interaction-harness/src/harness.interaction.browser.spec.ts',
+      ),
+    ).toBe(false);
   });
 });
 
@@ -547,12 +615,13 @@ describe('repository specs', () => {
       path.join(root, 'playwright.config.ts'),
       'utf8',
     );
+    expect(config).toContain('testMatch: [...A11Y_SPEC_GLOBS]');
     for (const glob of [
       'internal/a11y-spec/src/**/*.chromium.spec.ts',
       'packages/*/src/**/*.a11y.chromium.spec.ts',
       'packages/*/src/**/*.a11y.browser.spec.ts',
     ]) {
-      expect(config).toContain(`'${glob}'`);
+      expect(A11Y_SPEC_GLOBS).toContain(glob);
     }
     expect(files.length).toBeGreaterThan(100);
   });

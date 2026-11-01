@@ -218,13 +218,7 @@ they are separately named.
   is the full suites behind the labels. No required context depends on the
   touched check, and it records each touched component's pass, fail, changed
   or not-run result per suite, or that the change was wide and how many
-  components it touched, for the pull-request comment. The default check also
-  runs, in Chromium, every browser accessibility spec file the change adds or
-  modifies, and only those files, routed by their own `@pr-a11y` lines read
-  from the merge commit: a changed `release-only` spec waits for the release
-  check, and the run widens to no other spec. A pull request that changes no
-  such file runs none, and a failing one turns the check red on that pull
-  request, wide changes included. An opted-in PR's a11y MUST remain scoped to changed components
+  components it touched, for the pull-request comment. The default check also runs, in Chromium, the browser accessibility spec files the change adds or modifies, and only those files, routed by their own `@pr-a11y` lines read from the merge commit: a changed `release-only` spec waits for the release check, a changed `audit` spec for its component-audit pull request, and the run widens to no other spec. It stays inside the check's 15-minute budget by running at most four changed spec files, in path order, and stopping after eight minutes; a file over the limit is recorded as not run, with the label that runs it, and a spec that does not finish fails the run, so neither reads as passed. A pull request that changes no such file runs none, and a failing one turns the advisory check red on that pull request, wide changes included. An opted-in PR's a11y MUST remain scoped to changed components
   plus fast interaction guards; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
@@ -590,9 +584,7 @@ while the full
 suites stay behind their labels; the
 modal-close, theme-var and story-play guards are steps of the accessibility
 owner, so they run with it, after merge or on a labelled pull request. A
-browser accessibility spec file a pull request adds or modifies runs in that
-same job, by itself, so a new spec never first runs on `main`'s release check;
-it costs nothing on a pull request that changes no spec. A
+browser accessibility spec file a pull request adds or modifies runs in that same job, by itself, so a new scoped or `always` spec is checked on its own pull request rather than first on `main`'s release check; an `audit` or `release-only` spec still first runs on its audit pull request or the release check. It costs nothing on a pull request that changes no spec. A
 failure on `main` is repaired forward with an atomic pull request, not reverted
 first. This supersedes DEC-5's choice to keep these checks off main pushes:
 running the browser suites on every update of every open pull request costs

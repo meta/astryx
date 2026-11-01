@@ -586,7 +586,11 @@ describe('pr-touched-components routing', () => {
     expect(find.env.FILES_PATH).toBe(
       '${{ steps.scope.outputs.changed_files_path }}',
     );
-    expect(find.run).toContain('\\.a11y\\.(chromium|browser)\\.spec\\.ts');
+    // The same spec list playwright.config.ts runs, not a copy of its globs.
+    expect(find.run).toContain(
+      'import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";',
+    );
+    expect(find.run).not.toContain('spec\\.ts');
     const runSpecs = step('Run the changed browser accessibility specs');
     expect(runSpecs.if).toBe(
       "always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'",
