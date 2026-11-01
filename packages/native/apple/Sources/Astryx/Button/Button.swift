@@ -184,10 +184,13 @@ public struct Button: View {
       .modifier(SystemBarLabel(tint: systemBarTint, style: style))
   }
 
-  /// The tint a primary or destructive Button in a bar gives the bar's glass,
-  /// through SwiftUI's prominent glass style (FR7, FR8); nil elsewhere.
+  /// The tint an enabled primary or destructive Button in a bar gives the
+  /// bar's glass, through SwiftUI's prominent glass style (FR7, FR8); nil
+  /// elsewhere. A disabled one keeps its focus stop, so that style would
+  /// still draw its full tint and press response; it draws as a bar item
+  /// instead, its label dimmed in the variant's color (FR11).
   var systemBarTint: Color? {
-    guard case .glass(.barProminent(let role)) = surface else { return nil }
+    guard !isDisabled, case .glass(.barProminent(let role)) = surface else { return nil }
     return role.color(astryx.tokens)
   }
 
@@ -197,7 +200,8 @@ public struct Button: View {
   @ViewBuilder private var styledControl: some View {
     #if os(iOS) && compiler(>=6.2)
     if #available(iOS 26, *), let tint = systemBarTint {
-      control.buttonStyle(.glassProminent).tint(tint)
+      // The elevation paints beneath the system's capsule (FR11).
+      control.buttonStyle(.glassProminent).tint(tint).astryxShadow(shadow, in: Capsule())
     } else {
       control.buttonStyle(style)
     }
@@ -333,10 +337,12 @@ struct AstryxButtonStyle: ButtonStyle {
         configuration, fill: role.color(astryx.tokens), edge: astryx.tokens.color.borderEmphasized,
         underlay: astryx.tokens.color.backgroundSurface, keepsTapMinimum: !inBar
       )
-    case .glass(.barItem), .glass(.barProminent):
-      // `.barProminent` draws through SwiftUI's own style; this is only its
-      // fallback.
-      barItemBody(configuration)
+    case .glass(.barItem):
+      barItemBody(configuration, labelColor: foreground)
+    case .glass(.barProminent(let role)):
+      // An enabled one draws through SwiftUI's prominent style; a disabled
+      // one draws here, its label in the variant's color, dimmed.
+      barItemBody(configuration, labelColor: role.color(astryx.tokens))
     case .glass(let glass):
       glassBody(configuration, glass: glass)
     }
@@ -348,11 +354,11 @@ struct AstryxButtonStyle: ButtonStyle {
 
   /// The label in the theme's type, at least the size's height, which grows
   /// with text size, but not so far that one line becomes a tall slab.
-  private func label(_ configuration: Configuration, padded: Bool) -> some View {
+  private func label(_ configuration: Configuration, padded: Bool, color: Color? = nil) -> some View {
     let font = astryx.tokens.font
     return configuration.label
       .font(astryx.font(TypeStyle(font.label, families: font.family.body)))
-      .foregroundStyle(foreground)
+      .foregroundStyle(color ?? foreground)
       .padding(.horizontal, padded ? astryx.tokens.space.s3 : 0)
       .frame(maxWidth: fillsWidth ? .infinity : nil, minHeight: height * min(astryx.textScale, 1.4))
   }
@@ -386,8 +392,8 @@ struct AstryxButtonStyle: ButtonStyle {
   /// In a system bar: no fill or border, so the bar's glass is the only
   /// chrome; no Astryx padding, so the label is never cut short in a bar with
   /// room; a set elevation still paints its shadow (FR7, FR11).
-  private func barItemBody(_ configuration: Configuration) -> some View {
-    label(configuration, padded: false)
+  private func barItemBody(_ configuration: Configuration, labelColor: Color) -> some View {
+    label(configuration, padded: false, color: labelColor)
       .fixedSize(horizontal: !fillsWidth, vertical: false)
       .astryxShadow(shadow, in: shape)
       .opacity(pressOpacity(configuration))
@@ -428,8 +434,9 @@ struct AstryxButtonStyle: ButtonStyle {
 }
 
 /// A label drawn by SwiftUI's own prominent glass style in a bar: the theme's
-/// type in the variant's label color, kept whole, dimmed while disabled; the
-/// Astryx style draws all of this itself elsewhere.
+/// type in the variant's label color, at least the size's height, kept whole
+/// or filling the width as `width` asks (FR11); the Astryx style draws all of
+/// this itself elsewhere.
 private struct SystemBarLabel: ViewModifier {
   let tint: Color?
   let style: AstryxButtonStyle
@@ -441,7 +448,10 @@ private struct SystemBarLabel: ViewModifier {
         .font(style.astryx.font(TypeStyle(font.label, families: font.family.body)))
         .foregroundStyle(style.foreground)
         .fixedSize(horizontal: !style.fillsWidth, vertical: false)
-        .opacity(style.isDimmed ? 0.5 : 1)
+        .frame(
+          maxWidth: style.fillsWidth ? .infinity : nil,
+          minHeight: style.height * min(style.astryx.textScale, 1.4)
+        )
     } else {
       content
     }
