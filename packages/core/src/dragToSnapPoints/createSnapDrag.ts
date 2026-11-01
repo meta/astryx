@@ -37,6 +37,7 @@ import {createPan, type PanInput} from '../gestures/createPan';
 import {
   createMotionAnimator,
   type Animator,
+  type AnimatorOptions,
   type MotionHandle,
 } from '../motion/animator';
 import {resolveSnapPoint} from '../motion/resolveSnapPoint';
@@ -136,8 +137,11 @@ export interface SnapDragOptions {
   onSettle: (index: number) => void;
   /** The pan's own options: which pointers and scrolls start it, its claim, a begin gate. */
   pan?: Omit<PanGestureRecognizerOptions, 'direction'>;
-  /** Draws the axis into this custom property instead of `translate`. */
-  customProperty?: {name: string; syntax: '<length>' | '<number>'};
+  /**
+   * Draws the axis into this custom property instead of `translate`, with
+   * an optional companion drawn from it in the same animation.
+   */
+  customProperty?: AnimatorOptions['customProperty'];
   /** The drag's model; the public one without it. */
   model?: SnapDragModel;
 }
@@ -150,6 +154,16 @@ export interface SettleOptions {
   spring?: SpringDescription;
   /** Whether a touch drag's release starts it (Reduce Motion cross-fades). */
   touchRelease?: boolean;
+  /**
+   * Calls `call` once, on the first animation frame whose presented value
+   * (the settle's own curve, at that frame's time) is past `offset` in
+   * `direction` (at or above it for 1, at or below it for -1): on the next
+   * frame when the element is past it already. Never for a settle that
+   * lands short of it, that another settle or a drag replaces first, or
+   * that a destroy ends. A crossing during a drag is the caller's to read
+   * from the drag.
+   */
+  onPass?: {offset: number; direction: 1 | -1; call: () => void};
 }
 
 /** What `createSnapDrag` returns. */
@@ -261,11 +275,33 @@ export function createSnapDrag(
       },
       {touchRelease: settleOptions.touchRelease === true},
     );
+    let finished = false;
     void handle.finished.then(arrived => {
+      finished = true;
       if (arrived && mine === turn && !destroyed) {
         onSettle(index);
       }
     });
+    const {onPass} = settleOptions;
+    if (onPass != null && typeof requestAnimationFrame === 'function') {
+      // Read on the settle's own curve at each frame's time (no timer): the
+      // first frame past the offset calls back; a settle done, replaced or
+      // destroyed before that never does.
+      const {direction} = onPass;
+      const check = (time: number) => {
+        if (destroyed || mine !== turn) {
+          return;
+        }
+        if ((animator.get(axis, time) - onPass.offset) * direction >= 0) {
+          onPass.call();
+          return;
+        }
+        if (!finished) {
+          requestAnimationFrame(check);
+        }
+      };
+      requestAnimationFrame(check);
+    }
     return handle;
   };
 
