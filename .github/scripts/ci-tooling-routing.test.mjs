@@ -347,6 +347,185 @@ describe('Node-tooling CI routing', () => {
     }
   });
 
+  it("keeps a base built only for its API surface from removing main's size record", () => {
+    const wait = step(
+      ci.jobs['build-storybook'],
+      "Wait for the merge base's sizes",
+    );
+    expect(wait.env.SIZES_FROM_MAIN).toBe(
+      "${{ steps.base-build.outputs.sizes == 'false' }}",
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+    try {
+      fs.mkdirSync(path.join(root, '.component-size-base'));
+      fs.writeFileSync(
+        path.join(root, '.component-size-base/component-size.json'),
+        '{}',
+      );
+      fs.writeFileSync(path.join(root, 'base-build.log'), 'log\n');
+      fs.writeFileSync(path.join(root, 'base-build.failed'), '');
+      const out = execFileSync('bash', ['-e', '-c', wait.run], {
+        cwd: root,
+        encoding: 'utf8',
+        env: {...process.env, SIZES_FROM_MAIN: 'true'},
+      });
+      expect(out).toContain(
+        'the API changes compare with its committed reports',
+      );
+      expect(
+        fs.existsSync(
+          path.join(root, '.component-size-base/component-size.json'),
+        ),
+      ).toBe(true);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it("compares the merge base's API surface from main's kept record, building the base only without one", () => {
+    const main = load('.github/workflows/deploy.yml');
+    const record = step(
+      main.jobs.typecheck,
+      'Record the published API surface',
+    );
+    expect(record.run).toBe(
+      'node scripts/api-report/cli.mjs --surface api-surface',
+    );
+    // Evidence only (INV24): neither step can fail main's validation.
+    expect(record['continue-on-error']).toBe(true);
+    const keep = step(
+      main.jobs.typecheck,
+      "Keep this commit's API surface for PR API changes",
+    );
+    expect(keep['continue-on-error']).toBe(true);
+    expect(keep.with).toMatchObject({
+      name: 'api-surface-main-${{ needs.main-commit.outputs.sha }}',
+      path: 'api-surface/',
+      'retention-days': 14,
+    });
+    const mainNames = main.jobs.typecheck.steps.map(entry => entry.name);
+    expect(
+      mainNames.indexOf('Record the published API surface'),
+    ).toBeGreaterThan(
+      main.jobs.typecheck.steps.findIndex(entry => entry.run === 'pnpm build'),
+    );
+
+    const job = ci.jobs['build-storybook'];
+    const find = step(job, "Find main's size records for the merge base");
+    expect(find.with.script).toContain("['api_run_id', 'api-surface-main'");
+    const download = step(
+      job,
+      "Download main's API surface for the merge base",
+    );
+    expect(download.id).toBe('api-download');
+    expect(download['continue-on-error']).toBe(true);
+    expect(download.with).toMatchObject({
+      name: 'api-surface-main-${{ steps.merge-base.outputs.sha }}',
+      'run-id': '${{ steps.size-records.outputs.api_run_id }}',
+      path: '.api-surface-base',
+    });
+    const start = step(job, 'Start building the merge base without a record');
+    expect(start.if).toContain("steps.api-download.outcome != 'success'");
+    expect(start.env.NEED_API).toBe(
+      "${{ steps.api-download.outcome != 'success' }}",
+    );
+    expect(start.run).toContain(
+      'node ../scripts/api-report/cli.mjs --surface ../.api-surface-build --root .',
+    );
+    const names = job.steps.map(entry => entry.name);
+    const at = name => names.indexOf(name);
+    expect(at("Download main's API surface for the merge base")).toBeLessThan(
+      at('Start building the merge base without a record'),
+    );
+    expect(at("Wait for the merge base's sizes")).toBeLessThan(
+      at('Report API changes'),
+    );
+    expect(step(job, 'Report API changes')['continue-on-error']).toBe(true);
+  });
+
+  it('starts no base build for an API surface a head predating --surface cannot write', () => {
+    const start = step(
+      ci.jobs['build-storybook'],
+      'Start building the merge base without a record',
+    );
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'base-build-'));
+    try {
+      fs.mkdirSync(path.join(root, 'scripts/api-report'), {recursive: true});
+      fs.writeFileSync(
+        path.join(root, 'scripts/api-report/cli.mjs'),
+        "if (a === '--changes') {}\n",
+      );
+      const output = path.join(root, 'output');
+      fs.writeFileSync(output, '');
+      execFileSync('bash', ['-e', '-c', start.run], {
+        cwd: root,
+        env: {
+          ...process.env,
+          NEED_SIZES: 'false',
+          NEED_API: 'true',
+          GITHUB_OUTPUT: output,
+        },
+      });
+      expect(fs.readFileSync(output, 'utf8')).toBe('');
+      expect(fs.existsSync(path.join(root, '.size-base'))).toBe(false);
+    } finally {
+      fs.rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it.each([
+    [
+      'main kept',
+      '.api-surface-base',
+      true,
+      ['--base-surface', '.api-surface-base', '--base-record', 'main'],
+    ],
+    [
+      'this run built',
+      '.api-surface-build',
+      true,
+      ['--base-surface', '.api-surface-build', '--base-record', 'build'],
+    ],
+    ['nobody kept', null, true, []],
+    ['main kept, for a head predating it,', '.api-surface-base', false, []],
+  ])(
+    'compares the API changes with the surface %s',
+    (_label, dir, supported, extra) => {
+      const report = step(ci.jobs['build-storybook'], 'Report API changes');
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'api-changes-'));
+      try {
+        fs.mkdirSync(path.join(root, 'scripts/api-report'), {recursive: true});
+        fs.mkdirSync(path.join(root, '.github/scripts'), {recursive: true});
+        fs.writeFileSync(
+          path.join(root, '.github/scripts/merge-base.sh'),
+          'echo abc123\n',
+        );
+        fs.chmodSync(path.join(root, '.github/scripts/merge-base.sh'), 0o755);
+        fs.writeFileSync(
+          path.join(root, 'scripts/api-report/cli.mjs'),
+          `${supported ? "// '--base-surface'\n" : ''}console.log(JSON.stringify(process.argv.slice(2)));\n`,
+        );
+        if (dir) {
+          fs.mkdirSync(path.join(root, dir));
+          fs.writeFileSync(path.join(root, dir, 'surface.json'), '{}');
+        }
+        const out = execFileSync('bash', ['-e', '-c', report.run], {
+          cwd: root,
+          encoding: 'utf8',
+          env: {...process.env, BASE_REF: 'main'},
+        });
+        expect(JSON.parse(out.trim())).toEqual([
+          '--changes',
+          '--base',
+          'abc123',
+          ...extra,
+        ]);
+      } finally {
+        fs.rmSync(root, {recursive: true, force: true});
+      }
+    },
+  );
+
   it('builds no Sandbox and builds Storybook once per pull-request run', () => {
     // Vercel builds the Sandbox preview; nothing downloaded CI's copy.
     expect(ci.jobs['build-sandbox']).toBeUndefined();
