@@ -395,9 +395,9 @@ Known verification gaps:
 - INV18: shipped props that configure a subcomponent's label or target, such
   as TopNavMegaMenuFeaturedCard's `linkLabel` and `linkHref` and
   TopNavHeading's `logoLabel`, conform only through replacement under INV9.
-- INV23: the `@astryx/no-raw-private-attribute` rule and its baseline do not
-  exist yet, and no owner module exists yet; public-API review is the check
-  until they do. The `data-astryx-press` selector is copied in 14 Core files.
+- INV23: the `@astryx/no-raw-private-attribute` rule runs with a baseline of
+  the sites that predate it, and no owner module exists yet; each baselined
+  site conforms by moving into its owner module. The `data-astryx-press` selector is copied in 14 Core files.
   Other private attributes still written at their sites include
   `data-astryx-popover-fallback-close` and DropdownMenu's
   `data-astryx-submenu-regions`, which Popover and DropdownMenuSubMenu also read
