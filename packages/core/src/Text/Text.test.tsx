@@ -224,6 +224,37 @@ describe('Text', () => {
     });
   });
 
+  // Text FR3 (spec:AST-020 FR1, WCAG 2.2 1.4.10): a token longer than its line
+  // wraps in text that is not truncated; truncation keeps its own treatment.
+  describe('long unbroken tokens', () => {
+    const token =
+      'https://example.com/aVeryLongUnbrokenTokenThatIsWiderThan320px';
+
+    it('wraps them in inline and block text that is not truncated', () => {
+      render(
+        <>
+          <Text>{token}</Text>
+          <Text display="block">{`${token}/block`}</Text>
+        </>,
+      );
+      expect(getComputedStyle(screen.getByText(token)).overflowWrap).toBe(
+        'break-word',
+      );
+      expect(
+        getComputedStyle(screen.getByText(`${token}/block`)).overflowWrap,
+      ).toBe('break-word');
+    });
+
+    it('leaves single-line truncation clipping on one line', () => {
+      render(<Text maxLines={1}>{token}</Text>);
+      const style = getComputedStyle(screen.getByText(token));
+      expect(style.whiteSpace).toBe('nowrap');
+      expect(style.textOverflow).toBe('ellipsis');
+      expect(style.wordBreak).toBe('break-all');
+      expect(style.overflowWrap).not.toBe('break-word');
+    });
+  });
+
   it('renders the stable target and type data attribute for theme targeting', () => {
     render(<Text type="body">Themed Text</Text>);
     const element = screen.getByText('Themed Text');

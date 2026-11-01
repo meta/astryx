@@ -303,6 +303,32 @@ function countScrollWidthReads(run: () => void): number {
   return reads;
 }
 
+// Heading FR3 (spec:AST-020 FR1, WCAG 2.2 1.4.10): a token longer than its
+// line wraps in a heading that is not truncated; truncation is unchanged.
+describe('Heading long unbroken tokens', () => {
+  const token =
+    'https://example.com/aVeryLongUnbrokenTokenThatIsWiderThan320px';
+
+  it('wraps them when the heading is not truncated', () => {
+    render(<Heading level={1}>{token}</Heading>);
+    expect(getComputedStyle(screen.getByText(token)).overflowWrap).toBe(
+      'break-word',
+    );
+  });
+
+  it('leaves single-line truncation clipping on one line', () => {
+    render(
+      <Heading level={1} maxLines={1}>
+        {token}
+      </Heading>,
+    );
+    const style = getComputedStyle(screen.getByText(token));
+    expect(style.whiteSpace).toBe('nowrap');
+    expect(style.textOverflow).toBe('ellipsis');
+    expect(style.overflowWrap).not.toBe('break-word');
+  });
+});
+
 describe('Heading maxLines without a truncation tooltip', () => {
   it('takes no truncation measurement when hasTruncateTooltip is false', () => {
     const reads = countScrollWidthReads(() => {
