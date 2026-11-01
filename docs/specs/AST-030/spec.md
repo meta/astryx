@@ -166,7 +166,12 @@ they are separately named.
   independently routed test lane and, when applicable, one independently routed
   build lane MUST own them. New coverage inside an existing surface MUST join
   those owners and MUST NOT create a separately routed lane or required context.
-  Existing historical joins remain stable. A selected surface whose dedicated
+  Existing historical joins remain stable. The default touched-components
+  check (FR12) is the visual, accessibility and RTL owners' pull-request
+  coverage for the components a change touches: its visual part runs inside
+  `pr-visual`, and its accessibility and RTL part runs in one advisory job
+  beside them that reports no required context, so it routes no new surface
+  lane. A selected surface whose dedicated
   owner is not yet admitted continues through broad CI. The Build package's test
   owner includes its production CSS-layer cascade behavior. Theme-family
   compilation remains `theme-build` and does not become Build merely because both
@@ -192,12 +197,28 @@ they are separately named.
   focused, smoke, and no-op paths MUST NOT narrow release checks. On a pull
   request, the visual (`visual-scout`, `pr-visual`), accessibility (`pr-a11y`
   with its guards and specs) and RTL (`pr-rtl` with its legs) owners MUST each
-  run only when the pull request carries that suite's label at the event:
+  run at their opted-in scope (FR13) only when the pull request carries that
+  suite's label at the event:
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
-  confirm that runs nothing. A label runs only its own suite; a pull request
-  update without one runs none of them, and no required context depends on
-  them. An opted-in PR's a11y MUST remain scoped to changed components
+  confirm that runs nothing. A label runs only its own suite. Without a label, a pull request update
+  runs none of these owners at their opted-in scope, and no required context
+  depends on them; it runs one default touched-components check instead:
+  visual, accessibility and RTL for only the components the change touches,
+  never their reverse dependents, against the pull request's Storybook build
+  and within the 15-minute budget. Its visual part is `pr-visual`'s default
+  mode, a focused check of the touched Core components that never escalates
+  to the release plan, so `pr-visual` stays the one visual owner; its
+  accessibility and RTL parts and the per-component record are
+  `pr-touched-components`, on one standard runner. A wide change skips it: one
+  that touches more than five components, or changes shared styles (themes,
+  tokens, or a `.stylex.ts` file in a package's shared `theme`, `utils`,
+  `hooks`, `internal` or `Layer` folder); behaviour-only shared code is not a
+  wide change. Nothing starts a full suite on its own; a wide change's check
+  is the full suites behind the labels. No required context depends on the
+  touched check, and it records each touched component's pass, fail, changed
+  or not-run result per suite, or that the change was wide and how many
+  components it touched, for the pull-request comment. An opted-in PR's a11y MUST remain scoped to changed components
   plus fast interaction guards; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
@@ -238,17 +259,20 @@ they are separately named.
   reads sources for it (the TypeScript compiler, a bundler) counts as reading
   sources; and every test that loads a changed workspace package from its build,
   by the package's name or a path into its `dist/`. When a pull request runs
-  them (FR12: only with their `ci:run-visual` or `ci:run-rtl` label), the visual and RTL owners
-  audit one affected set of component folders: the changed components
+  them at their opted-in scope (FR12: only with their `ci:run-visual` or
+  `ci:run-rtl` label), the visual and RTL owners audit one affected set of
+  component folders: the changed components
   and their reverse dependents, the folders of the components, in any package,
   whose built bundle, `import()` targets included, reaches a changed module.
   Visual audits each dependent folder that has a stable story, and runs the
   whole plan when the dependents exceed its focused budget or none has one; RTL
   audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
   a readable build the audits run in full. PR accessibility, when it runs, stays
-  scoped to changed components (FR12). Shared infrastructure runs the full suite of
-  the owners the pull request runs (visual, accessibility and RTL only with
-  their `ci:run-*` labels, FR12): root
+  scoped to changed components (FR12). Without a label, the default
+  touched-components check audits only the touched components and never
+  widens (FR12). Shared infrastructure runs the full suite of the owners the
+  pull request runs (visual, accessibility and RTL only with their `ci:run-*`
+  labels, FR12): root
   dependency manifests and lockfile, root configuration, a package's manifest,
   build or test configuration and test setup, `internal/` (the test harness
   included), `theme-build` paths (tokens and themes), Storybook configuration,
@@ -345,6 +369,18 @@ they are separately named.
   minutes added to time to green. A flag asks the reviewer to weigh the cost;
   it fails no check.
 
+- **FR22 — Main's full unit run finishes in minutes.** The Main workflow runs
+  every Vitest leg of `main`'s full unit run at once, with no `max-parallel`
+  hold: six UI legs and six Node legs beside the build-and-typecheck lane, each
+  inside the fifteen-minute job budget (DEC-17). A dispatch may name `sha`, a
+  commit in `main`'s history that has the size records the build lane keeps, and
+  every lane checks that commit out; without it the run validates `main`'s tip.
+  A `sha` run waits for nothing and replaces nothing. One validation of `main`
+  runs at a time and a newer one waits. Only a release re-check, which the
+  workflow token sends with `recheck` and no `sha`, cancels the running
+  validation, because the re-check validates `main`'s tip in full itself.
+  Pull-request legs keep their shape.
+
 ### Platform support
 
 - Supported feature/engine floor: GitHub pull-request and merge-group workflows
@@ -396,6 +432,7 @@ read change (FR14).
 | FR16     | `heavy-caps-action.test.mjs` cap cases and heavy-job contract; `ci-admission.test.mjs` | sixteenth-oldest PR; 101st heavy run of the day, beside cancelled, light and other-branch runs; agent lane and its five-PR and forty-run backstops; an engineering owner, including the shared login past those backstops, a commented-out or trailing-comment handle and an unreadable roster; bot; the deciding run; re-run; failed lookup; a run with room, without room, past its longest wait, beside a waiting `main` check, as a draft or unlabelled fork, with opt-in labels, beside small workflows past their measured most, and with the API unreadable; each workflow's most jobs; every required context's rule | a heavy suite that runs ahead of the author's fifteen oldest PRs, or past the daily cap, a capped job that passes, an engineering owner or a re-run that is held, or a roster read from the pull request's head, a run that starts without room before its longest wait, a pull-request run that starts while `main` waits, a job admission could skip, or a peak below the jobs its run holds fails |
 | FR17     | `ci-pr-gate.test.mjs` over every `pull_request` workflow and the shared conditions     | branch here, fork with and without `ci:run`, another label, draft with the label, ready, push, merge group, dispatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | a job that can start on a pull request without the condition, a label trigger, a required job that skips for a pull request that may not run CI, or a draft or unlabelled fork that runs fails                                                                                                                                                                                                       |
 | FR19     | `ci-impact.test.mjs`, `pr-preview.test.mjs` and the maintenance template               | CI change and non-CI change; standard, non-standard and expression runners; added, removed and changed jobs; trigger change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | a CI change reports no impact, a move onto a non-standard runner or a pool or time-to-green rise past its threshold goes unflagged, or the section names a price                                                                                                                                                                                                                                     |
+| FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver     | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces                                                                                                                                                                                                                                                                                                                                             | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip fails                                                                                                                               |
 
 ## Decision log
 
@@ -455,6 +492,10 @@ registers its cases with the one shared Storybook-backed PR visual owner in
 visual lanes; a second workflow that captures or compares those pixels is.
 The single-workflow wording clarifies the existing shared-system requirement;
 it does not admit a new owner.
+The default touched-components check (FR12) is the visual, accessibility and
+RTL owners' own pull-request coverage of touched components: its visual part
+is `pr-visual`'s default mode, and its advisory accessibility and RTL job feeds
+no required context, so it is not a new lane.
 
 Build's production CSS-layer cascade is a Build package integration contract, so
 it belongs to Build's test owner. Theme-family compilation remains owned by
@@ -480,9 +521,11 @@ history.
 Baseline capture and the reviewed pull request that
 versions an accepted candidate remain separate operations.
 
-PR accessibility, when a pull request runs it (DEC-7), is a scoped, fast check:
-audit only explicitly resolved changed component owners and retain the fast
-modal-close, theme-var, and story-play browser guards. Never widen a PR to the exhaustive accessibility sweep because a
+PR accessibility, when a pull request runs it at its opted-in scope (DEC-7), is
+a scoped, fast check: audit only explicitly resolved changed component owners
+and retain the fast modal-close, theme-var, and story-play browser guards. The
+default touched-components check (FR12) audits the touched components' stories
+without the guards, which run with the accessibility owner. Never widen a PR to the exhaustive accessibility sweep because a
 shared path changed or the component set is empty. Missing or approximate analysis
 fails the scoped check rather than silently claiming no work. Multi-component
 folders expand only to their own canonical component owners or existing umbrella
@@ -496,7 +539,7 @@ pushes to `main`), and treating a maintenance
 capture, skipped check, a checked SHA no longer in current `main` history, or
 retroactive status as release evidence.
 
-### DEC-7 — Visual, accessibility and RTL run on main, not on pull request updates
+### DEC-7 — Full visual, accessibility and RTL suites run on main; pull request updates check only touched components
 
 **Reference:** `spec:AST-030/DEC-7`
 **Decider:** `cixzhang`, `2026-10-28`
@@ -505,10 +548,17 @@ not on every push)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
-a pull request runs each only when it opts in with that suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label. Main-push checks are throttled: one runs at a time, a
+a pull request runs each at its opted-in scope only when it opts in with that
+suite's `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl` label, and otherwise
+only the touched-components check (FR12). Main-push checks are throttled: one runs at a time, a
 burst of pushes collapses to its newest commit, and a running check is never
 cancelled, so every check that starts finishes.
-Pull request updates keep the fast checks and every required context; the
+Pull request updates keep the fast checks and every required context, and add
+the touched-components check (FR12), which audits only what the change touches,
+its visual part in `pr-visual`'s default mode and its accessibility and RTL
+parts in one standard-runner job, so each update spends few runner-minutes
+while the full
+suites stay behind their labels; the
 modal-close, theme-var and story-play guards are steps of the accessibility
 owner, so they run with it, after merge or on a labelled pull request. A
 failure on `main` is repaired forward with an atomic pull request, not reverted
@@ -532,8 +582,9 @@ the module graph for tests and built-bundle reach for components. Tests that
 read sources through the file system run whole, because no import reaches what
 they read. Shared infrastructure, uncertainty, `main`, merge-group entries and
 release checks run everything, so no landing or release gate narrows; a pull
-request runs the visual, accessibility and RTL owners only with the
-suite's `ci:run-*` label (DEC-7).
+request runs the visual, accessibility and RTL owners at their opted-in scope
+only with the suite's `ci:run-*` label, and otherwise only the
+touched-components check for the components it touches (DEC-7).
 
 Rejected: a full run triggered by approval, a label or a draft-to-ready change,
 which tests the pull request's head rather than the merged result.
@@ -588,6 +639,23 @@ Rejected: waiting for main to be quiet for some minutes (busy hours never go
 quiet, so the check would starve); holding a runner to wait out each push (it
 is billed while it waits); a daily check (main's result would lag a whole
 day).
+
+### DEC-17 — Main's full runs spend runner-minutes to finish in minutes
+
+**Reference:** `spec:AST-030/DEC-17`
+**Decider:** `cixzhang`, `2026-10-31`
+
+A full check of `main` may cost more runner-minutes if it finishes sooner: the
+release train can then fix and re-check within minutes, and pull requests, which
+run far more often, carry the per-update cost. A full run starts every
+leg at once, with no `max-parallel` hold, on standard runners, and gets as many
+legs as shorten its slowest lane. Legs stop growing where one indivisible piece
+of work sets the floor, such as the longest test file. Pull requests keep their
+shape, which bounds the spend of each update.
+
+Rejected: larger runners for these lanes (measured no faster than the standard
+four-core runners); keeping four unit legs, whose slowest leg took about eight
+minutes.
 
 ### DEC-16 — CI holds itself to about ninety jobs, and main fits first
 

@@ -129,10 +129,10 @@ describe('CI baseline maintenance routing', () => {
     const optedIn = {event: 'pull_request', needs};
     // The job decides its stable visual scope in its own steps.
     expect(runs(visual, optedIn)).toBe(true);
-    // Without the opt-in a pull request update runs no visual owner, and
-    // another suite's label does not opt it in.
+    // Without the opt-in pr-visual still runs, for its default touched check
+    // (its full check's step needs ci:run-visual; ci-heavy-lanes.test.mjs).
     needs['run-labels'].outputs = {visual: 'false', a11y: 'true', rtl: 'true'};
-    expect(runs(visual, {event: 'pull_request', needs})).toBe(false);
+    expect(runs(visual, {event: 'pull_request', needs})).toBe(true);
     needs['run-labels'].outputs = {visual: 'true', a11y: 'false', rtl: 'false'};
     needs['build-storybook'].result = 'failure';
     expect(runs(visual, optedIn)).toBe(false);

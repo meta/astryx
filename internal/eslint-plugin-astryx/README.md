@@ -599,7 +599,7 @@ if (rendered == null || typeof rendered === 'boolean') return null; // flagged
 const hasLabel = isRenderable(label); // good
 ```
 
-The presets ship it as a warning. The repository config enforces it in core and richtext with `{baseline, root}`: each value's checks that predated enforcement are listed per file in `no-nullish-jsx-guard.baseline.json`, once per check, and that many stay allowed until migrated; one more check of a value in that file is an error in strict mode. A chain that also tests the value against another type (`typeof value === 'string'`, `isValidElement`, `Array.isArray`, `instanceof`) is a type switch and is not flagged. After migrating call sites, rewrite the baseline with `node internal/eslint-plugin-astryx/no-nullish-jsx-guard.baseline.mjs` (`--check` verifies it). For a JSX guard, the rule also provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
+The presets ship it as a warning. The repository config enforces it in core and richtext, where it is an error in strict mode. A check of a string, number or data value, or a documented `false` opt-out, says so with `// eslint-disable-next-line @astryx/no-nullish-jsx-guard -- <reason>`. The rule still takes `{baseline, root}` (each value's allowed checks per file) for a codebase that adopts it with existing call sites. A chain that also tests the value against another type (`typeof value === 'string'`, `isValidElement`, `Array.isArray`, `instanceof`) is a type switch and is not flagged. For a JSX guard, the rule also provides an ESLint suggestion that rewrites the comparison to `isRenderable(value)` (add the import manually).
 
 See: https://github.com/meta/astryx/issues/2538
 

@@ -760,6 +760,44 @@ describe('MultiSelector', () => {
     expect(trigger).toHaveAttribute('aria-activedescendant', options[0].id);
   });
 
+  it('typeahead reaches a stroked option with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="City"
+        options={['Ankara', 'İzmir', 'Đà Nẵng']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+
+    await user.keyboard('d');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+  });
+
+  it('typeahead puts the exact option first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Name"
+        options={['Anh', 'Dung', 'Đào']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+
+    await user.keyboard('đ');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+  });
+
   it('toggles item with Enter key', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
