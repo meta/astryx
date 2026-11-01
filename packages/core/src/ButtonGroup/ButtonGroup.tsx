@@ -4,7 +4,7 @@
 
 /**
  * @file ButtonGroup.tsx
- * @input Uses React, StyleX, Button/IconButton children
+ * @input Uses React, StyleX, Button/IconButton children, OverflowList, DropdownMenu
  * @output Exports ButtonGroup component, context, and types
  * @position Groups buttons with connected styling; consumed by index.ts
  *
@@ -21,7 +21,7 @@
  * - /packages/cli/assets/templates/blocks/components/ButtonGroup/ (showcase blocks)
  */
 
-import {useMemo, type ReactNode} from 'react';
+import {useCallback, useMemo, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {ButtonSize} from '../Button';
 import {radiusVars, shadowVars} from '../theme/tokens.stylex';
@@ -33,6 +33,11 @@ import type {BaseProps} from '../BaseProps';
 import {ButtonGroupContext} from './ButtonGroupContext';
 import type {ButtonGroupOrientation} from './ButtonGroupContext';
 import {themeProps} from '../utils/themeProps';
+import {OverflowList} from '../OverflowList';
+import {DropdownMenu} from '../DropdownMenu';
+import {useIcon} from '../Icon';
+import {useTranslator} from '../i18n';
+import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 // =============================================================================
@@ -81,6 +86,13 @@ export interface ButtonGroupProps extends BaseProps<HTMLDivElement> {
   isDisabled?: boolean;
 
   /**
+   * Collapses horizontal members that no longer fit into an overflow actions
+   * menu. The overflow trigger participates in the group's roving focus.
+   * @default undefined
+   */
+  overflow?: 'menu';
+
+  /**
    * Test ID for testing frameworks.
    */
   'data-testid'?: string;
@@ -97,6 +109,12 @@ const styles = stylex.create({
   },
   vertical: {
     flexDirection: 'column',
+  },
+  // OverflowList stretches to its parent while collapsed; the group's surface
+  // (elevation, radius) must hug the members that are actually shown.
+  overflowHug: {
+    width: 'auto',
+    maxWidth: '100%',
   },
 });
 
@@ -126,7 +144,8 @@ const elevationStyles = stylex.create({
 
 /**
  * Groups buttons with connected styling — shared borders, proper border-radius
- * handling (only on outer edges), and horizontal or vertical orientation.
+ * handling (only on outer edges), horizontal or vertical orientation, and an
+ * optional overflow actions menu for horizontal groups.
  *
  * Children automatically detect the group via context and apply position-aware
  * styles in pure CSS.
@@ -162,6 +181,7 @@ export function ButtonGroup({
   children,
   label,
   orientation = 'horizontal',
+  overflow,
   size: sizeProp,
   isDisabled = false,
   elevation = 'none',
@@ -175,6 +195,10 @@ export function ButtonGroup({
   ...props
 }: ButtonGroupProps): ReactNode {
   const size = useSize(sizeProp, 'md');
+  const t = useTranslator();
+  const moreIcon = useIcon('moreHorizontal');
+  const lastFocusedMemberRef = useRef<HTMLElement | null>(null);
+  const overflowTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
     // Roving rewrites `tabindex` on every item, so the selector cannot key off
@@ -196,32 +220,118 @@ export function ButtonGroup({
     () => ({orientation, isDisabled}),
     [orientation, isDisabled],
   );
+  // Collapsed members read this and render as ordinary menu rows.
+  const overflowMenuContextValue = useMemo(
+    () => ({
+      orientation: 'vertical' as const,
+      isDisabled,
+      isOverflowMenu: true,
+    }),
+    [isDisabled],
+  );
+
+  // React unmounts a member when it moves into the overflow menu. Keep the
+  // composite widget's tab stop valid by returning focus to its visible
+  // overflow trigger rather than letting it fall back to document.body.
+  useIsomorphicLayoutEffect(() => {
+    const focused = lastFocusedMemberRef.current;
+    if (focused != null && !focused.isConnected) {
+      overflowTriggerRef.current?.focus({preventScroll: true});
+    }
+  });
+
+  const handleGroupFocus = useCallback(
+    (event: React.FocusEvent<HTMLDivElement>) => {
+      if (event.target.closest('[aria-hidden="true"], [inert]') == null) {
+        lastFocusedMemberRef.current = event.target;
+      }
+      handleFocus(event);
+    },
+    [handleFocus],
+  );
+
+  const mergedRef = useMergedRefs(ref, listRef);
+  const {className: themeClassName, ...themeAttributes} = themeProps(
+    'button-group',
+    {size, orientation, elevation},
+  );
+  const groupProps = {
+    ...props,
+    ...themeAttributes,
+    role: 'group',
+    'aria-label': label,
+    onKeyDown: composeEventHandlers(onKeyDown, handleKeyDown),
+    onFocus: composeEventHandlers(onFocus, handleGroupFocus),
+    'aria-disabled': isDisabled || undefined,
+    'data-testid': testId,
+  };
 
   return (
     <ButtonGroupContext value={contextValue}>
       <SizeProvider value={size}>
-        <div
-          ref={useMergedRefs(ref, listRef)}
-          {...props}
-          {...mergeProps(
-            themeProps('button-group', {size, orientation, elevation}),
-            stylex.props(
+        {overflow === 'menu' && orientation === 'horizontal' ? (
+          // The list is the group itself: it measures the space its parent
+          // offers, while its own box shrinks to the members it shows.
+          <OverflowList
+            {...groupProps}
+            ref={mergedRef}
+            gap={0}
+            behavior="observeParent"
+            xstyle={[
               styles.group,
-              orientation === 'vertical' && styles.vertical,
               elevationStyles[elevation],
+              styles.overflowHug,
               xstyle,
-            ),
-            className,
-            style,
-          )}
-          role="group"
-          aria-label={label}
-          onKeyDown={composeEventHandlers(onKeyDown, handleKeyDown)}
-          onFocus={composeEventHandlers(onFocus, handleFocus)}
-          aria-disabled={isDisabled || undefined}
-          data-testid={testId}>
-          {children}
-        </div>
+            ]}
+            className={
+              className ? `${themeClassName} ${className}` : themeClassName
+            }
+            style={style}
+            overflowRenderer={items => (
+              <DropdownMenu
+                hasChevron={false}
+                button={{
+                  label: t('@astryx.moreMenu.label'),
+                  icon: moreIcon,
+                  size,
+                  isDisabled,
+                  tooltip: t('@astryx.moreMenu.label'),
+                  isIconOnly: true,
+                  ref: element => {
+                    // The hidden measurement copy has its own trigger. It is
+                    // never a focus-return target; keep the visible one.
+                    if (
+                      element?.closest('[aria-hidden="true"], [inert]') == null
+                    ) {
+                      overflowTriggerRef.current = element;
+                    }
+                  },
+                }}>
+                <ButtonGroupContext value={overflowMenuContextValue}>
+                  {items.map(({child}) => child)}
+                </ButtonGroupContext>
+              </DropdownMenu>
+            )}>
+            {children}
+          </OverflowList>
+        ) : (
+          <div
+            ref={mergedRef}
+            {...groupProps}
+            {...mergeProps(
+              {className: themeClassName},
+              stylex.props(
+                styles.group,
+                orientation === 'vertical' && styles.vertical,
+                elevationStyles[elevation],
+                xstyle,
+              ),
+              className,
+              style,
+            )}>
+            {children}
+          </div>
+        )}
       </SizeProvider>
     </ButtonGroupContext>
   );

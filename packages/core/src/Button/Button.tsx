@@ -51,6 +51,10 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {
+  DropdownMenuItem,
+  type DropdownMenuItemProps,
+} from '../DropdownMenu/DropdownMenuItem';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
@@ -571,7 +575,41 @@ const groupStyles = stylex.create({
  * <Button label="Open in new tab" href="https://example.com" target="_blank" rel="noopener noreferrer" />
  * ```
  */
-export function Button({
+export function Button(props: ButtonProps): ReactNode {
+  // A member collapsed into ButtonGroup's overflow menu is a menu row there.
+  return useButtonGroup()?.isOverflowMenu ? (
+    <ButtonMenuItem {...props} />
+  ) : (
+    <ButtonControl {...props} />
+  );
+}
+
+function ButtonMenuItem({
+  label,
+  icon,
+  variant,
+  isDisabled,
+  onClick,
+  href,
+  target,
+  rel,
+}: ButtonProps): ReactNode {
+  const groupDisabled = useButtonGroup()?.isDisabled ?? false;
+  return (
+    <DropdownMenuItem
+      label={label}
+      icon={icon}
+      variant={variant === 'destructive' ? 'destructive' : 'default'}
+      isDisabled={isDisabled || groupDisabled}
+      onClick={onClick as DropdownMenuItemProps['onClick']}
+      href={href}
+      target={target as DropdownMenuItemProps['target']}
+      rel={rel}
+    />
+  );
+}
+
+function ButtonControl({
   label,
   variant = 'secondary',
   size: sizeProp,
