@@ -58,8 +58,17 @@ describe('Lint: actionlint on workflow changes', () => {
 
   it('runs shellcheck at error severity and fails the step on a finding', () => {
     expect(step.run).toContain(
-      'SHELLCHECK_OPTS=--severity=error "$RUNNER_TEMP/actionlint" -color -shellcheck=shellcheck -pyflakes=',
+      'if ! SHELLCHECK_OPTS=--severity=error "$RUNNER_TEMP/actionlint" -color -shellcheck=shellcheck -pyflakes=; then',
     );
+    // A failure tells a contributor, a fork's included, how to run it locally.
+    expect(step.run).toContain('::error title=actionlint::');
+    expect(step.run).toContain(
+      'https://github.com/rhysd/actionlint/blob/main/docs/install.md',
+    );
+    expect(step.run).toContain(
+      'run SHELLCHECK_OPTS=--severity=error actionlint from the repository root',
+    );
+    expect(step.run).toContain('exit 1');
     // shellcheck must be present, or actionlint would skip it silently.
     expect(step.run).toContain('command -v shellcheck >/dev/null || {');
     expect(step['continue-on-error']).toBeUndefined();
