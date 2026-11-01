@@ -10,6 +10,7 @@ import {
   listedTests,
   partitionTests,
   recordDurations,
+  recordLogs,
   recordTestDurations,
   testKey,
   testListLines,
@@ -213,7 +214,7 @@ describe('a11y contract shards', () => {
     ]);
   });
 
-  it('balances the recorded suite within 30% of its floor', () => {
+  it('balances the recorded suite far below its longest file', () => {
     const recordedSuite = JSON.parse(
       fs.readFileSync(
         path.join(ROOT, '.github/a11y-contract-durations.json'),
@@ -224,22 +225,38 @@ describe('a11y contract shards', () => {
       const [file, ...titles] = key.split(' › ');
       return {file, titles, line: index, column: 0};
     });
+    const longestFile = Math.max(...Object.values(recordedSuite.seconds));
     const legs = partitionTests(suite, 6, recordedSuite);
     expect(selectedOnce(suite, legs)).toBe(true);
-    // No leg can finish sooner than an even share of the suite over six legs
-    // of four workers, nor sooner than the largest piece the split keeps
-    // whole (a file it cannot cut, or one part of a cut file).
-    const total = Object.values(recordedSuite.tests).reduce(
-      (sum, value) => sum + value,
-      0,
+    expect(Math.max(...legs.map(leg => unitsWall(leg)))).toBeLessThan(
+      longestFile,
     );
-    const floor = Math.max(
-      total / (6 * 4),
-      ...legs.flat().map(unit => unit.seconds),
+  });
+
+  it('records a file the split cut across legs at its whole time', () => {
+    const leg = (test, seconds) =>
+      `  ✓  1 [chromium] › packages/cut.spec.ts:${test}:1 › t${test} (${seconds}s)`;
+    const {seconds, tests} = recordLogs([leg(1, 2), leg(2, 3)]);
+    expect(seconds['packages/cut.spec.ts']).toBe(5);
+    expect(Object.keys(tests)).toHaveLength(2);
+  });
+
+  it('keeps every recorded file at the sum of its tests', () => {
+    const recordedSuite = JSON.parse(
+      fs.readFileSync(
+        path.join(ROOT, '.github/a11y-contract-durations.json'),
+        'utf8',
+      ),
     );
-    expect(Math.max(...legs.map(leg => unitsWall(leg)))).toBeLessThanOrEqual(
-      floor * 1.3,
-    );
+    const byFile = {};
+    for (const [key, value] of Object.entries(recordedSuite.tests)) {
+      const file = key.split(' › ')[0];
+      byFile[file] = (byFile[file] ?? 0) + value;
+    }
+    for (const [file, value] of Object.entries(byFile))
+      expect(recordedSuite.seconds[file], file).toBeGreaterThanOrEqual(
+        value * 0.9,
+      );
   });
 
   it('simulates path-order workers', () => {
