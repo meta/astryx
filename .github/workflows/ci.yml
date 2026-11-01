@@ -1132,8 +1132,10 @@ jobs:
             pnpm install --frozen-lockfile
             # Core and its build tooling always build: the other component
             # packages depend on them. Another package builds only when the
-            # pull request changes its source. A published package left
-            # unbuilt is unchanged, so the head build stands in for its API.
+            # pull request changes its source. A published package the base
+            # leaves unbuilt is reported from the head build only when none of
+            # its report inputs changed (SHARED_INPUTS in
+            # scripts/api-report/cli.mjs); otherwise from its committed report.
             pnpm -F @astryxdesign/build build
             pnpm -F @astryxdesign/core build
             for pkg in lab charts richtext vega; do

@@ -146,13 +146,20 @@ function showAt(ref, file) {
 
 /**
  * What every report also depends on: themes get their stylesheets from Core
- * through the CLI, and every report reads the CLI's theming targets and the
- * lint rule's public attributes.
+ * through the CLI; every report reads the CLI's theming targets and the lint
+ * rule's public attributes; declarations come from `tsc` over the root
+ * tsconfig, and stylesheets from the CSS build and StyleX, at the locked
+ * versions.
  */
 export const SHARED_INPUTS = [
   'packages/core',
   'packages/cli',
   'internal/eslint-plugin-astryx/no-raw-private-attribute.js',
+  'tsconfig.json',
+  'pnpm-lock.yaml',
+  'scripts/build-css.mjs',
+  'scripts/stylex-module-resolution.cjs',
+  'scripts/add-declaration-extensions.mjs',
 ];
 
 /** Whether a package's report inputs are the same at `ref` as at HEAD. */
