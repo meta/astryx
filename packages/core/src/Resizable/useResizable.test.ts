@@ -11,14 +11,24 @@
  * SYNC: When useResizable changes, update tests to match new behavior
  */
 
-import {createElement, useLayoutEffect, useRef} from 'react';
+import {
+  Activity,
+  createElement,
+  useLayoutEffect,
+  useRef,
+  type ComponentProps,
+} from 'react';
 import {createRoot, hydrateRoot} from 'react-dom/client';
 import {flushSync} from 'react-dom';
 import {renderToString} from 'react-dom/server';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, renderHook, act, waitFor} from '@testing-library/react';
 import {useResizable} from './useResizable';
-import type {ResizableProps, UseResizableSingleConfig} from './useResizable';
+import type {
+  ResizableProps,
+  ResizableRegion,
+  UseResizableSingleConfig,
+} from './useResizable';
 import {percent, pixel} from './utils';
 import type {ResizableSize} from './utils';
 
@@ -1558,6 +1568,41 @@ describe('useResizable percentage configuration (AST-010)', () => {
       expect(result.current.props._maxSizePx).toBe(399);
     });
 
+    it('follows a container swapped behind the ref with a configuration object kept across renders', () => {
+      // A module constant or a memoized object: no new options reach the
+      // region when the element behind its ref changes.
+      const first = makeSized(398);
+      const second = makeSized(798);
+      const containerRef: {current: HTMLElement | null} = {current: first};
+      const config = {containerRef, defaultSize: 150, maxSize: '50%'} as const;
+      const {result, rerender} = renderHook(() => useResizable(config));
+      expect(result.current.props._maxSizePx).toBe(199);
+
+      act(() => {
+        containerRef.current = second;
+      });
+      rerender();
+      expect(result.current.props._maxSizePx).toBe(399);
+    });
+
+    it('follows a container swapped behind the ref with the same options in the ref form', () => {
+      const first = makeSized(398);
+      const second = makeSized(798);
+      const containerRef: {current: HTMLElement | null} = {current: first};
+      const handleRef = {current: document.createElement('div')};
+      const options = {containerRef, defaultSize: 100, minSize: '50%'} as const;
+      const {result, rerender} = renderHook(() =>
+        useResizable(handleRef, options),
+      );
+      expect(result.current.size).toBe(199);
+
+      act(() => {
+        containerRef.current = second;
+      });
+      rerender();
+      expect(result.current.size).toBe(399);
+    });
+
     it('stops observing the element it left behind', () => {
       const first = makeSized(398);
       const second = makeSized(798);
@@ -1611,6 +1656,70 @@ describe('useResizable percentage configuration (AST-010)', () => {
       );
       expect(localStorage.getItem('astryx-resizable:hidden-mount')).toBe(
         JSON.stringify({size: 321, isCollapsed: false}),
+      );
+      localStorage.clear();
+    });
+
+    it('resolves a percentage default against its container once measured, after an <Activity> hid and showed the region before then', () => {
+      // The temporary 1200px basis stands in while the container is not laid
+      // out. A factory made for the reveal must not take the size the old one
+      // showed against it as a selection.
+      content = 0;
+      const containerRef = makeContainer();
+      let region: ResizableRegion | undefined;
+      function Panel() {
+        region = useResizable({
+          containerRef,
+          defaultSize: '30%',
+          autoSaveId: 'pct-activity',
+        });
+        return null;
+      }
+      // Activity's props type requires children, which the third argument
+      // passes.
+      const host = (mode: 'visible' | 'hidden') =>
+        createElement(
+          Activity,
+          {mode} as ComponentProps<typeof Activity>,
+          createElement(Panel),
+        );
+      const view = render(host('visible'));
+      expect(region?.size).toBe(360);
+      view.rerender(host('hidden'));
+      view.rerender(host('visible'));
+      content = 800;
+      act(() => {
+        StubResizeObserver.resizeAll();
+      });
+      expect(region?.size).toBe(240);
+      expect(localStorage.getItem('astryx-resizable:pct-activity')).toBe(
+        JSON.stringify({size: 240, isCollapsed: false}),
+      );
+      localStorage.clear();
+    });
+
+    it('resolves a percentage default against its container once measured, when the handle attaches before then (the ref form)', () => {
+      content = 0;
+      const containerRef = makeContainer();
+      const handleRef: {current: HTMLDivElement | null} = {current: null};
+      const options = {
+        containerRef,
+        defaultSize: '30%',
+        autoSaveId: 'pct-late',
+      };
+      const {result, rerender} = renderHook(() =>
+        useResizable(handleRef, options),
+      );
+      expect(result.current.size).toBe(360);
+      handleRef.current = document.createElement('div');
+      rerender();
+      content = 800;
+      act(() => {
+        StubResizeObserver.resizeAll();
+      });
+      expect(result.current.size).toBe(240);
+      expect(localStorage.getItem('astryx-resizable:pct-late')).toBe(
+        JSON.stringify({size: 240, isCollapsed: false}),
       );
       localStorage.clear();
     });
