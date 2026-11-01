@@ -24,6 +24,8 @@ const packageJson = JSON.parse(
   fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
 );
 const releaseJobs = [
+  // Admits every CI run under CI's ceiling (ci-admission.test.mjs).
+  'admission',
   'release-authority',
   'test-registry-e2e',
   // Decides the pull-request opt-ins; on a release check it opts nothing in
