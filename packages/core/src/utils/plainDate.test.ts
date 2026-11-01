@@ -28,6 +28,7 @@ import {
   plainDateSetEndOfWeekExclusive,
   plainDateGetWeekNumber,
   plainDateFormat,
+  plainDateFormatStandaloneMonthYear,
   formatSharedDate,
   DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
@@ -752,6 +753,31 @@ describe('plainDateGetWeekNumber', () => {
   it('keeps years 1-99 instead of mapping them to 1900-1999', () => {
     // 0004-01-01 is a Thursday (ISO week 1); 1904-01-01 was a Friday.
     expect(plainDateGetWeekNumber({year: 4, month: 1, day: 1})).toBe(1);
+  });
+});
+
+describe('plainDateFormatStandaloneMonthYear', () => {
+  const october = {year: 2026, month: 10, day: 1};
+
+  it.each([
+    ['es-ES', 'Octubre de 2026'],
+    ['fr-FR', 'Octobre 2026'],
+    ['it-IT', 'Ottobre 2026'],
+    ['nl-NL', 'Oktober 2026'],
+    ['pl-PL', 'Październik 2026'],
+    ['ru-RU', 'Октябрь 2026 г.'],
+    ['uk-UA', 'Жовтень 2026 р.'],
+    ['es-MX', 'Octubre de 2026'],
+  ])('capitalizes the stand-alone month in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+
+  it.each([
+    ['vi-VN', 'tháng 10 năm 2026'],
+    ['en-US', 'October 2026'],
+    ['pt-BR', 'outubro de 2026'],
+  ])('keeps the Intl label in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
   });
 });
 

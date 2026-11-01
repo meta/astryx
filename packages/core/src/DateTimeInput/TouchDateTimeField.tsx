@@ -84,13 +84,13 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   DATE_FORMAT_LONG,
-  DATE_FORMAT_MONTH_YEAR,
   DATE_FORMAT_WEEKDAY_ONLY,
   plainDateFormat,
   plainDateFromISO,
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
+import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
 import {
   MonthScroller,
   type MonthScrollerHandle,
@@ -672,9 +672,8 @@ export function TouchDateTimeField({
       ),
     [weekStartsOn, locale],
   );
-  const monthYearLabel = plainDateFormat(
+  const monthYearLabel = plainDateFormatStandaloneMonthYear(
     {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
     locale,
   );
 
