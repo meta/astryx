@@ -3,13 +3,14 @@
 /**
  * @file animatedLayout.ts
  * @input The DOM (layout rectangles, computed style), Web Animations, the
- *   internal `springs.settle` motion role (motion/roles.ts) and the Reduce Motion
- *   cross-fade clock (uikit/timing.ts)
+ *   internal `springs.settle` motion role (motion/roles.ts), the Reduce Motion
+ *   cross-fade clock (uikit/timing.ts) and the block measure (frameBlock.ts)
  * @output Exports `createAnimatedLayout` and the opaque `AnimatedLayout`
  *   handle, `reportLayoutChange`, `playLayoutChange`, `holdLayoutExit` /
  *   `releaseLayoutExit`, the in-place swap (`holdLayoutSwap` /
  *   `playLayoutSwap`), the edge reveal's two-state form (`holdLayoutEdge` /
- *   `playLayoutEdge`), `playLayoutFrames` and `applyLayoutChangeTransition`:
+ *   `playLayoutEdge`), `playLayoutFrames`, `layoutStartFor` and
+ *   `applyLayoutChangeTransition`:
  *   the one module that produces the size-change glide and the edge reveal
  *   `spec:AST-105` defines (`architecture:react-component-runtime` INV12)
  * @position Motion foundation, internal to core. A handle comes from the
@@ -73,6 +74,7 @@
  *   (`spec:AST-105` FR2).
  */
 
+import {LATE_START_MS} from './frameBlock';
 import {motionRole} from './roles';
 import {
   inertCopy,
@@ -217,6 +219,7 @@ function safeAnimate(
   element: Element,
   keyframes: Keyframe[],
   options: KeyframeAnimationOptions,
+  change?: ChangeStart,
 ): Animation | null {
   if (typeof (element as HTMLElement).animate !== 'function') {
     return null;
@@ -230,12 +233,120 @@ function safeAnimate(
   ours.add(animation);
   // Started on the document timeline's current time, not on the next frame:
   // a retargeted glide keeps moving through the frame it is replaced in, and
-  // every animation of one change shares the same start.
-  const now = element.ownerDocument.timeline?.currentTime;
+  // every animation of one change shares the same start. Not after a block
+  // since that frame: through a long task Chromium's timeline still reads the
+  // frame before it, so the motion would start in the past and skip into its
+  // curve, or past all of it. Then it starts at the moment of the change, and
+  // the block delays the motion instead (startFor). Every animation of one
+  // change, in one document, shares that start.
+  const doc = element.ownerDocument;
+  const now = doc.timeline?.currentTime;
   if (now != null) {
-    animation.startTime = now;
+    // The start of the change it is part of, captured when that change made
+    // its first animation (changeStartOf); otherwise the document's.
+    const start =
+      change != null && change.frame === Number(now)
+        ? change
+        : startFor(doc, Number(now));
+    start.last = clockOf(doc);
+    animation.startTime = start.at;
+    if (start.at !== Number(now)) {
+      // Started after the frame time the timeline still reads: until the
+      // timeline gets there it shows its first keyframe, not the element at
+      // rest.
+      const fill = animation.effect?.getTiming().fill;
+      animation.effect?.updateTiming({
+        fill: fill === 'forwards' || fill === 'both' ? 'both' : 'backwards',
+      });
+    }
   }
   return animation;
+}
+
+/**
+ * The start a change's animations share: the timeline's frame time, unless a
+ * block had run more than LATE_START_MS past that frame when the first of
+ * them was made. Then they start at that moment instead: the frame time is
+ * from before the block, and a motion started on it would skip into its
+ * curve, or past all of it, by the first frame after the block. Chromium
+ * holds the timeline at the frame before a long task once anything in the
+ * task reads it.
+ */
+interface ChangeStart {
+  /** The frame time the timeline read. */
+  readonly frame: number;
+  /** When the change's animations start. */
+  readonly at: number;
+  /** When the last of them was made, on the document's clock. */
+  last: number;
+}
+
+/**
+ * Each document's change start: an iframe or a Picture-in-Picture window
+ * keeps its own clock, with its own origin and frames.
+ */
+const changeStarts = new WeakMap<Document, ChangeStart>();
+
+/** The clock of the document whose timeline a start is read on. */
+function clockOf(doc: Document): number {
+  return (doc.defaultView?.performance ?? performance).now();
+}
+
+/**
+ * The start the current change's animations share. A change keeps one start
+ * from its first animation through the flush of its glides and the parts
+ * that ride them, however long the work between them runs (the rest of a
+ * commit, a slow swap): it holds while the timeline reads the same frame,
+ * through the task that made it and the microtasks after it. A change that
+ * begins after a block takes a start of its own (beginChange).
+ */
+function startFor(doc: Document, frame: number): ChangeStart {
+  const now = clockOf(doc);
+  const held = changeStarts.get(doc);
+  if (held != null && held.frame === frame) {
+    held.last = now;
+    return held;
+  }
+  const start: ChangeStart = {
+    frame,
+    at: now - frame <= LATE_START_MS ? frame : now,
+    last: now,
+  };
+  changeStarts.set(doc, start);
+  // Let go in a later task: every microtask of this one, where the glides
+  // flush and the parts riding them play, has run by then.
+  const view = doc.defaultView;
+  (view?.setTimeout ?? setTimeout)(() => {
+    if (changeStarts.get(doc) === start) {
+      changeStarts.delete(doc);
+    }
+  }, 0);
+  return start;
+}
+
+/**
+ * A change begins, as its "before" is read: after a block since the last
+ * animation of the change before it, it takes a start of its own, so a change
+ * made after a block that follows an earlier layout motion still plays.
+ * Changes made together, with no block between them, share one start.
+ */
+function beginChange(doc: Document): void {
+  const held = changeStarts.get(doc);
+  if (held != null && clockOf(doc) - held.last > LATE_START_MS) {
+    changeStarts.delete(doc);
+  }
+}
+
+/**
+ * When the animations of the layout change being made start, for code that
+ * follows the change on its own clock (a rail's width, a swap's fade): the
+ * document timeline's current time, or after a block since that frame the
+ * moment the change made its first animation. Until the timeline reaches it,
+ * the change has not started.
+ */
+export function layoutStartFor(document: Document): number {
+  const now = document.timeline?.currentTime;
+  return now == null ? 0 : startFor(document, Number(now)).at;
 }
 
 /** Every animation this module started, so it can tell the app's apart. */
@@ -727,6 +838,12 @@ interface Batch {
   scheduled: boolean;
   /** Called after every reading and before any glide starts. */
   readonly beforeMove: ((candidates: ReadonlyArray<Element>) => void)[];
+  /**
+   * The start the change's animations share, taken by its first one (its
+   * entrance, or its glides at the flush): a change begun after a block
+   * before this one flushes takes its own, and leaves this one's.
+   */
+  start: ChangeStart | null;
 }
 
 const batches = new Map<Element, Batch>();
@@ -749,6 +866,7 @@ function batchFor(area: Element): Batch {
       cache: {rects: new Map(), parts: new Map()},
       scheduled: false,
       beforeMove: [],
+      start: null,
     };
     batches.set(area, created);
     // A measurement no commit claims by the next frame (a controlled owner
@@ -768,6 +886,39 @@ function batchFor(area: Element): Batch {
     batch = created;
   }
   return batch;
+}
+
+/**
+ * The start `batch`'s change shares: taken by its first animation, from the
+ * document's (startFor), and kept with the batch through its flush.
+ */
+function changeStartOf(batch: Batch): ChangeStart | undefined {
+  const doc = batch.area.ownerDocument;
+  const now = doc.timeline?.currentTime;
+  if (now == null) {
+    return undefined;
+  }
+  if (batch.start == null || batch.start.frame !== Number(now)) {
+    batch.start = startFor(doc, Number(now));
+  }
+  return batch.start;
+}
+
+/**
+ * The start of the change being made in `area`, captured now for animations
+ * made later in the task (the parts riding a glide): its batch's when one is
+ * open there, otherwise the document's.
+ */
+function changeStartIn(
+  area: Element | null | undefined,
+  doc: Document,
+): ChangeStart | undefined {
+  const batch = area == null ? undefined : batches.get(area);
+  if (batch != null) {
+    return changeStartOf(batch);
+  }
+  const now = doc.timeline?.currentTime;
+  return now == null ? undefined : startFor(doc, Number(now));
 }
 
 function intersects(a: DOMRect, b: DOMRect): boolean {
@@ -888,6 +1039,9 @@ function flush(batch: Batch): void {
     notify([]);
     return;
   }
+  // The change's own start, taken by its entrance when it played one, even
+  // when another change has begun since.
+  const change = changeStartOf(batch);
   const visible = visibleRect(batch.area);
   // Every running glide stops first and every new place is read before any
   // glide starts, so no reading includes another's new motion.
@@ -1004,10 +1158,12 @@ function flush(batch: Batch): void {
       continue;
     }
     if (motion.kind === 'fade') {
-      safeAnimate(element, [{opacity: 0}, {opacity: 1}], {
-        duration: motion.durationMs,
-        easing: motion.easing,
-      });
+      safeAnimate(
+        element,
+        [{opacity: 0}, {opacity: 1}],
+        {duration: motion.durationMs, easing: motion.easing},
+        change,
+      );
       continue;
     }
     if (entry.isMovedByApp === true) {
@@ -1036,6 +1192,7 @@ function flush(batch: Batch): void {
         return {translate: `${offset.x}px ${offset.y}px`};
       }),
       {duration: durationMs, easing: 'linear'},
+      change,
     );
     if (animation != null) {
       const glide: Glide = {animation, offsetAt, durationMs};
@@ -1092,6 +1249,7 @@ export function reportLayoutChange(
       if (area == null) {
         return;
       }
+      beginChange(element.ownerDocument);
       const batch = batchFor(area);
       if (batch.changed.has(element)) {
         return;
@@ -1488,11 +1646,22 @@ export function playLayoutChange(
     return null;
   }
   const from = shownAtStart(element, 0);
+  // The start of the change it enters with, which its glides then share.
+  const batch = batches.get(area);
+  const change =
+    batch != null &&
+    [...batch.changed].some(
+      changed => changed === element || changed.contains(element),
+    )
+      ? changeStartOf(batch)
+      : undefined;
   if (motion.kind === 'fade') {
-    return safeAnimate(element, [{opacity: from}, {opacity: 1}], {
-      duration: motion.durationMs,
-      easing: motion.easing,
-    });
+    return safeAnimate(
+      element,
+      [{opacity: from}, {opacity: 1}],
+      {duration: motion.durationMs, easing: motion.easing},
+      change,
+    );
   }
   const {progress} = motion;
   const rtl = edge.startsWith('inline') && isRtl(element);
@@ -1503,6 +1672,7 @@ export function playLayoutChange(
       return {opacity: 1 - hidden, clipPath: fractionClip(edge, hidden, rtl)};
     }),
     {duration: progress.durationMs, easing: 'linear'},
+    change,
   );
   if (animation != null) {
     const tracked = trackEdgeMotion(
@@ -1785,13 +1955,16 @@ export function holdLayoutExit(
   // there.
   const from = shownAtStart(element, 1);
   const rtl = edge.startsWith('inline') && isRtl(element);
+  // The start of the change it exits with, which its glides then share.
+  const change = changeStartOf(batch);
   let animation: Animation | null;
   if (motion.kind === 'fade') {
-    animation = safeAnimate(element, [{opacity: from}, {opacity: 0}], {
-      duration: motion.durationMs,
-      easing: motion.easing,
-      fill: 'forwards',
-    });
+    animation = safeAnimate(
+      element,
+      [{opacity: from}, {opacity: 0}],
+      {duration: motion.durationMs, easing: motion.easing, fill: 'forwards'},
+      change,
+    );
   } else {
     const {progress} = motion;
     animation = safeAnimate(
@@ -1801,6 +1974,7 @@ export function holdLayoutExit(
         return {opacity: shown, clipPath: fractionClip(edge, 1 - shown, rtl)};
       }),
       {duration: progress.durationMs, easing: 'linear', fill: 'forwards'},
+      change,
     );
     if (animation != null) {
       const tracked = trackEdgeMotion(
@@ -1942,6 +2116,7 @@ export function holdLayoutSwap(
   ) {
     return null;
   }
+  beginChange(element.ownerDocument);
   const box = element.getBoundingClientRect();
   if (!isVisiblePart) {
     const copy = inertCopy(element);
@@ -1967,6 +2142,9 @@ export function playLayoutSwap(
     return () => {};
   }
   const {copy} = swap;
+  // Captured now: the parts riding a glide play a microtask later, on the
+  // start of the change they are part of.
+  const change = changeStartIn(swap.area, copy.ownerDocument);
   placeOver(copy, how.host, swap.rect);
   if (how.isOpaque === true) {
     copy.style.zIndex = '1';
@@ -2022,6 +2200,7 @@ export function playLayoutSwap(
         element,
         sample(t => shape(progressAt(t), rideAt(t))),
         {duration: durationMs, fill: 'both', ...options},
+        change,
       );
       if (animation != null) {
         animations.push(animation);
@@ -2093,9 +2272,10 @@ export function playLayoutFrames(
 ): () => void {
   const area = handle?.[AREA]() ?? null;
   const motion = area == null ? null : layoutMotion(area);
-  if (motion == null || motion.kind === 'instant') {
+  if (area == null || motion == null || motion.kind === 'instant') {
     return () => {};
   }
+  const change = changeStartIn(area, area.ownerDocument);
   const animations: Animation[] = [];
   for (const {element, frames: shape} of parts) {
     const animation =
@@ -2110,11 +2290,14 @@ export function playLayoutFrames(
               easing: 'linear',
               fill: 'both',
             },
+            change,
           )
-        : safeAnimate(element, [{opacity: 0}, {opacity: 1}], {
-            duration: motion.durationMs,
-            easing: motion.easing,
-          });
+        : safeAnimate(
+            element,
+            [{opacity: 0}, {opacity: 1}],
+            {duration: motion.durationMs, easing: motion.easing},
+            change,
+          );
     if (animation != null) {
       animations.push(animation);
     }
@@ -2191,6 +2374,7 @@ export function holdLayoutEdge(
   if (element == null || typeof element.animate !== 'function') {
     return null;
   }
+  beginChange(element.ownerDocument);
   const rect = element.getBoundingClientRect();
   return {
     element,
@@ -2266,11 +2450,14 @@ export function playLayoutEdge(
     rides ? from + towards(ride) : from + (to - from) * p;
   const clip = (hidden: number) => pxClip(edge, hidden, rtl);
   const now = () => Number(element.ownerDocument.timeline?.currentTime ?? 0);
-  const startedAt = now();
+  // The start this change's animations share, which after a block is later
+  // than the frame time the timeline still reads (startFor).
+  const startedAt =
+    changeStartIn(areaOf(handle, element), element.ownerDocument)?.at ?? 0;
   const durationMs =
     motion.kind === 'spring' ? motion.progress.durationMs : motion.durationMs;
   const shown = (): {extent: number; progress: number} | null => {
-    const elapsed = now() - startedAt;
+    const elapsed = Math.max(0, now() - startedAt);
     if (elapsed >= durationMs) {
       return null;
     }
@@ -2552,6 +2739,7 @@ export function reportLayoutEdge(
       const element = getElement();
       measured = null;
       if (element != null) {
+        beginChange(element.ownerDocument);
         const running = resizeReveals.get(element);
         const elapsed = Number(running?.animation?.currentTime);
         const rect = element.getBoundingClientRect();
@@ -2563,7 +2751,9 @@ export function reportLayoutEdge(
                 rect,
               }
             : {
-                shown: running.shownAt(Number.isFinite(elapsed) ? elapsed : 0),
+                shown: running.shownAt(
+                  Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0,
+                ),
                 box: running.box,
                 rect,
               };
@@ -2601,12 +2791,15 @@ export function reportLayoutEdge(
         return;
       }
       const isConceal = after < before.shown;
+      const change = changeStartIn(area, element.ownerDocument);
       if (motion.kind === 'fade') {
         if (!isConceal) {
-          safeAnimate(element, [{opacity: 0}, {opacity: 1}], {
-            duration: motion.durationMs,
-            easing: motion.easing,
-          });
+          safeAnimate(
+            element,
+            [{opacity: 0}, {opacity: 1}],
+            {duration: motion.durationMs, easing: motion.easing},
+            change,
+          );
         }
         return;
       }
@@ -2631,6 +2824,7 @@ export function reportLayoutEdge(
           clipPath: pxClip(edge, curve(t), rtl),
         })),
         {duration: progress.durationMs, easing: 'linear'},
+        change,
       );
       const reveal: ResizeReveal = {
         animation,

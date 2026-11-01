@@ -67,6 +67,8 @@ beforeEach(() => {
   played = [];
   media = {};
   setTimeline(1000);
+  // The page's clock reads the timeline's frame time: no block since it.
+  vi.spyOn(performance, 'now').mockImplementation(timelineNow);
   Element.prototype.animate = function (
     this: Element,
     keyframes: Keyframe[] | PropertyIndexedKeyframes | null,
