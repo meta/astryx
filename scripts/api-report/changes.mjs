@@ -59,7 +59,7 @@ export function parseReport(text) {
     if (!line.trim()) continue;
     if (!line.startsWith(' ')) {
       item = itemName(line);
-      rows.set(`${entry}\0${section}\0${item}`, {
+      rows.set(uniqueKey(rows, `${entry}\0${section}\0${item}`), {
         entry,
         section,
         item,
@@ -68,7 +68,7 @@ export function parseReport(text) {
       });
     } else if (item) {
       const member = memberName(line);
-      rows.set(`${entry}\0${section}\0${item}\0${member}`, {
+      rows.set(uniqueKey(rows, `${entry}\0${section}\0${item}\0${member}`), {
         entry,
         section,
         item,
@@ -82,8 +82,20 @@ export function parseReport(text) {
 
 function itemName(line) {
   if (/^[\w$]+ \(/.test(line)) return line.split(' ')[0]; // `Name (./entry)` in an also-exported list
-  const m = line.match(/^(\w+) ([^\s(:<=]+)/);
-  return m ? `${m[1]} ${m[2]}` : line;
+  const m = line.match(/^(\w+) ([^\s(:<=]+)(?: (\([^)]*\)))?/);
+  if (!m) return line;
+  // One custom property can come from two stylesheets, and one target class
+  // from two components: their qualifier is part of the row's identity.
+  return (m[1] === 'var' || m[1] === 'target') && m[3]
+    ? `${m[1]} ${m[2]} ${m[3]}`
+    : `${m[1]} ${m[2]}`;
+}
+
+/** A key no earlier row holds, so a repeated row is never dropped. */
+function uniqueKey(rows, key) {
+  let unique = key;
+  for (let n = 2; rows.has(unique); n++) unique = `${key}\0#${n}`;
+  return unique;
 }
 
 function memberName(line) {

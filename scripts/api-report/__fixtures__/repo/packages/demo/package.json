@@ -19,6 +19,9 @@
       "default": "./lib/demo.css"
     },
     "./cjs": "./lib/cjs.js",
-    "./locales/*.json": "./lib/locales/*.json"
+    "./locales/*.json": "./lib/locales/*.json",
+    "./theme.css": {
+      "default": "./lib/theme.css"
+    }
   }
 }

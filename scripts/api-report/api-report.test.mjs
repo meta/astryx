@@ -104,6 +104,7 @@ describe('generateReport', () => {
       './cjs',
       './demo.css',
       './locales/*.json',
+      './theme.css',
     ]);
     const names = fencedRows('Types').map(line => line.split(' ')[1]);
     expect(names).toEqual([...names].sort());
@@ -148,6 +149,16 @@ describe('API changes', () => {
     expect(removed.map(r => r.item)).toEqual(['function formatChip']);
   });
 
+  it('tells apart one custom property declared in two stylesheets', () => {
+    expect(report).toContain('var --demo-accent (./theme.css)');
+    const head = report.replace('var --demo-accent (./demo.css)\n', '');
+    const {added, changed, removed} = diffReports(report, head);
+    expect([added, changed]).toEqual([[], []]);
+    expect(removed.map(r => r.line)).toEqual([
+      'var --demo-accent (./demo.css)',
+    ]);
+  });
+
   it('renders one summary line, keeps the rows in a closed disclosure, and flags a stale report', () => {
     const md = renderChanges(
       computeChanges([
@@ -185,8 +196,10 @@ describe('API changes', () => {
         '@astryxdesign/demo',
         rows.find(r => r.item === item),
       );
-    expect(usage('var --demo-accent')).toBe('.my-scope { --demo-accent: …; }');
-    expect(usage('target chip')).toBe(
+    expect(usage('var --demo-accent (./demo.css)')).toBe(
+      '.my-scope { --demo-accent: …; }',
+    );
+    expect(usage('target chip (Chip)')).toBe(
       "defineTheme({components: {'chip': {…}}})",
     );
     expect(usage('attr data-astryx-theme')).toBe('[data-astryx-theme] { … }');
