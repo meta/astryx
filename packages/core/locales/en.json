@@ -2258,5 +2258,13 @@
   "@astryx.comments.postFailed": {
     "defaultMessage": "Your comment couldn't be posted.",
     "description": "Error shown above the new-comment composer of a lab Comments panel when posting failed; the draft is kept and a Retry action follows."
+  },
+  "@astryx.searchField.cancel": {
+    "defaultMessage": "Cancel",
+    "description": "Accessible name of a lab SearchField's close button, which ends the search: it clears the query, ends editing and deactivates the field."
+  },
+  "@astryx.searchField.clear": {
+    "defaultMessage": "Clear text",
+    "description": "Accessible name of a lab SearchField's clear button, which empties the query."
   }
 }
