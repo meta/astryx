@@ -105,6 +105,9 @@ seeking and sampling run a curve forward. The recorder keeps one entry per
 `Animation` object, so one reversed or replayed mid-run is misread: a watch
 taken before the reversal rejects, and an unwatched wait returns at once with
 a curve dated before it. Take a fresh animation for each run a proof reads.
+`sampleCurve(locator, times, {pseudoElement: '::before'})` samples the
+element's `::before` or `::after` instead: its presented values, labelled by
+that pseudo-element's own animations.
 
 **Waiting for an animation.** The page records every animation from the first
 call into `curves.ts` on it (and on every later document): a frame loop on the

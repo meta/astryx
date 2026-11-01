@@ -917,7 +917,8 @@ export interface CurveSample {
    * The time the sampled element presents: `t`, or just inside the end of
    * its own animations when the sample was taken at or past it (see
    * `seekAnimations`). Read from the element's own animations only (from
-   * every held one if none targets it).
+   * every held one if none targets it); when sampling a pseudo-element, from
+   * that pseudo-element's.
    */
   readonly presentedAt: number;
   /**
@@ -951,13 +952,19 @@ export interface CurveSample {
  * held origin, as for `seekAnimations`). Hold the animations first. An animation of the
  * individual `translate`, `rotate` or `scale` properties is included: they
  * are composed with `transform` into one matrix.
+ *
+ * `pseudoElement` samples the element's `::before` or `::after` instead:
+ * its presented values, labelled by its own animations (those whose effect
+ * targets the element with that pseudo-element), as a component that animates
+ * a pseudo-element (`element.animate(keyframes, {pseudoElement})`) draws it.
  */
 export async function sampleCurve(
   locator: Locator,
   times: readonly number[],
+  {pseudoElement}: {pseudoElement?: '::before' | '::after'} = {},
 ): Promise<CurveSample[]> {
   const raw = await locator.evaluate(
-    (element, {ts, inset}) => {
+    (element, {ts, inset, pseudo}) => {
       const w = window as unknown as {
         __harnessHeld?: Animation[];
         __harnessHeldStarts?: number[];
@@ -980,12 +987,17 @@ export async function sampleCurve(
           'sampleCurve: no held animations (call holdAnimations first)',
         );
       }
-      // The properties each held animation of this element animates. A
-      // `::before` or `::after` animation is not the element's own: its
-      // clock would label the element's samples with another box's time.
+      // The properties each held animation of the sampled box animates: the
+      // element's own, or its pseudo-element's when one is sampled. Another
+      // box's animation (the element's `::before` when the element is
+      // sampled) is not its own: its clock would label the samples with
+      // another box's time.
       const own = held.map(animation => {
         const effect = animation.effect as KeyframeEffect | null;
-        if (effect?.target !== element || effect.pseudoElement != null) {
+        if (
+          effect?.target !== element ||
+          (effect.pseudoElement ?? null) !== pseudo
+        ) {
           return null;
         }
         const properties = new Set<string>();
@@ -1034,7 +1046,10 @@ export async function sampleCurve(
         const or = (value: number, fallback: number) =>
           Number.isFinite(value) ? value : fallback;
         const presentedAt = or(presentedOwn, or(presented, t));
-        const style = getComputedStyle(element);
+        const style =
+          pseudo == null
+            ? getComputedStyle(element)
+            : getComputedStyle(element, pseudo);
         // translate · rotate · scale · transform, as CSS applies them (all
         // about the same transform origin, which `transform` excludes too).
         // A percentage resolves against the border box, unrounded
@@ -1138,7 +1153,7 @@ export async function sampleCurve(
         };
       });
     },
-    {ts: [...times], inset: END_INSET_MS},
+    {ts: [...times], inset: END_INSET_MS, pseudo: pseudoElement ?? null},
   );
   return raw.map(r => ({
     t: r.t,
