@@ -21,6 +21,7 @@ import {
   collectDirectionalDecorations,
   filterStoryRoutesByPackages,
   finishFiniteAnimations,
+  gradeDirectionalPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   resolveFilterRoutes,
@@ -1093,5 +1094,20 @@ describe('resolveFilterRoutes (filters resolve through the Storybook index)', ()
 
   it('is the whole route list when no filter is given', () => {
     expect(resolve([]).routes).toBe(routes);
+  });
+});
+
+describe('gradeDirectionalPair (D2 order, D3 scroll direction)', () => {
+  it('passes a relationship that holds in LTR and reverses in RTL', () => {
+    expect(gradeDirectionalPair(true, true)).toBe('pass');
+  });
+
+  it('fails a relationship that keeps its LTR physical order in RTL', () => {
+    expect(gradeDirectionalPair(true, false)).toBe('fail');
+  });
+
+  it('fails a relationship already wrong in LTR, or wrong in both', () => {
+    expect(gradeDirectionalPair(false, true)).toBe('fail');
+    expect(gradeDirectionalPair(false, false)).toBe('fail');
   });
 });
