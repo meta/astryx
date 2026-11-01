@@ -67,6 +67,7 @@ import {
   type ResizeGesture,
   type ResizeGestureModel,
 } from './resizeGesture';
+import {regionOfProps} from './resizablePane';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
 
@@ -451,7 +452,15 @@ export function ResizeHandle({
         isDisabled:
           configRef.current.isDisabled || resizableRef.current == null,
       }),
-      setIsLegacyDragging,
+      isDragging => {
+        setIsLegacyDragging(isDragging);
+        // The hook's region lets a pointer drag reopen its pane without a
+        // slide (component:Resizable FR8); a hand-built object has none.
+        const region = resizableRef.current;
+        if (region != null) {
+          regionOfProps(region)?.setPointerDragging(isDragging);
+        }
+      },
     );
   });
 
