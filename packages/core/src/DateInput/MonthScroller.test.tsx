@@ -86,6 +86,37 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     expect(scrollTo).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps a jump to a distant month made within the dip: the dip does not land after it', () => {
+    const {handleRef} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    // Eleven months on: beyond the mounted window, so it jumps at once.
+    act(() => handleRef.current?.scrollToMonth(20));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(
+      scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
+    ).toEqual([20 * 300]);
+  });
+
+  it('keeps a step at once made within the dip: the dip does not land after it', () => {
+    const {handleRef} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    act(() => handleRef.current?.scrollToMonth(8, 'auto'));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(
+      scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
+    ).toEqual([8 * 300]);
+  });
+
   it('scrolls nothing once unmounted within the dip', () => {
     const {handleRef, unmount} = renderScroller();
     act(() => handleRef.current?.scrollToMonth(10));

@@ -453,6 +453,9 @@ export function MonthScroller({
 
   const scrollToMonth = useCallback(
     (monthIndex: number, behavior: ScrollBehavior = 'smooth') => {
+      // Every step replaces a running dip, whichever way it moves: the dip's
+      // landing would otherwise undo a jump or a step at once made after it.
+      stopDip();
       const scroller = scrollerRef.current;
       if (scroller == null || paneSize === 0) {
         return;
@@ -502,9 +505,8 @@ export function MonthScroller({
           land();
           return;
         }
-        // A second step within the dip replaces the first: only its scroll
-        // lands, at its own dip's middle.
-        stopDip();
+        // A second step within the dip has replaced the first (above): only
+        // its scroll lands, at its own dip's middle.
         dipRef.current = {
           animation: scroller.animate(
             [{opacity: 1}, {opacity: 0}, {opacity: 1}],
