@@ -605,9 +605,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const isAtCommitLimit = committedChoices?.isAtLimit === true;
   const [committedKeyOfState, setCommittedKeyOfState] =
     useState(committedChoicesKey);
-  // The key whose commit dropped the last shown row, so that list closes
-  // instead of reloading (FR15).
-  const [emptiedForKey, setEmptiedForKey] = useState<string | undefined>();
+  // Whether the latest commit dropped the last shown row, so that list
+  // closes instead of reloading (FR15). Decided anew on every commit.
+  const [isEmptiedByCommit, setIsEmptiedByCommit] = useState(false);
   if (committedKeyOfState !== committedChoicesKey) {
     setCommittedKeyOfState(committedChoicesKey);
     const committedIds = committedChoices?.ids;
@@ -615,6 +615,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       committedIds == null
         ? results
         : results.filter(item => !committedIds.has(item.id));
+    const isEmptied = results.length > 0 && kept.length === 0;
+    if (isEmptied !== isEmptiedByCommit) {
+      setIsEmptiedByCommit(isEmptied);
+    }
     if (kept.length !== results.length) {
       const highlightedId = displayedResults[highlightedIndex]?.id;
       const keptOrder = displayOrder(kept, queryEntryCount);
@@ -626,9 +630,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setHighlightedIndex(
         keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
       );
-      if (kept.length === 0) {
-        setEmptiedForKey(committedChoicesKey);
-      }
     }
   }
   // The popup's listbox, measured when a later list arrives so the appended
@@ -1200,11 +1201,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     ) {
       return;
     }
-    if (emptiedForKey === committedChoicesKey || isAtCommitLimit) {
-      // The commit dropped the last shown row, or at the limit nothing more
-      // can be committed whatever the query: the list closes
+    if (isAtCommitLimit || (isEmptiedByCommit && !hadPendingSearch)) {
+      // At the limit nothing more can be committed whatever the query, or the
+      // commit dropped the last shown row: the list closes
       // (component:Tokenizer FR15). A list that was already empty (typed text
-      // whose match was a token) reloads instead, so a removed token returns.
+      // whose match was a token) reloads instead, so a removed token returns,
+      // and so does a typed search that was waiting for its debounce.
       popover.hide();
     } else if (
       query.length > 0 &&
@@ -1220,8 +1222,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [
     isDisabled,
-    emptiedForKey,
-    committedChoicesKey,
+    isEmptiedByCommit,
     isAtCommitLimit,
     query,
     minQueryLength,

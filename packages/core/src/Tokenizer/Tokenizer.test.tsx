@@ -1238,6 +1238,9 @@ describe('Tokenizer', () => {
           <button type="button" onClick={() => setValue([users[2]])}>
             Set Charlie
           </button>
+          <button type="button" onClick={() => setValue([users[0]])}>
+            Set Alice
+          </button>
           <button
             type="button"
             onClick={() => setValue([users[0], users[1], users[2]])}>
@@ -1424,6 +1427,71 @@ describe('Tokenizer', () => {
       expect(
         screen.queryByRole('option', {name: 'Charlie', hidden: true}),
       ).not.toBeInTheDocument();
+    });
+
+    it('keeps an open list that still has choices when the tokens return to a set that once emptied it', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0], users[1]]} />);
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      // Committing Charlie empties the shown list, which closes.
+      act(() => {
+        screen.getByRole('button', {name: 'Set all three'}).click();
+      });
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Set Alice'}).click();
+      });
+      await user.type(input, 'i');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Diana', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      // The same three tokens again: Diana still matches "i".
+      act(() => {
+        screen.getByRole('button', {name: 'Set all three'}).click();
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: 'Diana', hidden: true}),
+      ).toBeInTheDocument();
+    });
+
+    it('runs a typed search waiting for its debounce when a commit empties the shown list', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0], users[1]]} />);
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      await user.type(input, 'd');
+      // Charlie, the last shown row, becomes a token before "d" is searched.
+      act(() => {
+        screen.getByRole('button', {name: 'Set all three'}).click();
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Diana', hidden: true}),
+        ).toBeInTheDocument();
+      });
     });
 
     it('drops a value set from outside from the open list', async () => {
