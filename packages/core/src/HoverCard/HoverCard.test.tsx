@@ -26,9 +26,12 @@ import {
   fireEvent,
   waitFor,
   act,
+  cleanup,
+  within,
 } from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
+import {createPortal} from 'react-dom';
 import {StrictMode, type ComponentProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
@@ -748,6 +751,138 @@ describe('HoverCard', () => {
   });
 
   describe('Escape key behavior', () => {
+    describe('in a second document', () => {
+      // A same-origin iframe stands in for any second document an app renders
+      // into through a portal, Document Picture-in-Picture included. A key
+      // press reaches only the document it happened in.
+      let frame: HTMLIFrameElement;
+
+      beforeEach(() => {
+        frame = document.createElement('iframe');
+        document.body.appendChild(frame);
+        // The frame has its own element prototypes: give them the same
+        // Popover API stand-ins as this document's.
+        const frameWindow = frame.contentWindow as Window & typeof globalThis;
+        const proto = frameWindow.HTMLElement.prototype;
+        const frameMatches = proto.matches;
+        proto.showPopover = function (this: HTMLElement) {
+          popoverOpenState.set(this, true);
+        };
+        proto.hidePopover = function (this: HTMLElement) {
+          popoverOpenState.set(this, false);
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (proto as any).matches = function (selector: string): boolean {
+          if (selector === ':popover-open') {
+            return popoverOpenState.get(this) ?? false;
+          }
+          return frameMatches.call(this, selector);
+        };
+      });
+
+      afterEach(() => {
+        // Unmount before the frame goes, or React removes nodes from a
+        // document that no longer exists.
+        cleanup();
+        frame.remove();
+      });
+
+      it('closes a card rendered into the second document on Escape there', async () => {
+        const onOpenChange = vi.fn();
+        const frameDocument = frame.contentDocument!;
+        render(
+          createPortal(
+            <HoverCard
+              content={<span>Card content</span>}
+              onOpenChange={onOpenChange}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>,
+            frameDocument.body,
+          ),
+        );
+        const trigger = within(frameDocument.body).getByRole('button', {
+          name: 'Trigger',
+        });
+
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() =>
+          expect(onOpenChange).toHaveBeenLastCalledWith(true),
+        );
+
+        fireEvent.keyDown(frameDocument.body, {key: 'Escape'});
+        await waitFor(() =>
+          expect(onOpenChange).toHaveBeenLastCalledWith(false),
+        );
+      });
+
+      it('stays open when focus moves from the trigger into the card', async () => {
+        const onOpenChange = vi.fn();
+        const frameDocument = frame.contentDocument!;
+        const button = (text: string) =>
+          Array.from(frameDocument.querySelectorAll('button')).find(
+            candidate => candidate.textContent === text,
+          );
+        render(
+          createPortal(
+            <HoverCard
+              content={<button type="button">Inside</button>}
+              onOpenChange={onOpenChange}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>,
+            frameDocument.body,
+          ),
+        );
+        const trigger = button('Trigger')!;
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() =>
+          expect(onOpenChange).toHaveBeenLastCalledWith(true),
+        );
+        trigger.focus();
+        button('Inside')!.focus();
+        await act(async () => {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        });
+        expect(onOpenChange).toHaveBeenLastCalledWith(true);
+      });
+
+      it('returns focus to the trigger when Escape closes the card from inside it', async () => {
+        const frameDocument = frame.contentDocument!;
+        // Testing Library's role queries cannot read the frame's popover, so
+        // find buttons by text.
+        const button = (text: string) =>
+          Array.from(frameDocument.querySelectorAll('button')).find(
+            candidate => candidate.textContent === text,
+          );
+        render(
+          createPortal(
+            <HoverCard
+              content={<button type="button">Inside</button>}
+              delay={0}
+              hideDelay={0}>
+              <button type="button">Trigger</button>
+            </HoverCard>,
+            frameDocument.body,
+          ),
+        );
+        const trigger = button('Trigger')!;
+        fireEvent.mouseEnter(trigger);
+        await waitFor(() => expect(button('Inside')).toBeDefined());
+        const inside = button('Inside')!;
+        inside.focus();
+        // Compared as booleans: printing a frame's element fails.
+        expect(frameDocument.activeElement === inside).toBe(true);
+
+        fireEvent.keyDown(inside, {key: 'Escape'});
+        await waitFor(() =>
+          expect(frameDocument.activeElement === trigger).toBe(true),
+        );
+      });
+    });
+
     it('hides hover card when Escape is pressed on trigger', async () => {
       const onOpenChange = vi.fn();
       // Reset the mock before this test

@@ -60,6 +60,17 @@ const styles = stylex.create({
 });
 
 /**
+ * The card lives in its trigger's document, which can be an iframe or a
+ * Picture-in-Picture window rather than this page.
+ */
+function ownerDocumentOf(el: HTMLElement | null): Document | null {
+  if (el != null) {
+    return el.ownerDocument;
+  }
+  return typeof document === 'undefined' ? null : document;
+}
+
+/**
  * Focus trigger behavior for hover cards
  */
 export type HoverCardFocusTrigger = 'auto' | 'always' | 'never';
@@ -449,7 +460,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     (e: FocusEvent) => {
       // Check if focus is moving to the hover card content
       const relatedTarget = e.relatedTarget as HTMLElement | null;
-      const popoverElement = document.getElementById(layerId);
+      const popoverElement = ownerDocumentOf(
+        triggerRef.current,
+      )?.getElementById(layerId);
 
       if (popoverElement?.contains(relatedTarget)) {
         // Focus moving into hover card, keep it open
@@ -481,11 +494,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     // — it would silently eat Escapes meant for the dialog underneath — so
     // presence is answered from the DOM at press time instead of from state.
     isActive: true,
+    // The stack listens for Escape in the trigger's own document, which may be
+    // an iframe or a Picture-in-Picture window rather than this page.
+    getContainer: () => triggerRef.current,
     isPresent: () => {
-      const el =
-        typeof document === 'undefined'
-          ? null
-          : document.getElementById(layerId);
+      const el = ownerDocumentOf(triggerRef.current)?.getElementById(layerId);
       if (el == null) {
         return false;
       }
@@ -514,11 +527,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       // guard unconditionally would swallow their next focus on the trigger,
       // because a focus() on the already-focused trigger fires no focusin to
       // clear it.
-      const card =
-        typeof document === 'undefined'
-          ? null
-          : document.getElementById(layerId);
-      const hadFocus = card?.contains(document.activeElement) ?? false;
+      const doc = ownerDocumentOf(triggerRef.current);
+      const card = doc?.getElementById(layerId);
+      const hadFocus = card?.contains(doc?.activeElement ?? null) ?? false;
       hide();
       if (hadFocus) {
         isEscapeDismissingRef.current = true;
@@ -619,11 +630,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       // A consumer closing the card while it holds focus would strand focus on
       // <body>. Arming the re-show guard is what keeps the refocus from
       // reopening the card through `handleFocusIn`, which shows on any focusin.
-      const card =
-        typeof document === 'undefined'
-          ? null
-          : document.getElementById(layerId);
-      const hadFocus = card?.contains(document.activeElement) ?? false;
+      const doc = ownerDocumentOf(triggerRef.current);
+      const card = doc?.getElementById(layerId);
+      const hadFocus = card?.contains(doc?.activeElement ?? null) ?? false;
       hideLayer();
       if (hadFocus) {
         isEscapeDismissingRef.current = true;
