@@ -283,6 +283,19 @@ describe('catalog blocks', () => {
     expect(files.length).toBeGreaterThan(100);
   });
 
+  it('copies the usePressFeedback block as one Text placeholder in its Card, with no branch on the face', () => {
+    const file = files.find(f => f.endsWith('/usePressFeedbackHookUsage.tsx'));
+    expect(file).toBeDefined();
+    const {source, demoContentReplaced} = replaceTemplateDemos(
+      fs.readFileSync(/** @type {string} */ (file), 'utf8'),
+    );
+    expect(demoContentReplaced).toBe(1);
+    expect(source).toContain(
+      '      }}>\n      <Text>Card content</Text>\n    </Card>',
+    );
+    expect(source).not.toMatch(/\?\s*\(/u);
+  });
+
   it('leaves no demo-content reference in any block as a copy writes it', () => {
     const remaining = files.filter(file => {
       const {source} = replaceTemplateDemos(fs.readFileSync(file, 'utf8'));
