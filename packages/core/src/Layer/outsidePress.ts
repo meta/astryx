@@ -4,8 +4,7 @@
 
 /**
  * @file outsidePress.ts
- * @input Listens for pointerdown, pointerup, pointercancel and focusin on a
- *   document
+ * @input Listens for pointerdown, pointerup and pointercancel on a document
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
  *   for a component: start on show, stop on hide, stop on unmount
  * @position Internal to Layer; the outside-press dismissal for a manual
@@ -18,8 +17,6 @@
  * browser took the gesture for a scroll or a pinch) forgets it. Inside is
  * judged on the event's composed path, so a field or list inside an open
  * shadow root, which the document sees as its shadow host, is still inside.
- * Focus that moves outside (Tab to another field) closes the layer too, which
- * the auto popover's exclusivity used to do when that field opened its own.
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
@@ -56,21 +53,14 @@ export function watchOutsidePress(
   const handleCancel = () => {
     startedOutside = false;
   };
-  const handleFocusIn = (event: FocusEvent) => {
-    if (!isInside(event.composedPath())) {
-      onOutside();
-    }
-  };
 
   doc.addEventListener('pointerdown', handleDown, true);
   doc.addEventListener('pointerup', handleUp, true);
   doc.addEventListener('pointercancel', handleCancel, true);
-  doc.addEventListener('focusin', handleFocusIn, true);
   return () => {
     doc.removeEventListener('pointerdown', handleDown, true);
     doc.removeEventListener('pointerup', handleUp, true);
     doc.removeEventListener('pointercancel', handleCancel, true);
-    doc.removeEventListener('focusin', handleFocusIn, true);
   };
 }
 

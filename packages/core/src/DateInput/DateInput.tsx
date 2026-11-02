@@ -830,10 +830,27 @@ function PointerDateField({
     locale,
   ]);
 
-  // Handle blur - validate, check constraints, and clear pending input
-  const handleBlur = useCallback(() => {
-    commitPendingInput();
-  }, [commitPendingInput]);
+  // Handle blur - validate, check constraints, and clear pending input. Focus
+  // that moves from the input to anything outside the field and its calendar
+  // (Tab to the next field) also closes the calendar: a manual popover has no
+  // auto-popover exclusivity to close it when that field opens its own, and
+  // outside dismissal is the member's to own (family:overlay-dismissal AV4).
+  // Focus going nowhere (a window switch) leaves it open.
+  const handleBlur = useCallback(
+    (e: React.FocusEvent<HTMLInputElement>) => {
+      commitPendingInput();
+      const next = e.relatedTarget;
+      if (!popover.isOpen || !(next instanceof Node)) {
+        return;
+      }
+      const layer = next.ownerDocument?.getElementById(popover.id);
+      if (fieldElementRef.current?.contains(next) || layer?.contains(next)) {
+        return;
+      }
+      popover.hide();
+    },
+    [commitPendingInput, popover],
+  );
 
   // Handle keyboard events on input
   const handleInputKeyDown = useCallback(

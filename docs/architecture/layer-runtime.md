@@ -301,9 +301,10 @@ A text input cannot be an invoker, so BaseTypeahead's list and DateInput's
 calendar, which their text fields own, are manual popovers. A press that starts
 and ends on the field's input or its buttons (and DateInput's label), or in the
 layer, is inside, judged
-across open shadow roots; a press that starts and ends anywhere else, or focus
-moving outside, closes the layer, a scroll or pinch that starts outside does
-not, and Escape stays on the shared stack. Implementation gap: DateTimeInput's time list and
+across open shadow roots; a press that starts and ends anywhere else closes the
+layer, a scroll or pinch that starts outside does not, and Escape stays on the
+shared stack. Focus leaving the field stays each owner's to handle
+(`family:overlay-dismissal` AV4). Implementation gap: DateTimeInput's time list and
 ChatComposerInput's trigger menu are still auto popovers with native light
 dismiss, so a press in their own text input closes them.
 

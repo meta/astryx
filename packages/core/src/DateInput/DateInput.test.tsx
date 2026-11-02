@@ -486,6 +486,7 @@ describe('DateInput', () => {
         </>,
       );
       const [start, end] = screen.getAllByRole('combobox');
+      start.focus();
       fireEvent.keyDown(start, {key: 'ArrowDown'});
       expect(start).toHaveAttribute('aria-expanded', 'true');
       end.focus();
