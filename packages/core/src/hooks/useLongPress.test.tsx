@@ -362,15 +362,15 @@ describe('useLongPress on the events\u2019 clock (spec:AST-094 FR16)', () => {
     expect(onLongPress).toHaveBeenCalledWith({x: 4, y: 6});
   });
 
-  it('brings an event stamped in epoch milliseconds (jsdom) onto its window\u2019s clock through the time origin', () => {
-    // Handled 300 ms late on a clock whose events arrive in epoch ms: on the
-    // window's clock the press is due in 200 ms, not the full delay.
+  it('reads an event stamped in epoch milliseconds (jsdom) by its age on Date.now()', () => {
+    // Handled 300 ms after it was stamped: the press is due in 200 ms, not
+    // the full delay.
     const page = windowClock(1300);
     const onLongPress = vi.fn();
     const {result} = renderHook(() => useLongPress({onLongPress}));
     act(() => {
       result.current.onTouchStart(
-        stamped(page, EPOCH_ORIGIN + 1000, [{clientX: 0, clientY: 0}]),
+        stamped(page, Date.now() - 300, [{clientX: 0, clientY: 0}]),
       );
       vi.advanceTimersByTime(199);
     });
@@ -379,6 +379,24 @@ describe('useLongPress on the events\u2019 clock (spec:AST-094 FR16)', () => {
       vi.advanceTimersByTime(1);
     });
     expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a tap a tap in a test that freezes the system time at an earlier date', () => {
+    vi.setSystemTime(new Date(2026, 2, 15));
+    // The window's time origin stays the real one, months after the frozen
+    // date; jsdom stamps events with the frozen Date.now().
+    const page = windowClock(1000, Date.UTC(2026, 10, 2));
+    const onLongPress = vi.fn();
+    const {result} = renderHook(() => useLongPress({onLongPress}));
+    act(() => {
+      result.current.onTouchStart(
+        stamped(page, Date.now(), [{clientX: 0, clientY: 0}]),
+      );
+      vi.advanceTimersByTime(100);
+      result.current.onTouchEnd(stamped(page, Date.now()));
+      vi.advanceTimersByTime(1000);
+    });
+    expect(onLongPress).not.toHaveBeenCalled();
   });
 
   it('never waits longer than the delay when a touch is stamped ahead of its clock', () => {

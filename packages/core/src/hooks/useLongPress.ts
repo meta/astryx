@@ -26,11 +26,10 @@
 // axis. The context menu's own movement allowance is a guess and is not
 // measured yet (AST-094).
 //
-// The hold is a deadline on the touch events' own timestamps, read on the
-// clock of the window the touch came from (an iframe or a Picture-in-Picture
-// window has its own). A busy main thread can hold the timer back past the
-// deadline; a touch stamped past it then reports the long press before it
-// acts, so a busy page delays the report and never drops it.
+// The hold is a deadline on the touch events' timestamps, on the clock of the
+// touch's own window. A busy main thread can delay the timer past the
+// deadline. A touch stamped after the deadline then reports the press before
+// it acts.
 
 import {useCallback, useEffect, useRef} from 'react';
 import {
@@ -44,9 +43,8 @@ const DEFAULT_DELAY_MS = LONG_PRESS_DURATION_MS;
 const DEFAULT_MOVE_CANCEL_PX = LONG_PRESS_ALLOWABLE_MOVEMENT_PX;
 
 /** The part of a window's performance timeline a press reads. */
-type EventClock = Pick<Performance, 'now' | 'timeOrigin'>;
+type EventClock = Pick<Performance, 'now'>;
 
-/** The clock of the window a touch came from. */
 function clockOf(e: React.TouchEvent): EventClock | null {
   const view = e.view as unknown as {performance?: EventClock} | null;
   return (
@@ -56,8 +54,9 @@ function clockOf(e: React.TouchEvent): EventClock | null {
 }
 
 /**
- * An event's time on its window's clock. jsdom stamps events in epoch
- * milliseconds; those come onto the clock through its time origin.
+ * An event's time on its window's clock. jsdom stamps events with
+ * `Date.now()`, so such a stamp's age is read on that clock: a test that
+ * freezes or moves the system time keeps the press's timing.
  */
 function timeOn(
   clock: EventClock | null,
@@ -66,8 +65,8 @@ function timeOn(
   if (timeStamp == null || !Number.isFinite(timeStamp)) {
     return undefined;
   }
-  if (timeStamp > 1e12 && clock != null && clock.timeOrigin > 0) {
-    return timeStamp - clock.timeOrigin;
+  if (timeStamp > 1e12 && clock != null) {
+    return clock.now() - (Date.now() - timeStamp);
   }
   return timeStamp;
 }
