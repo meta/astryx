@@ -302,6 +302,7 @@ function ToastRow({
           onDismiss={reason => onDismiss(entry.id, reason)}
           renderContent={o.renderContent}
           timerKey={entry.id}
+          isLiveRegion={false}
         />
       </div>
     </div>
@@ -405,13 +406,11 @@ export function ToastViewport({
     [],
   );
 
-  // Announce toasts through the persistent singleton live regions. Each
-  // <Toast> also renders its own role="status"/"alert" region, but that region
-  // is "born with content" — mounted together with its text — which many
-  // screen readers do not announce (see useAnnounce.ts); the singleton regions
-  // are mounted empty and only mutated afterwards, so they are what actually
-  // guarantees the announcement (the per-toast markup is kept for browse-mode
-  // discoverability). The announcement happens in addToast — the imperative
+  // Announce toasts through the persistent singleton live regions. They are
+  // mounted empty and only mutated afterwards, which screen readers announce
+  // (see useAnnounce.ts). The cards here carry no live region of their own:
+  // a card updated in place would announce its new text a second time. The
+  // announcement happens in addToast — the imperative
   // dispatch path invoked once per useToast() call from an event handler,
   // never from render — so each toast is announced exactly once by
   // construction, independent of the React render lifecycle (StrictMode

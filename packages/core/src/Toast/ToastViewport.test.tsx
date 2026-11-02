@@ -958,6 +958,87 @@ describe('ToastViewport keyboard reach + focus', () => {
     }
   });
 
+  // FR2: an update that removes the focused control drops its focus hold, so
+  // a control-free, auto-hiding replacement still hides on time.
+  it('auto-hides a control-free replacement after the update removes the focused control', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={{
+              body: 'Uploading',
+              uniqueID: 'upload',
+              isAutoHide: false,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Start"
+          />
+          <ShowToastButton
+            options={{
+              body: 'Uploaded',
+              uniqueID: 'upload',
+              autoHideDuration: 2000,
+              renderContent: () => <span>Uploaded</span>,
+              onHide,
+            }}
+            triggerLabel="Finish"
+          />
+        </>,
+      );
+      const start = screen.getByText('Start');
+      act(() => {
+        start.focus();
+        fireEvent.click(start);
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Cancel upload'}).focus();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByText('Finish'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // FR9: the viewport is the one announcement owner, so a card updated in
+  // place carries no live region of its own and is announced once.
+  it('announces an overwrite once, through the viewport only', () => {
+    const upload = (percent: number): ToastOptions => ({
+      body: `Uploading ${percent}%`,
+      uniqueID: 'upload',
+      isAutoHide: false,
+    });
+    renderViewport(
+      <>
+        <ShowToastButton options={upload(10)} triggerLabel="Start" />
+        <ShowToastButton options={upload(60)} triggerLabel="Progress" />
+      </>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Start'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('Progress'));
+    });
+
+    // The toast's text sits in no live region inside its row: only the
+    // viewport's own announcer speaks it.
+    const row = getToastWrapperByText('Uploading 60%');
+    const liveAncestor = within(row)
+      .getByText('Uploading 60%')
+      .closest('[aria-live], [role="status"], [role="alert"]');
+    expect(liveAncestor == null || !row.contains(liveAncestor)).toBe(true);
+  });
+
   // FR8, FR10: when the overwrite removes the focused control, focus moves as
   // FR10 hands it off, never to the page body.
   it('hands focus off when an overwrite removes the focused control', () => {
@@ -2917,7 +2998,9 @@ describe('toast timer lifecycle (#3589)', () => {
       fireEvent.click(screen.getByText('Show held'));
     });
     const viewport = screen.getByRole('region', {name: 'Notifications'});
-    const card = within(viewport).getByText('Held').closest('[role="status"]');
+    // The row's wrapper holds the clip, which holds the card.
+    const card =
+      getToastWrapperByText('Held').firstElementChild?.firstElementChild;
     if (!(card instanceof HTMLElement)) {
       throw new Error('toast card not found');
     }

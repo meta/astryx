@@ -159,6 +159,11 @@ interface ToastSurfaceProps extends ToastProps {
    * toast's auto-hide timer starts over.
    */
   timerKey?: string;
+  /**
+   * False when the viewport announces the toast: the card then carries no
+   * live region of its own, so an update in place is announced once.
+   */
+  isLiveRegion?: boolean;
 }
 
 /**
@@ -199,6 +204,7 @@ export function ToastSurface({
   renderContent,
   gestureDirection,
   timerKey,
+  isLiveRegion = true,
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -275,6 +281,16 @@ export function ToastSurface({
 
   useEffect(() => {
     remainingRef.current = autoHideDuration;
+    // An update in place can remove the focused control, which fires no blur:
+    // a focus hold whose focus has left the card is stale.
+    const root = cardRootRef.current?.current;
+    if (
+      pauseSourcesRef.current.has('focus') &&
+      root != null &&
+      !root.contains(root.ownerDocument.activeElement)
+    ) {
+      pauseSourcesRef.current.delete('focus');
+    }
     startTimer();
     return () => {
       if (timerRef.current) {
@@ -363,9 +379,9 @@ export function ToastSurface({
   return (
     <div
       ref={rootRef}
-      role={isError ? 'alert' : 'status'}
-      aria-live={isError ? 'assertive' : 'polite'}
-      aria-atomic="true"
+      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
+      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
+      aria-atomic={isLiveRegion ? 'true' : undefined}
       onMouseEnter={pauseForPointer}
       onMouseLeave={resumeForPointer}
       onFocusCapture={pauseForFocus}
