@@ -57,37 +57,44 @@ function zeroIsInside(style: string): boolean {
   return zeroParent()?.closest(`[class*="${style}"]`) != null;
 }
 
-function InDrawer({
+const OPEN_MOBILE_NAV = {
+  isMobile: true,
+  isMobileNavOpen: true,
+  toggleMobileNav: vi.fn(),
+  openMobileNav: vi.fn(),
+  closeMobileNav: vi.fn(),
+  isMobileNavEnabled: true,
+  hasAutoToggle: true,
+};
+
+function InMode({
   children,
+  mode,
   mobileContent = null,
 }: {
   children: ReactNode;
+  mode: 'drawer' | 'mobile-bar';
   mobileContent?: ReactNode;
 }) {
   return (
-    <AppShellMobileContext
-      value={{
-        isMobile: true,
-        isMobileNavOpen: true,
-        toggleMobileNav: vi.fn(),
-        openMobileNav: vi.fn(),
-        closeMobileNav: vi.fn(),
-        isMobileNavEnabled: true,
-        hasAutoToggle: true,
-      }}>
+    <AppShellMobileContext value={OPEN_MOBILE_NAV}>
       <TopNavMobileContentContext value={mobileContent}>
-        <TopNavRenderContext value="drawer">{children}</TopNavRenderContext>
+        <TopNavRenderContext value={mode}>{children}</TopNavRenderContext>
       </TopNavMobileContentContext>
     </AppShellMobileContext>
   );
 }
 
+function InDrawer(props: {children: ReactNode; mobileContent?: ReactNode}) {
+  return <InMode mode="drawer" {...props} />;
+}
+
 describe('TopNav slots follow isRenderable', () => {
   describe.each([
-    ['the desktop bar', (node: ReactNode) => node, 'styles.heading'],
+    ['the desktop bar', (node: ReactNode): ReactNode => node, 'styles.heading'],
     [
       'the mobile bar',
-      (node: ReactNode) => (
+      (node: ReactNode): ReactNode => (
         <TopNavRenderContext value="mobile-bar">{node}</TopNavRenderContext>
       ),
       'mobileBarHeading',
@@ -148,6 +155,55 @@ describe('TopNav slots follow isRenderable', () => {
   });
 });
 
+// TopNav's layout flags decide presence with the same check as the slots.
+describe('TopNav layout follows isRenderable', () => {
+  it.each(EMPTY_VALUES)(
+    'an empty centerContent (%s) keeps the bar out of its center layout',
+    (_label, value) => {
+      render(<TopNav heading="Product" centerContent={value} />);
+      expect(document.querySelector('[class*="centerContent"]')).toBeNull();
+      expect(document.querySelector('[class*="rightSection"]')).toBeNull();
+    },
+  );
+
+  it.each(EMPTY_VALUES)(
+    'empty start, center and mobile content (%s) show no mobile-bar toggle',
+    (_label, value) => {
+      render(
+        <InMode mode="mobile-bar" mobileContent={value}>
+          <TopNav
+            heading="Product"
+            startContent={value}
+            centerContent={value}
+          />
+        </InMode>,
+      );
+      expect(screen.queryByRole('button')).toBeNull();
+    },
+  );
+
+  it('a mobile content of 0 shows the mobile-bar toggle', () => {
+    render(
+      <InMode mode="mobile-bar" mobileContent={0}>
+        <TopNav heading="Product" />
+      </InMode>,
+    );
+    expect(screen.getByRole('button')).toBeInTheDocument();
+  });
+
+  it.each(EMPTY_VALUES)(
+    'an empty startContent (%s) renders no drawer',
+    (_label, value) => {
+      const {container} = render(
+        <InDrawer>
+          <TopNav heading="Product" startContent={value} />
+        </InDrawer>,
+      );
+      expect(container.innerHTML).toBe('');
+    },
+  );
+});
+
 describe('TopNavHeading slots follow isRenderable', () => {
   // Each props set reaches a different render path of the heading.
   const paths: ReadonlyArray<[string, Record<string, unknown>]> = [
@@ -201,10 +257,14 @@ describe('TopNavHeading slots follow isRenderable', () => {
 
 describe('TopNavMegaMenuItem icon follows isRenderable', () => {
   describe.each([
-    ['the desktop popover', (node: ReactNode) => node, 'desktopIcon'],
+    [
+      'the desktop popover',
+      (node: ReactNode): ReactNode => node,
+      'desktopIcon',
+    ],
     [
       'the drawer',
-      (node: ReactNode) => (
+      (node: ReactNode): ReactNode => (
         <TopNavRenderContext value="drawer">{node}</TopNavRenderContext>
       ),
       'drawerItemIcon',
