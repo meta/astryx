@@ -44,9 +44,10 @@ const styles = stylex.create({
   // Section padding propagation), the layout values the docs card publishes
   // stop at the example, so it renders as it does at a page root: no Layout in
   // the example escapes the card's padding, or takes its insets, widths or
-  // height cap. These are the values that reset leaves out. AppShell's own
-  // layout-root reset (component:AppShell FR18) is not built yet; until it is,
-  // this boundary is what keeps the AppShell examples whole.
+  // height cap. These are the values that reset leaves out: a mirror of
+  // Layout's internal `layoutReset` (component:Layout FR8), which Core's
+  // `./internal/*` rule keeps the docsite from importing.
+  // example-layout-root.test.ts fails when the two differ.
   exampleRoot: {
     minWidth: 'fit-content',
     '--layout-content-width': 'initial',

@@ -28,7 +28,13 @@ import {Icon} from '../Icon';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatDictationButton.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -113,7 +119,7 @@ export function ChatDictationButton({
   style,
   ...rest
 }: ChatDictationButtonProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   if (isHiddenWhenUnsupported && !dictation.isSupported) {
     return null;

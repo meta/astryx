@@ -38,7 +38,13 @@ import {isRenderable, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {chatMessageVars} from './chatMessage.vars.stylex';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatMessage.generated';
+
+registerEnglishFallback(english);
 
 export interface ChatMessageProps extends BaseProps<HTMLElement> {
   ref?: React.Ref<HTMLElement>;
@@ -205,7 +211,7 @@ export function ChatMessage({
   ref,
   ...rest
 }: ChatMessageProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const listContext = useChatListContext();
   const density = densityProp ?? listContext?.density ?? 'balanced';
 
