@@ -49,7 +49,7 @@ import type {
   HeaderCellRenderProps,
 } from '../../types';
 import {proportional} from '../../columnUtils';
-import {useLocale, useTranslator} from '../../../i18n';
+import {useLocale} from '../../../i18n';
 import type {
   PowerSearchConfig,
   PowerSearchField,
@@ -64,6 +64,13 @@ import type {
   StringListOperatorValue,
   EntityListOperatorValue,
 } from '../../../PowerSearch/types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/filtering/useTableFiltering.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Filter Value Types
@@ -430,7 +437,7 @@ function TextFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -540,7 +547,7 @@ function NumberFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -615,7 +622,7 @@ function SelectorFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -679,7 +686,7 @@ function MultiSelectorFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];
@@ -721,7 +728,7 @@ function DateFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value = store.getConfig().filters[columnKey] as string | undefined;
 
@@ -750,7 +757,7 @@ function TimeFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value = store.getConfig().filters[columnKey] as string | undefined;
 
@@ -781,7 +788,7 @@ function StringListFilterControl({
   size: 'sm' | 'md';
   hasClear?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const value =
     (store.getConfig().filters[columnKey] as string[] | undefined) ?? [];
@@ -923,7 +930,7 @@ function PopoverFilterTrigger({
   header: string;
   operatorValue: OperatorValue;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const store = useFilterStore();
   const config = store.getConfig();
   const value = config.filters[columnKey];

@@ -41,9 +41,15 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {innermostInteractive} from '../hooks/useClickableContainer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {isLayerSurface} from '../Layer/layerSurfacePress';
-import {useTranslator} from '../i18n';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Token/Token.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -310,7 +316,7 @@ export function Token({
   // document controller once, so the token's output stays a pure function
   // of its props.
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
 
