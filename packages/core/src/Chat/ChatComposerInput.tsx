@@ -656,6 +656,14 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     triggerMenu.handleInput();
   }, [isDisabled, emitChange, triggerMenu]);
 
+  // A click inside the editor keeps the menu open, but it can move the caret
+  // out of the query; the trigger is checked again at the new caret.
+  const handleEditorClick = useCallback(() => {
+    if (!isDisabled && triggerMenu.state.isActive) {
+      triggerMenu.handleInput();
+    }
+  }, [isDisabled, triggerMenu]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLDivElement>) => {
       if (isDisabled) {
@@ -935,6 +943,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         contentEditable={!isDisabled}
         suppressContentEditableWarning
         onInput={handleInput}
+        onClick={handleEditorClick}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
         onDragOver={handleDragOver}

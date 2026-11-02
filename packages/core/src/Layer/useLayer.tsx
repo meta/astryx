@@ -29,6 +29,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
+import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, removeAnchorName} from './anchorName';
 import {currentGesture, currentGestureHasClicked} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
@@ -1909,7 +1910,10 @@ function useLayerImplementation(
             ...extraStyle,
           }}
           onMouseEnter={onMouseEnter}
-          onMouseLeave={onMouseLeave}>
+          onMouseLeave={onMouseLeave}
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
+          {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </Container>
       );
@@ -1970,7 +1974,10 @@ function useLayerImplementation(
           id={id}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
-          style={{...stylexResult.style, ...positionStyle, ...extraStyle}}>
+          style={{...stylexResult.style, ...positionStyle, ...extraStyle}}
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
+          {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </div>
       );

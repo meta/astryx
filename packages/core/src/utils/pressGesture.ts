@@ -9,30 +9,20 @@
  * @position Pure half of the touch press model; driven by pressFeedback.ts,
  *   tested by pressGesture.test.ts without a browser
  *
- * WHAT A FINGER MEANS, AS A STATE MACHINE.
- *
- * A native (UIKit) list delays a press by 0.15 s, cancels it the instant a
- * scroll claims the gesture, never brings it back inside that gesture, and
- * fades it only on release. CSS `:active` on iOS Safari does none of those
- * things: measured on iOS 26.2, it paints within 14 ms of the touch and was
- * still painted 1.6 s into a scroll. So on a coarse pointer the pressed state
- * is owned here, in JavaScript, and `:active` keeps only the mouse.
- *
- * The stylesheet drops `:active` by the PRIMARY pointer, so a mouse, trackpad
- * or Space key on such a device has lost `:active` too. Their presses come
- * here as `buttonDown`: painted at once, held through any travel, faded on
- * release like a finger's.
- *
- * Every constant below was measured against the real Settings and Contacts
- * apps on an iPhone simulator, driven with real HID touches at 60 fps, before
- * it was written down. The machine is deliberately ignorant of the DOM: it
- * takes what happened and answers with what should be painted, so
- * {@link pressGestureStep}'s table of cases IS the state diagram, one arm per
- * requirement.
- *
  * SYNC: When modified, update pressFeedback.ts (the controller) and
  * pressGesture.test.ts.
  */
+
+// A native list delays a press by 0.15 s, cancels it when a scroll claims the
+// gesture, never brings it back in that gesture, and fades it only on
+// release. On iOS Safari, CSS `:active` paints at once and stays painted into
+// a scroll. So on a coarse pointer this machine owns the pressed state, and
+// `:active` keeps only the mouse. The stylesheet drops `:active` by the
+// primary pointer, so a mouse, trackpad or Space press on such a device comes
+// here as `buttonDown`: painted at once and faded on release.
+//
+// The constants were measured against native apps. The machine knows nothing
+// of the DOM, so {@link pressGestureStep}'s cases are the state diagram.
 
 import {pressConsts} from './interactionOverlay.stylex';
 

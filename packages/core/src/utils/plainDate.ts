@@ -202,7 +202,7 @@ export function plainDateToInstant(
   // this wall time skipped or repeated.
   const offsetBefore = getTimezoneOffsetMS(timezoneID, wallTime - DAY_MS);
   const offsetAfter = getTimezoneOffsetMS(timezoneID, wallTime + DAY_MS);
-  // AST-067 (Temporal's "compatible" disambiguation): a wall time that happens
+  // Temporal's "compatible" disambiguation (AST-067): a wall time that happens
   // twice resolves to its earlier occurrence, and one that never happens is
   // read in the offset before the transition, which moves it forward by the
   // length of the gap.

@@ -41,6 +41,7 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {overlayPaddingReset} from '../Layout/padding.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
@@ -649,10 +650,6 @@ export function Lightbox({
     <dialog
       ref={mergedDialogRef}
       onCancel={handleCancel}
-      onClick={e => {
-        handleBackdropClick(e);
-        onClickProp?.(e);
-      }}
       onKeyDown={e => {
         handleKeyDown(e);
         onKeyDownProp?.(e);
@@ -670,7 +667,16 @@ export function Lightbox({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      // Presses inside the lightbox do not reach handlers around where it is
+      // written.
+      {...layerClickBoundary({
+        ...props,
+        onClick: (e: React.MouseEvent<HTMLDialogElement>) => {
+          handleBackdropClick(e);
+          onClickProp?.(e);
+        },
+      })}>
       <LayerDepthProvider>
         <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
           <LayerContentBoundary>

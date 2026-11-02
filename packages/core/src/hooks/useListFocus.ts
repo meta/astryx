@@ -139,11 +139,10 @@ export interface InternalListFocusOptions extends UseListFocusOptions {
    */
   tabStopOrder?: (list: HTMLElement) => ReadonlyArray<HTMLElement>;
   /**
-   * Moves focus with the focus the last input calls for
-   * (`architecture:interaction-modality` INV1): after a pointer press a
-   * focused item shows no keyboard ring, after a key press it does. For a list
-   * whose items draw the ring and that opens from a pointer, such as a context
-   * menu. Unset (the default): a plain `focus()`.
+   * Moves focus with the modality of the last input: after a pointer press a
+   * focused item shows no keyboard ring, and after a key press it does. Use it
+   * for a list whose items draw the ring and that opens from a pointer, such as
+   * a context menu. Unset (the default): a plain `focus()`.
    */
   focusFollowsLastInput?: boolean;
 }

@@ -71,10 +71,13 @@ describe('spec-only change scope', () => {
     ]);
     expect(result.touchesKnowledgeRecords).toBe(true);
     expect(result.specOnly).toBe(false);
-    expect(
-      classifyChanges([{filename: 'packages/native/specs/README.md'}])
-        .touchesKnowledgeRecords,
-    ).toBe(false);
+    // Every Markdown file under a package's specs/ is owner-gated, a README
+    // too, though only records count toward a spec-only change.
+    const readme = classifyChanges([
+      {filename: 'packages/native/specs/README.md'},
+    ]);
+    expect(readme.touchesKnowledgeRecords).toBe(true);
+    expect(readme.specOnly).toBe(false);
   });
 
   it('owner-gates architecture records without granting the spec-only fast path', () => {

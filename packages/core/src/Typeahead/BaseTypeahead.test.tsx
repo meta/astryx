@@ -28,6 +28,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {BaseTypeahead} from './BaseTypeahead';
+import {CommittedChoicesKeyContext} from './committedChoicesKey';
 import {Typeahead} from './Typeahead';
 import {Tokenizer} from '../Tokenizer';
 import {InternationalizationProvider} from '../i18n';
@@ -380,6 +381,217 @@ describe('BaseTypeahead', () => {
     expect(
       screen.queryByRole('option', {name: 'Result', hidden: true}),
     ).not.toBeInTheDocument();
+  });
+
+  // component:Tokenizer FR13, spec:AST-092 FR4: when the caller's committed
+  // values change, an open list reloads from the source they now filter.
+  describe('committed values change', () => {
+    const COMMITTED: Record<
+      string,
+      {key: string; ids: ReadonlySet<string>; isAtLimit: boolean}
+    > = {
+      a: {key: 'a', ids: new Set(), isAtLimit: false},
+      b: {key: 'b', ids: new Set(), isAtLimit: false},
+    };
+    const renderField = (
+      searchSource: SearchSource<SearchableItem>,
+      key: 'a' | 'b',
+      props: {hasEntriesOnFocus?: boolean} = {hasEntriesOnFocus: true},
+    ) => (
+      <CommittedChoicesKeyContext value={COMMITTED[key]}>
+        <BaseTypeahead
+          searchSource={searchSource}
+          value={null}
+          onChange={() => {}}
+          {...props}
+        />
+      </CommittedChoicesKeyContext>
+    );
+
+    it('reloads an open focus list', async () => {
+      const user = userEvent.setup();
+      const updatedBootstrap = vi.fn(() => [
+        {id: '2', label: 'Updated result'},
+      ]);
+      const {rerender} = render(
+        renderField({search: () => [], bootstrap: () => [resultItem]}, 'a'),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Result', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      rerender(
+        renderField({search: () => [], bootstrap: updatedBootstrap}, 'b'),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Updated result', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.queryByRole('option', {name: 'Result', hidden: true}),
+      ).not.toBeInTheDocument();
+      expect(updatedBootstrap).toHaveBeenCalledTimes(1);
+    });
+
+    it('searches again for the typed query while the list is open', async () => {
+      const user = userEvent.setup();
+      const updatedSearch = vi.fn(() => [{id: '2', label: 'Updated result'}]);
+      const {rerender} = render(
+        renderField({search: () => [resultItem], bootstrap: () => []}, 'a', {}),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 're');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Result', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      rerender(
+        renderField({search: updatedSearch, bootstrap: () => []}, 'b', {}),
+      );
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Updated result', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      expect(updatedSearch).toHaveBeenCalledWith('re', expect.anything());
+    });
+
+    it('leaves a closed list closed', async () => {
+      const user = userEvent.setup();
+      const updatedBootstrap = vi.fn(() => [
+        {id: '2', label: 'Updated result'},
+      ]);
+      const {rerender} = render(
+        renderField({search: () => [], bootstrap: () => [resultItem]}, 'a'),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      await user.keyboard('{Escape}');
+      rerender(
+        renderField({search: () => [], bootstrap: updatedBootstrap}, 'b'),
+      );
+
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(updatedBootstrap).not.toHaveBeenCalled();
+    });
+
+    it('closes an open focus list when the reload finds nothing', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(
+        renderField({search: () => [], bootstrap: () => [resultItem]}, 'a'),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      rerender(renderField({search: () => [], bootstrap: () => []}, 'b'));
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes an open focus list when the reload fails', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(
+        renderField({search: () => [], bootstrap: () => [resultItem]}, 'a'),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      rerender(
+        renderField(
+          {
+            search: () => [],
+            bootstrap: async () => {
+              throw new Error('offline');
+            },
+          },
+          'b',
+        ),
+      );
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes an open focus list when focus entries are turned off', async () => {
+      const user = userEvent.setup();
+      const source = {search: () => [], bootstrap: () => [resultItem]};
+      const {rerender} = render(renderField(source, 'a'));
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      rerender(renderField(source, 'b', {hasEntriesOnFocus: false}));
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('does not reload or move the highlight when only the source is rebuilt', async () => {
+      const user = userEvent.setup();
+      const items = [
+        {id: '1', label: 'First'},
+        {id: '2', label: 'Second'},
+      ];
+      const bootstrap = vi.fn(() => items);
+      const {rerender} = render(
+        renderField({search: () => [], bootstrap: () => bootstrap()}, 'a'),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Second', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      await user.keyboard('{ArrowDown}');
+      const second = screen.getByRole('option', {name: 'Second', hidden: true});
+      expect(input).toHaveAttribute('aria-activedescendant', second.id);
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+
+      // A caller that builds its source in render passes a new object.
+      rerender(
+        renderField({search: () => [], bootstrap: () => bootstrap()}, 'a'),
+      );
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      });
+
+      expect(bootstrap).toHaveBeenCalledTimes(1);
+      expect(input).toHaveAttribute(
+        'aria-activedescendant',
+        screen.getByRole('option', {name: 'Second', hidden: true}).id,
+      );
+    });
   });
 
   it('re-shows cached results without bootstrapping again when the source is unchanged', async () => {
