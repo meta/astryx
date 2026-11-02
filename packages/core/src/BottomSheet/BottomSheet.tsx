@@ -150,6 +150,7 @@ import {
 export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 
 const styles = stylex.create({
   dialog: {
@@ -845,7 +846,9 @@ function StandaloneBottomSheet({
         hasScrim && stackView.depth > 0 ? stackView.depth : undefined
       }
       onCancel={handleCancel}
-      onClick={handleClick}>
+      // Presses inside the sheet do not reach handlers around where it is
+      // written. The dialog, not the panel, is the root, as in a switcher.
+      {...layerClickBoundary({onClick: handleClick})}>
       <BottomSheetPanel
         {...props}
         ref={ref}
@@ -1179,8 +1182,14 @@ function SwitcherBottomSheetItem({
       }
       role={purpose === 'required' ? 'alertdialog' : switcherDialogProps.role}
       onCancel={onDialogCancel}
-      onClick={onDialogClick}
-      onKeyDown={onDialogKeyDown}>
+      onKeyDown={onDialogKeyDown}
+      // Presses inside the sheet do not reach handlers around where it is
+      // written. The step's dialog, not the panel, is the root, because the
+      // switcher's handlers sit here and must still run.
+      {...layerClickBoundary({
+        ...switcherDialogProps,
+        onClick: onDialogClick,
+      })}>
       <div
         {...stylex.props(
           styles.positioner,

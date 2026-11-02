@@ -33,6 +33,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {
   getActiveModalOutlet,
   subscribeModalOutlets,
@@ -823,7 +824,9 @@ export function ToastViewport({
         {
           style: Object.keys(insetStyle).length > 0 ? insetStyle : undefined,
         },
-      )}>
+      )}
+      // Presses on toasts do not reach handlers around the viewport.
+      {...layerClickBoundary()}>
       <LayerContentBoundary>
         {visibleToasts.map(entry => (
           <ToastRow
