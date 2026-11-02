@@ -653,7 +653,6 @@ export class GestureArena {
     return winner.canPrevent(other) && other.canBePrevented(winner);
   }
 
-  /** UIControl's rule: a control may veto an overlapping ancestor recognizer. */
   /**
    * Whether a recognizer that claims touches would take a contact the
    * browser keeps while it is down (`refusesClaim`).
@@ -671,6 +670,7 @@ export class GestureArena {
     );
   }
 
+  /** UIControl's rule: a control may veto an overlapping ancestor recognizer. */
   private isVetoedByConsumer(recognizer: GestureRecognizer): boolean {
     for (const id of internals(recognizer).seenTouchIds) {
       const consumer = this.records.get(id)?.consumer;
