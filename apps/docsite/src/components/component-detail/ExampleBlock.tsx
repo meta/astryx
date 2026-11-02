@@ -23,6 +23,7 @@ import {
   HStack,
   LayoutAreaContext,
   LayoutDividerContext,
+  overlayPaddingReset,
   VStack,
 } from '@astryxdesign/core/Layout';
 import type {ExampleEntry} from '../../generated/exampleRegistry';
@@ -39,23 +40,15 @@ import {
 import {shadcnInstallCommand} from '../../lib/shadcnRegistry.mjs';
 
 const styles = stylex.create({
-  // The layout values the docs card publishes stop at the example, so it
-  // renders as it does at a page root: no Layout in the example escapes the
-  // card's padding, or takes its insets, widths or height cap. The same values
-  // AppShell resets at its root (component:AppShell FR18).
+  // With Core's `overlayPaddingReset` (container padding, Layout insets,
+  // Section padding propagation), the layout values the docs card publishes
+  // stop at the example, so it renders as it does at a page root: no Layout in
+  // the example escapes the card's padding, or takes its insets, widths or
+  // height cap. These are the values that reset leaves out. AppShell's own
+  // layout-root reset (component:AppShell FR18) is not built yet; until it is,
+  // this boundary is what keeps the AppShell examples whole.
   exampleRoot: {
     minWidth: 'fit-content',
-    '--container-padding-inline-start': '0px',
-    '--container-padding-inline-end': '0px',
-    '--container-padding-block-start': '0px',
-    '--container-padding-block-end': '0px',
-    '--layout-padding-outer-x': 'initial',
-    '--layout-padding-outer-y': 'initial',
-    '--layout-padding-own-outer-x': 'initial',
-    '--layout-padding-own-outer-y': 'initial',
-    '--layout-padding-inner-x': 'initial',
-    '--layout-padding-inner-y': 'initial',
-    '--_section-padding-propagated': 'initial',
     '--layout-content-width': 'initial',
     '--layout-alignment-width': 'initial',
     '--_layout-flush-block-start': 'initial',
@@ -77,7 +70,9 @@ function ExampleLayoutRoot({children}: {children: ReactNode}) {
   return (
     <LayoutAreaContext value={null}>
       <LayoutDividerContext value={null}>
-        <div {...stylex.props(styles.exampleRoot)}>{children}</div>
+        <div {...stylex.props(overlayPaddingReset.reset, styles.exampleRoot)}>
+          {children}
+        </div>
       </LayoutDividerContext>
     </LayoutAreaContext>
   );
