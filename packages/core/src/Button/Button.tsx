@@ -463,8 +463,14 @@ const loadingStyles = stylex.create({
  * popover is never an in-flow member — it is `display: none` until shown, then
  * promoted to the top layer. Context layers also retain an inert `<template>`
  * marker so they can re-resolve their JSX position. Neither element is a group
- * member, so "last member" is: no following element sibling besides those two
- * pieces of layer infrastructure.
+ * member, so "last member" is: no following element sibling besides those
+ * pieces of layer infrastructure — the last sibling that is not one of them.
+ *
+ * Written as `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet
+ * is global, and WebKit re-evaluates a sibling-relative `:has()` against every
+ * earlier sibling on each insertion, so filling any container on the page
+ * became quadratic (ButtonGroup FR3). A member is never layer infrastructure,
+ * so being the last such sibling is the same as having none after it.
  *
  * Reading it the other way round — marking the *buttons* and testing for a
  * marked sibling — is the trap: it silently reclassifies anything it doesn't
@@ -480,7 +486,8 @@ const loadingStyles = stylex.create({
  * The leading edge still uses `:first-child` — a member's button always precedes
  * its own layer, so the first button is genuinely `:first-child`.
  */
-const IS_LAST_ITEM = ':not(:has(~ *:not([popover]):not(template):not(dialog)))';
+const IS_LAST_ITEM =
+  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
 
 const groupStyles = stylex.create({
   horizontal: {
