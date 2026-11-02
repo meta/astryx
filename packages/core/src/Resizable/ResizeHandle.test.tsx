@@ -1142,9 +1142,9 @@ describe('ResizeHandle', () => {
     },
   );
 
-  // On a pane shorter than the zone, the zone reaches at most half the pane
-  // (spec:AST-094 FR42's grown targets stop at half the gap); a collapsed
-  // pane keeps the whole zone, which reopens it.
+  // On a pane shorter than the zone, the zone reaches at most half the pane.
+  // Grown targets stop at half the gap in the same way. A collapsed pane keeps
+  // the whole zone, which reopens it.
   it('limits the grab zone to the length of a short pane, and not while it is collapsed', () => {
     const view = render(
       <Harness

@@ -8,19 +8,14 @@
  * @output Styled drag handle with WAI-ARIA separator role and keyboard support
  * @position Between resizable panels; consumed directly by builders
  *
- * The handle element is 1px wide (the divider line itself), with an
- * absolutely-positioned wider hit area (the Grab zone) for pointer
- * interaction, centred on the Handle whatever `pillPlacement` says; on a
- * pane shorter than the zone it takes at most half the pane, so a short item
- * keeps its own pointer targets. The Grip pill takes the pointer too,
- * wherever it is drawn, while it is painted.
+ * The handle element is 1px wide (the divider line itself). A wider,
+ * absolutely positioned hit area (the Grab zone) takes the pointer, centred
+ * on the Handle whatever `pillPlacement` says. On a pane shorter than the
+ * zone, it takes at most half the pane, so a short item keeps its own
+ * targets. The Grip pill takes the pointer too while it is painted.
  * Pill grip indicator can sit on either side of the divider (or centered)
  * via pillPlacement. Default 'auto' places the pill on the panel side and
  * flips when the panel collapses to 0px so it stays accessible.
- *
- * Pill placement uses a single stylex dynamic style that accepts a direction
- * multiplier (-1 or 1). The pill element has its own themeProps
- * ('resize-handle-pill') so themes can target size/shape directly.
  *
  * While the panel is collapsed, aria-valuenow is clamped to aria-valuemin
  * (a value below the minimum is invalid per WCAG 4.1.2) and a localized
@@ -117,9 +112,9 @@ const styles = stylex.create({
     insetInlineEnd: 0,
     height: 'var(--resize-handle-hit-area, 16px)',
   },
-  // An overlay Handle takes at most half of the pane it sits in (its
-  // containing block), so a short pane keeps half of itself for its own
-  // pointer targets. A collapsed pane keeps the full Handle, which reopens it.
+  // An overlay Handle takes at most half of its containing block, the pane it
+  // sits in. A short pane keeps half of itself for its own pointer targets. A
+  // collapsed pane keeps the full Handle, which reopens it.
   overlayHorizontalOnShortPane: {
     width: 'min(var(--resize-handle-hit-area, 16px), 50%)',
   },
@@ -252,15 +247,16 @@ const styles = stylex.create({
 // Dynamic styles — avoids inline style overrides.
 // Each axis gets its own function since StyleX requires static structure.
 const dynamicStyles = stylex.create({
-  // An inline Handle's zone, centred on its line, reaches half its length
-  // into the pane: on a pane shorter than the zone, that is at most half the
-  // pane.
+  // An inline Handle's zone is centred on its line, so half of it reaches into
+  // the pane. On a pane shorter than the zone, that is at most half the pane.
   hitAreaLengthX: (pane: number) => ({
     width: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
   hitAreaLengthY: (pane: number) => ({
     height: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
+  // The pill's offset takes a direction multiplier: -1 for the start side, 1
+  // for the end side.
   pillOffsetX: (dir: number) => ({
     insetInlineStart: 0,
     transform: `translate(calc(${dir} * (100% + ${spacingVars['--spacing-1']})), -50%)`,
