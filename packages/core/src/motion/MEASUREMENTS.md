@@ -286,3 +286,21 @@ fades in, with Prefer Cross-Fade Transitions on or off.
 | M-CM4 | Reduce Motion press feedback    | Probe app with Reduce Motion on: long press, then dismiss                                                                   | press feedback, lift and dismiss animations under Reduce Motion                                                                                                                           | A, B   |
 | M-CM5 | Commit haptic stand-in          | An Android device: `navigator.vibrate` patterns against the platform's HapticFeedbackConstants for the context-click moment | the pattern that matches; not a UIKit parity value (as M-G18)                                                                                                                             | H      |
 | M-CM6 | Press thresholds                | Probe app: repeated long presses at random vsync phases                                                                     | from touch receipt and from the HID timestamp, the tick before and the tick at the press observer's began and at the click commit; the intersection pins the 150 ms and 400 ms thresholds | C      |
+
+## Picker (UIPickerView)
+
+Values the Wheel reads from its own table (`uikit/picker.ts`).
+
+The recordings are of a 402 × 216 pt UIPickerView with two columns of 24 and
+60 rows. It runs in an instrumented host app on the iOS 26.2 simulator
+(iPhone 17 Pro), driven by real HID touches. They hold per-frame offsets, the
+table views' and cells' layers, the delegate calls and the haptics.
+
+Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the picker's table): the
+row pitch, the picker's height, the rubber band's dimension, the coast's stop
+speed, the velocity floor, the snap at rest, the tap spin and the selection
+tick. Measured and kept by the gesture system instead: the
+scroll view coasts with 0.25 × the pan's velocity plus 0.75 × its value one
+event earlier (four HID releases; `velocity.scrollReleaseWeight`, which a
+pan's `scrollVelocity()` reads). On UIKit, Reduce Motion with Prefer Cross-Fade changes
+nothing on a picker; the Wheel follows design:reduced-motion instead.

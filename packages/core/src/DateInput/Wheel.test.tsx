@@ -2,17 +2,26 @@
 
 /**
  * @file Wheel.test.tsx
- * @input Uses Vitest, Testing Library and the Wheel column
- * @output Proves where a wheel rests when it stops on a row it cannot commit
- * @position Unit coverage for Wheel.tsx's rest rule; the wheels inside the
+ * @input Uses Vitest, Testing Library, the Wheel column and a stubbed
+ *   matchMedia (and CSS.supports, to show the engine does not matter)
+ * @output Proves where today's wheel rests when it stops on a row it cannot
+ *   commit, and which column (and which frame) each primary pointer draws
+ * @position Unit coverage for Wheel.tsx: the switch and today's column
+ *   (PickerWheel.test.tsx covers the touch column); the wheels inside the
  *   DateInput, DateTimeInput and TimeInput sheets are covered by their own
  *   touch suites
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
+import {createRef} from 'react';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
-import {fakeAnimate} from '../motion/__tests__/fakeWebAnimation';
-import {nearestEnabledIndex, Wheel, type WheelOption} from './Wheel';
+import {
+  nearestEnabledIndex,
+  ScrollWheel,
+  Wheel,
+  type WheelHandle,
+  type WheelOption,
+} from './Wheel';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
 
 const ROW = 28;
@@ -68,7 +77,7 @@ describe('Wheel — where it comes to rest', () => {
    * the scroller's scrollTop and scrollTo, so a test can stop the wheel on any
    * row.
    */
-  function renderWheel(value: number) {
+  function renderWheel(value: number, Column: typeof ScrollWheel = Wheel) {
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
       configurable: true,
       get(this: HTMLElement) {
@@ -77,8 +86,8 @@ describe('Wheel — where it comes to rest', () => {
     });
     const onChange = vi.fn();
     const scrollTo = vi.fn();
-    const {rerender, unmount} = render(
-      <Wheel label="Hour" options={HOURS} value={value} onChange={onChange} />,
+    const {rerender} = render(
+      <Column label="Hour" options={HOURS} value={value} onChange={onChange} />,
     );
     const scroller = screen.getByRole('listbox', {name: 'Hour'});
     let top = value * ROW;
@@ -214,51 +223,16 @@ describe('Wheel — where it comes to rest', () => {
       );
     });
 
-    it('cross-fades onto it on a touch screen: opacity only, 200 ms', async () => {
-      stubReducedMotion('coarse');
-      const {scrollTo, stopOn} = renderWheel(10);
-      const scroller = screen.getByRole('listbox', {name: 'Hour'});
-      const {animate, animations} = fakeAnimate();
-      scroller.animate = animate;
-      stopOn(7);
-      // Out, then back in after the rows land: opacity alone.
-      expect(animations).toHaveLength(1);
-      expect(animations[0].keyframes.map(frame => frame.opacity)).toEqual([
-        1, 0,
-      ]);
-      expect(scrollTo).not.toHaveBeenCalled();
-      await act(async () => animations[0].finish());
-      // The rows land at the dip's midpoint, with no travel.
-      expect(scrollTo).toHaveBeenCalledWith({top: 9 * ROW, behavior: 'auto'});
-      expect(animations).toHaveLength(2);
-      expect(animations[1].keyframes.map(frame => frame.opacity)).toEqual([
-        0, 1,
-      ]);
-      for (const {keyframes} of animations) {
-        for (const frame of keyframes) {
-          expect(
-            Object.keys(frame).filter(
-              key => key !== 'offset' && key !== 'easing',
-            ),
-          ).toEqual(['opacity']);
-        }
-      }
-      const total = animations.reduce(
-        (sum, {options}) => sum + Number(options.duration),
-        0,
-      );
-      expect(total).toBeLessThanOrEqual(200);
-    });
-
-    it('lands the rows only when the fade-out ends, however late its frame comes', async () => {
-      // design:reduced-motion DR2: a timer at the dip's middle could fire
-      // after the fade-in began, and the rows would move fully visible.
-      stubReducedMotion('coarse');
+    it('cross-fades onto it after a touch: opacity only, 200 ms', () => {
+      // A touch screen whose primary pointer is fine (a laptop's): today's
+      // column, and a touch release fades (DR2).
+      stubReducedMotion('fine');
       vi.useFakeTimers();
       const {scrollTo, stopOn} = renderWheel(10);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
-      const {animate, animations} = fakeAnimate();
-      scroller.animate = animate;
+      fireEvent.pointerDown(scroller, {pointerType: 'touch'});
+      const animate = vi.fn();
+      scroller.animate = animate as HTMLElement['animate'];
       stopOn(7);
       act(() => {
         vi.advanceTimersByTime(10_000);
@@ -294,9 +268,12 @@ describe('Wheel — where it comes to rest', () => {
       });
     }
 
-    it('lands an arrow key step on a touch screen under its cross-fade, not before', async () => {
+    it('lands an arrow key step on a coarse pointer under its cross-fade, not before', () => {
+      // A finger gets the touch column (PickerWheel.test.tsx); today's
+      // column keeps its dip for a coarse pointer wherever it is rendered.
       stubReducedMotion('coarse');
-      const {onChange, scrollTo, rerender} = renderWheel(10);
+      vi.useFakeTimers();
+      const {onChange, scrollTo, rerender} = renderWheel(10, ScrollWheel);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
       const {animate, animations} = fakeAnimate();
       scroller.animate = animate;
@@ -305,7 +282,12 @@ describe('Wheel — where it comes to rest', () => {
       // The parent takes the step. The new value must not move the rows
       // while they are still fully visible: they land under the dip.
       rerender(
-        <Wheel label="Hour" options={HOURS} value={11} onChange={onChange} />,
+        <ScrollWheel
+          label="Hour"
+          options={HOURS}
+          value={11}
+          onChange={onChange}
+        />,
       );
       expect(animations).toHaveLength(1);
       expect(scrollTo).not.toHaveBeenCalled();
@@ -318,8 +300,11 @@ describe('Wheel — where it comes to rest', () => {
     it('starts a second step’s dip where the first one’s fade-in has the column', async () => {
       // design:reduced-motion DR2: a leaving element fades out where it is,
       // so a step during the last dip's fade-in never pops back to opaque.
+      // A finger gets the touch column (PickerWheel.test.tsx); today's
+      // column keeps its dip for a coarse pointer wherever it is rendered.
       stubReducedMotion('coarse');
-      renderWheel(10);
+      vi.useFakeTimers();
+      renderWheel(10, ScrollWheel);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
       const {animate, animations} = fakeAnimate();
       scroller.animate = animate;
@@ -504,5 +489,119 @@ describe('Wheel — where it comes to rest', () => {
       behavior: 'smooth',
     });
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Wheel — by pointer', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * The pointer and the engine: `(pointer: coarse)` is a finger, and
+   * `-webkit-touch-callout` exists only in WebKit on iOS, which must not
+   * matter.
+   */
+  function stubDevice({ios, coarse}: {ios: boolean; coarse: boolean}) {
+    vi.stubGlobal('CSS', {
+      supports: (condition: string) =>
+        ios && condition.includes('-webkit-touch-callout'),
+    });
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(pointer: coarse)' && coarse,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })),
+    );
+  }
+
+  function renderPicker() {
+    const ref = createRef<WheelHandle>();
+    const onChange = vi.fn();
+    const view = render(
+      <Wheel
+        ref={ref}
+        label="Hour"
+        options={HOURS}
+        value={12}
+        onChange={onChange}
+      />,
+    );
+    return {...view, ref, onChange};
+  }
+
+  it.each([
+    ['iOS WebKit', true],
+    ['Android Chrome', false],
+  ])('draws the touch column under a finger, on %s', (_, ios) => {
+    stubDevice({ios, coarse: true});
+    const {container} = renderPicker();
+    expect(container.querySelector('[data-wheel]')).not.toBeNull();
+    // Each option is a drawn row, once.
+    expect(container.querySelectorAll('[data-wheel-row]')).toHaveLength(
+      HOURS.length,
+    );
+  });
+
+  it.each([
+    ['a mouse', false],
+    ['iOS WebKit with a mouse', true],
+  ])('keeps the scrolling column, with no frame, for %s', (_, ios) => {
+    stubDevice({ios, coarse: false});
+    const {container} = renderPicker();
+    expect(container.querySelector('[data-wheel]')).toBeNull();
+    // Today's column, straight in its container: no group frame around it.
+    expect(
+      screen.getByRole('listbox', {name: 'Hour'}).parentElement?.parentElement,
+    ).toBe(container);
+  });
+
+  it('commits a spin at once under a fine pointer', async () => {
+    stubDevice({ios: false, coarse: false});
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const {ref, onChange} = renderPicker();
+    await expect(ref.current?.spinTo(14)).resolves.toBe(true);
+    expect(onChange).toHaveBeenCalledWith(14);
+    // A disabled row is not a place to rest.
+    await expect(ref.current?.spinTo(3)).resolves.toBe(false);
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a spin onto a row the owner’s rest moves off, as the touch column does', async () => {
+    stubDevice({ios: false, coarse: false});
+    const ref = createRef<WheelHandle>();
+    const onChange = vi.fn();
+    render(
+      <Wheel
+        ref={ref}
+        label="Hour"
+        options={HOURS}
+        value={12}
+        onChange={onChange}
+        resolveRest={index => (index % 2 === 0 ? index : index + 1)}
+      />,
+    );
+    await expect(ref.current?.spinTo(13)).resolves.toBe(false);
+    await expect(ref.current?.spinTo(24)).resolves.toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+    await expect(ref.current?.spinTo(14)).resolves.toBe(true);
+    expect(onChange).toHaveBeenCalledWith(14);
+  });
+});
+
+describe('Wheel — markup', () => {
+  // Written before the listbox wiring moved into useWheelListbox: the
+  // snapshot holds today's column to its markup (attributes, classes, order).
+  it('keeps today’s column’s markup', () => {
+    const {container} = render(
+      <Wheel label="Hour" options={HOURS} value={10} onChange={() => {}} />,
+    );
+    // React's generated ids depend on how many renders ran before.
+    expect(
+      container.innerHTML.replace(/_r_[0-9a-z]+_/g, '_r_id_'),
+    ).toMatchSnapshot();
   });
 });

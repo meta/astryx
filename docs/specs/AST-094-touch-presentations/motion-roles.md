@@ -6,6 +6,7 @@ Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind
 
 | Role                            | Kind     | Default                                                         | Named by                |
 | ------------------------------- | -------- | --------------------------------------------------------------- | ----------------------- |
+| `picker.tapSpin.durationMs`     | duration | 300 ms                                                          | `component:DateInput`   |
 | `progress.curves.fill`          | curve    | cubic-bezier(0, 0, 1, 1)                                        | `component:ProgressBar` |
 | `progress.fillTrackMs`          | duration | 1000 ms                                                         | `component:ProgressBar` |
 | `progress.reducedMotionPulseMs` | duration | 2000 ms                                                         | `component:ProgressBar` |

@@ -153,7 +153,9 @@ const GESTURE_USERS = new Set([
   'SegmentedControl',
   // DateTimeInput: through the SegmentedControl its touch field renders.
   'DateTimeInput',
-  // useScrollLock's page hold, and the imports that reach it.
+  // useScrollLock's page hold, and the imports that reach it. The sheet
+  // wheels of DateInput, TimeInput and DateTimeInput also drag and tap
+  // through the gesture system's pan and tap (DateInput/PickerWheel.tsx).
   'hooks: useScrollLock',
   'AppShell',
   'BottomSheet',
