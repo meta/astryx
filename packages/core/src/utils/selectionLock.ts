@@ -3,10 +3,10 @@
 /**
  * @file selectionLock.ts
  * @input The elements a held touch contact presses, and the touch's target
- * @output lockSelection and locksSelectionFor: a held finger's lock;
- *   lockDragSelection: a claimed mouse or pen drag's hold, which keeps the
- *   page's selection; startsOnSelectableText and selectionRangesOf: what a
- *   mouse or pen press reads
+ * @output lockSelection and locksSelectionFor give a held finger's lock.
+ *   lockDragSelection gives a claimed mouse or pen drag's hold, which keeps
+ *   the page's selection. startsOnSelectableText and selectionRangesOf are
+ *   what a mouse or pen press reads.
  * @position Recognizers whose hold does something bring lockSelection; the
  *   gesture host imports the drag hold and the press reads.
  *
@@ -227,10 +227,10 @@ export function selectionRangesOf(
 }
 
 /**
- * Whether a press at (`x`, `y`) lands on text a drag would select: a text
- * field, or a character of non-empty text whose element allows a selection.
- * A native button's label is not selectable text, because the engine starts
- * no selection from a drag inside a button. A point beside text, which a
+ * Whether a press at (`x`, `y`) lands on text a drag would select. That is a
+ * text field, or a character of non-empty text whose element allows a
+ * selection. A native button's label, slotted or not, is not selectable text,
+ * because the engine starts no selection from a drag inside a button. A point beside text, which a
  * caret query snaps to the nearest character, lands on none. Where the engine
  * has no caret query, nothing is selectable text.
  */

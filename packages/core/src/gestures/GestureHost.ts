@@ -87,12 +87,6 @@
  *   input selectable); restored when the contact ends. A finger or a pen
  *   takes it under any primary pointer; a mouse never does (`spec:AST-017`
  *   FR59).
- * - A mouse or a pen drag that a recognizer claims takes no new text
- *   selection and never clears the page's: the
- *   claiming elements and the document refuse one until a task after the
- *   lift, and the selection the press began with is put back
- *   (lockDragSelection). A drag that starts on selectable text is not
- *   claimed (the arena's `refusesClaim`): it selects text.
  * - Each element with a recognizer that can claim a touch while it moves (a
  *   pan, a swipe, a long press that then drags, a pinch) gets a
  *   NON-passive `touchmove` listener that cancels the event only while a
@@ -657,8 +651,8 @@ export class GestureHost {
    */
   private readonly pressSelections = new Map<number, ReadonlyArray<Range>>();
   /**
-   * Mouse and pen contacts that began on selectable text: once one moves, it
-   * is a drag the browser keeps for a selection, and no recognizer claims it.
+   * Mouse and pen contacts that began on selectable text. Once one moves, the
+   * browser keeps the drag for a selection, and no recognizer claims it.
    */
   private readonly selectingContacts = new Set<number>();
   /**
@@ -853,9 +847,6 @@ export class GestureHost {
       // tap) ends here: an armed press stops listening (FR24).
       onIdle: () => this.releaseArmedPress(),
       onTransition: options.onTransition,
-      // A mouse or pen drag a recognizer claims takes no new selection and
-      // keeps the page's; one that starts on selectable text is the
-      // browser's, and selects text.
       onClaim: (ids, claimer) => this.lockClaimedDrags(ids, claimer),
       onRelease: ids => this.releaseClaimedDrags(ids),
       refusesClaim: touch =>
@@ -2622,10 +2613,9 @@ export class GestureHost {
   }
 
   /**
-   * Claimed contacts given back to the browser (a waiting recognizer that
-   * failed or was cancelled, with no other owner): their drag holds end at
-   * once, so the browser's drag selects again. A
-   * contact's press lock (lockSelection) is not a drag hold and stays.
+   * Claimed contacts the arena gave back. Their drag holds end at once, so
+   * the browser's drag selects again. A contact's press lock (lockSelection)
+   * is not a drag hold and stays.
    */
   private releaseClaimedDrags(ids: ReadonlyArray<number>): void {
     for (const id of ids) {
@@ -2746,9 +2736,8 @@ export class GestureHost {
   private unlockSelection(id: number, isCancel = false): void {
     const lock = this.lockedBy.get(id);
     lock?.({isCancel});
-    // A drag hold that a press lock replaced (a pen press a group claims at
-    // its own pointerdown, inside a row whose hold locks too) ends here as
-    // well.
+    // A press lock can replace the drag hold in `lockedBy`. Release the hold
+    // too.
     const hold = this.claimHolds.get(id);
     if (hold != null && hold !== lock) {
       hold({isCancel});

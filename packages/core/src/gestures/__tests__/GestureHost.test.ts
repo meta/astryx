@@ -5553,10 +5553,10 @@ describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () =>
   it('holds the selection from the claim of a pan that waits on another to fail, and lets it go when that claim is given back', async () => {
     const {box} = mount('<div id="box">Some text a drag would select</div>');
     const fine = fineHost();
-    // The pan wants to begin at 10 px; a hold that allows 15 px of movement
-    // is still possible then, so the pan waits on it, claiming the drag. The
-    // hold takes no selection lock of its own at the press (its hold does
-    // nothing to the selection), so only the claim can hold it.
+    // The pan wants to begin at 10 px. A hold that allows 15 px of movement
+    // is still possible then. So the pan waits on it and claims the drag. The
+    // hold takes no selection lock of its own at the press, because its hold
+    // does nothing to the selection. So only the claim can hold it.
     const hold = new LongPressGestureRecognizer({
       name: 'hold',
       allowableMovement: 15,

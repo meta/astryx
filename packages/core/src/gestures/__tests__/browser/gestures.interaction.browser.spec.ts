@@ -2000,8 +2000,8 @@ test.describe('where the primary pointer is fine', () => {
   });
 
   /**
-   * A page with text above a card a pan takes, the card's own text on its
-   * first line only, and text below; the pan's transitions land on
+   * A page has text above a card that a pan takes, the card's own text on its
+   * first line only, and text below. The pan's transitions land on
    * `window.__panStates`. Returns the card's box and its text's.
    */
   async function cardPage(page: Page) {
