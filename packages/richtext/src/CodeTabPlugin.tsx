@@ -10,17 +10,16 @@
  *   indent and outdent every line the selection touches, by the indent the
  *   block's own lines use.
  * @position Rendered by RichTextEditor; always on, and not exported from the
- *   package (spec:AST-061 DEC-8). A press indents by the block's own indent,
- *   so edited code keeps the indentation its author chose (spec:AST-062
- *   DEC-1); the selection stays on the same characters, and each press is
- *   one undo step. It replaces only what Tab did in a code block before:
- *   TabIndentationPlugin put a tab character in place of the selection. Its
- *   listener sits at the front of the editor-priority queue, ahead of
- *   TabIndentationPlugin and behind every low-priority listener, so Escape
- *   then Tab still moves focus out of the editor (TabFocusEscapePlugin, WCAG
- *   2.1.2). A selection that reaches outside the code block keeps
- *   TabIndentationPlugin's meaning. Read-only and disabled editors are
- *   unchanged.
+ *   package. A press indents by the block's own indent, so edited code keeps
+ *   the indentation its author chose; the selection stays on the same
+ *   characters, and each press is one undo step. It replaces only what Tab
+ *   did in a code block before: TabIndentationPlugin put a tab character in
+ *   place of the selection. Its listener sits at the front of the
+ *   editor-priority queue, ahead of TabIndentationPlugin and behind every
+ *   low-priority listener, so Escape then Tab still moves focus out of the
+ *   editor (TabFocusEscapePlugin, WCAG 2.1.2). A selection that reaches
+ *   outside the code block keeps TabIndentationPlugin's meaning. Read-only
+ *   and disabled editors are unchanged.
  */
 
 import {useEffect} from 'react';
