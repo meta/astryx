@@ -771,6 +771,64 @@ describe('busyWindowProof settledWithinSteps', () => {
     expect(inSteps.verdict).toEqual(inPx.verdict);
   });
 
+  it('under one step a frame, reads a two-frame plateau right after two changes in a row as the cast’s step, not a stall', () => {
+    // The tail shows 214 px one frame early, at +132 ms: 212, then 214 for
+    // three frames, then 216 at +170. At about 0.7 px a frame the 2 px
+    // position changes every three frames, so the plateau is the cast's.
+    const tracked = webkit(webkitTail.tracked).map(f =>
+      f.t > 130 && f.t < 135 && f.box != null
+        ? ({...f, box: {...f.box, x: 214}} as TrackedFrame)
+        : f,
+    );
+    const proof = busyWindowProof(tracked, webkitTail.block, {
+      axis: 'x',
+      settledWithinSteps: 2,
+      control: webkit(webkitTail.control),
+    });
+    expect(proof.verdict.failures).toEqual([]);
+    // A pixel bound reads it by the run before it, as before: a stall.
+    const inPx = busyWindowProof(tracked, webkitTail.block, {
+      axis: 'x',
+      settledWithin: 4,
+      control: webkit(webkitTail.control),
+    });
+    expect(inPx.verdict.failures.join('\n')).toMatch(
+      /longest stall \d+\.\d ms, longer than the control's/,
+    );
+  });
+
+  it('under one step a frame, still fails a three-frame freeze whose motion resumes from where it held', () => {
+    // 1.2 px a frame on a 2 px cast, the control 3 px a frame. The coast
+    // holds three frames, then moves on from where it held, so the change
+    // that ends the still run is one step: the pace around the run, not
+    // across it, bounds the run.
+    const q = (x: number) => 2 * Math.floor(x / 2);
+    const at = (t: number, x: number) =>
+      ({
+        t,
+        box: {x, y: 0, width: 1, height: 1},
+        step: {x: 2, y: 2},
+      }) as TrackedFrame;
+    const tracked: TrackedFrame[] = [];
+    const control: TrackedFrame[] = [];
+    let x = 100;
+    for (let n = -12; n <= 54; n += 1) {
+      if (n < 18 || n >= 21) {
+        x += 1.2;
+      }
+      tracked.push(at(n * 16.7, q(x)));
+      control.push(at(n * 16.7, q(3 * (n + 12))));
+    }
+    const proof = busyWindowProof(
+      tracked,
+      {from: 0, to: 700},
+      {axis: 'x', settledWithinSteps: 2, control},
+    );
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /longest stall \d+\.\d ms, longer than the control's/,
+    );
+  });
+
   it("still fails a 40 ms freeze in a WebKit coast's tail, more than two steps from rest", () => {
     // Held at 200 px, 20 px from rest, then a 10 px catch-up.
     const proof = busyWindowProof(

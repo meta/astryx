@@ -625,10 +625,13 @@ export function busyWindowProof(
       'busyWindowProof: give settledWithin or settledWithinSteps, not both',
     );
   }
+  // The cast's own position step, for a proof that bounds its settle in it.
+  const castStepPx =
+    settledWithinSteps == null ? null : castStep(tracked, axis);
   const settledWithinPx =
-    settledWithinSteps == null
+    settledWithinSteps == null || castStepPx == null
       ? settledWithin
-      : settledWithinSteps * castStep(tracked, axis);
+      : settledWithinSteps * castStepPx;
   if (settledWithinPx != null) {
     const valued = tracked.flatMap(f =>
       f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
@@ -912,6 +915,18 @@ export function busyWindowProof(
         ? Math.abs(series[start].value - series[start - back].value) / frames
         : null;
     };
+    // The component's motion per frame over up to four frames after frame
+    // `end`, or null with fewer than two to read.
+    const pxPerFrameAfter = (end: number): number | null => {
+      const ahead = Math.min(4, series.length - 1 - end);
+      if (ahead < 2) {
+        return null;
+      }
+      const frames = (series[end + ahead].t - series[end].t) / cadence;
+      return frames > 0
+        ? Math.abs(series[end + ahead].value - series[end].value) / frames
+        : null;
+    };
     const underStep = (t: number): boolean => {
       const i = seriesIndex.get(t);
       if (i == null || changed.has(t)) {
@@ -955,6 +970,23 @@ export function busyWindowProof(
           catchUp <= (unchanged + 1) * pace + stepPx);
       if (!shown) {
         return false;
+      }
+      // Under one step a frame, a proof that bounds its settle in the cast's
+      // own steps reads the run against the cast: the position changes about
+      // every step ÷ pace frames, so a run shows one position for at most
+      // ceil(step ÷ pace) frames, and a frame delivered early adds one. Only a
+      // longer run is a stall, whatever the run before it was.
+      const paceAfter = pxPerFrameAfter(k);
+      const around =
+        paceBefore == null
+          ? paceAfter
+          : paceAfter == null
+            ? paceBefore
+            : Math.min(paceBefore, paceAfter);
+      if (castStepPx != null && around != null && around < castStepPx) {
+        // The ratio is read to a millionth: a pace of 0.5 that sums to
+        // 0.4999… still allows two frames, not three.
+        return unchanged <= Math.ceil(castStepPx / around - 1e-6);
       }
       // A slowing curve lengthens its runs a frame at a time: a run more than
       // one frame longer than the one before it is a stall.
