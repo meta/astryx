@@ -19,7 +19,7 @@
 import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLayer, type ContextRenderProps} from '../Layer/useLayer';
-import {useFocusTrap} from '../hooks/useFocusTrap';
+import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {
@@ -423,25 +423,44 @@ function usePopoverImplementation(
   // Track whether to skip auto-focus for the current open event
   const skipAutoFocusRef = useRef(false);
 
+  // Set when the layer reports it has shown, so `show` can tell a popover
+  // that opened within the call from one whose content mounts later.
+  const hasShownRef = useRef(false);
+  const handleLayerShow = useCallback(() => {
+    hasShownRef.current = true;
+    onShow?.();
+  }, [onShow]);
+
   // Core layer for popover positioning
   const layer = useLayer({
     mode: 'context',
     lightDismiss: hasLightDismiss,
-    onShow,
+    onShow: handleLayerShow,
     onHide,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
   // dismiss is on (native popover="auto" closes on Escape regardless), so a
   // host Dialog keeps deferring to this trap instead of double-dismissing.
-  const {containerRef: contentRef, focusFirst} = useFocusTrap<HTMLDivElement>({
-    isActive: layer.isOpen,
-    onEscape: hasEscapeDismiss || hasLightDismiss ? layer.hide : undefined,
-  });
+  // The element focused when `show` ran: initial focus may move inside before
+  // the trap activates, so the trap restores focus here instead.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const getRestoreTarget = useCallback(() => openerRef.current, []);
+  const {containerRef: contentRef, focusFirst} =
+    useFocusTrapInternal<HTMLDivElement>({
+      isActive: layer.isOpen,
+      onEscape: hasEscapeDismiss || hasLightDismiss ? layer.hide : undefined,
+      getRestoreTarget,
+    });
 
   const focusInitialTarget = useCallback(() => {
     const container = contentRef.current;
     if (!container) {
+      return;
+    }
+    // Focus already inside (set in `onShow`, or a press in the content) is
+    // where the user or the caller wants it; moving it would undo that.
+    if (container.contains(container.ownerDocument.activeElement)) {
       return;
     }
     if (focusFirstContentControl(container)) {
@@ -490,9 +509,38 @@ function usePopoverImplementation(
   const show = useCallback(
     (showOptions?: {skipAutoFocus?: boolean}) => {
       skipAutoFocusRef.current = showOptions?.skipAutoFocus ?? false;
+      hasShownRef.current = false;
+      const activeElement = (
+        triggerElementRef.current?.ownerDocument ?? document
+      ).activeElement as HTMLElement | null;
+      openerRef.current =
+        activeElement != null && !contentRef.current?.contains(activeElement)
+          ? activeElement
+          : null;
       layer.show();
+      // When the content is already mounted, the layer shows it within this
+      // call, so initial focus lands within the event that opened it: iOS
+      // raises its keyboard only for a focus made while the tap is still
+      // being handled. The frame in the effect above stays for content that
+      // mounts later.
+      // Only a content control already rendered takes focus here; content
+      // that renders on open (and the dialog-surface fallback) waits for the
+      // effect's frame.
+      const container = contentRef.current;
+      if (
+        hasShownRef.current &&
+        hasAutoFocus &&
+        !skipAutoFocusRef.current &&
+        container != null &&
+        !container.contains(container.ownerDocument.activeElement) &&
+        focusFirstContentControl(container)
+      ) {
+        // Initial focus is done: the effect's frame must not move focus the
+        // user has since moved elsewhere.
+        skipAutoFocusRef.current = true;
+      }
     },
-    [layer],
+    [layer, hasAutoFocus, contentRef],
   );
 
   // Toggle function. Opening delegates to show so every route inherits the

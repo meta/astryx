@@ -874,6 +874,80 @@ describe('Popover', () => {
       );
     });
 
+    // iOS raises its keyboard only for a focus made while the browser still
+    // handles the tap, so initial focus lands within the opening event, not a
+    // frame later.
+    it('focuses the first content control within the click that opens it', () => {
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          frames.push(callback);
+          return frames.length;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', () => {});
+      try {
+        render(
+          <Popover content={<input aria-label="Discount" />} label="Discount">
+            <button type="button">Open discount</button>
+          </Popover>,
+        );
+
+        act(() => {
+          fireEvent.click(screen.getByRole('button', {name: 'Open discount'}), {
+            detail: 1,
+          });
+        });
+
+        // No frame has run.
+        expect(
+          screen.getByRole('textbox', {name: 'Discount', hidden: true}),
+        ).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('keeps focus that onShow moves inside the popover', async () => {
+      function Fields() {
+        const secondRef = useRef<HTMLInputElement>(null);
+        const popover = usePopover({
+          dialogLabel: 'Fields',
+          onShow: () => secondRef.current?.focus(),
+        });
+        return (
+          <>
+            <button
+              type="button"
+              ref={popover.triggerRef}
+              {...popover.triggerProps}
+              onClick={popover.toggle}>
+              Open fields
+            </button>
+            {popover.render(
+              <>
+                <input aria-label="First" />
+                <input aria-label="Second" ref={secondRef} />
+              </>,
+            )}
+          </>
+        );
+      }
+      render(<Fields />);
+
+      fireEvent.click(screen.getByRole('button', {name: 'Open fields'}), {
+        detail: 1,
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+
+      expect(
+        screen.getByRole('textbox', {name: 'Second', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('focuses the dialog container when content has no controls', async () => {
       render(
         <Popover content={<span>Read-only content</span>} label="Read only">
