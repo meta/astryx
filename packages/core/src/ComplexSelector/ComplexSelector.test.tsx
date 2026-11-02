@@ -11,7 +11,14 @@
 
 import React, {useLayoutEffect} from 'react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from '../Button/Button';
 import * as stylex from '@stylexjs/stylex';
@@ -1043,6 +1050,40 @@ describe('ComplexSelector onOpenChange', () => {
         );
       },
     );
+
+    it('shows the status icon on the trigger row with attached status, and none with detached', () => {
+      const {container, rerender} = render(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const controlBox = screen.getByRole('combobox', {name: 'Filter'})
+        .parentElement as HTMLElement;
+      expect(
+        controlBox.querySelector('.astryx-input-status-icon'),
+      ).toBeInTheDocument();
+      // A plain icon, not a control: the combobox stays the one tab stop.
+      expect(within(controlBox).queryAllByRole('button')).toHaveLength(0);
+      rerender(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}
+          statusVariant="detached">
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      expect(
+        controlBox.querySelector('.astryx-input-status-icon'),
+      ).not.toBeInTheDocument();
+      // The detached message box shows its own icon.
+      expect(
+        container.querySelector('.astryx-field-status'),
+      ).toBeInTheDocument();
+    });
 
     it('renders no message box for statusVariant="tooltip"', () => {
       const {container} = render(

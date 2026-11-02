@@ -78,8 +78,8 @@ registerEnglishFallback(english);
 const CONTENT_BLOCK_CAP = '480px';
 
 const styles = stylex.create({
-  // The tooltip-placement status info-tip sits beside the chevron and keeps
-  // its size when the trigger text is long.
+  // The status icon (or the tooltip-placement info-tip) sits beside the
+  // chevron and keeps its size when the trigger text is long.
   statusTip: {
     display: 'inline-flex',
     alignItems: 'center',
@@ -594,13 +594,13 @@ export function ComplexSelector<Value>({
   const contentId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
-  // With `tooltip` placement Field renders no message box, so the status
-  // lives in an info-tip button on the trigger row (family:input-fields FR8).
-  // Only that placement renders an on-field status affordance here.
+  // The trigger row shows the status icon for `attached`, and for `tooltip`
+  // an info-tip button that holds the message, as Field renders no message
+  // box then. `detached` shows its icon in the message box instead.
   const isTooltipStatus = effectiveStatusVariant === 'tooltip';
   const {statusIcon: statusTip, describedBy: statusTipDescribedBy} =
     useInputStatusIcon({
-      status: isTooltipStatus ? status : undefined,
+      status,
       statusVariant: effectiveStatusVariant,
       size: 'sm',
     });
@@ -912,14 +912,20 @@ export function ComplexSelector<Value>({
           {...stylex.props(styles.trigger)}>
           <span {...stylex.props(styles.triggerText)}>{triggerContent}</span>
         </button>
-        {isRenderable(statusTip) && (
-          // The info-tip is its own control: a press on it, or on its message
-          // bubble (portaled, so outside this span in the DOM but inside it in
-          // React), shows the message without opening the popup.
-          <span onClick={stopPropagation} {...stylex.props(styles.statusTip)}>
-            {statusTip}
-          </span>
-        )}
+        {isRenderable(statusTip) &&
+          (isTooltipStatus ? (
+            // The info-tip is its own control: a press on it, or on its
+            // message bubble (portaled, so outside this span in the DOM but
+            // inside it in React), shows the message without opening the
+            // popup.
+            <span onClick={stopPropagation} {...stylex.props(styles.statusTip)}>
+              {statusTip}
+            </span>
+          ) : (
+            // The plain icon is part of the field: a press on it opens the
+            // popup, as a press on the chevron does.
+            <span {...stylex.props(styles.statusTip)}>{statusTip}</span>
+          ))}
         {isBusy && <Spinner size="sm" aria-hidden="true" />}
         <Icon
           icon="chevronDown"
