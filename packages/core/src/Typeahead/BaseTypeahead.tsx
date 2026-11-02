@@ -778,12 +778,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [searchSource]);
 
+  // True from the moment the list is asked to open until it closes, including
+  // a show deferred past the active click, so a source replaced in the same
+  // event that opened the list still reloads it.
+  const isShowingRef = useRef(false);
+
   // Layer for dropdown
   const handleLayerShow = useCallback(() => {
+    isShowingRef.current = true;
     onOpenChange?.(true);
   }, [onOpenChange]);
 
   const handleLayerHide = useCallback(() => {
+    isShowingRef.current = false;
     onOpenChange?.(false);
     setHighlightedIndex(-1);
     closedGenRef.current = searchGenRef.current;
@@ -832,6 +839,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     if (isDisabledRef.current) {
       return;
     }
+    isShowingRef.current = true;
     if (pointerActiveRef.current) {
       document.addEventListener(
         'click',
@@ -1089,6 +1097,48 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       }
     }
   }, [searchSource, applyBootstrapResults, setLoading, replaceResults]);
+
+  // A list shown from a replaced search source is no longer current
+  // (spec:AST-092 FR4). While the list is open, the replacement loads the same
+  // query, its typed text or the focus list, so the menu offers what the new
+  // source offers (a Tokenizer token removed or set from outside, for
+  // example). A closed list stays closed; opening it loads the new source.
+  const reloadFromReplacedSource = useCallback(() => {
+    if (isDisabled || !isMountedRef.current || !isShowingRef.current) {
+      return;
+    }
+    if (query.length > 0 && !isBelowMinQueryLength(query, minQueryLength)) {
+      void performSearch(query);
+    } else if (query.length === 0 && hasEntriesOnFocus) {
+      void performBootstrap();
+    }
+  }, [
+    isDisabled,
+    query,
+    minQueryLength,
+    hasEntriesOnFocus,
+    performSearch,
+    performBootstrap,
+  ]);
+  // The latest reload, read when the source changes, as an effect event.
+  const reloadFromReplacedSourceRef = useRef(reloadFromReplacedSource);
+  useIsomorphicLayoutEffect(() => {
+    reloadFromReplacedSourceRef.current = reloadFromReplacedSource;
+  });
+  const reloadedSourceRef = useRef(searchSource);
+  useEffect(() => {
+    if (reloadedSourceRef.current === searchSource) {
+      return;
+    }
+    reloadedSourceRef.current = searchSource;
+    // The reload is a source request, started after the commit like one a
+    // keystroke starts.
+    queueMicrotask(() => {
+      if (reloadedSourceRef.current === searchSource) {
+        reloadFromReplacedSourceRef.current();
+      }
+    });
+  }, [searchSource]);
 
   // Handle query change
   const handleQueryChange = useCallback(
