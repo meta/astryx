@@ -1931,10 +1931,16 @@ for (const [viewport, colorMode] of [
   });
 }
 
-// spec:AST-061 FR6: every block takes the direction of the surface around
-// it, whatever its first strong character, on both surfaces.
+// spec:AST-061 FR6: a block takes the direction of its own text — a Hebrew
+// paragraph reads right-to-left and an English one left-to-right, wherever
+// each sits, as in Google Docs and Lexical's own playground — and a block
+// with no direction of its own takes the document's. A table part is
+// exempt: its columns are read in the document's order. Core `Markdown`
+// sets no `dir`, so its blocks follow the document throughout.
 for (const direction of ['ltr', 'rtl'] as const) {
-  test(`blocks take the provider direction (${direction})`, async ({page}) => {
+  test(`markdown blocks take the provider direction (${direction})`, async ({
+    page,
+  }) => {
     const errors = await openStory(
       page,
       STORY.sideBySide,
@@ -1942,33 +1948,220 @@ for (const direction of ['ltr', 'rtl'] as const) {
       `colorMode:light;direction:${direction}`,
     );
     await waitForDocument(page, MARKDOWN);
-    await waitForDocument(page, RICH_TEXT);
-    for (const surface of [MARKDOWN, RICH_TEXT]) {
-      const geometry = await surfaceGeometry(page, surface);
-      const otherDirection = geometry.blocks
-        .filter(block => block.direction !== direction)
-        .map(block => block.key);
-      expect(otherDirection, surface).toEqual([]);
-      // Inside blocks too: table rows and cells, list items, and paragraphs.
-      const nested = await page.evaluate(
-        ({selector, expected}) =>
-          [
-            ...document.querySelectorAll(
-              `${selector} [data-parity-body] :is(tr, th, td, li, p)`,
-            ),
-          ]
-            .filter(element => getComputedStyle(element).direction !== expected)
-            .map(element => element.tagName),
-        {selector: surface, expected: direction},
-      );
-      expect(nested, `${surface} nested`).toEqual([]);
-    }
+    const geometry = await surfaceGeometry(page, MARKDOWN);
+    const otherDirection = geometry.blocks
+      .filter(block => block.direction !== direction)
+      .map(block => block.key);
+    expect(otherDirection, MARKDOWN).toEqual([]);
+    // Inside blocks too: table rows and cells, list items, and paragraphs.
+    // This PR does not change core Markdown, so its nested blocks still
+    // take the provider direction throughout.
+    const nested = await page.evaluate(
+      ({selector, expected}) =>
+        [
+          ...document.querySelectorAll(
+            `${selector} [data-parity-body] :is(tr, th, td, li, p)`,
+          ),
+        ]
+          .filter(element => getComputedStyle(element).direction !== expected)
+          .map(element => element.tagName),
+      {selector: MARKDOWN, expected: direction},
+    );
+    expect(nested, `${MARKDOWN} nested`).toEqual([]);
     expect(errors).toEqual([]);
   });
 
-  // Mixed English and Hebrew cells take the document's direction, so each
-  // cell's text starts at the document's start edge, whatever its script.
-  test(`table cells take the provider direction with mixed scripts (${direction})`, async ({
+  test(`a rich text block reads the way its own text reads (${direction})`, async ({
+    page,
+  }) => {
+    const errors = await openStory(
+      page,
+      STORY.sideBySide,
+      DESKTOP,
+      `colorMode:light;direction:${direction}`,
+    );
+    await waitForDocument(page, RICH_TEXT);
+    const byKey = new Map(
+      (await surfaceGeometry(page, RICH_TEXT)).blocks.map(block => [
+        block.key,
+        block.direction,
+      ]),
+    );
+    // The Hebrew paragraph reads right-to-left in either document...
+    expect(byKey.get('paragraph-rtl')).toBe('rtl');
+    // ...and an English block reads left-to-right in either, which is the
+    // mirror case: both hold wherever the document points.
+    expect(byKey.get('heading-1')).toBe('ltr');
+    // A block with no strong character of its own follows the document.
+    expect(byKey.get('thematic-break')).toBe(direction);
+    // A table's parts follow the document too, so its columns keep order.
+    const tableParts = await page.evaluate(
+      ({selector, expected}) =>
+        [
+          ...document.querySelectorAll(
+            `${selector} [data-parity-body] :is(table, tr, th, td)`,
+          ),
+        ]
+          .filter(element => getComputedStyle(element).direction !== expected)
+          .map(element => element.tagName),
+      {selector: RICH_TEXT, expected: direction},
+    );
+    expect(tableParts, `${RICH_TEXT} table`).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  // Each line of a fenced code block reads its own way: Lexical gives the
+  // block no per-line node to carry a direction, so `unicode-bidi: plaintext`
+  // puts every line in its own bidi paragraph instead. A Hebrew comment line
+  // reads right-to-left while `const x = 1;` keeps its semicolon at the end,
+  // in either document.
+  test(`each line of a fenced code block reads its own way (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    await page
+      .locator('textarea')
+      .fill(['```js', '// \u05e9\u05dc\u05d5\u05dd', 'const x = 1;', '```'].join('\n'));
+    // The story draws the editor and the read-only view of one document.
+    await expect(page.locator('[data-lexical-editor] code')).toHaveCount(2);
+    // Syntax highlighting splits a line into many spans, so read the
+    // characters out of the box and group them into visual lines.
+    const lines = await page.evaluate(() => {
+      const el = document.querySelector('[data-lexical-editor] code');
+      if (el === null) {
+        return {bidi: 'none', rows: []};
+      }
+      const box = el.getBoundingClientRect();
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      const chars: Array<{top: number; left: number; char: string}> = [];
+      let node: Node | null;
+      while ((node = walker.nextNode()) !== null) {
+        const text = node.textContent ?? '';
+        for (let index = 0; index < text.length; index++) {
+          const range = document.createRange();
+          range.setStart(node, index);
+          range.setEnd(node, index + 1);
+          const rect = range.getBoundingClientRect();
+          // A preserved newline sits on the line it ends and would sort
+          // into the middle of a right-to-left line's characters.
+          if ((rect.width === 0 && rect.height === 0) || text[index] === '\n') {
+            continue;
+          }
+          chars.push({
+            top: Math.round(rect.top),
+            left: rect.left,
+            char: text[index],
+          });
+        }
+      }
+      const rows = new Map<number, Array<{left: number; char: string}>>();
+      for (const entry of chars) {
+        const row = rows.get(entry.top) ?? [];
+        row.push({left: entry.left, char: entry.char});
+        rows.set(entry.top, row);
+      }
+      return {
+        bidi: getComputedStyle(el).unicodeBidi,
+        rows: [...rows.entries()]
+          .sort((a, b) => a[0] - b[0])
+          .map(([, row]) => {
+            const sorted = [...row].sort((a, b) => a.left - b.left);
+            return {
+              visual: sorted.map(entry => entry.char).join(''),
+              startsAtLeftEdge:
+                Math.round(sorted[0].left - box.left) <= 20,
+            };
+          }),
+      };
+    });
+    // Every line is its own bidi paragraph.
+    expect(lines.bidi).toBe('plaintext');
+    const code = lines.rows.find(row => row.visual.includes('const'));
+    // The code line reads left to right, semicolon last, and starts at the
+    // left edge whichever way the document points.
+    expect(code?.visual).toBe('const x = 1;');
+    expect(code?.startsAtLeftEdge).toBe(true);
+    // The Hebrew comment line still reads right to left.
+    const comment = lines.rows.find(row => row.visual.includes('\u05e9'));
+    expect(comment?.visual).toBe('\u05dd\u05d5\u05dc\u05e9 //');
+    // It reads right to left, so it starts at the right edge in either
+    // document — the line's own direction, not the document's.
+    expect(comment?.startsAtLeftEdge).toBe(false);
+  });
+
+  // A list orders its markers and indent in the document's direction, so the
+  // `ul` keeps it. Each item is its own piece of prose and takes its own, so
+  // a Hebrew first item cannot turn `Buy milk.` into `.Buy milk`, and an
+  // English item in a right-to-left document still reads left-to-right. A
+  // fenced code block is several lines under one element with no per-line
+  // node to carry a direction, so it keeps the document's.
+  test(`a list orders in the document direction and its items read their own (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    await page
+      .locator('textarea')
+      .fill(
+        [
+          '- \u05e9\u05dc\u05d5\u05dd',
+          '- Buy milk.',
+          '',
+          '```js',
+          '// \u05e9\u05dc\u05d5\u05dd',
+          'const x = 1;',
+          '```',
+        ].join('\n'),
+      );
+    await expect(page.locator('ul:visible')).toHaveCount(2);
+    const containers = await page.evaluate(() =>
+      [
+        ...document.querySelectorAll('[data-lexical-editor] > :is(ul, code)'),
+      ].map(element => ({
+        tag: element.tagName,
+        dir: element.getAttribute('dir'),
+        direction: getComputedStyle(element).direction,
+      })),
+    );
+    // The editor's list and code block (the view renders its own copies).
+    expect(containers.length).toBeGreaterThanOrEqual(2);
+    for (const node of containers) {
+      // No direction is written onto either, so they order in the document's.
+      expect(node.dir, node.tag).toBe('auto');
+      expect(node.direction, node.tag).toBe(direction);
+    }
+    // Each item reads the way its own text reads, in either document.
+    const items = await page.evaluate(() =>
+      [...document.querySelectorAll('[data-lexical-editor] li')].map(item => ({
+        text: (item.textContent ?? '').trim(),
+        dir: item.getAttribute('dir'),
+        direction: getComputedStyle(item).direction,
+      })),
+    );
+    const hebrew = items.find(item => item.text === '\u05e9\u05dc\u05d5\u05dd');
+    const english = items.find(item => item.text === 'Buy milk.');
+    expect(hebrew?.dir).toBe('rtl');
+    expect(hebrew?.direction).toBe('rtl');
+    expect(english?.dir).toBe('ltr');
+    expect(english?.direction).toBe('ltr');
+    // Which is what keeps `Buy milk.` reading `Buy milk.`, not `.Buy milk`.
+    await expect(
+      page.locator('[data-lexical-editor] li', {hasText: 'Buy milk.'}).first(),
+    ).toHaveText('Buy milk.');
+  });
+
+  // A table's own parts take the document's direction, so its columns keep
+  // their order and a column's start edge is the document's. The paragraph
+  // inside a cell is prose and takes its own, so a cell of English in a
+  // right-to-left document reads and is edited left-to-right.
+  test(`a table orders in the document direction and its cells read their own (${direction})`, async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
@@ -1991,12 +2184,23 @@ for (const direction of ['ltr', 'rtl'] as const) {
           range.selectNodeContents(paragraph);
           const text = range.getBoundingClientRect();
           const box = cell.getBoundingClientRect();
+          const paragraphDirection = getComputedStyle(paragraph).direction;
           return {
             column: (cell as HTMLTableCellElement).cellIndex,
             direction: style.direction,
-            paragraphDirection: getComputedStyle(paragraph).direction,
+            paragraphDirection,
+            // Hebrew is the only strong right-to-left script in the fixture.
+            textDirection: /^[^A-Za-z\u0590-\u05ff]*[\u0590-\u05ff]/.test(
+              (paragraph.textContent ?? '').trim(),
+            )
+              ? 'rtl'
+              : /^[^A-Za-z\u0590-\u05ff]*[A-Za-z]/.test(
+                    (paragraph.textContent ?? '').trim(),
+                  )
+                ? 'ltr'
+                : null,
             startGap:
-              style.direction === 'rtl'
+              paragraphDirection === 'rtl'
                 ? box.right - parseFloat(style.paddingRight) - text.right
                 : text.left - box.left - parseFloat(style.paddingLeft),
           };
@@ -2006,10 +2210,13 @@ for (const direction of ['ltr', 'rtl'] as const) {
     // Editor and view, three rows of two cells each.
     expect(cells).toHaveLength(12);
     for (const cell of cells) {
+      // The cell box, and so the column it sits in, follows the document.
       expect(cell.direction).toBe(direction);
-      expect(cell.paragraphDirection).toBe(direction);
+      // Its prose reads the way the cell's own text reads.
+      expect(cell.paragraphDirection).toBe(cell.textDirection ?? direction);
       if (cell.column === 0) {
-        // The first column is start-aligned: its text touches the start edge.
+        // The first column is start-aligned: its text touches the start edge
+        // of its own paragraph's direction.
         expect(Math.abs(cell.startGap)).toBeLessThanOrEqual(1);
       }
     }

@@ -59,13 +59,30 @@ const CODE_HEADER_SPACE = `calc(${spacingVars['--spacing-2']} + ${sizeVars['--si
 const CODE_CORNER_SPACE = `calc(${spacingVars['--spacing-4']} + ${sizeVars['--size-element-sm']} + 2 * ${spacingVars['--spacing-2']})`;
 
 const editorTheme = stylex.create({
-  // Lexical marks every top-level block `dir="auto"`, which picks each
-  // block's direction from its first strong character: a Hebrew paragraph in
-  // an English document flips to the right, an English one in an Arabic
-  // document to the left. Blocks take the direction of the surface around
-  // them instead, as core Markdown's do, and bidi inside a block still
-  // follows the Unicode algorithm (spec:AST-061 FR6).
-  providerDirection: {
+  // Lexical gives a top-level block `dir="auto"` until BlockDirectionPlugin
+  // writes the direction of the block's own text onto it. A block that says
+  // `ltr` or `rtl` is left alone, so the UA's own rule sets its direction
+  // and its caret, alignment, quote bar and indent all follow its text, as
+  // they do in Google Docs and in Lexical's own playground.
+  //
+  // `auto` means the block has no single direction of its own — it holds
+  // digits, punctuation, an image, nothing at all, or several lines that
+  // are each read on their own terms (a list, a fenced code block). It
+  // follows the document around it (spec:AST-061 FR6), so an empty
+  // paragraph keeps its caret on a right-to-left document's start edge and
+  // an English item under a Hebrew one still reads `Buy milk.`.
+  blockDirection: {
+    direction: {
+      default: null,
+      ':is([dir="auto"])': 'inherit',
+    },
+  },
+  // A table is not prose. Its columns are read in the document's order, not
+  // in the order of whichever language the first cell happens to hold, so
+  // every table part takes the surface's direction and a column stays
+  // aligned down its length. The paragraph inside a cell is prose and takes
+  // the rule above.
+  surfaceDirection: {
     direction: 'inherit',
   },
   paragraph: {
@@ -429,6 +446,23 @@ const editorTheme = stylex.create({
   // lines wrap rather than scroll: a scrolling region inside the editable
   // text cannot take keyboard focus of its own, so keyboard users could not
   // scroll it (axe scrollable-region-focusable).
+  // A fenced code block is several lines under one element, and Lexical
+  // gives it no per-line node that could carry a direction. `plaintext`
+  // puts each line in its own bidi paragraph taking the direction of its
+  // own first strong character, which is what a reader of code wants: a
+  // Hebrew comment line reads right-to-left while `const x = 1;` keeps its
+  // semicolon at the end, in either document.
+  //
+  // This is the one place the two surfaces differ. Core Markdown's `pre`
+  // takes the document's direction for the whole block, so in a
+  // right-to-left document it reorders every line and renders
+  // `const x = 1;` as `;const x = 1`. Code is read in its own order, not
+  // the document's, so RichText does not follow it here; core Markdown
+  // wants the same treatment in a change that can move both surfaces.
+  codeDirection: {
+    direction: 'inherit',
+    unicodeBidi: 'plaintext',
+  },
   code: {
     display: 'block',
     fontFamily: typographyVars['--font-family-code'],
@@ -483,9 +517,17 @@ const editorTheme = stylex.create({
  * class-name strings, which `stylex.props(...).className` yields.
  */
 export function sharedEditorTheme(): EditorThemeClasses {
-  // A class for a block Lexical may mark `dir="auto"`.
+  // A class for a block Lexical can mark `dir="auto"`: it reads its own way
+  // once BlockDirectionPlugin has written a direction onto it, and follows
+  // the document while it still says `auto`.
   const block = (...styles: Array<stylex.StyleXStyles>): string =>
-    stylex.props(...styles, editorTheme.providerDirection).className ?? '';
+    stylex.props(...styles, editorTheme.blockDirection).className ?? '';
+  // A class for a container — a list, a table and its parts — which orders
+  // its contents in the document's direction whatever they hold, and
+  // unconditionally, so a `dir` that arrives with a paste or an older
+  // stored document cannot turn the container around.
+  const container = (...styles: Array<stylex.StyleXStyles>): string =>
+    stylex.props(...styles, editorTheme.surfaceDirection).className ?? '';
   const className = (style: stylex.StyleXStyles): string =>
     stylex.props(style).className ?? '';
   return {
@@ -503,8 +545,10 @@ export function sharedEditorTheme(): EditorThemeClasses {
     },
     quote: block(editorTheme.quote),
     list: {
-      ul: block(editorTheme.ul),
-      ol: block(editorTheme.ol),
+      // A list orders its markers and indent in the document's direction;
+      // each item carries its own (BlockDirectionPlugin).
+      ul: container(editorTheme.ul),
+      ol: container(editorTheme.ol),
       listitem: stylex.props(editorTheme.listItem).className,
       nested: {
         listitem: stylex.props(editorTheme.listItem).className,
@@ -530,20 +574,22 @@ export function sharedEditorTheme(): EditorThemeClasses {
       code: stylex.props(editorTheme.textCode).className,
     },
     // The plain class lets CodeSyntaxPlugin's highlight rules find code blocks.
-    code: `${block(editorTheme.code)} ${CODE_SYNTAX_CLASS}`,
+    // Each line of a fenced code block reads its own way (codeDirection),
+    // so the block itself takes no direction from `block()`.
+    code: `${className(editorTheme.code)} ${className(editorTheme.codeDirection)} ${CODE_SYNTAX_CLASS}`,
     hr: stylex.props(editorTheme.hr).className,
     hrSelected: stylex.props(editorTheme.hrSelected).className,
     // MarkdownExtensionsPlugin puts it on a selected plugin node.
     markdownExtensionSelected: stylex.props(editorTheme.hrSelected).className,
-    table: block(editorTheme.table),
-    // Lexical stamps rows and cells `dir="auto"` too, which would set a cell
-    // of English text left-to-right inside a right-to-left document.
-    tableRow: block(editorTheme.tableRow),
-    tableCell: block(editorTheme.tableCell),
-    tableCellHeader: block(editorTheme.tableCellHeader),
+    // Every table part takes the surface's direction, so a column reads the
+    // same way down its length whatever each cell holds.
+    table: container(editorTheme.table),
+    tableRow: container(editorTheme.tableRow),
+    tableCell: container(editorTheme.tableCell),
+    tableCellHeader: container(editorTheme.tableCellHeader),
     // Added on top of the cell's own class by Lexical while the cell is in a
     // table selection, so it carries no direction of its own.
     tableCellSelected: className(editorTheme.tableCellSelected),
-    tableScrollableWrapper: block(editorTheme.tableScrollableWrapper),
+    tableScrollableWrapper: container(editorTheme.tableScrollableWrapper),
   };
 }
