@@ -73,6 +73,14 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
    * at the start only (UIScrollView's directional lock).
    */
   lockAxis?: boolean;
+  /**
+   * A trackpad's two-finger scroll (`continuous`) drives the pan where its
+   * owner allows it. It moves as a contact with the content, along its own
+   * axis, after the scrollers under the pointer. A mouse wheel's notches
+   * never drive a pan; they scroll what is under the pointer.
+   * @default [] (none)
+   */
+  allowedScrollTypes?: ReadonlyArray<'continuous'>;
   /** Begin only when the native scrollers under the touch are at the edge. */
   scrollEdge?: boolean;
 }

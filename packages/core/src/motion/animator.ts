@@ -517,6 +517,14 @@ interface StartGroup {
   madeInFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
+  /**
+   * Per channel, when its animation's first frame ran without a known start.
+   * That frame came too late to stand for the start, and the browser had not
+   * told it yet. The compositor starts the animation within about a frame of
+   * this time. Until the browser tells its start, a read of the channel takes
+   * the curve from here.
+   */
+  latest?: Map<Channel, number>;
   /** A later call in the same task that took over its curves. */
   adoptedBy?: StartGroup;
   readonly resolve: (start: number) => void;
@@ -1070,16 +1078,42 @@ export function createAnimator(
   };
 
   /**
-   * The value on screen at `time`. A curve the browser has not started is at
-   * its start up to now; a later time reads the curve from its provisional
-   * start, the model's best guess until the browser's start moves it (a
-   * companion that samples a curve ahead follows its shape).
+   * A held curve's start once a frame dated its call, as the browser's start
+   * moves it: by that frame's lead over the call's own time.
+   */
+  const datedFromLatest = (
+    segment: Segment,
+    latest: number | undefined,
+  ): {latest: number; start: number} | null =>
+    latest == null || segment.group == null
+      ? null
+      : {latest, start: segment.start + latest - segment.group.provisional};
+
+  /**
+   * The value on screen at `time`. Until the browser reports its start, a
+   * held curve shows its first value. A frame that ran without that start
+   * dates the curve. Without that frame, a later time reads from the
+   * provisional start, so a companion that samples ahead follows the curve's
+   * shape.
    */
   const valueAt = (property: MotionProperty, time: number): number => {
     const segment = segments.get(property);
-    if (segment != null && isHeld(segment) && time <= now()) {
+    if (segment != null && isHeld(segment)) {
+      // The compositor starts the call near its first frame. The curve is
+      // dated as the browser's start would date it. A curve that joined by an
+      // older clock keeps its lead over the call's own time.
+      const latest = segment.group?.latest?.get(CHANNEL_OF[property]);
+      const dated = datedFromLatest(segment, latest);
+      if (dated != null) {
+        const elapsed = Math.max(time, dated.latest) - dated.start;
+        return elapsed >= segment.duration
+          ? segment.target
+          : segment.at(elapsed);
+      }
       // Nothing has moved on screen until the browser starts the call.
-      return segment.at(0);
+      if (time <= now()) {
+        return segment.at(0);
+      }
     }
     return curveAt(property, time);
   };
@@ -1087,10 +1121,22 @@ export function createAnimator(
   const velocityAt = (property: MotionProperty, time: number): number => {
     const held = segments.get(property);
     if (held != null && isHeld(held)) {
-      // Still at its start on screen, but moving in the model: a retarget
-      // carries the velocity the curve has reached by now, so a flick whose
-      // moves all land before the browser starts any keeps its speed.
-      return held.speed(Math.max(0, time - held.start));
+      // Still at its start on screen, but moving in the model. A retarget
+      // carries the velocity the curve has reached by now. So a flick whose
+      // moves all land before the browser starts any keeps its speed. Past
+      // its first frame, it reads from that frame, as its value does.
+      const dated = datedFromLatest(
+        held,
+        held.group?.latest?.get(CHANNEL_OF[property]),
+      );
+      return held.speed(
+        Math.max(
+          0,
+          dated != null && time > dated.latest
+            ? time - dated.start
+            : time - held.start,
+        ),
+      );
     }
     const segment = segmentAt(property, time);
     if (segment == null || time < segment.start) {
@@ -1276,6 +1322,35 @@ export function createAnimator(
       }
     }
     const moving = properties.filter(p => segments.has(p));
+    // An explicit call can rebuild a channel while one of its curves still
+    // waits for the browser's start. The animation then joins the current
+    // call, or else that waiting call, with no start of its own.
+    const waiting =
+      callGroup ??
+      moving
+        .map(p => (segments.get(p) as Segment).group)
+        .find(group => group != null && !group.resolved) ??
+      null;
+    const rebuiltAfterFirstFrame = waiting?.framed === true;
+    // The new animation starts at the frame that commits it, from its first
+    // keyframe. That holds for a waiting call it joins after that call's
+    // first frame, and for every waiting call it takes a curve from. So this
+    // channel's reads below, and until that frame, take that first value.
+    const restarted = new Set<StartGroup>();
+    if (rebuiltAfterFirstFrame) {
+      restarted.add(waiting);
+    }
+    if (callGroup != null) {
+      for (const property of moving) {
+        const group = (segments.get(property) as Segment).group;
+        if (group != null && group !== callGroup && !group.resolved) {
+          restarted.add(group);
+        }
+      }
+    }
+    for (const group of restarted) {
+      group.latest?.delete(channel);
+    }
     if (channel === 'translate') {
       // The animation built below starts from the value at `time` (its first
       // keyframe); a rebase or a retarget builds a new one, so a new start.
@@ -1308,15 +1383,6 @@ export function createAnimator(
       previous?.cancel();
       return;
     }
-    // A channel rebuilt by an explicit call (set, rebase, a retarget of
-    // another axis) while one of its curves still waits for the browser's
-    // start keeps that start: no explicit start for this animation.
-    const waiting =
-      callGroup ??
-      moving
-        .map(p => (segments.get(p) as Segment).group)
-        .find(group => group != null && !group.resolved) ??
-      null;
     // The keyframes start where the animation will: at the waiting call's
     // own time, which its start moves to the browser's (resolveGroup), so a
     // write later in the task keeps the screen on the model's clock.
@@ -1431,6 +1497,20 @@ export function createAnimator(
       waiting.channels.add(channel);
       // A cancel before the first frame rejects its ready promise.
       (animation as Partial<Animation>).ready?.catch(() => {});
+      if (rebuiltAfterFirstFrame) {
+        // The frame that commits it dates this channel's start again. The
+        // call's other channels keep their own.
+        requestFrame?.(() => {
+          if (
+            !waiting.resolved &&
+            running.get(channel) === animation &&
+            animation.startTime == null &&
+            animation.playState === 'running'
+          ) {
+            (waiting.latest ??= new Map()).set(channel, now());
+          }
+        });
+      }
     } else {
       // One clock: the keyframes were sampled from `time`.
       animation.startTime = time;
@@ -2134,6 +2214,22 @@ export function createAnimator(
         )
       ) {
         resolveGroup(group, now());
+      }
+      // The browser's start is still unread. The compositor starts the call
+      // near this frame, so each moving channel's reads take the curve from
+      // now until the browser tells its start.
+      if (!group.resolved) {
+        for (const channel of group.channels) {
+          const animation = running.get(channel);
+          if (
+            animation != null &&
+            group.animations.includes(animation) &&
+            animation.startTime == null &&
+            animation.playState === 'running'
+          ) {
+            (group.latest ??= new Map()).set(channel, now());
+          }
+        }
       }
     });
     ready.then(
