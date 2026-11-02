@@ -22,7 +22,6 @@ export const docs = {
     'right-to-left',
     'language',
     'catalog',
-    'calendar',
   ],
   slots: {
     guides: {title: 'Guides', accepts: {kinds: ['generic']}},

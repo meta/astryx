@@ -93,7 +93,8 @@ describe('route resolution', () => {
     // `cli-host-entry` are topics added since; `global` is the Global mode
     // page; `authoring` holds what CLI Integrations and Writing docs did;
     // `use-integrations` is the guide for apps that install one;
-    // `cli-experimental-render-pages` is the experimental render guide.
+    // `cli-experimental-render-pages` is the experimental render guide;
+    // `calendars` is the calendar systems page.
     const sidebarGuides = docTopics
       .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
       .map(d => d.topic)
@@ -102,6 +103,7 @@ describe('route resolution', () => {
       [
         'authoring',
         'browser-support',
+        'calendars',
         'cli-component-lookups',
         'cli-experimental-icon-set-files',
         'cli-experimental-icon-sets',

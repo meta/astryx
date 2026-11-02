@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[docs] `astryx docs internationalization/i18n-calendars` explains how to show dates in another calendar: choosing a calendar on `InternationalizationProvider`, which calendars need `Temporal`, loading `temporal-polyfill/full/global` on the server and in the browser only where `Temporal` is missing, why the Chinese and Korean calendars can differ by a day between runtimes, and that week numbers are always ISO 8601.
+[docs] Internationalization gains a short Calendars guide: choose a calendar on `InternationalizationProvider` or `Calendar`, values stay Gregorian ISO dates, and most calendars need `Temporal` (load `temporal-polyfill/full/global` where it is missing). A new `astryx docs calendars` topic has the detail: the supported calendars, loading `Temporal` on the server and in the browser, why the Chinese and Korean calendars can differ by a day between runtimes, and ISO 8601 week numbers.
 
 @nynexman4464

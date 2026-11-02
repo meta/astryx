@@ -16,6 +16,11 @@
         "package": "@astryxdesign/cli"
       },
       {
+        "topic": "calendars",
+        "description": "Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, Chinese, and other calendars while values stay Gregorian ISO dates.",
+        "package": "@astryxdesign/cli"
+      },
+      {
         "topic": "cli",
         "description": "Commands, programmatic APIs, and output contracts. Building an integration is under `astryx docs authoring`.",
         "package": "@astryxdesign/cli"
@@ -37,7 +42,7 @@
       },
       {
         "topic": "internationalization",
-        "description": "Set the active locale, load catalogs, coexist with your own i18n library, handle RTL, and test translations.",
+        "description": "Set the active locale, load catalogs, coexist with your own i18n library, show other calendars, handle RTL, and test translations.",
         "package": "@astryxdesign/cli"
       },
       {
