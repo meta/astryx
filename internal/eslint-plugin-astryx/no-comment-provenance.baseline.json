@@ -853,23 +853,7 @@
     "spec quote"
   ],
   "packages/core/src/Resizable/resizableModel.ts": ["#4790"],
-  "packages/core/src/Resizable/useResizable.ts": [
-    "#5297",
-    "#5297",
-    "AST-010",
-    "AST-010",
-    "AST-010",
-    "AST-010",
-    "FR10",
-    "FR11",
-    "FR6",
-    "FR7",
-    "FR9",
-    "component:Resizable",
-    "component:Resizable",
-    "spec quote",
-    "spec quote"
-  ],
+  "packages/core/src/Resizable/useResizable.ts": ["#5297", "AST-010", "FR11"],
   "packages/core/src/SegmentedControl/SegmentedControl.tsx": [
     "FR1",
     "FR2",
