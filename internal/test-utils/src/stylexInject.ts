@@ -69,13 +69,7 @@ export default function stylexTestInject(args: InjectArgs): string {
   const target = ownSheet();
   if (target != null && !inserted.has(text)) {
     inserted.add(text);
-    // jsdom's CSS parser rejects some at-rules; StyleX's own insertion skips
-    // those the same way.
-    try {
-      target.insertRule(text, target.cssRules.length);
-    } catch {
-      inserted.delete(text);
-    }
+    target.insertRule(text, target.cssRules.length);
   }
   return text;
 }
