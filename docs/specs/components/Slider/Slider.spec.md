@@ -47,18 +47,15 @@ an additive target for the interactive control surface.
   `onChangeEnd`, with no `onChange`, moves by keyboard today and does not under
   FR5, so the change is breaking (`spec:AST-017/FR1`) and ships as
   `[breaking]` in a declared minor (`spec:AST-017/FR31`).
-- Pointer tracking and the finger's coast (FR7): a new contract decision
-  (DEC-4), not a correction and not an accessibility fix
-  (`spec:AST-017/FR53`). Callbacks and documented interaction are released
-  contract (`spec:AST-017/FR3`). Released victims: a press on a thumb no
-  longer sets a value, and a mouse drag starts only after 10 px; after a
-  finger's drag, `onChange` keeps firing through the coast and `onChangeEnd`
-  fires when the thumb stops, about 0.6 s after the lift, so an owner that
-  treats `onChangeEnd` as the moment of the lift — one that submits, navigates,
-  or asserts at the release — receives it later and must wait for it. The
-  change is breaking (`spec:AST-017/FR1`) and ships as `[breaking]` in a
-  declared minor (`spec:AST-017/FR31`); no prop restores the released drag
-  (DEC-4), so it has no patch-level coexistence path (`spec:AST-017/FR28`).
+- Pointer tracking and the finger's coast (FR7): ships as a patch `[fix]`
+  by the owner's ruling on 2026-11-01 ("touch timing: I don't think these are
+  breaking. Can you name a desirable scenario?"). No desirable use depends on
+  the released drag: a press on a thumb that jumps the value is a defect; a
+  slow drag still ends at the lift, since only a flick coasts; and
+  `onChangeEnd` still carries the value the person sees settle (FR5). What
+  moves is when a touch flick's `onChangeEnd` fires, about 0.6 s after the
+  lift, once the coast settles; an owner that acts at the release keeps doing
+  so through `onChangeEnd` and receives it after the coast.
 - Implementation gap: FR7 is not shipped. Every pointer still moves the
   thumb's center to the pointer on press, a finger has no 48 px target, lift,
   or coast, `onChangeEnd` fires at the release, and the `springs.sliderRelease`
