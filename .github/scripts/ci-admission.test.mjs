@@ -61,20 +61,26 @@ describe('where runs wait', () => {
     expect(needsOf(admission)).toEqual(['room']);
     expect(room.permissions).toEqual({actions: 'read', contents: 'read'});
     // The rest of the wait carries on from where room left off.
-    for (const key of ['fits', 'started', 'looks'])
+    for (const key of ['fits', 'started', 'looks', 'next'])
       expect(wait.with[key]).toBe(`\${{ needs.room.outputs.${key} }}`);
-    for (const key of ['fits', 'full', 'started', 'looks'])
+    for (const key of ['fits', 'full', 'started', 'looks', 'next'])
       expect(room.outputs[key]).toBe(`\${{ steps.room.outputs.${key} }}`);
     // Every job but the Storybook build reaches admission, directly or through
     // the jobs it needs, never only through the build.
+    // heavy-ci, the agent-push deferral decision (spec:AST-030 FR20), is one
+    // slim job beside admission that the build needs.
     const BESIDE = 'build-storybook';
-    expect(needsOf(ci.jobs[BESIDE])).toEqual(['room']);
+    const DEFERRAL = 'heavy-ci';
+    expect(needsOf(ci.jobs[BESIDE])).toEqual(['room', DEFERRAL]);
+    expect(needsOf(ci.jobs[DEFERRAL])).toEqual(['room']);
     const reaches = id =>
       needsOf(ci.jobs[id]).some(
-        need => need === 'admission' || (need !== BESIDE && reaches(need)),
+        need =>
+          need === 'admission' ||
+          (need !== BESIDE && need !== DEFERRAL && reaches(need)),
       );
     for (const id of Object.keys(ci.jobs)) {
-      if (!['room', 'admission', 'ci-full', BESIDE].includes(id))
+      if (!['room', 'admission', 'ci-full', BESIDE, DEFERRAL].includes(id))
         expect(reaches(id), id).toBe(true);
     }
   });
@@ -237,8 +243,12 @@ describe('peaks', () => {
     const closure = new Set();
     const visit = name => {
       for (const need of needsOf(ci.jobs[name])) {
+        // heavy-ci decides an agent push's deferral and skips for a
+        // release-check (spec:AST-030 FR20).
         if (
-          ['maintenance-request', 'room', 'admission'].includes(need) ||
+          ['maintenance-request', 'room', 'admission', 'heavy-ci'].includes(
+            need,
+          ) ||
           closure.has(need)
         )
           continue;
@@ -271,20 +281,38 @@ describe('peaks', () => {
     expect(estimateOf('ci.yml')).toContain(`'workflow_dispatch' ? ${peak} :`);
   });
 
-  it("gives Main's unit run a peak that covers all its jobs beside main-commit", () => {
-    const held = Object.keys(main.jobs)
-      .filter(name => name !== 'main-commit' && name !== 'test')
-      .map(name => legs(main.jobs[name]))
-      .reduce((sum, count) => sum + count, 0);
-    const peak = stepOf(main.jobs['main-commit']).with.peak;
-    expect(peak).toBeGreaterThanOrEqual(held);
-    expect(estimateOf('deploy.yml')).toContain(`() => ${peak},`);
+  it("gives Main's unit run a peak that covers all its jobs, and a push one for its fast checks", () => {
+    const [, push, unit] = /&& (\d+) \|\| (\d+)/
+      .exec(stepOf(main.jobs['main-commit']).with.peak)
+      .map(Number);
+    const held = names =>
+      names
+        .map(name => legs(main.jobs[name]))
+        .reduce((sum, count) => sum + count, 0);
+    // A dispatched unit run holds every job beside main-commit and the join.
+    expect(unit).toBeGreaterThanOrEqual(
+      held(
+        Object.keys(main.jobs).filter(
+          name => name !== 'main-commit' && name !== 'test',
+        ),
+      ),
+    );
+    // A push skips the unit legs (spec:AST-030 FR21).
+    const fast = Object.keys(main.jobs).filter(
+      name => main.jobs[name].if !== "github.event_name != 'push'",
+    );
+    expect(push).toBeGreaterThanOrEqual(fast.length);
+    expect(push).toBeLessThan(unit);
+    expect(estimateOf('deploy.yml')).toContain(
+      `run => (run.event === 'push' ? ${push} : ${unit}),`,
+    );
   });
 
   it('gives a pull request a peak that covers every job it starts at once', () => {
-    // The jobs that need only the waits start together the moment admission
-    // ends; the Storybook build may still be running then.
-    const waits = ['room', 'admission'];
+    // The jobs that need only the waits (and heavy-ci, the deferral decision
+    // that runs only for an agent push; spec:AST-030 FR20) start together the
+    // moment admission ends; the Storybook build may still be running then.
+    const waits = ['room', 'admission', 'heavy-ci'];
     const first = Object.keys(ci.jobs).filter(
       name =>
         !waits.includes(name) &&
@@ -395,6 +423,7 @@ describe('ci admission', () => {
     fits = '',
     started = '',
     looked = '',
+    next = '',
   } = {}) {
     vi.useFakeTimers({now: NOW});
     vi.spyOn(Math, 'random').mockReturnValue(random);
@@ -421,7 +450,11 @@ describe('ci admission', () => {
               data: {
                 workflow_runs: runs().filter(run => run.status === status),
               },
-              headers: {'x-ratelimit-remaining': String(budget)},
+              headers: {
+                'x-ratelimit-remaining': String(
+                  typeof budget === 'function' ? budget() : budget,
+                ),
+              },
             };
           },
           listJobsForWorkflowRun: async ({run_id, per_page}) => {
@@ -464,6 +497,7 @@ describe('ci admission', () => {
       FITS: fits,
       STARTED: started,
       LOOKS: looked,
+      NEXT: next,
     });
     const done = new AsyncFunction('github', 'context', 'core', script)(
       github,
@@ -606,15 +640,17 @@ describe('ci admission', () => {
         maxLooks: 2,
       });
       expect(result.looks).toBe(1);
-      expect(result.outputs).toMatchObject({fits: 'false', looks: '1'});
+      // Near room (four over), so that look spent none of the run's two.
+      expect(result.outputs).toMatchObject({fits: 'false', looks: '0'});
       expect(result.outputs.full).toBeUndefined();
       expect(result.info.at(-2)).toContain('Room for the Storybook build');
     });
 
     it('holds the build too when there is no room even for it', async () => {
-      // 6 x 12 + 18 = 90: not one more job fits, so nothing of the run starts.
+      // 7 x 12 + 18 = 102: not one more job fits, and room is further than ten
+      // jobs away, so nothing of the run starts and it keeps its two looks.
       const result = await admit({
-        active: prs(6),
+        active: prs(7),
         peak: 16,
         phase: 'room',
         maxWait: 12,
@@ -661,28 +697,43 @@ describe('ci admission', () => {
         phase: 'room',
         error: new Error('rate limited'),
       });
-      expect(room.outputs.fits).toBeUndefined();
+      expect(room.outputs.fits ?? '').toBe('');
     });
 
-    it('carries the wait on from room: its clock and its looks', async () => {
-      // Room looked at once and found room for the build only; the rest looks
-      // once more at the second look of the same twelve-minute wait.
-      const rest = await admit({
-        active: prs(5),
+    it('carries the wait on from room: its clock, its looks and its next look', async () => {
+      // Far from room (7 x 12 + 18 + 16 = 118): room planned the second look
+      // at the end of the twelve-minute wait, and the rest looks then.
+      const far = await admit({
+        active: prs(7),
         peak: 16,
         phase: 'rest',
         fits: 'false',
         started: String(NOW),
         looked: '1',
+        next: String(NOW + 11.67 * 60_000),
         maxWait: 12,
         maxLooks: 2,
       });
-      expect(rest.looks).toBe(1);
-      expect(rest.lookTimes[0]).toBeGreaterThan(11 * 60_000);
-      expect(rest.lookTimes[0]).toBeLessThanOrEqual(12 * 60_000);
+      expect(far.looks).toBe(1);
+      expect(far.lookTimes[0]).toBeGreaterThan(11 * 60_000);
+      expect(far.lookTimes[0]).toBeLessThanOrEqual(12 * 60_000);
+      // Near room, room planned the next look four minutes on.
+      const near = await admit({
+        active: prs(5),
+        peak: 16,
+        phase: 'rest',
+        fits: 'false',
+        started: String(NOW),
+        looked: '0',
+        next: String(NOW + 4 * 60_000),
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(near.lookTimes[0]).toBeGreaterThanOrEqual(4 * 60_000);
+      expect(near.lookTimes[0]).toBeLessThanOrEqual(4 * 60_000 + 20_000);
       // Room already spent both looks: the rest starts at once.
       const spent = await admit({
-        active: prs(6),
+        active: prs(7),
         peak: 16,
         phase: 'rest',
         fits: 'false',
@@ -692,6 +743,85 @@ describe('ci admission', () => {
         maxLooks: 2,
       });
       expect(spent).toMatchObject({looks: 0, calls: 0});
+    });
+
+    it('leaves fits unset when a later look stops early, so the rest starts', async () => {
+      // Room's first look finds no room even for the build (far over) and
+      // records that the run did not fit; its second look meets a low budget
+      // and stops.
+      let looksSoFar = 0;
+      const room = await admit({
+        active: looks => {
+          looksSoFar = looks;
+          return prs(7);
+        },
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 4,
+        budget: () => (looksSoFar >= 2 ? 1000 : 4000),
+      });
+      expect(room.looks).toBe(2);
+      expect(room.warning.at(-1)).toContain('API calls left this hour');
+      expect(room.outputs.fits).toBe('');
+      const rest = await admit({
+        active: prs(7),
+        peak: 16,
+        phase: 'rest',
+        fits: room.outputs.fits,
+        started: String(NOW),
+        looked: room.outputs.looks,
+        maxWait: 12,
+        maxLooks: 4,
+      });
+      expect(rest).toMatchObject({looks: 0, calls: 0});
+    });
+
+    it('looks at the end of the wait, never starts early, when room planned a look past it', async () => {
+      // Room found the build room four minutes in, after a near look, with the
+      // run then far over; its plan of four plus twelve minutes passes the
+      // wait. The rest looks once at the end of the wait, then starts.
+      vi.useFakeTimers({now: NOW});
+      const started = NOW - 4 * 60_000;
+      const rest = await admit({
+        active: prs(7),
+        peak: 16,
+        phase: 'rest',
+        fits: 'false',
+        started: String(started),
+        looked: '1',
+        next: String(NOW + 11.67 * 60_000),
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(rest.looks).toBe(1);
+      expect(rest.lookTimes[0]).toBeGreaterThan(7 * 60_000);
+      expect(rest.lookTimes[0]).toBeLessThanOrEqual(8 * 60_000);
+      expect(rest.warning[0]).toContain('Still no room');
+    });
+
+    it('plans the rest of the run four minutes on when room finds the build room and the run near it', async () => {
+      // 5 x 12 + 18 = 78: the build fits; + 16 = 94 is four over, near room.
+      const room = await admit({
+        active: prs(5),
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(room.outputs.looks).toBe('0');
+      expect(Number(room.outputs.next) - NOW).toBe(4 * 60_000);
+      // Far: 6 x 12 + 18 + 1 = 91 does not fit even the build; with 5 runs of
+      // 14 (88), the build fits and the run, 16 more, is fourteen over.
+      const wide = await admit({
+        active: prs(5, 14),
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(wide.outputs.looks).toBe('1');
+      expect(Number(wide.outputs.next) - NOW).toBeGreaterThan(11 * 60_000);
     });
 
     it('sees a run as waiting while either of its waits is in progress', async () => {
@@ -738,6 +868,20 @@ describe('ci admission', () => {
       );
     });
 
+    it('counts only waiting pull-request runs toward the ten', async () => {
+      const queued = Array.from({length: 12}, (_, i) =>
+        waitingRun(400 + i, {event: 'merge_group'}),
+      );
+      const result = await admit({
+        active: [...prs(5), ...waiting(9), ...queued],
+        peak: 16,
+        phase: 'room',
+        maxWait: 12,
+        maxLooks: 2,
+      });
+      expect(result.outputs.full).toBeUndefined();
+    });
+
     it('never turns away a merge-queue entry', async () => {
       // A merge-queue run is not `main`, and carries no pull request.
       const entry = await admit({
@@ -749,7 +893,8 @@ describe('ci admission', () => {
         maxLooks: 2,
       });
       expect(entry.outputs.full).toBeUndefined();
-      expect(entry.looks).toBe(2);
+      // It waits (one job past room, so it looks every four minutes).
+      expect(entry.looks).toBeGreaterThan(1);
     });
 
     it('lets the tenth waiter wait, and never turns away a run that fits or a main run', async () => {
@@ -827,6 +972,88 @@ describe('ci admission', () => {
     expect(freed.looks).toBe(3);
   });
 
+  it('starts a pull-request run within one two-minute look of a waiting main check starting', async () => {
+    // 2026-11-01 16:16Z: a pull-request run yielded to a main push waiting
+    // for room, slept to its second look twelve minutes later, though the push
+    // started at 16:17. Here main waits two and a half minutes.
+    const MAIN_WAIT = 150_000;
+    const others = prs(3);
+    const result = await admit({
+      active: () =>
+        Date.now() - NOW < MAIN_WAIT
+          ? [
+              ...others,
+              waitingRun(71, {
+                event: 'push',
+                path: '.github/workflows/deploy.yml',
+              }),
+            ]
+          : [
+              ...others,
+              admittedRun(71, 4, {
+                event: 'push',
+                path: '.github/workflows/deploy.yml',
+              }),
+            ],
+      peak: 16,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(result.warning).toEqual([]);
+    const started = result.lookTimes.at(-1);
+    expect(started).toBeGreaterThanOrEqual(MAIN_WAIT);
+    expect(started - MAIN_WAIT).toBeLessThanOrEqual(2 * 60_000 + 20_000);
+    // Yield looks do not spend the run's two looks.
+    expect(result.looks).toBe(3);
+  });
+
+  it('looks every four minutes when a run is within ten jobs of room', async () => {
+    // 2026-11-01 18:42Z: a pull-request run was two jobs over (64 live + 18
+    // kept for small workflows + 16 = 98), and its only other look came
+    // twelve minutes later. Here room frees five minutes in.
+    const FREES = 5 * 60_000;
+    const result = await admit({
+      active: () => {
+        const runs = [...prs(5), admittedRun(60, 4)];
+        return Date.now() - NOW < FREES ? runs : runs.slice(1);
+      },
+      peak: 16,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(result.warning).toEqual([]);
+    // Looks at 0, about 4 and about 8 minutes: room by the third.
+    expect(result.looks).toBe(3);
+    expect(result.lookTimes[1]).toBeGreaterThanOrEqual(4 * 60_000);
+    expect(result.lookTimes[1]).toBeLessThanOrEqual(4 * 60_000 + 20_000);
+    expect(result.lookTimes[2] - FREES).toBeLessThanOrEqual(
+      4 * 60_000 + 20_000,
+    );
+    // Near looks stay inside the twelve-minute wait.
+    const stuck = await admit({
+      active: [...prs(5), admittedRun(60, 4)],
+      peak: 16,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(stuck.looks).toBe(4);
+    expect(stuck.lookTimes.at(-1)).toBeLessThanOrEqual(12 * 60_000);
+    expect(stuck.warning[0]).toContain('Still no room');
+  });
+
+  it('keeps two looks when there is no room, a waiting main check or not', async () => {
+    // 6 x 12 + 18 + 16 = 106: sixteen over, further than ten from room, so
+    // neither the yield nor nearness shortens the wait.
+    const result = await admit({
+      active: [...prs(6), waitingRun(72, {event: 'workflow_dispatch'})],
+      peak: 16,
+      maxWait: 12,
+      maxLooks: 2,
+    });
+    expect(result.looks).toBe(2);
+    expect(result.lookTimes[1]).toBeGreaterThan(11 * 60_000);
+  });
+
   it('lets a waiting main run go first, counting its whole peak; never waits for a pull-request run', async () => {
     const mainWaiting = waitingRun(70, {event: 'workflow_dispatch'});
     const held = await admit({
@@ -838,6 +1065,8 @@ describe('ci admission', () => {
       maxLooks: 2,
     });
     expect(held.looks).toBe(2);
+    // It would fit but yields, so it looks again in two minutes, not twelve.
+    expect(held.lookTimes[1]).toBeLessThanOrEqual(2 * 60_000 + 20_000);
     // A waiting pull-request run whose Storybook build started beside its
     // wait holds both: 48 + 2 x 4 + 18 + 16 = 90 fits; a fifth does not.
     const building = id => ({

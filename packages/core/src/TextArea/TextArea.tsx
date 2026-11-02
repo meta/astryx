@@ -43,6 +43,7 @@ import {
   inputStatusFocusWithinStyles,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {isRenderable} from '../utils/isRenderable';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
@@ -61,11 +62,17 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {characterCount} from '../utils/characters';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TextArea/TextArea.generated';
+
+registerEnglishFallback(english);
 const COUNTER_WARNING_THRESHOLD = 0.8;
 
 const styles = stylex.create({
@@ -427,7 +434,11 @@ export function TextArea({
     containerStyle,
   });
   const size = useSize(sizeProp, 'md');
-  const t = useTranslator();
+  // One presence check for the start icon's slot and its padding
+  // (`architecture:react-component-runtime` INV16), on the value the caller
+  // passed: an icon component counts as present, as any non-empty value does.
+  const hasStartIcon = isRenderable(startIcon as ReactNode);
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const announce = useAnnounce();
   const generatedID = useId();
@@ -622,7 +633,7 @@ export function TextArea({
           controlClassName,
           controlStyle,
         )}>
-        {startIcon && (
+        {hasStartIcon && (
           <span {...stylex.props(styles.startIcon)}>
             {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
           </span>
@@ -673,7 +684,7 @@ export function TextArea({
               styles.textarea,
               textareaSizeStyles[size],
               isDisabled && styles.textareaDisabled,
-              Boolean(startIcon) && styles.textareaWithStartIcon,
+              hasStartIcon && styles.textareaWithStartIcon,
               // Reserve trailing space only when the end slot actually renders
               // something (spinner or on-field status icon). The `detached`
               // status variant suppresses the on-field icon — its glyph lives

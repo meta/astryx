@@ -481,3 +481,117 @@ describe('useTooltip — focus returning from a popover the keyboard closed', ()
     expect(tooltipElement().matches(':popover-open')).toBe(true);
   });
 });
+
+describe('useTooltip — focusTrigger="auto" decides when focus arrives', () => {
+  /** jsdom does not match `:focus-visible`; stand it up for keyboard focus. */
+  function asKeyboardFocus(element: HTMLElement) {
+    const realMatches = element.matches.bind(element);
+    vi.spyOn(element, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+  }
+
+  function RovingMember({onShow}: {onShow: () => void}) {
+    const tooltip = useTooltip({onShow, delay: 0});
+    return (
+      <div>
+        {/* A roving-tabindex member that is not the tab stop when the
+            tooltip attaches. */}
+        <button type="button" tabIndex={-1} ref={tooltip.ref}>
+          Filter
+        </button>
+        {tooltip.renderTooltip('Filter (F)')}
+      </div>
+    );
+  }
+
+  it('opens on keyboard focus of a trigger that was tabindex="-1" when it attached', () => {
+    const onShow = vi.fn();
+    render(<RovingMember onShow={onShow} />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    asKeyboardFocus(member);
+    // The roving hook moves the tab stop, then focus, as an arrow key does.
+    member.setAttribute('tabindex', '0');
+    fireEvent.focusIn(member);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens on keyboard focus of a focusable trigger it does not list, such as a summary', () => {
+    const onShow = vi.fn();
+    function SummaryTrigger() {
+      const tooltip = useTooltip({onShow, delay: 0});
+      return (
+        <details>
+          <summary ref={tooltip.ref}>More</summary>
+          {tooltip.renderTooltip('Show details')}
+        </details>
+      );
+    }
+    render(<SummaryTrigger />);
+    const summary = screen.getByText('More');
+    asKeyboardFocus(summary);
+    fireEvent.focusIn(summary);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  function WrapperTrigger(options: TooltipOptions) {
+    const tooltip = useTooltip({delay: 0, ...options});
+    return (
+      <div>
+        <div ref={tooltip.ref} data-testid="wrapper">
+          <input aria-label="Amount" />
+        </div>
+        {tooltip.renderTooltip('About amounts')}
+      </div>
+    );
+  }
+
+  it('still ignores focus inside a trigger that is not focusable', () => {
+    const onShow = vi.fn();
+    render(<WrapperTrigger onShow={onShow} />);
+    const input = screen.getByLabelText('Amount');
+    asKeyboardFocus(input);
+    fireEvent.focusIn(input);
+    tick(0);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
+  it('hides when focus that counted leaves, even after the trigger left the tab order', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableContainer() {
+      const tooltip = useTooltip({onShow, onHide, delay: 0});
+      return (
+        <div>
+          <div ref={tooltip.ref} tabIndex={0} data-testid="container">
+            <button type="button">Inside</button>
+          </div>
+          {tooltip.renderTooltip('About the group')}
+        </div>
+      );
+    }
+    render(<FocusableContainer />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    asKeyboardFocus(inside);
+    fireEvent.focusIn(inside);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    // A roving hook resets the container's tab stop before moving focus on.
+    screen.getByTestId('container').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    tick(100);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not hide a hover-opened tooltip when focus leaves a child of a non-focusable trigger', () => {
+    const onHide = vi.fn();
+    render(<WrapperTrigger onHide={onHide} />);
+    fireEvent.mouseEnter(screen.getByTestId('wrapper'));
+    tick(0);
+    fireEvent.focusOut(screen.getByLabelText('Amount'));
+    tick(100);
+    expect(onHide).not.toHaveBeenCalled();
+  });
+});

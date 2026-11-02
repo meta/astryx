@@ -3,7 +3,7 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
-import {Typeahead} from '@astryxdesign/core/Typeahead';
+import {Typeahead, TypeaheadItem} from '@astryxdesign/core/Typeahead';
 import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
 
@@ -130,6 +130,27 @@ export const WithBootstrap: Story = {
     hasEntriesOnFocus: true,
   },
   name: 'With Bootstrap Results',
+};
+
+/**
+ * Fixture for the RTL audit: results rendered through TypeaheadItem with a
+ * leading icon and a description, so the item's icon-then-content order can
+ * be measured in both directions.
+ */
+export const ItemWithIcon: Story = {
+  ...Default,
+  args: {
+    ...Default.args,
+    hasEntriesOnFocus: true,
+    renderItem: (item: SearchableItem) => (
+      <TypeaheadItem
+        item={item}
+        description="Fruit"
+        icon={<MagnifyingGlassIcon width={16} height={16} aria-hidden="true" />}
+      />
+    ),
+  },
+  name: 'Parts / TypeaheadItem with icon',
 };
 
 export const Required: Story = {

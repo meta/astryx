@@ -218,6 +218,10 @@ export function componentRoutesForFilters(routes, filters) {
  * own component, so it keeps its own coverage entry and verified-N/A record.
  * A filter with neither selects nothing and stays a coverage gap
  * (`architecture:rtl-audit-evidence` INV5).
+ *
+ * A run with no filters (the release check's full audit) keeps every route
+ * and applies the same adoption to every known component no route names, so
+ * a full run and a filtered run audit ResizeHandle through the same stories.
  * @param {{
  *   routes: {id: string, component: string}[],
  *   filters: string[],
@@ -235,20 +239,14 @@ export function resolveFilterRoutes({
   ownerOf,
   renders,
 }) {
-  if (filters.length === 0) return {routes, adopted: {}};
   const known = new Set(knownComponents.map(name => name.toLowerCase()));
   const selected = new Map();
   const adopted = {};
-  for (const filter of filters) {
-    const direct = routes.filter(route =>
-      routeMatchesComponentFilter(route, filter),
-    );
-    for (const route of direct) {
-      selected.set(`${route.component}::${route.id}`, route);
-    }
-    if (direct.length > 0) continue;
+  const keep = route => selected.set(`${route.component}::${route.id}`, route);
+  /** Route a filter's folder's orphan stories that render it to its component. */
+  const adopt = filter => {
     const owner = ownerOf(filter);
-    if (owner == null) continue;
+    if (owner == null) return;
     const orphans = routes.filter(
       route =>
         !known.has(route.component.toLowerCase()) &&
@@ -257,14 +255,25 @@ export function resolveFilterRoutes({
           .startsWith(`${owner.folder}/`) &&
         renders(route.id, owner.component),
     );
-    if (orphans.length === 0) continue;
+    if (orphans.length === 0) return;
     adopted[owner.component] = orphans.map(route => route.id).sort();
-    for (const {id} of orphans) {
-      selected.set(`${owner.component}::${id}`, {
-        id,
-        component: owner.component,
-      });
+    for (const {id} of orphans) keep({id, component: owner.component});
+  };
+  if (filters.length === 0) {
+    routes.forEach(keep);
+    const named = new Set(routes.map(route => route.component.toLowerCase()));
+    for (const component of knownComponents) {
+      const filter = component.toLowerCase();
+      if (!named.has(filter)) adopt(filter);
     }
+    return {routes: [...selected.values()], adopted};
+  }
+  for (const filter of filters) {
+    const direct = routes.filter(route =>
+      routeMatchesComponentFilter(route, filter),
+    );
+    direct.forEach(keep);
+    if (direct.length === 0) adopt(filter);
   }
   return {routes: [...selected.values()], adopted};
 }
@@ -428,6 +437,38 @@ function validatePhysicalPosition(value, storyId) {
     );
   }
   return {physical: value.physical, within: value.within.trim()};
+}
+
+/**
+ * Canonical order for curated RTL targets: by component, then story id
+ * (case-insensitive), keeping entries with the same key in file order. A sorted
+ * `targets.json` lets parallel pull requests add targets in different places
+ * instead of all appending at the end.
+ */
+export function compareTargets(left, right) {
+  const key = target => [
+    String(target.component).toLowerCase(),
+    String(target.storyId).toLowerCase(),
+  ];
+  const [lc, ls] = key(left);
+  const [rc, rs] = key(right);
+  return lc < rc ? -1 : lc > rc ? 1 : ls < rs ? -1 : ls > rs ? 1 : 0;
+}
+
+/** Index of the first target out of canonical order, or -1 when sorted. */
+export function firstUnsortedTarget(targets) {
+  for (let i = 1; i < targets.length; i++) {
+    if (compareTargets(targets[i - 1], targets[i]) > 0) return i;
+  }
+  return -1;
+}
+
+/** The targets in canonical order (a stable sort). */
+export function sortTargets(targets) {
+  return targets
+    .map((target, index) => ({target, index}))
+    .sort((a, b) => compareTargets(a.target, b.target) || a.index - b.index)
+    .map(({target}) => target);
 }
 
 /** Selected owners for which the canonical Storybook route has no story. */

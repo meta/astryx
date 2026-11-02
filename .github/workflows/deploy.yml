@@ -23,16 +23,18 @@ on:
 
 permissions: {}
 
-# One validation of main at a time; a newer one waits and replaces any older
-# waiting one. A dispatch that names `sha` validates an older commit in a group
-# of its own, so it never replaces or cancels main's validations. Only a release
-# re-check, which the release re-check workflow sends with the workflow token
-# and without `sha`, cancels the running validation: it is itself a full
-# validation of main's tip, so the cancelled run's commits stay covered
-# (spec:AST-030 FR22).
+# Push runs (the fast checks) share one group, and a newer push replaces an
+# older waiting one. Full unit runs have a group of their own that no push
+# cancels: the scheduler's (main-heavy-lanes.yml, which names the commit) and a
+# person's run of main's tip queue there, one at a time (spec:AST-030 FR21).
+# A person's dispatch that names an older `sha` validates it in a group of its
+# own, so it never replaces or cancels another run. Only a release re-check,
+# which the release re-check workflow sends with the workflow token, naming
+# main's tip, cancels the running unit run: it is itself a full validation of
+# that commit, so the cancelled run's commits stay covered (spec:AST-030 FR22).
 concurrency:
-  group: "${{ github.event_name == 'workflow_dispatch' && inputs.sha != '' && format('main-validation-sha-{0}', github.run_id) || 'main-validation' }}"
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && inputs.sha == '' && github.triggering_actor == 'github-actions[bot]' }}
+  group: "${{ github.event_name == 'push' && 'main-validation' || (inputs.sha != '' && github.triggering_actor != 'github-actions[bot]' && format('main-validation-sha-{0}', github.run_id)) || 'main-unit-tests' }}"
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' && inputs.recheck && github.triggering_actor == 'github-actions[bot]' }}
 
 jobs:
   # The one commit every lane and leg of this run tests. A push validates the
@@ -109,7 +111,9 @@ jobs:
         continue-on-error: true
         timeout-minutes: 16
         with:
-          peak: 14
+          # A push runs only the fast checks (main-commit, sync-exports,
+          # typecheck, test); a dispatched unit run holds every leg.
+          peak: ${{ github.event_name == 'push' && 4 || 14 }}
           main: true
 
   # Verify package.json exports match the source tree.
@@ -148,8 +152,11 @@ jobs:
   # (~5 minutes); the leg that holds the longest Node test file (~6 minutes on
   # its own) sets the floor, and more legs would not move it. `test` joins the
   # legs.
+  # The unit lanes run the full suites only in a dispatched run (about hourly,
+  # from main-heavy-lanes.yml; spec:AST-030 FR21), never on a push.
   test-ui:
     needs: [main-commit]
+    if: github.event_name != 'push'
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -176,6 +183,7 @@ jobs:
 
   test-node:
     needs: [main-commit]
+    if: github.event_name != 'push'
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -270,11 +278,21 @@ jobs:
     runs-on: ubuntu-slim
     permissions: {}
     steps:
+      # A push runs only the fast checks; a dispatched run is the full unit
+      # run, and passes only when every unit leg passed.
       - name: Assert every push gate succeeded
+        env:
+          EVENT: ${{ github.event_name }}
+          TEST_UI: ${{ needs.test-ui.result }}
+          TEST_NODE: ${{ needs.test-node.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
         run: |
-          echo "test-ui:    ${{ needs.test-ui.result }}"
-          echo "test-node:  ${{ needs.test-node.result }}"
-          echo "typecheck:  ${{ needs.typecheck.result }}"
-          [ "${{ needs.test-ui.result }}" = "success" ] || exit 1
-          [ "${{ needs.test-node.result }}" = "success" ] || exit 1
-          [ "${{ needs.typecheck.result }}" = "success" ] || exit 1
+          echo "test-ui:    $TEST_UI"
+          echo "test-node:  $TEST_NODE"
+          echo "typecheck:  $TYPECHECK"
+          [ "$TYPECHECK" = success ] || exit 1
+          if [ "$EVENT" = push ]; then
+            [ "$TEST_UI" = skipped ] && [ "$TEST_NODE" = skipped ] || exit 1
+          else
+            [ "$TEST_UI" = success ] && [ "$TEST_NODE" = success ] || exit 1
+          fi

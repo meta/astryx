@@ -393,6 +393,10 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.5',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check: one would ask
+        // the unreachable test registry, and its failure, recorded whenever
+        // npm gives up, would join doctor's newest-release line.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const dir = makeProject({declare: {'@astryxdesign/core': '^9.0.0'}});

@@ -796,9 +796,12 @@ slugs and docs routes, are data and may change.
 
 ### How a release is cut
 
-First, the canonical full-scope `release-check` must pass on an exact commit from
-current `main`; the release branch is cut only from that checked SHA while it remains
-in current main history. A minor cut also requires Cindy, the release owner, to
+First, the canonical full-scope `release-check` and a full unit run of the Main
+workflow must both pass on an exact commit from current `main`. Main's scheduler
+dispatches the unit run with every release-check of main's tip, a person's included,
+while that commit is still the tip. The release branch is cut only from a SHA with
+both while it remains in current main history; the stable publish refuses one
+without them. A minor cut also requires Cindy, the release owner, to
 explicitly sign off on the exact `vX.Y.0` immediately before the branch is created.
 Scheduled or standing authority does not cover a minor.
 
@@ -961,6 +964,12 @@ Storybook story for anything you added or altered.
   request past either limit shows a failing check that says why, and runs in
   full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
   are not limited.
+- **Pull requests from the shared agent login run the heavy suites when ready
+  and before merge.** A push to a ready agent pull request runs lint and, in
+  the CI workflow, only typecheck (path-filtered workflows run as usual);
+  `test`, `build` and `docsite-test` fail with "Heavy CI deferred" (unless the
+  change is spec-only, which runs everything) until the pull request is marked ready or reopened, or its latest run is
+  re-run with **Re-run all jobs**, which runs everything at that head.
 
 ## Code Style
 

@@ -11,6 +11,7 @@
  * - no-raw-paragraph: Disallows components from rendering a <p> by default (render <div> so any content composes)
  * - no-style-only-wrapper: Disallows div/span wrappers that only style a single Astryx component (use xstyle)
  * - no-nullish-jsx-guard: Flags `!= null` JSX render guards for rendered values (use isRenderable so false/''/true slots don't leak an empty element)
+ * - no-truthy-jsx-guard: Flags a truthiness guard on a ReactNode value in front of JSX (a 0 slot renders a stray "0" or is dropped; use isRenderable). Reads types, so it is not in the presets
  * - no-raw-intl-locale: Forbids raw Intl formatting/comparison outside the approved i18n infrastructure boundary, navigator.language(s) as a locale source, and date-helper calls without provider locale
  * - no-unguarded-ime-keydown: Flags an onKeyDown on an editable surface that branches on command keys without an IME composition guard (isImeKeyEvent/isComposing)
  * - no-physical-properties: Flags physical left/right CSS properties and unsafe logical-centering transform pairs
@@ -42,6 +43,7 @@ import noClassnameClobberRule from './no-classname-clobber.js';
 import noHardcodedAnchorRule from './no-hardcoded-anchor.js';
 import noRawParagraphRule from './no-raw-paragraph.js';
 import noNullishJsxGuardRule from './no-nullish-jsx-guard.js';
+import noTruthyJsxGuardRule from './no-truthy-jsx-guard.js';
 import noRawIntlLocaleRule from './no-raw-intl-locale.js';
 import noUnguardedImeKeydownRule from './no-unguarded-ime-keydown.js';
 import noBorderShorthandRule from './no-border-shorthand.js';
@@ -347,6 +349,7 @@ const plugin = {
     'no-hardcoded-anchor': noHardcodedAnchorRule,
     'no-raw-paragraph': noRawParagraphRule,
     'no-nullish-jsx-guard': noNullishJsxGuardRule,
+    'no-truthy-jsx-guard': noTruthyJsxGuardRule,
     'no-raw-intl-locale': noRawIntlLocaleRule,
     'no-unguarded-ime-keydown': noUnguardedImeKeydownRule,
     'no-border-shorthand': noBorderShorthandRule,

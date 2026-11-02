@@ -50,7 +50,12 @@ describe('interaction proof routing', () => {
       "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
-    expect(proofs.needs).toEqual(['room', 'admission', 'build-storybook']);
+    expect(proofs.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
   });
 
   it('decides its own scope first, and gates every later step on it', () => {

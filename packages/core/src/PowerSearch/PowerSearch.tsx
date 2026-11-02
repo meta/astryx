@@ -59,7 +59,6 @@ import {PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
 import {truncateCharacters} from '../utils/characters';
-import {useTranslator} from '../i18n';
 import {useLocale} from '../i18n/useLocale';
 import type {Locale} from '../i18n/types';
 import type {
@@ -78,6 +77,13 @@ import type {
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Icon mapping for typeahead entries
 // =============================================================================
@@ -587,7 +593,7 @@ export function PowerSearch({
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
   const searchSource = usePowerSearchSource(config, maxSearchResults);
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const label = labelFromProps ?? t('@astryx.powersearch.label');
   const placeholder =
