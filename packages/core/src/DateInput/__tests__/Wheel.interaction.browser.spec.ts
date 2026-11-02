@@ -51,6 +51,7 @@ import {
 import {UIKIT_GESTURES} from '../../motion/uikit';
 import {WHEEL_ROW_HEIGHT} from '../wheelOptions';
 import {planRelease, type WheelLayout} from '../wheelPhysics';
+import {VelocityTracker} from '../../gestures/VelocityTracker';
 
 const storybook = withStorybook(test);
 
@@ -293,6 +294,76 @@ const stripOffset = async (strip: Locator) =>
     return -Number.parseFloat(y);
   });
 
+/** An input the page received: its type, timestamp (ms) and position. */
+type InputSeen = [type: string, time: number, x: number, y: number];
+
+/**
+ * Record the inputs a finger's pan reads, before the gesture system sees them.
+ * A finger begins with its touchstart and lifts with its touchend. Its moves
+ * are its touch `pointermove`s, one sample per event, as the pan takes them.
+ * Each time is on the page's clock, as the gesture host reads it.
+ */
+async function recordFingerInputs(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const seen: [string, number, number, number][] = [];
+    (window as unknown as {__inputsSeen: typeof seen}).__inputsSeen = seen;
+    const timeOf = (event: Event) =>
+      event.timeStamp > 1e12
+        ? event.timeStamp - performance.timeOrigin
+        : event.timeStamp;
+    for (const type of ['touchstart', 'touchend']) {
+      window.addEventListener(
+        type,
+        event => {
+          const touch = (event as TouchEvent).changedTouches[0];
+          if (touch != null) {
+            seen.push([type, timeOf(event), touch.clientX, touch.clientY]);
+          }
+        },
+        {capture: true, passive: true},
+      );
+    }
+    window.addEventListener(
+      'pointermove',
+      event => {
+        if (event.pointerType === 'touch' && seen.length > 0) {
+          seen.push([
+            'pointermove',
+            timeOf(event),
+            event.clientX,
+            event.clientY,
+          ]);
+        }
+      },
+      {capture: true, passive: true},
+    );
+  });
+}
+
+async function fingerInputsSeen(page: Page): Promise<InputSeen[]> {
+  return page.evaluate(
+    () => (window as unknown as {__inputsSeen: InputSeen[]}).__inputsSeen,
+  );
+}
+
+/**
+ * The release velocity (px/s, positive when the rows move up) that the pan's
+ * tracker reads from `inputs`, as the wheel's release does. The gesture
+ * arena never lets time go backwards, so each time is held at the latest.
+ */
+function releaseVelocityOf(inputs: ReadonlyArray<InputSeen>): number {
+  const tracker = new VelocityTracker();
+  let latest = -Infinity;
+  for (const [type, time, x, y] of inputs) {
+    latest = Math.max(time, latest);
+    if (type === 'touchend') {
+      return -tracker.scrollVelocity(latest).y;
+    }
+    tracker.add(x, y, latest);
+  }
+  throw new Error(`no lift among the inputs: ${JSON.stringify(inputs)}`);
+}
+
 test('a flick coasts on UIKit’s curve onto the row it projects, and commits it on arrival', async ({
   page,
   browserName,
@@ -300,6 +371,7 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
   const {driver, field, strip, start} = await openWheel(page);
   const {script, offsetAtLift} = flickUp(start);
   expect(releaseVelocity(script).y).toBeCloseTo(-FLICK_VELOCITY, -1);
+  await recordFingerInputs(page);
   await driver.play(script);
   const coast = stripAnimationOf(await waitForAnimation(strip));
   const held = await holdAnimations(page, strip);
@@ -315,29 +387,14 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
 
   const from = samples[0].value;
   const rest = samples[samples.length - 1].value;
-  // The engine computes the release velocity from the touch timestamps it
-  // delivers. The 120 Hz script's 8.3 ms steps reach them only to the
-  // millisecond. So the velocity is fitted and held near the scripted one. The
-  // whole release is then UIKit's plan for it: the row projected, and the
-  // coast's rate re-solved to stop there at the stop speed. (WebKit dispatches
-  // the script in real time, and its velocity can land far from the scripted
-  // one: there only the curve's shape is judged.)
-  let fittedVelocity = FLICK_VELOCITY;
-  let best = Infinity;
-  const [low, high] = browserName === 'chromium' ? [0.8, 1.2] : [0.25, 2];
-  for (let v = FLICK_VELOCITY * low; v < FLICK_VELOCITY * high; v += 1) {
-    const candidate = planRelease(from, v, MINUTES).curve;
-    const error = compareCurve(
-      samples,
-      t => candidate.value(t / 1000),
-      1e9,
-    ).maxError;
-    if (error < best) {
-      best = error;
-      fittedVelocity = v;
-    }
-  }
-  const plan = planRelease(from, fittedVelocity, MINUTES);
+  // The page reads the release velocity from the timestamps of the inputs it
+  // receives. WebKit stamps each input as it dispatches it, so under load its
+  // velocity can differ from the scripted one. The pan's own tracker reads the
+  // inputs the page saw. The whole release is UIKit's plan for that velocity:
+  // the row projected, and the coast's rate re-solved to stop there.
+  const inputs = await fingerInputsSeen(page);
+  const pageVelocity = releaseVelocityOf(inputs);
+  const plan = planRelease(from, pageVelocity, MINUTES);
   const expected = (t: number) => plan.curve.value(t / 1000);
   const result = compareCurve(samples, expected, 0.75);
   await writeEvidence(
@@ -355,7 +412,8 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
             index: plan.index,
             duration: plan.curve.duration,
           },
-          fittedVelocity,
+          pageVelocity,
+          inputs,
           comparison: result,
         },
         null,
@@ -372,8 +430,10 @@ test('a flick coasts on UIKit’s curve onto the row it projects, and commits it
     browserName === 'chromium' ? 2 : 24,
   );
   if (browserName === 'chromium') {
+    // Chromium replays the script's timestamps, so the page measures the
+    // scripted velocity.
     expect(
-      Math.abs(fittedVelocity - FLICK_VELOCITY) / FLICK_VELOCITY,
+      Math.abs(pageVelocity - FLICK_VELOCITY) / FLICK_VELOCITY,
     ).toBeLessThan(0.05);
   }
   // The last sample is half a millisecond before the end.
