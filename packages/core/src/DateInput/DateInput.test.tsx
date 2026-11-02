@@ -478,6 +478,34 @@ describe('DateInput', () => {
       });
     });
 
+    it('closes the calendar when focus moves to another field', async () => {
+      render(
+        <>
+          <DateInput label="Start" onChange={() => {}} />
+          <DateInput label="End" onChange={() => {}} />
+        </>,
+      );
+      const [start, end] = screen.getAllByRole('combobox');
+      fireEvent.keyDown(start, {key: 'ArrowDown'});
+      expect(start).toHaveAttribute('aria-expanded', 'true');
+      end.focus();
+      await waitFor(() => {
+        expect(start).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('keeps the calendar open on a press on its label', () => {
+      render(<DateInput label="Date" onChange={() => {}} />);
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      const label = document.querySelector(
+        `label[for="${input.id}"]`,
+      ) as HTMLLabelElement;
+      expect(label).not.toBeNull();
+      press(label);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
     it('keeps the calendar open when a scroll starts outside (pointercancel)', () => {
       render(
         <>

@@ -646,7 +646,7 @@ function PointerDateField({
   // The calendar is a manual popover: the browser's light dismiss counts a
   // press in the text input as outside (a text input cannot be an invoker),
   // so a press in the field would close the calendar it just opened. A press
-  // on the field (its input, clear button) or in the calendar is inside; a press
+  // on the field (its label, input, clear button) or in the calendar is inside; a press
   // anywhere else closes it (architecture:layer-runtime,
   // component:BaseTypeahead FR12's rule).
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
@@ -662,11 +662,16 @@ function PointerDateField({
         field,
         // The calendar layer may be hosted outside the field (Layer portals it
         // out of lists, labels and inline text), so it counts on its own.
+        // Its label counts too: a press there focuses the input, which would
+        // otherwise close the calendar and reopen it on the same press.
         path =>
           path.some(
             target =>
               target === field ||
-              (target instanceof Element && target.id === popover.id),
+              (target instanceof Element && target.id === popover.id) ||
+              (target instanceof HTMLLabelElement &&
+                target.control != null &&
+                target.control === inputRef.current),
           ),
         // Called after usePopover has returned, so `popover` is assigned.
         () => popover.hide(),
