@@ -19,11 +19,10 @@
  * client navigation) so hovering or reopening Search never sends a request
  * each time.
  *
- * A query sent while the warm-up is still running may not join it: the host
- * can start a second server for it, which starts cold too. The search source
- * (lib/cliSearchSource.ts) sends the query at once, so a cached answer is not
- * held back, and sends it again when the warm-up answers first, so an
- * uncached one reaches the warmed server.
+ * While the warm-up runs, its server is starting and cannot take requests, so
+ * the host would start another cold server for a query sent then. The search
+ * source (lib/cliSearchSource.ts) holds a query until the running warm-up
+ * answers (runningSearchWarmup), and keeps one request at a time after that.
  */
 
 /** The request that loads the search server without running a query. */
