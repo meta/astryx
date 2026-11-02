@@ -30,6 +30,13 @@ import {importDocModule} from '../doc-compiler/import.mjs';
 import {CLI_ROOT, discoverExternalPackages} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {Project} from '../config/project.mjs';
+import {
+  isReference,
+  parseTemplateSource,
+  programPath,
+  traverseTemplateSource,
+  writtenNames,
+} from './template-source-tree.mjs';
 
 const require = createRequire(import.meta.url);
 
@@ -393,35 +400,34 @@ const DEMO_CONTENT_PLACEHOLDER_TEXT = 'Card content';
 /** Where emitted placeholders import Text from, as catalog templates do. */
 const TEXT_MODULE = '@astryxdesign/core/Text';
 
-/** AST keys that hold positions or comments rather than child nodes. */
-const NON_CHILD_KEYS = new Set([
-  'loc',
-  'start',
-  'end',
-  'range',
-  'extra',
-  'leadingComments',
-  'trailingComments',
-  'innerComments',
-  'comments',
-  'tokens',
-]);
+/** The modules an existing Astryx Text import can come from. */
+const TEXT_MODULES = new Set([TEXT_MODULE, '@astryxdesign/core']);
+
+/** The local name a new Text import takes when the file already writes `Text`. */
+const TEXT_ALIAS = 'AstryxText';
 
 /**
  * Replace each JSX element imported from {@link DEMO_CONTENT_MODULE} with a
  * generic `<Text>` placeholder and remove that import, so emitted source never
- * depends on content only Astryx's previews provide. Text is imported from
- * Astryx when the source does not import it already.
+ * depends on content only Astryx's previews provide.
  *
- * Only a plain static use is replaced: a named import used as a JSX tag whose
- * children, if any, are whitespace, and whose props are literal values or read
- * only variables that the rest of the file still reads (so `faceDown={!isOpen}`
- * is safe when `isOpen` is also used elsewhere). Anything else (a namespace or
- * type import, a re-export, a dynamic import, the element used as a value, a
- * spread or computed prop, a prop whose variable nothing else reads, children)
- * throws, naming the element, rather than leaving a reference behind, leaving a
- * variable unused, or dropping code the rest of the file relies on. Source that
- * never names the module is returned as is.
+ * Every check resolves a name to its binding through the module's scope, so a
+ * local declaration or parameter with the same name never counts as the same
+ * variable. The placeholder uses an existing Text import from Astryx when that
+ * import is the binding its name resolves to at every replaced element. Else
+ * the placeholder imports Text, under a unique alias when the file already
+ * writes the name `Text`.
+ *
+ * Only a plain static use is replaced: a named import used only as a JSX tag
+ * whose children, if any, are whitespace, and whose props are literal values or
+ * read only bindings that code outside the replaced elements still reads. So
+ * `faceDown={!isOpen}` is safe when the same `isOpen` is also read elsewhere.
+ * Anything else (a namespace or type import, a re-export, a dynamic import, the
+ * element used as a value or a type, a spread or computed prop, a prop whose
+ * binding nothing else reads, children) throws, naming the element, rather than
+ * leaving a reference behind, leaving a binding unused, or dropping code the
+ * rest of the file relies on. Source that never names the module is returned
+ * as is.
  *
  * @param {string} source - Template source code.
  * @returns {{source: string, demoContentReplaced: number}}
@@ -431,176 +437,136 @@ export function replaceDemoContent(source) {
     return {source, demoContentReplaced: 0};
   }
   /** @type {any} */
-  let ast;
+  let file;
   try {
-    ast = templateSourceParser().parse(source, {
-      sourceType: 'module',
-      plugins: ['jsx', 'typescript'],
-    });
+    file = parseTemplateSource(source);
   } catch (err) {
     throw unsafeDemoContent(
       `the source does not parse (${/** @type {Error} */ (err).message})`,
     );
   }
 
-  const program = ast.program;
   /** @type {any[]} */
   const demoImports = [];
-  /** @type {Set<string>} */
-  const demoNames = new Set();
-  /** @type {string | null} */
-  let textName = null;
-  for (const statement of program.body) {
-    if (statement.type !== 'ImportDeclaration') continue;
-    const from = statement.source.value;
-    if (from === DEMO_CONTENT_MODULE) {
-      if (statement.importKind === 'type') {
-        throw unsafeDemoContent('it is imported as a type');
-      }
-      for (const specifier of statement.specifiers) {
-        if (
-          specifier.type !== 'ImportSpecifier' ||
-          specifier.importKind === 'type'
-        ) {
-          throw unsafeDemoContent(
-            'only named value imports can be replaced; import each element by name',
-          );
-        }
-        demoNames.add(specifier.local.name);
-      }
-      demoImports.push(statement);
-    } else if (
-      (from === TEXT_MODULE || from === '@astryxdesign/core') &&
-      statement.importKind !== 'type'
+  for (const statement of file.program.body) {
+    if (
+      statement.type !== 'ImportDeclaration' ||
+      statement.source.value !== DEMO_CONTENT_MODULE
     ) {
-      for (const specifier of statement.specifiers) {
-        if (
-          specifier.type === 'ImportSpecifier' &&
-          specifier.importKind !== 'type' &&
-          (specifier.imported.name ?? specifier.imported.value) === 'Text'
-        ) {
-          textName = specifier.local.name;
-        }
+      continue;
+    }
+    if (statement.importKind === 'type') {
+      throw unsafeDemoContent('it is imported as a type');
+    }
+    for (const specifier of statement.specifiers) {
+      if (
+        specifier.type !== 'ImportSpecifier' ||
+        specifier.importKind === 'type'
+      ) {
+        throw unsafeDemoContent(
+          'only named value imports can be replaced; import each element by name',
+        );
       }
     }
+    demoImports.push(statement);
   }
 
-  /** @type {Array<[number, number]>} */
-  const elementRanges = [];
-  /** @type {Set<string>} */
-  const boundNames = new Set();
-  /** Variables read outside every replaced element. */
-  /** @type {Set<string>} */
-  const readNames = new Set();
-  /** Variables a replaced element's props read, with the element's name. */
-  /** @type {Array<{variable: string, element: string}>} */
-  const propReads = [];
-  /**
-   * @param {any} node
-   * @param {any} parent
-   * @param {string} key
-   * @param {boolean} [inPattern] - The node is inside a binding pattern.
-   */
-  const visit = (node, parent, key, inPattern = false) => {
-    if (!node || typeof node.type !== 'string') return;
-    const binds = inPattern || isPatternRoot(parent, key);
-    if (node.type === 'StringLiteral' && node.value === DEMO_CONTENT_MODULE) {
-      if (!(parent?.type === 'ImportDeclaration' && key === 'source')) {
+  const program = programPath(file);
+  const demoBindings = new Set(
+    demoImports.flatMap(statement =>
+      statement.specifiers.map((/** @type {any} */ specifier) =>
+        program.scope.getBinding(specifier.local.name),
+      ),
+    ),
+  );
+  /** The paths of the JSX elements to replace. */
+  /** @type {any[]} */
+  const elements = [];
+  traverseTemplateSource(file, {
+    StringLiteral(/** @type {any} */ path) {
+      if (
+        path.node.value === DEMO_CONTENT_MODULE &&
+        !(path.parentPath.isImportDeclaration() && path.key === 'source')
+      ) {
         throw unsafeDemoContent(
           'it is used outside a static import (a re-export, dynamic import, require, or string value)',
         );
       }
-    }
-    if (
-      node.type === 'TemplateLiteral' &&
-      node.quasis.some(
-        /** @param {any} q */ q =>
-          q.value.cooked?.includes(DEMO_CONTENT_MODULE),
-      )
-    ) {
-      throw unsafeDemoContent('it is used outside a static import');
-    }
-    if (node.type === 'Identifier') {
-      if (demoNames.has(node.name) && !isImportBinding(parent, key)) {
-        if (!isNonReferenceKey(parent, key)) {
-          throw unsafeDemoContent(
-            `${node.name} is used as a value, not only as a JSX element`,
-          );
-        }
-      }
-      if (node.name === 'Text' && isBindingPosition(parent, key)) {
-        boundNames.add('Text');
-      }
+    },
+    TemplateLiteral(/** @type {any} */ path) {
       if (
-        !binds &&
-        !isImportBinding(parent, key) &&
-        !isNonReferenceKey(parent, key)
+        path.node.quasis.some((/** @type {any} */ quasi) =>
+          quasi.value.cooked?.includes(DEMO_CONTENT_MODULE),
+        )
       ) {
-        readNames.add(node.name);
+        throw unsafeDemoContent('it is used outside a static import');
       }
-    }
-    if (
-      node.type === 'JSXMemberExpression' &&
-      node.object.type === 'JSXIdentifier' &&
-      demoNames.has(node.object.name)
-    ) {
-      throw unsafeDemoContent(`${node.object.name} is used as a namespace`);
-    }
-    if (
-      node.type === 'JSXElement' &&
-      node.openingElement.name.type === 'JSXIdentifier' &&
-      demoNames.has(node.openingElement.name.name)
-    ) {
-      const element = node.openingElement.name.name;
-      for (const variable of assertStaticDemoElement(node)) {
-        propReads.push({variable, element});
+    },
+    'Identifier|JSXIdentifier'(/** @type {any} */ path) {
+      const {node, parentPath} = path;
+      if (!demoBindings.has(path.scope.getBinding(node.name))) return;
+      if (!isReference(node, path.parent, path.listKey ?? path.key)) return;
+      if (path.key === 'name' && parentPath.isJSXOpeningElement()) {
+        elements.push(parentPath.parentPath);
+        return;
       }
-      elementRanges.push([node.start, node.end]);
-      return;
-    }
-    for (const [childKey, value] of Object.entries(node)) {
-      if (NON_CHILD_KEYS.has(childKey)) continue;
-      const nextInPattern = binds && !isExpressionInPattern(node, childKey);
-      if (Array.isArray(value)) {
-        for (const child of value) visit(child, node, childKey, nextInPattern);
-      } else if (value && typeof value === 'object') {
-        visit(value, node, childKey, nextInPattern);
+      if (path.key === 'name' && parentPath.isJSXClosingElement()) return;
+      if (parentPath.isJSXMemberExpression()) {
+        throw unsafeDemoContent(`${node.name} is used as a namespace`);
       }
-    }
-  };
-  visit(program, null, 'program');
-
-  for (const {variable, element} of propReads) {
-    if (!readNames.has(variable)) {
       throw unsafeDemoContent(
-        `<${element}> reads ${variable}, and nothing else in the file reads it, so the copy would leave it unused`,
+        `${node.name} is used as a value, not only as a JSX element`,
       );
+    },
+  });
+
+  /** @param {any} node */
+  const isReplaced = node =>
+    elements.some(
+      element =>
+        element.node.start <= node.start && node.end <= element.node.end,
+    );
+  for (const element of elements) {
+    for (const variable of assertStaticDemoElement(element.node)) {
+      const binding = element.scope.getBinding(variable);
+      // An unbound name is a global: removing its read leaves nothing unused.
+      if (!binding || isExportedDeclaration(binding)) continue;
+      if (
+        binding.referencePaths.every((/** @type {any} */ ref) =>
+          isReplaced(ref.node),
+        )
+      ) {
+        throw unsafeDemoContent(
+          `<${element.node.openingElement.name.name}> reads ${variable}, and nothing else in the file reads it, so the copy would leave it unused`,
+        );
+      }
     }
   }
 
-  if (elementRanges.length > 0 && textName === null && boundNames.has('Text')) {
-    throw unsafeDemoContent(
-      'its placeholder needs Text, but the source already declares its own Text',
-    );
-  }
-  const placeholderTag = textName ?? 'Text';
-  const placeholder = `<${placeholderTag}>${DEMO_CONTENT_PLACEHOLDER_TEXT}</${placeholderTag}>`;
+  const reused =
+    elements.length === 0 ? null : astryxTextAtEvery(file, program, elements);
+  const written = writtenNames(file);
+  const textName =
+    reused ?? (written.has('Text') ? uniqueName(TEXT_ALIAS, written) : 'Text');
+  const textImport =
+    elements.length > 0 && reused === null
+      ? `import {${textName === 'Text' ? 'Text' : `Text as ${textName}`}} from '${TEXT_MODULE}';\n`
+      : '';
+  const placeholder = `<${textName}>${DEMO_CONTENT_PLACEHOLDER_TEXT}</${textName}>`;
 
   /** @type {Array<{start: number, end: number, text: string}>} */
-  const edits = elementRanges.map(([start, end]) => ({
-    start,
-    end,
+  const edits = elements.map(element => ({
+    start: element.node.start,
+    end: element.node.end,
     text: placeholder,
   }));
   demoImports.forEach((statement, index) => {
     let end = statement.end;
     if (source[end] === '\n') end += 1;
-    const addText =
-      index === 0 && textName === null && elementRanges.length > 0;
     edits.push({
       start: statement.start,
       end,
-      text: addText ? `import {Text} from '${TEXT_MODULE}';\n` : '',
+      text: index === 0 ? textImport : '',
     });
   });
   edits.sort((a, b) => b.start - a.start);
@@ -608,7 +574,68 @@ export function replaceDemoContent(source) {
   for (const edit of edits) {
     output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
   }
-  return {source: output, demoContentReplaced: elementRanges.length};
+  return {source: output, demoContentReplaced: elements.length};
+}
+
+/**
+ * The local name of an Astryx Text import that is the binding its name
+ * resolves to at every element, or null when no such import exists.
+ * @param {any} file
+ * @param {any} program - The program path, from {@link programPath}.
+ * @param {any[]} elements - Element paths.
+ * @returns {string | null}
+ */
+function astryxTextAtEvery(file, program, elements) {
+  for (const statement of file.program.body) {
+    if (
+      statement.type !== 'ImportDeclaration' ||
+      statement.importKind === 'type' ||
+      !TEXT_MODULES.has(statement.source.value)
+    ) {
+      continue;
+    }
+    for (const specifier of statement.specifiers) {
+      if (
+        specifier.type !== 'ImportSpecifier' ||
+        specifier.importKind === 'type' ||
+        (specifier.imported.name ?? specifier.imported.value) !== 'Text'
+      ) {
+        continue;
+      }
+      const name = specifier.local.name;
+      const imported = program.scope.getBinding(name);
+      if (
+        elements.every(element => element.scope.getBinding(name) === imported)
+      ) {
+        return name;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether a binding is declared in an export, so code outside the file can
+ * still read it.
+ * @param {any} binding
+ */
+function isExportedDeclaration(binding) {
+  const declaration = binding.path.isVariableDeclarator()
+    ? binding.path.parentPath
+    : binding.path;
+  return Boolean(declaration.parentPath?.isExportDeclaration());
+}
+
+/**
+ * `base`, or `base` with the first number from 2 that makes it a name the
+ * file does not write.
+ * @param {string} base
+ * @param {Set<string>} written
+ */
+function uniqueName(base, written) {
+  let name = base;
+  for (let n = 2; written.has(name); n++) name = `${base}${n}`;
+  return name;
 }
 
 /**
@@ -668,33 +695,6 @@ function isVariableRead(node, variables) {
   }
 }
 
-/**
- * Whether `parent[key]` starts a binding: a declared name, a function
- * parameter, or a caught error.
- * @param {any} parent
- * @param {string} key
- */
-function isPatternRoot(parent, key) {
-  return (
-    isBindingPosition(parent, key) ||
-    (parent?.type === 'FunctionExpression' && key === 'id') ||
-    (parent?.type === 'CatchClause' && key === 'param')
-  );
-}
-
-/**
- * Whether `node[key]` is an expression inside a binding pattern rather than a
- * binding: a default value or a computed key.
- * @param {any} node
- * @param {string} key
- */
-function isExpressionInPattern(node, key) {
-  return (
-    (node.type === 'AssignmentPattern' && key === 'right') ||
-    (node.type === 'ObjectProperty' && key === 'key' && node.computed)
-  );
-}
-
 /** @param {any} node */
 function isLiteralExpression(node) {
   switch (node.type) {
@@ -710,70 +710,6 @@ function isLiteralExpression(node) {
     default:
       return false;
   }
-}
-
-/**
- * Whether the identifier at `parent[key]` is the local binding an import
- * specifier introduces.
- * @param {any} parent
- * @param {string} key
- */
-function isImportBinding(parent, key) {
-  return (
-    (parent?.type === 'ImportSpecifier' ||
-      parent?.type === 'ImportDefaultSpecifier' ||
-      parent?.type === 'ImportNamespaceSpecifier') &&
-    (key === 'local' || key === 'imported')
-  );
-}
-
-/**
- * Whether the identifier at `parent[key]` is a name rather than a reference: a
- * non-computed property key or member property.
- * @param {any} parent
- * @param {string} key
- */
-function isNonReferenceKey(parent, key) {
-  if (!parent) return false;
-  if (
-    (parent.type === 'MemberExpression' ||
-      parent.type === 'OptionalMemberExpression') &&
-    key === 'property' &&
-    !parent.computed
-  ) {
-    return true;
-  }
-  return (
-    (parent.type === 'ObjectProperty' ||
-      parent.type === 'ObjectMethod' ||
-      parent.type === 'ClassProperty' ||
-      parent.type === 'ClassMethod' ||
-      parent.type === 'TSPropertySignature') &&
-    key === 'key' &&
-    !parent.computed &&
-    !parent.shorthand
-  );
-}
-
-/**
- * Whether the identifier at `parent[key]` declares a binding that a
- * placeholder's own `Text` would collide with.
- * @param {any} parent
- * @param {string} key
- */
-function isBindingPosition(parent, key) {
-  if (!parent) return false;
-  if (isImportBinding(parent, key)) return key === 'local';
-  return (
-    ((parent.type === 'VariableDeclarator' ||
-      parent.type === 'FunctionDeclaration' ||
-      parent.type === 'ClassDeclaration' ||
-      parent.type === 'TSTypeAliasDeclaration' ||
-      parent.type === 'TSInterfaceDeclaration' ||
-      parent.type === 'TSEnumDeclaration') &&
-      key === 'id') ||
-    key === 'params'
-  );
 }
 
 /** @param {string} reason */
@@ -1954,11 +1890,22 @@ function topLevelBindingNames(src) {
 }
 
 /**
+ * The components a template file composes, as written in the catalog.
  * @param {string} pagePath
  * @returns {string[]}
  */
 export function extractComponents(pagePath) {
-  const src = fs.readFileSync(pagePath, 'utf-8');
+  return componentsInSource(fs.readFileSync(pagePath, 'utf-8'));
+}
+
+/**
+ * The components a template source composes. A surface that returns rewritten
+ * source lists the components of that source, so a component the rewrite
+ * removed is not listed.
+ * @param {string} src
+ * @returns {string[]}
+ */
+export function componentsInSource(src) {
   // Match JSX opening tags, e.g. `<Section` or the legacy `<XDSSection`.
   // Templates author bare component names post un-prefix migration
   // (P2380608025), so the `XDS` prefix is optional. Anchoring on the `<`

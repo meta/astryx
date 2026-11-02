@@ -296,9 +296,7 @@ for each bug.
   `spec:AST-028` FR13 and its registry item carries the source with fixture
   media and demo-content elements both replaced. Integration-package blocks
   display `template show` output, so their displayed code has fixture media
-  replaced. Implementation gap: not
-  built; each surface carries block source as read from disk (Current-state
-  impact).
+  replaced.
 
 ### Authority routing
 
@@ -348,13 +346,14 @@ Known conformance gaps remain implementation work:
   navigation that owns it;
 - analytics still permits unrestricted string context for item, package, category,
   source, type, tab, view, and toggle-value fields, and nested template-preview
-  activation can reach the same semantic action twice;
+  activation can reach the same semantic action twice; and
 - existing interaction tests do not yet cover the complete primary-selection,
-  Back/Forward, close, cancellation, and supersession matrix; and
-- the Code tab, Open in Playground, the Sandbox code view, the MCP server's
-  `get()`, and the shadcn Install item carry block source as read from disk,
-  with no demo-content element replacement, and the shadcn Install item also
-  keeps its fixture media (FR23).
+  Back/Forward, close, cancellation, and supersession matrix.
+
+The Code tab, Open in Playground, the Sandbox code view, and the MCP server's
+`get()` carry example source after the demo-content element replacement, with
+fixture media kept. The shadcn Install item carries it with demo-content
+elements and fixture media both replaced (FR23).
 
 Stable Storybook and Sandbox currently use a split deployment: pull-request
 previews are staged inside the Vercel Docsite, while stable main is rebuilt and

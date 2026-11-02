@@ -14,6 +14,7 @@ import * as path from 'node:path';
 import {template, discoverTemplates} from '../template.mjs';
 import {templateCopy} from './copy.mjs';
 import {templateShow} from '../show/show.mjs';
+import {templateSkeleton} from '../skeleton/skeleton.mjs';
 import {DEMO_CONTENT_MODULE} from '../../../foundation/discovery/template-adapter.mjs';
 
 const SLOW = 60_000;
@@ -31,9 +32,10 @@ const fixtureRefs = filePath =>
  * @param {'page' | 'block'} type
  */
 async function findTemplate(type, predicate) {
-  const all = /** @type {Array<{dirName: string, type: string, filePath: string}>} */ (
-    await discoverTemplates()
-  );
+  const all =
+    /** @type {Array<{dirName: string, type: string, filePath: string}>} */ (
+      await discoverTemplates()
+    );
   const ids = new Map();
   for (const t of all) ids.set(t.dirName, (ids.get(t.dirName) ?? 0) + 1);
   const found = all.find(
@@ -54,30 +56,44 @@ describe('template.copy receipt — replaced demo media', () => {
   });
   afterEach(() => fs.rmSync(dir, {recursive: true, force: true}));
 
-  it('counts every demo image a page template carried, and leaves none behind', async () => {
-    const {id, refs} = await findTemplate(
-      'page',
-      r => r.length > 0 && r.every(ext => !VIDEO.has(ext)),
-    );
-    const res = await template(id, {targetPath: './dest', cwd: dir});
-    expect(res.type).toBe('template.copy');
-    expect(res.data.demoMediaReplaced).toBe(refs.length);
-    expect(
-      fs.readFileSync(path.join(dir, 'dest', 'page.tsx'), 'utf-8'),
-    ).not.toContain('/template-assets/');
-  }, SLOW);
+  it(
+    'counts every demo image a page template carried, and leaves none behind',
+    async () => {
+      const {id, refs} = await findTemplate(
+        'page',
+        r => r.length > 0 && r.every(ext => !VIDEO.has(ext)),
+      );
+      const res = await template(id, {targetPath: './dest', cwd: dir});
+      expect(res.type).toBe('template.copy');
+      expect(res.data.demoMediaReplaced).toBe(refs.length);
+      expect(
+        fs.readFileSync(path.join(dir, 'dest', 'page.tsx'), 'utf-8'),
+      ).not.toContain('/template-assets/');
+    },
+    SLOW,
+  );
 
-  it('counts a demo video in a block template', async () => {
-    const {id, refs} = await findTemplate('block', r => r.some(ext => VIDEO.has(ext)));
-    const res = await template(id, {targetPath: './dest', cwd: dir});
-    expect(res.data.demoMediaReplaced).toBe(refs.length);
-  }, SLOW);
+  it(
+    'counts a demo video in a block template',
+    async () => {
+      const {id, refs} = await findTemplate('block', r =>
+        r.some(ext => VIDEO.has(ext)),
+      );
+      const res = await template(id, {targetPath: './dest', cwd: dir});
+      expect(res.data.demoMediaReplaced).toBe(refs.length);
+    },
+    SLOW,
+  );
 
-  it('reports 0 when the template carries no demo media', async () => {
-    const {id} = await findTemplate('page', r => r.length === 0);
-    const res = await template(id, {targetPath: './dest', cwd: dir});
-    expect(res.data.demoMediaReplaced).toBe(0);
-  }, SLOW);
+  it(
+    'reports 0 when the template carries no demo media',
+    async () => {
+      const {id} = await findTemplate('page', r => r.length === 0);
+      const res = await template(id, {targetPath: './dest', cwd: dir});
+      expect(res.data.demoMediaReplaced).toBe(0);
+    },
+    SLOW,
+  );
 });
 
 describe('template.copy receipt — replaced demo content', () => {
@@ -126,9 +142,47 @@ describe('template.copy receipt — replaced demo content', () => {
     );
   });
 
-  it('reports 0 for a catalog template that carries no demo content', async () => {
-    const {id} = await findTemplate('page', r => r.length === 0);
-    const res = await template(id, {targetPath: './dest', cwd: dir});
-    expect(res.data.demoContentReplaced).toBe(0);
-  }, SLOW);
+  const PAGE_SOURCE =
+    "import {Card} from '@astryxdesign/core/Card';\n" +
+    "import {Badge} from '@astryxdesign/core/Badge';\n" +
+    `import {PlayingCardContents} from '${DEMO_CONTENT_MODULE}';\n\n` +
+    'export default function CardDemo() {\n' +
+    '  return (\n' +
+    '    <Card padding={4}>\n' +
+    '      <Badge label="New" />\n' +
+    '      <PlayingCardContents rank="Q" suit="hearts" />\n' +
+    '    </Card>\n' +
+    '  );\n' +
+    '}\n';
+
+  /** @returns {any} a resolved page whose source carries demo content */
+  function demoPage() {
+    const filePath = path.join(dir, 'src', 'CardPage.tsx');
+    fs.mkdirSync(path.dirname(filePath), {recursive: true});
+    fs.writeFileSync(filePath, PAGE_SOURCE);
+    return {dirName: 'CardPage', type: 'page', filePath, description: ''};
+  }
+
+  it('show lists the components of the source it returns, not the demo content it replaced', () => {
+    const {data} = templateShow(demoPage());
+    expect(data.source).not.toContain('PlayingCardContents');
+    expect(data.components).toEqual(['Badge', 'Card']);
+  });
+
+  it('skeleton lists, and lays out, the components of the replaced source', () => {
+    const {data} = templateSkeleton(demoPage(), []);
+    expect(data.components).toEqual(['Badge', 'Card']);
+    expect(data.skeleton).not.toContain('PlayingCardContents');
+    expect(data.skeleton).toContain('<Card padding={4}>');
+  });
+
+  it(
+    'reports 0 for a catalog template that carries no demo content',
+    async () => {
+      const {id} = await findTemplate('page', r => r.length === 0);
+      const res = await template(id, {targetPath: './dest', cwd: dir});
+      expect(res.data.demoContentReplaced).toBe(0);
+    },
+    SLOW,
+  );
 });

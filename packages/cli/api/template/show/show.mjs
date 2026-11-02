@@ -12,7 +12,7 @@ import * as fs from 'node:fs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
-  extractComponents,
+  componentsInSource,
   pkgOf,
   replaceTemplateDemos,
 } from '../../../foundation/discovery/template-adapter.mjs';
@@ -56,7 +56,7 @@ export function templateShow(match, {iconSets = NO_ICON_SETS} = {}) {
       template: match.dirName,
       description: match.description,
       type: match.type,
-      components: extractComponents(match.filePath),
+      components: componentsInSource(source),
       source,
       demoMediaReplaced,
       demoContentReplaced,

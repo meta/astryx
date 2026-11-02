@@ -11,11 +11,16 @@ import {describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {parse as parseModule} from '@babel/parser';
 import {
   DEMO_CONTENT_MODULE,
   replaceDemoContent,
   replaceTemplateDemos,
 } from './template-adapter.mjs';
+
+/** @param {string} source */
+const parse = source =>
+  parseModule(source, {sourceType: 'module', plugins: ['jsx', 'typescript']});
 
 const CARD = "import {Card} from '@astryxdesign/core/Card';\n";
 const DEMO = `import {PlayingCardContents} from '${DEMO_CONTENT_MODULE}';\n`;
@@ -96,6 +101,74 @@ describe('replaceDemoContent', () => {
     });
   });
 
+  it('imports Text under a unique alias when a module-level destructuring already binds Text', () => {
+    const source =
+      CARD +
+      DEMO +
+      'const {Text} = Typography;\n' +
+      'export default function Example() {\n' +
+      '  return <Card><Text>Title</Text><PlayingCardContents rank="Q" suit="hearts" /></Card>;\n' +
+      '}\n';
+    const result = replaceDemoContent(source);
+    expect(result).toEqual({
+      source:
+        CARD +
+        "import {Text as AstryxText} from '@astryxdesign/core/Text';\n" +
+        'const {Text} = Typography;\n' +
+        'export default function Example() {\n' +
+        '  return <Card><Text>Title</Text><AstryxText>Card content</AstryxText></Card>;\n' +
+        '}\n',
+      demoContentReplaced: 1,
+    });
+    expect(() => parse(result.source)).not.toThrow();
+  });
+
+  it('imports Text under a unique alias when a local declaration named Text exists', () => {
+    const source = `${DEMO}function Text() { return null; }\nconst a = <PlayingCardContents rank="Q" suit="hearts" />;\n`;
+    expect(replaceDemoContent(source)).toEqual({
+      source:
+        "import {Text as AstryxText} from '@astryxdesign/core/Text';\n" +
+        'function Text() { return null; }\n' +
+        'const a = <AstryxText>Card content</AstryxText>;\n',
+      demoContentReplaced: 1,
+    });
+  });
+
+  it('does not use an Astryx Text import that a parameter named Text shadows at the element', () => {
+    const source =
+      "import {Text} from '@astryxdesign/core/Text';\n" +
+      DEMO +
+      'export const title = <Text>Title</Text>;\n' +
+      'export function Face({Text}) {\n' +
+      '  return <Text><PlayingCardContents rank="Q" suit="hearts" /></Text>;\n' +
+      '}\n';
+    const result = replaceDemoContent(source);
+    expect(result).toEqual({
+      source:
+        "import {Text} from '@astryxdesign/core/Text';\n" +
+        "import {Text as AstryxText} from '@astryxdesign/core/Text';\n" +
+        'export const title = <Text>Title</Text>;\n' +
+        'export function Face({Text}) {\n' +
+        '  return <Text><AstryxText>Card content</AstryxText></Text>;\n' +
+        '}\n',
+      demoContentReplaced: 1,
+    });
+    expect(() => parse(result.source)).not.toThrow();
+  });
+
+  it('reuses an Astryx Text import from the package root when it is the binding at every element', () => {
+    const source =
+      "import {Card, Text} from '@astryxdesign/core';\n" +
+      DEMO +
+      'export const a = <Card><Text>Title</Text><PlayingCardContents rank="Q" suit="hearts" /></Card>;\n';
+    expect(replaceDemoContent(source)).toEqual({
+      source:
+        "import {Card, Text} from '@astryxdesign/core';\n" +
+        'export const a = <Card><Text>Title</Text><Text>Card content</Text></Card>;\n',
+      demoContentReplaced: 1,
+    });
+  });
+
   it.each([
     [
       'a spread prop',
@@ -158,9 +231,9 @@ describe('replaceDemoContent', () => {
       /outside a static import/u,
     ],
     [
-      'a local Text the placeholder would collide with',
-      `${DEMO}function Text() { return null; }\nconst a = <PlayingCardContents rank="Q" suit="hearts" />;\n`,
-      /already declares its own Text/u,
+      'a prop whose variable only another component reads, by the same name',
+      `${DEMO}function Face() {\n  const rank = 'Q';\n  return <PlayingCardContents rank={rank} suit="hearts" />;\n}\nfunction Label({rank}) {\n  return rank;\n}\n`,
+      /reads rank, and nothing else in the file reads it/u,
     ],
     [
       'source that does not parse',

@@ -144,12 +144,7 @@ concerns require a separate contract.
   the originals (FR4). A check MUST fail when copied, shown, or handed-out
   output still references a demo-content element or the code that defines it.
   How a demo-content element is marked and replaced belongs to
-  `architecture:template-authoring`. Implementation gap: the element
-  replacement and `demoContentReplaced` in the copy receipt and the
-  `template show` response are not built; `--showcase` prints the showcase file
-  as read from disk; the shadcn Install item installs block source as read from
-  disk, with its fixture media, and discloses no replacement (Current-state
-  impact).
+  `architecture:template-authoring`.
 
 ### Boundary with icons
 
@@ -175,12 +170,17 @@ previously unwritten requirements for why assets are fixtures, which references
 may be transformed, what a safe fallback means, how unsupported formats fail,
 and why icons are separate.
 
-Demo-content elements (FR13) are not built: the copy and show paths replace no
-elements, and neither the copy receipt nor the `template show` response has a
-`demoContentReplaced` count. `astryx component <Name> --showcase` prints the
-showcase file as read from disk. The shadcn Install item installs block source
-as read from disk, so it writes `/template-assets/` references into the
-consumer's project and discloses no replacement.
+`template copy` and `template show` replace each demo-content element (FR13)
+with a `<Text>Card content</Text>` placeholder, import Astryx's `Text` for it
+when the source does not already import it, and remove the demo-content import.
+Both responses report the count as `demoContentReplaced`.
+`astryx template <name> --skeleton` outlines that replaced source and lists
+its components. `astryx component <Name> --showcase` prints the showcase source
+with each demo-content element replaced and its fixture media kept. The shadcn
+Install item installs block and page source with demo-content elements and
+fixture media both replaced, each as a visibly marked placeholder, and its
+registry item description says how many were replaced. Its
+`.astryx/<item>.json` receipt keeps the v2 shape until CLN-0027.
 
 This specification-only change alters no package, template, asset, preview,
 runtime, or public CLI behavior. Remaining implementation and verification
