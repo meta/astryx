@@ -63,6 +63,11 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {usePopover} from '../Popover';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {NativeDateField} from './NativeDateField';
 import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
@@ -476,6 +481,20 @@ export interface DateInputProps extends Omit<
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
 /**
+ * Whether `target` is a label whose control is `input`. Checked by nodeType
+ * and tag name, so a label in a same-origin iframe counts.
+ */
+function isLabelFor(target: EventTarget, input: HTMLInputElement | null) {
+  const node = target as Partial<HTMLLabelElement>;
+  return (
+    input != null &&
+    node.nodeType === 1 &&
+    node.localName === 'label' &&
+    node.control === input
+  );
+}
+
+/**
  * The pointer-driven field: a text input you can type into, with a calendar
  * in a popover beside it. `DateInput` renders this whenever the primary
  * pointer is not a finger — see {@link TOUCH_POINTER_QUERY}.
@@ -637,18 +656,44 @@ function PointerDateField({
       ? true
       : parseDateInput(pendingInput, locale) !== null;
 
+  const fieldElementRef = useRef<HTMLDivElement | null>(null);
+  // Set just before a close that focus already left the field for, so onHide
+  // does not pull focus back to the input.
+  const isFocusMovingAwayRef = useRef(false);
+  const outsidePress = useOutsidePress();
   const popover = usePopover({
+    // A text input cannot be an invoker. Light dismiss would count a press in
+    // it as outside and close the calendar.
+    hasLightDismiss: false,
+    onShow: () => {
+      const field = fieldElementRef.current;
+      if (field == null) {
+        return;
+      }
+      outsidePress.start(
+        field,
+        // The label counts too: a press there focuses the input, which would
+        // otherwise close the calendar and reopen it on the same press.
+        path =>
+          isPressInsideOwnedLayer(path, field, popover.id) ||
+          path.some(target => isLabelFor(target, inputRef.current)),
+        // Called after usePopover has returned, so `popover` is assigned.
+        () => popover.hide(),
+      );
+    },
     dialogLabel: t('@astryx.dateInput.dialogLabel'),
     closeButtonLabel: t('@astryx.dateInput.closeCalendar'),
     // Return focus to the input when the calendar closes — but only when the
     // dismiss left focus detached (Escape, or a click on non-focusable empty
-    // space), which the focus trap can't restore on its own. A native
-    // popover="auto" light-dismiss fires synchronously with the pointer event
-    // that moved focus, so if the user clicked another control — the clear
-    // button, another field, anywhere — focus has already landed there;
-    // reclaiming it would fight their click.
+    // space), which the focus trap can't restore on its own. An outside press
+    // closes the calendar after the pointer event that moved focus, so if the
+    // user clicked another control — another field, anywhere — focus has
+    // already landed there; reclaiming it would fight their click.
     onHide: () => {
-      if (isFocusDetached()) {
+      outsidePress.stop();
+      const isFocusMovingAway = isFocusMovingAwayRef.current;
+      isFocusMovingAwayRef.current = false;
+      if (!isFocusMovingAway && isFocusDetached()) {
         inputRef.current?.focus();
       }
     },
@@ -791,10 +836,29 @@ function PointerDateField({
     locale,
   ]);
 
-  // Handle blur - validate, check constraints, and clear pending input
+  // Handle blur - validate, check constraints, and clear pending input.
   const handleBlur = useCallback(() => {
     commitPendingInput();
   }, [commitPendingInput]);
+
+  // A manual popover has no auto-popover exclusivity, so without this close
+  // the next field's calendar would open beside this one. Focus going nowhere
+  // (a window switch) leaves it open.
+  const handleFieldBlur = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      const next = e.relatedTarget;
+      if (
+        !popover.isOpen ||
+        next == null ||
+        isFocusInsideOwnedLayer(next, fieldElementRef.current, popover.id)
+      ) {
+        return;
+      }
+      isFocusMovingAwayRef.current = true;
+      popover.hide();
+    },
+    [popover],
+  );
 
   // Handle keyboard events on input
   const handleInputKeyDown = useCallback(
@@ -831,12 +895,14 @@ function PointerDateField({
   const inputWrapper = (
     <div
       ref={el => {
+        fieldElementRef.current = el;
         popover.triggerRef(el);
         // Anchor + hover/focus listeners for the disabled-message tooltip.
         // Handlers are gated internally by isEnabled, and anchor names
         // compose, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
+      onBlur={handleFieldBlur}
       {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
