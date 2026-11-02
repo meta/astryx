@@ -1833,6 +1833,9 @@ export async function findShowcase(componentName, cwd, options) {
   return null;
 }
 
+/** The npm scope of every Astryx package. */
+const ASTRYX_PACKAGE_SCOPE = '@astryxdesign/';
+
 const UBIQUITOUS = new Set([
   'Text',
   'Heading',
@@ -1845,16 +1848,21 @@ const UBIQUITOUS = new Set([
 ]);
 
 /**
- * Names bound by top-level `function`, `class`, `const`, `let` or `var`
- * declarations (exported or not). Returns an empty set when the source does
- * not parse, so a parse failure never drops a real component.
+ * The top-level bindings of a source. `declared` holds names bound by
+ * `function`, `class`, `const`, `let` or `var` declarations (exported or not).
+ * `astryxImports` maps each local name of a named Astryx import to the name the
+ * package exports, so `Text as AstryxText` maps `AstryxText` to `Text`. Both
+ * are empty when the source does not parse, so a parse failure never drops a
+ * real component.
  *
  * @param {string} src
- * @returns {Set<string>}
+ * @returns {{declared: Set<string>, astryxImports: Map<string, string>}}
  */
-function topLevelBindingNames(src) {
+function topLevelBindings(src) {
   /** @type {Set<string>} */
   const names = new Set();
+  /** @type {Map<string, string>} */
+  const astryxImports = new Map();
   let program;
   try {
     program = templateSourceParser().parse(src, {
@@ -1863,9 +1871,21 @@ function topLevelBindingNames(src) {
       errorRecovery: true,
     }).program;
   } catch {
-    return names;
+    return {declared: names, astryxImports};
   }
   for (const statement of program.body) {
+    if (statement.type === 'ImportDeclaration') {
+      if (!statement.source.value.startsWith(ASTRYX_PACKAGE_SCOPE)) continue;
+      for (const specifier of statement.specifiers) {
+        if (specifier.type !== 'ImportSpecifier') continue;
+        const {imported} = specifier;
+        astryxImports.set(
+          specifier.local.name,
+          imported.type === 'Identifier' ? imported.name : imported.value,
+        );
+      }
+      continue;
+    }
     const node =
       statement.type === 'ExportNamedDeclaration' ||
       statement.type === 'ExportDefaultDeclaration'
@@ -1886,7 +1906,7 @@ function topLevelBindingNames(src) {
       }
     }
   }
-  return names;
+  return {declared: names, astryxImports};
 }
 
 /**
@@ -1931,12 +1951,13 @@ export function componentsInSource(src) {
   // page-local helpers (e.g. `function TimelineSection()`), not components a
   // builder can import. Read real bindings from the syntax tree so comments,
   // strings and type annotations cannot add or hide a name.
-  const localDeclNames = topLevelBindingNames(src);
+  const {declared: localDeclNames, astryxImports} = topLevelBindings(src);
 
   return [
     ...new Set(
       matches
         .filter(n => !localDeclNames.has(n))
+        .map(n => astryxImports.get(n) ?? n)
         .filter(n => !['Theme', 'ThemeProvider'].includes(n))
         .filter(n => !UBIQUITOUS.has(n))
         .map(n =>

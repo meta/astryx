@@ -817,6 +817,31 @@ describe('buildShadcnRegistry', () => {
     }
   });
 
+  it('installs an integration-package block from its authored file, so it discloses its replacements', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-integration-'));
+    try {
+      const authoredSourcePath = path.join(dir, 'ButtonShowcase.tsx');
+      const source = src =>
+        `export default function ButtonShowcase() {\n  return <video src="${src}" />;\n}\n`;
+      writeFileSync(authoredSourcePath, source('/template-assets/clip.mp4'));
+      const [base] = fixture().blocks;
+      // `source` is `template show` output, so its video source is already empty.
+      const block = {...base, sourcePackage: '@astryxdesign/lab', source: source('')};
+      const {items} = buildShadcnRegistry(
+        fixture({blocks: [{...block, authoredSourcePath}]}),
+      );
+      const item = items.find(({name}) => name === 'showcase-button-variants');
+      expect(item.files[0].content).toContain(
+        `<video src="${MARKED_VIDEO_PLACEHOLDER}" />`,
+      );
+      expect(item.description).toBe(
+        'Shows a primary button. Astryx replaced 1 demo media reference with marked placeholders; put your own content there.',
+      );
+    } finally {
+      rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
   it('leaves the description of an item with no demo content as written', () => {
     const {items} = buildShadcnRegistry(fixture());
     expect(

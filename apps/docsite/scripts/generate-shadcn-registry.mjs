@@ -339,6 +339,20 @@ export function withReplacementNote(description, replaced) {
   return `${lead} Astryx replaced ${counts.join(' and ')} with marked placeholders; put your own content there.`;
 }
 
+/**
+ * The entry with the source a copy starts from. An entry whose `source` is
+ * already a copy, such as `template show` output, names its authored file in
+ * `authoredSourcePath`; the install applies every copy replacement to that file.
+ * @template {{source: string, authoredSourcePath?: string | null}} T
+ * @param {T} entry
+ * @returns {T}
+ */
+function withAuthoredSource(entry) {
+  return entry.authoredSourcePath
+    ? {...entry, source: fs.readFileSync(entry.authoredSourcePath, 'utf-8')}
+    : entry;
+}
+
 function withCompositionReceipt(item, identity, sourceVersion) {
   const [sourceFile, ...supportFiles] = item.files;
   const receiptTarget = registryReceiptTarget(sourceFile.target, item.name);
@@ -659,7 +673,7 @@ export function buildShadcnRegistry({
   const packageCatalog = new Map(packages.map(pkg => [pkg.name, pkg]));
   const blockItems = [];
   let skippedUnpublishedBlocks = 0;
-  for (const block of blocks) {
+  for (const block of blocks.map(withAuthoredSource)) {
     // A released subpath can still lack a named component added after the last
     // package release. Production blocks must satisfy both contracts: the
     // imported subpath below and the published component snapshot here.
@@ -705,7 +719,7 @@ export function buildShadcnRegistry({
 
   const pageItems = [];
   let skippedUnpublishedPages = 0;
-  for (const template of templates) {
+  for (const template of templates.map(withAuthoredSource)) {
     try {
       pageItems.push(
         pageItem(

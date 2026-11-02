@@ -57,7 +57,11 @@ import {
   docs as readDocs,
   template as queryTemplates,
 } from '@astryxdesign/cli/api';
-import {replaceDemoContent} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {
+  discoverAll,
+  pkgOf,
+  replaceDemoContent,
+} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import docsiteConfig from '../astryx.config.mjs';
 import {
   integrationContentEnabled,
@@ -1463,6 +1467,9 @@ export const groupedComponents: Record<string, GroupedComponents> = ${JSON.strin
 
 // ── 3. Block Registry ──────────────────────────────────────────────────
 
+/** The authored file of each integration block, by block `dirName`. */
+const integrationBlockFiles = new Map();
+
 async function generateBlockRegistry() {
   console.log('Generating block registry...');
 
@@ -1571,6 +1578,7 @@ async function generateBlockRegistry() {
     const integrationBlocks = templateList.data.filter(entry =>
       CONFIGURED_COMPONENT_PACKAGES.has(entry.package),
     );
+    const discovered = await discoverAll(DOCSITE_ROOT);
     for (const entry of integrationBlocks) {
       const shown = await queryTemplates(entry.id, {
         show: true,
@@ -1578,8 +1586,14 @@ async function generateBlockRegistry() {
         package: entry.package,
         cwd: DOCSITE_ROOT,
       });
+      const dirName = `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const authored = discovered.find(
+        t => t.type === 'block' && t.dirName === entry.id && pkgOf(t) === entry.package,
+      );
+      if (!authored) throw new Error(`No authored file for ${dirName}`);
+      integrationBlockFiles.set(dirName, authored.filePath);
       blocks.push({
-        dirName: `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-'),
+        dirName,
         name: entry.name,
         displayName: entry.displayName || entry.name,
         description: entry.description,
@@ -2243,17 +2257,6 @@ function templateSourcePath(template) {
   );
 }
 
-/**
- * The registries carry displayed source. A shadcn install is a copy, so it
- * starts from the file as authored and applies every copy replacement itself.
- * Integration blocks have no file here: their source is already a copy.
- */
-function withAuthoredSource(entry, sourcePath) {
-  return sourcePath
-    ? {...entry, source: fs.readFileSync(sourcePath, 'utf-8')}
-    : entry;
-}
-
 function writeBlockPreview(block, outDir, basename) {
   const destFile = `${basename}.tsx`;
   const destination = path.join(outDir, destFile);
@@ -2697,12 +2700,17 @@ async function main() {
     outDir: path.join(DOCSITE_ROOT, 'public', 'shadcn'),
     packages,
     allComponents,
-    blocks: blocks.map(block =>
-      withAuthoredSource(block, blockSourcePath(block)),
-    ),
-    templates: templates.map(template =>
-      withAuthoredSource(template, templateSourcePath(template)),
-    ),
+    // The registries carry displayed source. A shadcn install is a copy, so it
+    // starts from the file as authored.
+    blocks: blocks.map(block => ({
+      ...block,
+      authoredSourcePath:
+        blockSourcePath(block) ?? integrationBlockFiles.get(block.dirName),
+    })),
+    templates: templates.map(template => ({
+      ...template,
+      authoredSourcePath: templateSourcePath(template),
+    })),
     cliRoot: CLI_ROOT,
     dependencyTag: DOCSITE_TARGET === 'canary' ? 'canary' : null,
     externalDependencySpecs: registryExternalDependencySpecs(),

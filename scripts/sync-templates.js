@@ -320,29 +320,29 @@ async function main() {
 
 module.exports = {generateSourceRegistry};
 
-if (require.main === module) {
-  main()
-    .then(() => {
-      if (process.argv.includes('--watch')) {
-        const chokidar = require('chokidar');
-        const watchPaths = [
-          PAGES_DIR + '/**/template.doc.mjs',
-          BLOCKS_DIR + '/**/*.doc.mjs',
-        ];
-        let debounce = null;
-        const rerun = () => {
-          if (debounce) clearTimeout(debounce);
-          debounce = setTimeout(() => {
-            console.log('\n  .doc.mjs changed — re-syncing...');
-            main().catch(console.error);
-          }, 300);
-        };
-        chokidar.watch(watchPaths, {ignoreInitial: true}).on('all', rerun);
-        console.log('  Watching .doc.mjs files for changes...');
-      }
-    })
-    .catch(err => {
-      console.error(err);
-      process.exit(1);
-    });
-}
+// Importing the module for its helpers runs neither the sync nor the watch.
+const isCli = require.main === module;
+(isCli ? main() : Promise.resolve())
+  .then(() => {
+    if (isCli && process.argv.includes('--watch')) {
+      const chokidar = require('chokidar');
+      const watchPaths = [
+        PAGES_DIR + '/**/template.doc.mjs',
+        BLOCKS_DIR + '/**/*.doc.mjs',
+      ];
+      let debounce = null;
+      const rerun = () => {
+        if (debounce) clearTimeout(debounce);
+        debounce = setTimeout(() => {
+          console.log('\n  .doc.mjs changed — re-syncing...');
+          main().catch(console.error);
+        }, 300);
+      };
+      chokidar.watch(watchPaths, {ignoreInitial: true}).on('all', rerun);
+      console.log('  Watching .doc.mjs files for changes...');
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
