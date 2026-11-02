@@ -158,6 +158,43 @@ function heldSearch() {
   return {fetchSearch, pending};
 }
 
+describe('a slow query', () => {
+  beforeEach(() => resetSearchWarmup());
+
+  it('is sent once more after the hedge delay, and the first answer wins', async () => {
+    const search = heldSearch();
+    const source = createCliSearchSource(search.fetchSearch, () => null, 50);
+    const results = source.search('app shell');
+    await new Promise(resolve => setTimeout(resolve, 160));
+    expect(search.pending).toHaveLength(1);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    // Still unanswered after the hedge delay: sent once more, never a third time.
+    expect(search.pending).toHaveLength(2);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(search.pending).toHaveLength(2);
+
+    search.pending[1].answer([
+      {href: '/components/app-shell', name: 'AppShell'},
+    ]);
+    expect((await results).map(item => item.label)).toEqual(['AppShell']);
+    expect(search.pending[0].signal.aborted).toBe(true);
+    expect(search.pending[1].signal.aborted).toBe(false);
+  });
+
+  it('keeps the first answer when it arrives before the second', async () => {
+    const search = heldSearch();
+    const source = createCliSearchSource(search.fetchSearch, () => null, 50);
+    const results = source.search('app shell');
+    await new Promise(resolve => setTimeout(resolve, 260));
+    expect(search.pending).toHaveLength(2);
+    search.pending[0].answer([
+      {href: '/components/app-shell', name: 'AppShell'},
+    ]);
+    expect((await results).map(item => item.label)).toEqual(['AppShell']);
+    expect(search.pending[1].signal.aborted).toBe(true);
+  });
+});
+
 describe('a query typed during a warm-up', () => {
   beforeEach(() => resetSearchWarmup());
 
