@@ -595,6 +595,36 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     () => displayOrder(results, queryEntryCount),
     [results, queryEntryCount],
   );
+  // Committed values (Tokenizer's tokens) leave the shown rows in the same
+  // render that commits them, before any reload answers, so a list never
+  // offers a token (component:Tokenizer FR13). The highlight stays on its item
+  // when that item remains. The previous key is remembered in state, like
+  // `sourceOfState` below.
+  const committedChoices = useCommittedChoices();
+  const committedChoicesKey = committedChoices?.key;
+  const isAtCommitLimit = committedChoices?.isAtLimit === true;
+  const [committedKeyOfState, setCommittedKeyOfState] =
+    useState(committedChoicesKey);
+  if (committedKeyOfState !== committedChoicesKey) {
+    setCommittedKeyOfState(committedChoicesKey);
+    const committedIds = committedChoices?.ids;
+    const kept =
+      committedIds == null
+        ? results
+        : results.filter(item => !committedIds.has(item.id));
+    if (kept.length !== results.length) {
+      const highlightedId = displayedResults[highlightedIndex]?.id;
+      const keptOrder = displayOrder(kept, queryEntryCount);
+      const keptIndex =
+        highlightedId == null
+          ? -1
+          : keptOrder.findIndex(item => item.id === highlightedId);
+      setResults(kept);
+      setHighlightedIndex(
+        keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
+      );
+    }
+  }
   // The popup's listbox, measured when a later list arrives so the appended
   // rows scroll instead of moving the shown rows or flipping the popup to
   // the other side of the field (spec:AST-092 FR6).
@@ -1147,16 +1177,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // open, it reloads the same query, its typed text or the focus list, from
   // the source those values now filter. A closed list stays closed; opening it
   // loads that source.
-  const committedChoices = useCommittedChoices();
-  const committedChoicesKey = committedChoices?.key;
-  const isAtCommitLimit = committedChoices?.isAtLimit === true;
   const reloadForCommittedChoices = useCallback(() => {
     if (isDisabled || !isMountedRef.current || !isShowingRef.current) {
       return;
     }
-    if (isAtCommitLimit) {
-      // At the limit nothing more can be committed, whatever the query, so
-      // the list closes (component:Tokenizer FR15).
+    if (results.length === 0 || isAtCommitLimit) {
+      // The commit left no row to show, or at the limit nothing more can be
+      // committed whatever the query: the list closes (component:Tokenizer
+      // FR15).
       popover.hide();
     } else if (
       query.length > 0 &&
@@ -1172,6 +1200,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [
     isDisabled,
+    results.length,
     isAtCommitLimit,
     query,
     minQueryLength,
@@ -1180,46 +1209,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     performBootstrap,
     popover,
   ]);
-  // Until the reload answers, the shown rows drop every value just
-  // committed, so the list never offers a token (component:Tokenizer FR13).
-  // The highlight stays on its item when that item remains, and a list left
-  // with no rows closes (FR15).
-  const committedIds = committedChoices?.ids;
-  const dropCommittedRows = useCallback(() => {
-    if (committedIds == null || !isShowingRef.current) {
-      return;
-    }
-    const kept = results.filter(item => !committedIds.has(item.id));
-    if (kept.length === results.length) {
-      return;
-    }
-    const highlightedId = displayedResults[highlightedIndex]?.id;
-    const keptOrder = displayOrder(kept, queryEntryCount);
-    const keptIndex =
-      highlightedId == null
-        ? -1
-        : keptOrder.findIndex(item => item.id === highlightedId);
-    setResults(kept);
-    setHighlightedIndex(
-      keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
-    );
-    if (kept.length === 0) {
-      popover.hide();
-    }
-  }, [
-    committedIds,
-    results,
-    displayedResults,
-    highlightedIndex,
-    queryEntryCount,
-    popover,
-  ]);
-  // The latest handlers, read when the key changes, as effect events.
+  // The latest reload, read when the key changes, as an effect event.
   const reloadForCommittedChoicesRef = useRef(reloadForCommittedChoices);
-  const dropCommittedRowsRef = useRef(dropCommittedRows);
   useIsomorphicLayoutEffect(() => {
     reloadForCommittedChoicesRef.current = reloadForCommittedChoices;
-    dropCommittedRowsRef.current = dropCommittedRows;
   });
   const reloadedKeyRef = useRef(committedChoicesKey);
   useIsomorphicLayoutEffect(() => {
@@ -1227,10 +1220,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       return;
     }
     reloadedKeyRef.current = committedChoicesKey;
-    // Before paint, so a committed value is never painted as a choice.
-    dropCommittedRowsRef.current();
     // The reload is a source request, started after the commit like one a
-    // keystroke starts.
+    // keystroke starts. Queued from a layout effect, it runs before paint, so
+    // a list the commit emptied closes without showing empty.
     queueMicrotask(() => {
       if (reloadedKeyRef.current === committedChoicesKey) {
         reloadForCommittedChoicesRef.current();

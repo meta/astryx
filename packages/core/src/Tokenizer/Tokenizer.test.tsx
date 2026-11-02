@@ -1339,7 +1339,24 @@ describe('Tokenizer', () => {
           return users.slice(0, 3);
         },
       };
-      render(<Controlled initial={[users[0]]} source={slowSource} />);
+      // Whether each commit after the change painted Charlie as a choice.
+      const commitsListingCharlie: boolean[] = [];
+      let isWatching = false;
+      render(
+        <Profiler
+          id="tokenizer"
+          onRender={() => {
+            if (isWatching) {
+              commitsListingCharlie.push(
+                Array.from(document.querySelectorAll('[role="option"]')).some(
+                  option => option.textContent?.includes('Charlie'),
+                ),
+              );
+            }
+          }}>
+          <Controlled initial={[users[0]]} source={slowSource} />
+        </Profiler>,
+      );
       const input = screen.getByRole('combobox');
 
       await user.click(input);
@@ -1348,11 +1365,15 @@ describe('Tokenizer', () => {
           screen.getByRole('option', {name: 'Charlie', hidden: true}),
         ).toBeInTheDocument();
       });
+      isWatching = true;
       act(() => {
         screen.getByRole('button', {name: 'Set Charlie'}).click();
       });
+      isWatching = false;
 
-      // Before the reload answers, Charlie is a token and not a choice.
+      // No commit, not even the one that adds the token, lists Charlie.
+      expect(commitsListingCharlie.length).toBeGreaterThan(0);
+      expect(commitsListingCharlie).not.toContain(true);
       expect(
         screen.queryByRole('option', {name: 'Charlie', hidden: true}),
       ).not.toBeInTheDocument();
