@@ -786,6 +786,7 @@
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",
     "/templates/useToastHookUsage/",
+    "/templates/useTranslatorHookUsage/",
     "/templates/work-item-detail/",
     "/themes/",
     "/tools/"
