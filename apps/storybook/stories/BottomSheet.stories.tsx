@@ -25,6 +25,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
 import {Popover} from '@astryxdesign/core/Popover';
 
 const meta: Meta<typeof BottomSheet> = {
@@ -277,6 +278,9 @@ function MobileKeyboardCommentForm({onPost}: {onPost: () => void}) {
 export const Showcase: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
+    const [inStock, setInStock] = useState(false);
+    const [onSale, setOnSale] = useState(false);
+    const [freeShipping, setFreeShipping] = useState(false);
     return (
       <>
         <Button label="Open sheet" onClick={() => setIsOpen(true)} />
@@ -285,11 +289,23 @@ export const Showcase: Story = {
             <VStack gap={4}>
               <Heading level={3}>Filters</Heading>
               <Divider />
-              <VStack gap={2}>
-                <CheckboxInput label="In stock" value={false} />
-                <CheckboxInput label="On sale" value={false} />
-                <CheckboxInput label="Free shipping" value={false} />
-              </VStack>
+              <CheckboxList label="Filters" isLabelHidden>
+                <CheckboxListItem
+                  label="In stock"
+                  isChecked={inStock}
+                  onCheck={setInStock}
+                />
+                <CheckboxListItem
+                  label="On sale"
+                  isChecked={onSale}
+                  onCheck={setOnSale}
+                />
+                <CheckboxListItem
+                  label="Free shipping"
+                  isChecked={freeShipping}
+                  onCheck={setFreeShipping}
+                />
+              </CheckboxList>
               <Button label="Apply" onClick={() => setIsOpen(false)} />
             </VStack>
           </Section>
