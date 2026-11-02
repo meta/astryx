@@ -113,8 +113,9 @@ const FOLDERS = {
   },
 };
 
-/** @type {string[]} */
-const bases = [];
+/** Run folders not yet removed: a run removes its own once it has read it. */
+/** @type {Set<string>} */
+const bases = new Set();
 
 /**
  * Every file under `root`, skipping node_modules, by path relative to `base`.
@@ -144,7 +145,7 @@ function readTree(root, base, into = new Map()) {
  */
 async function runThrough(door, argv, setUp) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-door-'));
-  bases.push(base);
+  bases.add(base);
   const dir = path.join(base, 'app');
   const home = path.join(base, 'home');
   fs.mkdirSync(dir);
@@ -202,6 +203,10 @@ async function runThrough(door, argv, setUp) {
   const placeholders = text =>
     text.split(real).join('<run>').split(base).join('<run>');
   const after = read();
+  // The run's folder is read; it goes now, while the runs are spread over
+  // the setup's own budget, rather than all of them at once after the file.
+  fs.rmSync(base, {recursive: true, force: true});
+  bases.delete(base);
   /** @type {Record<string, string | null>} */
   const changes = {};
   for (const [file, text] of after) {
@@ -240,6 +245,7 @@ async function inBatches(tasks, limit) {
 
 const examples = await commandExamples();
 
+// Only a run that failed before removing its folder leaves one here.
 afterAll(() => {
   for (const base of bases) fs.rmSync(base, {recursive: true, force: true});
 });
