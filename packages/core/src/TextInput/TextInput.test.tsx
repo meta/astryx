@@ -246,6 +246,21 @@ describe('TextInput', () => {
     expect(container.querySelector('svg')).not.toBeInTheDocument();
   });
 
+  // The shared presence check decides the start icon's slot
+  // (architecture:react-component-runtime INV16).
+  it.each([
+    ['null', null],
+    ['false', false],
+    ['an empty string', ''],
+  ])('renders no start icon for %s', (_label, value) => {
+    const {container} = render(
+      <TextInput label="Name" value="" onChange={() => {}} startIcon={value} />,
+    );
+    const wrapper = screen.getByRole('textbox').parentElement as HTMLElement;
+    expect(wrapper.firstChild).toBe(screen.getByRole('textbox'));
+    expect(container.querySelector('svg')).toBeNull();
+  });
+
   describe('status prop', () => {
     it('renders with error status icon', () => {
       const {container} = render(

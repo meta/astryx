@@ -43,6 +43,7 @@ import {
   inputStatusFocusWithinStyles,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {isRenderable} from '../utils/isRenderable';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
@@ -427,6 +428,10 @@ export function TextArea({
     containerStyle,
   });
   const size = useSize(sizeProp, 'md');
+  // One presence check for the start icon's slot and its padding
+  // (`architecture:react-component-runtime` INV16), on the value the caller
+  // passed: an icon component counts as present, as any non-empty value does.
+  const hasStartIcon = isRenderable(startIcon as ReactNode);
   const t = useTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const announce = useAnnounce();
@@ -622,7 +627,7 @@ export function TextArea({
           controlClassName,
           controlStyle,
         )}>
-        {startIcon && (
+        {hasStartIcon && (
           <span {...stylex.props(styles.startIcon)}>
             {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
           </span>
@@ -673,7 +678,7 @@ export function TextArea({
               styles.textarea,
               textareaSizeStyles[size],
               isDisabled && styles.textareaDisabled,
-              Boolean(startIcon) && styles.textareaWithStartIcon,
+              hasStartIcon && styles.textareaWithStartIcon,
               // Reserve trailing space only when the end slot actually renders
               // something (spinner or on-field status icon). The `detached`
               // status variant suppresses the on-field icon — its glyph lives

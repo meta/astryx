@@ -44,6 +44,7 @@ import {
   inputStatusFocusWithinStyles,
 } from '../Field';
 import {renderIconSlot, type IconType} from '../Icon';
+import {isRenderable} from '../utils/isRenderable';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -487,7 +488,11 @@ export function TextInput({
         controlClassName,
         controlStyle,
       )}>
-      {startIcon && renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
+      {/* The shared presence check decides the slot
+          (`architecture:react-component-runtime` INV16); an icon component
+          counts as present, as any non-empty value does. */}
+      {isRenderable(startIcon as ReactNode) &&
+        renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       <input
         {...fieldProps}
