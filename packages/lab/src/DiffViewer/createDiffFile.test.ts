@@ -219,6 +219,32 @@ describe('createDiffFile', () => {
     }
   });
 
+  it('finds a minimal diff for texts with more than a thousand changes', () => {
+    // Past a thousand changed lines a second, linear-space search takes over.
+    const random = createRandom(11);
+    for (let run = 0; run < 3; run++) {
+      const text = () =>
+        Array.from({length: 1200}, () => `line ${Math.floor(random() * 40)}`);
+      const a = text();
+      const b = text();
+      const file = createDiffFile({
+        oldValue: a.join('\n'),
+        newValue: b.join('\n'),
+        contextLines: 10_000,
+      });
+      const expected = minimalEditCount(a, b);
+      expect(expected).toBeGreaterThan(1000);
+      const {oldSide, newSide} = sides(file);
+      expect(oldSide).toEqual(a);
+      expect(newSide).toEqual(b);
+      expect(
+        file.hunks
+          .flatMap(hunk => hunk.lines)
+          .filter(line => line.kind !== 'context'),
+      ).toHaveLength(expected);
+    }
+  });
+
   it('keeps a line diff for thousands of changes spread through a long file', () => {
     // 1,500 lines changed in place: 3,000 changed lines in a 20,000-line file.
     const base = Array.from({length: 20_000}, (_, i) => `line ${i}`);

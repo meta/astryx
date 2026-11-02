@@ -9,7 +9,7 @@
  *   texts rather than a patch
  *
  * Shared leading and trailing lines are matched without a search. The minimal
- * search over the rest uses memory linear in the input and stops after
+ * search over the rest keeps its memory small for any input and stops after
  * MAX_EDIT_DISTANCE changed lines, so its time stays bounded; a middle that
  * differs more than that becomes one replaced block, marked with
  * `isReplacedBlock` on its hunk.
@@ -73,6 +73,14 @@ function splitLines(value: string): string[] {
  */
 const MAX_EDIT_DISTANCE = 10_000;
 
+/**
+ * Most changed lines the traced search tries first. Most changes are small,
+ * and for them the traced search is faster than the linear-space one. Its
+ * trace grows with the square of the edits, so at this limit it stays near
+ * 4 MB.
+ */
+const TRACED_SEARCH_LIMIT = 1000;
+
 interface EditScript {
   ops: Op[];
   /** True when the middle was replaced as a whole, not compared line by line. */
@@ -83,7 +91,8 @@ interface EditScript {
  * Line edit script from `a` to `b`. Shared leading and trailing lines are
  * context without a search; the middle uses a shortest edit script, or, when
  * it needs more than MAX_EDIT_DISTANCE edits, removes the old middle and adds
- * the new one.
+ * the new one. The traced search runs first and the linear-space search takes
+ * over when the change is larger than TRACED_SEARCH_LIMIT.
  */
 function diffLines(a: string[], b: string[]): EditScript {
   let head = 0;
@@ -106,7 +115,8 @@ function diffLines(a: string[], b: string[]): EditScript {
   const isOneSided = tailA === head || tailB === head;
   const middle = isOneSided
     ? null
-    : shortestEditScript(a, b, head, tailA, tailB);
+    : (tracedEditScript(a, b, head, tailA, tailB, TRACED_SEARCH_LIMIT) ??
+      shortestEditScript(a, b, head, tailA, tailB));
   if (middle != null) {
     // A loop, not a spread: one call argument per op overflows the stack on
     // long inputs.
@@ -344,6 +354,81 @@ function removalsFirst(ops: Op[]): Op[] {
     sorted.push(addedOp);
   }
   return sorted;
+}
+
+/**
+ * Myers' O(ND) shortest edit script over `a[start, endA)` and
+ * `b[start, endB)`, with absolute indexes in the ops; null when it needs more
+ * than `maxEdits` edits. It keeps every step's diagonals to trace the path
+ * back, so its memory grows with the square of the edits.
+ */
+function tracedEditScript(
+  a: string[],
+  b: string[],
+  start: number,
+  endA: number,
+  endB: number,
+  maxEdits: number,
+): Op[] | null {
+  const n = endA - start;
+  const m = endB - start;
+  const max = n + m;
+  const offset = max + 1;
+  const v = new Int32Array(2 * max + 3);
+  // trace[d] holds diagonals -d..d of v as it was before step d.
+  const trace: Int32Array[] = [];
+
+  outer: for (let d = 0; d <= max; d++) {
+    if (d > maxEdits) {
+      return null;
+    }
+    trace.push(v.slice(offset - d, offset + d + 1));
+    for (let k = -d; k <= d; k += 2) {
+      let x =
+        k === -d || (k !== d && v[offset + k - 1] < v[offset + k + 1])
+          ? v[offset + k + 1]
+          : v[offset + k - 1] + 1;
+      let y = x - k;
+      while (x < n && y < m && a[start + x] === b[start + y]) {
+        x++;
+        y++;
+      }
+      v[offset + k] = x;
+      if (x >= n && y >= m) {
+        break outer;
+      }
+    }
+  }
+
+  const ops: Op[] = [];
+  let x = n;
+  let y = m;
+  for (let d = trace.length - 1; d >= 0; d--) {
+    const vd = trace[d];
+    // Outside the stored window (only k = 1 at d = 0) v was still zero.
+    const at = (k: number) => vd[k + d] ?? 0;
+    const k = x - y;
+    const prevK =
+      k === -d || (k !== d && at(k - 1) < at(k + 1)) ? k + 1 : k - 1;
+    const prevX = at(prevK);
+    const prevY = prevX - prevK;
+    while (x > prevX && y > prevY) {
+      x--;
+      y--;
+      ops.push({kind: 'context', a: start + x, b: start + y});
+    }
+    if (d > 0) {
+      if (x === prevX) {
+        ops.push({kind: 'added', b: start + prevY});
+      } else {
+        ops.push({kind: 'removed', a: start + prevX});
+      }
+    }
+    x = prevX;
+    y = prevY;
+  }
+  ops.reverse();
+  return ops;
 }
 
 function formatRange(start: number, count: number): string {
