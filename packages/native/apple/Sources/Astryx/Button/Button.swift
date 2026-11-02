@@ -203,9 +203,9 @@ public struct Button: View {
       // the whole control dims and takes no touch, so the style shows no
       // press response, while it keeps its focus stop (FR6, FR11).
       control.buttonStyle(.glassProminent).tint(tint)
+        .astryxShadow(shadow, in: Capsule())
         .opacity(isDisabled ? 0.5 : 1)
         .allowsHitTesting(!isDisabled)
-        .astryxShadow(shadow, in: Capsule())
     } else {
       control.buttonStyle(style)
     }
