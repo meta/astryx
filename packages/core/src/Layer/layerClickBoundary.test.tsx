@@ -224,16 +224,31 @@ describe('layer click boundary (layer-runtime INV17)', () => {
     it.each(roots)(
       'a press inside %s reaches no plain wrapper bubble handler',
       async (_name, renderRoot) => {
-        const wrapper = {click: vi.fn(), pointerDown: vi.fn()};
+        const wrapper = {
+          click: vi.fn(),
+          pointerDown: vi.fn(),
+          gotCapture: vi.fn(),
+          lostCapture: vi.fn(),
+        };
         render(
-          <div onClick={wrapper.click} onPointerDown={wrapper.pointerDown}>
+          <div
+            onClick={wrapper.click}
+            onPointerDown={wrapper.pointerDown}
+            onGotPointerCapture={wrapper.gotCapture}
+            onLostPointerCapture={wrapper.lostCapture}>
             {renderRoot()}
           </div>,
         );
         await waitFor(() => expect(target()).toBeInTheDocument());
         press(target());
+        // A drag handle or slider inside the layer taking and releasing
+        // pointer capture.
+        fireEvent(target(), new Event('gotpointercapture', {bubbles: true}));
+        fireEvent(target(), new Event('lostpointercapture', {bubbles: true}));
         expect(wrapper.click).not.toHaveBeenCalled();
         expect(wrapper.pointerDown).not.toHaveBeenCalled();
+        expect(wrapper.gotCapture).not.toHaveBeenCalled();
+        expect(wrapper.lostCapture).not.toHaveBeenCalled();
       },
     );
 

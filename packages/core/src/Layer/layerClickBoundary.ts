@@ -40,6 +40,8 @@ const BOUNDARY_EVENTS = [
   'onPointerOver',
   'onPointerOut',
   'onPointerCancel',
+  'onGotPointerCapture',
+  'onLostPointerCapture',
   'onTouchStart',
   'onTouchMove',
   'onTouchEnd',
