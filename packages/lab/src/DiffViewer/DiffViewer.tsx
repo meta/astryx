@@ -12,8 +12,9 @@
  *
  * Renders one DiffViewerFile: a file header (path, status, +/- counts, a
  * caller slot, optional disclosure) over its hunks in unified or split view.
- * A hunk marked `isReplacedBlock` shows a labeled fold in place of its
- * changed lines until the reader opens it.
+ * A hunk marked `isReplacedBlock`, and a file with more than
+ * MAX_UNFOLDED_CHANGED_LINES other changed lines, show a labeled fold until
+ * the reader opens it.
  * Unified view is one table. Split view is two side-by-side panes (each an
  * ARIA table) whose rows share one grid's row tracks through `subgrid`, so a
  * row is as tall as its taller side while each pane scrolls sideways on its
@@ -358,33 +359,6 @@ function lineAnnotation(
   return isRenderable(note) ? note : null;
 }
 
-/**
- * Replaced blocks with an annotation on one of their changed lines. Such a
- * block starts open, so a review comment is never hidden behind the fold.
- */
-function findAnnotatedBlocks(
-  file: DiffViewerFile,
-  renderLineAnnotation: ((ref: DiffViewerLineRef) => ReactNode) | undefined,
-): Set<number> {
-  const blocks = new Set<number>();
-  if (renderLineAnnotation == null) {
-    return blocks;
-  }
-  file.hunks.forEach((hunk, hunkIndex) => {
-    if (hunk.isReplacedBlock !== true) {
-      return;
-    }
-    const isAnnotated = hunk.lines.some(line => {
-      const ref = line.kind === 'context' ? null : lineRef(line, hunkIndex);
-      return ref != null && lineAnnotation(renderLineAnnotation, ref) != null;
-    });
-    if (isAnnotated) {
-      blocks.add(hunkIndex);
-    }
-  });
-  return blocks;
-}
-
 function lineRef(
   line: DiffViewerLine,
   hunkIndex: number,
@@ -433,6 +407,42 @@ function addInlineEmphasis(
       added[r].emphasis = ranges.new;
     }
   }
+}
+
+/**
+ * Most changed lines a file shows before the reader asks for them. Each row
+ * costs render time and the rows are not virtualized, so a file with more
+ * changed lines (outside replaced blocks, which fold on their own) starts
+ * folded behind the large-change row.
+ */
+const MAX_UNFOLDED_CHANGED_LINES = 2000;
+
+/**
+ * Hunks with an annotation on one of their lines. A fold that would hide such
+ * a line starts open, so a review comment is never hidden.
+ */
+function findAnnotatedHunks(
+  file: DiffViewerFile,
+  renderLineAnnotation: ((ref: DiffViewerLineRef) => ReactNode) | undefined,
+): Set<number> {
+  const hunks = new Set<number>();
+  if (renderLineAnnotation == null) {
+    return hunks;
+  }
+  file.hunks.forEach((hunk, hunkIndex) => {
+    const isAnnotated = hunk.lines.some(line => {
+      // A replaced block's fold keeps its context lines in view.
+      if (hunk.isReplacedBlock === true && line.kind === 'context') {
+        return false;
+      }
+      const ref = lineRef(line, hunkIndex);
+      return ref != null && lineAnnotation(renderLineAnnotation, ref) != null;
+    });
+    if (isAnnotated) {
+      hunks.add(hunkIndex);
+    }
+  });
+  return hunks;
 }
 
 /**
@@ -1300,16 +1310,48 @@ export function DiffViewer({
     onCollapsedChange?.(next);
   };
 
-  // A replaced block starts folded unless one of its lines is annotated. The
-  // reader's toggles are kept per file; a new file starts over.
+  let unfoldedChangedLines = 0;
+  let hasReplacedBlock = false;
+  for (const hunk of file.hunks) {
+    if (hunk.isReplacedBlock === true) {
+      hasReplacedBlock = true;
+      continue;
+    }
+    for (const line of hunk.lines) {
+      if (line.kind !== 'context') {
+        unfoldedChangedLines++;
+      }
+    }
+  }
+  const isLargeFile = unfoldedChangedLines > MAX_UNFOLDED_CHANGED_LINES;
+  const annotatedHunks =
+    isLargeFile || hasReplacedBlock
+      ? findAnnotatedHunks(file, renderLineAnnotation)
+      : null;
+
+  // A large file and a replaced block start folded unless a line they would
+  // hide is annotated. The reader's toggles are kept per file; a new file
+  // starts over.
+  const [fileToggle, setFileToggle] = useState<{
+    file: DiffViewerFile;
+    isExpanded: boolean;
+  } | null>(null);
+  const isFileFolded =
+    isLargeFile &&
+    !(fileToggle?.file === file
+      ? fileToggle.isExpanded
+      : (annotatedHunks?.size ?? 0) > 0);
+  const toggleFile = () => {
+    setFileToggle({file, isExpanded: isFileFolded});
+  };
+
   const [blockToggles, setBlockToggles] = useState<{
     file: DiffViewerFile;
     isExpanded: ReadonlyMap<number, boolean>;
   } | null>(null);
   const toggles = blockToggles?.file === file ? blockToggles.isExpanded : null;
-  const annotatedBlocks = findAnnotatedBlocks(file, renderLineAnnotation);
   const isBlockExpanded = (hunkIndex: number) =>
-    toggles?.get(hunkIndex) ?? annotatedBlocks.has(hunkIndex);
+    toggles?.get(hunkIndex) ?? annotatedHunks?.has(hunkIndex) ?? false;
   const toggleBlock = (hunkIndex: number) => {
     const next = new Map(toggles);
     next.set(hunkIndex, !isBlockExpanded(hunkIndex));
@@ -1329,17 +1371,25 @@ export function DiffViewer({
     [expandedKey],
   );
 
+  // A folded file builds no cells, so its lines are not tokenized.
   const cells = useMemo(
-    () => buildCells(file, language, inlineHighlight, expandedBlocks),
-    [file, language, inlineHighlight, expandedBlocks],
+    () =>
+      isFileFolded
+        ? []
+        : buildCells(file, language, inlineHighlight, expandedBlocks),
+    [isFileFolded, file, language, inlineHighlight, expandedBlocks],
   );
   const unifiedRows = useMemo(
-    () => (viewMode === 'unified' ? buildUnifiedRows(file, cells) : []),
-    [viewMode, file, cells],
+    () =>
+      viewMode === 'unified' && !isFileFolded
+        ? buildUnifiedRows(file, cells)
+        : [],
+    [viewMode, isFileFolded, file, cells],
   );
   const splitRows = useMemo(
-    () => (viewMode === 'split' ? buildSplitRows(file, cells) : []),
-    [viewMode, file, cells],
+    () =>
+      viewMode === 'split' && !isFileFolded ? buildSplitRows(file, cells) : [],
+    [viewMode, isFileFolded, file, cells],
   );
 
   let addedCount = 0;
@@ -1523,25 +1573,36 @@ export function DiffViewer({
     );
   };
 
-  const renderFold = (fold: ReplacedBlockFold) => (
+  const renderFoldControl = (
+    changedLines: number,
+    isExpanded: boolean,
+    onToggle: () => void,
+    isSticky: boolean,
+  ) => (
     <span
-      {...stylex.props(styles.foldContent, isPinned && styles.hunkTextSticky)}>
-      <span>
-        {t('@astryx.diffViewer.largeChange', {count: fold.changedLines})}
-      </span>
+      {...stylex.props(styles.foldContent, isSticky && styles.hunkTextSticky)}>
+      <span>{t('@astryx.diffViewer.largeChange', {count: changedLines})}</span>
       <Button
         size="sm"
         variant="secondary"
         label={
-          fold.isExpanded
+          isExpanded
             ? t('@astryx.diffViewer.hideFullDiff')
             : t('@astryx.diffViewer.showFullDiff')
         }
-        aria-expanded={fold.isExpanded}
-        onClick={() => toggleBlock(fold.hunkIndex)}
+        aria-expanded={isExpanded}
+        onClick={onToggle}
       />
     </span>
   );
+
+  const renderFold = (fold: ReplacedBlockFold) =>
+    renderFoldControl(
+      fold.changedLines,
+      fold.isExpanded,
+      () => toggleBlock(fold.hunkIndex),
+      isPinned,
+    );
 
   const renderHunkText = (header: string) => (
     <span {...stylex.props(styles.ltr, isPinned && styles.hunkTextSticky)}>
@@ -1890,8 +1951,6 @@ export function DiffViewer({
     );
   };
 
-  const table = viewMode === 'split' ? renderSplit() : renderUnified();
-
   let body: ReactNode;
   if (file.isBinary) {
     body = (
@@ -1906,16 +1965,34 @@ export function DiffViewer({
       </div>
     );
   } else {
+    // The fold row stays first whether the file is folded or not, so its
+    // button keeps focus when it toggles.
     body = (
-      <div
-        {...withoutInlineOverscroll(
-          getViewportProps<HTMLDivElement>({
-            ...stylex.props(styles.viewport),
-            style: scrollStyle,
-          }),
-        )}>
-        <div {...getContentProps<HTMLDivElement>({})}>{table}</div>
-      </div>
+      <>
+        {isLargeFile && (
+          <div data-diff-fold="" {...stylex.props(styles.fold)}>
+            {renderFoldControl(
+              unfoldedChangedLines,
+              !isFileFolded,
+              toggleFile,
+              false,
+            )}
+          </div>
+        )}
+        {!isFileFolded && (
+          <div
+            {...withoutInlineOverscroll(
+              getViewportProps<HTMLDivElement>({
+                ...stylex.props(styles.viewport),
+                style: scrollStyle,
+              }),
+            )}>
+            <div {...getContentProps<HTMLDivElement>({})}>
+              {viewMode === 'split' ? renderSplit() : renderUnified()}
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
