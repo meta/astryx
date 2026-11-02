@@ -1759,9 +1759,50 @@ describe('DateTimeInput', () => {
       expect(timeInput).toHaveAttribute('aria-expanded', 'false');
     });
 
+    // architecture:layer-runtime: a press on the time field is inside its list.
+    it('keeps the time list open on a press in the time input, closes it on a press elsewhere', async () => {
+      const press = (target: Element) => {
+        fireEvent.pointerDown(target, {composed: true});
+        fireEvent.pointerUp(target, {composed: true});
+      };
+      render(
+        <>
+          <DateTimeInput
+            label="Meeting"
+            value={'2026-03-15T14:00' as ISODateTimeString}
+            timeOptionInterval={60}
+            onChange={() => {}}
+          />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.keyDown(timeInput, {key: 'ArrowDown', altKey: true});
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      const listbox = document.getElementById(
+        timeInput.getAttribute('aria-controls')!,
+      );
+      // The list is a manual popover, so the browser does not light-dismiss
+      // it on a press in the time input.
+      expect(listbox?.closest('[popover]')).toHaveAttribute(
+        'popover',
+        'manual',
+      );
+
+      press(timeInput);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      press(listbox!);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
     it('closes the list when focus leaves the field entirely', () => {
-      // Light dismiss covers outside clicks and Escape, never a programmatic
-      // focus move. Without this the listbox is orphaned in the top layer.
+      // The outside-press watch covers outside presses and Escape stays on the
+      // layer stack, never a programmatic focus move. Without this the listbox is orphaned in the top layer.
       render(
         <>
           <DateTimeInput

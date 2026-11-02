@@ -33,8 +33,14 @@ import {mergeProps} from '../utils';
 import {isSafeUrl} from '../utils/safeUrl';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {renderIconSlot} from '../Icon';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Citation/Citation.generated';
+
+registerEnglishFallback(english);
 
 export interface CitationSource {
   title?: string;
@@ -188,7 +194,7 @@ export function Citation({
   'data-testid': testId,
   ...rest
 }: CitationProps): React.ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const title = source.title ?? String(number);
   const href =
     source.url != null && isSafeUrl(source.url) ? source.url : undefined;

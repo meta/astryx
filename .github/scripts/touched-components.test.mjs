@@ -490,7 +490,7 @@ describe('pr-touched-components routing', () => {
   it('runs on every pull request after the Storybook build and pr-visual, on one standard arm runner', () => {
     expect(job.needs).toEqual(['build-storybook', 'pr-visual']);
     expect(ungated(job.if)).toBe(
-      "!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success'",
+      "!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.lab_only != 'true'",
     );
     expect(job['runs-on']).toBe('ubuntu-24.04-arm');
     expect(job['timeout-minutes']).toBeLessThanOrEqual(15);

@@ -11,6 +11,7 @@ import reactCompiler from 'eslint-plugin-react-compiler';
 import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
 import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
+import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
 import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
 
 /* global process */
@@ -42,6 +43,19 @@ const internalBarrelBaseline = JSON.parse(
     path.join(
       import.meta.dirname,
       'internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Truthiness guards on ReactNode values that existed when
+// `@astryx/no-truthy-jsx-guard` arrived, by repo-relative file, once per
+// guard. The list only shrinks.
+const truthyGuardBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.json',
     ),
     'utf8',
   ),
@@ -421,6 +435,24 @@ export default defineConfig(
     rules: {
       '@astryx/no-hover-on-disabled': 'error',
       '@astryx/disabled-cursor': 'error',
+    },
+  },
+  // StyleX compiles a `border` shorthand unevenly, and @astryxdesign/build's
+  // strict default refuses it, so a lab or charts component written with one
+  // ships without its border in the prebuilt stylesheet. Core already gets the
+  // rule from its config above; lab and charts get it at the same severity
+  // (error in strict mode, warning otherwise).
+  {
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/charts/src/**/*.{ts,tsx}',
+    ],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-border-shorthand':
+        astryxConfig.rules['@astryx/no-border-shorthand'],
     },
   },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
@@ -910,6 +942,25 @@ export default defineConfig(
     },
     rules: {
       '@astryx/no-nullish-jsx-guard': reactSeverity,
+    },
+  },
+  // A slot value can be `0`. A truthiness guard in front of its JSX then
+  // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
+  // presence is decided by `isRenderable` here too. The rule reads types, so
+  // its scope is core, which the type-aware block above parses with the
+  // project service. The guards that predate the rule are listed in the
+  // baseline, once per guard; one more is reported (an error in strict mode).
+  {
+    files: truthyGuardScope.files,
+    ignores: truthyGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-truthy-jsx-guard': [
+        reactSeverity,
+        {baseline: truthyGuardBaseline, root: import.meta.dirname},
+      ],
     },
   },
   // A private `data-astryx-*` attribute is written once, in its owner module
