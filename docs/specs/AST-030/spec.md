@@ -962,12 +962,13 @@ tests, docs and stories, so a Lab change that broke one would turn every later
 pull request red until `main` was repaired. They cost about half of what the
 lane would otherwise save.
 
-The docsite, the Sandbox and the CLI import Lab, and their checks do not run on
-a Lab-only pull request. A Lab change that breaks the docsite or Sandbox build
+The docsite and the Sandbox import Lab, and their checks do not run on a
+Lab-only pull request; the CLI's tests that load Lab or read its files run
+with the guard tests. A Lab change that breaks the docsite or Sandbox build
 shows as a failing preview deployment on its own pull request and on `main`'s
-production deployment; one that breaks the docsite or CLI tests fails the next
-pull request that runs them and `main`'s hourly full unit run (FR21). A Lab
-break that lands also reaches the `canary` dist-tag until the next push to
+production deployment. One that breaks a docsite test fails only the next
+pull request's `docsite-test`: `main` runs no docsite tests. A Lab break that
+lands also reaches the `canary` dist-tag until the next push to
 `main` replaces it. That is the accepted cost: about one pull-request run in a
 hundred is Lab-only, and each skips most of a full run's work.
 

@@ -1111,7 +1111,7 @@ jobs:
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
-          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran only the Lab package's tests (spec:AST-030 FR26)."
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran the Lab package's tests and the source-reading guard tests (spec:AST-030 FR26)."
 
       # A release-branch pull request is spec-only by classification, but its
       # join still runs: it requires the release bump's own validation.
