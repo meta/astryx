@@ -40,8 +40,17 @@ Differentiate Without Color get components that honor each setting.
   hidden from VoiceOver unless it carries a label. An icon-only control
   requires a label.
 - **X5 — One element per thing a person reads.** A component that reads as one
-  thing, such as a banner or a list row, is one accessibility element. Every
-  action reachable only by a gesture (swipe, long press, drag) is also an
+  thing, such as a banner or a list row, is one accessibility element. A label
+  on a container does not merge what the container holds: a text child inside a
+  labelled ancestor keeps its own element and its static-text role, and that
+  element publishes the ancestor's label in place of the child's own words, so
+  the same name is reachable twice and the words the child draws are never
+  read. A component that reads as one thing merges its children explicitly
+  rather than resting on a container label:
+  `accessibilityElement(children: .combine)`, `.ignore` with a label of its
+  own, and `accessibilityRepresentation` each do this, as does any equivalent
+  that exposes one element named with the component's own words. Every action
+  reachable only by a gesture (swipe, long press, drag) is also an
   `accessibilityAction`.
 - **X6 — Settings are honored.**
   - Reduce Motion: movement becomes a cross-fade or no animation.
@@ -52,7 +61,9 @@ Differentiate Without Color get components that honor each setting.
     an icon, or a word.
   - Button Shapes: controls drawn without a visible edge show one.
 - **X7 — Targets are at least 44 by 44 points,** even when the drawn control is
-  smaller.
+  smaller. A control's rendered size follows the environment its ancestor
+  establishes, so a target is measured in the environment the component ships
+  in, at the default and the largest text sizes, and not in isolation.
 
 ## Acceptance checks
 
@@ -62,8 +73,9 @@ Differentiate Without Color get components that honor each setting.
 | X2          | A test disables a focused control and finds it still focused, read as dimmed, with its reason as the hint.                                                                                                                                                                                                                                                                                                   |
 | X3          | A test shows a covered component's message after load and observes exactly one announcement, at high priority for an error; a time-critical failure is also high priority; a second render announces nothing; the same message present at load announces nothing; a Banner shown after load announces nothing. A message VoiceOver can reach only through its announcement, present at load, announces once. |
 | X4, X5      | A UI test runs `performAccessibilityAudit()` on a screen of every component at the default and largest text sizes, with no failures.                                                                                                                                                                                                                                                                         |
+| X5          | A test places a text child inside a container that carries a label and finds exactly one element, reachable once, whose name is the words the component reads as. The audit does not establish this on its own, so the test asserts it.                                                                                                                                                                      |
 | X6          | Captures under Reduce Motion show no movement; under Reduce Transparency, opaque surfaces; under Bold Text, heavier text in every component; under Differentiate Without Color, every state shown by color also shows a shape, an icon, or a word; under Button Shapes, every control drawn without a visible edge shows one.                                                                                |
-| X7          | The audit's hit-region check passes for every control.                                                                                                                                                                                                                                                                                                                                                       |
+| X7          | The audit's hit-region check passes for every control, measured in the environment the component ships in and at the default and largest text sizes.                                                                                                                                                                                                                                                         |
 
 ## Current state
 
