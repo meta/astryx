@@ -3680,6 +3680,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-scroll-overflow-filter-strip-edge-fades",
+      "path": "examples/use-scroll-overflow/filter-strip-edge-fades",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
       "aliases": []

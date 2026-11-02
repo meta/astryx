@@ -784,6 +784,7 @@
     "/templates/useContainerRevealHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/usePressFeedbackHookUsage/",
+    "/templates/useScrollOverflowHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",
     "/templates/useToastHookUsage/",
