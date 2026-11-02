@@ -14,7 +14,14 @@
  */
 
 import {useState, useCallback, useEffect, useMemo, useRef} from 'react';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/useSpeechRecognition.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -259,7 +266,7 @@ function getDefaultAudioContext(): AudioContext {
 export function useSpeechRecognition(
   options: UseSpeechRecognitionOptions = {},
 ): UseSpeechRecognitionReturn {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const providerLocale = useLocale();
   const {
     lang,

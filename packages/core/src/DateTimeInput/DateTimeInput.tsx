@@ -99,7 +99,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {
   formatLocaleTime,
   parseLocaleTime,
@@ -117,6 +117,13 @@ import {
   type PickerPresentation,
 } from '../utils/inputPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateTimeInput/DateTimeInput.generated';
+
+registerEnglishFallback(english);
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -657,7 +664,7 @@ function PointerDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const usesNativePicker = nativeMode !== 'off';
   // `forced` (`presentation="native"`, FR2): no Astryx fallback. `adaptive`
