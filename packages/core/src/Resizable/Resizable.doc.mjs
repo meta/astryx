@@ -18,7 +18,7 @@ const anatomy = [
     name: 'Grab zone',
     required: true,
     description:
-      'Invisible enlarged pointer region aligned with the grip or divider.',
+      'Invisible enlarged pointer region centred on the divider; on a pane shorter than it, it takes at most half the pane.',
   },
 ];
 
@@ -224,7 +224,8 @@ const region = useResizable({
           description:
             'Which side of the divider the pill sits on. ' +
             'auto = content side (derived from isReversed), flips when collapsed. ' +
-            'start = left/top, end = right/bottom, center = centered on divider.',
+            'start = left/top, end = right/bottom, center = centered on divider. ' +
+            'It moves only the pill; the grab zone stays centred on the divider.',
           default: "'auto'",
         },
         {
@@ -317,7 +318,7 @@ export const docsDense = {
         isAlwaysVisible:
           'show pill grip at rest instead of only on hover. Use when discoverability important',
         pillPlacement:
-          'which side of divider pill sits on. auto = content side (derived from isReversed), flips when collapsed; start = left/top, end = right/bottom, center = centered on divider',
+          'which side of divider pill sits on. auto = content side (derived from isReversed), flips when collapsed; start = left/top, end = right/bottom, center = centered on divider. Moves only the pill; grab zone stays on the divider',
         label: 'accessible label for separator',
         resizable: 'resize props from useResizable: connects handle to panel',
       },
