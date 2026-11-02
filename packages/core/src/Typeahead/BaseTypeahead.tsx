@@ -605,9 +605,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   const isAtCommitLimit = committedChoices?.isAtLimit === true;
   const [committedKeyOfState, setCommittedKeyOfState] =
     useState(committedChoicesKey);
-  // Whether the latest commit dropped the last shown row, so that list
-  // closes instead of reloading (FR15). Decided anew on every commit.
-  const [isEmptiedByCommit, setIsEmptiedByCommit] = useState(false);
   if (committedKeyOfState !== committedChoicesKey) {
     setCommittedKeyOfState(committedChoicesKey);
     const committedIds = committedChoices?.ids;
@@ -615,10 +612,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       committedIds == null
         ? results
         : results.filter(item => !committedIds.has(item.id));
-    const isEmptied = results.length > 0 && kept.length === 0;
-    if (isEmptied !== isEmptiedByCommit) {
-      setIsEmptiedByCommit(isEmptied);
-    }
     if (kept.length !== results.length) {
       const highlightedId = displayedResults[highlightedIndex]?.id;
       const keptOrder = displayOrder(kept, queryEntryCount);
@@ -1186,47 +1179,53 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // open, it reloads the same query, its typed text or the focus list, from
   // the source those values now filter. A closed list stays closed; opening it
   // loads that source.
+  // Decided from the state at the moment the committed values change, with
+  // no remembered outcome (the state table in the pull request):
+  // - at the limit: close, whatever the query (FR15);
+  // - a closed list with no search waiting: stays closed, and opening it
+  //   loads the current source;
+  // - typed text: search it again, also replacing a search still waiting
+  //   for its debounce; an empty answer shows the empty-search message;
+  // - a focus list the commit emptied (no row left, no load waiting): close
+  //   (FR15); with rows left, or a load waiting: load the focus list again;
+  //   an empty or failed answer closes (FR15);
+  // - a focus list with focus entries off: close.
   const reloadForCommittedChoices = useCallback(() => {
-    // A typed search still waiting for its debounce would search the source
-    // from before the commit, so the reload replaces it, open list or not.
+    // A search waiting for its debounce would use the source from before the
+    // commit, so the reload replaces it.
     const hadPendingSearch = searchTimeoutRef.current != null;
     if (searchTimeoutRef.current != null) {
       clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = null;
     }
-    if (
-      isDisabled ||
-      !isMountedRef.current ||
-      (!isShowingRef.current && !hadPendingSearch)
-    ) {
+    if (isDisabled || !isMountedRef.current) {
       return;
     }
-    if (isAtCommitLimit || (isEmptiedByCommit && !hadPendingSearch)) {
-      // At the limit nothing more can be committed whatever the query, or the
-      // commit dropped the last shown row: the list closes
-      // (component:Tokenizer FR15). A list that was already empty (typed text
-      // whose match was a token) reloads instead, so a removed token returns,
-      // and so does a typed search that was waiting for its debounce.
+    if (isAtCommitLimit) {
       popover.hide();
-    } else if (
-      query.length > 0 &&
-      !isBelowMinQueryLength(query, minQueryLength)
-    ) {
-      void performSearch(query);
-    } else if (query.length === 0 && hasEntriesOnFocus) {
-      void performBootstrap();
-    } else if (query.length === 0) {
-      // Nothing current can be loaded, so the old list closes instead of
-      // staying stale.
-      popover.hide();
+      return;
     }
+    if (!isShowingRef.current && !hadPendingSearch) {
+      return;
+    }
+    if (query.length > 0) {
+      if (!isBelowMinQueryLength(query, minQueryLength)) {
+        void performSearch(query);
+      }
+      return;
+    }
+    if (!hasEntriesOnFocus || (results.length === 0 && !hadPendingSearch)) {
+      popover.hide();
+      return;
+    }
+    void performBootstrap();
   }, [
     isDisabled,
-    isEmptiedByCommit,
     isAtCommitLimit,
     query,
     minQueryLength,
     hasEntriesOnFocus,
+    results.length,
     performSearch,
     performBootstrap,
     popover,

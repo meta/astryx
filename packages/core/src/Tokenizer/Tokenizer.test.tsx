@@ -1213,8 +1213,34 @@ describe('Tokenizer', () => {
   });
 
   // After the tokens change, the list the field shows is the current one
-  // (spec:AST-092 FR4, component:Tokenizer FR13).
+  // (spec:AST-092 FR4; component:Tokenizer FR13, FR15). Each row is one
+  // situation from the state table in the pull request: the list open or
+  // closed, a focus list or typed text, a typed search waiting for its
+  // debounce, a reload that is slow or fails, a token added or removed from
+  // inside or outside, and the limit.
   describe('list after the tokens change', () => {
+    const slowSource: SearchSource = {
+      search: async query =>
+        users.filter(u => u.label.toLowerCase().includes(query.toLowerCase())),
+      bootstrap: async () => {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return users.slice(0, 3);
+      },
+    };
+    function failsOnReload(): SearchSource {
+      let calls = 0;
+      return {
+        search: userSource.search,
+        bootstrap: async () => {
+          calls += 1;
+          if (calls > 1) {
+            throw new Error('offline');
+          }
+          return users.slice(0, 3);
+        },
+      };
+    }
+
     function Controlled({
       initial,
       maxEntries,
@@ -1250,98 +1276,200 @@ describe('Tokenizer', () => {
       );
     }
 
-    it('offers a token removed with its button again in the list it opens', async () => {
+    // Steps: `open` (click the field and wait for its list), `type:<text>`
+    // (type without waiting for the debounce), `listed:<name>` (wait until
+    // listed), `noResults` (wait for the empty-search message), `escape`,
+    // `set:<button>` (a value set from outside, focus stays in the field),
+    // `remove:<name>` (the token's remove button), `pick:<name>` (choose an
+    // option), `absent:<name>` (not listed right now).
+    type Row = {
+      situation: string;
+      initial: SearchableItem[];
+      maxEntries?: number;
+      source?: () => SearchSource;
+      steps: string[];
+      expanded: boolean;
+      listed?: string[];
+      notListed?: string[];
+    };
+    const rows: Row[] = [
+      {
+        situation:
+          'focus list open, outside adds a token, choices remain: reload',
+        initial: [users[0]],
+        steps: ['open', 'listed:Charlie', 'set:Set Charlie', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice', 'Bob'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, outside commits its last row: close',
+        initial: [users[0], users[1]],
+        steps: ['open', 'listed:Charlie', 'set:Set all three'],
+        expanded: false,
+      },
+      {
+        situation: 'focus list open, token removed with its button: reload',
+        initial: [users[0], users[1]],
+        steps: ['open', 'escape', 'remove:Alice', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice', 'Charlie'],
+      },
+      {
+        situation: 'focus list closed, outside change: stays closed',
+        initial: [users[0]],
+        steps: ['open', 'escape', 'set:Set Charlie'],
+        expanded: false,
+      },
+      {
+        situation: 'token picked from the list (inside add): closes, no reopen',
+        initial: [users[0]],
+        steps: ['open', 'listed:Charlie', 'pick:Charlie'],
+        expanded: false,
+      },
+      {
+        situation: 'focus list open, slow reload: new token never listed',
+        initial: [users[0]],
+        source: () => slowSource,
+        steps: [
+          'open',
+          'listed:Charlie',
+          'set:Set Charlie',
+          'absent:Charlie',
+          'listed:Alice',
+        ],
+        expanded: true,
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, reload fails: close',
+        initial: [users[0]],
+        source: failsOnReload,
+        steps: ['open', 'listed:Charlie', 'set:Set Charlie'],
+        expanded: false,
+      },
+      {
+        situation: 'typed text, limit reached from outside: close',
+        initial: [users[0]],
+        maxEntries: 3,
+        steps: ['type:i', 'listed:Diana', 'set:Set all three'],
+        expanded: false,
+      },
+      {
+        situation: 'typed text matched only a token, token removed: re-search',
+        initial: [users[0], users[1]],
+        steps: ['type:ali', 'noResults', 'set:Set Charlie', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice'],
+      },
+      {
+        situation:
+          'typed text, tokens return to a set that once emptied the list: re-search',
+        initial: [users[0], users[1]],
+        steps: [
+          'open',
+          'listed:Charlie',
+          'set:Set all three',
+          'set:Set Alice',
+          'type:i',
+          'listed:Diana',
+          'set:Set all three',
+          'listed:Diana',
+        ],
+        expanded: true,
+        listed: ['Diana'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation:
+          'typed search waiting for its debounce, outside commit: re-search',
+        initial: [users[0]],
+        steps: ['type:char', 'set:Set Charlie', 'absent:Charlie'],
+        expanded: true,
+        notListed: ['Charlie'],
+      },
+      {
+        situation:
+          'typed search waiting for its debounce, commit empties the shown rows: re-search',
+        initial: [users[0], users[1]],
+        steps: [
+          'open',
+          'listed:Charlie',
+          'type:d',
+          'set:Set all three',
+          'listed:Diana',
+        ],
+        expanded: true,
+        listed: ['Diana'],
+      },
+    ];
+
+    it.each(rows)('$situation', async row => {
       const user = userEvent.setup();
-      render(<Controlled initial={[users[0], users[1]]} />);
+      render(
+        <Controlled
+          initial={row.initial}
+          maxEntries={row.maxEntries}
+          source={row.source?.()}
+        />,
+      );
       const input = screen.getByRole('combobox');
-
-      await user.click(input);
-      await waitFor(() => {
-        expect(input).toHaveAttribute('aria-expanded', 'true');
-      });
-      await user.keyboard('{Escape}');
-      await user.click(screen.getByRole('button', {name: 'Remove Alice'}));
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Alice', hidden: true}),
-        ).toBeInTheDocument();
-      });
-    });
-
-    // FR15: an open list with no eligible choice left closes.
-    it('closes the open list when its last choice is set from outside', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0], users[1]]} />);
-      const input = screen.getByRole('combobox');
-
-      await user.click(input);
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Charlie', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      act(() => {
-        screen.getByRole('button', {name: 'Set all three'}).click();
-      });
-
-      await waitFor(() => {
-        expect(input).toHaveAttribute('aria-expanded', 'false');
-      });
-    });
-
-    it('closes the open list when a value set from outside reaches the maximum', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0]]} maxEntries={3} />);
-      const input = screen.getByRole('combobox');
-
-      await user.click(input);
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Charlie', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      act(() => {
-        screen.getByRole('button', {name: 'Set all three'}).click();
+      const option = (name: string) =>
+        screen.queryByRole('option', {name, hidden: true});
+      for (const step of row.steps) {
+        const [action, arg = ''] = step.split(/:(.*)/s);
+        if (action === 'open') {
+          await user.click(input);
+          await waitFor(() => {
+            expect(input).toHaveAttribute('aria-expanded', 'true');
+          });
+        } else if (action === 'type') {
+          await user.type(input, arg);
+        } else if (action === 'listed') {
+          await waitFor(() => {
+            expect(option(arg)).toBeInTheDocument();
+          });
+        } else if (action === 'noResults') {
+          await waitFor(() => {
+            expect(screen.getByText('No results found')).toBeInTheDocument();
+          });
+        } else if (action === 'escape') {
+          await user.keyboard('{Escape}');
+        } else if (action === 'set') {
+          act(() => {
+            screen.getByRole('button', {name: arg}).click();
+          });
+        } else if (action === 'remove') {
+          await user.click(screen.getByRole('button', {name: `Remove ${arg}`}));
+        } else if (action === 'pick') {
+          await user.click(
+            screen.getByRole('option', {name: arg, hidden: true}),
+          );
+        } else if (action === 'absent') {
+          expect(option(arg)).not.toBeInTheDocument();
+        } else {
+          throw new Error(`Unknown step: ${step}`);
+        }
+      }
+      // Let any reload or debounced search settle.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
       });
 
-      await waitFor(() => {
-        expect(input).toHaveAttribute('aria-expanded', 'false');
-      });
-    });
-
-    it('closes the open list with typed text when a value set from outside reaches the maximum', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0]]} maxEntries={3} />);
-      const input = screen.getByRole('combobox');
-
-      await user.type(input, 'i');
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Diana', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      act(() => {
-        screen.getByRole('button', {name: 'Set all three'}).click();
-      });
-
-      await waitFor(() => {
-        expect(input).toHaveAttribute('aria-expanded', 'false');
-      });
+      expect(input).toHaveAttribute(
+        'aria-expanded',
+        row.expanded ? 'true' : 'false',
+      );
+      for (const name of row.listed ?? []) {
+        expect(option(name)).toBeInTheDocument();
+      }
+      for (const name of row.notListed ?? []) {
+        expect(option(name)).not.toBeInTheDocument();
+      }
     });
 
     it('never shows a value set from outside while an async reload is pending', async () => {
       const user = userEvent.setup();
-      const slowSource: SearchSource = {
-        search: async query =>
-          users.filter(u =>
-            u.label.toLowerCase().includes(query.toLowerCase()),
-          ),
-        bootstrap: async () => {
-          await new Promise(resolve => setTimeout(resolve, 200));
-          return users.slice(0, 3);
-        },
-      };
       // Whether each commit after the change painted Charlie as a choice.
       const commitsListingCharlie: boolean[] = [];
       let isWatching = false;
@@ -1386,138 +1514,6 @@ describe('Tokenizer', () => {
           screen.getByRole('option', {name: 'Alice', hidden: true}),
         ).toBeInTheDocument();
       });
-    });
-
-    it('offers a removed token again when the typed text matched only that token', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0], users[1]]} />);
-      const input = screen.getByRole('combobox');
-
-      await user.type(input, 'ali');
-      // The search for "ali" settles empty: its only match is a token.
-      await waitFor(() => {
-        expect(screen.getByText('No results found')).toBeInTheDocument();
-      });
-      // Alice leaves the value while focus stays in the field.
-      act(() => {
-        screen.getByRole('button', {name: 'Set Charlie'}).click();
-      });
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Alice', hidden: true}),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('never lists a value set from outside while a typed search waits for its debounce', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0]]} />);
-      const input = screen.getByRole('combobox');
-
-      await user.type(input, 'char');
-      // Charlie becomes a token before the debounced search for "char" runs.
-      act(() => {
-        screen.getByRole('button', {name: 'Set Charlie'}).click();
-      });
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 300));
-      });
-
-      expect(
-        screen.queryByRole('option', {name: 'Charlie', hidden: true}),
-      ).not.toBeInTheDocument();
-    });
-
-    it('keeps an open list that still has choices when the tokens return to a set that once emptied it', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0], users[1]]} />);
-      const input = screen.getByRole('combobox');
-
-      await user.click(input);
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Charlie', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      // Committing Charlie empties the shown list, which closes.
-      act(() => {
-        screen.getByRole('button', {name: 'Set all three'}).click();
-      });
-      await waitFor(() => {
-        expect(input).toHaveAttribute('aria-expanded', 'false');
-      });
-      act(() => {
-        screen.getByRole('button', {name: 'Set Alice'}).click();
-      });
-      await user.type(input, 'i');
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Diana', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      // The same three tokens again: Diana still matches "i".
-      act(() => {
-        screen.getByRole('button', {name: 'Set all three'}).click();
-      });
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      });
-
-      expect(input).toHaveAttribute('aria-expanded', 'true');
-      expect(
-        screen.getByRole('option', {name: 'Diana', hidden: true}),
-      ).toBeInTheDocument();
-    });
-
-    it('runs a typed search waiting for its debounce when a commit empties the shown list', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0], users[1]]} />);
-      const input = screen.getByRole('combobox');
-
-      await user.click(input);
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Charlie', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      await user.type(input, 'd');
-      // Charlie, the last shown row, becomes a token before "d" is searched.
-      act(() => {
-        screen.getByRole('button', {name: 'Set all three'}).click();
-      });
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Diana', hidden: true}),
-        ).toBeInTheDocument();
-      });
-    });
-
-    it('drops a value set from outside from the open list', async () => {
-      const user = userEvent.setup();
-      render(<Controlled initial={[users[0]]} />);
-      const input = screen.getByRole('combobox');
-
-      await user.click(input);
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Charlie', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      // A click() that keeps focus in the field, as a value set by code does.
-      act(() => {
-        screen.getByRole('button', {name: 'Set Charlie'}).click();
-      });
-
-      await waitFor(() => {
-        expect(
-          screen.getByRole('option', {name: 'Alice', hidden: true}),
-        ).toBeInTheDocument();
-      });
-      expect(
-        screen.queryByRole('option', {name: 'Charlie', hidden: true}),
-      ).not.toBeInTheDocument();
     });
   });
 
