@@ -52,7 +52,6 @@ import {ResizeHandle} from '../Resizable/ResizeHandle';
 import {themeProps} from '../utils/themeProps';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
@@ -77,6 +76,13 @@ import {
   type RailMotion,
   type RailSnapshot,
 } from './railMotion';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNav.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Constants
 // =============================================================================
@@ -465,7 +471,7 @@ export function SideNav({
   handleRef,
   ...props
 }: SideNavProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Parse collapsible prop
   const collapsibleConfig = typeof collapsible === 'object' ? collapsible : {};
   const hasCollapseButton = collapsibleConfig.hasButton ?? true;

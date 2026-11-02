@@ -41,7 +41,6 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useTranslator} from '../i18n';
 import {
   StepperContext,
   StepperInternalContext,
@@ -51,6 +50,13 @@ import {
   type StepperInternalContextValue,
   type StepperRegistrationOptions,
 } from './StepperContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Stepper/Stepper.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Default width below which a step can no longer hold its own label. Under
@@ -246,7 +252,7 @@ export function Stepper({
   ref,
   ...rest
 }: StepperProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.stepper.label');
   const minimumStepWidth =
     horizontalOptions?.minimumStepWidth ?? DEFAULT_MIN_STEP_WIDTH;

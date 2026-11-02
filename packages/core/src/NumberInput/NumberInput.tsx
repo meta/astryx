@@ -231,10 +231,17 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, useLocale} from '../i18n';
+import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
 import {parseNumberInput, resolveNumberInputCommit} from './numberInputCommit';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/NumberInput/NumberInput.generated';
+
+registerEnglishFallback(english);
 
 interface NumberInputPropsBase extends Omit<
   FieldInputBaseProps,
@@ -598,7 +605,7 @@ export function NumberInput({
     containerStyle,
   });
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const size = useSize(sizeProp, 'md');
