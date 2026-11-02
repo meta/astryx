@@ -268,7 +268,7 @@ export type UseTreeFocusInternalReturn<T extends HTMLElement = HTMLElement> =
      * With `hasRovingTabIndex`, makes `item` the tree's one Tab stop, by the
      * same rule the hook's own moves follow: a disabled or hidden row never
      * takes it, and the stop stays where it is. TreeList calls it when it
-     * moves focus to a collapsing row (`component:TreeList` AR2).
+     * moves focus to a collapsing row.
      */
     takeTabStop: (item: HTMLElement) => void;
   };
@@ -468,8 +468,8 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
         ...items.slice(0, start + offset),
       ];
       const enabled = ordered.filter(item => !itemDisabled(item));
-      // INV17: case, accents, stroked letters and Turkish i fold away, and a
-      // typed mark prefers the exact match.
+      // Case, accents, stroked letters and Turkish i fold away, and a typed
+      // mark prefers the exact match.
       const matchIndex = findTypeaheadMatch(
         enabled.map((_, i) => i),
         i => itemLabelText(enabled[i], matchLabelledBy),
