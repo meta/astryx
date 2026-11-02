@@ -265,6 +265,17 @@ function ignoreActivation(event: React.MouseEvent): void {
   event.stopPropagation();
 }
 
+/**
+ * Stops Enter and Space before they reach the focused control, so a key
+ * handler (a search field's Enter, for example) does not run either.
+ */
+function ignoreActivationKey(event: React.KeyboardEvent): void {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+}
+
 function stackStateAttribute(
   view: BottomSheetStackView,
   isOpen: boolean,
@@ -780,13 +791,36 @@ function StandaloneBottomSheet({
   // the state is explicit; one that does contain the top sheet is left alone,
   // because inert on it would reach the top sheet too.
   // A sheet that closes with focus inside it is neither inert nor hidden
-  // until its exit ends: `inert` would drop that focus to the page, and
-  // `aria-hidden` would hide the focused control. Its exit ends by returning
-  // focus, and only then does the dialog close. Until the close settles, no
-  // closing sheet is inert, so the first commit of a close never hides focus.
+  // while that focus stays: `inert` would drop the focus to the page, and
+  // `aria-hidden` would hide the focused control. When the exit ends, the
+  // dialog closes and focus returns in the same task. When focus leaves the
+  // sheet first (into a sheet opened above it, for example), the sheet goes
+  // inert at once. Until the close settles, no closing sheet is inert, so the
+  // first commit of a close never hides focus.
   const isExitHoldingFocus =
     isExiting && !isReplaced && (!isCloseSettled || isExitFocusHeld);
   const isInert = (isExiting && !isExitHoldingFocus) || stackView.isBlocked;
+
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isExitFocusHeld || dialog == null) {
+      return;
+    }
+    const doc = dialog.ownerDocument;
+    // Focus can leave in the commit that closed the sheet, before this
+    // listener exists.
+    if (!dialog.contains(doc.activeElement)) {
+      setIsExitFocusHeld(false);
+      return;
+    }
+    const releaseWhenFocusLeaves = (event: FocusEvent) => {
+      if (!(event.target instanceof Node) || !dialog.contains(event.target)) {
+        setIsExitFocusHeld(false);
+      }
+    };
+    doc.addEventListener('focusin', releaseWhenFocusLeaves);
+    return () => doc.removeEventListener('focusin', releaseWhenFocusLeaves);
+  }, [isExitFocusHeld]);
 
   return (
     <dialog
@@ -827,6 +861,8 @@ function StandaloneBottomSheet({
       // exit: a repeated Enter or Space on the control that closed it does
       // not run that control again.
       onClickCapture={isExitHoldingFocus ? ignoreActivation : undefined}
+      onKeyDownCapture={isExitHoldingFocus ? ignoreActivationKey : undefined}
+      onKeyUpCapture={isExitHoldingFocus ? ignoreActivationKey : undefined}
       // Presses inside the sheet do not reach handlers around where it is
       // written. The dialog, not the panel, is the root, as in a switcher.
       {...layerClickBoundary({onClick: handleClick})}>

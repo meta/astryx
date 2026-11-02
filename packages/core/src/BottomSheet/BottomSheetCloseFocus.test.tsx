@@ -4,10 +4,10 @@
  * @file BottomSheetCloseFocus.test.tsx
  * @input Uses vitest, @testing-library/react and BottomSheet
  * @output Tests the close order for focus: a sheet that closes with focus
- *   inside it is neither inert nor aria-hidden during its exit, keeps that
- *   focus, and returns it to the opener when the exit ends, before its dialog
- *   closes; a sheet that closes with focus elsewhere is inert and hidden at
- *   once
+ *   inside it is neither inert nor aria-hidden while that focus stays, takes
+ *   no pointer or keyboard activation, and when the exit ends closes and
+ *   returns focus to the opener; a sheet that focus leaves, or that closes
+ *   with focus elsewhere, is inert and hidden at once
  * @position Core testing; validates the exit inertness in BottomSheet.tsx
  */
 
@@ -137,7 +137,50 @@ describe('BottomSheet close order for focus', () => {
     expect(done).toHaveFocus();
   });
 
-  it('returns focus to the opener when the exit ends, then closes', () => {
+  it('does not pass Enter or Space to the focused control during the exit', () => {
+    let submits = 0;
+    function Search() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+          <input
+            aria-label="Search"
+            onKeyDown={event => {
+              if (event.key === 'Enter') {
+                submits += 1;
+                setIsOpen(false);
+              }
+            }}
+          />
+        </BottomSheet>
+      );
+    }
+    render(<Search />);
+    const search = screen.getByRole('textbox', {name: 'Search'});
+    act(() => search.focus());
+
+    fireEvent.keyDown(search, {key: 'Enter'});
+    fireEvent.keyDown(search, {key: 'Enter'});
+    fireEvent.keyDown(search, {key: ' '});
+
+    expect(submits).toBe(1);
+    expect(search).toHaveFocus();
+  });
+
+  it('goes inert and hidden once focus leaves it during the exit', () => {
+    openFilters();
+    const done = screen.getByRole('button', {name: 'Done'});
+    act(() => done.focus());
+    fireEvent.click(done);
+    expect(sheet()).not.toHaveAttribute('inert');
+
+    act(() => screen.getByRole('button', {name: 'Filters'}).focus());
+
+    expect(sheet()).toHaveAttribute('inert');
+    expect(sheet()).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('closes and returns focus to the opener when the exit ends', () => {
     const opener = openFilters();
     const done = screen.getByRole('button', {name: 'Done'});
     act(() => done.focus());
