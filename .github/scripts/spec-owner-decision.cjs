@@ -265,6 +265,66 @@ function leadingAuthority(content) {
   return null;
 }
 
+/**
+ * The owner groups one changed record or owner-gated file needs: a set of
+ * `spec`, `design` and `theme`, empty when none (a draft record, a design
+ * asset whose group comes from the change's own flag).
+ */
+function recordApprovalGroups(record) {
+  const groups = new Set();
+  const versions = [
+    {content: record.baseContent, path: record.previousPath ?? record.path},
+    {content: record.headContent, path: record.path},
+  ];
+  // An owner-gated Markdown file with no authority of its own (a generated
+  // table beside a spec, a README or draft note in a record location) has
+  // nothing for the gate to read, so an engineering owner decides it.
+  if (
+    versions.some(
+      version =>
+        typeof version.path === 'string' &&
+        version.path.endsWith('.md') &&
+        !version.path.startsWith('docs/design/assets/'),
+    ) &&
+    versions.every(version => leadingAuthority(version.content) == null) &&
+    versions.some(version => version.content != null)
+  ) {
+    groups.add('spec');
+    return groups;
+  }
+  const currentVersions = versions.filter(
+    version => parseAuthority(version.content, version.path) === 'current',
+  );
+  if (currentVersions.length === 0) return groups;
+
+  const touchesComponentOrModule = versions.some(version => {
+    const kind = parseKind(version.content, version.path);
+    return kind === 'component' || kind === 'module';
+  });
+  if (touchesComponentOrModule) {
+    const change = classifyDesignDecisionChange({
+      basePath: record.previousPath ?? record.path,
+      headPath: record.path,
+      baseContent: record.baseContent,
+      headContent: record.headContent,
+    });
+    if (change.classification === 'dd-only') {
+      groups.add('design');
+    } else if (change.classification === 'mixed') {
+      groups.add('spec');
+      groups.add('design');
+    } else {
+      groups.add('spec');
+    }
+    return groups;
+  }
+
+  for (const version of currentVersions) {
+    groups.add(approvalGroupFor(version.content, version.path));
+  }
+  return groups;
+}
+
 function requiredApprovalGroups(
   records,
   {complete = true, touchesDesignAssets = false} = {},
@@ -272,56 +332,7 @@ function requiredApprovalGroups(
   if (!complete) return {spec: true, design: true, theme: true};
   const groups = {spec: false, design: touchesDesignAssets, theme: false};
   for (const record of records) {
-    const versions = [
-      {content: record.baseContent, path: record.previousPath ?? record.path},
-      {content: record.headContent, path: record.path},
-    ];
-    // An owner-gated Markdown file with no authority of its own (a generated
-    // table beside a spec, a README or draft note in a record location) has
-    // nothing for the gate to read, so an engineering owner decides it.
-    if (
-      versions.some(
-        version =>
-          typeof version.path === 'string' &&
-          version.path.endsWith('.md') &&
-          !version.path.startsWith('docs/design/assets/'),
-      ) &&
-      versions.every(version => leadingAuthority(version.content) == null) &&
-      versions.some(version => version.content != null)
-    ) {
-      groups.spec = true;
-      continue;
-    }
-    const currentVersions = versions.filter(
-      version => parseAuthority(version.content, version.path) === 'current',
-    );
-    if (currentVersions.length === 0) continue;
-
-    const touchesComponentOrModule = versions.some(version => {
-      const kind = parseKind(version.content, version.path);
-      return kind === 'component' || kind === 'module';
-    });
-    if (touchesComponentOrModule) {
-      const change = classifyDesignDecisionChange({
-        basePath: record.previousPath ?? record.path,
-        headPath: record.path,
-        baseContent: record.baseContent,
-        headContent: record.headContent,
-      });
-      if (change.classification === 'dd-only') {
-        groups.design = true;
-      } else if (change.classification === 'mixed') {
-        groups.spec = true;
-        groups.design = true;
-      } else {
-        groups.spec = true;
-      }
-      continue;
-    }
-
-    for (const version of currentVersions) {
-      groups[approvalGroupFor(version.content, version.path)] = true;
-    }
+    for (const group of recordApprovalGroups(record)) groups[group] = true;
   }
   return groups;
 }
@@ -439,6 +450,8 @@ module.exports = {
   parseOwnerCommandIntent,
   parseOwnerCommandTarget,
   parseOwnerFile,
+  leadingAuthority,
+  recordApprovalGroups,
   requiredApprovalGroups,
   requiresOwnerApproval,
   resolveOwnerDecision,
