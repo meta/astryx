@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import {createRef} from 'react';
 import {DiffViewer} from './DiffViewer';
 import {parseUnifiedDiff} from './parseUnifiedDiff';
-import type {DiffViewerLineRef} from './diffTypes';
+import type {DiffViewerFile, DiffViewerLineRef} from './diffTypes';
 import {createDiffFile} from './createDiffFile';
 import {dockerfile} from '@astryxdesign/core/CodeBlock/languages/dockerfile';
 import {graphql} from '@astryxdesign/core/CodeBlock/languages/graphql';
@@ -603,29 +603,58 @@ describe('DiffViewer', () => {
   });
 
   describe('replaced blocks', () => {
-    // 2,100 lines on each side share none, so createDiffFile replaces the
-    // middle as a whole.
-    const LINE_COUNT = 2100;
-    const REPLACED = createDiffFile({
-      oldValue: [
-        'head',
-        ...Array.from({length: LINE_COUNT}, (_, i) => `old ${i}`),
-        'tail',
-      ].join('\n'),
-      newValue: [
-        'head',
-        ...Array.from({length: LINE_COUNT}, (_, i) => `new ${i}`),
-        'tail',
-      ].join('\n'),
-      path: 'big.txt',
-      contextLines: 1,
-    });
+    // The shape createDiffFile gives a change too large to compare line by
+    // line: shared context, every old line removed, every new line added.
+    const LINE_COUNT = 3;
+    const numbers = Array.from({length: LINE_COUNT}, (_, i) => i);
+    const REPLACED: DiffViewerFile = {
+      oldPath: 'big.txt',
+      newPath: 'big.txt',
+      status: 'modified',
+      isBinary: false,
+      hunks: [
+        {
+          header: `@@ -1,${LINE_COUNT + 2} +1,${LINE_COUNT + 2} @@`,
+          oldStart: 1,
+          oldLines: LINE_COUNT + 2,
+          newStart: 1,
+          newLines: LINE_COUNT + 2,
+          isReplacedBlock: true,
+          lines: [
+            {
+              kind: 'context',
+              content: 'head',
+              oldLineNumber: 1,
+              newLineNumber: 1,
+            },
+            ...numbers.map(i => ({
+              kind: 'removed' as const,
+              content: `old ${i}`,
+              oldLineNumber: i + 2,
+              newLineNumber: null,
+            })),
+            ...numbers.map(i => ({
+              kind: 'added' as const,
+              content: `new ${i}`,
+              oldLineNumber: null,
+              newLineNumber: i + 2,
+            })),
+            {
+              kind: 'context',
+              content: 'tail',
+              oldLineNumber: LINE_COUNT + 2,
+              newLineNumber: LINE_COUNT + 2,
+            },
+          ],
+        },
+      ],
+    };
 
     it('folds the changed lines behind a labeled control', () => {
       const {container} = render(<DiffViewer file={REPLACED} />);
       expect(
         screen.getByText(
-          'Large change: 4,200 lines. Too large to compare line by line.',
+          'Large change: 6 lines. Too large to compare line by line.',
         ),
       ).toBeTruthy();
       const button = screen.getByRole('button', {name: 'Show full diff'});
@@ -636,9 +665,7 @@ describe('DiffViewer', () => {
       expect(screen.getByText('head')).toBeTruthy();
       expect(screen.getByText('tail')).toBeTruthy();
       // The header still counts the whole change.
-      expect(
-        screen.getByText('2,100 lines added, 2,100 lines removed'),
-      ).toBeTruthy();
+      expect(screen.getByText('3 lines added, 3 lines removed')).toBeTruthy();
     });
 
     it('shows and hides the full diff from the keyboard', async () => {
@@ -685,7 +712,7 @@ describe('DiffViewer', () => {
         const rows = paneRows(container, side);
         // The hunk header, the leading context, the fold, the trailing context.
         expect(rows).toHaveLength(4);
-        expect(rows[2].textContent).toContain('Large change: 4,200 lines.');
+        expect(rows[2].textContent).toContain('Large change: 6 lines.');
       }
       await user.click(screen.getByRole('button', {name: 'Show full diff'}));
       expect(paneRows(container, 'old')).toHaveLength(4 + LINE_COUNT);
