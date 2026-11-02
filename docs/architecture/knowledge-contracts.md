@@ -339,7 +339,7 @@ Every record is either:
 
 ### Source comments
 
-- **INV28 — Source comments explain only non-obvious work.** Names, structure,
+- **INV29 — Source comments explain only non-obvious work.** Names, structure,
   and control flow make source code explain itself. A comment that restates
   what the code does is a defect: the fix is clearer code, not a comment. A
   source comment explains only what a reader cannot see in the code: a reason,
@@ -361,7 +361,7 @@ Every record is either:
     (`architecture:react-component-runtime` INV3);
   - lint and TypeScript directives.
 
-Example. This comment breaks INV28. It cites a record, packs several topics
+Example. This comment breaks INV29. It cites a record, packs several topics
 into long sentences, and restates the `finalFocusRef` line below it:
 
 ```ts
@@ -380,7 +380,7 @@ into long sentences, and restates the `finalFocusRef` line below it:
 // elsewhere stays there).
 ```
 
-This comment follows INV28. Each sentence states one fact, and the code states
+This comment follows INV29. Each sentence states one fact, and the code states
 the rest:
 
 ```ts
@@ -1211,7 +1211,7 @@ needs its own spec location.
 | INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                                                                                                                                                                                                   | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
 | INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                          | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
 | INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                    | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
-| INV28                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code, or a header grows past about 12 lines, with no lint failure or review finding                                                                                                                                                                                                                                                   |
+| INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code, or a header grows past about 12 lines, with no lint failure or review finding                                                                                                                                                                                                                                                   |
 | DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
