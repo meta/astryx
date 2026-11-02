@@ -160,6 +160,24 @@ function shortestEditScript(
   };
   const oldIds = toIds(a, endA);
   const newIds = toIds(b, endB);
+
+  // Each copy of a line that one side has more often than the other is an
+  // edit, so this count is a lower bound on the edits. When it is past the
+  // limit (a rewrite, for example), skip the search.
+  const surplus = new Int32Array(ids.size);
+  for (const id of oldIds) {
+    surplus[id]++;
+  }
+  for (const id of newIds) {
+    surplus[id]--;
+  }
+  let minEdits = 0;
+  for (const count of surplus) {
+    minEdits += Math.abs(count);
+  }
+  if (minEdits > MAX_EDIT_DISTANCE) {
+    return null;
+  }
   // The furthest x each search reached on diagonal k (x - y), stored at
   // index k + offset. The backward search counts x and y from the end.
   const offset = oldIds.length + newIds.length + 1;
