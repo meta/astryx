@@ -18,12 +18,18 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
+import {use} from 'react';
 import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {AppShell} from './AppShell';
 import {Card} from '../Card/Card';
 import {Section} from '../Section/Section';
+import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
+import {
+  DEFAULT_LAYOUT_SLOTS,
+  LayoutSlotsContext,
+} from '../Layout/LayoutSlotsContext';
 import {Layout} from '../Layout/Layout';
 import {LayoutHeader} from '../Layout/LayoutHeader';
 import {InternationalizationProvider} from '../i18n';
@@ -1460,6 +1466,29 @@ describe('AppShell layout root (FR18)', () => {
     expect(screen.getByTestId('mobile-header')).not.toHaveAttribute(
       'data-divider',
     );
+  });
+
+  it('resets the Layout area and slot contexts for every child of the root', () => {
+    let seen: unknown = 'unrendered';
+    function Probe() {
+      seen = {area: use(LayoutAreaContext), slots: use(LayoutSlotsContext)};
+      return null;
+    }
+    render(
+      <Layout
+        header={<p>Outer header</p>}
+        start={<p>Outer start</p>}
+        content={
+          <AppShell mobileNav={<Probe />}>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    // Inside the outer Layout's content area the probe would read area
+    // 'content' and the outer header and start slots; at the shell's root
+    // both are back to their defaults.
+    expect(seen).toEqual({area: null, slots: DEFAULT_LAYOUT_SLOTS});
   });
 
   it('keeps the caller style and a Section host out of each other', () => {

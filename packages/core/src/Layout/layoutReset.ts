@@ -4,7 +4,7 @@
  * @file layoutReset.ts
  * @input The layout custom properties Layout, its regions, Section and the
  *   container styles publish to their descendants.
-^ * @output `layoutReset`: the StyleX styles that stop every one of them at an
+ * @output `layoutReset`: the StyleX styles that stop every one of them at an
  *   element, so what renders inside lays out as it does at a page root.
  * @position Layout owns the reset (`component:Layout` FR8). A layout root
  *   applies it, as AppShell does at its root (`component:AppShell` FR18).
