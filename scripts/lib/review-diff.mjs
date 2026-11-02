@@ -4,7 +4,7 @@
  * @file Read the shipped source lines a change adds.
  * @input A unified diff (`git diff` output).
  * @output Each added line of shipped source with its file and new line number,
- *   and every changed path.
+ *   every changed path, and every added line of each path.
  * @position Shared by `pnpm specs:for --diff` and
  *   `scripts/review-global-baselines.mjs`, which match these lines against the
  *   `concerns` the owning records declare (`architecture:knowledge-contracts/INV20`).
@@ -24,10 +24,14 @@ export function isShippedSource(file) {
   return SOURCE_FILE.test(file) && !NOT_SHIPPED.test(file);
 }
 
-/** Parse a unified diff into its changed paths and added lines. */
+/**
+ * Parse a unified diff into its changed paths and added lines. `addedLines`
+ * keeps shipped source only; `addedByFile` keeps every added line of each path.
+ */
 export function readDiff(diffText) {
   const files = [];
   const addedLines = [];
+  const addedByFile = {};
   let file = null;
   let newLine = 0;
   for (const line of diffText.split('\n')) {
@@ -35,6 +39,7 @@ export function readDiff(diffText) {
     if (header) {
       file = header[1];
       files.push(file);
+      addedByFile[file] ??= [];
       continue;
     }
     if (line.startsWith('+++ ') || line.startsWith('--- ')) continue;
@@ -45,6 +50,7 @@ export function readDiff(diffText) {
     }
     if (file == null) continue;
     if (line.startsWith('+')) {
+      addedByFile[file].push(line.slice(1));
       if (isShippedSource(file)) {
         addedLines.push({file, line: newLine, text: line.slice(1)});
       }
@@ -53,5 +59,5 @@ export function readDiff(diffText) {
       newLine += 1;
     }
   }
-  return {files, addedLines};
+  return {files, addedLines, addedByFile};
 }
