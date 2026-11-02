@@ -368,6 +368,340 @@ export function replaceDemoMedia(source) {
   return {source: output + source.slice(copied), demoMediaReplaced};
 }
 
+/**
+ * The one module docs-only demo content is imported from. A template imports
+ * an element such as a playing card's face from here so its live preview shows
+ * real-looking content; the module exists only where Astryx's own previews
+ * build templates, so a copy replaces every element imported from it (see
+ * {@link replaceDemoContent}).
+ */
+export const DEMO_CONTENT_MODULE = '@astryx-docs/demo-content';
+
+/** What a demo-content element becomes in emitted source. */
+const DEMO_CONTENT_PLACEHOLDER_TEXT = 'Card content';
+
+/** Where emitted placeholders import Text from, as catalog templates do. */
+const TEXT_MODULE = '@astryxdesign/core/Text';
+
+/** AST keys that hold positions or comments rather than child nodes. */
+const NON_CHILD_KEYS = new Set([
+  'loc',
+  'start',
+  'end',
+  'range',
+  'extra',
+  'leadingComments',
+  'trailingComments',
+  'innerComments',
+  'comments',
+  'tokens',
+]);
+
+/**
+ * Replace each JSX element imported from {@link DEMO_CONTENT_MODULE} with a
+ * generic `<Text>` placeholder and remove that import, so emitted source never
+ * depends on content only Astryx's previews provide. Text is imported from
+ * Astryx when the source does not import it already.
+ *
+ * Only a plain static use is replaced: a named import used as a JSX tag whose
+ * props are literal values and whose children, if any, are whitespace. Anything
+ * else (a namespace or type import, a re-export, a dynamic import, the element
+ * used as a value, a spread or computed prop, children) throws, naming the
+ * element, rather than leaving a reference behind or dropping code the rest of
+ * the file relies on. Source that never names the module is returned as is.
+ *
+ * @param {string} source - Template source code.
+ * @returns {{source: string, demoContentReplaced: number}}
+ */
+export function replaceDemoContent(source) {
+  if (!source.includes(DEMO_CONTENT_MODULE)) {
+    return {source, demoContentReplaced: 0};
+  }
+  /** @type {any} */
+  let ast;
+  try {
+    ast = templateSourceParser().parse(source, {
+      sourceType: 'module',
+      plugins: ['jsx', 'typescript'],
+    });
+  } catch (err) {
+    throw unsafeDemoContent(
+      `the source does not parse (${/** @type {Error} */ (err).message})`,
+    );
+  }
+
+  const program = ast.program;
+  /** @type {any[]} */
+  const demoImports = [];
+  /** @type {Set<string>} */
+  const demoNames = new Set();
+  /** @type {string | null} */
+  let textName = null;
+  for (const statement of program.body) {
+    if (statement.type !== 'ImportDeclaration') continue;
+    const from = statement.source.value;
+    if (from === DEMO_CONTENT_MODULE) {
+      if (statement.importKind === 'type') {
+        throw unsafeDemoContent('it is imported as a type');
+      }
+      for (const specifier of statement.specifiers) {
+        if (
+          specifier.type !== 'ImportSpecifier' ||
+          specifier.importKind === 'type'
+        ) {
+          throw unsafeDemoContent(
+            'only named value imports can be replaced; import each element by name',
+          );
+        }
+        demoNames.add(specifier.local.name);
+      }
+      demoImports.push(statement);
+    } else if (
+      (from === TEXT_MODULE || from === '@astryxdesign/core') &&
+      statement.importKind !== 'type'
+    ) {
+      for (const specifier of statement.specifiers) {
+        if (
+          specifier.type === 'ImportSpecifier' &&
+          specifier.importKind !== 'type' &&
+          (specifier.imported.name ?? specifier.imported.value) === 'Text'
+        ) {
+          textName = specifier.local.name;
+        }
+      }
+    }
+  }
+
+  /** @type {Array<[number, number]>} */
+  const elementRanges = [];
+  /** @type {Set<string>} */
+  const boundNames = new Set();
+  /**
+   * @param {any} node
+   * @param {any} parent
+   * @param {string} key
+   */
+  const visit = (node, parent, key) => {
+    if (!node || typeof node.type !== 'string') return;
+    if (node.type === 'StringLiteral' && node.value === DEMO_CONTENT_MODULE) {
+      if (!(parent?.type === 'ImportDeclaration' && key === 'source')) {
+        throw unsafeDemoContent(
+          'it is used outside a static import (a re-export, dynamic import, require, or string value)',
+        );
+      }
+    }
+    if (
+      node.type === 'TemplateLiteral' &&
+      node.quasis.some(
+        /** @param {any} q */ q => q.value.cooked?.includes(DEMO_CONTENT_MODULE),
+      )
+    ) {
+      throw unsafeDemoContent('it is used outside a static import');
+    }
+    if (node.type === 'Identifier') {
+      if (demoNames.has(node.name) && !isImportBinding(parent, key)) {
+        if (!isNonReferenceKey(parent, key)) {
+          throw unsafeDemoContent(
+            `${node.name} is used as a value, not only as a JSX element`,
+          );
+        }
+      }
+      if (node.name === 'Text' && isBindingPosition(parent, key)) {
+        boundNames.add('Text');
+      }
+    }
+    if (
+      node.type === 'JSXMemberExpression' &&
+      node.object.type === 'JSXIdentifier' &&
+      demoNames.has(node.object.name)
+    ) {
+      throw unsafeDemoContent(`${node.object.name} is used as a namespace`);
+    }
+    if (
+      node.type === 'JSXElement' &&
+      node.openingElement.name.type === 'JSXIdentifier' &&
+      demoNames.has(node.openingElement.name.name)
+    ) {
+      assertStaticDemoElement(node);
+      elementRanges.push([node.start, node.end]);
+      return;
+    }
+    for (const [childKey, value] of Object.entries(node)) {
+      if (NON_CHILD_KEYS.has(childKey)) continue;
+      if (Array.isArray(value)) {
+        for (const child of value) visit(child, node, childKey);
+      } else if (value && typeof value === 'object') {
+        visit(value, node, childKey);
+      }
+    }
+  };
+  visit(program, null, 'program');
+
+  if (elementRanges.length > 0 && textName === null && boundNames.has('Text')) {
+    throw unsafeDemoContent(
+      'its placeholder needs Text, but the source already declares its own Text',
+    );
+  }
+  const placeholderTag = textName ?? 'Text';
+  const placeholder = `<${placeholderTag}>${DEMO_CONTENT_PLACEHOLDER_TEXT}</${placeholderTag}>`;
+
+  /** @type {Array<{start: number, end: number, text: string}>} */
+  const edits = elementRanges.map(([start, end]) => ({
+    start,
+    end,
+    text: placeholder,
+  }));
+  demoImports.forEach((statement, index) => {
+    let end = statement.end;
+    if (source[end] === '\n') end += 1;
+    const addText =
+      index === 0 && textName === null && elementRanges.length > 0;
+    edits.push({
+      start: statement.start,
+      end,
+      text: addText ? `import {Text} from '${TEXT_MODULE}';\n` : '',
+    });
+  });
+  edits.sort((a, b) => b.start - a.start);
+  let output = source;
+  for (const edit of edits) {
+    output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+  }
+  return {source: output, demoContentReplaced: elementRanges.length};
+}
+
+/**
+ * Throw unless a demo-content element can be replaced without dropping code:
+ * literal props only, and no children but whitespace.
+ * @param {any} element
+ */
+function assertStaticDemoElement(element) {
+  const name = element.openingElement.name.name;
+  for (const attribute of element.openingElement.attributes) {
+    if (attribute.type === 'JSXSpreadAttribute') {
+      throw unsafeDemoContent(`<${name}> spreads props`);
+    }
+    const value = attribute.value;
+    if (value === null || value.type === 'StringLiteral') continue;
+    if (
+      value.type === 'JSXExpressionContainer' &&
+      isLiteralExpression(value.expression)
+    ) {
+      continue;
+    }
+    throw unsafeDemoContent(
+      `<${name}> prop ${attribute.name.name ?? ''} is not a literal value`,
+    );
+  }
+  for (const child of element.children) {
+    if (child.type === 'JSXText' && child.value.trim() === '') continue;
+    throw unsafeDemoContent(`<${name}> has children`);
+  }
+}
+
+/** @param {any} node */
+function isLiteralExpression(node) {
+  switch (node.type) {
+    case 'StringLiteral':
+    case 'NumericLiteral':
+    case 'BooleanLiteral':
+    case 'NullLiteral':
+      return true;
+    case 'TemplateLiteral':
+      return node.expressions.length === 0;
+    case 'UnaryExpression':
+      return node.operator === '-' && node.argument.type === 'NumericLiteral';
+    default:
+      return false;
+  }
+}
+
+/**
+ * Whether the identifier at `parent[key]` is the local binding an import
+ * specifier introduces.
+ * @param {any} parent
+ * @param {string} key
+ */
+function isImportBinding(parent, key) {
+  return (
+    (parent?.type === 'ImportSpecifier' ||
+      parent?.type === 'ImportDefaultSpecifier' ||
+      parent?.type === 'ImportNamespaceSpecifier') &&
+    (key === 'local' || key === 'imported')
+  );
+}
+
+/**
+ * Whether the identifier at `parent[key]` is a name rather than a reference: a
+ * non-computed property key or member property.
+ * @param {any} parent
+ * @param {string} key
+ */
+function isNonReferenceKey(parent, key) {
+  if (!parent) return false;
+  if (
+    (parent.type === 'MemberExpression' ||
+      parent.type === 'OptionalMemberExpression') &&
+    key === 'property' &&
+    !parent.computed
+  ) {
+    return true;
+  }
+  return (
+    (parent.type === 'ObjectProperty' ||
+      parent.type === 'ObjectMethod' ||
+      parent.type === 'ClassProperty' ||
+      parent.type === 'ClassMethod' ||
+      parent.type === 'TSPropertySignature') &&
+    key === 'key' &&
+    !parent.computed &&
+    !parent.shorthand
+  );
+}
+
+/**
+ * Whether the identifier at `parent[key]` declares a binding that a
+ * placeholder's own `Text` would collide with.
+ * @param {any} parent
+ * @param {string} key
+ */
+function isBindingPosition(parent, key) {
+  if (!parent) return false;
+  if (isImportBinding(parent, key)) return key === 'local';
+  return (
+    ((parent.type === 'VariableDeclarator' ||
+      parent.type === 'FunctionDeclaration' ||
+      parent.type === 'ClassDeclaration' ||
+      parent.type === 'TSTypeAliasDeclaration' ||
+      parent.type === 'TSInterfaceDeclaration' ||
+      parent.type === 'TSEnumDeclaration') &&
+      key === 'id') ||
+    key === 'params'
+  );
+}
+
+/** @param {string} reason */
+function unsafeDemoContent(reason) {
+  return new Error(
+    `Demo content from ${DEMO_CONTENT_MODULE} cannot be replaced safely: ${reason}. Use each element as a JSX tag with literal props and no children.`,
+  );
+}
+
+/**
+ * Replace everything in a template that only Astryx's previews provide, in
+ * the order a copy applies it: demo-content elements
+ * ({@link replaceDemoContent}), then demo media ({@link replaceDemoMedia}).
+ * Both counts are what a receipt discloses.
+ *
+ * @param {string} source - Template source code.
+ * @returns {{source: string, demoContentReplaced: number, demoMediaReplaced: number}}
+ */
+export function replaceTemplateDemos(source) {
+  const {source: withContent, demoContentReplaced} = replaceDemoContent(source);
+  const {source: output, demoMediaReplaced} = replaceDemoMedia(withContent);
+  return {source: output, demoContentReplaced, demoMediaReplaced};
+}
+
 /** @param {string | undefined} char */
 function isTokenDelimiter(char) {
   return char === undefined || /\s/u.test(char) || TOKEN_DELIMITERS.has(char);

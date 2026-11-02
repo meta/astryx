@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file The template.copy receipt discloses replaced demo media. Templates are
+ * @file The template.copy receipt discloses replaced demo media and demo
+ * content. Templates are
  * picked by what their source contains, not by slug, so catalog renames do not
  * break the suite.
  */
@@ -11,6 +12,9 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {template, discoverTemplates} from '../template.mjs';
+import {templateCopy} from './copy.mjs';
+import {templateShow} from '../show/show.mjs';
+import {DEMO_CONTENT_MODULE} from '../../../foundation/discovery/template-adapter.mjs';
 
 const SLOW = 60_000;
 const FIXTURE_REF = /\/template-assets\/[\w.-]+\.(\w+)/g;
@@ -73,5 +77,58 @@ describe('template.copy receipt — replaced demo media', () => {
     const {id} = await findTemplate('page', r => r.length === 0);
     const res = await template(id, {targetPath: './dest', cwd: dir});
     expect(res.data.demoMediaReplaced).toBe(0);
+  }, SLOW);
+});
+
+describe('template.copy receipt — replaced demo content', () => {
+  let dir;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tmpl-receipt-'));
+  });
+  afterEach(() => fs.rmSync(dir, {recursive: true, force: true}));
+
+  const SOURCE =
+    "import {Card} from '@astryxdesign/core/Card';\n" +
+    `import {PlayingCardContents} from '${DEMO_CONTENT_MODULE}';\n\n` +
+    'export default function CardDemo() {\n' +
+    '  return <Card><PlayingCardContents rank="Q" suit="hearts" /></Card>;\n' +
+    '}\n';
+
+  /** @returns {any} a resolved block whose source carries demo content */
+  function demoBlock() {
+    const filePath = path.join(dir, 'src', 'CardDemo.tsx');
+    fs.mkdirSync(path.dirname(filePath), {recursive: true});
+    fs.writeFileSync(filePath, SOURCE);
+    return {dirName: 'CardDemo', type: 'block', filePath, description: ''};
+  }
+
+  it('counts each demo-content element and writes the placeholder, not the demo import', () => {
+    const res = templateCopy(demoBlock(), {targetPath: './dest', cwd: dir});
+    expect(res.data.demoContentReplaced).toBe(1);
+    expect(res.data.demoMediaReplaced).toBe(0);
+    const written = fs.readFileSync(
+      path.join(dir, 'dest', 'CardDemo.tsx'),
+      'utf-8',
+    );
+    expect(written).toContain('<Card><Text>Card content</Text></Card>');
+    expect(written).toContain("import {Text} from '@astryxdesign/core/Text';");
+    expect(written).not.toContain(DEMO_CONTENT_MODULE);
+    expect(written).not.toContain('PlayingCardContents');
+  });
+
+  it('show returns the same source the copy writes, with the same count', () => {
+    const match = demoBlock();
+    const shown = templateShow(match);
+    templateCopy(match, {targetPath: './dest', cwd: dir});
+    expect(shown.data.demoContentReplaced).toBe(1);
+    expect(shown.data.source).toBe(
+      fs.readFileSync(path.join(dir, 'dest', 'CardDemo.tsx'), 'utf-8'),
+    );
+  });
+
+  it('reports 0 for a catalog template that carries no demo content', async () => {
+    const {id} = await findTemplate('page', r => r.length === 0);
+    const res = await template(id, {targetPath: './dest', cwd: dir});
+    expect(res.data.demoContentReplaced).toBe(0);
   }, SLOW);
 });

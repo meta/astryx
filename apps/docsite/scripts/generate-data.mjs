@@ -57,6 +57,7 @@ import {
   docs as readDocs,
   template as queryTemplates,
 } from '@astryxdesign/cli/api';
+import {replaceDemoContent} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import docsiteConfig from '../astryx.config.mjs';
 import {
   integrationContentEnabled,
@@ -1527,6 +1528,12 @@ async function generateBlockRegistry() {
     } catch {
       /* ignore */
     }
+    // The displayed (and registry-published) source is the code a copy writes:
+    // docs-only demo content becomes the same generic placeholder `template
+    // copy` emits. The live preview still renders the original file (see
+    // writeBlockPreview). Throws, failing the build, on a use it cannot
+    // replace safely.
+    source = replaceDemoContent(source).source;
 
     const resolvedName = meta.name || basename;
     blocks.push({
