@@ -1925,6 +1925,27 @@ describe('Item row onClick: clicks that belong to something else', () => {
     },
   );
 
+  it('does not run for a click on a read-only native input in endContent', async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <Item
+        label="Invoice 42"
+        onClick={onClick}
+        endContent={
+          <input
+            type="checkbox"
+            aria-readonly="true"
+            aria-label="Paid"
+            readOnly
+          />
+        }
+      />,
+    );
+    await user.click(screen.getByRole('checkbox', {name: 'Paid'}));
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('does not run for a click on a native control in endContent', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

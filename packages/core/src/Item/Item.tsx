@@ -829,7 +829,10 @@ export function Item({
       // React bubbles a click through a portal rendered from the row (a
       // MoreMenu's menu in `endContent`), but its target is not in the row.
       !e.currentTarget.contains(target) ||
-      // A nested control, native or role-based, owns the click.
+      // A native control owns the click, as it always has (this also keeps a
+      // read-only input and a row inside a link or button inert).
+      target.closest('button, a, input, select, textarea') ||
+      // So does a nested role-based control (role="tab", role="switch").
       hasInteractiveAncestor(target, e.currentTarget)
     ) {
       return;
