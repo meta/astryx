@@ -13,7 +13,7 @@
  * undo.
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -30,10 +30,25 @@ const SLOW = 60_000;
 
 /** A folder with only a package.json: a docs search there reads the CLI's docs. */
 function scratchProject() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-gather-reuse-'));
+  const dir = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-gather-reuse-'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}');
   return dir;
 }
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-search-adapter-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 describe('gatherCandidatesReused', () => {
   it(
