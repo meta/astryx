@@ -409,4 +409,47 @@ describe('SelectableCard compatibility until the next minor', () => {
     expect(onChange).toHaveBeenCalledWith(true);
     expect(onClick).toHaveBeenCalledTimes(2);
   });
+
+  it('a caller onClick that stops propagation does not block a control inside the layer', () => {
+    const inside = vi.fn();
+    const onClick = vi.fn((event: {stopPropagation: () => void}) => {
+      event.stopPropagation();
+    });
+    render(
+      <SelectableCard
+        label="Plan"
+        isSelected={false}
+        onChange={() => {}}
+        onClick={onClick}>
+        <Popover
+          isOpen
+          label="Details"
+          content={
+            <button type="button" onClick={inside}>
+              Inside
+            </button>
+          }>
+          <button type="button">Trigger</button>
+        </Popover>
+      </SelectableCard>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Inside', hidden: true}));
+    expect(onClick).toHaveBeenCalledTimes(1);
+    expect(inside).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onClick once for a click inside a caller-written popover, which is not a layer root', () => {
+    const onClick = vi.fn();
+    render(
+      <SelectableCard
+        label="Plan"
+        isSelected={false}
+        onChange={() => {}}
+        onClick={onClick}>
+        <div popover="manual">Own popover text</div>
+      </SelectableCard>,
+    );
+    fireEvent.click(screen.getByText('Own popover text'));
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
 });

@@ -90,8 +90,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   click inside an open layer inside the card (a Tooltip or HoverCard surface)
   reaches the caller's `onClick` from a capture-phase handler on the card
   root, so before the layer's own handlers, because the layer boundary
-  (`architecture:layer-runtime` INV17) stops it before the bubble phase. It
-  does not toggle. At the next minor, staged as `[breaking]` (`CLN-0026`),
+  (`architecture:layer-runtime` INV17) stops it before the bubble phase; its
+  `stopPropagation()` does not keep the press from the layer, and a popover
+  the caller writes without a layer root is not a layer. It does not toggle. At the next minor, staged as `[breaking]` (`CLN-0026`),
   that handler is removed and callers move a handler that needs those presses
   to the layer content.
 - **Two focus indicators on nested controls (FR4, AR2).** The card draws its

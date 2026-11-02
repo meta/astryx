@@ -44,6 +44,7 @@ import {mergeProps} from '../utils';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
+import {closestLayerRoot} from '../privateAttributes/layerRoot.stylex';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -426,9 +427,19 @@ export function SelectableCard({
         if (!(target instanceof Element)) {
           return;
         }
-        const layer = target.closest('[popover], dialog');
-        if (layer != null && !layer.contains(e.currentTarget)) {
+        const layerRoot = closestLayerRoot(target);
+        if (layerRoot == null || layerRoot.contains(e.currentTarget)) {
+          return;
+        }
+        // In capture, a caller's stopPropagation() would keep the press from
+        // the menu item or control inside the layer, which bubble delivery
+        // never could; it is a no-op for this call.
+        const stopPropagation = e.stopPropagation;
+        e.stopPropagation = () => {};
+        try {
           onClickProp(e);
+        } finally {
+          e.stopPropagation = stopPropagation;
         }
       }
     : undefined;

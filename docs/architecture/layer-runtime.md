@@ -642,7 +642,8 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
   reset.
 - `Layer/gestureCounter.ts` owns physical pointer/key gesture identity.
 - `Layer/layerClickBoundary.ts` owns the INV17 seam: the React-tree stop every
-  layer content root spreads.
+  layer content root spreads, with the layer-root mark that
+  `privateAttributes/layerRoot.stylex.ts` owns.
 - One shared seam in the layer runtime owns INV17's stop on every layer content
   root. It stops propagation through the React tree only. React's
   `stopPropagation()` also stops the native event in React 19, which would

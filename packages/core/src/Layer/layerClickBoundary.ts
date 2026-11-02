@@ -6,7 +6,7 @@
  * @file layerClickBoundary.ts
  * @input React pointer, mouse, touch and click events on a layer root
  * @output Exports layerClickBoundary, the props every layer content root
- *   spreads (architecture:layer-runtime INV17)
+ *   spreads (architecture:layer-runtime INV17), including the layer-root mark
  * @position Internal to Layer; used by useLayer's renderers and the Dialog,
  *   Drawer, Lightbox, MobileNav, BottomSheetPanel and ToastViewport roots.
  *   Not exported from the package.
@@ -21,6 +21,7 @@
  */
 
 import type {SyntheticEvent} from 'react';
+import {layerRootProps} from '../privateAttributes/layerRoot.stylex';
 
 /** The React event props that stop at a layer root. */
 const BOUNDARY_EVENTS = [
@@ -47,7 +48,9 @@ const BOUNDARY_EVENTS = [
 
 type BoundaryEvent = (typeof BOUNDARY_EVENTS)[number];
 type Handler = (event: SyntheticEvent) => void;
-export type LayerClickBoundaryProps = Record<BoundaryEvent, Handler>;
+
+export type LayerClickBoundaryProps = Record<BoundaryEvent, Handler> &
+  Readonly<Record<`data-${string}`, string>>;
 
 const returnTrue = () => true;
 
@@ -72,7 +75,7 @@ function stopInReactTree(event: SyntheticEvent): void {
 export function layerClickBoundary(
   own: Readonly<Record<string, unknown>> = {},
 ): LayerClickBoundaryProps {
-  const props: Partial<LayerClickBoundaryProps> = {};
+  const props: Partial<Record<BoundaryEvent, Handler>> = {};
   for (const name of BOUNDARY_EVENTS) {
     const handler = own[name];
     props[name] =
@@ -83,6 +86,10 @@ export function layerClickBoundary(
           }
         : stopInReactTree;
   }
-  // Every boundary event is set by the loop above.
-  return props as LayerClickBoundaryProps;
+  return {
+    // Every boundary event is set by the loop above.
+    ...(props as Record<BoundaryEvent, Handler>),
+    // Marks the root, so code outside the layer can find where it starts.
+    ...layerRootProps,
+  };
 }
