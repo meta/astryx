@@ -93,13 +93,18 @@ async function settle(page: Page) {
 
 async function observeEnvironment(page: Page) {
   return page.evaluate(() => {
-    const card = document.querySelector<HTMLElement>('.astryx-hover-card');
+    const directions = Array.from(
+      document.querySelectorAll<HTMLElement>('.astryx-hover-card'),
+    ).map(card => getComputedStyle(card).direction);
     return {
       theme: document
         .querySelector('[data-astryx-theme]')
         ?.getAttribute('data-astryx-theme'),
       mode: document.documentElement.getAttribute('data-theme'),
-      direction: card ? getComputedStyle(card).direction : null,
+      direction:
+        directions.length > 0 && new Set(directions).size === 1
+          ? directions[0]
+          : directions.join(',') || null,
       viewport: {width: innerWidth, height: innerHeight},
       dpr: devicePixelRatio,
       reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -319,7 +324,7 @@ for (const item of cases) {
 
     for (const card of observed.cards) {
       const id = card.role ?? 'unknown';
-      // FR1: one open surface carrying only the hover-card target, padded on
+      // one open surface carrying only the hover-card target, padded on
       // every logical edge.
       check(card.open, `${id}: card is not open in the top layer`);
       check(
@@ -348,12 +353,12 @@ for (const item of cases) {
     }
 
     if (group != null && text != null && group.box && text.box) {
-      // FR3: without a label the card is a group that describes its trigger.
+      // without a label the card is a group that describes its trigger.
       check(group.ariaLabel == null, 'group: has an aria-label');
       check(text.describedBy === group.id, 'text trigger: not described');
       check(text.hasPopup == null, 'text trigger: advertises a popup');
       check(text.expanded == null, 'text trigger: aria-expanded on a span');
-      // FR8: the default hover cue on a text trigger.
+      // the default hover cue on a text trigger.
       check(
         text.decorationLine === 'underline' &&
           text.decorationStyle === 'dashed',
@@ -363,7 +368,7 @@ for (const item of cases) {
     }
 
     if (dialog != null && button != null && dialog.box && button.box) {
-      // FR3: with a label the card is a named dialog its button advertises.
+      // with a label the card is a named dialog its button advertises.
       check(dialog.ariaLabel === 'Jane Doe profile', 'dialog: wrong name');
       check(button.hasPopup === 'dialog', 'button: aria-haspopup');
       check(button.expanded === 'true', 'button: aria-expanded');
@@ -456,7 +461,7 @@ test('hover-and-keyboard', async ({browser}) => {
       }),
     );
 
-  // FR4: hovering the trigger opens the card after the delay.
+  // hovering the trigger opens the card after the delay.
   await page.mouse.move(5, 5);
   await trigger.hover();
   await expect.poll(cardOpen, {timeout: 3000}).toBe(true);
@@ -473,19 +478,19 @@ test('hover-and-keyboard', async ({browser}) => {
   await settle(page);
   const png = await page.screenshot({animations: 'disabled', fullPage: true});
 
-  // FR4: moving from the trigger into the card keeps it open.
+  // moving from the trigger into the card keeps it open.
   await page.getByRole('button', {name: 'Follow'}).hover();
   await page.waitForTimeout(600);
   steps.openWhileOnCard = await cardOpen();
   check(steps.openWhileOnCard === true, 'card closed while pointer on it');
 
-  // FR4: leaving the card closes it after the hide delay.
+  // leaving the card closes it after the hide delay.
   await page.mouse.move(5, 5);
   await expect.poll(cardOpen, {timeout: 3000}).toBe(false);
   steps.closesAfterLeave = !(await cardOpen());
   check(steps.closesAfterLeave === true, 'card stayed open after leave');
 
-  // FR4 and FR6: keyboard focus opens it, Tab reaches its actions, and
+  // keyboard focus opens it, Tab reaches its actions, and
   // Escape closes it and returns focus to the trigger without reopening.
   await trigger.focus();
   await expect.poll(cardOpen, {timeout: 3000}).toBe(true);

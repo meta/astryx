@@ -54,7 +54,7 @@ export const docs = {
           name: 'children',
           type: 'ReactNode',
           description:
-            'The trigger. A single string or number is wrapped in a focusable inline span. With element children, HoverCard wires the first element, so that element does not need to accept a ref.',
+            'The trigger. A single string or number is wrapped in a focusable inline span. Text that reaches HoverCard in several pieces, such as `Edited {when}`, gets no trigger, so pass one string or wrap it in an element. With element children, HoverCard wires the first element, so that element does not need to accept a ref.',
         },
         {
           name: 'content',
@@ -143,7 +143,7 @@ export const docs = {
           name: 'isOpen',
           type: 'boolean',
           description:
-            'Controlled open state. true holds the card open and false holds it closed against hover. A controlled card answers Escape by calling onOpenChange(false) without closing; it closes when you set isOpen to false, and focus inside the card then returns to the trigger.',
+            'Controlled open state. true holds the card open. false holds it closed against hover, but focus on the trigger still opens it. A controlled card answers Escape by calling onOpenChange(false) without closing; it closes when you set isOpen to false, and focus inside the card then returns to the trigger.',
         },
         {
           name: 'xstyle',
@@ -266,7 +266,7 @@ export const docsZh = {
           name: 'children',
           type: 'ReactNode',
           description:
-            '触发元素。单个字符串或数字会被包裹在可聚焦的内联 span 中。传入元素时，HoverCard 连接第一个元素，因此该元素无需接受 ref。',
+            '触发元素。单个字符串或数字会被包裹在可聚焦的内联 span 中。分成多段到达的文本（例如 `Edited {when}`）不会得到触发器，请传入单个字符串或用元素包裹。传入元素时，HoverCard 连接第一个元素，因此该元素无需接受 ref。',
         },
         {
           name: 'content',
@@ -347,7 +347,7 @@ export const docsZh = {
           name: 'isOpen',
           type: 'boolean',
           description:
-            '受控的打开状态。true 保持卡片打开，false 使悬停无法打开卡片。受控卡片响应 Escape 时调用 onOpenChange(false) 而不关闭；将 isOpen 设为 false 时关闭，此时卡片内的焦点返回触发元素。',
+            '受控的打开状态。true 保持卡片打开。false 使悬停无法打开卡片，但触发元素获得焦点时仍会打开。受控卡片响应 Escape 时调用 onOpenChange(false) 而不关闭；将 isOpen 设为 false 时关闭，此时卡片内的焦点返回触发元素。',
         },
         {
           name: 'xstyle',
@@ -474,7 +474,7 @@ export const docsDense = {
         'Component wrapper for hover card overlay; richer overlay triggered on hover/focus.',
       propDescriptions: {
         children:
-          'Trigger. A single string/number is wrapped in a focusable inline span; with elements, the first element is wired (no ref needed).',
+          'Trigger. A single string/number is wrapped in a focusable inline span; text in several pieces (`Edited {when}`) gets no trigger. With elements, the first element is wired (no ref needed).',
         content: 'Hover card content.',
         placement:
           "Position relative to anchor element. Logical: start/end follow the popover's inherited direction (RTL mirrors).",
@@ -494,7 +494,7 @@ export const docsDense = {
           'Dashed underline on a text trigger. auto = single string/number children; no effect on element triggers.',
         isDefaultOpen: 'Show hover card on mount. Still dismissible.',
         isOpen:
-          'Controlled open state. true holds open, false holds closed against hover. Escape calls onOpenChange(false) without closing; setting false returns focus inside the card to the trigger.',
+          'Controlled open state. true holds open; false holds closed against hover, but trigger focus still opens it. Escape calls onOpenChange(false) without closing; setting false returns focus inside the card to the trigger.',
         xstyle: 'StyleX styles for the card surface (hover-card target).',
         className: 'Class added to the card surface.',
         style: 'Inline styles for the card surface.',

@@ -30,6 +30,7 @@ import {
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
 import {StrictMode, type ComponentProps} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Theme, defineTheme} from '../theme';
@@ -1435,7 +1436,6 @@ describe('HoverCard surface press', () => {
   });
 });
 
-// Contract claims the record lists as read from source only.
 describe('HoverCard timing, hold, and controlled state', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -1553,6 +1553,14 @@ describe('HoverCard timing, hold, and controlled state', () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(true);
   });
 
+  it('applies xstyle to the themed card surface', () => {
+    const overrides = stylex.create({card: {minWidth: 240}});
+    renderCard({isOpen: true, xstyle: overrides.card});
+    const card = screen.getByText('Card action').closest('[popover]');
+    expect(card).toHaveClass('astryx-hover-card');
+    expect(getComputedStyle(card as HTMLElement).minWidth).toBe('240px');
+  });
+
   it('applies className and style to the themed card surface', () => {
     renderCard({
       isOpen: true,
@@ -1567,7 +1575,7 @@ describe('HoverCard timing, hold, and controlled state', () => {
 
   it("restores the trigger's own popup attributes when the label is removed", () => {
     const {rerender} = render(
-      <HoverCard content={<span>Card content</span>} label="Profile">
+      <HoverCard content={<span>Card content</span>} label="Profile" isOpen>
         <button
           type="button"
           aria-haspopup="menu"
@@ -1578,10 +1586,13 @@ describe('HoverCard timing, hold, and controlled state', () => {
       </HoverCard>,
     );
     const trigger = screen.getByRole('button', {name: 'Trigger'});
+    const cardId = screen.getByText('Card content').closest('[popover]')?.id;
     expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(trigger).toHaveAttribute('aria-controls', `own-menu ${cardId}`);
 
     rerender(
-      <HoverCard content={<span>Card content</span>}>
+      <HoverCard content={<span>Card content</span>} isOpen>
         <button
           type="button"
           aria-haspopup="menu"

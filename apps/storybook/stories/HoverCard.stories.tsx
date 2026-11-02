@@ -247,10 +247,9 @@ function AuditProfile({name, role}: {name: string; role: string}) {
 }
 
 /**
- * Both popup roles held open, so accessibility, RTL, and visual checks can
- * reach the card without a hover: an unlabelled card on a text trigger is a
- * group that describes its trigger, and a labelled card with actions is a
- * named dialog its button advertises.
+ * Both popup roles, shown open. An unlabelled card on a text trigger is a
+ * group that describes its trigger. A labelled card with actions is a named
+ * dialog that its button advertises.
  */
 export const OpenStates: Story = {
   render: () => (
