@@ -910,9 +910,8 @@ interface SelectorOptionRowProps {
 }
 
 /**
- * One option row. Memoized: a highlight move or a selection re-renders only
- * the rows whose own props change, not the whole list, so every prop here is
- * stable across renders that do not concern the row.
+ * One option row, memoized. Keep each prop stable across renders that do not
+ * change this row. A new `onSelect` or `renderOption` re-renders every row.
  */
 const SelectorOptionRow = memo(function SelectorOptionRow({
   item,
@@ -1203,8 +1202,7 @@ export function Selector<T extends SelectorOptionType>(
     () => getSelectableOptions(options),
     [options],
   );
-  // Each option as given, to its normalized data: the rows keep the same item
-  // objects from render to render, so their memo holds (SelectorOptionRow).
+  // Rows need the same item object on every render, or their memo fails.
   const normalizedOf = useMemo(() => {
     const map = new Map<string | SelectorOptionData, SelectorOptionData>();
     let index = 0;

@@ -14,7 +14,6 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
 interface UseHighlightedOptionScrollOptions {
   isOpen: boolean;
@@ -43,30 +42,23 @@ export function useHighlightedOptionScroll({
   getOptionId,
   itemCount,
 }: UseHighlightedOptionScrollOptions): (index: number) => void {
-  const hoverHighlightRef = useRef(false);
-  // Read at the hover, after the commit, so the callback stays the same
-  // function while the highlight moves: owners pass it to memoized rows.
-  const highlightedIndexRef = useRef(highlightedIndex);
-  useIsomorphicLayoutEffect(() => {
-    highlightedIndexRef.current = highlightedIndex;
-  });
+  // The index the last hover asked for. The callback reads no render state,
+  // so it stays the same function while the highlight moves: owners pass it
+  // to memoized rows.
+  const hoveredIndexRef = useRef<number | null>(null);
 
   const highlightFromHover = useCallback(
     (index: number) => {
-      if (index !== highlightedIndexRef.current) {
-        hoverHighlightRef.current = true;
-      }
+      hoveredIndexRef.current = index;
       setHighlightedIndex(index);
     },
     [setHighlightedIndex],
   );
 
   useEffect(() => {
-    if (hoverHighlightRef.current) {
-      hoverHighlightRef.current = false;
-      return;
-    }
-    if (!isOpen || highlightedIndex < 0) {
+    const isFromHover = hoveredIndexRef.current === highlightedIndex;
+    hoveredIndexRef.current = null;
+    if (isFromHover || !isOpen || highlightedIndex < 0) {
       return;
     }
     document
