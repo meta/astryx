@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {spawnSync} from 'node:child_process';
+import {spawn, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -61,14 +61,64 @@ const PNPM_STUB =
   '  [ -f "$PUBLISH_LOG.once" ] || { : > "$PUBLISH_LOG.once"; echo "(409) an equivalent entry already exists in the transparency log" >&2; exit 1; };;\n' +
   'esac; fi\n';
 
-function runCanaryPublish({
-  httpStatus,
-  curlExitCode = '0',
+/*
+ * A registry stand-in on a local port. The private canary-only package's
+ * dist-tags answer each status in `NATIVE_STATUSES` in turn (the last one
+ * repeats; `000` drops the connection); other dist-tags answer 200, and every
+ * version document 404. Each request path is logged.
+ */
+const REGISTRY_STUB = `
+import fs from 'node:fs';
+import http from 'node:http';
+const statuses = process.env.NATIVE_STATUSES.split(',');
+let nativeReads = 0;
+const server = http.createServer((request, response) => {
+  const url = decodeURIComponent(request.url);
+  fs.appendFileSync(process.env.REQUEST_LOG, url + '\\n');
+  if (url === '/-/package/@astryxdesign/native/dist-tags') {
+    const status = statuses[Math.min(nativeReads, statuses.length - 1)];
+    nativeReads += 1;
+    if (status === '000') return request.socket.destroy();
+    response.writeHead(Number(status)).end('{}');
+    return;
+  }
+  response.writeHead(url.startsWith('/-/package/') ? 200 : 404).end('{}');
+});
+server.listen(0, '127.0.0.1', () => console.log(server.address().port));
+`;
+
+async function startRegistryStub(root, nativeStatuses) {
+  const script = path.join(root, 'registry-stub.mjs');
+  const requestLog = path.join(root, 'requests.log');
+  fs.writeFileSync(script, REGISTRY_STUB);
+  fs.writeFileSync(requestLog, '');
+  const child = spawn(process.execPath, [script], {
+    env: {
+      ...process.env,
+      NATIVE_STATUSES: nativeStatuses,
+      REQUEST_LOG: requestLog,
+    },
+    stdio: ['ignore', 'pipe', 'inherit'],
+  });
+  const port = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.stdout.once('data', data => resolve(String(data).trim()));
+  });
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests: () => fs.readFileSync(requestLog, 'utf8'),
+    stop: () => child.kill(),
+  };
+}
+
+async function runCanaryPublish({
+  nativeStatuses,
   failingPackage = '',
   failOnce = '',
 }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-canary-publish-'));
   const publishLog = path.join(root, 'publish.log');
+  const registry = await startRegistryStub(root, nativeStatuses);
   try {
     writeJson(root, 'packages/core/package.json', {
       name: '@astryxdesign/core',
@@ -84,13 +134,11 @@ function runCanaryPublish({
       name: '@astryxdesign/theme-neutral',
       version: '0.7.4',
     });
-    writeExecutable(
-      root,
-      'curl',
-      '#!/bin/sh\nprintf %s "$NATIVE_HTTP_STATUS"\nexit "$CURL_EXIT_CODE"\n',
-    );
     writeExecutable(root, 'pnpm', PNPM_STUB);
-    const publisherEnv = withPublisher(root);
+    const publisherEnv = {
+      ...withPublisher(root),
+      ASTRYX_PUBLISH_REGISTRY: registry.url,
+    };
 
     const runnerTemp = path.join(root, 'runner-temp');
     fs.mkdirSync(runnerTemp, {recursive: true});
@@ -103,11 +151,9 @@ function runCanaryPublish({
         env: {
           ...process.env,
           ...publisherEnv,
-          CURL_EXIT_CODE: curlExitCode,
           FAIL_ONCE: failOnce,
           FAIL_PACKAGE: failingPackage,
           GITHUB_SHA: 'abcdef1234567890',
-          NATIVE_HTTP_STATUS: httpStatus,
           PATH: `${path.join(root, 'bin')}:${process.env.PATH}`,
           PUBLISH_LOG: publishLog,
           RUNNER_TEMP: runnerTemp,
@@ -116,11 +162,13 @@ function runCanaryPublish({
     );
     return {
       ...result,
+      requests: registry.requests(),
       published: fs.existsSync(publishLog)
         ? fs.readFileSync(publishLog, 'utf8')
         : '',
     };
   } finally {
+    registry.stop();
     fs.rmSync(root, {recursive: true, force: true});
   }
 }
@@ -297,8 +345,8 @@ describe('stable and canary publication authority', () => {
     expect(canaryText).not.toContain('release-publish-receipt');
   });
 
-  it('skips only an absent package that was private and canary-only', () => {
-    const result = runCanaryPublish({httpStatus: '404'});
+  it('skips only an absent package that was private and canary-only', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '404'});
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain(
@@ -309,38 +357,59 @@ describe('stable and canary publication authority', () => {
     expect(result.published).not.toContain('publish ./packages/native');
   });
 
-  it('publishes a bootstrapped private canary-only package normally', () => {
-    const result = runCanaryPublish({httpStatus: '200'});
+  it('publishes a bootstrapped private canary-only package normally', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '200'});
 
     expect(result.status).toBe(0);
     expect(result.published).toContain('publish ./packages/native');
   });
 
-  it('fails on registry errors instead of treating them as package absence', () => {
-    const result = runCanaryPublish({httpStatus: '503'});
+  it('asks whether a package exists through its dist-tags, never its full document', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '200'});
+
+    expect(result.requests).toContain(
+      '/-/package/@astryxdesign/native/dist-tags',
+    );
+    expect(result.requests.split('\n')).not.toContain('/@astryxdesign/native');
+    expect(step(canary, 'Publish canary versions').run).not.toContain('curl');
+  });
+
+  it('fails on registry errors instead of treating them as package absence', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '503'});
 
     expect(result.status).toBe(1);
-    expect(result.stdout).toContain(
-      'Registry lookup for @astryxdesign/native returned HTTP 503',
+    expect(result.stderr).toContain(
+      'Could not tell whether @astryxdesign/native exists on the registry after 3 lookups.',
     );
+    expect(result.stdout).toContain(
+      'Canary publish failed for @astryxdesign/native',
+    );
+    expect(result.stdout).not.toContain('Skipping absent');
     expect(result.published).not.toContain('publish ./packages/native');
   });
 
-  it('records a failed registry request and continues later packages', () => {
-    const result = runCanaryPublish({httpStatus: '000', curlExitCode: '28'});
+  it('records a dropped registry request and continues later packages', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '000'});
 
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(
-      'Registry lookup for @astryxdesign/native returned HTTP 000',
+      'Canary publish failed for @astryxdesign/native',
     );
     expect(result.published).not.toContain('publish ./packages/native');
     expect(result.published).toContain('publish ./packages/themes/neutral');
   });
 
-  it('still fails when a present package cannot publish', () => {
-    const result = runCanaryPublish({
+  it('asks again after an unknown answer and publishes once the package is found', async () => {
+    const result = await runCanaryPublish({nativeStatuses: '000,503,200'});
+
+    expect(result.status).toBe(0);
+    expect(result.published).toContain('publish ./packages/native');
+  });
+
+  it('still fails when a present package cannot publish', async () => {
+    const result = await runCanaryPublish({
       failingPackage: 'packages/native',
-      httpStatus: '200',
+      nativeStatuses: '200',
     });
 
     expect(result.status).toBe(1);
@@ -363,10 +432,10 @@ describe('stable and canary publication authority', () => {
     );
   });
 
-  it('retries a canary whose first signature is rejected, and passes', () => {
-    const result = runCanaryPublish({
+  it('retries a canary whose first signature is rejected, and passes', async () => {
+    const result = await runCanaryPublish({
       failOnce: 'packages/themes/neutral',
-      httpStatus: '200',
+      nativeStatuses: '200',
     });
 
     expect(result.status).toBe(0);
