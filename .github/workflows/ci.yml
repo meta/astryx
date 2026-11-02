@@ -522,12 +522,14 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - name: Defer the heavy suites unless the change is spec-only
+      - name: Defer the heavy suites unless the change is spec-only or Lab-only
         id: decide
         env:
           SPEC_ONLY: ${{ steps.scope.outputs.spec_only }}
+          LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
         run: |
-          if [ "$SPEC_ONLY" = true ]; then
+          # A Lab-only change runs only fast work, so nothing is deferred (FR26).
+          if [ "$SPEC_ONLY" = true ] || [ "$LAB_ONLY" = true ]; then
             echo 'deferred=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -584,24 +586,29 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: steps.scope.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
+
       - name: Skip docsite work for Node tooling
         if: steps.scope.outputs.tooling_only == 'true'
         run: echo "Node-tooling PR — docsite generation is not an owned check"
 
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       # Spec validation imports the canonical CLI discovery path, so the
       # lightweight docs path needs workspace dependencies too.
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       - name: Validate spec records
         if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')
         run: node scripts/check-knowledge.mjs
 
       - name: Install Playwright
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: npx playwright install chromium
 
       # The production build (and the data generation inside it) imports every
@@ -609,7 +616,7 @@ jobs:
       # of core. Core builds first; the rest depend on it and not on each
       # other, so they build side by side.
       - name: Build docsite workspace dependencies
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: |
           pnpm -F @astryxdesign/core build
           pnpm --workspace-concurrency=4 \
@@ -629,7 +636,7 @@ jobs:
       # `build` generates the docsite data first, so the data tests below run
       # on the same generated files the production build used.
       - name: Build the docsite
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm -F @astryxdesign/docsite build
 
       # test-docsite (the data tests) runs in the background while
@@ -637,13 +644,13 @@ jobs:
       # e2e step stays its own step so it can move to another tier alone.
       - name: test-docsite (start the data tests)
         id: data
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         # errexit off inside: a failing test run must still record its exit
         # code, written whole so the result step never reads half a file.
         run: (set +e; pnpm -F @astryxdesign/docsite test > docsite-data.log 2>&1; echo $? > docsite-data.exit.tmp; mv docsite-data.exit.tmp docsite-data.exit) &
 
       - name: test-docsite-e2e (browser contracts)
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm test:docsite-browser
 
       - name: test-docsite (data test results)
@@ -656,11 +663,11 @@ jobs:
       # A docsite-only change skips test-node, and the registry generator
       # lives in the docsite.
       - name: Verify the hidden production registry gate
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: node internal/shadcn-registry/verify-production-gate.mjs
 
       - name: Upload docsite browser evidence
-        if: always() && steps.scope.outcome == 'success' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: always() && steps.scope.outcome == 'success' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: docsite-browser-evidence
@@ -726,6 +733,11 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: steps.scope.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job runs only the Lab package's tests and the repository guards (spec:AST-030 FR26)."
+
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
@@ -780,8 +792,13 @@ jobs:
       - name: Run this shard of the UI tests
         env:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
+          LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
         run: |
-          if [ "$SCOPED" = true ]; then
+          if [ "$LAB_ONLY" = true ]; then
+            # A change only to the Lab package runs every Lab test, and only
+            # those, across the same legs (spec:AST-030 FR26).
+            pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} packages/lab/
+          elif [ "$SCOPED" = true ]; then
             pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
             # Tests no module graph relates to the change run too: guards
             # that read sources, and tests that load a changed package from
@@ -802,7 +819,7 @@ jobs:
       # (AST-036); the other shards run on other machines.
       - name: Run the isolated Markdown benchmark
         run: pnpm test:ui:isolated
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
   test-node:
     name: test-node (${{ matrix.shard }}/${{ strategy.job-total }})
@@ -840,17 +857,22 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: steps.scope.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
+
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
 
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
         with:
           fetch-depth: 2
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       # Before Vitest starts. A scoped run's `--changed` walks the tests'
       # import graphs before the global setup builds Core, and Vite answers an
@@ -859,7 +881,7 @@ jobs:
       # "@astryxdesign/core/theme" imported by "@astryxdesign/cli"". The global
       # setup then finds Core built and skips its own build.
       - name: Build core package
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm -F @astryxdesign/core build
 
       # Scoped like test-ui's run.
@@ -881,18 +903,18 @@ jobs:
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           fi
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       # Theme-family compilation is owned by `theme-build`, not Build. Until
       # that surface has an admitted dedicated lane, broad CI keeps its browser
       # contract inside the existing Node test owner rather than `test-build`.
       # One leg runs it.
       - name: Install Playwright for theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: npx playwright install chromium
 
       - name: Run the theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm test:theme-family
 
   # The one pre-job left: a runner must be picked before its job starts, so
@@ -1085,6 +1107,11 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: steps.scope.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The test owners ran only the Lab package's tests (spec:AST-030 FR26)."
+
       # A release-branch pull request is spec-only by classification, but its
       # join still runs: it requires the release bump's own validation.
       - uses: actions/checkout@v7
@@ -1098,6 +1125,7 @@ jobs:
           DOCSITE_ONLY: ${{ steps.scope.outputs.docsite_only }}
           SPEC_ONLY: ${{ steps.scope.outputs.spec_only }}
           TOOLING_ONLY: ${{ steps.scope.outputs.tooling_only }}
+          LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
           TEST_UI_RESULT: ${{ needs.test-ui.result }}
           TEST_NODE_RESULT: ${{ needs.test-node.result }}
           TEST_BUILD_RESULT: ${{ needs.test-build.result }}
@@ -1170,6 +1198,7 @@ jobs:
     outputs:
       short_hash: ${{ steps.release.outputs.short_hash || steps.urls.outputs.short_hash }}
       pr_number: ${{ steps.urls.outputs.pr_number }}
+      lab_only: ${{ steps.scope.outputs.lab_only }}
     steps:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
@@ -1591,23 +1620,28 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: steps.scope.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
+
       - name: Skip typechecks for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
         run: echo "Specialized PR lane — skipping typechecks"
 
       - name: Checkout
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node and pnpm
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         uses: ./.github/actions/setup
 
       # The doc, template and CLI typechecks resolve the built package types.
       - name: Build packages
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm build
 
       # Every workspace package's own `typecheck` script: its sources and
@@ -1616,7 +1650,7 @@ jobs:
       # A PR head cut before `pnpm typecheck` existed runs the previous list,
       # loaded from the merge commit these steps come from.
       - name: Typecheck every package
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         env:
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
@@ -1660,6 +1694,11 @@ jobs:
         run: |
           echo "::error::Heavy CI deferred: runs when marked ready and before merge (spec:AST-030 FR20)."
           exit 1
+
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: needs.build-storybook.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. Typecheck is not required for a change only to the Lab package; the Storybook build ran (spec:AST-030 FR26)."
 
       - name: Assert parallel builds succeeded
         run: |
@@ -2428,42 +2467,47 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
+      - name: 'Lab-only: Lab tests + Storybook build'
+        if: steps.scope.outputs.lab_only == 'true'
+        run: |
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
+
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
 
       - name: Per-author heavy-suite caps
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         uses: ./.github/actions/heavy-caps
 
       # The daily heavy-run cap counts this step (spec:AST-030 FR16).
       - name: Heavy suite runs
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: 'true'
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
       - name: Install Playwright
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: npx playwright install chromium
 
       # The Build package's contracts: the packed consumer's dependencies, the
       # production CSS-layer cascade, and cross-package StyleX markers in a
       # real browser. `pnpm test:build` owns the list.
       - name: Run Build package contracts
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm test:build
 
       # The vibe-tests fixtures share this Playwright-equipped runner: the
       # canonical setup compositions and the guest fixture contrast need a
       # production browser render.
       - name: Verify canonical setup compositions
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         env:
           ASTRYX_CANONICAL_SETUP_BROWSER: '1'
         run: pnpm vitest run internal/vibe-tests/setup-test/setup-canonical.test.ts --project node --maxWorkers=1
 
       - name: Verify guest fixture contrast
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
         run: pnpm -F @astryxdesign/vibe-tests fixtures:contrast
 
   # The full visual plan first loads every Core story to learn which theming
@@ -2521,7 +2565,7 @@ jobs:
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
-          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' }}
+          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' || steps.scope.outputs.lab_only == 'true' }}
         run: |
           if [ "$SPECIALIZED" = true ]; then
             printf 'has_stable_visual=false\nbroad_stable_visual=false\n' >> "$GITHUB_OUTPUT"
@@ -2631,7 +2675,7 @@ jobs:
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
-          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' }}
+          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' || steps.scope.outputs.lab_only == 'true' }}
         run: |
           if [ "$SPECIALIZED" = true ]; then
             printf 'has_stable_visual=false\nbroad_stable_visual=false\n' >> "$GITHUB_OUTPUT"
@@ -3348,7 +3392,7 @@ jobs:
   pr-touched-components:
     name: Touched components (visual, accessibility, RTL)
     needs: [build-storybook, pr-visual]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success') }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.lab_only != 'true') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:

@@ -22,8 +22,9 @@ const {jobs} = yaml.parse(
 );
 const owner = jobs['docsite-test'];
 const step = name => owner.steps.find(candidate => candidate.name === name);
+// A Lab-only change skips the docsite work too (spec:AST-030 FR26).
 const ACTIVE =
-  "steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'";
+  "steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'";
 
 describe('docsite-test', () => {
   it('is one job that builds the docsite once and runs both suites on it', () => {

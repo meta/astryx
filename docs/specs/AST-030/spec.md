@@ -478,6 +478,22 @@ they are separately named.
   hourly schedule (FR21), and the release cut's own exact-commit checks are
   unchanged (DEC-19).
 
+- **FR26 — A Lab-only pull request runs the Lab tests and the Storybook
+  build.** A pull request whose every changed path is in the Lab package
+  (`packages/lab/`), beside any Changesets, runs the Lab package's tests on the
+  UI legs, the Storybook build, and the repository-wide guards: full lint and
+  the UI lane's copyright, package-exports, CLI API type, token-docs, Lab
+  readiness and knowledge-schema checks. It runs no docsite build or tests, no
+  typecheck, no Node or Build-package tests, and no visual, accessibility, RTL,
+  interaction or touched-components suite, and an agent lane's push defers
+  nothing (FR20). The required `build`, `test` and `docsite-test` contexts
+  report success with the notice "Lab-only: Lab tests + Storybook build",
+  never a skip. Any other changed path, Lab stories under
+  `apps/storybook/stories/` included, an incomplete file list, or a base whose
+  classifier has no Lab-only lane runs CI as for any pull request. An outside
+  contributor's pull request still needs `ci:run` (FR17), and `main` and the
+  release-check cover Lab as before (DEC-21).
+
 ### Platform support
 
 - Supported feature/engine floor: GitHub pull-request and merge-group workflows
@@ -537,6 +553,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver; `vitest-shard-sequencer.test.mjs` over the recorded Node times | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces; four and six Node legs over the recorded suite, a file with no recorded time, a project other than `node`                                                                                                                                                                                                                                  | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a person's `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip, or two of the slowest Node files in one leg, a file run by no leg or by two, or a split that depends on collection order fails |
 | FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract                                             | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                              | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                           |
 | FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                            | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                    | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                |
+| FR26     | `ci-lab-only-routing.test.mjs`, `change-scope.test.mjs` and `test-scope-action.test.mjs` Lab-only cases                                            | a Lab-only change, with and without a Changeset; Lab beside core, charts, a Storybook story, the docsite, the Sandbox, a workflow, the lockfile, root configuration, internal tooling or a spec record; a rename into or out of Lab; an incomplete list; a base classifier without the lane; each required context, its owners, the UI legs' Lab tests and guards, the Storybook build, the heavy suites, lint and an agent push                                                                                                                                                                                             | a mixed change takes the Lab-only lane; a required context skips or fails, or passes without its notice; a Lab test, a repository guard or the Storybook build does not run; a heavy suite, the docsite, typecheck or the Node lane runs; lint is skipped                                                                                                                                                 |
 
 ## Decision log
 
@@ -918,6 +935,39 @@ keeps its own hourly schedule (FR21).
 
 Rejected: a check only at the cut (main's result would lag a whole day);
 keeping it hourly (the run is the largest share of main's runner use).
+
+### DEC-21 — A Lab-only change runs only what checks Lab
+
+**Reference:** `spec:AST-030/DEC-21`
+**Decider:** `cixzhang`, `2026-11-01`
+
+The Lab package is experimental: it is published, but outside the
+compatibility promise, and its changes merge without the spec gates. The
+decider's words: "Lab can just merge since its not shipped"; "Lab could
+likely skip a lot of CI"; "LAb-only updates at least. Maybe it only runs the
+lab tests"; "Theymight need storybook". A Lab-only pull request therefore
+runs the Lab tests and the Storybook build, which holds Lab's stories and the
+pull request's preview.
+
+The repository-wide guards are a small addition to those words. They read the
+whole repository on every pull request, so a Lab change that broke one would
+turn every later pull request red until `main` was repaired; they cost about
+three minutes of small jobs per Lab-only run.
+
+The docsite, the Sandbox and the CLI import Lab, and their checks do not run on
+a Lab-only pull request. A Lab change that breaks the docsite or Sandbox build
+shows as a failing preview deployment on its own pull request and on `main`'s
+production deployment; one that breaks the docsite or CLI tests fails the next
+pull request that runs them and `main`'s hourly full unit run (FR21). That is
+the accepted cost: about one pull-request run in a hundred is Lab-only, and
+each skips most of a full run's work.
+
+Rejected: keeping full CI for Lab (it spends shipped-surface checks on a
+package outside the compatibility promise); Lab tests alone, without the
+repository-wide guards (a landed guard break blocks everyone else's pull
+requests); counting Lab stories under `apps/storybook/stories/` as Lab-only
+(they share the visual surface, and a path cannot tell a Lab story from a core
+one without reading pull-request content, FR3).
 
 ## Open questions
 

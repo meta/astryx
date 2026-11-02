@@ -12,6 +12,7 @@ const broad = {
   DOCSITE_ONLY: 'false',
   SPEC_ONLY: 'false',
   TOOLING_ONLY: 'false',
+  LAB_ONLY: 'false',
   RELEASE_BUMP: 'false',
   RELEASE_BUMP_RESULT: 'skipped',
   TEST_UI_RESULT: 'success',
@@ -65,7 +66,7 @@ describe('pull-request test join', () => {
     }
   });
 
-  it.each(['DOCSITE_ONLY', 'SPEC_ONLY', 'TOOLING_ONLY'])(
+  it.each(['DOCSITE_ONLY', 'SPEC_ONLY', 'TOOLING_ONLY', 'LAB_ONLY'])(
     'still requires every owner to report success for %s, since each skips its own work',
     scope => {
       expect(run({[scope]: 'true'})).toMatchObject({status: 0});
@@ -96,5 +97,8 @@ describe('pull-request test join', () => {
   it('rejects missing or invalid scope decisions', () => {
     expect(run({SPEC_ONLY: ''})).toMatchObject({status: 1});
     expect(run({TOOLING_ONLY: 'unknown'})).toMatchObject({status: 1});
+    // A Lab-only decision is required too (spec:AST-030 FR26).
+    expect(run({LAB_ONLY: null})).toMatchObject({status: 1});
+    expect(run({LAB_ONLY: 'maybe'})).toMatchObject({status: 1});
   });
 });

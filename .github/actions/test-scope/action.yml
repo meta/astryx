@@ -64,6 +64,11 @@ outputs:
   tooling_only:
     description: The PR changes only Node tooling.
     value: ${{ steps.scope.outputs.tooling_only }}
+  lab_only:
+    description: >-
+      The PR changes only the Lab package (and Changesets): it runs the Lab
+      tests and the Storybook build, nothing else (spec:AST-030 FR26).
+    value: ${{ steps.scope.outputs.lab_only }}
   full_suite:
     description: The import graph cannot scope this change; run every test.
     value: ${{ steps.scope.outputs.full_suite }}
@@ -103,8 +108,8 @@ outputs:
     value: ${{ steps.scope.outputs.head_file_present }}
   applies:
     description: >-
-      The job's work applies: not a specialized lane (spec, docsite or tooling
-      only), `touches` holds, and any `requires-head-file` is present.
+      The job's work applies: not a specialized lane (spec, docsite, tooling or
+      Lab only), `touches` holds, and any `requires-head-file` is present.
     value: ${{ steps.scope.outputs.applies }}
 
 runs:
@@ -129,6 +134,7 @@ runs:
             spec_only: 'false',
             docsite_only: 'false',
             tooling_only: 'false',
+            lab_only: 'false',
             full_suite: 'true',
             release_bump: 'false',
             touches: 'true',
@@ -245,7 +251,8 @@ runs:
             const pattern = new RegExp(process.env.SCOPE_PATHS);
             touches = String(files.some(f => pattern.test(f.filename) || (f.previous_filename != null && pattern.test(f.previous_filename))));
           }
-          const specialized = ['spec_only', 'docsite_only', 'tooling_only'].some(key => classified[key] === 'true');
+          // A base whose classifier predates lab_only reports none: false.
+          const specialized = ['spec_only', 'docsite_only', 'tooling_only', 'lab_only'].some(key => classified[key] === 'true');
           let applies = String(!specialized && touches === 'true');
           // Whether the head has the file the work needs, decided whether or
           // not `touches` holds; a diff that touches the file keeps it.
