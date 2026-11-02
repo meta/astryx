@@ -30,8 +30,9 @@ describe('docsite-test', () => {
     expect(jobs['docsite-data']).toBeUndefined();
     expect(jobs['docsite-browser']).toBeUndefined();
     // Only CI's run admission, which never skips (ci-admission.test.mjs).
-    // room tells it when CI is full (ci-admission.test.mjs).
-    expect(owner.needs).toEqual(['room', 'admission']);
+    // room tells it when CI is full (ci-admission.test.mjs); heavy-ci whether
+    // an agent push deferred it (spec:AST-030 FR20).
+    expect(owner.needs).toEqual(['room', 'admission', 'heavy-ci']);
     expect(owner['continue-on-error']).toBeUndefined();
     // A required context keeps only the draft skip in its condition; an
     // outside contributor's run stops at the first step with the reason.
@@ -46,7 +47,9 @@ describe('docsite-test', () => {
     );
     // After the FR17 gate and the CI-is-full stop (ci-admission.test.mjs).
     expect(owner.steps[1].name).toBe('Stop when CI is full');
-    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(3);
+    // Then an agent push's deferral (spec:AST-030 FR20), then the scope.
+    expect(owner.steps[2].name).toBe('Heavy CI deferred');
+    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(4);
 
     const builds = owner.steps.filter(s =>
       /pnpm -F @astryxdesign\/docsite build/.test(s.run ?? ''),
@@ -75,6 +78,21 @@ describe('docsite-test', () => {
     expect(step('test-docsite (data test results)').if).toBe(
       "${{ !cancelled() && steps.data.outcome == 'success' }}",
     );
+  });
+
+  it('builds and tests the docs prompt with placeholder origins only', () => {
+    // One job-level value reaches the build and the browser contracts alike.
+    expect(owner.env).toEqual({
+      NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: 'https://docs.example.test',
+      NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: 'https://probe.example.test',
+    });
+    for (const s of owner.steps) {
+      expect(s.env?.NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN, s.name).toBeUndefined();
+      expect(
+        s.env?.NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN,
+        s.name,
+      ).toBeUndefined();
+    }
   });
 
   it.each([0, 1])(

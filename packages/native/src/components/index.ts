@@ -19,6 +19,7 @@ import {heading} from './Heading.js';
 import {hStack} from './HStack.js';
 import {icon} from './Icon.js';
 import {item} from './Item.js';
+import {listItem} from './ListItem.js';
 import {progressBar} from './ProgressBar.js';
 import {selector} from './Selector.js';
 import {switchControl} from './Switch.js';
@@ -38,6 +39,7 @@ export const NATIVE_COMPONENTS: readonly NativeAdditions[] = [
   hStack,
   icon,
   item,
+  listItem,
   progressBar,
   selector,
   switchControl,

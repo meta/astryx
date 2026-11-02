@@ -195,6 +195,21 @@ describe('pull-request CI gate (spec:AST-030 FR17)', () => {
           !/always\(\)|cancelled\(\)|failure\(\)/.test(condition)
         )
           continue;
+        // A job that runs only once a gated job it needs succeeded is gated
+        // through it (its status check keeps an ancestor's skip, such as
+        // heavy-ci's, from skipping it; spec:AST-030 FR20).
+        if (
+          [job.needs ?? []]
+            .flat()
+            .some(
+              need =>
+                condition.includes(`needs.${need}.result == 'success'`) &&
+                startsWithGate(PR_CI_GATE).test(
+                  String(value.jobs[need]?.if ?? ''),
+                ),
+            )
+        )
+          continue;
         if (
           /^(\$\{\{\s*)?(always\(\) && )?github\.event_name == 'workflow_dispatch' &&/.test(
             condition,

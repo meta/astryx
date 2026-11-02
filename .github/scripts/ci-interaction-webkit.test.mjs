@@ -59,7 +59,12 @@ describe('WebKit interaction proof routing', () => {
       "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
-    expect(webkit.needs).toEqual(['room', 'admission', 'build-storybook']);
+    expect(webkit.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
   });
 
   it('stays on a standard runner within the 15-minute budget', () => {

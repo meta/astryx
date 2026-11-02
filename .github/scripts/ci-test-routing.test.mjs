@@ -297,11 +297,16 @@ describe.each(Object.entries(WORKFLOWS))(
           );
         }
       } else {
-        const commands = runLines(join);
+        // deploy.yml passes each result through the step's environment;
+        // main-unit-run.test.mjs runs its pass and fail cases.
+        const step = join.steps.find(
+          candidate => candidate.name === 'Assert every push gate succeeded',
+        );
         for (const lane of lanes) {
-          expect(commands, `join does not assert ${lane}`).toContain(
-            `needs.${lane}.result }}" = "success"`,
-          );
+          expect(
+            Object.values(step.env),
+            `join does not assert ${lane}`,
+          ).toContain(`\${{ needs.${lane}.result }}`);
         }
       }
     });
@@ -708,9 +713,11 @@ describe('deploy.yml push gating', () => {
     ]);
     const join = workflow.jobs.test.steps.find(
       step => step.name === 'Assert every push gate succeeded',
-    ).run;
+    );
     for (const owner of ['test-ui', 'test-node', 'typecheck']) {
-      expect(join).toContain(`needs.${owner}.result`);
+      expect(Object.values(join.env)).toContain(
+        `\${{ needs.${owner}.result }}`,
+      );
     }
   });
 
@@ -779,7 +786,12 @@ describe('ci.yml interaction proofs', () => {
     // One fixed runner: out of scope, every step after the scope step skips.
     expect(KNOWN_RUNNERS.has(job['runs-on']), job['runs-on']).toBe(true);
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
-    expect(job.needs).toEqual(['room', 'admission', 'build-storybook']);
+    expect(job.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&

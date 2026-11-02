@@ -50,6 +50,7 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils';
+import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
 import {
   type DayOfWeek,
   type ISODateString,
@@ -59,7 +60,6 @@ import {
   plainDateFormat,
   plainDateIsEqual,
   plainDateToISO,
-  DATE_FORMAT_MONTH_YEAR,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
@@ -866,9 +866,8 @@ function MonthPane({
     hasVariableRowCount: false,
   });
 
-  const monthLabel = plainDateFormat(
+  const monthLabel = plainDateFormatStandaloneMonthYear(
     {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
     locale,
   );
 

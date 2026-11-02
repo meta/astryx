@@ -123,9 +123,9 @@ jobs:
             });
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'deploy.yml', ref: 'main',
-              // Without `sha`: a re-check validates main's tip, which takes
-              // the validation group; a `sha` run never does.
-              inputs: {recheck: 'true'},
+              // Naming the commit, so the run is the commit's unit-run receipt
+              // (spec:AST-030 FR21); a re-check takes the unit-run group.
+              inputs: {sha, recheck: 'true'},
             });
             await core.summary
               .addHeading('Release re-check started')

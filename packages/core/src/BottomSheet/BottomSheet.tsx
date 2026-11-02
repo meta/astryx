@@ -87,6 +87,8 @@ import {
   type RefObject,
   type ReactNode,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
@@ -214,6 +216,13 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': {
         transitionDuration: 'var(--_sheet-scrim-duration, 0.01s)',
       },
+    },
+  },
+  // A sheet present on page load dims at once (spec:AST-013 FR13): the
+  // collapse reduced motion uses, so the transition still ends.
+  scrimSettled: {
+    '::backdrop': {
+      transitionDuration: '0.01s',
     },
   },
   /**
@@ -423,7 +432,24 @@ function StandaloneBottomSheet({
   // state stays the consumer's; nothing here writes it.
   const host = use(BottomSheetHostContext);
   const isHostOpen = host?.isOpen ?? true;
-  const isOpen = isOpenProp && isHostOpen;
+  // A sheet open on the server renders closed until hydration, and opens in
+  // the render after it, the first one that can enter its native host: a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have (FR17).
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && isHostOpen && !isHydrating;
+  // A sheet open on the server was present on page load, so it opens settled,
+  // with no rise or fade-in; its later opens and closes animate as usual
+  // (spec:AST-013 FR13). It latches on its own request, not its host's state:
+  // a host sheet hydrating reads as closed to the sheets inside it.
+  // The latch is released when the settled entry's transition ends, so a
+  // drag's settle later in the same open glides as usual.
+  const [settledOpen, releaseSettledOpen] = useSettledOpen(
+    isOpenProp,
+    isOpen,
+    false,
+  );
+  const isEntrySettled = settledOpen && isOpen;
   // Presentation outlives the controlled prop: a closing sheet stays mounted
   // and in its native host through its exit, and only its motion completion
   // (or a replace finishing) clears it. The open flip is derived during
@@ -796,6 +822,7 @@ function StandaloneBottomSheet({
         // one. The backdrop is not a descendant and stays put.
         ...stackPositionerStyles(stackView),
         hasScrim && styles.scrim,
+        hasScrim && isEntrySettled && styles.scrimSettled,
         hasScrim && isExiting && styles.scrimClosing,
         !hasScrim && styles.dialogNonModal,
       )}
@@ -823,6 +850,8 @@ function StandaloneBottomSheet({
         {...props}
         ref={ref}
         state={panelState}
+        isEntrySettled={isEntrySettled}
+        onEntrySettled={releaseSettledOpen}
         isOpenRequested={isOpen}
         height={height}
         label={label}
@@ -897,6 +926,8 @@ function SwitcherBottomSheetItem({
     onDialogCancel,
     onDialogClick,
     onDialogKeyDown,
+    settledSheet,
+    releaseSettledSheet,
   } = switcher;
   const hasValidSheetId = typeof sheetId === 'string' && sheetId.length > 0;
   const phase = hasValidSheetId ? getSheetPhase(sheetId) : 'hidden';
@@ -911,6 +942,9 @@ function SwitcherBottomSheetItem({
     phase === 'fading' ||
     phase === 'exiting';
   const isPresented = phase !== 'hidden';
+  // The step open on the server opens settled (spec:AST-013 FR13).
+  const isEntrySettled =
+    hasValidSheetId && isPresented && settledSheet === sheetId;
   const isTopSheet = phase === 'active' || phase === 'entering';
   const ownsScrim = hasValidSheetId && isScrimOwner(sheetId);
   // The flow is one level of the bottom-sheet stack; a sheet outside the flow
@@ -1108,6 +1142,7 @@ function SwitcherBottomSheetItem({
       styles.dialog,
       isPresented && styles.dialogOpen,
       hasScrim && styles.scrim,
+      hasScrim && isEntrySettled && styles.scrimSettled,
       hasScrim && ownsScrim && isFlowClosing && styles.scrimClosing,
       !hasScrim && styles.dialogNonModalItem,
       !hasScrim && isTopSheet && styles.dialogNonModalItemTop,
@@ -1160,6 +1195,8 @@ function SwitcherBottomSheetItem({
           {...props}
           ref={ref}
           state={panelState}
+          isEntrySettled={isEntrySettled}
+          onEntrySettled={releaseSettledSheet}
           isOpenRequested={hasValidSheetId && activeSheet === sheetId}
           height={height}
           label={label}
