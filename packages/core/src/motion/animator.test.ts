@@ -19,7 +19,7 @@ import path from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
   animatorFor,
-  createAnimator,
+  createMotionAnimator,
   END_HOLD_MS,
   PROMOTION_LINGER_MS,
   type AnimatorOptions,
@@ -205,7 +205,7 @@ function setup({
 }: AnimatorOptions & {reduced?: boolean; coarse?: boolean} = {}) {
   stubMedia(reduced, coarse);
   const element = document.createElement('div');
-  const animator = createAnimator(element, {
+  const animator = createMotionAnimator(element, {
     now: () => clock,
     requestFrame,
     ...options,
@@ -900,6 +900,139 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       });
       await Promise.resolve();
       expect(started).toBe(false);
+    });
+
+    describe("a call made in an input event's own task (start: 'next-frame')", () => {
+      it('starts at the first frame after it, however long its task ran', async () => {
+        const {animator} = setup();
+        const handle = animator.animate(
+          {x: 300},
+          {spring: springs.settle},
+          {start: 'next-frame'},
+        );
+        // A listener later in the same task holds the main thread 800 ms.
+        clock += 800;
+        const [animation] = live('translate');
+        clock += 16;
+        await commitFrame(clock, {startUnread: true});
+        expect(animation.startTime).toBe(clock);
+        await expect(handle.started).resolves.toBe(clock);
+      });
+
+      it('moves a start the browser dates before a later listener’s block (WebKit) to the first frame after it', async () => {
+        // WebKit dates the animation at its last frame time before the task;
+        // the task's first microtask ran before the later listener's block,
+        // so only the caller says the task ran on.
+        Object.defineProperty(document, 'timeline', {
+          configurable: true,
+          get: () => ({currentTime: clock}),
+        });
+        try {
+          const {animator} = setup();
+          const handle = animator.animate(
+            {x: 300},
+            {spring: springs.settle},
+            {start: 'next-frame'},
+          );
+          // The call's listener returns: its first microtask runs.
+          await Promise.resolve();
+          // A later listener of the same event holds the main thread 800 ms.
+          clock += 800;
+          const [animation] = live('translate');
+          animation.startTime = 1000;
+          clock += 16;
+          await commitFrame(clock);
+          await expect(handle.started).resolves.toBe(clock);
+          expect(animation.startTime).toBe(clock);
+        } finally {
+          Reflect.deleteProperty(document, 'timeline');
+        }
+      });
+
+      it('starts a call whose first frame comes late without a block (WebKit) at that frame', async () => {
+        // The first read stands for the task's end: a slow first frame, with
+        // no block in the task, moves WebKit's dated start to that frame too.
+        // Nothing was painted before it, so the motion is delayed by that
+        // frame instead of skipping into its curve.
+        Object.defineProperty(document, 'timeline', {
+          configurable: true,
+          get: () => ({currentTime: clock}),
+        });
+        try {
+          const {animator} = setup();
+          const handle = animator.animate(
+            {x: 300},
+            {spring: springs.settle},
+            {start: 'next-frame'},
+          );
+          await Promise.resolve();
+          const [animation] = live('translate');
+          animation.startTime = 1000;
+          // The first frame comes 100 ms after the call.
+          clock = 1100;
+          await commitFrame(clock);
+          await expect(handle.started).resolves.toBe(1100);
+          expect(animation.startTime).toBe(1100);
+        } finally {
+          Reflect.deleteProperty(document, 'timeline');
+        }
+      });
+
+      it('leaves a call with an explicit start to that start', async () => {
+        // `at` pins the call's clock: it never waits for a start.
+        const {animator} = setup();
+        const at = clock;
+        animator.animate(
+          {x: 300},
+          {spring: springs.settle},
+          {at, start: 'next-frame'},
+        );
+        clock += 800;
+        const [animation] = live('translate');
+        expect(animation.startTime).toBe(at);
+        clock += 16;
+        await commitFrame(clock, {startUnread: true});
+        expect(animation.startTime).toBe(at);
+      });
+
+      it('leaves an earlier waiting call to its own rule when a call with an explicit start joins it', async () => {
+        // An explicit `at` no later than a call from rest still waiting on
+        // the same channel joins that call's start; `start` is ignored with
+        // `at`, so the earlier call keeps the rule it had.
+        const {animator} = setup();
+        const handle = animator.animate({x: 300}, {spring: springs.settle});
+        animator.animate(
+          {x: 400},
+          {spring: springs.settle},
+          {at: clock, start: 'next-frame'},
+        );
+        // A block before the first frame: without 'next-frame' the call
+        // keeps the browser's start.
+        clock += 816;
+        await commitFrame(clock, {startUnread: true});
+        expect(live('translate').at(-1)?.startTime).toBeNull();
+        let started = false;
+        void handle.started.then(() => {
+          started = true;
+        });
+        await Promise.resolve();
+        expect(started).toBe(false);
+      });
+
+      it('starts a call that continues motion now, as by default', async () => {
+        const {animator} = setup();
+        animator.animate({x: 300}, {spring: springs.settle});
+        clock = 1016;
+        await commitFrame(1016);
+        clock = 1100;
+        animator.animate(
+          {x: 400},
+          {spring: springs.settle},
+          {start: 'next-frame'},
+        );
+        const retarget = live('translate').at(-1) as Recorded;
+        expect(retarget.startTime).toBe(1100);
+      });
     });
 
     it('a call the page pauses before its first frame waits for its start', async () => {
@@ -1755,11 +1888,11 @@ describe('promotion: a compositing layer while it moves', () => {
         .mock.calls.filter(([read]) => read === node).length;
     const removed = document.createElement('div');
     document.body.append(removed);
-    createAnimator(removed, {now: () => clock, requestFrame});
+    createMotionAnimator(removed, {now: () => clock, requestFrame});
     removed.remove();
     const kept = document.createElement('div');
     document.body.append(kept);
-    createAnimator(kept, {now: () => clock, requestFrame});
+    createMotionAnimator(kept, {now: () => clock, requestFrame});
     await vi.advanceTimersByTimeAsync(0);
     expect(readsOf(removed)).toBe(0);
     // A node still in the document is read, once, in that task.
@@ -1773,7 +1906,7 @@ describe('promotion: a compositing layer while it moves', () => {
     stylesheet['will-change'] = 'transform, opacity';
     stubMedia(false, false);
     const element = document.createElement('div');
-    const animator = createAnimator(element, {
+    const animator = createMotionAnimator(element, {
       now: () => clock,
       requestFrame,
     });
@@ -2518,7 +2651,7 @@ describe('Reduced Motion (design:reduced-motion)', () => {
 
   it('a running dip survives any re-attach, so the move never passes in view', async () => {
     const halfway = async (
-      animator: ReturnType<typeof createAnimator>,
+      animator: ReturnType<typeof createMotionAnimator>,
       start: number,
     ): Promise<number> => {
       // The plan lands by timer: step the clock to the landing.
@@ -3855,7 +3988,7 @@ describe('pseudoElement: a dialog\u2019s ::backdrop', () => {
 
 describe('attach', () => {
   it('keeps state without an element and resumes the curve on attach', () => {
-    const animator = createAnimator(null, {
+    const animator = createMotionAnimator(null, {
       now: () => clock,
     });
     animator.animate({x: 300}, {spring: springs.settle});
@@ -3946,7 +4079,7 @@ describe('attach', () => {
 
   it('writes nothing for channels at identity', () => {
     const element = document.createElement('div');
-    createAnimator(element);
+    createMotionAnimator(element);
     expect(element.getAttribute('style')).toBeNull();
   });
 });

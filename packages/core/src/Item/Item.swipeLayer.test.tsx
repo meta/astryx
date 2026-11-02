@@ -4,25 +4,39 @@
  * @file Item.swipeLayer.test.tsx
  * @input Item with and without swipe actions; the swipe layer module, spied
  * @output Verifies a row without swipe actions never renders the swipe layer,
- *   and a row with them renders it into the root once it has loaded
- * @position Companion to Item.test.tsx for the lazily loaded swipe layer
+ *   a row given `swipe` renders it into the root at its first render, under a
+ *   fine primary pointer as under a phone's, and a row given the deprecated
+ *   `swipeActions` takes the released row style at once and renders the
+ *   layer once DEP-0017's loader has brought it
+ * @position Companion to Item.test.tsx for where the swipe layer comes from
  */
 
 import {createElement, type ReactNode} from 'react';
-import {describe, expect, it, vi} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
+import {act, render, screen} from '@testing-library/react';
 import {Item} from './Item';
-import type {ItemSwipeLayerProps} from './ItemSwipeLayer';
+import {createSwipe} from '../Swipe/createSwipe';
+import type {SwipeLayerProps} from '../Swipe/swipeHost';
+import {emulateTouch} from './__tests__/emulateTouch';
+import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 
 const {layerRenders} = vi.hoisted(() => ({layerRenders: vi.fn()}));
 
-vi.mock('./ItemSwipeLayer', async importOriginal => {
+// DEP-0017's loaded layer arrives 1.5 s late, as on a loaded machine: longer
+// than `waitFor`'s second, so only a test that waits for the load itself sees
+// the panel.
+vi.mock('../Swipe/DeprecatedSwipeLayer', async importOriginal => {
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  return importOriginal();
+});
+
+vi.mock('../Swipe/SwipeActionsLayer', async importOriginal => {
   const actual = await importOriginal<{
-    default: (props: ItemSwipeLayerProps) => ReactNode;
+    default: (props: SwipeLayerProps) => ReactNode;
   }>();
   return {
     ...actual,
-    default: (props: ItemSwipeLayerProps) => {
+    default: (props: SwipeLayerProps) => {
       layerRenders();
       return createElement(actual.default, props);
     },
@@ -30,6 +44,11 @@ vi.mock('./ItemSwipeLayer', async importOriginal => {
 });
 
 describe('Item and the swipe layer', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    layerRenders.mockClear();
+  });
+
   it('renders a row without swipe actions with no swipe layer at all', async () => {
     render(
       <ul>
@@ -51,7 +70,72 @@ describe('Item and the swipe layer', () => {
     expect(screen.getByTestId('row').childElementCount).toBe(1);
   });
 
-  it('renders the swipe layer into the root of a row with swipe actions', async () => {
+  it('renders the layer of a row given swipe at its first render, under a fine primary pointer too', () => {
+    // A touchscreen laptop: a fine primary pointer, and a finger beside it.
+    // The gesture reads each touch's pointer (`spec:AST-057`), so the layer
+    // is there; a mouse never starts it (Item.test.tsx).
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    render(
+      <Item
+        label="Inbox"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [{label: 'Archive', onActivate: () => {}}],
+        })}
+      />,
+    );
+    // No chunk to wait for: the layer came with createSwipe
+    // (`spec:AST-057` FR10).
+    expect(
+      screen.getByTestId('row').querySelector('[data-swipe-panel="trailing"]'),
+    ).not.toBeNull();
+    expect(layerRenders).toHaveBeenCalled();
+  });
+
+  it("renders the layer into the root of a row given swipe on a phone's pointer, adding nothing else", () => {
+    emulateTouch();
+    render(
+      <Item
+        label="Inbox"
+        data-testid="row"
+        swipe={createSwipe({
+          trailing: [{label: 'Archive', onActivate: () => {}}],
+        })}
+      />,
+    );
+    const row = screen.getByTestId('row');
+    const panel = row.querySelector('[data-swipe-panel="trailing"]');
+    // The layer adds nothing but the panel: the root is still the content
+    // followed by the out-of-flow panel, with no wrapper for either.
+    expect(panel?.parentElement).toBe(row);
+    expect(row.childElementCount).toBe(2);
+  });
+
+  it('gives a row the deprecated swipeActions the released row style at its first render, before its chunk loads', () => {
+    const entries = [{label: 'Archive', onActivate: () => {}}];
+    render(
+      <>
+        <Item
+          label="A"
+          data-testid="deprecated"
+          swipeActions={{trailing: entries}}
+        />
+        <Item
+          label="A"
+          data-testid="current"
+          swipe={createSwipe({trailing: entries})}
+        />
+      </>,
+    );
+    const deprecated = screen.getByTestId('deprecated');
+    // DEP-0017's deprecated-path exception: the style is there before the
+    // layer, so nothing on the page reorders when the chunk arrives.
+    expect(deprecated.querySelector('[data-swipe-panel]')).toBeNull();
+    expect(deprecated.className).toBe(screen.getByTestId('current').className);
+  });
+
+  it('renders the layer of a row given the deprecated swipeActions once its chunk has loaded', async () => {
+    emulateTouch();
     render(
       <Item
         label="Inbox"
@@ -60,14 +144,11 @@ describe('Item and the swipe layer', () => {
       />,
     );
     const row = screen.getByTestId('row');
-    const panel = await waitFor(() => {
-      const found = row.querySelector('[data-swipe-panel="trailing"]');
-      expect(found).not.toBeNull();
-      return found;
-    });
+    // DEP-0017's loader, however long its chunk takes to arrive.
+    await swipeLayerLoaded();
+    const panel = row.querySelector('[data-swipe-panel="trailing"]');
+    expect(panel).not.toBeNull();
     expect(layerRenders).toHaveBeenCalled();
-    // The layer adds nothing but the panel: the root is still the content
-    // followed by the out-of-flow panel, with no wrapper for either.
     expect(panel?.parentElement).toBe(row);
     expect(row.childElementCount).toBe(2);
   });

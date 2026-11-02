@@ -97,6 +97,10 @@ describe('collectDocInputs over what this repo ships', () => {
       'NavMenu',
       'Resizable',
       'SyntaxTheme',
+      'createAnimator',
+      'createDragToSnapPoints',
+      'createPanGesture',
+      'createSwipe',
     ]);
   });
 

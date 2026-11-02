@@ -7,7 +7,7 @@ source), the spring, decay, rubber-band and projection math UIKit uses, and a
 compositor animator that plays it. Nothing here is exported from the package
 entry point. Core's motion and gesture modules read the table by path;
 components read touch motion through its internal motion roles (`roles.ts`),
-so each keeps its measured value; no shipped component reads the roles yet.
+so each keeps its measured value, as the snap-point drag's settle does.
 
 ## Files
 
@@ -19,6 +19,7 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `uikit/timing.ts`                                | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.                                                   |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
+| `uikit/swipeActions.ts`                          | Swipe actions on a list row: the claim and swipe thresholds, the tracking and settle spring, the release rule.                                                       |
 | `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
 | `roleValue.ts`                                   | A role's CSS form, written: a spring's duration and bounce, a duration in ms, a curve's `cubic-bezier()`.                                                            |
 | `resolveMotion.ts`                               | A role's value: its table value, as the per-role tables stay internal (`spec:AST-094` DEC-15).                                                                       |
@@ -59,7 +60,7 @@ the timings that decide who gets a touch are not roles.
 ## Animator
 
 ```
-import {createAnimator} from '../motion/animator';
+import {createMotionAnimator} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -68,7 +69,7 @@ import {registerSpringsTable, springs} from '../motion/uikit';
 // Once, so the springs are registered as their roles:
 registerSpringsTable();
 
-const animator = createAnimator(sheet);
+const animator = createMotionAnimator(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the
 // per-role tables stay internal (DEC-15); math on a spring reads the role with
 // resolveMotion.
@@ -163,7 +164,7 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+- `createMotionAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
   pseudo-element exists. A dialog's `::backdrop` is made again each time the

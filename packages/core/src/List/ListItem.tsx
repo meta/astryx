@@ -44,6 +44,7 @@ import {mergeProps} from '../utils/mergeProps';
 import {Item} from '../Item/Item';
 import {ItemMarkerColumnsContext} from '../Item/ItemMarkerColumnsContext';
 import type {ItemAlign, ItemSwipeActions, ItemSwipeBehavior} from '../Item';
+import type {Swipe} from '../Swipe/swipeHost';
 import {themeProps} from '../utils/themeProps';
 
 // =============================================================================
@@ -135,16 +136,14 @@ export interface ListItemProps extends BaseProps<HTMLLIElement> {
    */
   isSelected?: boolean;
 
-  /**
-   * Swipe actions for touch, passed through to `Item` unchanged: the verbs a
-   * sideways drag uncovers on each side. See `Item.swipeActions`; `List`
-   * clips the rows in the inline axis for them.
-   */
+  /** Swipe actions from `createSwipe`, passed to `Item` unchanged. */
+  swipe?: Swipe;
+
+  /** @deprecated Pass `swipe` instead (`spec:AST-057` DEP-0017). */
   swipeActions?: ItemSwipeActions;
 
   /**
-   * What a swipe does, passed through to `Item` unchanged. See
-   * `Item.swipeBehavior`.
+   * @deprecated Set it in `swipe` instead (`spec:AST-057` DEP-0017).
    * @default 'reveal'
    */
   swipeBehavior?: ItemSwipeBehavior;
