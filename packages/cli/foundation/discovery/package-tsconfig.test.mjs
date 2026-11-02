@@ -12,6 +12,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {createRequire} from 'node:module';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {recordReads} from '../fs/read-record.mjs';
 import {readPackageTsconfig} from './package-tsconfig.mjs';
 
 const require = createRequire(import.meta.url);
@@ -101,10 +102,15 @@ describe('readPackageTsconfig', () => {
     expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual(
       [],
     );
-    expect(readPackageTsconfig(counted, root, [source]).declarations).toEqual(
-      [],
-    );
+    // The kept answer still counts as reading the file, for an operation
+    // that keeps its own result while what it read is unchanged.
+    const seen = new Map();
+    expect(
+      recordReads(seen, () => readPackageTsconfig(counted, root, [source]))
+        .declarations,
+    ).toEqual([]);
     expect(reads).toBe(1);
+    expect(seen.has(file)).toBe(true);
 
     // Now a script, a different size: ambient.
     fs.writeFileSync(file, 'interface Maybe {}\n');
