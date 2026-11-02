@@ -63,6 +63,7 @@ export default function UseGridFocusHookUsage() {
                   <button
                     type="button"
                     aria-label={swatch.name}
+                    aria-pressed={swatch.name === selected}
                     onClick={() => setSelected(swatch.name)}
                     style={{
                       width: 28,

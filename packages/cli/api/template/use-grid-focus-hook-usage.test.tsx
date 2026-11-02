@@ -95,8 +95,9 @@ describe('useGridFocus example', () => {
     expect(focused()).toBe('Black');
   });
 
-  it('picks the swatch that is clicked', () => {
+  it('picks the swatch that is clicked and exposes it on the focused button', () => {
     renderExample();
+    expect(swatch('Red').getAttribute('aria-pressed')).toBe('true');
     act(() => swatch('Teal').click());
     expect(container.textContent).toContain('Selected: Teal');
     expect(
@@ -104,5 +105,20 @@ describe('useGridFocus example', () => {
         .closest('[role="gridcell"]')
         ?.getAttribute('aria-selected'),
     ).toBe('true');
+    expect(swatch('Teal').getAttribute('aria-pressed')).toBe('true');
+    expect(swatch('Red').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('exposes the swatch picked from the keyboard on its button', () => {
+    renderExample();
+    act(() => swatch('Red').focus());
+    press('ArrowRight');
+    press('ArrowRight');
+    // jsdom does not turn Enter on a button into a click, so this does it the
+    // way the browser does for the focused swatch.
+    act(() => (document.activeElement as HTMLButtonElement).click());
+    expect(focused()).toBe('Amber');
+    expect(swatch('Amber').getAttribute('aria-pressed')).toBe('true');
+    expect(swatch('Red').getAttribute('aria-pressed')).toBe('false');
   });
 });
