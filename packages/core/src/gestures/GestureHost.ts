@@ -2577,10 +2577,12 @@ export class GestureHost {
       }
       const touch = this.arena.touches.find(each => each.id === id);
       // A claim made at the contact's own lift (a tap's) holds nothing: the
-      // drag is over, and a click keeps the selection it made.
+      // drag is over, and a click keeps the selection it made. A wheel's
+      // contact keeps the page's selection, as a scroll does.
       if (
         touch == null ||
         touch.pointerType === 'touch' ||
+        touch.scrollType != null ||
         touch.phase === 'ended' ||
         touch.phase === 'cancelled'
       ) {
