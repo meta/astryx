@@ -10,13 +10,14 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, act} from '@testing-library/react';
+import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import {createContext, createRef, use, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Drawer} from './Drawer';
 import {DrawerHeader} from './DrawerHeader';
 import {Button} from '../Button';
 import {ButtonGroup} from '../ButtonGroup';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 
@@ -1331,5 +1332,79 @@ describe('Drawer', () => {
         ),
       ).toBe('0px');
     });
+  });
+});
+
+describe('Drawer without a scrim, opened from the keyboard', () => {
+  it('lets a focused control open its tooltip after the show, with no error', async () => {
+    // A <dialog>'s showPopover() runs the dialog focusing steps and focuses
+    // its first control inside the show. After a key press that focus is
+    // :focus-visible, so the control's tooltip asks to show while the
+    // drawer's show is still running, which the browser refuses with an
+    // InvalidStateError. This stand-in refuses the same way.
+    let showing = 0;
+    const tooltipShows: HTMLElement[] = [];
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      if (showing > 0) {
+        throw new DOMException(
+          'Invalid to show a popover during another show operation',
+          'InvalidStateError',
+        );
+      }
+      showing++;
+      try {
+        this.setAttribute('open', '');
+        if (this instanceof HTMLDialogElement) {
+          this.querySelector<HTMLElement>('button')?.focus();
+        } else {
+          tooltipShows.push(this);
+        }
+      } finally {
+        showing--;
+      }
+    });
+    const matches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      if (selector === ':focus-visible') {
+        return true;
+      }
+      return matches.call(this, selector);
+    });
+    const errors: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onError);
+    try {
+      const {rerender} = render(
+        <Drawer
+          isOpen={false}
+          onOpenChange={() => {}}
+          label="Filters"
+          hasScrim={false}>
+          <Tooltip content="Close the filters">
+            <button type="button">Close</button>
+          </Tooltip>
+        </Drawer>,
+      );
+      rerender(
+        <Drawer isOpen onOpenChange={() => {}} label="Filters" hasScrim={false}>
+          <Tooltip content="Close the filters">
+            <button type="button">Close</button>
+          </Tooltip>
+        </Drawer>,
+      );
+      expect(document.activeElement).toBe(
+        screen.getByRole('button', {name: 'Close', hidden: true}),
+      );
+      await waitFor(() => expect(tooltipShows.length).toBeGreaterThan(0));
+      expect(errors).toEqual([]);
+    } finally {
+      window.removeEventListener('error', onError);
+    }
   });
 });
