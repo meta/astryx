@@ -498,10 +498,9 @@ export function Drawer({
     setIsRendered,
   });
 
-  // An open modal drawer hosts app-global surfaces (toasts), so they stay
-  // visible and operable above it: outside the modal they are inert. A
-  // closing drawer stops supplying when it starts to close. Passive: it runs
-  // after the effect that runs showModal().
+  // Toasts outside an open modal are inert, so the open drawer hosts them.
+  // It releases them when its exit starts.
+  // showModal() must run first, so keep this call after useDrawerDialogPresence.
   useModalOutlet(dialogRef, isOpen && hasScrim);
 
   const handleDismiss = useCallback(() => {
