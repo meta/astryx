@@ -41,6 +41,8 @@ import {eagerShowcases} from '../components/eagerShowcases';
 import {TEMPLATE_COMPONENTS} from '../components/templateComponents';
 import {exampleRegistry} from '../generated/exampleRegistry';
 import {normalizeComponentCategory} from '../lib/componentCategories';
+import {decompressCode} from '../lib/compress';
+import {buildPlaygroundHref} from '../components/playgroundLink';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1018,6 +1020,25 @@ describe('blockRegistry', () => {
     }
     for (const entry of Object.values(exampleRegistry).flat()) {
       expect(entry.source).not.toContain(DEMO_CONTENT_MODULE);
+    }
+  });
+
+  it('opens the displayed source in the playground, with no demo content (spec:AST-033 FR23)', () => {
+    for (const entry of Object.values(exampleRegistry).flat()) {
+      const hash = buildPlaygroundHref(entry.source).split('#code=')[1];
+      const opened = decompressCode(hash);
+      expect(opened).not.toBeNull();
+      expect(opened).not.toContain(DEMO_CONTENT_MODULE);
+    }
+    const pagesDir = path.join(
+      REPO_ROOT,
+      'packages/cli/assets/templates/pages',
+    );
+    for (const template of templates) {
+      const file = path.join(pagesDir, template.slug, 'page.tsx');
+      expect(template.source).toBe(
+        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+      );
     }
   });
 

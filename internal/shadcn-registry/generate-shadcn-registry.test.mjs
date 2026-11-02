@@ -748,7 +748,9 @@ describe('buildShadcnRegistry', () => {
           ],
         }),
       );
-      const block = items.find(item => item.name === 'showcase-button-variants');
+      const block = items.find(
+        item => item.name === 'showcase-button-variants',
+      );
       const page = items.find(item => item.name === 'template-dashboard');
       for (const [item, demoContentReplaced] of [
         [block, 1],

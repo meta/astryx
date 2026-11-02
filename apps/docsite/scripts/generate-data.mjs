@@ -2233,7 +2233,14 @@ function blockSourcePath(block) {
 }
 
 function templateSourcePath(template) {
-  return path.join(CLI_ROOT, 'assets', 'templates', 'pages', template.slug, 'page.tsx');
+  return path.join(
+    CLI_ROOT,
+    'assets',
+    'templates',
+    'pages',
+    template.slug,
+    'page.tsx',
+  );
 }
 
 /**
@@ -2690,7 +2697,9 @@ async function main() {
     outDir: path.join(DOCSITE_ROOT, 'public', 'shadcn'),
     packages,
     allComponents,
-    blocks: blocks.map(block => withAuthoredSource(block, blockSourcePath(block))),
+    blocks: blocks.map(block =>
+      withAuthoredSource(block, blockSourcePath(block)),
+    ),
     templates: templates.map(template =>
       withAuthoredSource(template, templateSourcePath(template)),
     ),

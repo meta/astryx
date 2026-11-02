@@ -132,9 +132,10 @@ describe('ShadCN registry receipts', () => {
       demoContentReplaced: _content,
       ...value
     } = receipt();
-    expect(
-      parseRegistryReceipt({...value, schemaVersion: 2}),
-    ).toMatchObject({schemaVersion: 2, files: [{id: 'primary'}]});
+    expect(parseRegistryReceipt({...value, schemaVersion: 2})).toMatchObject({
+      schemaVersion: 2,
+      files: [{id: 'primary'}],
+    });
   });
 
   it('requires a version 3 receipt to count what the copy replaced', () => {

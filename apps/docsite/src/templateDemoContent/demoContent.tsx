@@ -6,10 +6,10 @@
  * @input A rank and suit, and whether the card lies face down.
  * @output Token-styled card contents sized to fill their container.
  * @position The one demo-content module templates import, as
- *   `@astryx-docs/demo-content` (mapped by the docsite, template viewer, test,
- *   and CLI type-check configs). It is not part of any package: copying a
- *   template, and the docsite's displayed code, replace every element imported
- *   from it with a generic `<Text>` placeholder (the CLI's
+ *   `@astryx-docs/demo-content` (mapped by the docsite, sandbox, template
+ *   viewer, test, and CLI type-check configs). It is not part of any package:
+ *   every copy and every surface that hands out template source replace each
+ *   element imported from it with a generic `<Text>` placeholder (the CLI's
  *   `replaceDemoContent`), so only live previews ever render it. Elements are
  *   used with no children, and each prop is a literal or a variable the
  *   template also reads elsewhere, so that replacement stays safe.
