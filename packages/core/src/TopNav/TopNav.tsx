@@ -206,8 +206,7 @@ export function TopNav({
   const mobileContent = useTopNavMobileContent();
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
-  // Slot presence follows `isRenderable` (`architecture:react-component-runtime`
-  // INV16): an empty slot renders nothing, as an omitted one does.
+  // The layout flags use the same test as the slots they gate.
   const hasCenterContent = isRenderable(centerContent);
   const hasStartContent = isRenderable(resolvedStartContent);
   const hasMobileContent = isRenderable(mobileContent);
