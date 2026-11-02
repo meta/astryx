@@ -154,6 +154,11 @@ export interface ToastProps {
 
 interface ToastSurfaceProps extends ToastProps {
   gestureDirection: ToastGestureDirection;
+  /**
+   * Changes when a uniqueID overwrite updates this card in place: the new
+   * toast's auto-hide timer starts over.
+   */
+  timerKey?: string;
 }
 
 /**
@@ -193,6 +198,7 @@ export function ToastSurface({
   onDismiss,
   renderContent,
   gestureDirection,
+  timerKey,
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -282,9 +288,10 @@ export function ToastSurface({
         clearTimeout(timerRef.current);
       }
     };
-    // startTimer's identity is stable per isAutoHide, so this runs on mount
-    // and on a genuine duration change — not on unrelated viewport renders.
-  }, [autoHideDuration, startTimer]);
+    // startTimer's identity is stable per isAutoHide, so this runs on mount,
+    // on a genuine duration change and on an overwrite (timerKey), not on
+    // unrelated viewport renders.
+  }, [autoHideDuration, startTimer, timerKey]);
 
   // Pause the auto-hide timer while the window is not focused, so a toast
   // doesn't silently expire while the user is in another window or tab.

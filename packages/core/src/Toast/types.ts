@@ -100,4 +100,9 @@ export interface ToastEntry {
   id: string;
   options: ToastOptions;
   createdAt: number;
+  /**
+   * The row's identity in the stack. A uniqueID overwrite keeps the replaced
+   * toast's, so the card updates in place and focus inside it stays.
+   */
+  rowKey?: string;
 }

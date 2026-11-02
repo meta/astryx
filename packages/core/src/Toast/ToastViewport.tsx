@@ -296,6 +296,7 @@ function ToastRow({
           gestureDirection={isReversed ? -1 : 1}
           onDismiss={reason => onDismiss(entry.id, reason)}
           renderContent={o.renderContent}
+          timerKey={entry.id}
         />
       </div>
     </div>
@@ -363,6 +364,9 @@ export function ToastViewport({
   // The next toast id that should receive focus once the dismissed toast has
   // unmounted, or 'restore' to fall back to the previously-focused element.
   const pendingFocusRef = useRef<string | 'restore' | null>(null);
+  // The id of a toast whose overwrite updated a row that held focus. If the
+  // update removed the focused control, the commit hands focus off.
+  const overwriteFocusIdRef = useRef<string | null>(null);
 
   // Collect a focusable control within a toast node, if any.
   // Reuses the canonical INTERACTIVE_SELECTORS list (native controls plus
@@ -441,9 +445,28 @@ export function ToastViewport({
       if (overwritten && renderedToastsRef.current.includes(overwritten)) {
         replacedRef.current.set(overwritten.id, overwritten);
       }
+      // An overwrite of a toast that is not leaving keeps its row, so the card
+      // updates in place and focus inside it stays. A leaving namesake
+      // is replaced by a new row, which enters again.
+      const keepsRow =
+        overwritten != null && !exitingIdsRef.current.has(overwritten.id);
+      const placed: ToastEntry = keepsRow
+        ? {...entry, rowKey: overwritten.rowKey ?? overwritten.id}
+        : entry;
+      if (keepsRow) {
+        const row = viewportRef.current?.querySelector<HTMLElement>(
+          `[data-toast-id="${overwritten.id}"]`,
+        );
+        const active = document.activeElement;
+        if (row != null && active instanceof Node && row.contains(active)) {
+          // If the update removes the focused control, the commit hands focus
+          // off as a dismissal does.
+          overwriteFocusIdRef.current = placed.id;
+        }
+      }
       const projected = overwritten
-        ? committed.map(t => (t === overwritten ? entry : t))
-        : [...committed, entry];
+        ? committed.map(t => (t === overwritten ? placed : t))
+        : [...committed, placed];
       // `maxVisible={0}` shows every toast (FR7): nothing leaves the window.
       const firstVisible = maxVisible > 0 ? projected.length - maxVisible : 0;
       const cutIds = new Set(
@@ -470,7 +493,7 @@ export function ToastViewport({
           }
         }
       }
-      pending.set(entry.id, entry);
+      pending.set(entry.id, placed);
       // An overwrite swaps a new entry, with a new id, into the replaced
       // toast's place, so the old row leaves the DOM without ever being
       // dismissed. Its settled id is dropped by the prune below, which covers
@@ -482,8 +505,8 @@ export function ToastViewport({
         // overwrite into an append. An ignored collision already returned.
         const kept = prev.filter(t => !cutIds.has(t.id));
         return overwritten && kept.includes(overwritten)
-          ? kept.map(t => (t === overwritten ? entry : t))
-          : [...kept, entry];
+          ? kept.map(t => (t === overwritten ? placed : t))
+          : [...kept, placed];
       });
     },
     [announce, maxVisible],
@@ -587,6 +610,40 @@ export function ToastViewport({
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  // Moves focus to a control in the target toast, else in another toast that
+  // shows (newest first), else back to the element focused before focus
+  // entered the viewport, so a handoff never drops focus to <body>.
+  const handOffFocus = useCallback(
+    (targetId: string | null) => {
+      const el = viewportRef.current;
+      const rowFor = (id: string) =>
+        el?.querySelector<HTMLElement>(`[data-toast-id="${id}"]`) ?? null;
+      const shownIds = toastsRef.current
+        .slice(maxVisibleRef.current > 0 ? -maxVisibleRef.current : 0)
+        .map(t => t.id)
+        .reverse();
+      const candidates =
+        targetId == null
+          ? []
+          : [targetId, ...shownIds.filter(id => id !== targetId)];
+      for (const id of candidates) {
+        const control = getFocusable(rowFor(id));
+        if (control != null) {
+          control.focus();
+          return;
+        }
+      }
+      const prev = prevFocusRef.current;
+      prevFocusRef.current = null;
+      if (prev && prev.isConnected) {
+        prev.focus();
+      } else if (el) {
+        el.focus();
+      }
+    },
+    [getFocusable],
+  );
+
   // After a dismissed toast unmounts, hand focus off so it never falls to
   // <body>. Runs in a layout effect once the toast list no longer contains
   // the dismissed toast.
@@ -602,27 +659,23 @@ export function ToastViewport({
     }
     focusHandoffIdRef.current = null;
     pendingFocusRef.current = null;
-    const el = viewportRef.current;
-    if (target !== 'restore' && el) {
-      const nextNode = el.querySelector<HTMLElement>(
-        `[data-toast-id="${target}"]`,
-      );
-      const focusable = getFocusable(nextNode) ?? nextNode;
-      if (focusable) {
-        focusable.focus();
-        return;
-      }
+    handOffFocus(target === 'restore' ? null : target);
+  }, [toasts, handOffFocus]);
+
+  // After an overwrite updated a row that held focus: focus stays on the same
+  // control, or, if the update removed it, moves as a dismissal hands it off.
+  useLayoutEffect(() => {
+    const id = overwriteFocusIdRef.current;
+    if (id == null) {
+      return;
     }
-    // No remaining toast to receive focus — restore the previously-focused
-    // element if it's still connected, else fall back to the container.
-    const prev = prevFocusRef.current;
-    prevFocusRef.current = null;
-    if (prev && prev.isConnected) {
-      prev.focus();
-    } else if (el) {
-      el.focus();
+    overwriteFocusIdRef.current = null;
+    const active = document.activeElement;
+    if (active != null && active !== document.body) {
+      return;
     }
-  }, [toasts, getFocusable]);
+    handOffFocus(id);
+  }, [toasts, handOffFocus]);
 
   const findByUniqueID = useCallback((uid: string) => {
     return toastsRef.current.find(t => t.options.uniqueID === uid);
@@ -830,7 +883,7 @@ export function ToastViewport({
       <LayerContentBoundary>
         {visibleToasts.map(entry => (
           <ToastRow
-            key={entry.id}
+            key={entry.rowKey ?? entry.id}
             entry={entry}
             isExiting={exitingIds.has(entry.id)}
             isReversed={isReversed}
