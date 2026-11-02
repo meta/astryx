@@ -119,8 +119,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Cross-component picker vocabulary and deprecated-prop migration — owned by
   `spec:AST-043`.
 - Browser/OS picker appearance, locale, momentum, or hit areas.
-- A cylinder or other 3D wheel look: under a finger, each sheet wheel is the same
-  flat scrolling column it is under a mouse (DEC-2).
+- A cylinder or other 3D wheel look: under a finger each sheet wheel's rows lie
+  flat, and under a mouse the scrolling column keeps its tilt (DEC-2).
 
 ## Public concepts
 
@@ -353,6 +353,10 @@ clear-glyph target of its own.
 - **Snap rate as a constant (FR13).** A wheel let go without speed snaps onto
   its row at UIKit's measured rate, an internal constant rather than a motion
   role, against `spec:AST-094` FR4.
+- **Selection tick haptics.** Under a finger each row that reaches the band
+  ticks with a short vibration where the browser has the Vibration API, as on
+  Android. iOS Safari has none, so the tick is silent there (`spec:AST-094`
+  FR23).
 - **Month paging (AR8).** PageUp and PageDown do not page the touch calendar by
   a month, and Shift+PageUp and Shift+PageDown do not move it by a year, as AR8
   states they do.
@@ -379,15 +383,15 @@ empty.
 Rejected: returning to the previous row, which makes the person scroll again to
 reach the bound.
 
-### DEC-2 — The sheet wheels keep the flat scrolling column under a finger
+### DEC-2 — The sheet wheels' rows lie flat under a finger
 
 **Reference:** `component:DateInput/DEC-2`
 **Decider:** cixzhang, 2026-11-01
 
-Every sheet wheel in DateInput, TimeInput, and DateTimeInput looks the same under
-a finger as under a mouse: one flat scrolling column whose rows tip back and fade
-away from the committed row. Under a finger the rows fade without tipping or
-shrinking; under a mouse they keep main's scroll-timeline tilt.
+Under a finger, each sheet wheel in DateInput, TimeInput, and DateTimeInput lays
+its rows flat at the scrolling column's pitch and fades them toward its edges,
+without tipping or shrinking. Under a mouse, the scrolling column tips and fades
+its rows on a scroll timeline.
 
 Rejected: a UIPickerView-style cylinder look.
 

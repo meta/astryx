@@ -313,7 +313,8 @@ test('a meridiem change past the maximum turns the hour wheel onto it, frame by 
     () => (window as unknown as {stripYs: number[]}).stripYs,
   );
   // From 10 onto 5 through the rows between, as UIDatePicker turns onto its
-  // maximum, never a jump, and only ever one way: five rows down the strip.
+  // maximum. It never jumps, and it moves one way only: five rows down the
+  // strip.
   expect(ys.length).toBeGreaterThan(30);
   const from = ys[0];
   const to = ys[ys.length - 1];

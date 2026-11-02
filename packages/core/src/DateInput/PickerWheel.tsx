@@ -326,10 +326,23 @@ export function PickerWheel({
     [arrive],
   );
 
-  // Hand the strip to the animator, and the rows' layout to the motion.
+  // The animator holds the strip while it is attached, and lets it go as it
+  // detaches or is replaced.
+  const attachStrip = useCallback(
+    (strip: HTMLDivElement) => {
+      rowsRef.current = strip;
+      motion.attach(strip);
+      return () => {
+        rowsRef.current = null;
+        motion.attach(null);
+      };
+    },
+    [motion],
+  );
+
+  // The motion's layout follows the rows.
   useIsomorphicLayoutEffect(() => {
     motion.setLayout(layout);
-    motion.attach(rowsRef.current);
   }, [motion, layout]);
 
   // The band's mark follows the row the motion reports nearest the band.
@@ -704,7 +717,10 @@ export function PickerWheel({
       data-wheel=""
       {...stylex.props(styles.column, focusOutlineStyles.focusVisible)}>
       <div aria-hidden="true" {...stylex.props(styles.band)} />
-      <div ref={rowsRef} data-wheel-strip="" {...stylex.props(styles.strip)}>
+      <div
+        ref={attachStrip}
+        data-wheel-strip=""
+        {...stylex.props(styles.strip)}>
         {options.map((option, index) => (
           <div
             key={option.value}
