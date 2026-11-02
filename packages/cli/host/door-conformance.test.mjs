@@ -189,6 +189,10 @@ async function runThrough(door, argv, setUp) {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
+  // Decode each stream as one UTF-8 sequence. A character can span two
+  // chunks, and a chunk decoded alone breaks it.
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   let stdout = '';
   let stderr = '';
   child.stdout.on('data', chunk => (stdout += chunk));
