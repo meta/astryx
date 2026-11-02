@@ -18,7 +18,6 @@ export const docs = {
     'delete',
     'gesture',
     'touch',
-    'constructor',
   ],
   params: [
     {
