@@ -163,7 +163,7 @@ export const docs = {
           name: 'href',
           type: 'string',
           description:
-            'Link URL. Makes the item a link via an invisible anchor element. A row whose root is already a link component (see `as`) carries the address on that root instead, and no invisible anchor is rendered.',
+            'Link URL. Makes the item a link via an invisible anchor element. A row whose root is already a link component (see `as`) carries the address on that root instead, and no invisible anchor is rendered. A press anywhere on the row that is not a nested control or a text selection follows the link, as a press on the label does.',
         },
         {
           name: 'target',
@@ -331,7 +331,7 @@ export const docsZh = {
         onClick: '点击处理函数。使项目可点击，具有按钮语义。',
         interactiveRef:
           '指向嵌套控件（如 startContent 中的复选框）的 ref，该控件承载项目的键盘访问和操作。行成为更大的点击/触摸目标，将表面点击委托给该控件（useClickableContainer），且不渲染不可见按钮/锚点，因此行不会增加第二个 Tab 停留点（WCAG 4.1.2）。与 onClick/href 互斥——设置后二者将被忽略。',
-        href: '链接 URL。通过不可见锚点元素使项目成为链接。',
+        href: '链接 URL。通过不可见锚点元素使项目成为链接。在行内任意非嵌套控件、非文本选择的位置按下，都会像按下标签一样跟随链接。',
         target:
           '链接目标。仅与 href 一起使用。target="_blank" 会自动添加 noopener noreferrer。',
         rel: '链接关系标记。target="_blank" 会自动合并 noopener noreferrer。',

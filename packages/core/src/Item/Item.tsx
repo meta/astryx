@@ -235,7 +235,9 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   /**
    * Link URL. Makes the item a link via an invisible anchor element. A row
    * whose root is already a link component (see `as`) carries the address on
-   * that root instead, and no invisible anchor is rendered.
+   * that root instead, and no invisible anchor is rendered. A press anywhere
+   * on the row that is not a nested control or a text selection follows the
+   * link, as a press on the label does.
    */
   href?: string;
 
@@ -618,18 +620,36 @@ export function Item({
   // the router link component, which may require a live href. The element type
   // then changes with `isDisabled`, so focus follows the swap (FR4).
   const RowAnchor = isDisabled ? 'a' : LinkComponent;
-  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>();
+  const anchorElementRef = useRef<HTMLAnchorElement | null>(null);
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>(anchorElementRef);
 
   // Delegation mode: the row is an enlarged click/tap target for a nested
   // control (e.g. a checkbox) that owns the keyboard access and action. The
   // control is the row's only tab stop; the row proxies surface clicks to it.
   const isDelegate = interactiveRef != null;
   const containerRef = useRef<HTMLElement | null>(null);
-  // Only onClick is needed: onMouseUp handles middle-click href navigation,
-  // which delegation mode never has (href is ignored here).
+  // A link row is the enlarged target of its own anchor. A press on the row
+  // outside a nested control goes to the anchor with its modifier keys, so
+  // the anchor decides where it goes. A middle press fires no click, so the
+  // row opens the destination in a new tab on mouse up.
+  const isLinkRow =
+    !isDelegate &&
+    role == null &&
+    onClick == null &&
+    href != null &&
+    typeof Component === 'string';
   const {onClick: delegatedOnClick} = useClickableContainer({
     containerRef,
-    interactiveRef: interactiveRef ?? undefined,
+    interactiveRef: isDelegate
+      ? interactiveRef
+      : isLinkRow
+        ? anchorElementRef
+        : undefined,
+    disabled: isDisabled,
+  });
+  const {onMouseUp: linkRowOnMouseUp} = useClickableContainer({
+    containerRef,
+    href: isLinkRow ? href : undefined,
     disabled: isDisabled,
   });
 
@@ -845,19 +865,20 @@ export function Item({
 
   const mergedRef = useMergedRefs(ref, containerRef);
   const rootRef = useMergedRefs(
-    (isDelegate ? mergedRef : ref) as React.Ref<HTMLElement>,
+    (isDelegate || isLinkRow ? mergedRef : ref) as React.Ref<HTMLElement>,
     hasSwipe ? swipeRootRef : undefined,
   );
 
   // The row's own primary, which the click the browser synthesizes after a
   // drag must not fire.
-  const primaryOnClick = isDelegate
-    ? delegatedOnClick
-    : hasParentRole
-      ? onClick
-      : isInteractive
-        ? handleContainerClick
-        : undefined;
+  const primaryOnClick =
+    isDelegate || isLinkRow
+      ? delegatedOnClick
+      : hasParentRole
+        ? onClick
+        : isInteractive
+          ? handleContainerClick
+          : undefined;
   const rootOnClick =
     hasSwipe && primaryOnClick != null
       ? (event: React.MouseEvent<HTMLElement>) => {
@@ -927,7 +948,15 @@ export function Item({
         style,
       )}
       role={role}
-      onClick={rootOnClick}>
+      onClick={rootOnClick}
+      onMouseUp={
+        isLinkRow
+          ? (event: React.MouseEvent<HTMLElement>) => {
+              restProps.onMouseUp?.(event);
+              linkRowOnMouseUp(event);
+            }
+          : restProps.onMouseUp
+      }>
       <ItemDescriptionContext
         value={hasRenderableDescription ? descriptionID : null}>
         {isRenderable(marker) && marker}
