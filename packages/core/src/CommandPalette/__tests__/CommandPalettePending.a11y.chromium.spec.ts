@@ -42,14 +42,18 @@ test('the first pending query shows no message and keeps the height', async ({
   // The result surface's layout height (offsetHeight ignores the dialog's
   // entry transform, which a bounding box would include mid-animation).
   const empty = dialog.locator('.astryx-command-palette-empty');
-  const before = await empty.evaluate(element => element.offsetHeight);
+  const before = await empty.evaluate(
+    (element: HTMLElement) => element.offsetHeight,
+  );
 
   await dialog.getByRole('combobox').pressSequentially('butt');
   // The search answers after 600 ms; check while the spinner shows.
   await expect(dialog.locator('.astryx-spinner')).toBeVisible();
   await expect(dialog.getByText('Type to search')).toHaveCount(0);
   await expect(dialog.getByText('No results')).toHaveCount(0);
-  const pending = await empty.evaluate(element => element.offsetHeight);
+  const pending = await empty.evaluate(
+    (element: HTMLElement) => element.offsetHeight,
+  );
   expect(pending).toBe(before);
 
   await expect(dialog.getByText('No results')).toBeVisible();
