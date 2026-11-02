@@ -62,6 +62,7 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {usePopover} from '../Popover';
+import {useOutsidePress} from '../Layer/outsidePress';
 import {NativeDateField} from './NativeDateField';
 import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
@@ -642,17 +643,40 @@ function PointerDateField({
       ? true
       : parseDateInput(pendingInput, locale) !== null;
 
+  // The calendar is a manual popover: the browser's light dismiss counts a
+  // press in the text input as outside (a text input cannot be an invoker),
+  // so a press in the field would close the calendar it just opened. A press
+  // on the field (its input and buttons) or in the calendar is inside; a press
+  // anywhere else closes it (architecture:layer-runtime,
+  // component:BaseTypeahead FR12's rule).
+  const fieldElementRef = useRef<HTMLDivElement | null>(null);
+  const outsidePress = useOutsidePress();
   const popover = usePopover({
+    hasLightDismiss: false,
+    onShow: () => {
+      const field = fieldElementRef.current;
+      if (field == null) {
+        return;
+      }
+      outsidePress.start(
+        field,
+        path => path.includes(field),
+        () =>
+          field
+            .querySelector<HTMLElement>('[popover]:popover-open')
+            ?.hidePopover(),
+      );
+    },
     dialogLabel: t('@astryx.dateInput.dialogLabel'),
     closeButtonLabel: t('@astryx.dateInput.closeCalendar'),
     // Return focus to the input when the calendar closes — but only when the
     // dismiss left focus detached (Escape, or a click on non-focusable empty
-    // space), which the focus trap can't restore on its own. A native
-    // popover="auto" light-dismiss fires synchronously with the pointer event
-    // that moved focus, so if the user clicked another control — the clear
-    // button, another field, anywhere — focus has already landed there;
-    // reclaiming it would fight their click.
+    // space), which the focus trap can't restore on its own. An outside press
+    // closes the calendar after the pointer event that moved focus, so if the
+    // user clicked another control — another field, anywhere — focus has
+    // already landed there; reclaiming it would fight their click.
     onHide: () => {
+      outsidePress.stop();
       if (isFocusDetached()) {
         inputRef.current?.focus();
       }
@@ -836,6 +860,7 @@ function PointerDateField({
   const inputWrapper = (
     <div
       ref={el => {
+        fieldElementRef.current = el;
         popover.triggerRef(el);
         // Anchor + hover/focus listeners for the disabled-message tooltip.
         // Handlers are gated internally by isEnabled, and anchor names
