@@ -13,8 +13,8 @@
  *
  * SYNC: the docsite's example root composes `overlayPaddingReset` and
  * mirrors the rest of this list (apps/docsite/src/components/component-detail/
- * ExampleBlock.tsx); a parity test against it is pending until that mirror is
- * on main.
+ * ExampleBlock.tsx); apps/docsite/src/__tests__/example-layout-root.test.ts
+ * fails when they differ.
  */
 
 import * as stylex from '@stylexjs/stylex';
