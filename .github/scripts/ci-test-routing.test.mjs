@@ -93,6 +93,11 @@ const rootScripts = JSON.parse(read('package.json')).scripts;
  * A run block with each `pnpm <root script>` replaced by the script's body,
  * recursively; arguments after the script name stay after its body.
  */
+// The spec-only lane's run of the tests that read a changed record
+// (fs-guard-tests.test.mjs holds its contract); not a lane's suite.
+const specReaderRun = step =>
+  / tests that read a changed record$/.test(step.name ?? '');
+
 function expandScripts(run) {
   return run.replace(/\bpnpm ([a-z][\w:-]*)(?=\s|$)/g, (whole, name) =>
     Object.hasOwn(rootScripts, name) ? expandScripts(rootScripts[name]) : whole,
@@ -147,8 +152,10 @@ describe.each(Object.entries(WORKFLOWS))(
     it('runs FR23 only after the parallel UI suite has exited', () => {
       const benchmark = 'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
       const job = workflow.jobs['test-ui'];
-      const suites = job.steps.filter(step =>
-        expandScripts(step.run ?? '').includes('--project ui'),
+      const suites = job.steps.filter(
+        step =>
+          !specReaderRun(step) &&
+          expandScripts(step.run ?? '').includes('--project ui'),
       );
       // The two package scripts every lane calls: the parallel suite without
       // FR23, and FR23 alone with no file parallelism.
@@ -255,8 +262,10 @@ describe.each(Object.entries(WORKFLOWS))(
           );
           expect(Object.keys(job.strategy.matrix)).toEqual(['shard']);
           expect(job.strategy['fail-fast']).toBe(false);
-          const suites = job.steps.filter(step =>
-            /--project \w+/.test(expandScripts(step.run ?? '')),
+          const suites = job.steps.filter(
+            step =>
+              !specReaderRun(step) &&
+              /--project \w+/.test(expandScripts(step.run ?? '')),
           );
           // The one step that is not sharded is the isolated FR23 benchmark.
           const unsharded = suites.filter(
@@ -343,8 +352,10 @@ describe.each(Object.entries(WORKFLOWS))(
             `${lane} has no scope step`,
           ).toBe(true);
           const steps = workflow.jobs[lane].steps;
-          const suite = steps.find(step =>
-            expandScripts(step.run ?? '').includes('--project'),
+          const suite = steps.find(
+            step =>
+              !specReaderRun(step) &&
+              expandScripts(step.run ?? '').includes('--project'),
           );
           expect(suite.if, `${lane} suite is unconditional`).toContain(
             "docsite_only != 'true'",
