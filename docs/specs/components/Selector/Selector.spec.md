@@ -77,6 +77,12 @@ connection between the closed trigger and its selection surface.
 - Migration decision: replace the removed theme key and CSS class with
   `input-clear-icon` and `.astryx-input-clear-icon`, or run
   `astryx upgrade --from 0.6.3 --apply --path .`.
+- A closed Selector renders no option list (PR3). Undocumented markup is
+  not a released contract (`spec:AST-017` FR3), and the documented selection,
+  keyboard, accessibility, and form behavior stays the same, so no caller must
+  change source (`spec:AST-017` FR1). It ships as a victim-free patch `[fix]`
+  (`spec:AST-017` FR5, FR7). A product test that queries a closed Selector's
+  options opens it first.
 
 ### DEP-0011 — Deprecate the `popover` default presentation
 
@@ -107,6 +113,15 @@ connection between the closed trigger and its selection surface.
 | delta     | With no `presentation`, a compact coarse-pointer screen opens a modal bottom sheet (trigger `aria-haspopup="dialog"`, focus moves in and returns on close); every other device keeps the anchored popover. Compound DropdownMenus are unchanged |
 | rollback  | Restore the `popover` default from the final-patch baseline                                                                                                                                                                                     |
 | state     | `pending` — lands in a declared minor with its `[breaking]` Changeset                                                                                                                                                                           |
+
+## Current-state impact
+
+- **A closed Selector holds its option list (PR3).** Every closed Selector
+  keeps its whole option list mounted, in the popover's closed host and in the
+  bottom sheet, so a page with many Selectors builds every list at load.
+- **Opening a long option list costs time on every open.** The cost grows with
+  the number of options. Reducing it is separate work; no requirement in this
+  record governs open time.
 
 ## Ownership boundary
 
@@ -201,6 +216,22 @@ These requirements describe shipped behavior on current `main`.
 - **PR2 — Geometry work is scoped to the open popover.** Selected-item alignment
   may read browser layout while opening; it does not impose document-wide or
   persistent observation while closed.
+- **PR3 — A closed Selector holds no option list.** While closed, a Selector
+  renders only its trigger and its form value (the hidden input when `htmlName`
+  is set); a surface may keep an empty, inert anchor marker, but no listbox,
+  option, search row, or other list content exists. Every open, in the popover
+  and the bottom sheet alike, mounts the list. Every close removes it once the
+  close settles: after the exit animation when one plays (`spec:AST-090`), so
+  the exit plays on the list. No list stays mounted while closed. Every open
+  starts the same way, the first included: the highlight starts on the
+  selected option, or on the first enabled option when none is selected; the
+  trigger's `aria-activedescendant` names it; and FR2 alignment applies.
+  Closed-trigger typeahead (FR7) and the form value (FR6) read option data and
+  the committed value, never the rendered list. The trigger names the list in
+  `aria-controls` only while the list exists. Selector opts out of the
+  `component:Popover` default (side effects and lifetime), where the closed
+  layer keeps its host mounted. Implementation gap: not built (Current-state
+  impact).
 
 ## Accessibility contract
 
@@ -351,6 +382,12 @@ new theming target.
 | FR5                                | loading, empty-state, and live-region tests                                                                          | empty options, unmatched search, loading                                                             | Empty/no-results output appears or is announced while loading                                                                                                                                                                                                    | `audit:Selector/behavior`        |
 | FR6, AR4                           | read-only interaction, form, ARIA, and theme-state tests                                                             | search/non-search, clearable, open→read-only, disabled precedence                                    | A value changes, popup or edit affordance remains, form value disappears, or read-only semantics are absent                                                                                                                                                      | `audit:Selector/accessibility`   |
 | FR7                                | `Selector.test.tsx` press model suite                                                                                | finger release over another option, finger/mouse release outside, listbox marker                     | The press option is selected, the listbox takes focus, a finger release outside closes the list, or the stray click selects                                                                                                                                      | `audit:Selector/behavior`        |
+| PR3                                | `Selector.test.tsx` mount suite and a Chromium story that counts elements                                            | never opened, opened then closed, popover and bottom sheet                                           | A closed Selector has any listbox, option, or search element besides its trigger, form value, and inert marker                                                                                                                                                   | `audit:Selector/behavior`        |
+| PR3, FR2                           | `Selector.test.tsx` mount suite and placement tests                                                                  | first open and a later open, by pointer and by keyboard, with and without a selected value           | The first or a later open does not start on the selected option (or the first enabled option when none is selected), `aria-activedescendant` does not name it, or the selected row is not aligned over the trigger                                               | `audit:Selector/behavior`        |
+| PR3, FR7                           | `Selector.test.tsx` closed typeahead tests                                                                           | never opened, opened then closed                                                                     | Typing on a closed trigger with no list mounted does not choose the matching option                                                                                                                                                                              | `audit:Selector/behavior`        |
+| PR3, FR6                           | `Selector.test.tsx` form tests                                                                                       | never opened with `htmlName`, read-only, after a selection                                           | The submitted form value is missing or differs from the committed value while the list is not mounted                                                                                                                                                            | `audit:Selector/behavior`        |
+| PR3                                | Chromium story with an exit-enabled theme                                                                            | popover close, bottom-sheet close, reduced motion                                                    | The list leaves before its exit animation ends, the exit does not play, or the list stays mounted after the close settles                                                                                                                                        | `audit:Selector/behavior`        |
+| PR3, AR1                           | `Selector.combobox.a11y.test.tsx`                                                                                    | closed, open, closing                                                                                | `aria-controls` names an element that does not exist, or is absent while the list exists                                                                                                                                                                         | `audit:Selector/accessibility`   |
 | source-build contract              | `Selector.source-build.test.mjs`                                                                                     | package source compiled by consumer Babel                                                            | Moving evaluated StyleX values outside the supported source form fails compilation                                                                                                                                                                               | `audit:Selector/code-health`     |
 
 ## Decision log
@@ -369,6 +406,18 @@ through `spec:AST-094` FR13: a coarse primary pointer and the `spec:AST-012` FR9
 compact definition.
 Rejected: keeping `popover` as the default, because a phone then gets a
 pointer-sized anchored list unless the caller opts in.
+
+### DEC-2 — The option list exists only while open
+
+**Reference:** `component:Selector/DEC-2`
+**Decider:** `cixzhang`, `2026-11-02`
+
+A closed Selector holds no option list, and each open builds it again (PR3).
+A page with many Selectors loads with only their triggers, and memory holds
+only the list that is open. The reopen cost this adds is small next to the
+cost of opening a long list, which is separate work.
+Rejected: keeping each list after its first open, because closed Selectors
+then keep their lists in memory for the life of the page.
 
 ## Open questions
 
