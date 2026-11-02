@@ -1385,6 +1385,47 @@ describe('Tokenizer', () => {
       });
     });
 
+    it('offers a removed token again when the typed text matched only that token', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0], users[1]]} />);
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 'ali');
+      // The search for "ali" settles empty: its only match is a token.
+      await waitFor(() => {
+        expect(screen.getByText('No results found')).toBeInTheDocument();
+      });
+      // Alice leaves the value while focus stays in the field.
+      act(() => {
+        screen.getByRole('button', {name: 'Set Charlie'}).click();
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('never lists a value set from outside while a typed search waits for its debounce', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0]]} />);
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 'char');
+      // Charlie becomes a token before the debounced search for "char" runs.
+      act(() => {
+        screen.getByRole('button', {name: 'Set Charlie'}).click();
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+
+      expect(
+        screen.queryByRole('option', {name: 'Charlie', hidden: true}),
+      ).not.toBeInTheDocument();
+    });
+
     it('drops a value set from outside from the open list', async () => {
       const user = userEvent.setup();
       render(<Controlled initial={[users[0]]} />);
