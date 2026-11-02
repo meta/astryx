@@ -894,6 +894,61 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(began).toHaveLength(1);
   });
 
+  it.each(['detached', 'disabled'] as const)(
+    'stamps the release of a trackpad pan %s mid-swipe at its last wheel: a long press right after keeps its own clock (spec:AST-094 FR16)',
+    how => {
+      const {box, other} = mount('<div id="box"></div><div id="other"></div>');
+      const pan = new PanGestureRecognizer({
+        direction: 'vertical',
+        allowedScrollTypes: ['continuous'],
+      });
+      const detach = host.attach(box, pan);
+      const press = new LongPressGestureRecognizer({name: 'press'});
+      const began: number[] = [];
+      press.addListener(recognizer => {
+        if (recognizer.state === 'began') {
+          began.push(clock.time);
+        }
+      });
+      detachers.push(host.attach(other, press));
+      expect(
+        wheel(box, {trackpad: true, dy: 12, time: 0}).defaultPrevented,
+      ).toBe(true);
+      // 10 ms later the pan leaves mid-swipe, and the fingers' next wheel
+      // lands at 16 ms, the page's now.
+      clock.runDue(10);
+      if (how === 'detached') {
+        detach();
+      } else {
+        pan.setEnabled(false);
+        detachers.push(detach);
+      }
+      clock.runDue(16);
+      expect(
+        wheel(box, {trackpad: true, dy: 12, time: 16}).defaultPrevented,
+      ).toBe(false);
+      // A pen comes down at 20 ms.
+      clock.runDue(20);
+      const down = new PointerEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: 6,
+        pointerType: 'pen',
+        clientX: 5,
+        clientY: 5,
+        buttons: 1,
+      });
+      Object.defineProperty(down, 'timeStamp', {value: 20});
+      other.dispatchEvent(down);
+      clock.runDue(519);
+      expect(began).toEqual([]);
+      clock.runDue(521);
+      // 500 ms after the pen landed, not after the scroll's end window.
+      expect(began).toHaveLength(1);
+    },
+  );
+
   it('removes the wheel listener when the pan is disabled or detached', () => {
     const {box} = mount('<div id="box"></div>');
     const removed = vi.spyOn(box, 'removeEventListener');
