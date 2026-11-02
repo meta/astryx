@@ -3,9 +3,8 @@
 /**
  * @file The search panel's source: each query goes to the site's search API
  * (app/api/search/route.ts), which runs `astryx search`, and its results come
- * back in the CLI's order. A query typed while the page's warm-up runs is sent
- * when the warm-up answers, to the server it started; a query still
- * unanswered after HEDGE_MS is sent once more.
+ * back in the CLI's order. The page sends one search request at a time (the
+ * warm-up counts as one), and only the newest query once the server is free.
  * @position Consumed by SearchPalette.tsx.
  *
  * Items carry no `group`, since CommandPalette orders grouped items by group
@@ -82,23 +81,17 @@ export function toSearchItem(
 const DEBOUNCE_MS = 120;
 
 /**
- * How long a query may go unanswered before it is sent once more. A warm
- * server answers well within it; a request still waiting has most likely
- * started a cold server, and the host sends the second request to another,
- * often warm, one.
+ * The longest a query waits for the request before it (or the warm-up):
+ * longer than a cold start, so a request that never answers holds nothing for
+ * good.
  */
-export const HEDGE_MS = 1500;
-
-/** The longest a query waits for a running warm-up: longer than a cold start. */
-export const WARMUP_WAIT_MS = 10_000;
+export const SERVER_WAIT_MS = 10_000;
 
 /**
  * A SearchSource that answers with `astryx search`, through the site's API.
  * @param fetchSearch - Fetches one query's response; the site passes `fetch`.
  * @param runningWarmup - The page's running warm-up (lib/searchWarmup.ts), or
  *   null.
- * @param hedgeMs - How long a query may go unanswered before it is sent once
- *   more.
  */
 export function createCliSearchSource(
   fetchSearch: (url: string, init: RequestInit) => Promise<Response> = (
@@ -106,7 +99,6 @@ export function createCliSearchSource(
     init,
   ) => fetch(url, init),
   runningWarmup: () => Promise<void> | null = runningSearchWarmup,
-  hedgeMs: number = HEDGE_MS,
 ): SearchSource<CliSearchItem> & {
   item(id: string): CliSearchItem | undefined;
 } {
@@ -114,66 +106,30 @@ export function createCliSearchSource(
   let shown = new Map<string, CliSearchItem>();
   let inFlight: AbortController | null = null;
 
+  // The request the server is working on, settled or not.
+  let serverBusy: Promise<unknown> = Promise.resolve();
+
   /**
-   * Fetch one query. While the page's warm-up runs, its server is still
-   * starting and cannot take requests, so the host would start another cold
-   * server for this one: wait for the warm-up's answer first, then send to
-   * the server it started. If the query is still unanswered after HEDGE_MS,
-   * send it once more and take whichever answer comes first: the first
-   * request may be waiting on a cold server while another is warm.
+   * Send one query when the server is free. A search server is blocked while
+   * it works on a request (and for seconds while it starts), so the host
+   * sends a request that arrives meanwhile to another server, which may start
+   * cold. So the page keeps one request at a time: a query waits for the
+   * request before it and for a running warm-up, at most SERVER_WAIT_MS. A
+   * request already sent is not cancelled when a newer query replaces it: the
+   * server finishes it anyway, and the newer query waits for it.
    */
-  async function sendQuery(url: string, signal: AbortSignal) {
+  async function sendQuery(
+    url: string,
+    signal: AbortSignal,
+  ): Promise<Response> {
     const warmup = runningWarmup();
-    if (warmup != null) {
-      await new Promise<void>((resolve, reject) => {
-        const done = () => {
-          clearTimeout(timer);
-          signal.removeEventListener('abort', onAbort);
-          resolve();
-        };
-        const onAbort = () => {
-          clearTimeout(timer);
-          reject(signal.reason);
-        };
-        // A warm-up that never answers must not hold the query for good.
-        const timer = setTimeout(done, WARMUP_WAIT_MS);
-        signal.addEventListener('abort', onAbort, {once: true});
-        warmup.then(done);
-      });
-    }
-    // Each attempt has its own controller, which the query's signal aborts
-    // (also while the winner's body is read, as a single request's would be).
-    const attempts: AbortController[] = [];
-    const attempt = (): Promise<{response: Response; index: number}> => {
-      const attemptController = new AbortController();
-      const index = attempts.push(attemptController) - 1;
-      const followQuery = () => attemptController.abort(signal.reason);
-      signal.addEventListener('abort', followQuery, {once: true});
-      return fetchSearch(url, {signal: attemptController.signal}).then(
-        response => ({response, index}),
-      );
-    };
-    let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
-    const hedge = new Promise<'again'>(resolve => {
-      hedgeTimer = setTimeout(() => resolve('again'), hedgeMs);
-    });
-    let winner = -1;
-    try {
-      const first = attempt();
-      const outcome = await Promise.race([first, hedge]);
-      const won =
-        outcome === 'again' ? await Promise.any([first, attempt()]) : outcome;
-      winner = won.index;
-      return won.response;
-    } finally {
-      clearTimeout(hedgeTimer);
-      // Stop the request that lost; never the one whose answer is read.
-      attempts.forEach((controller, index) => {
-        if (index !== winner) {
-          controller.abort();
-        }
-      });
-    }
+    await whenSettled(
+      warmup ? Promise.all([serverBusy, warmup]) : serverBusy,
+      signal,
+    );
+    const request = fetchSearch(url, {});
+    serverBusy = request.catch(() => {});
+    return (await whenSettled(request, signal, false)) as Response;
   }
 
   return {
@@ -205,6 +161,8 @@ export function createCliSearchSource(
         const body = (await response.json()) as {
           data: {results: SiteSearchResult[]};
         };
+        // A newer query replaced this one while its answer was read.
+        controller.signal.throwIfAborted();
         // Two results can open the same place on the site (a topic and the
         // page that shows it): the panel lists each place once, at its
         // first result, keeping the CLI's order.
@@ -235,4 +193,35 @@ export function createCliSearchSource(
       inFlight = null;
     },
   };
+}
+
+/**
+ * `work`'s outcome, or a rejection with `signal`'s reason once it aborts.
+ * With `capped`, resolve after SERVER_WAIT_MS at the latest.
+ */
+function whenSettled<T>(
+  work: Promise<T>,
+  signal: AbortSignal,
+  capped = true,
+): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const timer = capped
+      ? setTimeout(() => finish(() => resolve(undefined)), SERVER_WAIT_MS)
+      : undefined;
+    const onAbort = () => finish(() => reject(signal.reason));
+    function finish(settle: () => void) {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      settle();
+    }
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, {once: true});
+    work.then(
+      value => finish(() => resolve(value)),
+      error => finish(() => reject(error)),
+    );
+  });
 }
