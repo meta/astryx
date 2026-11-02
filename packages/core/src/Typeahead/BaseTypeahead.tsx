@@ -603,8 +603,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   );
   // Committed values (Tokenizer's tokens) leave the shown rows in the same
   // render that commits them, before any reload answers, so a list never
-  // offers a token (component:Tokenizer FR13). The highlight stays on its item
-  // when that item remains. The previous key is remembered in state, like
+  // offers a token (component:Tokenizer FR13). Until the reload answers, the
+  // highlight stays on its item when that item remains; the reloaded list
+  // highlights its first row. The previous key is remembered in state, like
   // `sourceOfState` below.
   const committedChoices = useCommittedChoices();
   const committedChoicesKey = committedChoices?.key;
@@ -1116,11 +1117,16 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       resultsGenRef.current = gen;
       const shown = bootstrapResults.slice(0, maxMenuItems);
       const nextHighlightedIndex = shown.length > 0 ? 0 : -1;
+      // A focus load that yields no choice, or fails (it arrives here empty),
+      // closes the list rather than leaving it open and empty (FR2;
+      // component:Tokenizer FR15). A typed query's empty search is not a
+      // focus load and still shows FR4's message.
       if (
         results.length === 0 &&
         shown.length === 0 &&
         highlightedIndex === -1
       ) {
+        popover.hide();
         return;
       }
       setHeldHeight(null);
@@ -1128,11 +1134,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setHighlightedIndex(nextHighlightedIndex);
       if (bootstrapResults.length > 0) {
         showLayer();
-      } else if (committedChoices != null) {
-        // A Tokenizer list left with no eligible choice (its focus entries
-        // all committed, or the request failed) closes rather than staying
-        // open and empty (component:Tokenizer FR15). A plain Typeahead
-        // provides no committed choices and keeps its current behavior.
+      } else {
         popover.hide();
       }
     },
@@ -1143,7 +1145,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       showLayer,
       replaceResults,
       popover,
-      committedChoices,
     ],
   );
 
