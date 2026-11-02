@@ -27,12 +27,12 @@ import {useEffect, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {getGestureHost} from './GestureHost';
 import type {GestureRecognizer} from './GestureRecognizer';
+import {useAttachment} from '../hooks/useAttachment';
 import {
   isSyncingGestures,
   syncingGestures,
-  useAttachment,
   useIsUnmountedRef,
-} from './useAttachment';
+} from './gestureSync';
 import {internals} from './recognizerInternals';
 
 export interface UseGestureRecognizerOptions {
