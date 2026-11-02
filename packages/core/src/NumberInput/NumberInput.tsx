@@ -65,8 +65,11 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 
 // Public padding tokens for the `number-input` theme target. A theme writes an
 // ordinary `padding` (in ANY spelling — the shorthand, `paddingBlock`, or a
@@ -652,6 +655,7 @@ export function NumberInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
 
@@ -1245,11 +1249,7 @@ export function NumberInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          isStatusInvalid(status, inputGroup) || !isInputValid
-            ? 'true'
-            : undefined
-        }
+        aria-invalid={isMemberInvalid || !isInputValid ? 'true' : undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(
           styles.input,

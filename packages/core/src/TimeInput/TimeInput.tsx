@@ -73,8 +73,11 @@ import {useInputContainer} from '../hooks/useInputContainer';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
@@ -477,6 +480,7 @@ function TimeField({
   const mergedInputRef = useMergedRefs(ref, inputRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -821,9 +825,7 @@ function TimeField({
           isFocusableDisabled
           isEffectivelyRequired={isEffectivelyRequired}
           isBusy={isBusy}
-          statusType={
-            isStatusInvalid(status, inputGroup) ? 'error' : status?.type
-          }
+          statusType={isMemberInvalid ? 'error' : status?.type}
           ariaDescribedBy={ariaDescribedBy}
           controlProps={{
             ...controlProps,
@@ -862,11 +864,7 @@ function TimeField({
             data-autofocus={hasAutoFocus || undefined}
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
-            aria-invalid={
-              isStatusInvalid(status, inputGroup) || !isInputValid
-                ? 'true'
-                : undefined
-            }
+            aria-invalid={isMemberInvalid || !isInputValid ? 'true' : undefined}
             aria-busy={isBusy || undefined}
             aria-labelledby={controlLabelledBy}
             {...stylex.props(

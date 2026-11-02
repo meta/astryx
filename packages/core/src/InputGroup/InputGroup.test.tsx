@@ -672,24 +672,30 @@ describe('InputGroup', () => {
     it.each([
       [
         'native DateInput',
-        <DateInput label="Due" presentation="native" onChange={() => {}} />,
+        () => (
+          <DateInput label="Due" presentation="native" onChange={() => {}} />
+        ),
         'input[type="date"]',
       ],
       [
         'bottom-sheet DateInput',
-        <DateInput
-          label="Due"
-          presentation="bottom-sheet"
-          onChange={() => {}}
-        />,
+        () => (
+          <DateInput
+            label="Due"
+            presentation="bottom-sheet"
+            onChange={() => {}}
+          />
+        ),
         'input[aria-haspopup="dialog"]',
       ],
       [
         'native TimeInput',
-        <TimeInput label="Start" presentation="native" onChange={() => {}} />,
+        () => (
+          <TimeInput label="Start" presentation="native" onChange={() => {}} />
+        ),
         'input[type="time"]',
       ],
-    ])('marks a %s invalid too', (_name, member, selector) => {
+    ])('marks a %s invalid too', (_name, renderMember, selector) => {
       // The sheet surface observes its size; jsdom has no ResizeObserver.
       vi.stubGlobal(
         'ResizeObserver',
@@ -701,7 +707,7 @@ describe('InputGroup', () => {
       );
       const {container} = render(
         <InputGroup label="Schedule" status={{type: 'error', message: 'Bad'}}>
-          {member}
+          {renderMember()}
         </InputGroup>,
       );
       const control = container.querySelector(selector);

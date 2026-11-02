@@ -101,8 +101,11 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
-import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
@@ -1132,6 +1135,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   ...restProps
 }: MultiSelectorProps<T>) {
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
   const {rest, container} = useFieldInputStyling('MultiSelector', restProps, {
@@ -2469,7 +2473,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
       undefined,
     'aria-labelledby': triggerLabelledBy,
     'aria-required': isEffectivelyRequired ? 'true' : undefined,
-    'aria-invalid': isStatusInvalid(status, inputGroup) ? 'true' : undefined,
+    'aria-invalid': isMemberInvalid ? 'true' : undefined,
     'aria-busy': isBusy || undefined,
     // Newly forwarded handlers compose component first: the built-in toggle
     // and keyboard model always run. `onFocus` keeps its existing caller-first

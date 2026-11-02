@@ -55,7 +55,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
-import {isStatusInvalid} from '../InputGroup/InputGroupContext';
+import {useIsMemberInvalid} from '../InputGroup/InputGroupInternalContext';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
@@ -323,6 +323,7 @@ export function NativeDateField({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const mergedInputRef = useMergedRefs(ref, inputRef);
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -655,11 +656,7 @@ export function NativeDateField({
           }
           aria-describedby={ariaDescribedBy}
           aria-required={isEffectivelyRequired ? 'true' : undefined}
-          aria-invalid={
-            isStatusInvalid(status, inputGroup) || !isInputValid
-              ? 'true'
-              : undefined
-          }
+          aria-invalid={isMemberInvalid || !isInputValid ? 'true' : undefined}
           aria-busy={isBusy || undefined}
           {...stylex.props(
             styles.input,

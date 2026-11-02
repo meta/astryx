@@ -44,8 +44,11 @@ import {
 } from '../Field';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -680,6 +683,8 @@ function PointerDateField({
     isStatusAnnounced: !inputGroup,
     hasPlaceholder: placeholderFromProps != null,
   });
+  // The field's own status decides; without one, a group error marks it invalid.
+  const isMemberInvalid = useIsMemberInvalid(fieldStatus);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -957,11 +962,7 @@ function PointerDateField({
         }
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={
-          isStatusInvalid(fieldStatus, inputGroup) || isInvalid
-            ? 'true'
-            : undefined
-        }
+        aria-invalid={isMemberInvalid || isInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}
         aria-haspopup="dialog"

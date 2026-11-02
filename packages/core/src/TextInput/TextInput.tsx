@@ -116,8 +116,11 @@ import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {isStatusInvalid, useInputGroup} from '../InputGroup/InputGroupContext';
-import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {useInputGroup} from '../InputGroup/InputGroupContext';
+import {
+  InputGroupInternalContext,
+  useIsMemberInvalid,
+} from '../InputGroup/InputGroupInternalContext';
 import type {BaseProps} from '../BaseProps';
 import {
   type FieldInputBaseProps,
@@ -364,6 +367,7 @@ export function TextInput({
   ...restProps
 }: TextInputProps) {
   const inputGroup = useInputGroup();
+  const isMemberInvalid = useIsMemberInvalid(status);
   const inputGroupState = use(InputGroupInternalContext);
   const isDisabled = isDisabledProp || inputGroupState.isDisabled;
   const {rest, container} = useFieldInputStyling('TextInput', restProps, {
@@ -570,7 +574,7 @@ export function TextInput({
           undefined
         }
         aria-required={isEffectivelyRequired ? 'true' : undefined}
-        aria-invalid={isStatusInvalid(status, inputGroup) ? 'true' : undefined}
+        aria-invalid={isMemberInvalid ? 'true' : undefined}
         aria-busy={isBusy || undefined}
         aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}
