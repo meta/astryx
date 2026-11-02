@@ -37,6 +37,7 @@ import {
 import {isRenderable, mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
+import {chatMessageScope} from './chatMessage.markers.stylex';
 import {useTranslator} from '../i18n';
 
 export interface ChatMessageProps extends BaseProps<HTMLElement> {
@@ -111,8 +112,13 @@ const styles = stylex.create({
   avatarWrap: {
     display: {default: null, ':empty': 'none'},
     flexShrink: 0,
-    ':has(~ * [data-chat-name])': {
-      marginBlockStart: spacingVars['--spacing-5'],
+    // The avatar lines up with a bubble's name row when the message holds
+    // one. Judged from the message article (parent-relative), so the global
+    // stylesheet keeps no sibling-relative :has() (see chatMessageScope).
+    marginBlockStart: {
+      default: null,
+      [stylex.when.ancestor(':has([data-chat-name])', chatMessageScope)]:
+        spacingVars['--spacing-5'],
     },
   },
   contentColumn: {
@@ -257,6 +263,7 @@ export function ChatMessage({
         {...mergeProps(
           themeProps('chat-message', {sender, density}),
           stylex.props(
+            chatMessageScope,
             styles.root,
             rootAlignment,
             hasAvatar && rootGap,

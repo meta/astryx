@@ -1,5 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import * as path from 'node:path';
+import {transformSync} from '@babel/core';
+import stylexBabelPlugin from '@stylexjs/babel-plugin';
 import {createElement, createRef, Fragment, type ReactNode} from 'react';
 import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
@@ -340,5 +345,59 @@ describe('ChatMessage', () => {
     expect(message).toHaveAttribute('data-purpose', 'summary');
     expect(message).toHaveClass('astryx-chat-message', 'consumer-message');
     expect(message.style.order).toBe('2');
+  });
+});
+
+// A sibling-relative :has(~ …) in Core's global stylesheet makes WebKit
+// re-check every earlier sibling on each insertion into any container. The
+// avatar's top spacing is judged from the message article instead.
+describe('ChatMessage compiled avatar rule', () => {
+  function compiledSelectors(): {selector: string; declaration: string}[] {
+    const repoRoot = path.resolve(__dirname, '../../../..');
+    const source = path.resolve(__dirname, 'ChatMessage.tsx');
+    const require = createRequire(__filename);
+    const result = transformSync(readFileSync(source, 'utf8'), {
+      babelrc: false,
+      configFile: false,
+      filename: source,
+      presets: [
+        [
+          require.resolve('@babel/preset-typescript'),
+          {isTSX: true, allExtensions: true},
+        ],
+        [require.resolve('@babel/preset-react'), {runtime: 'automatic'}],
+      ],
+      plugins: [
+        [
+          stylexBabelPlugin,
+          {
+            dev: false,
+            runtimeInjection: false,
+            genConditionalClasses: true,
+            treeshakeCompensation: true,
+            unstable_moduleResolution: {type: 'commonJS', rootDir: repoRoot},
+          },
+        ],
+      ],
+    });
+    const rules =
+      (result?.metadata as {stylex?: [string, {ltr: string}, number][]})
+        ?.stylex ?? [];
+    return rules.map(([, {ltr}]) => {
+      const brace = ltr.indexOf('{');
+      return {selector: ltr.slice(0, brace), declaration: ltr.slice(brace)};
+    });
+  }
+
+  it('compiles no sibling-relative :has() and judges the name from the article', () => {
+    const rules = compiledSelectors();
+    expect(rules.filter(rule => rule.selector.includes(':has(~'))).toEqual([]);
+    const avatarSpacing = rules.filter(
+      rule =>
+        rule.selector.includes(':has([data-chat-name])') &&
+        // StyleX emits marginBlockStart as margin-top.
+        /margin-(block-start|top):var\(--spacing-5\)/.test(rule.declaration),
+    );
+    expect(avatarSpacing).toHaveLength(1);
   });
 });
