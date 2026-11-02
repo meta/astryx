@@ -97,6 +97,17 @@ export interface UseTableRowExpansionConfig<T extends Record<string, unknown>> {
    */
   renderExpanded: (item: T) => ReactNode;
   /**
+   * Derive a human-readable row identity for the expansion control's accessible
+   * name. The plugin combines it with localized expand/collapse wording. Blank
+   * labels fall back to the generic row label.
+   *
+   * @example
+   * ```
+   * getRowLabel: item => item.name
+   * ```
+   */
+  getRowLabel?: (item: T) => string;
+  /**
    * Control which rows are expandable. Non-expandable rows show no chevron, no
    * context-menu action, and never render a panel. @default all rows expandable
    */
@@ -339,13 +350,14 @@ const chevronOffsetStyles = stylex.create({
 // =============================================================================
 
 function ExpansionChevron({
+  ariaLabel,
   isExpanded,
   onToggle,
 }: {
+  ariaLabel: string;
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const t = useTranslator();
   const ctx = useTableContext();
   return (
     <button
@@ -359,11 +371,7 @@ function ExpansionChevron({
         e.stopPropagation();
         onToggle();
       }}
-      aria-label={
-        isExpanded
-          ? t('@astryx.tableRowExpansion.collapseRow')
-          : t('@astryx.tableRowExpansion.expandRow')
-      }
+      aria-label={ariaLabel}
       aria-expanded={isExpanded}>
       <Icon
         icon="chevronRight"
@@ -576,6 +584,7 @@ function ExpansionSnapshot({
  *       return next;
  *     }),
  *   getRowKey: item => item.id,
+ *   getRowLabel: item => item.name,
  *   renderExpanded: item => <OrderDetails order={item} />,
  * });
  * <Table data={data} columns={columns} idKey="id" plugins={{expansion}} />;
@@ -589,6 +598,7 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
     onToggle,
     getRowKey,
     renderExpanded,
+    getRowLabel,
     getIsItemExpandable,
     hasRowClickExpansion,
     panelVariant = 'transparent',
@@ -596,6 +606,20 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
   } = config;
 
   const t = useTranslator();
+  const getExpansionLabel = useCallback(
+    (item: T, isExpanded: boolean) => {
+      const rowLabel = getRowLabel?.(item)?.trim();
+      if (rowLabel) {
+        return isExpanded
+          ? t('@astryx.tableRowExpansion.collapseRowNamed', {label: rowLabel})
+          : t('@astryx.tableRowExpansion.expandRowNamed', {label: rowLabel});
+      }
+      return isExpanded
+        ? t('@astryx.tableRowExpansion.collapseRow')
+        : t('@astryx.tableRowExpansion.expandRow');
+    },
+    [getRowLabel, t],
+  );
 
   // Final rendered column count, captured in transformColumns (pipeline step
   // 1) and read in transformBodyRow for the detail panel's colSpan.
@@ -831,15 +855,24 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
           return null;
         }
         const key = getRowKey(item);
+        const isExpanded = expandedKeys.has(key);
         return (
           <ExpansionChevron
-            isExpanded={expandedKeys.has(key)}
+            ariaLabel={getExpansionLabel(item, isExpanded)}
+            isExpanded={isExpanded}
             onToggle={() => onToggle(key)}
           />
         );
       },
     }),
-    [expandedKeys, onToggle, getRowKey, getIsItemExpandable, t],
+    [
+      expandedKeys,
+      onToggle,
+      getRowKey,
+      getIsItemExpandable,
+      getExpansionLabel,
+      t,
+    ],
   );
 
   return useMemo(

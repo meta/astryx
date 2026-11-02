@@ -1495,9 +1495,17 @@
     "defaultMessage": "Collapse row",
     "description": "Screen-reader-only label on the row-expand chevron when the row is currently expanded. Part of the four-way expand/collapse set."
   },
+  "@astryx.tableRowExpansion.collapseRowNamed": {
+    "defaultMessage": "Collapse {label}",
+    "description": "Aria label for an expanded row expansion control when a human-readable identity is available. `label` is the row identity from getRowLabel."
+  },
   "@astryx.tableRowExpansion.expandRow": {
     "defaultMessage": "Expand row",
     "description": "Screen-reader-only label on the row-expand chevron when the row is currently collapsed. Part of a four-way set with `collapseRow`, `expandAllRows`, `collapseAllRows`."
+  },
+  "@astryx.tableRowExpansion.expandRowNamed": {
+    "defaultMessage": "Expand {label}",
+    "description": "Aria label for a collapsed row expansion control when a human-readable identity is available. `label` is the row identity from getRowLabel."
   },
   "@astryx.tableRowExpansion.columnHeader": {
     "defaultMessage": "Row expansion",
@@ -1555,9 +1563,17 @@
     "defaultMessage": "Collapse row",
     "description": "Aria label for the Table tree-data expander chevron when the row is currently expanded."
   },
+  "@astryx.tableTree.collapseRowNamed": {
+    "defaultMessage": "Collapse {label}",
+    "description": "Aria label for an expanded Table tree-data row when a human-readable identity is available. `label` is the row identity from getRowLabel."
+  },
   "@astryx.tableTree.expandRow": {
     "defaultMessage": "Expand row",
     "description": "Aria label for the Table tree-data expander chevron when the row is currently collapsed."
+  },
+  "@astryx.tableTree.expandRowNamed": {
+    "defaultMessage": "Expand {label}",
+    "description": "Aria label for a collapsed Table tree-data row when a human-readable identity is available. `label` is the row identity from getRowLabel."
   },
   "@astryx.tableTree.collapseAllRows": {
     "defaultMessage": "Collapse all rows",

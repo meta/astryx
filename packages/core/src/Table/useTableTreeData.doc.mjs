@@ -19,8 +19,14 @@ export const docs = {
     {
       name: 'onToggleItem',
       type: '(item: T) => void',
-      description: 'Toggle a row\'s expansion.',
+      description: "Toggle a row's expansion.",
       required: true,
+    },
+    {
+      name: 'getRowLabel',
+      type: '(item: T) => string',
+      description:
+        'Derive a human-readable row identity for the expander. Astryx combines it with localized expand/collapse wording. Omit it, or return blank text, to keep the generic "Expand row" and "Collapse row" labels.',
     },
     {
       name: 'hasExpandableRows',
@@ -81,7 +87,10 @@ export const docs = {
   idKey: 'id',
   defaultExpandedIds: ['src'],
 });
-const tree = useTableTreeData(treeConfig);
+const tree = useTableTreeData({
+  ...treeConfig,
+  getRowLabel: item => item.name,
+});
 
 <Table data={visibleData} columns={columns} idKey="id" plugins={{tree}} />;`,
     },
@@ -97,10 +106,13 @@ export const docsDense = {
     getRowMeta:
       'structural meta per visible row: {id, level (0-based), hasChildren, isExpanded}',
     onToggleItem: 'toggle row expansion',
+    getRowLabel:
+      'derive a row identity for the localized expand/collapse accessible name. Blank or omitted values keep the generic row label.',
     hasExpandableRows: 'false => plugin is a no-op (no expanders/indent/ARIA)',
     indent:
       "indent step per level: 'sm' | 'md' | 'lg' (spacing-3/4/6). Defaults to 'md'.",
-    treeColumnKey: 'column carrying indent + expander. Defaults to first column.',
+    treeColumnKey:
+      'column carrying indent + expander. Defaults to first column.',
     hasExpandAllControl:
       'show expand-all/collapse-all toggle in tree column header. Needs isAllExpanded + onExpandAll/onCollapseAll (from useTableTreeState). Defaults to false.',
     isAllExpanded:

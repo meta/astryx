@@ -161,6 +161,7 @@ type Story = StoryObj;
  * Hierarchical records rendered as a table. `useTableTreeState` flattens the
  * nested data into the visible rows and owns the expanded set;
  * `useTableTreeData` draws the indent + expander in the first column.
+ * `getRowLabel` gives each expander a row-specific accessible name.
  *
  * Collapsed branches are unmounted, not hidden — the `<tbody>` holds exactly
  * the visible rows.
@@ -172,7 +173,10 @@ export const Default: Story = {
       idKey: 'id',
       defaultExpandedIds: ['eng'],
     });
-    const tree = useTableTreeData(treeConfig);
+    const tree = useTableTreeData({
+      ...treeConfig,
+      getRowLabel: item => item.name,
+    });
 
     return (
       <Table

@@ -59,9 +59,15 @@ function TreeTable(
     data?: FileRow[];
     hasExpandAllControl?: boolean;
     hasRowClickExpansion?: boolean;
+    getRowLabel?: (item: FileRow) => string;
   },
 ) {
-  const {hasExpandAllControl, hasRowClickExpansion, ...stateProps} = props;
+  const {
+    hasExpandAllControl,
+    hasRowClickExpansion,
+    getRowLabel,
+    ...stateProps
+  } = props;
   const {visibleData, treeConfig} = useTableTreeState<FileRow>({
     data: props.data ?? fileTree,
     idKey: 'id',
@@ -71,6 +77,7 @@ function TreeTable(
     ...treeConfig,
     hasExpandAllControl,
     hasRowClickExpansion,
+    getRowLabel,
   });
 
   return (
@@ -106,6 +113,48 @@ describe('useTableTreeData — expander', () => {
 
     const readmeRow = getRowByText('README.md');
     expect(within(readmeRow).queryByRole('button')).toBeNull();
+  });
+
+  it('names top-level and nested expansion controls when getRowLabel is provided', () => {
+    render(
+      <TreeTable
+        defaultExpandedIds={['src']}
+        getRowLabel={item => item.name}
+      />,
+    );
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Collapse src'}),
+    ).toBeInTheDocument();
+    expect(
+      within(getRowByText('components')).getByRole('button', {
+        name: 'Expand components',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it('falls back to the generic label when getRowLabel returns blank text', () => {
+    render(<TreeTable getRowLabel={() => '   '} />);
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Expand row'}),
+    ).toBeInTheDocument();
+  });
+
+  it('updates expansion control names when getRowLabel changes', () => {
+    const {rerender} = render(<TreeTable getRowLabel={item => item.name} />);
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {name: 'Expand src'}),
+    ).toBeInTheDocument();
+
+    rerender(<TreeTable getRowLabel={item => `Folder ${item.name}`} />);
+
+    expect(
+      within(getRowByText('src')).getByRole('button', {
+        name: 'Expand Folder src',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('expands children on click and relabels the button "Collapse row"', async () => {

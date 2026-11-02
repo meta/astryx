@@ -109,8 +109,8 @@ type Story = StoryObj;
 /**
  * Each row expands a full-width detail panel below it, rendered by
  * `renderExpanded(item)`. Click the chevron (or right-click, then
- * "Expand/Collapse row") to toggle the panel. The consumer owns the
- * `expandedKeys` set.
+ * "Expand/Collapse row") to toggle the panel. `getRowLabel` gives each control
+ * a row-specific accessible name. The consumer owns the `expandedKeys` set.
  *
  * For hierarchical data (child rows that reuse the parent columns), use
  * `useTableTreeData` + `useTableTreeState` instead.
@@ -125,6 +125,7 @@ export const DetailPanel: Story = {
       expandedKeys,
       onToggle: key => setExpandedKeys(prev => toggleKey(prev, key)),
       getRowKey: item => item.id,
+      getRowLabel: item => item.customer,
       renderExpanded: item => <OrderItems order={item} />,
     });
 
