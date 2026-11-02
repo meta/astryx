@@ -270,6 +270,18 @@ for each bug.
   fallback in place of the running example: the block's source as an ordinary
   code block. Implementation gap: not built (Current-state impact).
 
+### Example code
+
+- **FR23 — The Code tab shows the source a copy writes.** In a motion or
+  gesture example, a real Astryx component may wrap docs-only demo contents,
+  such as `<Card><PlayingCardContents /></Card>`. The live example renders the
+  original. The Code tab, and its copy action, show the source after the same
+  replacement step the CLI copy runs (`architecture:template-authoring` INV8):
+  each demo-content element becomes a generic placeholder, its import is
+  dropped, and the outer component keeps its props and behavior. Implementation
+  gap: not built; the Code tab shows block source as read from disk
+  (Current-state impact).
+
 ### Authority routing
 
 `architecture:knowledge-contracts` owns public-delta routing and change disposition.
@@ -323,7 +335,9 @@ Known conformance gaps remain implementation work:
   Back/Forward, close, cancellation, and supersession matrix; and
 - blog posts render every fenced code block as static code: no `tsx live`
   block runs an example, the preview scope holds no post-local assets, and the
-  plain-text route and RSS feed have no live-block fallback (FR22).
+  plain-text route and RSS feed have no live-block fallback (FR22); and
+- the Code tab shows block source as read from disk, without the copy's
+  replacement step, so it cannot replace demo-content elements (FR23).
 
 Stable Storybook and Sandbox currently use a split deployment: pull-request
 previews are staged inside the Vercel Docsite, while stable main is rebuilt and
@@ -348,6 +362,7 @@ exact source already serving those public surfaces.
 | FR16      | production-browser playground isolation and recovery tests                                                          | direct load, reload, hostile navigation, storage and parent-DOM denial                                                                                   | preview code reaches parent/storage or trusted recovery restores stale source/theme                                                                                                                    |
 | FR17–FR21 | exact-head Vercel build, route/asset probes, metadata checks, and Pages landing contract                            | production and PR Preview; Storybook manager/frame; Sandbox route/embed; old root/deep path; desktop/mobile; light/dark                                  | one app is absent or stale, a direct asset/route fails, metadata claims the wrong owner, identity drifts, or Pages hosts more than the compatibility page                                              |
 | FR22      | real-browser blog post checks plus plain-text route and RSS feed checks                                             | a post with a `tsx live` block; that post's plain-text route and RSS item; a block importing a post-local asset; a block that fails to compile or throws | the live block does not run in the browser, the text route or feed shows anything but the source fallback, a post-local import fails to resolve, or a broken example breaks the page outside its frame |
+| FR23      | Code-tab output check plus real-browser live-example check                                                          | a motion or gesture example whose `Card` wraps a demo-content element; its Code tab and copied text; its live preview                                    | the Code tab or its copied text still references a demo-content element or its import, the outer component or its props change, or the live preview stops rendering the original                       |
 
 ## Decision log
 
@@ -472,6 +487,18 @@ renderer and one sandbox boundary. Post-local demo assets stay beside the post
 and outside every package and catalog.
 
 Rejected: a second blog-only renderer that would need its own isolation.
+
+### DEC-10 — Example code replaces demo contents the way copy does
+
+**Reference:** `spec:AST-033/DEC-10`
+**Decider:** `cixzhang`, `2026-11-01`
+
+Motion and gesture examples may show docs-only demo contents, such as a
+playing-card face, inside a real Astryx component, without a second copy of
+each example to maintain. The Code tab runs the CLI's copy replacement, so the
+code a person reads and copies is the generic code a CLI copy writes.
+
+Rejected: a docs-only duplicate of each example, which adds documents to keep in sync.
 
 ## Open questions
 
