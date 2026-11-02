@@ -50,10 +50,16 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {Text} from '../Text/Text';
-import {useTranslator} from '../i18n/useTranslator';
 import {warnOnce} from '../utils/devWarning';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 import {colorVars, radiusVars, spacingVars} from '../theme/tokens.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Tokenizer/TokenizerBottomSheet.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Sentinel prefix for the create row's synthetic item. Kept identical to the
@@ -317,7 +323,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
   onClearAll,
   onChangeQuery,
 }: TokenizerSheetContentProps<T>) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   // Whether a checkbox row holds focus, kept by the list's own focus events,
