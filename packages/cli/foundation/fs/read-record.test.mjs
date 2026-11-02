@@ -151,6 +151,31 @@ describe('reusedWhileUnchanged', () => {
     expect(unchangedSince(seen)).toBe(false);
   });
 
+  it('shares a load that is still running, unless what it read has changed since', async () => {
+    const {file} = scratch();
+    let loads = 0;
+    /** @type {(() => void)[]} */
+    const finish = [];
+    const get = reusedWhileUnchanged(async () => {
+      loads += 1;
+      const text = fs.readFileSync(file, 'utf8');
+      await new Promise(resolve => finish.push(() => resolve(undefined)));
+      return text;
+    });
+    const running = get();
+    const joined = get();
+    expect(loads).toBe(1);
+    // An edit to a file the running load already read: a later call loads
+    // again instead of sharing the pre-edit value.
+    fs.writeFileSync(file, 'two, longer');
+    const afterEdit = get();
+    expect(loads).toBe(2);
+    for (const done of finish) done();
+    expect(await running).toBe('one');
+    expect(await joined).toBe('one');
+    expect(await afterEdit).toBe('two, longer');
+  });
+
   it('tries a failed load again', async () => {
     let calls = 0;
     const get = reusedWhileUnchanged(async () => {

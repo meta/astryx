@@ -46,7 +46,7 @@ export const authors = {
   team: {
     name: 'Astryx team',
     avatar: '/blog/authors/astryx-team.png',
-    href: 'https://github.com/facebook/astryx',
+    href: 'https://github.com/meta/astryx',
   },
   cvkxx: {
     name: 'Catherine',

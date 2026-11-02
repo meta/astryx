@@ -12,7 +12,8 @@
  *   rest, the rail ends icons-only or with its labels, a second press mid-motion
  *   stays continuous, an expand whose old wrap is not copied keeps the edges
  *   together, and Reduce Motion cross-fades under a finger (DR2) and changes at
- *   once under a mouse (DR3)
+ *   once under a mouse (DR3), also on a loaded machine: those two cases read
+ *   the motion by its own start and end, never at a fixed time
  * @position Testing; the components' unit cases are
  *   SideNav/SideNavRailMotion.test.tsx
  *
@@ -74,19 +75,23 @@ interface Frames {
   readonly copiesSeen: number;
   /** Other inert copies seen: the content's old wrap. */
   readonly wrapCopiesSeen: number;
-  /** Distinct rail-edge positions seen: more than a few means it moved. */
+  /**
+   * Distinct positions the edge passes through, on the motion's own clock:
+   * more than a few means it moved. Read from the glide's keyframes, not from
+   * the frames sampled, which a loaded runner can deliver too few of.
+   */
   readonly edges: number;
 }
 
 /**
  * Presses the rail's collapse/expand button (`press` runs the press itself:
  * a tap or a click) after `delays` ms each, then samples every frame until
- * `durationMs` after the last press.
+ * the motion has ended on its own clock.
  */
 async function sampleMotion(
   page: Page,
   press: () => Promise<void>,
-  {presses = 1, gapMs = 0, durationMs = 1000} = {},
+  {presses = 1, gapMs = 0} = {},
 ): Promise<Frames> {
   await page.evaluate(() => {
     const state = {
@@ -99,6 +104,7 @@ async function sampleMotion(
       edges: new Set<number>(),
       running: true,
     };
+
     (window as unknown as {railFrames: typeof state}).railFrames = state;
     const panel = document.querySelector('.astryx-layout-panel');
     const main = document.querySelector('[role="main"]');
@@ -120,6 +126,7 @@ async function sampleMotion(
         element.getBoundingClientRect().right - (inset ? Number(inset[1]) : 0)
       );
     };
+    const glides = new WeakSet<Animation>();
     const sample = () => {
       if (!state.running) {
         return;
@@ -139,7 +146,26 @@ async function sampleMotion(
         }
       }
       const edge = Math.max(shownRight(panel), ...copies.map(shownRight));
-      state.edges.add(Math.round(edge));
+      // The positions the edge passes through, on the motion's own clock: the
+      // content column's glide keyframes, which the compositor plays whether
+      // or not a loaded page samples its frames. The edge stays on the column
+      // on every sampled frame (maxGap), so it passes through them too.
+      for (const animation of column.getAnimations()) {
+        if (glides.has(animation)) {
+          continue;
+        }
+        glides.add(animation);
+        for (const frame of (
+          animation.effect as KeyframeEffect
+        ).getKeyframes()) {
+          const offset = /(-?[\d.]+)px/.exec(
+            String(frame.translate ?? frame.transform ?? ''),
+          );
+          if (offset != null) {
+            state.edges.add(Math.round(Number(offset[1])));
+          }
+        }
+      }
       state.maxGap = Math.max(
         state.maxGap,
         Math.abs(edge - column.getBoundingClientRect().left),
@@ -160,7 +186,32 @@ async function sampleMotion(
     }
     await press();
   }
-  await page.waitForTimeout(durationMs);
+  // Until the motion has ended on its own clock: no animation it runs is still
+  // running, then two more frames, so what its end commits has landed. A
+  // loaded runner changes how long this takes, not what the frames read.
+  await toggleButton(page).evaluate(async toggle => {
+    const frame = async () =>
+      new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      });
+    const running = () =>
+      document.getAnimations().some(animation => {
+        const effect = animation.effect as KeyframeEffect | null;
+        // Animations on the toggle element itself are its press feedback.
+        return (
+          effect != null &&
+          effect.target !== toggle &&
+          animation.playState === 'running' &&
+          Number.isFinite(Number(effect.getComputedTiming().endTime))
+        );
+      });
+    await frame();
+    while (running()) {
+      await frame();
+    }
+    await frame();
+    await frame();
+  });
   return page.evaluate(() => {
     const state = (
       window as unknown as {
@@ -216,30 +267,145 @@ function toggleButton(page: Page) {
   return page.getByRole('button', {name: /^(Collapse|Expand) sidebar$/});
 }
 
-/** Every running animation's animated properties and duration. */
-async function runningMotion(page: Page) {
-  return page.evaluate(() =>
-    document.getAnimations().map(animation => {
-      const effect = animation.effect as KeyframeEffect;
-      const properties = new Set<string>();
-      for (const frame of effect.getKeyframes()) {
-        for (const key of Object.keys(frame)) {
-          if (
-            !['offset', 'computedOffset', 'easing', 'composite'].includes(key)
-          ) {
-            properties.add(key);
+/**
+ * A loaded machine, made repeatable: Chromium's CPU throttle slows the page's
+ * main thread four times, or its animation clock runs every animation at a
+ * quarter of its speed, as when frames come late. Neither changes what the
+ * motion is; both move when it starts and ends in real time.
+ */
+const LOADS = ['idle', 'a slow CPU', 'slow frames'] as const;
+type Load = (typeof LOADS)[number];
+
+async function applyLoad(page: Page, load: Load): Promise<void> {
+  if (load === 'idle') {
+    return;
+  }
+  const cdp = await page.context().newCDPSession(page);
+  if (load === 'a slow CPU') {
+    await cdp.send('Emulation.setCPUThrottlingRate', {rate: 4});
+  } else {
+    await cdp.send('Animation.enable');
+    await cdp.send('Animation.setPlaybackRate', {playbackRate: 0.25});
+  }
+}
+
+/** The test-name suffix for a load: nothing when idle. */
+function underLoad(load: Load): string {
+  return load === 'idle' ? '' : `, with ${load}`;
+}
+
+/** One animation of the rail's motion: what it animates and when it ends. */
+interface MotionPart {
+  readonly properties: ReadonlyArray<string>;
+  /**
+   * When it ends on its own clock, in ms: its delay, every iteration and its
+   * end delay, so a delayed or repeated fade counts in full.
+   */
+  readonly endTime: number;
+  /** Whether it animates an element holding the page's main content. */
+  readonly holdsPage: boolean;
+}
+
+/** The record `recordMotion` keeps on the page, for `settledMotion`. */
+interface MotionRecord {
+  readonly seen: Map<Animation, MotionPart>;
+  readonly collect: () => void;
+  sampling: boolean;
+}
+
+/**
+ * Starts recording the motion a press of the toggle causes: every animation
+ * running on any frame from now on, described when first seen. Animations on
+ * the toggle element itself are its press feedback (its highlight's release
+ * fade runs on the button), not the rail's, so they are left out; everything
+ * inside it, its chevron included, stays in. `settledMotion` ends the record.
+ */
+async function recordMotion(page: Page): Promise<void> {
+  await toggleButton(page).evaluate(toggle => {
+    const seen = new Map<Animation, MotionPart>();
+    const collect = () => {
+      for (const animation of document.getAnimations()) {
+        const effect = animation.effect;
+        if (
+          seen.has(animation) ||
+          !(effect instanceof KeyframeEffect) ||
+          effect.target === toggle
+        ) {
+          continue;
+        }
+        const properties = new Set<string>();
+        for (const frame of effect.getKeyframes()) {
+          for (const key of Object.keys(frame)) {
+            if (
+              !['offset', 'computedOffset', 'easing', 'composite'].includes(key)
+            ) {
+              properties.add(key);
+            }
           }
         }
+        seen.set(animation, {
+          properties: [...properties],
+          endTime: Number(effect.getComputedTiming().endTime),
+          holdsPage:
+            effect.target instanceof Element &&
+            effect.target.contains(document.querySelector('[role="main"]')),
+        });
       }
-      return {
-        properties: [...properties],
-        duration: Number(effect.getTiming().duration),
-        holdsPage:
-          effect.target instanceof Element &&
-          effect.target.contains(document.querySelector('[role="main"]')),
-      };
-    }),
-  );
+    };
+    const record: MotionRecord = {seen, collect, sampling: true};
+    (window as unknown as {railMotion: MotionRecord}).railMotion = record;
+    const sample = () => {
+      if (record.sampling) {
+        collect();
+        requestAnimationFrame(sample);
+      }
+    };
+    requestAnimationFrame(sample);
+  });
+}
+
+/**
+ * Ends the record once the motion has ended on its own clock: every recorded
+ * animation has finished or been cancelled, and two more frames have passed
+ * without a new one, so what its end commits has landed. One that never ends
+ * (endless iterations) is not waited for; it is returned with an `endTime`
+ * of Infinity, for the cases to fail on. It never waits a fixed time: a loaded
+ * machine changes how long this takes, not what it reads.
+ */
+async function settledMotion(page: Page): Promise<ReadonlyArray<MotionPart>> {
+  return page.evaluate(async () => {
+    const record = (window as unknown as {railMotion: MotionRecord}).railMotion;
+    const isRunning = (animation: Animation) =>
+      animation.playState === 'running' &&
+      Number.isFinite(Number(animation.effect?.getComputedTiming().endTime));
+    const twoFrames = async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    for (;;) {
+      record.collect();
+      const running = [...record.seen.keys()].filter(isRunning);
+      if (running.length > 0) {
+        await Promise.all(
+          running.map(async animation =>
+            animation.finished.catch(() => undefined),
+          ),
+        );
+        continue;
+      }
+      const seenBefore = record.seen.size;
+      await twoFrames();
+      record.collect();
+      if (
+        record.seen.size === seenBefore &&
+        ![...record.seen.keys()].some(isRunning)
+      ) {
+        break;
+      }
+    }
+    record.sampling = false;
+    return [...record.seen.values()];
+  });
 }
 
 test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger', () => {
@@ -341,25 +507,29 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger'
     });
   });
 
-  test('under Reduce Motion a tap only cross-fades, in 200 ms or less, with the page surface still (design:reduced-motion DR2)', async ({
-    page,
-  }) => {
-    await page.emulateMedia({reducedMotion: 'reduce'});
-    await openStory(page, PHONE_STORY);
-    await toggleButton(page).tap();
-    const motion = await runningMotion(page);
-    expect(motion.length).toBeGreaterThan(0);
-    for (const {properties, duration, holdsPage} of motion) {
-      expect(properties).toEqual(['opacity']);
-      expect(duration).toBeLessThanOrEqual(200);
-      expect(holdsPage).toBe(false);
-    }
-    await page.waitForTimeout(400);
-    expect(await railAtRest(page)).toMatchObject({
-      labelsShown: false,
-      copies: 0,
+  for (const load of LOADS) {
+    test(`under Reduce Motion a tap only cross-fades, in 200 ms or less, with the page surface still${underLoad(load)} (design:reduced-motion DR2)`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({reducedMotion: 'reduce'});
+      await openStory(page, PHONE_STORY);
+      await applyLoad(page, load);
+      await recordMotion(page);
+      await toggleButton(page).tap();
+      await expect(toggleButton(page)).toHaveAccessibleName('Expand sidebar');
+      const motion = await settledMotion(page);
+      expect(motion.length).toBeGreaterThan(0);
+      for (const {properties, endTime, holdsPage} of motion) {
+        expect(properties).toEqual(['opacity']);
+        expect(endTime).toBeLessThanOrEqual(200);
+        expect(holdsPage).toBe(false);
+      }
+      expect(await railAtRest(page)).toMatchObject({
+        labelsShown: false,
+        copies: 0,
+      });
     });
-  });
+  }
 });
 
 test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse', () => {
@@ -402,16 +572,21 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse',
     });
   });
 
-  test('under Reduce Motion a click changes the rail and the page at once (design:reduced-motion DR3)', async ({
-    page,
-  }) => {
-    await page.emulateMedia({reducedMotion: 'reduce'});
-    await openStory(page, DESKTOP_STORY);
-    await toggleButton(page).click();
-    expect(await runningMotion(page)).toEqual([]);
-    expect(await railAtRest(page)).toMatchObject({
-      labelsShown: false,
-      copies: 0,
+  for (const load of LOADS) {
+    test(`under Reduce Motion a click changes the rail and the page at once${underLoad(load)} (design:reduced-motion DR3)`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({reducedMotion: 'reduce'});
+      await openStory(page, DESKTOP_STORY);
+      await applyLoad(page, load);
+      await recordMotion(page);
+      await toggleButton(page).click();
+      await expect(toggleButton(page)).toHaveAccessibleName('Expand sidebar');
+      expect(await settledMotion(page)).toEqual([]);
+      expect(await railAtRest(page)).toMatchObject({
+        labelsShown: false,
+        copies: 0,
+      });
     });
-  });
+  }
 });

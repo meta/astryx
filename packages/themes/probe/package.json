@@ -23,12 +23,12 @@
     "build": "node ../../../scripts/clean-dist.mjs && astryx theme build src/probeTheme.ts -o dist/theme.css --icons-specifier ./registries.mjs && tsup && tsc --project tsconfig.build.json && node ../../../scripts/check-fully-specified.mjs"
   },
   "peerDependencies": {
-    "@astryxdesign/core": "0.7.5",
+    "@astryxdesign/core": "0.7.6",
     "react": ">=19"
   },
   "devDependencies": {
     "tsup": "^8.3.0",
-    "@astryxdesign/cli": "0.7.5"
+    "@astryxdesign/cli": "0.7.6"
   },
   "module": "./dist/source.mjs"
 }

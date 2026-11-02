@@ -527,10 +527,20 @@ describe('BreadcrumbItem menu', () => {
       </Breadcrumbs>,
     );
     await user.click(screen.getByRole('button', {name: 'Teams'}));
+    // The open focuses the first row in the next frame; let it land first,
+    // so the row the mouse moves onto is one that does not have focus yet.
+    await act(async () => {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    });
     const design = screen.getByRole('menuitem', {name: 'Design', hidden: true});
-    const focusSpy = vi.spyOn(design, 'focus');
-    fireEvent.pointerMove(design, {pointerType: 'mouse'});
     expect(design).toHaveFocus();
+    const engineering = screen.getByRole('menuitem', {
+      name: 'Engineering',
+      hidden: true,
+    });
+    const focusSpy = vi.spyOn(engineering, 'focus');
+    fireEvent.pointerMove(engineering, {pointerType: 'mouse'});
+    expect(engineering).toHaveFocus();
     expect(focusSpy).toHaveBeenCalledWith({
       preventScroll: true,
       focusVisible: false,

@@ -19,7 +19,7 @@ import {
   type StackItemCrossAlignSelf,
   type StackItemSize,
 } from './stackItem.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 
 const overflowStyles = stylex.create({

@@ -152,7 +152,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "6564c786e0e708b5ffb9a1811db06328dc9eb1f833c9722f7a4c417c46cc6eee",
+      "skeleton": "3cd256cfa2bad3dc6e87eb50075aef0d8afb437a7be74d4e5d4aebecf6948d0b",
       "mentions": []
     },
     "icons": {
@@ -199,9 +199,10 @@
         "movement-principles",
         "respecting-user-preferences",
         "usage",
+        "theme-motion",
         "best-practices"
       ],
-      "skeleton": "e648d618f9141bbd7f15bf970ba9e0d41b59ff9ae89e0cbbb2042e98bd5f0109",
+      "skeleton": "f1ffd7fc39f49d407c6caa563c25eadd8d79bf4d3c2fc6837f06297c37f714eb",
       "mentions": []
     },
     "principles": {

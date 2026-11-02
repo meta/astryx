@@ -21,7 +21,6 @@ import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
-import {useTranslator} from '../i18n';
 import {TopNavSlotContext} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {useTopNavMobileContent} from './TopNavMobileContentContext';
@@ -30,6 +29,14 @@ import {MobileNav} from '../MobileNav/MobileNav';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
 import {themeProps} from '../utils/themeProps';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TopNav/TopNav.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 
 /**
  * Base TopNav styles
@@ -193,17 +200,19 @@ export function TopNav({
   ref,
   ...props
 }: TopNavProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.topNav.landmarkLabel');
   const renderMode = useTopNavRenderMode();
   const mobileContent = useTopNavMobileContent();
   const {hasAutoToggle} = useAppShellMobile();
   const resolvedStartContent = startContent ?? children;
-  const hasCenterContent = centerContent != null;
-  const hasCollapsibleContent =
-    resolvedStartContent != null || centerContent != null;
+  // The layout flags use the same test as the slots they gate.
+  const hasCenterContent = isRenderable(centerContent);
+  const hasStartContent = isRenderable(resolvedStartContent);
+  const hasMobileContent = isRenderable(mobileContent);
+  const hasCollapsibleContent = hasStartContent || hasCenterContent;
   // Show mobile toggle when there's ANY drawer content — own items OR SideNav via context
-  const hasMobileDrawerContent = hasCollapsibleContent || mobileContent != null;
+  const hasMobileDrawerContent = hasCollapsibleContent || hasMobileContent;
 
   // =========================================================================
   // Mobile bar mode — heading + endContent + toggle, hide nav items.
@@ -223,7 +232,7 @@ export function TopNav({
           style,
         )}
         {...props}>
-        {heading && (
+        {isRenderable(heading) && (
           <div {...stylex.props(styles.mobileBarHeading)}>{heading}</div>
         )}
         <div {...stylex.props(styles.mobileBarEnd)}>
@@ -240,7 +249,7 @@ export function TopNav({
   // =========================================================================
   if (renderMode === 'drawer') {
     // Only render if there are collapsible items or extra content
-    if (!hasCollapsibleContent && !mobileContent) {
+    if (!hasCollapsibleContent && !hasMobileContent) {
       return null;
     }
 
@@ -252,10 +261,10 @@ export function TopNav({
             {centerContent}
           </div>
         )}
-        {hasCollapsibleContent && mobileContent && (
+        {hasCollapsibleContent && hasMobileContent && (
           <Divider xstyle={styles.drawerDivider} />
         )}
-        {mobileContent && (
+        {hasMobileContent && (
           <div {...stylex.props(styles.drawerExtraContent)}>
             {mobileContent}
           </div>
@@ -285,8 +294,10 @@ export function TopNav({
       )}
       {...props}>
       <div {...stylex.props(styles.leftSection)}>
-        {heading && <div {...stylex.props(styles.heading)}>{heading}</div>}
-        {resolvedStartContent && (
+        {isRenderable(heading) && (
+          <div {...stylex.props(styles.heading)}>{heading}</div>
+        )}
+        {hasStartContent && (
           <TopNavSlotContext value="start">
             <div {...stylex.props(styles.startContent)}>
               {resolvedStartContent}
@@ -304,7 +315,7 @@ export function TopNav({
           <TopNavSlotContext value="end">{endContent}</TopNavSlotContext>
         </div>
       ) : (
-        endContent && (
+        isRenderable(endContent) && (
           <div {...stylex.props(styles.endContent)}>
             <TopNavSlotContext value="end">{endContent}</TopNavSlotContext>
           </div>

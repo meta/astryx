@@ -14,7 +14,9 @@
  *   scroll control. Exposes APG
  *   carousel semantics: the root is a labelled region with
  *   aria-roledescription="carousel" and each item wrapper is a group with
- *   aria-roledescription="slide" named "Slide N of M".
+ *   aria-roledescription="slide" named "Slide N of M". The scroll area is a
+ *   group named like the carousel and a tab stop only while its content
+ *   overflows (AST-025 FR12).
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Carousel/index.ts (exports)
@@ -49,9 +51,15 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Carousel/Carousel.generated';
+
+registerEnglishFallback(english);
 /**
  * Imperative control surface for the Carousel, accessed via the `handleRef`
  * prop. Methods drive the same native-scroll machinery as the built-in
@@ -338,7 +346,7 @@ export function Carousel({
   'data-testid': testId,
   ...htmlProps
 }: CarouselProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
@@ -591,7 +599,13 @@ export function Carousel({
       aria-roledescription="carousel">
       <div
         ref={composedRef}
-        tabIndex={0}
+        // The scroll area takes keyboard scrolling (spec:AST-025 FR12): a
+        // group named like the carousel, in the tab order only while its
+        // content overflows. While it fits it still takes focus
+        // programmatically, for the edge buttons' hand-off (FR2).
+        role="group"
+        aria-label={ariaLabel}
+        tabIndex={hasOverflow ? 0 : -1}
         onWheel={handleWheel}
         {...mergeProps(
           themeProps('carousel-scroller', {

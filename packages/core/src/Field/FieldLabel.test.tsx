@@ -9,13 +9,14 @@
  * SYNC: When FieldLabel.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi} from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import {FieldLabel} from './FieldLabel';
 import {themeProps} from '../utils/themeProps';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 describe('FieldLabel', () => {
   it('renders label text', () => {
@@ -135,6 +136,119 @@ describe('FieldLabel', () => {
     expect(screen.getByText(/Optional/)).toBeInTheDocument();
     // Info icon should be present
     expect(document.querySelector('svg')).toBeInTheDocument();
+  });
+
+  describe('labelTooltip under each pointer', () => {
+    const originalShowPopover = HTMLElement.prototype.showPopover;
+    const originalHidePopover = HTMLElement.prototype.hidePopover;
+    const originalMatches = HTMLElement.prototype.matches;
+    beforeEach(() => {
+      __resetInteractionModalityForTest();
+      // jsdom has no Popover API: keep the open state where the test reads it.
+      HTMLElement.prototype.showPopover = function (this: HTMLElement) {
+        this.setAttribute('popover-open', '');
+      };
+      HTMLElement.prototype.hidePopover = function (this: HTMLElement) {
+        this.removeAttribute('popover-open');
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (HTMLElement.prototype as any).matches = function (
+        this: HTMLElement,
+        selector: string,
+      ): boolean {
+        return selector === ':popover-open'
+          ? this.hasAttribute('popover-open')
+          : originalMatches.call(this, selector);
+      };
+    });
+    afterEach(() => {
+      HTMLElement.prototype.showPopover = originalShowPopover;
+      HTMLElement.prototype.hidePopover = originalHidePopover;
+      HTMLElement.prototype.matches = originalMatches;
+    });
+
+    /** A finger's (or a pen's) tap, in the order a browser dispatches it. */
+    const tap = (element: HTMLElement, pointerType = 'touch') => {
+      fireEvent.pointerEnter(element, {pointerType});
+      fireEvent.pointerDown(element, {pointerType});
+      fireEvent.pointerUp(element, {pointerType});
+      fireEvent.mouseEnter(element);
+      fireEvent.click(element);
+    };
+
+    /** The info icon the help tooltip is attached to, inside the label. */
+    const infoIcon = (labelText: string) =>
+      screen
+        .getByText(labelText)
+        .closest('label')
+        ?.querySelector('[aria-describedby]') as HTMLElement;
+
+    it('opens the help on a tap of its icon and leaves a checkbox alone', async () => {
+      render(
+        <>
+          <FieldLabel
+            label="Notifications"
+            inputID="notify"
+            labelTooltip="Sends one digest a day"
+          />
+          <input type="checkbox" id="notify" />
+        </>,
+      );
+
+      tap(infoIcon('Notifications'));
+
+      await waitFor(() => {
+        expect(screen.getByRole('tooltip', {hidden: true})).toHaveAttribute(
+          'popover-open',
+        );
+      });
+      // The tap asked for the help, not for the label's control.
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
+    });
+
+    it('opens the help on a pen tap of its icon and leaves a checkbox alone', async () => {
+      render(
+        <>
+          <FieldLabel
+            label="Alerts"
+            inputID="alerts"
+            labelTooltip="Only for failed runs"
+          />
+          <input type="checkbox" id="alerts" />
+        </>,
+      );
+
+      tap(infoIcon('Alerts'), 'pen');
+
+      await waitFor(() => {
+        expect(screen.getByRole('tooltip', {hidden: true})).toHaveAttribute(
+          'popover-open',
+        );
+      });
+      expect(screen.getByRole('checkbox')).not.toBeChecked();
+    });
+
+    it('leaves a mouse click on its icon to the label, which toggles a checkbox', () => {
+      render(
+        <>
+          <FieldLabel
+            label="Auto-save"
+            inputID="autosave"
+            labelTooltip="Saves each change as you type"
+          />
+          <input type="checkbox" id="autosave" />
+        </>,
+      );
+
+      const icon = infoIcon('Auto-save');
+      fireEvent.pointerDown(icon, {pointerType: 'mouse'});
+      fireEvent.pointerUp(icon, {pointerType: 'mouse'});
+      fireEvent.click(icon);
+
+      // A mouse click anywhere on a native label, its info icon included,
+      // activates the label's control.
+      expect(screen.getByRole('checkbox')).toBeChecked();
+    });
   });
 
   describe('description click forwarding', () => {

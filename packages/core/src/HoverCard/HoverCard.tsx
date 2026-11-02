@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/HoverCard/HoverCard.test.tsx
+ * - /packages/core/src/HoverCard/HoverCard.doc.mjs
  * - /packages/core/src/HoverCard/index.ts
  * - /apps/storybook/stories/HoverCard.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/HoverCard/ (showcase blocks)
@@ -191,9 +192,10 @@ export interface HoverCardProps extends Pick<
   onOpenChange?: (isOpen: boolean) => void;
 
   /**
-   * Whether to show hover indication (dashed underline) on the trigger.
-   * - `'auto'`: Show for text-only children
-   * - `true`: Always show
+   * Whether to show hover indication (dashed underline) on a text trigger.
+   * An element trigger keeps its own styling, so this has no effect on it.
+   * - `'auto'`: Show when children is a single string or number
+   * - `true`: Show on a text trigger
    * - `false`: Never show
    *
    * @default 'auto'
@@ -201,9 +203,10 @@ export interface HoverCardProps extends Pick<
   hasHoverIndication?: 'auto' | boolean;
 
   /**
-   * Controlled open state. When provided, overrides hover/focus triggers:
+   * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: force-hide the hover card
+   * - `false`: hide the hover card and keep hover from opening it; focus on
+   *   the trigger still opens it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,

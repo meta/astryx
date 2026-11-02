@@ -4,13 +4,12 @@
 
 /**
  * @file MobileTokenizer.tsx
- * @input Uses public @astryxdesign/core components and hooks only
- *   (AlertDialog, BottomSheet, Button, CheckboxIndicator, EmptyState, Field,
- *   Icon, Spinner, Text, TextInput, Token, VisuallyHidden, useAnnounce,
- *   useMergedRefs, useTooltip, useTranslator)
+ * @input Public @astryxdesign/core components and hooks, plus private Lab
+ *   mobile-sheet confirmation and search-drag dismissal owners
  * @output Exports MobileTokenizer — Lab prototype of the touch Tokenizer
- *   flow with a single searchable sheet, stable in-session checkbox ordering,
- *   and progressive long-list rendering
+ *   flow with the inline-compatible closed trigger, a searchable draft-selection
+ *   sheet, persistent Clear all / Save footer, dirty-dismiss confirmation,
+ *   stable checkbox ordering, and progressive long-list rendering
  * @position Lab (canary) stack layer 1: the touch sheet's user-experience
  *   pass happens here; Core's sheet presentation (`component:Tokenizer`
  *   DEC-3, FR16–FR24, AR6) is implemented but not exposed. The behaviors
@@ -29,7 +28,11 @@
  * API mirrors Core Tokenizer (label/isLabelHidden/searchSource/value/onChange/
  * change, renderItem, hasCreate, maxEntries) so graduation is an import swap.
  * Lab deltas: the filter is a bordered TextInput (Core's PanelSearchInput is
- * not exported), and there is no theming/spec contract yet.
+ * not exported); row, Create, and Clear all changes stay in one draft until
+ * Save; the footer stays visible while searching; dirty dismissal asks before
+ * discarding; and directly dragging results blurs the search so the mobile
+ * keyboard leaves without clearing the query. There is no theming/spec contract
+ * yet.
  */
 
 import type React from 'react';
@@ -47,7 +50,6 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
-import {AlertDialog} from '@astryxdesign/core/AlertDialog';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
@@ -70,6 +72,8 @@ import {
   sizeVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {MobileSheetConfirmation} from '../internal/MobileSheetConfirmation';
+import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
 
 export type MobileTokenizerChange<T extends SearchableItem> =
   | {item: T; type: 'add'}
@@ -125,6 +129,18 @@ const LIST_LOAD_MORE_THRESHOLD_PX = 200;
 // concentric with the field's (radius-2) when inset = radius-2 − radius-1 −
 // border = 3px. The same number is the row gap, so wrapped rows read evenly.
 const TOKEN_ROW_INSET = `calc(${spacingVars['--spacing-1']} - 1px)`;
+
+type SheetDraftChange<T> = {
+  item: T;
+  type: 'add' | 'create' | 'remove';
+};
+
+function hasSameSelection<T extends SearchableItem>(a: T[], b: T[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every(item => b.some(candidate => candidate.id === item.id))
+  );
+}
 
 const styles = stylex.create({
   // The closed trigger is the inline Tokenizer field's own control box, as a
@@ -366,15 +382,9 @@ export function MobileTokenizer<T extends SearchableItem>({
     },
     [onChangeQuery],
   );
-  const selectedIds = useMemo(() => new Set(value.map(v => v.id)), [value]);
-  const isAtMax = maxEntries != null && value.length >= maxEntries;
-
   // A field that becomes disabled cannot keep its sheet open, and must not
-  // reopen it when re-enabled (FR17). Adjusted in the render that sees the
-  // change, not an effect, so no frame shows both. A sheet that was open when
-  // the field became disabled stays mounted, closed, so it runs its exit and
-  // hands focus back to the trigger; a field disabled from the start mounts
-  // no sheet.
+  // reopen it when re-enabled (FR17). A forced close bypasses the dirty-draft
+  // prompt, keeps the query, and discards the in-sheet draft on the next open.
   const [wasDisabled, setWasDisabled] = useState(isDisabled);
   const [keepsSheetWhileDisabled, setKeepsSheetWhileDisabled] = useState(false);
   if (isDisabled !== wasDisabled) {
@@ -388,49 +398,14 @@ export function MobileTokenizer<T extends SearchableItem>({
     }
   }
 
-  const handleAdd = useCallback(
-    (item: T): boolean => {
-      if (isDisabled || isAtMax || selectedIds.has(item.id)) {
-        return false;
+  const handleSheetCommit = useCallback(
+    (items: T[], change: SheetDraftChange<T>) => {
+      if (!isDisabled) {
+        onChange(items, change);
       }
-      if (
-        hasCreate &&
-        typeof item.id === 'string' &&
-        item.id.startsWith(CREATABLE_ID_PREFIX)
-      ) {
-        const created = item.id.slice(CREATABLE_ID_PREFIX.length);
-        if (selectedIds.has(created)) {
-          return false;
-        }
-        const createdItem: SearchableItem = {id: created, label: created};
-        const real = createdItem as T;
-        onChange([...value, real], {item: real, type: 'create'});
-        return true;
-      }
-      onChange([...value, item], {item, type: 'add'});
-      return true;
     },
-    [hasCreate, isAtMax, isDisabled, onChange, selectedIds, value],
+    [isDisabled, onChange],
   );
-  const handleRemove = useCallback(
-    (item: T): boolean => {
-      if (isDisabled) {
-        return false;
-      }
-      onChange(
-        value.filter(v => v.id !== item.id),
-        {item, type: 'remove'},
-      );
-      return true;
-    },
-    [isDisabled, onChange, value],
-  );
-  const handleClearAll = useCallback(() => {
-    if (isDisabled || value.length === 0) {
-      return;
-    }
-    onChange([], {item: value[value.length - 1], type: 'remove'});
-  }, [isDisabled, onChange, value]);
 
   const showsDisabledMessage = isDisabled && disabledMessage != null;
   // The disabled reason as a tooltip on the trigger, for hover, focus and
@@ -606,17 +581,14 @@ export function MobileTokenizer<T extends SearchableItem>({
             label={label}
             searchSource={searchSource}
             value={value}
-            selectedIds={selectedIds}
-            isAtMax={isAtMax}
+            maxEntries={maxEntries}
             hasCreate={hasCreate}
             maxMenuItems={maxMenuItems}
             minQueryLength={minQueryLength}
             debounceMs={debounceMs}
             emptySearchResultsText={emptySearchResultsText}
             renderItem={renderItem}
-            onAdd={handleAdd}
-            onRemove={handleRemove}
-            onClearAll={handleClearAll}
+            onCommit={handleSheetCommit}
             onChangeQuery={handleSheetQueryChange}
           />
         )}
@@ -635,23 +607,20 @@ interface MobileTokenizerSheetProps<T extends SearchableItem> {
   label: string;
   searchSource: SearchSource<T>;
   value: T[];
-  selectedIds: Set<string>;
-  isAtMax: boolean;
+  maxEntries?: number;
   hasCreate: boolean;
   maxMenuItems: number;
   minQueryLength: number;
   debounceMs: number;
   emptySearchResultsText?: string;
   renderItem?: (item: T) => ReactNode;
-  onAdd: (item: T) => boolean;
-  onRemove: (item: T) => boolean;
-  onClearAll: () => void;
+  onCommit: (items: T[], change: SheetDraftChange<T>) => void;
   onChangeQuery: (query: string) => void;
 }
 
 /**
  * The sheet: BottomSheet around the content. The content owns the query; a
- * close the person makes (Done, swipe, scrim, Escape) clears it through a
+ * close the person makes (Save, swipe, scrim, Escape) clears it through a
  * handle from the closing event, so a close the field forces (becoming
  * disabled) keeps it (FR18).
  */
@@ -663,7 +632,8 @@ function MobileTokenizerSheet<T extends SearchableItem>({
   ...content
 }: MobileTokenizerSheetProps<T>) {
   const clearQueryRef = useRef<(() => void) | null>(null);
-  const requestClose = () => {
+  const requestDismissRef = useRef<(() => void) | null>(null);
+  const closeSheet = () => {
     clearQueryRef.current?.();
     onOpenChange(false);
   };
@@ -673,8 +643,10 @@ function MobileTokenizerSheet<T extends SearchableItem>({
       onOpenChange={next => {
         if (next) {
           onOpenChange(true);
+        } else if (requestDismissRef.current != null) {
+          requestDismissRef.current();
         } else {
-          requestClose();
+          closeSheet();
         }
       }}
       finalFocusRef={finalFocusRef}
@@ -686,7 +658,8 @@ function MobileTokenizerSheet<T extends SearchableItem>({
         isOpen={isOpen}
         label={label}
         clearQueryRef={clearQueryRef}
-        onRequestClose={requestClose}
+        requestDismissRef={requestDismissRef}
+        onCloseSheet={closeSheet}
       />
     </BottomSheet>
   );
@@ -697,7 +670,8 @@ type MobileTokenizerSheetContentProps<T extends SearchableItem> = Omit<
   'onOpenChange' | 'finalFocusRef'
 > & {
   clearQueryRef: RefObject<(() => void) | null>;
-  onRequestClose: () => void;
+  requestDismissRef: RefObject<(() => void) | null>;
+  onCloseSheet: () => void;
 };
 
 /**
@@ -708,27 +682,43 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
   isOpen,
   initialQuery,
   clearQueryRef,
-  onRequestClose,
+  requestDismissRef,
+  onCloseSheet,
   label,
   searchSource,
   value,
-  selectedIds,
-  isAtMax,
+  maxEntries,
   hasCreate,
   maxMenuItems,
   minQueryLength,
   debounceMs,
   emptySearchResultsText,
   renderItem,
-  onAdd,
-  onRemove,
-  onClearAll,
+  onCommit,
   onChangeQuery,
 }: MobileTokenizerSheetContentProps<T>) {
   const t = useTranslator();
   const announce = useAnnounce();
   const searchRef = useRef<HTMLInputElement>(null);
   const clearAllRef = useRef<HTMLButtonElement>(null);
+
+  // One open sheet owns one selection draft. The caller's controlled value is
+  // unchanged until Save, so a cancelled dismissal can discard cleanly.
+  const [valueAtOpen, setValueAtOpen] = useState<T[]>(() => [...value]);
+  const [draftValue, setDraftValue] = useState<T[]>(() => [...value]);
+  const lastDraftChangeRef = useRef<SheetDraftChange<T> | null>(null);
+  const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
+  const [isDiscardConfirmationOpen, setIsDiscardConfirmationOpen] =
+    useState(false);
+  const afterConfirmationRef = useRef<'search' | 'clear-all' | null>(null);
+  const shouldRestoreDraftFocusRef = useRef(false);
+  const isDraftDirty = !hasSameSelection(valueAtOpen, draftValue);
+  const selectedIds = useMemo(
+    () => new Set(draftValue.map(item => item.id)),
+    [draftValue],
+  );
+  const isAtMax = maxEntries != null && draftValue.length >= maxEntries;
+  const isDraftOverMax = maxEntries != null && draftValue.length > maxEntries;
 
   // ---- query and search ----
   const [query, setQuery] = useState(initialQuery);
@@ -838,7 +828,11 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
   if (isOpen !== wasOpen) {
     setWasOpen(isOpen);
     if (isOpen) {
-      setSelectedItemsAtOpen(value);
+      const snapshot = [...value];
+      setValueAtOpen(snapshot);
+      setDraftValue(snapshot);
+      lastDraftChangeRef.current = null;
+      setSelectedItemsAtOpen(snapshot);
       resetListWindow();
       // An open lists the bootstrap set, or searches a query kept across a
       // forced close (FR18); a kept query below the threshold leaves nothing
@@ -851,6 +845,12 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
       } else {
         announcedSearchIdRef.current = searchIdRef.current;
       }
+    } else {
+      // Close both confirmations in the same render that closes the sheet.
+      afterConfirmationRef.current = null;
+      shouldRestoreDraftFocusRef.current = false;
+      setIsClearConfirmationOpen(false);
+      setIsDiscardConfirmationOpen(false);
     }
   }
   const handleQueryChange = (next: string) => {
@@ -890,7 +890,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
       selectedAtOpenMatches.map(item => item.id),
     );
     const resultIds = new Set(results.map(item => item.id));
-    const selectedItemsMissingFromResults = value.filter(
+    const selectedItemsMissingFromResults = draftValue.filter(
       item =>
         !selectedAtOpenIds.has(item.id) &&
         !resultIds.has(item.id) &&
@@ -901,7 +901,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
       ...selectedItemsMissingFromResults,
       ...results.filter(item => !selectedAtOpenIds.has(item.id)),
     ];
-  }, [trimmedQuery, results, selectedItemsAtOpen, value]);
+  }, [trimmedQuery, results, selectedItemsAtOpen, draftValue]);
   const renderedItems = visibleItems.slice(0, renderedItemCount);
 
   const createItem = useMemo<T | null>(() => {
@@ -911,7 +911,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
     const lower = trimmedQuery.toLowerCase();
     if (
       selectedIds.has(trimmedQuery) ||
-      value.some(item => item.label.toLowerCase() === lower) ||
+      draftValue.some(item => item.label.toLowerCase() === lower) ||
       results.some(r => r.label.toLowerCase() === lower)
     ) {
       return null;
@@ -920,7 +920,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
       id: `${CREATABLE_ID_PREFIX}${trimmedQuery}`,
       label: t('@astryx.tokenizer.create', {value: trimmedQuery}),
     } as unknown as T;
-  }, [hasCreate, trimmedQuery, results, selectedIds, isAtMax, value, t]);
+  }, [hasCreate, trimmedQuery, results, selectedIds, isAtMax, draftValue, t]);
 
   const isQueryEmpty = trimmedQuery === '';
   // An empty state is a searched query's answer. An empty query that lists
@@ -965,21 +965,30 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
     t,
   ]);
 
-  // ---- Clear all ----
-  // The confirmation is in the DOM only from the Clear all press until it
-  // closes (INV7). Dialog restores focus only in its close effect, so the
-  // sheet places focus itself once the modal is gone: on the search field
-  // after a confirmed clear — the clear is spent, and the search field is
-  // where the next selection starts (FR24, `spec:AST-085` FR4) — and back on
-  // Clear all after a cancel. A confirmed clear is announced there too, after
-  // the confirmation has gone, so the words are delivered inside the sheet
-  // (`spec:AST-086` FR14).
-  const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
-  const afterConfirmationRef = useRef<'search' | 'clear-all' | null>(null);
+  // ---- confirmations and dismissal ----
+  const closeDiscardConfirmation = () => {
+    shouldRestoreDraftFocusRef.current = true;
+    setIsDiscardConfirmationOpen(false);
+  };
+  // Synchronize DOM focus with the closed discard dialog. Dialog restores focus
+  // in its own close Effect, so focus the search only after that dialog closes.
+  useEffect(() => {
+    if (
+      isDiscardConfirmationOpen ||
+      !shouldRestoreDraftFocusRef.current ||
+      !isOpen
+    ) {
+      return;
+    }
+    shouldRestoreDraftFocusRef.current = false;
+    searchRef.current?.focus({preventScroll: true});
+  }, [isDiscardConfirmationOpen, isOpen]);
   const closeClearConfirmation = (confirmed: boolean) => {
     afterConfirmationRef.current = confirmed ? 'search' : 'clear-all';
     setIsClearConfirmationOpen(false);
   };
+  // Synchronize DOM focus and the live-region announcement after the clear
+  // dialog closes, once Dialog's own close Effect has restored focus.
   useEffect(() => {
     if (isClearConfirmationOpen || afterConfirmationRef.current == null) {
       return;
@@ -993,10 +1002,63 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
       clearAllRef.current?.focus();
     }
   }, [announce, isClearConfirmationOpen, t]);
+  useImperativeHandle(
+    requestDismissRef,
+    () => () => {
+      if (isDraftDirty) {
+        setIsDiscardConfirmationOpen(true);
+      } else {
+        onCloseSheet();
+      }
+    },
+    [isDraftDirty, onCloseSheet],
+  );
+
+  const handleSave = () => {
+    if (isDraftOverMax) {
+      return;
+    }
+    if (isDraftDirty) {
+      const added = draftValue.find(
+        item => !valueAtOpen.some(openItem => openItem.id === item.id),
+      );
+      const removed = valueAtOpen.find(
+        item => !draftValue.some(draftItem => draftItem.id === item.id),
+      );
+      const lastDraftChange = lastDraftChangeRef.current;
+      const lastChangeIsNet =
+        lastDraftChange != null &&
+        (lastDraftChange.type === 'remove'
+          ? valueAtOpen.some(item => item.id === lastDraftChange.item.id) &&
+            !draftValue.some(item => item.id === lastDraftChange.item.id)
+          : draftValue.some(item => item.id === lastDraftChange.item.id) &&
+            !valueAtOpen.some(item => item.id === lastDraftChange.item.id));
+      let change: SheetDraftChange<T> | null = null;
+      if (lastChangeIsNet) {
+        change = lastDraftChange;
+      } else if (lastDraftChange?.type === 'remove' && removed != null) {
+        change = {item: removed, type: 'remove'};
+      } else if (added != null) {
+        const type: SheetDraftChange<T>['type'] =
+          lastDraftChange?.item.id === added.id &&
+          lastDraftChange.type === 'create'
+            ? 'create'
+            : 'add';
+        change = {item: added, type};
+      } else if (removed != null) {
+        change = {item: removed, type: 'remove'};
+      }
+      if (change != null) {
+        onCommit([...draftValue], change);
+      }
+    }
+    onCloseSheet();
+  };
 
   const searchLabel = t('@astryx.tokenizer.search', {label});
   const noResultsTitle =
     emptySearchResultsText ?? t('@astryx.typeahead.emptySearchResults');
+  const listDragProps = useDismissSearchOnTouchDrag(() => [searchRef.current]);
 
   return (
     <div {...stylex.props(styles.sheetBody)}>
@@ -1045,6 +1107,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
           data-testid="mobile-tokenizer-list"
           data-rendered-count={renderedItems.length}
           data-total-count={visibleItems.length}
+          {...listDragProps}
           onScroll={event => {
             const list = event.currentTarget;
             const distanceFromBottom =
@@ -1074,12 +1137,21 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
                 variant="secondary"
                 size="lg"
                 onClick={() => {
-                  if (onAdd(createItem)) {
-                    announce(
-                      t('@astryx.tokenizer.tokenAdded', {label: trimmedQuery}),
-                    );
-                  }
+                  const item: SearchableItem = {
+                    id: trimmedQuery,
+                    label: trimmedQuery,
+                  };
+                  const createdItem = item as T;
+                  setDraftValue(current => [...current, createdItem]);
+                  lastDraftChangeRef.current = {
+                    item: createdItem,
+                    type: 'create',
+                  };
+                  announce(
+                    t('@astryx.tokenizer.tokenAdded', {label: trimmedQuery}),
+                  );
                   handleQueryChange('');
+                  searchRef.current?.focus();
                 }}
               />
             </div>
@@ -1100,14 +1172,16 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
                     return;
                   }
                   if (isSelected) {
-                    if (onRemove(item)) {
-                      announce(
-                        t('@astryx.tokenizer.tokenRemoved', {
-                          label: item.label,
-                        }),
-                      );
-                    }
-                  } else if (onAdd(item)) {
+                    setDraftValue(current =>
+                      current.filter(selected => selected.id !== item.id),
+                    );
+                    lastDraftChangeRef.current = {item, type: 'remove'};
+                    announce(
+                      t('@astryx.tokenizer.tokenRemoved', {label: item.label}),
+                    );
+                  } else {
+                    setDraftValue(current => [...current, item]);
+                    lastDraftChangeRef.current = {item, type: 'add'};
                     announce(
                       t('@astryx.tokenizer.tokenAdded', {label: item.label}),
                     );
@@ -1139,37 +1213,39 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
           })}
         </div>
       )}
-      {isQueryEmpty && (
-        <div {...stylex.props(styles.footer)}>
-          <Button
-            ref={clearAllRef}
-            label={t('@astryx.tokenizer.clearAll')}
-            variant="secondary"
-            size="lg"
-            isDisabled={value.length === 0}
-            // With a tooltip, Button's disabled mode is `aria-disabled`: the
-            // action keeps its focus order and says why it does nothing
-            // (`spec:AST-085` FR1), instead of leaving the tab order as a
-            // natively disabled button does (FR24).
-            tooltip={
-              value.length === 0
-                ? t('@astryx.tokenizer.nothingToClear')
-                : undefined
-            }
-            onClick={() => setIsClearConfirmationOpen(true)}
-            xstyle={styles.footerAction}
-          />
-          <Button
-            label={t('@astryx.tokenizer.done')}
-            variant="primary"
-            size="lg"
-            onClick={onRequestClose}
-            xstyle={styles.footerAction}
-          />
-        </div>
-      )}
+      <div {...stylex.props(styles.footer)}>
+        <Button
+          ref={clearAllRef}
+          label={t('@astryx.tokenizer.clearAll')}
+          variant="secondary"
+          size="lg"
+          isDisabled={draftValue.length === 0}
+          tooltip={
+            draftValue.length === 0
+              ? t('@astryx.tokenizer.nothingToClear')
+              : undefined
+          }
+          onClick={() => setIsClearConfirmationOpen(true)}
+          xstyle={styles.footerAction}
+        />
+        <Button
+          label={t('@astryx.tokenizer.save')}
+          variant="primary"
+          size="lg"
+          isDisabled={isDraftOverMax}
+          tooltip={
+            isDraftOverMax
+              ? t('@astryx.tokenizer.selectionLimit', {
+                  count: maxEntries ?? 0,
+                })
+              : undefined
+          }
+          onClick={handleSave}
+          xstyle={styles.footerAction}
+        />
+      </div>
       {isClearConfirmationOpen && (
-        <AlertDialog
+        <MobileSheetConfirmation
           isOpen
           onOpenChange={next => {
             if (!next) {
@@ -1178,10 +1254,39 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
           }}
           title={t('@astryx.tokenizer.clearAllTitle')}
           description={t('@astryx.tokenizer.clearAllDescription', {label})}
+          cancelLabel={t('@astryx.alertDialog.cancel')}
           actionLabel={t('@astryx.tokenizer.clearSelection')}
           onAction={() => {
-            onClearAll();
+            const lastItem = draftValue[draftValue.length - 1];
+            if (lastItem != null) {
+              setDraftValue([]);
+              lastDraftChangeRef.current = {
+                item: lastItem,
+                type: 'remove',
+              };
+            }
             closeClearConfirmation(true);
+          }}
+        />
+      )}
+      {isDiscardConfirmationOpen && (
+        <MobileSheetConfirmation
+          isOpen
+          onOpenChange={next => {
+            if (!next) {
+              closeDiscardConfirmation();
+            }
+          }}
+          title={t('@astryx.tokenizer.discardChangesTitle')}
+          description={t('@astryx.tokenizer.discardChangesDescription', {
+            label,
+          })}
+          cancelLabel={t('@astryx.tokenizer.keepEditing')}
+          actionLabel={t('@astryx.tokenizer.discardChanges')}
+          onAction={() => {
+            shouldRestoreDraftFocusRef.current = false;
+            setIsDiscardConfirmationOpen(false);
+            onCloseSheet();
           }}
         />
       )}

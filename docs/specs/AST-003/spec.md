@@ -29,7 +29,7 @@ affects_consumer_docs: []
 {
   "scope": "global",
   "triggers": {
-    "layering": ["FR10", "DEC-1", "DEC-2", "DEC-3", "DEC-5"]
+    "layering": ["FR4", "FR10", "DEC-1", "DEC-2", "DEC-3", "DEC-5", "DEC-6"]
   }
 }
 ```
@@ -69,9 +69,12 @@ browsers receive a usable reduced fallback, not equivalent behavior.
 - **FR3 — Blocking owners consume without closing.** A blocking owner prevents a
   channel from reaching an owner behind it. Required Dialog is the representative
   Escape/platform case.
-- **FR4 — Passive dependents never shield owners.** Tooltip is passive. It does
-  not win or block dismissal and disappears as a consequence when its associated
-  owner or trigger interaction closes.
+- **FR4 — Passive dependents never shield owners.** An unpinned Tooltip is
+  passive. It does not win or block dismissal and disappears as a consequence
+  when its associated owner or trigger interaction closes. A Tooltip or
+  HoverCard that a press pinned open (`component:Tooltip` FR9,
+  `component:HoverCard` FR9) is an active owner: it takes Escape first and
+  closes, and the owner beneath it stays open for that press (DEC-6).
 - **FR5 — Associations are explicit.** Every active or blocking owner records an
   optional parent owner and an interaction-branch root. A passive dependent
   records its associated owner or trigger without creating an owner node or
@@ -187,6 +190,8 @@ Current `main` does not satisfy this spec completely:
 
 - the stack has `close` and `block` but no passive role; Tooltip currently
   consumes Escape ahead of associated owners;
+- no Tooltip or HoverCard pins open on a press yet (`component:Tooltip` FR9,
+  `component:HoverCard` FR9);
 - no shared owner/branch association graph or outside-branch resolver exists;
 - DropdownMenuSubMenu has a local parent-close chain, but outside channels do not
   consume shared branch identity;
@@ -205,8 +210,8 @@ Current `main` does not satisfy this spec completely:
    and passive roles plus parent-owner and branch-root association. Add pure
    eligible-owner and outside-branch resolvers. Preserve the current
    Escape/platform contract for existing active/blocking members while migrating.
-2. **Eligibility migration.** Make Tooltip passive and update Tooltip-over-owner
-   tests. Keep HoverCard active because it can own interactive content. Migrate
+2. **Eligibility migration.** Make an unpinned Tooltip passive and a pinned
+   Tooltip active, and update Tooltip-over-owner tests. Keep HoverCard active because it can own interactive content. Migrate
    CommandPalette and the local Escape implementations tracked by
    `family:overlay-dismissal` onto eligible-owner delivery.
 3. **Branch migration.** Project DropdownMenuContext's root/submenu chain into a
@@ -233,21 +238,22 @@ Interaction modality continues to follow `architecture:interaction-modality`.
 
 ## Verification
 
-| Contract  | Verification                                               | Representative states                                                                           | Mutation or failure expectation                                                 |
-| --------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| FR1–FR6   | Pure registry/resolver tests plus family interaction tests | active, blocking, passive Tooltip, visual-only, controlled owner                                | Passive surface wins, blocker leaks, or wrong owner closes                      |
-| FR7–FR10  | Branch resolver tests and real-browser outside interaction | root menu with two submenu levels; parent + child Popover; associated trigger                   | Outside root leaves submenu open, or child-only outside closes parent           |
-| FR11–FR14 | Gesture-counter and browser event-order tests              | native light dismiss before/after click; menu button; hover-open; touch; backdrop; swipe        | Same gesture reopens any associated trigger or exposed hover reopens panel      |
-| FR15–FR20 | Chromium/WebKit native host tests                          | Toast at root; Toast through one/two modals; CommandPalette above modal; ordinary local Popover | Global surface is behind/inert, loses state, or ordinary overlay becomes global |
-| FR21–FR23 | Supported/unsupported browser matrix and public-doc checks | anchor/fixed/custom; auto/manual; explicit controls; absent feature APIs                        | Docs promise equivalence or reduced fallback is unusable                        |
-| IR1–IR3   | API/type tests and mutation tests for resolvers/claims     | one-at-a-time channel versus branch channel                                                     | One topmost query is reused for outside branches or timestamps replace identity |
-| IR4, IR5  | Public-surface snapshot and atomic change review           | local Popover, global Toast, global CommandPalette                                              | Generic global prop appears or unrelated behaviors are coupled in one change    |
+| Contract  | Verification                                               | Representative states                                                                                        | Mutation or failure expectation                                                                                  |
+| --------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| FR1–FR6   | Pure registry/resolver tests plus family interaction tests | active, blocking, passive Tooltip, pinned Tooltip and HoverCard over a Dialog, visual-only, controlled owner | Passive surface wins, a pinned surface lets Escape reach the owner beneath, blocker leaks, or wrong owner closes |
+| FR7–FR10  | Branch resolver tests and real-browser outside interaction | root menu with two submenu levels; parent + child Popover; associated trigger                                | Outside root leaves submenu open, or child-only outside closes parent                                            |
+| FR11–FR14 | Gesture-counter and browser event-order tests              | native light dismiss before/after click; menu button; hover-open; touch; backdrop; swipe                     | Same gesture reopens any associated trigger or exposed hover reopens panel                                       |
+| FR15–FR20 | Chromium/WebKit native host tests                          | Toast at root; Toast through one/two modals; CommandPalette above modal; ordinary local Popover              | Global surface is behind/inert, loses state, or ordinary overlay becomes global                                  |
+| FR21–FR23 | Supported/unsupported browser matrix and public-doc checks | anchor/fixed/custom; auto/manual; explicit controls; absent feature APIs                                     | Docs promise equivalence or reduced fallback is unusable                                                         |
+| IR1–IR3   | API/type tests and mutation tests for resolvers/claims     | one-at-a-time channel versus branch channel                                                                  | One topmost query is reused for outside branches or timestamps replace identity                                  |
+| IR4, IR5  | Public-surface snapshot and atomic change review           | local Popover, global Toast, global CommandPalette                                                           | Generic global prop appears or unrelated behaviors are coupled in one change                                     |
 
 ### Completion criteria
 
 This spec is complete only when:
 
-- Tooltip is passive in Escape/platform and outside-branch coordination;
+- an unpinned Tooltip is passive in Escape/platform and outside-branch
+  coordination, and a pinned Tooltip or HoverCard takes Escape first;
 - eligible-owner and associated-branch operations are shared and adopted by all
   members named by `family:overlay-dismissal` for their relevant channels;
 - outside a dropdown/menu root closes its entire open submenu cascade, while
@@ -273,8 +279,9 @@ This spec is complete only when:
 **Decider:** `cixzhang`, `2026-08-30`
 
 Escape and platform close select the topmost eligible active or blocking owner,
-not the topmost visible or registered surface. Tooltip is passive and cannot
-shield a Popover, menu, Dialog, or associated interactive element beneath it.
+not the topmost visible or registered surface. An unpinned Tooltip is passive
+and cannot shield a Popover, menu, Dialog, or associated interactive element
+beneath it; a pinned one is the person's own interaction (DEC-6).
 
 Rejected: letting every visible transient layer consume one Escape. That makes
 supplementary information block the interaction the user is trying to dismiss.
@@ -328,6 +335,18 @@ not equivalent positioning, stacking, association, or dismissal behavior.
 
 Rejected: describing the current `display` fallback as a polyfill. It does not
 implement the missing browser systems.
+
+### DEC-6 — A pinned layer is the person's own interaction
+
+**Reference:** `spec:AST-003/DEC-6`
+**Decider:** `cixzhang`, `2026-10-31`
+
+A Tooltip or HoverCard that a press pinned open is something the person asked
+to keep, so it is an active owner and Escape closes it before the owner beneath
+it. A Tooltip that only previews on hover or focus stays passive.
+
+Rejected: keeping every Tooltip passive, which lets Escape close a Dialog behind
+a tip the person pinned.
 
 ## Open questions
 

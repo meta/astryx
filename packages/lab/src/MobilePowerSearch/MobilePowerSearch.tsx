@@ -5,18 +5,15 @@
 /**
  * @file MobilePowerSearch.tsx
  * @input Core PowerSearch config, filters and onChange (the same props as
- *   @astryxdesign/core PowerSearch); public @astryxdesign/core components only
- *   (BottomSheet, Button, Field, Heading, Icon, List,
- *   RadioList, Text, TextInput, Token, Tooltip hooks, i18n, hooks —
- *   useAnnounce for every announcement — utils, Layout container-padding
- *   styles)
+ *   @astryxdesign/core PowerSearch); public Core primitives and private Lab
+ *   mobile-sheet confirmation and search-drag dismissal owners
  * @output Exports MobilePowerSearch — Lab prototype of the touch PowerSearch
  *   flow: the whole field is one "Manage filters" trigger with display-only
- *   tokens, a Filters sheet with chevron rows, Add filter and sticky
- *   Clear all / Done, and a field → operator → value drill-down whose edit
- *   sheet holds Cancel / Apply / Remove; the steps are sibling BottomSheets
- *   that replace one another on a same-update switch (one scrim, the
- *   entering step above the leaving one)
+ *   tokens, a Filters sheet with editable rows and direct remove actions, Add
+ *   filter and sticky Clear all / Done, and a field → operator → value
+ *   drill-down whose edit sheet holds Cancel / Apply; forward navigation stacks each step
+ *   above the one that opened it, and dismissing the current sheet reveals the
+ *   retained previous step
  * @position Lab (canary) stack layer 1: validates the touch design before any
  *   Core promotion. The caller chooses it explicitly
  *   (`isTouch ? MobilePowerSearch : PowerSearch`); there is no pointer
@@ -34,32 +31,35 @@
  * - announcements made while a sheet is open are delivered inside that
  *   sheet's dialog by `useAnnounce`, called from a `SheetAnnouncer` rendered
  *   in each step (spec AST-086 FR14): the shared page-body channel is not
- *   exposed while a native modal dialog is open. Empty-result and
- *   unavailable messages are spoken from their rendered element, once per
- *   occasion; Clear all's outcome and a result count that changes during
- *   the flow's exit are spoken once focus is back on the trigger;
+ *   exposed while a native modal dialog is open. Visual EmptyStates mount only
+ *   while their step is open; empty-result and unavailable messages are spoken
+ *   from their rendered element, once per occasion; Clear all announces after
+ *   its confirmation closes inside the still-open Filters sheet;
  * - no theming contract: no `power-search` theme target or selectors;
  * - `components[type].Token` overrides receive Core's PowerSearchTokenProps;
  *   the built-in token renders Core `Token` directly, with the value text
- *   the Filters rows share; `timezoneID` is accepted for API parity and
- *   changes no date value (dates follow Core's semantics, below);
+ *   the Filters rows share and date values formatted in `timezoneID`;
  * - fields whose every operator is `nested` are left out with a development
  *   warning; `nested` has no sheet editor yet (Core's built-in nested editor
  *   is not exported);
- * - dates follow Core PowerSearch's semantics (`component:PowerSearch`
- *   DEC-3, FR11, FR12): a `date_absolute` is the UTC midnight of the chosen
- *   day, which the date editor reads and writes as that UTC day; the token
- *   and the Filters row show it as the Core token does (the day in the
- *   browser's zone, no time); `isDateOnly: false` gets the same date-only
- *   editor, and `date_relative` is a row list rather than a Selector;
- * - Clear all removes every filter, read-only ones included, reported as one
- *   `remove` at the last index, as the Core field's clear control does;
+ * - date-only and date-range values use inline Calendars in `timezoneID`,
+ *   `isDateOnly: false` uses a large date-and-time input, and `date_relative`
+ *   remains a row list;
+ * - Clear all asks for confirmation, removes editable filters while preserving
+ *   read-only ones, and keeps the Filters sheet open for continued editing;
+ * - every removable Filters row, including one-tap boolean filters, uses the
+ *   same trailing remove button instead of a selected-state indicator; when
+ *   no filters exist, the centered Add filter is the only visible action;
+ * - Add filter leaves its search input unfocused until the user chooses it, so
+ *   opening the sheet does not summon the software keyboard;
+ * - a value editor that is the sheet's only section sits directly on the sheet
+ *   surface; muted section containers distinguish only multi-section editors;
  * - a filter whose field or operator the config no longer knows lists by its
- *   raw keys and its step is the unavailable state, whose Remove is the way
- *   out; rows and tokens are keyed by filter identity, so a controlled
- *   reorder or a removal above the focused row keeps focus where it was, and
- *   a removed focused control hands focus to the nearest remaining button
- *   row, else the sheet's first control;
+ *   raw keys and remains directly removable from the Filters row; rows and
+ *   tokens are keyed by filter identity, so controlled reorder and removal
+ *   keep focus stable or move it to the nearest remaining action;
+ * - the scroll viewport reaches the sheet edge so its scrollbar does too;
+ *   padded inner content keeps list text aligned with the fixed header;
  * - the sheets pad their own content (`padding={0}` on BottomSheet); each
  *   sheet body publishes that padding as container padding so its
  *   `edge="bleed"` lists run edge to edge with row text on the body's inset.
@@ -84,11 +84,13 @@ import React, {
   useRef,
   useState,
   type ReactNode,
+  type SVGProps,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
+import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {
   Field,
   inputStatusBorderStyles,
@@ -100,6 +102,7 @@ import {
 } from '@astryxdesign/core/Field';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Icon, renderIconSlot, type IconType} from '@astryxdesign/core/Icon';
+import {IconButton} from '@astryxdesign/core/IconButton';
 import {containerPaddingInlineVarStyles} from '@astryxdesign/core/Layout/padding.stylex';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {resolveOperatorLabel} from '@astryxdesign/core/PowerSearch';
@@ -132,19 +135,21 @@ import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {
   colorVars,
   fontWeightVars,
+  radiusVars,
   sizeVars,
   spacingVars,
   typeScaleVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {isImeKeyEvent, isRenderable, rtlStyles} from '@astryxdesign/core/utils';
+import {MobileSheetConfirmation} from '../internal/MobileSheetConfirmation';
+import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
 import {MobilePowerSearchValueEditor} from './MobilePowerSearchValueEditor';
 import {
   createContentSearchSource,
   createFilterIdentities,
   fieldMatchesQuery,
   filterSignature,
-  formatDateDay,
   isSupportedOperator,
   nearestEditableIndex,
   resolveFilterIdentityIndex,
@@ -198,7 +203,7 @@ export interface MobilePowerSearchProps extends Omit<
   /** Validation status. */
   status?: InputStatus;
   /** How the status message is placed. @default 'attached' */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusVariant | 'tooltip';
   /** Max display length for token values. @default 40 */
   maxTokenLength?: number;
   /** Max suggestions in string and entity value typeaheads. @default 10 */
@@ -231,6 +236,22 @@ export interface MobilePowerSearchProps extends Omit<
 // =============================================================================
 // Styles
 // =============================================================================
+
+function PlusIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}>
+      <path d="M5 12h14" />
+      <path d="M12 5v14" />
+    </svg>
+  );
+}
 
 const sizeStyles = stylex.create({
   sm: {minHeight: sizeVars['--size-element-sm']},
@@ -338,6 +359,10 @@ const styles = stylex.create({
     minHeight: '100%',
     isolation: 'isolate',
   },
+  sheetWithFixedFooter: {
+    height: '100%',
+    overflow: 'hidden',
+  },
   header: {
     position: 'sticky',
     insetBlockStart: 0,
@@ -376,6 +401,20 @@ const styles = stylex.create({
     paddingInline: spacingVars['--spacing-4'],
     paddingBlockEnd: spacingVars['--spacing-4'],
   },
+  scrollViewport: {
+    flexGrow: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    overscrollBehaviorY: 'contain',
+  },
+  scrollContent: {
+    minHeight: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-4'],
+    paddingInline: spacingVars['--spacing-4'],
+    paddingBlockEnd: spacingVars['--spacing-4'],
+  },
   footer: {
     position: 'sticky',
     insetBlockEnd: 0,
@@ -388,18 +427,37 @@ const styles = stylex.create({
     paddingInline: spacingVars['--spacing-4'],
     backgroundColor: colorVars['--color-background-surface'],
   },
-  footerActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
-    marginInlineStart: 'auto',
-  },
   footerSoleAction: {
     flexGrow: 1,
+  },
+  footerEqualAction: {
+    flexGrow: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    minHeight: 44,
+  },
+  fixedFooter: {
+    position: 'relative',
+    insetBlockEnd: 'auto',
+    flexShrink: 0,
   },
   empty: {
     paddingBlock: spacingVars['--spacing-6'],
     textAlign: 'center',
+  },
+  emptyState: {
+    flexGrow: 1,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  controlSection: {
+    padding: spacingVars['--spacing-3'],
+    borderRadius: radiusVars['--radius-container'],
+    backgroundColor: colorVars['--color-background-muted'],
+  },
+  trailingControlRow: {
+    flexDirection: 'row-reverse',
   },
   rowValue: {
     fontWeight: fontWeightVars['--font-weight-bold'],
@@ -546,13 +604,7 @@ function SheetEmptyMessage({
 // Token
 // =============================================================================
 
-/**
- * Formats a filter's value for a token or a row with the formatter the
- * Filters rows share. A `date_absolute` reads as the Core PowerSearch token
- * shows it (`formatDateDay`: a day in the browser's zone, no time), so a Lab
- * token or row and a Core token read the same; everything else goes through
- * Core's `formatFilterValue`.
- */
+/** Formats the value text shared by trigger tokens and Filters rows. */
 function formatValueText(
   config: InternalConfig,
   operator: PowerSearchOperator,
@@ -562,12 +614,6 @@ function formatValueText(
   locale: string,
   timezoneID: string | undefined,
 ): string {
-  if (
-    operator.value.type === 'date_absolute' &&
-    filter.value.type === 'date_absolute'
-  ) {
-    return formatDateDay(filter.value.unixSeconds, locale);
-  }
   return formatFilterValue(
     config,
     operator.value,
@@ -649,9 +695,9 @@ function MobilePowerSearchToken({
 /**
  * Lab prototype of the touch PowerSearch flow. The outer field keeps active
  * filters as display-only tokens and acts as one sheet trigger. The Filters
- * sheet lists selected filters as chevron rows with Add filter in its header
- * and Clear all plus Done in its sticky footer; opening a row edits that
- * filter in a sheet with Cancel, Apply and Remove. Add filter opens directly
+ * sheet lists selected filters as editable rows with direct remove actions,
+ * Add filter in its header, and Clear all plus Done in its sticky footer;
+ * opening a row edits that filter in a sheet with Cancel and Apply. Add filter
  * when no filter exists and, when the config names a content-search field,
  * carries that search with inline suggestions.
  */
@@ -717,14 +763,10 @@ export function MobilePowerSearch({
   // changed the filters — is spoken in the commit that shows the next step,
   // so it lands in that step's dialog rather than the one about to close.
   const pendingAnnouncementRef = useRef<string | null>(null);
-  // What to speak once the flow has fully closed and focus is back on the
-  // trigger: that Clear all removed every filter, and a result count that
-  // changed during the exit. The closing dialog stays modal through its exit,
-  // so neither its region nor the page-body channel is heard before then.
-  const afterCloseRef = useRef<{
-    isCleared: boolean;
-    resultCount: string | null;
-  }>({isCleared: false, resultCount: null});
+  // Clear all closes only its confirmation dialog; announce the result after
+  // that alertdialog has gone so the message lands in the still-open Filters
+  // sheet, coalesced with a result-count update from the same commit.
+  const pendingClearAnnouncementRef = useRef(false);
 
   const triggerLabel = labelFromProps ?? 'Manage filters';
   const fieldPlaceholder = placeholderFromProps ?? 'Filters…';
@@ -754,6 +796,7 @@ export function MobilePowerSearch({
   const endLaneRef = useRef<HTMLDivElement>(null);
   const managerAddButtonRef = useRef<HTMLButtonElement>(null);
   const contentSearchRef = useRef<HTMLDivElement>(null);
+  const fieldSearchRef = useRef<HTMLDivElement>(null);
   const contentSuggestionListRef = useRef<HTMLUListElement>(null);
   const managerRowsRef = useRef(new Map<number, HTMLLIElement>());
   const fieldRowsRef = useRef(new Map<string, HTMLLIElement>());
@@ -765,18 +808,12 @@ export function MobilePowerSearch({
   const pendingMutationFocusRef = useRef(false);
   // Where focus was inside the Filters or Add filter sheet — the sheet and
   // the index among its button rows — read on every focus change there, so a
-  // controlled update that unmounts the focused control (a filter's row, a
-  // dropped field's row, Clear all gone with the last filter) can put focus
-  // on the nearest remaining row by that index, else the sheet's first
-  // control, else the sheet panel. A removed element fires no blur, so the
-  // position is what the effect below reads.
+  // controlled update that unmounts the focused control can put focus on the
+  // nearest remaining row, else the sheet's first control or panel.
   const lastSheetFocusRef = useRef<{
     sheet: 'manage' | 'fields';
     rowIndex: number | null;
   } | null>(null);
-  // One index space for the record and the recovery: rows that are buttons
-  // (a plain read-only row is passed over, as the Remove and Apply/Cancel
-  // rules pass it over), in document order.
   const buttonRowsOf = (panel: HTMLElement): HTMLElement[] =>
     Array.from(panel.querySelectorAll<HTMLLIElement>('li'))
       .map(row => row.querySelector<HTMLElement>('button'))
@@ -796,8 +833,12 @@ export function MobilePowerSearch({
     },
     [],
   );
+  // Direct row removal returns focus to the next row's trailing remove action,
+  // avoiding the clipped full-row focus ring that appears as a black line.
+  const pendingRemovalFocusRef = useRef(false);
 
   const [step, setStep] = useState<SheetStep | null>(null);
+  const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   stepRef.current = step;
   // A field that becomes disabled cannot keep its flow open, and must not
   // reopen it when re-enabled. Adjusted in the render that sees the change,
@@ -805,8 +846,13 @@ export function MobilePowerSearch({
   const [wasDisabled, setWasDisabled] = useState(isDisabled);
   if (isDisabled !== wasDisabled) {
     setWasDisabled(isDisabled);
-    if (isDisabled && step != null) {
-      setStep(null);
+    if (isDisabled) {
+      if (step != null) {
+        setStep(null);
+      }
+      if (isClearConfirmationOpen) {
+        setIsClearConfirmationOpen(false);
+      }
     }
   }
   // The draft outlives a step change on purpose: the replace handoff keeps
@@ -817,10 +863,9 @@ export function MobilePowerSearch({
   const [contentQuery, setContentQuery] = useState('');
 
   const isInteractive = !isDisabled && !isReadOnly;
-  // Whether a Filters row is a button: the field interactive and the filter
-  // not read-only. The row opens the value step — the editor for its
-  // operator's value type, or for a filter the config no longer knows the
-  // unavailable state, whose Remove is the way out.
+  // Whether a Filters row is a button: the field is interactive and the filter
+  // is not read-only. Known filters open the value editor; stale filters open
+  // an unavailable state, while their trailing × remains the removal path.
   const isRowButton = useCallback(
     (filter: PowerSearchFilter): boolean => !filter.isReadOnly && isInteractive,
     [isInteractive],
@@ -844,6 +889,11 @@ export function MobilePowerSearch({
 
   // ------------------------------------------------------------------ focus --
 
+  const fieldPickerDragProps = useDismissSearchOnTouchDrag(() => [
+    contentSearchRef.current?.querySelector('input'),
+    fieldSearchRef.current?.querySelector('input'),
+  ]);
+
   const focusPendingSheetTarget = useCallback(() => {
     const target = pendingSheetFocusRef.current;
     if (target == null) {
@@ -857,7 +907,7 @@ export function MobilePowerSearch({
     // Add filter's fallback: a controlled update may have removed the field
     // whose row opened the step, or the content-search field itself; the
     // sheet's first focusable control then takes focus — the search field
-    // when one shows, else the first field row, else Back.
+    // when one shows, else the first field row, else the first button.
     const firstFieldsControl = () => {
       const panel = fieldsSheetRef.current;
       return (
@@ -882,10 +932,9 @@ export function MobilePowerSearch({
       )?.focus({preventScroll: true});
       return;
     }
-    // The row the step came from, followed across a controlled reorder or
-    // clone; when a controlled update removed it, or left two filters it
-    // could be, the nearest remaining row that is a button, as after a
-    // removal; else Add filter.
+    // Follow the row across controlled reorder or clone. If it disappeared,
+    // use the nearest remaining editable row, else Add filter. A removal puts
+    // focus on the next row's × action rather than the invisible row button.
     const index =
       resolveFilterIdentityIndex(
         latestFiltersRef.current,
@@ -898,12 +947,12 @@ export function MobilePowerSearch({
         target.preferredIndex,
         isRowButton,
       );
-    const rowButton =
-      index == null
-        ? null
-        : managerRowsRef.current
-            .get(index)
-            ?.querySelector<HTMLButtonElement>('button');
+    const row = index == null ? null : managerRowsRef.current.get(index);
+    const rowButton = pendingRemovalFocusRef.current
+      ? (row?.querySelector<HTMLButtonElement>('[aria-label^="Remove "]') ??
+        row?.querySelector<HTMLButtonElement>('button'))
+      : row?.querySelector<HTMLButtonElement>('button');
+    pendingRemovalFocusRef.current = false;
     (rowButton ?? managerAddButtonRef.current)?.focus({preventScroll: true});
   }, [isRowButton]);
 
@@ -1054,9 +1103,7 @@ export function MobilePowerSearch({
       fieldPickerOriginRef.current = 'trigger';
       setFieldQuery('');
       setContentQuery('');
-      pendingSheetFocusRef.current = hasContentSearch
-        ? {type: 'content-search'}
-        : null;
+      pendingSheetFocusRef.current = null;
       setStep('fields');
       return;
     }
@@ -1088,11 +1135,9 @@ export function MobilePowerSearch({
     fieldPickerOriginRef.current = 'manage';
     setFieldQuery('');
     setContentQuery('');
-    pendingSheetFocusRef.current = hasContentSearch
-      ? {type: 'content-search'}
-      : null;
+    pendingSheetFocusRef.current = null;
     setStep('fields');
-  }, [hasContentSearch, isInteractive]);
+  }, [isInteractive]);
 
   const queueManagerAddFocus = useCallback(() => {
     pendingSheetFocusRef.current = {type: 'manager-add'};
@@ -1185,9 +1230,26 @@ export function MobilePowerSearch({
       if (operator == null) {
         return;
       }
+      if (operator.value.type === 'empty' && operators.length === 1) {
+        const nextFilter: PowerSearchFilter = {
+          field: field.key,
+          operator: operator.key,
+          value: {type: 'empty'},
+        };
+        pendingSheetFocusRef.current = {
+          type: 'manager-filter',
+          sourceFilter: nextFilter,
+          sourceSignature: filterSignature(nextFilter),
+          preferredIndex: filters.length,
+        };
+        pendingMutationFocusRef.current = true;
+        onChange([...filters, nextFilter], 'add', filters.length);
+        setStep('manage');
+        return;
+      }
       openCreateEditor(field, operator);
     },
-    [config, isInteractive, openCreateEditor],
+    [config, filters, isInteractive, onChange, openCreateEditor],
   );
 
   const handleContentSuggestionSelect = useCallback(
@@ -1307,32 +1369,43 @@ export function MobilePowerSearch({
           preferredIndex: nextIndex,
         };
       }
+      pendingRemovalFocusRef.current = true;
       pendingMutationFocusRef.current = true;
       onChange(nextFilters, 'remove', index);
-      // The Core token's × announces the same phrase; spoken once the Filters
-      // sheet is the open dialog.
-      pendingAnnouncementRef.current = t('@astryx.tokenizer.tokenRemoved', {
+      const message = t('@astryx.tokenizer.tokenRemoved', {
         label: describeFilter(filter),
       });
+      // A direct Filters-row removal stays in the same sheet, so announce
+      // immediately there. A custom editor that removes while returning to
+      // Filters defers until the step handoff has completed.
+      if (stepRef.current === 'manage') {
+        announce(message);
+      } else {
+        pendingAnnouncementRef.current = message;
+      }
     },
-    [describeFilter, filters, isInteractive, isRowButton, onChange, t],
+    [
+      announce,
+      describeFilter,
+      filters,
+      isInteractive,
+      isRowButton,
+      onChange,
+      t,
+    ],
   );
 
-  // Clear all keeps the Core PowerSearch semantics (DEC-3): every filter
-  // goes, read-only ones included, reported as a `remove` at the last index —
-  // the change the Core field's clear control commits.
+  // Clear all is a management action: confirm it, remove only filters the user
+  // can edit, preserve read-only filters, and keep the sheet open.
   const handleClearAll = useCallback(() => {
-    if (filters.length === 0) {
+    const kept = filters.filter(filter => filter.isReadOnly);
+    const firstRemovedIndex = filters.findIndex(filter => !filter.isReadOnly);
+    if (firstRemovedIndex < 0) {
       return;
     }
-    onChange([], 'remove', filters.length - 1);
-    // Clear all closes the flow. The Filters dialog stays modal through its
-    // exit, hiding both its own region and the page-body channel, so the
-    // outcome is spoken once the dialog has gone and focus is back on the
-    // trigger.
-    afterCloseRef.current.isCleared = true;
-    closeSheet();
-  }, [closeSheet, filters, onChange]);
+    pendingClearAnnouncementRef.current = true;
+    onChange(kept, 'remove', firstRemovedIndex);
+  }, [filters, onChange]);
 
   const handleOperatorSelect = useCallback((operator: PowerSearchOperator) => {
     setDraft(current => {
@@ -1433,31 +1506,30 @@ export function MobilePowerSearch({
     [handleStepOpenChange],
   );
   const handleFieldsOpenChange = useCallback(
-    (isOpen: boolean) => handleStepOpenChange('fields', isOpen),
-    [handleStepOpenChange],
+    (isOpen: boolean) => {
+      if (isOpen || stepRef.current !== 'fields') {
+        return;
+      }
+      if (fieldPickerOriginRef.current === 'manage') {
+        queueManagerAddFocus();
+        setStep('manage');
+      } else {
+        setStep(null);
+      }
+    },
+    [queueManagerAddFocus],
   );
   const handleValueOpenChange = useCallback(
-    (isOpen: boolean) => handleStepOpenChange('value', isOpen),
-    [handleStepOpenChange],
+    (isOpen: boolean) => {
+      if (!isOpen && stepRef.current === 'value') {
+        returnFromValue();
+      }
+    },
+    [returnFromValue],
   );
 
   const handleFocusWithin = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
-      // The flow returns focus to the trigger only after its exit completes:
-      // the dialogs have closed and the page-body channel is exposed again.
-      // One announcement — two in one tick would replace each other in the
-      // single polite region.
-      if (step == null) {
-        const {isCleared, resultCount} = afterCloseRef.current;
-        afterCloseRef.current = {isCleared: false, resultCount: null};
-        if (isCleared && resultCount != null) {
-          announceOnPage(`All filters removed. ${resultCount}`);
-        } else if (isCleared) {
-          announceOnPage('All filters removed');
-        } else if (resultCount != null) {
-          announceOnPage(resultCount);
-        }
-      }
       if (
         !(event.relatedTarget instanceof Node) ||
         !event.currentTarget.contains(event.relatedTarget)
@@ -1465,7 +1537,7 @@ export function MobilePowerSearch({
         onFocus?.(event);
       }
     },
-    [announceOnPage, onFocus, step],
+    [onFocus],
   );
   const handleBlurWithin = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
@@ -1513,18 +1585,24 @@ export function MobilePowerSearch({
   // acquires no resource, so there is no cleanup.
   const announcedResultCountRef = useRef(resultCountText);
   useEffect(() => {
+    if (isClearConfirmationOpen || !pendingClearAnnouncementRef.current) {
+      return;
+    }
+    pendingClearAnnouncementRef.current = false;
+    announcedResultCountRef.current = resultCountText;
+    announce(
+      resultCountText == null
+        ? 'Editable filters removed'
+        : `Editable filters removed. ${resultCountText}`,
+    );
+  }, [announce, isClearConfirmationOpen, resultCountText]);
+
+  useEffect(() => {
     if (resultCountText === announcedResultCountRef.current) {
       return;
     }
     announcedResultCountRef.current = resultCountText;
     if (resultCountText == null) {
-      return;
-    }
-    // A change that lands while the flow is closing — Clear all's, whose
-    // commit also ends the flow — waits for the trigger focus with the other
-    // after-close messages, since the dialog is still modal through its exit.
-    if (stepRef.current == null && afterCloseRef.current.isCleared) {
-      afterCloseRef.current.resultCount = resultCountText;
       return;
     }
     announce(resultCountText);
@@ -1558,8 +1636,8 @@ export function MobilePowerSearch({
   // of remounting them, and focus stays on the same filter. Only a filter
   // that is itself removed loses its element, and the re-home effect above
   // takes over. Every filter lists — one whose field or operator the config
-  // no longer has by its raw keys, as its token shows on the trigger; its row
-  // opens the unavailable state, whose Remove is the way out.
+  // no longer has by its raw keys, as its token shows on the trigger, and its
+  // trailing × remains available even when the editor becomes unavailable.
   const [filterIdentities] = useState(createFilterIdentities);
   const filterIds = filterIdentities.next(filters);
   const filterRows = filters.map((filter, index) => {
@@ -1618,7 +1696,8 @@ export function MobilePowerSearch({
     );
   });
 
-  const isClearAllShown = hasClear && isInteractive && filters.length > 0;
+  const hasRemovableFilter = filters.some(filter => !filter.isReadOnly);
+  const isClearAllShown = hasClear && isInteractive && hasRemovableFilter;
 
   const EditorOverride =
     draftOperator != null
@@ -1651,19 +1730,28 @@ export function MobilePowerSearch({
     styles.body,
     containerPaddingInlineVarStyles[4],
   );
+  const scrollViewportProps = stylex.props(styles.scrollViewport);
+  const scrollContentProps = stylex.props(
+    styles.scrollContent,
+    containerPaddingInlineVarStyles[4],
+  );
 
   const isEditorDisabled = isDisabled || isReadOnly;
+  const isFieldPickerDirectEntry = fieldPickerOriginRef.current === 'trigger';
+  const isManageSheetOpen =
+    step === 'manage' ||
+    (step === 'fields' && !isFieldPickerDirectEntry) ||
+    (step === 'value' && (draft?.mode === 'edit' || !isFieldPickerDirectEntry));
+  const isFieldsSheetOpen =
+    step === 'fields' || (step === 'value' && draft?.mode === 'create');
   const isSaveDisabled =
     isEditorDisabled || draft?.operator == null || draft.value == null;
   const isDraftRenderable =
     draft != null && draftField != null && draftOperator != null;
   // A controlled config update that removes the field or operator being
   // edited replaces the step's body with the unavailable state while focus
-  // may be on one of the body's controls, which unmount without a blur. Focus
-  // then moves to the way out — Remove, or Cancel when there is no Remove —
-  // so it never falls to the page body inside the open sheet. The message
-  // itself is announced by its rendered element.
-  const removeButtonRef = useRef<HTMLButtonElement>(null);
+  // may be on one of the body's controls. Focus moves to Cancel, the remaining
+  // way back to the Filters row where direct removal lives.
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const wasDraftRenderableRef = useRef(isDraftRenderable);
   useLayoutEffect(() => {
@@ -1678,7 +1766,7 @@ export function MobilePowerSearch({
     if (dialog != null && active != null && dialog.contains(active)) {
       return;
     }
-    (removeButtonRef.current ?? cancelButtonRef.current)?.focus();
+    cancelButtonRef.current?.focus();
   }, [draft, isDraftRenderable, step]);
 
   return (
@@ -1772,7 +1860,7 @@ export function MobilePowerSearch({
       </Field>
 
       <BottomSheet
-        isOpen={step === 'manage'}
+        isOpen={isManageSheetOpen}
         onOpenChange={handleManageOpenChange}
         finalFocusRef={triggerRef}
         label="Filters"
@@ -1781,7 +1869,7 @@ export function MobilePowerSearch({
         <div
           ref={manageSheetRef}
           onFocus={noteSheetFocus('manage')}
-          {...stylex.props(styles.sheet)}>
+          {...stylex.props(styles.sheet, styles.sheetWithFixedFooter)}>
           {step === 'manage' && (
             <SheetAnnouncer onAnnounceChange={handleAnnounceChange} />
           )}
@@ -1790,86 +1878,125 @@ export function MobilePowerSearch({
               <div {...stylex.props(styles.headerText)}>
                 <Heading level={3}>Filters</Heading>
               </div>
-              {isInteractive && (
+              {isInteractive && filterRows.length > 0 && (
                 <Button
                   ref={managerAddButtonRef}
                   label="Add filter"
-                  variant="ghost"
-                  xstyle={styles.touchAction}
+                  icon={<Icon icon={PlusIcon} size="sm" />}
+                  isIconOnly
+                  variant="secondary"
+                  size="md"
                   onClick={openFieldList}
                 />
               )}
             </div>
           </div>
-          <div {...bodyProps}>
-            {filterRows.length === 0 ? (
-              <div {...stylex.props(styles.empty)}>
-                <Text type="supporting" color="secondary">
-                  No filters selected
-                </Text>
-              </div>
-            ) : (
-              <List hasDividers density="spacious" edge="bleed">
-                {filterRows.map(row => {
-                  const canEdit = row.isEditable;
-                  return (
-                    <ListItem
-                      key={row.key}
-                      ref={node => {
-                        if (node == null) {
-                          managerRowsRef.current.delete(row.index);
-                        } else {
-                          managerRowsRef.current.set(row.index, node);
+          <div {...stylex.props(styles.scrollViewport)}>
+            <div {...scrollContentProps}>
+              {filterRows.length === 0 ? (
+                isManageSheetOpen ? (
+                  <EmptyState
+                    title="No filters applied"
+                    description="Add a filter to narrow your results and find what you need faster."
+                    headingLevel={4}
+                    icon={<Icon icon="funnel" size="lg" color="secondary" />}
+                    xstyle={styles.emptyState}
+                    actions={
+                      isInteractive ? (
+                        <Button
+                          ref={managerAddButtonRef}
+                          label="Add filter"
+                          icon={<Icon icon={PlusIcon} size="sm" />}
+                          variant="primary"
+                          size="lg"
+                          onClick={openFieldList}
+                        />
+                      ) : undefined
+                    }
+                  />
+                ) : null
+              ) : (
+                <List hasDividers density="spacious" edge="bleed">
+                  {filterRows.map(row => {
+                    const canEdit = row.isEditable;
+                    const operator = config.getOperator(
+                      row.filter.field,
+                      row.filter.operator,
+                    );
+                    const fieldLabel =
+                      config.getField(row.filter.field)?.label ??
+                      row.filter.field;
+                    const isImmediateToggle = operator?.value.type === 'empty';
+                    return (
+                      <ListItem
+                        key={row.key}
+                        ref={node => {
+                          if (node == null) {
+                            managerRowsRef.current.delete(row.index);
+                          } else {
+                            managerRowsRef.current.set(row.index, node);
+                          }
+                        }}
+                        label={row.displayLabel}
+                        onClick={
+                          canEdit
+                            ? isImmediateToggle
+                              ? () => handleRemoveFilter(row.index)
+                              : () => handleFilterEdit(row.index)
+                            : undefined
                         }
-                      }}
-                      label={row.displayLabel}
-                      onClick={
-                        canEdit ? () => handleFilterEdit(row.index) : undefined
-                      }
-                      endContent={
-                        canEdit ? (
-                          <Icon
-                            icon="chevronRight"
-                            size="sm"
-                            color="secondary"
-                            xstyle={rtlStyles.mirror}
-                          />
-                        ) : undefined
-                      }
-                    />
-                  );
-                })}
-              </List>
-            )}
+                        endContent={
+                          canEdit ? (
+                            <IconButton
+                              label={`Remove ${fieldLabel} filter`}
+                              tooltip={`Remove ${fieldLabel} filter`}
+                              icon={<Icon icon="close" size="sm" />}
+                              variant="ghost"
+                              size="md"
+                              onClick={event => {
+                                event.stopPropagation();
+                                handleRemoveFilter(row.index);
+                              }}
+                            />
+                          ) : undefined
+                        }
+                      />
+                    );
+                  })}
+                </List>
+              )}
+            </div>
           </div>
-          <div {...stylex.props(styles.footer)}>
-            {isClearAllShown && (
-              <Button
-                label="Clear all"
-                variant="ghost"
-                xstyle={styles.touchAction}
-                onClick={handleClearAll}
-              />
-            )}
-            <div
-              {...stylex.props(
-                styles.footerActions,
-                !isClearAllShown && styles.footerSoleAction,
-              )}>
+          {filterRows.length > 0 && (
+            <div {...stylex.props(styles.footer, styles.fixedFooter)}>
+              {isClearAllShown && (
+                <Button
+                  label="Clear all"
+                  variant="secondary"
+                  size="lg"
+                  xstyle={styles.footerEqualAction}
+                  onClick={() => setIsClearConfirmationOpen(true)}
+                />
+              )}
               <Button
                 label="Done"
                 variant="primary"
-                xstyle={styles.touchAction}
+                size="lg"
+                xstyle={
+                  isClearAllShown
+                    ? styles.footerEqualAction
+                    : styles.footerSoleAction
+                }
                 onClick={closeSheet}
                 width={isClearAllShown ? undefined : '100%'}
               />
             </div>
-          </div>
+          )}
         </div>
       </BottomSheet>
 
       <BottomSheet
-        isOpen={step === 'fields'}
+        isOpen={isFieldsSheetOpen}
         onOpenChange={handleFieldsOpenChange}
         finalFocusRef={triggerRef}
         label="Add filter"
@@ -1878,34 +2005,12 @@ export function MobilePowerSearch({
         <div
           ref={fieldsSheetRef}
           onFocus={noteSheetFocus('fields')}
-          {...stylex.props(styles.sheet)}>
+          {...stylex.props(styles.sheet, styles.sheetWithFixedFooter)}>
           {step === 'fields' && (
             <SheetAnnouncer onAnnounceChange={handleAnnounceChange} />
           )}
           <div {...stylex.props(styles.header)}>
             <div {...stylex.props(styles.headerRow)}>
-              <Button
-                label="Back"
-                icon={
-                  <Icon
-                    icon="chevronLeft"
-                    size="sm"
-                    xstyle={rtlStyles.mirror}
-                  />
-                }
-                isIconOnly
-                variant="ghost"
-                size="sm"
-                xstyle={styles.touchIconAction}
-                onClick={() => {
-                  if (fieldPickerOriginRef.current === 'trigger') {
-                    closeSheet();
-                    return;
-                  }
-                  queueManagerAddFocus();
-                  setStep('manage');
-                }}
-              />
               <div {...stylex.props(styles.headerText)}>
                 <Heading level={3}>Add filter</Heading>
               </div>
@@ -1939,127 +2044,158 @@ export function MobilePowerSearch({
                   hasClear
                   startIcon={<Icon icon="search" size="sm" color="secondary" />}
                   isDisabled={!isInteractive}
+                  size="lg"
                   width="100%"
                 />
               </div>
             ) : isFieldSearchShown ? (
-              <TextInput
-                label="Search filters"
-                isLabelHidden
-                placeholder="Search filters…"
-                value={fieldQuery}
-                onChange={setFieldQuery}
-                startIcon={<Icon icon="search" size="sm" color="secondary" />}
-                isDisabled={!isInteractive}
-                width="100%"
-              />
+              <div ref={fieldSearchRef}>
+                <TextInput
+                  label="Search filters"
+                  isLabelHidden
+                  placeholder="Search filters…"
+                  value={fieldQuery}
+                  onChange={setFieldQuery}
+                  startIcon={<Icon icon="search" size="sm" color="secondary" />}
+                  isDisabled={!isInteractive}
+                  size="lg"
+                  width="100%"
+                />
+              </div>
             ) : null}
           </div>
-          <div {...bodyProps}>
-            {hasContentSearch ? (
-              contentResults.length > 0 ? (
-                <List
-                  ref={contentSuggestionListRef}
-                  id={contentResultsId}
-                  aria-label="Search results"
-                  hasDividers
-                  density="spacious"
-                  edge="bleed">
-                  {contentResults.map((item, index) => (
-                    <ListItem
-                      key={item.id}
-                      label={item.label}
-                      isDisabled={!isInteractive}
-                      onClick={() => handleContentSuggestionSelect(item)}
-                      onKeyDown={event => {
-                        if (
-                          isImeKeyEvent(event.nativeEvent) ||
-                          (event.key !== 'ArrowDown' && event.key !== 'ArrowUp')
-                        ) {
-                          return;
+          <div {...scrollViewportProps} {...fieldPickerDragProps}>
+            <div {...scrollContentProps}>
+              {hasContentSearch ? (
+                contentResults.length > 0 ? (
+                  <List
+                    ref={contentSuggestionListRef}
+                    id={contentResultsId}
+                    aria-label="Search results"
+                    hasDividers
+                    density="spacious"
+                    edge="bleed">
+                    {contentResults.map((item, index) => (
+                      <ListItem
+                        key={item.id}
+                        label={item.label}
+                        isDisabled={!isInteractive}
+                        onClick={() => handleContentSuggestionSelect(item)}
+                        onKeyDown={event => {
+                          if (
+                            isImeKeyEvent(event.nativeEvent) ||
+                            (event.key !== 'ArrowDown' &&
+                              event.key !== 'ArrowUp')
+                          ) {
+                            return;
+                          }
+                          event.preventDefault();
+                          const buttons = [
+                            ...(contentSuggestionListRef.current?.querySelectorAll<HTMLButtonElement>(
+                              'button',
+                            ) ?? []),
+                          ];
+                          const nextIndex =
+                            event.key === 'ArrowDown'
+                              ? Math.min(index + 1, buttons.length - 1)
+                              : index - 1;
+                          if (nextIndex < 0) {
+                            contentSearchRef.current
+                              ?.querySelector<HTMLInputElement>('input')
+                              ?.focus();
+                          } else {
+                            buttons[nextIndex]?.focus();
+                          }
+                        }}
+                      />
+                    ))}
+                  </List>
+                ) : contentQuery.trim() !== '' ? (
+                  <div id={contentResultsId}>
+                    {step === 'fields' && (
+                      <EmptyState
+                        icon={
+                          <Icon icon="search" size="lg" color="secondary" />
                         }
-                        event.preventDefault();
-                        const buttons = [
-                          ...(contentSuggestionListRef.current?.querySelectorAll<HTMLButtonElement>(
-                            'button',
-                          ) ?? []),
-                        ];
-                        const nextIndex =
-                          event.key === 'ArrowDown'
-                            ? Math.min(index + 1, buttons.length - 1)
-                            : index - 1;
-                        if (nextIndex < 0) {
-                          contentSearchRef.current
-                            ?.querySelector<HTMLInputElement>('input')
-                            ?.focus();
-                        } else {
-                          buttons[nextIndex]?.focus();
-                        }
-                      }}
-                    />
-                  ))}
-                </List>
-              ) : contentQuery.trim() !== '' ? (
-                // The searchbox's `aria-controls` target while nothing lists:
-                // the empty-result message carries the results id.
-                <SheetEmptyMessage
-                  id={contentResultsId}
-                  message="No results found"
-                  occasion={contentQuery}
-                  isShown={step === 'fields'}
-                />
+                        title="No results found"
+                        description="Try a different search."
+                        headingLevel={4}
+                        isCompact
+                        xstyle={styles.emptyState}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div id={contentResultsId} />
+                )
+              ) : groupedFields.length === 0 ? (
+                normalizedFieldQuery !== '' && step === 'fields' ? (
+                  <EmptyState
+                    icon={<Icon icon="search" size="lg" color="secondary" />}
+                    title="No filters found"
+                    description="Try a different search."
+                    headingLevel={4}
+                    isCompact
+                    xstyle={styles.emptyState}
+                  />
+                ) : null
               ) : (
-                // An empty query with no bootstrap suggestion: the results
-                // region exists, empty, so `aria-controls` always names an
-                // element in the document.
-                <div id={contentResultsId} />
-              )
-            ) : groupedFields.length === 0 ? (
-              // A search outcome: only a non-empty query that matches nothing
-              // shows it; a config with no field lists nothing.
-              normalizedFieldQuery !== '' && (
-                <SheetEmptyMessage
-                  message="No filters match your search"
-                  occasion={fieldQuery}
-                  isShown={step === 'fields'}
-                />
-              )
-            ) : (
-              groupedFields.map(([group, groupFields]) => (
-                <List
-                  key={group}
-                  hasDividers
-                  density="spacious"
-                  header={group === '' ? undefined : group}
-                  edge="bleed">
-                  {groupFields.map(field => (
-                    <ListItem
-                      key={field.key}
-                      ref={node => {
-                        if (node == null) {
-                          fieldRowsRef.current.delete(field.key);
-                        } else {
-                          fieldRowsRef.current.set(field.key, node);
+                groupedFields.map(([group, groupFields]) => (
+                  <List
+                    key={group}
+                    hasDividers
+                    density="spacious"
+                    header={
+                      <Heading level={4}>
+                        {group === '' ? 'General' : group}
+                      </Heading>
+                    }
+                    edge="bleed">
+                    {groupFields.map(field => (
+                      <ListItem
+                        key={field.key}
+                        ref={node => {
+                          if (node == null) {
+                            fieldRowsRef.current.delete(field.key);
+                          } else {
+                            fieldRowsRef.current.set(field.key, node);
+                          }
+                        }}
+                        label={field.label}
+                        isDisabled={!isInteractive}
+                        startContent={field.icon}
+                        endContent={
+                          field.operators.length === 1 &&
+                          field.operators[0]?.value.type === 'empty' ? (
+                            <Icon icon={PlusIcon} size="sm" color="secondary" />
+                          ) : (
+                            <Icon
+                              icon="chevronRight"
+                              size="sm"
+                              color="secondary"
+                              xstyle={rtlStyles.mirror}
+                            />
+                          )
                         }
-                      }}
-                      label={field.label}
-                      isDisabled={!isInteractive}
-                      startContent={field.icon}
-                      endContent={
-                        <Icon
-                          icon="chevronRight"
-                          size="sm"
-                          color="secondary"
-                          xstyle={rtlStyles.mirror}
-                        />
-                      }
-                      onClick={() => handleFieldSelect(field)}
-                    />
-                  ))}
-                </List>
-              ))
-            )}
+                        onClick={() => handleFieldSelect(field)}
+                      />
+                    ))}
+                  </List>
+                ))
+              )}
+            </div>
           </div>
+          {isFieldPickerDirectEntry && (
+            <div {...stylex.props(styles.footer, styles.fixedFooter)}>
+              <Button
+                label="Done"
+                variant="primary"
+                width="100%"
+                xstyle={styles.touchAction}
+                onClick={closeSheet}
+              />
+            </div>
+          )}
         </div>
       </BottomSheet>
 
@@ -2070,7 +2206,7 @@ export function MobilePowerSearch({
         label={editorTitle}
         height="tall"
         padding={0}
-        purpose="form">
+        purpose="info">
         <div {...stylex.props(styles.sheet)}>
           {step === 'value' && (
             <SheetAnnouncer onAnnounceChange={handleAnnounceChange} />
@@ -2119,37 +2255,56 @@ export function MobilePowerSearch({
                 {isDraftRenderable ? (
                   <>
                     {draftOperators.length > 1 && (
-                      <RadioList
-                        label="Operator"
-                        isLabelHidden
-                        value={draft.operator ?? ''}
-                        onChange={operatorKey => {
-                          const operator = draftOperators.find(
-                            candidate => candidate.key === operatorKey,
-                          );
-                          if (operator != null) {
-                            handleOperatorSelect(operator);
-                          }
-                        }}
-                        isDisabled={isEditorDisabled}>
-                        {draftOperators.map(operator => (
-                          <RadioListItem
-                            key={operator.key}
-                            label={`${draftField.label} ${resolveOperatorLabel(operator, t)}`}
-                            value={operator.key}
-                          />
-                        ))}
-                      </RadioList>
+                      <div {...stylex.props(styles.controlSection)}>
+                        <RadioList
+                          label="Operator"
+                          isLabelHidden
+                          value={draft.operator ?? ''}
+                          onChange={operatorKey => {
+                            const operator = draftOperators.find(
+                              candidate => candidate.key === operatorKey,
+                            );
+                            if (operator != null) {
+                              handleOperatorSelect(operator);
+                            }
+                          }}
+                          isDisabled={isEditorDisabled}>
+                          {draftOperators.map(operator => (
+                            <RadioListItem
+                              key={operator.key}
+                              label={`${draftField.label} ${resolveOperatorLabel(operator, t)}`}
+                              value={operator.key}
+                              xstyle={styles.trailingControlRow}
+                            />
+                          ))}
+                        </RadioList>
+                      </div>
                     )}
-                    <MobilePowerSearchValueEditor
-                      key={`${draft.field}-${draft.operator}`}
-                      operatorValue={draftOperator.value}
-                      filterValue={draft.value}
-                      onChange={handleDraftValueChange}
-                      label={draftField.label}
-                      isDisabled={isEditorDisabled}
-                      maxMenuItems={maxOperatorMenuItems}
-                    />
+                    {draftOperators.length > 1 ? (
+                      <div {...stylex.props(styles.controlSection)}>
+                        <MobilePowerSearchValueEditor
+                          key={`${draft.field}-${draft.operator}`}
+                          operatorValue={draftOperator.value}
+                          filterValue={draft.value}
+                          onChange={handleDraftValueChange}
+                          label={draftField.label}
+                          isDisabled={isEditorDisabled}
+                          maxMenuItems={maxOperatorMenuItems}
+                          timezoneID={timezoneID}
+                        />
+                      </div>
+                    ) : (
+                      <MobilePowerSearchValueEditor
+                        key={`${draft.field}-${draft.operator}`}
+                        operatorValue={draftOperator.value}
+                        filterValue={draft.value}
+                        onChange={handleDraftValueChange}
+                        label={draftField.label}
+                        isDisabled={isEditorDisabled}
+                        maxMenuItems={maxOperatorMenuItems}
+                        timezoneID={timezoneID}
+                      />
+                    )}
                   </>
                 ) : (
                   // A controlled config update removed the field or operator
@@ -2164,44 +2319,55 @@ export function MobilePowerSearch({
                 )}
               </div>
               <div {...stylex.props(styles.footer)}>
-                {draft?.mode === 'edit' && !isReadOnly && (
-                  <Button
-                    ref={removeButtonRef}
-                    label="Remove"
-                    variant="ghost"
-                    isDisabled={isEditorDisabled}
-                    xstyle={styles.touchAction}
-                    onClick={handleRemove}
-                  />
-                )}
-                <div
-                  {...stylex.props(
-                    styles.footerActions,
-                    isReadOnly && styles.footerSoleAction,
-                  )}>
+                {isReadOnly ? (
                   <Button
                     ref={cancelButtonRef}
                     label="Cancel"
-                    variant="ghost"
-                    xstyle={styles.touchAction}
+                    variant="secondary"
+                    width="100%"
+                    xstyle={styles.footerSoleAction}
                     onClick={returnFromValue}
-                    width={isReadOnly ? '100%' : undefined}
                   />
-                  {!isReadOnly && isDraftRenderable && (
+                ) : (
+                  <>
                     <Button
-                      label={saveButtonLabel}
-                      variant="primary"
-                      isDisabled={isSaveDisabled}
-                      xstyle={styles.touchAction}
-                      onClick={handleSave}
+                      ref={cancelButtonRef}
+                      label="Cancel"
+                      variant="secondary"
+                      size="lg"
+                      xstyle={styles.footerEqualAction}
+                      onClick={returnFromValue}
                     />
-                  )}
-                </div>
+                    {isDraftRenderable && (
+                      <Button
+                        label={saveButtonLabel}
+                        variant="primary"
+                        size="lg"
+                        isDisabled={isSaveDisabled}
+                        xstyle={styles.footerEqualAction}
+                        onClick={handleSave}
+                      />
+                    )}
+                  </>
+                )}
               </div>
             </>
           )}
         </div>
       </BottomSheet>
+
+      <MobileSheetConfirmation
+        isOpen={isClearConfirmationOpen}
+        onOpenChange={setIsClearConfirmationOpen}
+        title="Clear all filters?"
+        description="This removes all editable filters from this search."
+        actionLabel="Clear filters"
+        cancelLabel="Keep filters"
+        onAction={() => {
+          handleClearAll();
+          setIsClearConfirmationOpen(false);
+        }}
+      />
     </>
   );
 }

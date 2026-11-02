@@ -9,6 +9,7 @@
  * SYNC: When TopNav components change, update tests to match new behavior
  */
 
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi} from 'vitest';
 import {fireEvent, render, screen, act} from '@testing-library/react';
 import {__resetMenuPressForTest} from '../hooks/useMenuPress';
@@ -22,6 +23,9 @@ import {NavIcon} from '../NavIcon';
 import {TopNavItem} from './TopNavItem';
 import {TopNavMegaMenuFeaturedCard} from './TopNavMegaMenuFeaturedCard';
 import {LinkProvider} from '../Link/LinkProvider';
+import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
+import koreanCatalog from '../../locales/ko-KR.json';
+import {rtlStyles} from '../utils';
 
 function CustomLink({
   children,
@@ -301,6 +305,51 @@ describe('TopNavHeading', () => {
     expect(ref).toHaveBeenCalledWith(expect.any(HTMLElement));
   });
 
+  it('includes the visible heading in the menu trigger name without hrefs', () => {
+    render(<TopNavHeading heading="Acme" menu={<div>Menu content</div>} />);
+    expect(screen.getByRole('button')).toHaveAccessibleName('Acme, Open menu');
+  });
+
+  it('includes the heading in the translated menu trigger name with independent links', () => {
+    render(
+      <InternationalizationProvider
+        locale="ko-KR"
+        messages={{'ko-KR': koreanCatalog}}>
+        <TopNavHeading
+          heading="Acme"
+          headingHref="/acme"
+          menu={<div>Menu content</div>}
+        />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button')).toHaveAccessibleName('Acme, 메뉴 열기');
+    expect(screen.getByRole('link', {name: 'Acme'})).toHaveAttribute(
+      'href',
+      '/acme',
+    );
+  });
+
+  it('keeps the translated generic menu trigger name when the optional heading is absent or empty', () => {
+    const menu = <div>Menu content</div>;
+    const {rerender} = render(
+      <InternationalizationProvider
+        locale="ko-KR"
+        messages={{'ko-KR': koreanCatalog}}>
+        <TopNavHeading menu={menu} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button')).toHaveAccessibleName('메뉴 열기');
+
+    rerender(
+      <InternationalizationProvider
+        locale="ko-KR"
+        messages={{'ko-KR': koreanCatalog}}>
+        <TopNavHeading heading="" menu={menu} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('button')).toHaveAccessibleName('메뉴 열기');
+  });
+
   // ===========================================================================
   // Menu popover semantics — the popup must not be announced as a modal
   // dialog, and role="menu" must be scoped to the actual menu items so the
@@ -338,7 +387,7 @@ describe('TopNavHeading', () => {
           }
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       const FIRST = 'Alpha';
       const SECOND = 'Beta';
       const item = (name: string) =>
@@ -371,10 +420,37 @@ describe('TopNavHeading', () => {
           }
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expectNativeLinkClicks(
         screen.getByRole('menuitem', {name: 'Docs', hidden: true}),
       );
+    });
+
+    it('moves focus one item per arrow key in a NavHeadingMenu (APG menu)', async () => {
+      __resetMenuPressForTest();
+      const user = userEvent.setup();
+      render(
+        <TopNavHeading
+          heading="My App"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="One" onClick={() => {}} />
+              <NavHeadingMenuItem label="Two" onClick={() => {}} />
+              <NavHeadingMenuItem label="Three" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
+      const item = (name: string) =>
+        screen.getByRole('menuitem', {name, hidden: true});
+      item('One').focus();
+      fireEvent.keyDown(item('One'), {key: 'ArrowDown'});
+      expect(item('Two')).toHaveFocus();
+      fireEvent.keyDown(item('Two'), {key: 'ArrowDown'});
+      expect(item('Three')).toHaveFocus();
+      fireEvent.keyDown(item('Three'), {key: 'ArrowUp'});
+      expect(item('Two')).toHaveFocus();
     });
 
     it('after a pointer pick, returns focus to the trigger without a keyboard ring (interaction-modality INV1)', async () => {
@@ -391,7 +467,7 @@ describe('TopNavHeading', () => {
           }
         />,
       );
-      const trigger = screen.getByRole('button', {name: 'Open menu'});
+      const trigger = screen.getByRole('button', {name: /Open menu/});
       await user.click(trigger);
       const focusSpy = vi.spyOn(trigger, 'focus');
       const alpha = screen.getByRole('menuitem', {name: 'Alpha', hidden: true});
@@ -407,7 +483,7 @@ describe('TopNavHeading', () => {
     it('does not wrap the heading menu popup in a modal dialog', async () => {
       const user = userEvent.setup();
       render(<TopNavHeading heading="My App" menu={menuItems} />);
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     });
@@ -415,7 +491,7 @@ describe('TopNavHeading', () => {
     it('scopes role="menu" to only menuitem children with an accessible name', async () => {
       const user = userEvent.setup();
       render(<TopNavHeading heading="My App" menu={menuItems} />);
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       const menu = document.querySelector('[role="menu"]');
       expect(menu).not.toBeNull();
       expect(menu).toHaveAttribute('aria-label', 'My App');
@@ -429,7 +505,7 @@ describe('TopNavHeading', () => {
     it('keeps the popup heading button outside the menu and closes on click', async () => {
       const user = userEvent.setup();
       render(<TopNavHeading heading="My App" menu={menuItems} />);
-      const trigger = screen.getByRole('button', {name: 'Open menu'});
+      const trigger = screen.getByRole('button', {name: /Open menu/});
       await user.click(trigger);
       expect(trigger).toHaveAttribute('aria-expanded', 'true');
       const menu = document.querySelector('[role="menu"]');
@@ -455,7 +531,7 @@ describe('TopNavHeading', () => {
           menu={menuItems}
         />,
       );
-      await user.click(screen.getByRole('button', {name: 'Open menu'}));
+      await user.click(screen.getByRole('button', {name: /Open menu/}));
       expect(document.querySelector('[role="dialog"]')).toBeNull();
       const menu = document.querySelector('[role="menu"]');
       expect(menu).not.toBeNull();
@@ -747,6 +823,35 @@ describe('TopNavItem', () => {
       const link = screen.getByRole('link', {name: /Read the announcement/});
       expect(link).toHaveAttribute('href', '/blog/v4');
     });
+
+    // design:bidirectionality DR4: the arrow points toward the inline end, so
+    // it mirrors in RTL. jsdom does not apply compiled StyleX CSS, so this pins
+    // the structure the mirror relies on: the arrow sits in its own element
+    // carrying the shared rtlStyles.mirror, and the link name is unchanged.
+    it('wraps the link arrow in the shared RTL mirror', () => {
+      const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
+      const mirrorClasses = mirrorClassName?.split(' ') ?? [];
+      expect(mirrorClasses.length).toBeGreaterThan(0);
+      render(
+        <div dir="rtl">
+          <TopNavMegaMenuFeaturedCard
+            title="What's new"
+            linkLabel="Read the announcement"
+            linkHref="/blog/v4"
+          />
+        </div>,
+      );
+      const link = screen.getByRole('link', {
+        name: 'Read the announcement →',
+      });
+      const arrow = Array.from(link.querySelectorAll('span')).find(
+        span => span.textContent === '→',
+      );
+      expect(arrow).toBeDefined();
+      for (const className of mirrorClasses) {
+        expect(arrow).toHaveClass(className);
+      }
+    });
   });
 });
 
@@ -768,7 +873,7 @@ describe('TopNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -786,7 +891,7 @@ describe('TopNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -806,7 +911,7 @@ describe('TopNavHeading hover/click guard', () => {
     vi.useFakeTimers({shouldAdvanceTime: true});
     const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.hover(trigger);
     act(() => {
@@ -824,7 +929,7 @@ describe('TopNavHeading hover/click guard', () => {
   it('returns focus to the trigger on Escape', async () => {
     const user = userEvent.setup();
     render(<TopNavHeading heading="My App" menu={menuItems} />);
-    const trigger = screen.getByRole('button', {name: 'Open menu'});
+    const trigger = screen.getByRole('button', {name: /Open menu/});
 
     await user.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');

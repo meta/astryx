@@ -37,8 +37,9 @@ import {renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import {Item} from '../Item';
 import {useDropdownMenuContext} from './DropdownMenuContext';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {focusMenuItemOnHover} from './menuItemHover';
-import {colorVars, spacingVars} from '../theme/tokens.stylex';
+import {colorVars, focusVars, spacingVars} from '../theme/tokens.stylex';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 
@@ -55,7 +56,10 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   disabled: {
     opacity: 0.5,
@@ -110,8 +114,9 @@ export interface DropdownMenuCheckboxItemProps extends Omit<
    */
   onChange?: (checked: boolean) => void;
   /**
-   * Whether the item is disabled. Disabled items expose `aria-disabled`, block
-   * activation, and are currently skipped by DropdownMenu arrow-key navigation.
+   * Whether the item is disabled. A disabled item stays in the accessibility
+   * tree as disabled (`aria-disabled`) but takes no focus: the arrow keys,
+   * typeahead, and the pointer highlight skip it, and activation is blocked.
    * @default false
    */
   isDisabled?: boolean;
@@ -223,7 +228,12 @@ export function DropdownMenuCheckboxItem({
       endContent={endContent}
       onClick={handleClick}
       isDisabled={isDisabled}
-      xstyle={[styles.root, isDisabled && styles.disabled, xstyle]}
+      xstyle={[
+        focusOutlineStyles.focusVisible,
+        styles.root,
+        isDisabled && styles.disabled,
+        xstyle,
+      ]}
       {...mergeProps(themeProps('dropdown-menu-item', {size: menuSize}), {
         className,
         style,

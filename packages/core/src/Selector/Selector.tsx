@@ -10,7 +10,7 @@
  * @position Core implementation; consumed by index.ts
  *
  * SYNC: When modified, update:
- * - /packages/core/src/Selector/Selector.spec.md
+ * - /docs/specs/components/Selector/Selector.spec.md
  * - /packages/core/src/Selector/Selector.doc.mjs
  * - /packages/core/src/Selector/Selector.test.tsx
  * - /packages/core/src/Selector/index.ts
@@ -32,6 +32,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
@@ -42,7 +43,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -89,6 +89,7 @@ import {
 } from '../Field/fieldParts';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
@@ -99,11 +100,18 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from './SelectorBottomSheet';
 import {useSelectorPresentation} from './useSelectorPresentation';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Selector/Selector.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -293,21 +301,6 @@ const styles = stylex.create({
         '@media (pointer: coarse)': 'scale(1)',
       },
       '[data-astryx-press="on"]': 'scale(0.98)',
-    },
-  },
-  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
-  // and the shared disabled wrapper style drops the field focus ring, so the
-  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
-  // itself, a direct child, so a focused status button keeps its own outline.
-  triggerDisabledFocus: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)':
-        colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   triggerGhostDisabled: {
@@ -726,7 +719,7 @@ interface SelectorPropsBase<
    * - 'tooltip': message is exposed from the on-field status icon
    * @default 'attached' for input selectors; 'detached' for secondary/ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -946,7 +939,7 @@ function filterOptionsByQuery(
 export function Selector<T extends SelectorOptionType>(
   props: SelectorProps<T>,
 ) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const {
     label,
@@ -1038,8 +1031,10 @@ export function Selector<T extends SelectorOptionType>(
   // shorter inner button makes every size's selected row land too low.
   const anchorRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement>(null);
+  const triggerModality = useInteractionModalityTracking();
   const triggerButtonRef = useMergedRefs<HTMLButtonElement>(
     triggerRef as React.Ref<HTMLButtonElement>,
+    triggerModality.ref,
     ref,
   );
   const searchRef = useRef<HTMLInputElement>(null);
@@ -1060,11 +1055,9 @@ export function Selector<T extends SelectorOptionType>(
   useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), triggerRef);
   const announce = useAnnounce();
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the trigger container (which already exists)
-  // and the trigger button stays perceivable via aria-disabled instead of the
-  // disabled attribute. Activation is blocked by the isDisabled guards in
-  // useCombobox (onTriggerClick / onKeyDown).
+  // Disabled-reason tooltip. The container receives hover and bubbled focus
+  // while the trigger stays focusable via aria-disabled. Opening and selection
+  // are guarded independently, including options in an already-open surface.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -1140,6 +1133,14 @@ export function Selector<T extends SelectorOptionType>(
 
   // Ref for listbox to measure selected item position
   const listboxRef = useRef<HTMLDivElement>(null);
+  // The trigger may name the active option only once the listbox holding it
+  // is in the document. The bottom sheet loads its surface on first open, so
+  // the trigger expands a moment before its options exist.
+  const [isListboxMounted, setIsListboxMounted] = useState(false);
+  const attachListbox = useCallback((node: HTMLDivElement | null) => {
+    listboxRef.current = node;
+    setIsListboxMounted(node != null);
+  }, []);
 
   // Typeahead is defined below (it needs the popover), but closing and clearing
   // must drop its pending buffer — otherwise a stale prefix survives the reset
@@ -1175,6 +1176,7 @@ export function Selector<T extends SelectorOptionType>(
     onHide: handleLayerHide,
     onShow: handleLayerShow,
     triggerRef,
+    triggerModality,
     popoverOptions: {
       hasLightDismiss: true,
       hasCloseButton: false,
@@ -1319,6 +1321,11 @@ export function Selector<T extends SelectorOptionType>(
 
   const commitValue = useCallback(
     (newValue: string) => {
+      // A surface or pointer gesture can outlive the enabled state that opened
+      // it. Enforce current availability before callbacks or optimistic state.
+      if (isDisabled || isEffectivelyReadOnly) {
+        return;
+      }
       onChange?.(newValue);
       if (changeAction) {
         startTransition(async () => {
@@ -1327,7 +1334,14 @@ export function Selector<T extends SelectorOptionType>(
         });
       }
     },
-    [onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isDisabled,
+      isEffectivelyReadOnly,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Selector behavior (keyboard nav, selection)
@@ -1816,7 +1830,7 @@ export function Selector<T extends SelectorOptionType>(
       {renderSearch()}
       <Divider />
       <div
-        ref={listboxRef}
+        ref={attachListbox}
         id={listboxId}
         role="listbox"
         aria-labelledby={triggerId}
@@ -1835,7 +1849,7 @@ export function Selector<T extends SelectorOptionType>(
     </div>
   ) : (
     <div
-      ref={listboxRef}
+      ref={attachListbox}
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
@@ -1986,7 +2000,7 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'input' &&
               isDisabled &&
               !surface.isTriggerFocusRingSuppressed &&
-              styles.triggerDisabledFocus,
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&
@@ -2042,6 +2056,7 @@ export function Selector<T extends SelectorOptionType>(
             !isEffectivelyReadOnly &&
             !hasSearch &&
             surface.isOpen &&
+            isListboxMounted &&
             highlightedIndex >= 0
               ? getItemId(highlightedIndex)
               : undefined

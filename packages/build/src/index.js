@@ -42,12 +42,12 @@ const LIBRARY_PATTERNS = [
 const STYLEX_IMPORT_SOURCE = '@stylexjs/stylex';
 
 /**
- * Globs for the source each installed Astryx package publishes: each `files`
- * entry, a directory (the files below it) or a file, or the whole package when
- * it has none; an entry with glob characters or a leading `!` is refused, not
- * approximated. A package's own `node_modules` is never scanned: in a
- * workspace its links can lead back to the package (here, core's dev
- * dependency `@astryxdesign/cli` links core again).
+ * Globs for the source each installed Astryx package publishes: each positive
+ * `files` entry is a directory (the files below it) or a file, while negated
+ * entries become discovery exclusions. Positive entries with glob characters
+ * are refused rather than approximated. A package's own `node_modules` is never
+ * scanned: in a workspace its links can lead back to the package (here, core's
+ * dev dependency `@astryxdesign/cli` links core again).
  */
 function libraryGlobs(cwd) {
   const include = [];
@@ -69,10 +69,14 @@ function libraryGlobs(cwd) {
       continue;
     }
     for (const entry of files) {
-      // isGlob also flags a leading `!`.
+      if (entry.startsWith('!')) {
+        const excluded = entry.slice(1).replace(/^\.?\/|\/$/g, '');
+        if (excluded) ignore.push(`${base}/${excluded}`);
+        continue;
+      }
       if (isGlob(entry)) {
         throw new Error(
-          `@astryxdesign/build reads plain files entries only; @astryxdesign/${name} lists "${entry}"`,
+          `@astryxdesign/build reads plain positive files entries only; @astryxdesign/${name} lists "${entry}"`,
         );
       }
       const plain = entry.replace(/^\.?\/|\/$/g, '');

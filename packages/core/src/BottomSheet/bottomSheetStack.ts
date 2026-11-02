@@ -4,17 +4,12 @@
 
 /**
  * @file bottomSheetStack.ts
- * @input Uses the DOM (dialog elements, document order) and focusForLastInput
- * @output Exports the private bottom-sheet stack registry: registration of
- *   sheet hosts (modal sheets stack; non-modal sheets are a group of their
- *   own, hosted as manual popovers), open-order ranking with tree-order
- *   ties, native top-layer reconciliation, one view per host (top, covered,
- *   recede depth, scrim ownership, blocking), the replace handoff between a
- *   sheet closing and a sheet opening in the same update, and the native
- *   show/hide and focus helpers the hosts share
- * @position Internal to BottomSheet; consumed by the standalone host in
- *   BottomSheet.tsx and by BottomSheetSwitcher. Not exported from the package
- *   root, and no public API reaches it.
+ * @input The DOM (dialog elements, document order) and focusForLastInput
+ * @output The private bottom-sheet stack registry: host registration,
+ *   open-order ranking, top-layer reconciliation, one view per host, the
+ *   replace handoff, and the shared native show/hide and focus helpers
+ * @position Internal to BottomSheet, used by the standalone host in
+ *   BottomSheet.tsx and by BottomSheetSwitcher. No public API reaches it.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
@@ -23,82 +18,36 @@
  * - /packages/core/src/BottomSheet/BottomSheetReplace.test.tsx
  * - /packages/core/src/BottomSheet/BottomSheet.doc.mjs
  * - /apps/storybook/stories/BottomSheetReplace.stories.tsx
- *
- * ## Why a registry and not a component
- *
- * Every modal sheet keeps its own native `<dialog>` and its own open state. A
- * sheet opened while another sheet is open is a stacked sheet: the browser's
- * top layer already paints the later `showModal()` above the earlier one, and
- * the later modal dialog already blocks the earlier one. What the browser does
- * NOT know is that the two dialogs are sheets of one stack, so this registry
- * supplies the rest: which sheet is on top, how far back each covered sheet
- * recedes, whose `::backdrop` is the one visible scrim, and when the native
- * order would come out wrong (several sheets opening in one commit) it puts
- * the top layer right before the frame paints. Nothing here is a public
- * surface; the hosts call it from their commit-phase effects only.
- *
- * ## Order is open order, ties are tree order
- *
- * Each open cycle of a sheet gets a rank: the batch it opened in, then a
- * running sequence. A batch is one React commit: registrations that arrive
- * between two seals belong to the same commit, because the hosts seal in
- * passive effects and React runs every pending passive effect before the next
- * commit's layout effects (and flushes them synchronously after a sync
- * commit). Later batch is higher. Within one batch there is no open order, so
- * document order of the dialog elements decides: a sheet before the sheets
- * rendered in its content, siblings in the order they are written. That is the
- * order the first painted frame of a deep link must show, and effect order
- * (child first) gets it backwards; the rank is read at compare time, after
- * every registration of the commit has arrived, so it does not.
- *
- * ## The top layer is reconciled, not trusted
- *
- * The registry remembers the order it called `showModal()` in. After every
- * change it computes the order the ranks want; where the two diverge it closes
- * the dialogs from the first divergence up and shows them again in rank order.
- * That happens inside the commit, before paint, so a deep link whose inner
- * sheet registered first is repaired without a frame in between. A sheet that
- * closes and reopens gets a new rank and is re-shown on top the same way;
- * only the dialogs that have to move up are re-shown, the rest keep their
- * place, their backdrop and any motion in flight.
- *
- * ## A replace is a move the person makes from one sheet to the next
- *
- * One sheet closing and another opening in the same commit, where the closing
- * sheet was the top open sheet of its stack (no other open sheet above it,
- * the opening sheet aside) and the interaction came from inside it (the
- * control last pressed — or, with no fresh press, the focused element — was
- * in its dialog), is a replace: the person is moving from one step to the
- * next, not stacking one on the other. The registry then runs the handoff a BottomSheetSwitcher runs
- * between its steps, on the two standalone dialogs: the entering sheet rises
- * above the retained one; a taller retained sheet moves down to meet it; the
- * retained sheet fades only after both motions complete, then its dialog
- * closes and the entering sheet takes over the scrim in the same frame. The
- * retained sheet is inert at once, keeps no place in the dismissal order, and
- * lends its opener to the sheet replacing it, so closing the flow later
- * returns focus to where the flow began. A covered sheet closing (not the
- * top), a sheet closing in a different update from the open, or a close and
- * an open driven from a control outside the closing sheet (two owners acting
- * in one update) is never a replace, so a push over a stack and a pop out of
- * one keep their motion and their own openers. Non-modal sheets
- * (`hasScrim={false}`) replace each other too: they are hosted as manual
- * popovers, so the top layer orders them, but they are a group of their own
- * that never stacks, recedes, or owns a scrim.
- *
- * ## One state per page, per document
- *
- * The state lives on `globalThis` so that two copies of this module on one
- * page that speak the same stack protocol version share one stack (see
- * StackState); everything the stack reads and writes across commits — the
- * entries, each document's shown order, which documents have the press
- * listeners, the deferred non-modal sheets and their watchers, the element to
- * keep focused across a re-show — is in that shared state and none of it is
- * per copy. The one module-level value is the engine probe's answer, a fact
- * about the browser that every copy measures alike. A copy on another
- * protocol version keeps a stack of its own. Within a state, each document is
- * its own stack: a sheet portaled into another document has that document's
- * top layer, focus and order.
  */
+
+// Each modal sheet keeps its own native `<dialog>` and open state. The top
+// layer already paints a later showModal() above an earlier one, and the
+// later dialog blocks the earlier one. The browser does not know that the
+// dialogs are sheets of one stack. So this registry decides which sheet is on
+// top, how far each covered sheet recedes, and whose `::backdrop` is the one
+// scrim. The hosts call it only from commit-phase effects.
+//
+// Order is open order. Each open cycle gets a rank: its batch (one React
+// commit), then a sequence. Within one batch, document order decides, so a
+// sheet comes before the sheets in its content. Effect order is child first,
+// so the rank is read at compare time, after the whole commit registered.
+//
+// The top layer is reconciled, not trusted. Where the shown order differs
+// from the rank order, the registry closes the dialogs from the first
+// difference up and shows them again in rank order, inside the commit and
+// before paint. Only the dialogs that must move up are shown again.
+//
+// A replace is one sheet closing and another opening in the same commit,
+// where the closing sheet was the top open sheet and the last press or focus
+// was inside it. The registry then runs the switcher's handoff on the two
+// dialogs. The retained sheet is inert at once and lends its opener to the
+// entering sheet. A covered sheet closing, a close in another update, or a
+// change driven from outside the closing sheet is never a replace. Non-modal
+// sheets replace each other too, but they never stack.
+//
+// The state lives on `globalThis`, under a key with the protocol version, so
+// two copies of this module on one page share one stack. A copy on another
+// version keeps its own stack. Each document is its own stack.
 
 import {notifyTopLayerEntry} from '../Layer/modalOutlet';
 import {focusForLastInput} from '../utils/focusReturn';
@@ -356,10 +305,8 @@ interface DeferredTopLayer {
  * The stack protocol version: the shape and meaning of Entry, the
  * registration, the batch/seal protocol and the shared listeners. Copies of
  * the package on one page share one stack per document when they speak the
- * same protocol (`component:BottomSheet` PR1); the version is part of the
- * document-global key, so a copy on another protocol finds no state of its
- * own version and keeps a stack of its own — two independent stacks, each
- * ordering only the sheets its copy renders, never a shared state read with
+ * same protocol. The version is part of the document-global key, so a copy
+ * on another protocol keeps its own stack and never reads a shared state of
  * the wrong shape. Bump it whenever any of those change.
  */
 const STACK_PROTOCOL_VERSION = 8;
@@ -566,10 +513,9 @@ function listenForPresses(doc: Document): void {
 }
 
 /**
- * The document's last registered sheet left: nothing feeds the press record
- * any more, so the listeners go (`architecture:react-component-runtime`
- * INV5: a subscription lives as long as what reads it). The next sheet to
- * register in the document installs them again.
+ * The document's last registered sheet left. Nothing reads the press record
+ * now, so the listeners go. The next sheet to register in the document
+ * installs them again.
  */
 function stopListeningForPresses(doc: Document): void {
   if (state.entries.some(entry => entry.doc === doc)) {
@@ -968,8 +914,8 @@ function deferTopLayerEntry(
     state.deferredTopLayer.set(doc, entry);
   }
   if (entry.stopListeningForClose == null) {
-    // Installed with the first deferral and removed with the last promotion
-    // (`architecture:react-component-runtime` INV5), like the observer below.
+    // Installed with the first deferral and removed with the last promotion,
+    // like the observer below.
     const onClose = () => {
       promoteDeferredNonModal(doc);
     };
@@ -1453,6 +1399,28 @@ function finishReplace(replaced: Entry): void {
   replaced.replaceable?.finish();
 }
 
+/**
+ * The viewport top a panel rests at: its box without the translation it is
+ * still travelling under (an entering panel rises from below the viewport).
+ * Read from the panel itself, never from the element around it: a standalone
+ * sheet's panel sits directly in its dialog, which spans the viewport, so a
+ * parent's top is not where the panel rests.
+ */
+function restingTopOfPanel(panel: HTMLElement): number {
+  const top = panel.getBoundingClientRect().top;
+  const view = panel.ownerDocument.defaultView;
+  if (view == null || typeof view.DOMMatrixReadOnly !== 'function') {
+    return top;
+  }
+  const {transform} = view.getComputedStyle(panel);
+  if (transform === '' || transform === 'none') {
+    return top;
+  }
+  // A sheet panel only ever translates on the block axis (entrance, drag,
+  // alignment); its computed matrix's `m42` is that translation.
+  return top - new view.DOMMatrixReadOnly(transform).m42;
+}
+
 function alignmentOffsetForPanels(
   enteringPanel: HTMLElement | null,
   retainedPanel: HTMLElement | null,
@@ -1460,12 +1428,13 @@ function alignmentOffsetForPanels(
   if (enteringPanel == null || retainedPanel == null) {
     return 0;
   }
-  // The positioner is where the entering sheet will rest; the panel itself
-  // is still rising from below the viewport.
-  const enteringTop =
-    enteringPanel.parentElement?.getBoundingClientRect().top ??
-    enteringPanel.getBoundingClientRect().top;
-  return Math.max(0, enteringTop - retainedPanel.getBoundingClientRect().top);
+  // The retained panel is at rest; the entering panel is measured where its
+  // entrance will leave it.
+  return Math.max(
+    0,
+    restingTopOfPanel(enteringPanel) -
+      retainedPanel.getBoundingClientRect().top,
+  );
 }
 
 /**

@@ -55,6 +55,7 @@ import {
   fontWeightVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {isRenderable} from '../utils/isRenderable';
 
 // =============================================================================
 // Styles
@@ -477,6 +478,7 @@ export function TopNavMenu({
     return (
       <div {...stylex.props(drawerStyles.section)}>
         <button
+          ref={ref}
           type="button"
           {...rest}
           onMouseEnter={onMouseEnterProp}
@@ -531,7 +533,7 @@ export function TopNavMenu({
                   interactionOverlayStyles.backgroundColor,
                   drawerStyles.item,
                 )}>
-                {item.icon && (
+                {isRenderable(item.icon) && (
                   <span {...stylex.props(drawerStyles.itemIcon)}>
                     {item.icon}
                   </span>

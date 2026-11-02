@@ -170,6 +170,58 @@ function layout(element: HTMLElement, top: number, height: number) {
   element.getBoundingClientRect = () => new DOMRect(0, top, 390, height);
 }
 
+/**
+ * Lay out a standalone step as the browser does: its dialog spans the
+ * viewport and its panel sits directly in it, `top` from the viewport top.
+ * Nothing between them marks where the panel rests.
+ */
+function layoutSheet(dialog: HTMLElement, top: number, height: number) {
+  layout(dialog, 0, 844);
+  layout(getPanel(dialog), top, height);
+}
+
+/**
+ * Give a panel the computed transform a browser reports while it travels
+ * `offset` px below where it rests (an entrance in flight), with the matrix
+ * type the browser has and jsdom lacks. Returns the undo.
+ */
+function travel(panel: HTMLElement, offset: number): () => void {
+  const view = panel.ownerDocument.defaultView as Window & {
+    DOMMatrixReadOnly?: unknown;
+  };
+  class Matrix {
+    m42: number;
+    constructor(transform: string) {
+      const values = /^matrix\((.*)\)$/.exec(transform)?.[1].split(',') ?? [];
+      this.m42 = Number(values[5] ?? 0);
+    }
+  }
+  const hadMatrix = 'DOMMatrixReadOnly' in view;
+  const previousMatrix = view.DOMMatrixReadOnly;
+  view.DOMMatrixReadOnly = Matrix;
+  const getComputedStyle = view.getComputedStyle.bind(view);
+  const spy = vi
+    .spyOn(view, 'getComputedStyle')
+    .mockImplementation((element, pseudo) => {
+      const style = getComputedStyle(element, pseudo);
+      if (element === panel) {
+        // Each call returns a fresh declaration; shadow its `transform`.
+        Object.defineProperty(style, 'transform', {
+          value: `matrix(1, 0, 0, 1, 0, ${offset})`,
+        });
+      }
+      return style;
+    });
+  return () => {
+    spy.mockRestore();
+    if (hadMatrix) {
+      view.DOMMatrixReadOnly = previousMatrix;
+    } else {
+      delete view.DOMMatrixReadOnly;
+    }
+  };
+}
+
 type Step = 'one' | 'two' | 'three' | null;
 
 /**
@@ -455,8 +507,8 @@ describe('BottomSheet replace: the handoff', () => {
     // Step one is 400px tall; step two will rest 160px lower. The panels are
     // mounted already, so lay them out before the switch: the alignment is
     // measured when the entering motion starts.
-    layout(getPanel(one), 444, 400);
-    layout(getPanel(two).parentElement as HTMLElement, 604, 240);
+    layoutSheet(one, 444, 400);
+    layoutSheet(two, 604, 240);
     fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
     expect(summary()).toEqual(['One:replaced-aligning:0', 'Two:replacing:0']);
     expect(getPanel(one).style.transform).toBe('translateY(160px)');
@@ -474,8 +526,8 @@ describe('BottomSheet replace: the handoff', () => {
     openFlow();
     const one = getDialog('One');
     const two = getDialog('Two');
-    layout(getPanel(one), 444, 400);
-    layout(getPanel(two).parentElement as HTMLElement, 604, 240);
+    layoutSheet(one, 444, 400);
+    layoutSheet(two, 604, 240);
     fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
     endMotion(one, 'transform');
     expect(summary()).toEqual(['One:replaced-aligning:0', 'Two:replacing:0']);
@@ -488,11 +540,53 @@ describe('BottomSheet replace: the handoff', () => {
     openFlow();
     const one = getDialog('One');
     const two = getDialog('Two');
-    layout(getPanel(one), 604, 240);
-    layout(getPanel(two).parentElement as HTMLElement, 444, 400);
+    layoutSheet(one, 604, 240);
+    layoutSheet(two, 444, 400);
     fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
     expect(summary()).toEqual(['One:replaced-covered:0', 'Two:replacing:0']);
     expect(getPanel(one).style.transform).toBe('');
+  });
+
+  it('aligns to where the entering sheet comes to rest, not where its entrance has it', () => {
+    render(<Flow />);
+    openFlow();
+    const one = getDialog('One');
+    const two = getDialog('Two');
+    layoutSheet(one, 444, 400);
+    // Two rests at 604 but is still 240px below that, rising.
+    layoutSheet(two, 844, 240);
+    const restore = travel(getPanel(two), 240);
+    try {
+      fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
+    } finally {
+      restore();
+    }
+    expect(summary()).toEqual(['One:replaced-aligning:0', 'Two:replacing:0']);
+    expect(getPanel(one).style.transform).toBe('translateY(160px)');
+  });
+
+  it('moves the taller sheet back down when the person goes back to a shorter step', () => {
+    render(<Flow />);
+    openFlow();
+    fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
+    endMotion(getDialog('Two'), 'transform');
+    endMotion(getDialog('One'), 'opacity');
+    fireEvent.click(screen.getByRole('button', {name: 'Continue to three'}));
+    endMotion(getDialog('Three'), 'transform');
+    endMotion(getDialog('Two'), 'opacity');
+    expect(summary()).toEqual(['Three:top:0']);
+    const two = getDialog('Two');
+    const three = getDialog('Three');
+    layoutSheet(three, 388, 456);
+    layoutSheet(two, 444, 400);
+    fireEvent.click(screen.getByRole('button', {name: 'Back to two'}));
+    expect(summary()).toEqual(['Three:replaced-aligning:0', 'Two:replacing:0']);
+    expect(getPanel(three).style.transform).toBe('translateY(56px)');
+    endMotion(two, 'transform');
+    endMotion(three, 'transform');
+    expect(summary()).toEqual(['Three:replaced-fading:0', 'Two:replacing:0']);
+    endMotion(three, 'opacity');
+    expect(summary()).toEqual(['Two:top:0']);
   });
 
   it('keeps the scrim on the replaced sheet and hands it to the new sheet with no fade', () => {
@@ -954,6 +1048,24 @@ describe('BottomSheet replace: reduced motion (design:reduced-motion)', () => {
     endMotion(two, 'opacity');
     expect(two).not.toHaveAttribute('open');
     expect(openDialogs()).toEqual([]);
+  });
+
+  it('the replaced sheet does not move down to a shorter entering sheet (DR1), and the handoff still ends after its fade', () => {
+    stubMedia(['(prefers-reduced-motion: reduce)']);
+    render(<Flow />);
+    openFlow();
+    const one = getDialog('One');
+    const two = getDialog('Two');
+    layoutSheet(one, 444, 400);
+    layoutSheet(two, 604, 240);
+    fireEvent.click(screen.getByRole('button', {name: 'Continue to two'}));
+    expect(summary()).toEqual(['One:replaced-aligning:0', 'Two:replacing:0']);
+    expect(getPanel(one).style.transform).toBe('');
+    endMotion(two, 'transform');
+    endMotion(one, 'transform');
+    expect(summary()).toEqual(['One:replaced-fading:0', 'Two:replacing:0']);
+    endMotion(one, 'opacity');
+    expect(summary()).toEqual(['Two:top:0']);
   });
 
   it('fine pointer (DR3): an exit ends on its (collapsed) transform, as without the preference', () => {

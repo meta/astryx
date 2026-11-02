@@ -13,7 +13,14 @@ import {useState, type SyntheticEvent} from 'react';
 import {readFileSync} from 'node:fs';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import type {MockInstance} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  within,
+  cleanup,
+} from '@testing-library/react';
+import {createPortal} from 'react-dom';
 import {
   Dialog,
   dialogFullscreenSafeAreaPaddingContract,
@@ -21,7 +28,10 @@ import {
 } from './Dialog';
 import {DialogHeader} from './DialogHeader';
 import {defineTheme, generateThemeCSS} from '../theme';
-import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {
+  __resetInteractionModalityForTest,
+  getInteractionModality,
+} from '../utils/interactionModality';
 
 function generateThemeTestCSS(
   theme: Parameters<typeof generateThemeCSS>[0],
@@ -554,6 +564,210 @@ describe('Dialog', () => {
         fireEvent.click(screen.getByRole('button', {name: 'Close dialog'}));
       }).not.toThrow();
       expect(dialog).not.toHaveAttribute('open');
+    });
+
+    describe('in a second document', () => {
+      // An app can render a Dialog into a same-origin iframe or a Document
+      // Picture-in-Picture window through a portal. The control that opens it
+      // is focused in that document; the page's document reports only the
+      // iframe element.
+      let frame: HTMLIFrameElement;
+      let secondDocument: Document;
+
+      beforeEach(() => {
+        frame = document.createElement('iframe');
+        document.body.appendChild(frame);
+        secondDocument = frame.contentDocument!;
+        // The showModal/close stand-ins above, on the second window's own
+        // prototype.
+        const {prototype} = secondDocument.defaultView!.HTMLDialogElement;
+        prototype.showModal = HTMLDialogElement.prototype.showModal;
+        prototype.close = HTMLDialogElement.prototype.close;
+      });
+
+      afterEach(() => {
+        // Unmount before the frame goes, or React removes nodes from a
+        // document that no longer exists.
+        cleanup();
+        frame.remove();
+      });
+
+      function SecondDocumentDialog({isOpen}: {isOpen: boolean}) {
+        return createPortal(
+          <>
+            <button type="button">Open dialog</button>
+            <Dialog isOpen={isOpen} onOpenChange={() => {}} aria-label="Review">
+              <button type="button">Inside</button>
+            </Dialog>
+          </>,
+          secondDocument.body,
+        );
+      }
+
+      function PageOpensSecondDocumentDialog({isOpen}: {isOpen: boolean}) {
+        return (
+          <>
+            <button type="button">Open from the page</button>
+            {createPortal(
+              <Dialog
+                isOpen={isOpen}
+                onOpenChange={() => {}}
+                aria-label="Review">
+                <button type="button">Inside</button>
+              </Dialog>,
+              secondDocument.body,
+            )}
+          </>
+        );
+      }
+
+      function SecondDocumentFieldDialog({isOpen}: {isOpen: boolean}) {
+        return createPortal(
+          <>
+            <input aria-label="Search" />
+            <Dialog isOpen={isOpen} onOpenChange={() => {}} aria-label="Review">
+              <button type="button">Inside</button>
+            </Dialog>
+          </>,
+          secondDocument.body,
+        );
+      }
+
+      function SecondDocumentDialogs({count}: {count: number}) {
+        return createPortal(
+          <>
+            {count > 0 && (
+              <Dialog isOpen={false} onOpenChange={() => {}} aria-label="First">
+                First
+              </Dialog>
+            )}
+            {count > 1 && (
+              <Dialog
+                isOpen={false}
+                onOpenChange={() => {}}
+                aria-label="Second">
+                Second
+              </Dialog>
+            )}
+          </>,
+          secondDocument.body,
+        );
+      }
+
+      it('returns focus to the control that opened it, in its own document', () => {
+        const {rerender} = render(<SecondDocumentDialog isOpen={false} />);
+        const view = within(secondDocument.body);
+        const opener = view.getByRole('button', {name: 'Open dialog'});
+        opener.focus();
+        expect(document.activeElement).toBe(frame);
+
+        rerender(<SecondDocumentDialog isOpen={true} />);
+        view.getByRole('button', {name: 'Inside', hidden: true}).focus();
+
+        rerender(<SecondDocumentDialog isOpen={false} />);
+        expect(opener).toHaveFocus();
+      });
+
+      it('returns focus to a control in the page that opened it', () => {
+        const {rerender} = render(
+          <PageOpensSecondDocumentDialog isOpen={false} />,
+        );
+        const opener = screen.getByRole('button', {name: 'Open from the page'});
+        opener.focus();
+
+        rerender(<PageOpensSecondDocumentDialog isOpen={true} />);
+        within(secondDocument.body)
+          .getByRole('button', {name: 'Inside', hidden: true})
+          .focus();
+
+        rerender(<PageOpensSecondDocumentDialog isOpen={false} />);
+        expect(opener).toHaveFocus();
+      });
+
+      it('takes the ring from the last input in its own document', () => {
+        __resetInteractionModalityForTest();
+        const {rerender} = render(<SecondDocumentDialog isOpen={false} />);
+        const opener = within(secondDocument.body).getByRole('button', {
+          name: 'Open dialog',
+        });
+        // The page's last input was a pointer press (say, on the control that
+        // popped the window out); the dialog then closes from the keyboard in
+        // its own document.
+        fireEvent.pointerDown(document.body);
+        opener.focus();
+        rerender(<SecondDocumentDialog isOpen={true} />);
+        fireEvent.keyDown(secondDocument.body, {key: 'Escape'});
+        const focus = vi.spyOn(
+          secondDocument.defaultView!.HTMLElement.prototype,
+          'focus',
+        );
+
+        rerender(<SecondDocumentDialog isOpen={false} />);
+        expect(opener).toHaveFocus();
+        expect(
+          focus.mock.calls.filter(
+            (_call, index) => focus.mock.contexts[index] === opener,
+          ),
+        ).toEqual([[]]);
+        focus.mockRestore();
+      });
+
+      it('keeps plain focus on a text field that opened it after a pointer close', () => {
+        const {rerender} = render(<SecondDocumentFieldDialog isOpen={false} />);
+        const field = within(secondDocument.body).getByRole('textbox', {
+          name: 'Search',
+        });
+        field.focus();
+        rerender(<SecondDocumentFieldDialog isOpen={true} />);
+        const inside = within(secondDocument.body).getByRole('button', {
+          name: 'Inside',
+          hidden: true,
+        });
+        inside.focus();
+        fireEvent.pointerDown(inside);
+        // The field's own window's prototype: a field there is never an
+        // instance of the page's constructors.
+        const {prototype} = secondDocument.defaultView!.HTMLElement;
+        const focus = vi.spyOn(prototype, 'focus');
+        const blur = vi.spyOn(prototype, 'blur');
+
+        rerender(<SecondDocumentFieldDialog isOpen={false} />);
+        expect(field).toHaveFocus();
+        expect(
+          focus.mock.calls.filter(
+            (_call, index) => focus.mock.contexts[index] === field,
+          ),
+        ).toEqual([[]]);
+        expect(blur.mock.contexts).not.toContain(field);
+        focus.mockRestore();
+        blur.mockRestore();
+      });
+
+      it('tracks its document while any Dialog there is mounted, and releases it after the last', () => {
+        const removeEventListener = vi.spyOn(
+          secondDocument,
+          'removeEventListener',
+        );
+        const removedModalityListeners = () =>
+          removeEventListener.mock.calls
+            .map(([type]) => type)
+            .filter(type => type === 'pointerdown' || type === 'keydown')
+            .sort();
+        const {rerender} = render(<SecondDocumentDialogs count={2} />);
+        fireEvent.pointerDown(secondDocument.body);
+        expect(getInteractionModality(secondDocument)).toBe('pointer');
+
+        rerender(<SecondDocumentDialogs count={1} />);
+        fireEvent.keyDown(secondDocument.body, {key: 'Tab'});
+        expect(getInteractionModality(secondDocument)).toBe('keyboard');
+        expect(removedModalityListeners()).toEqual([]);
+
+        rerender(<SecondDocumentDialogs count={0} />);
+        expect(removedModalityListeners()).toEqual(['keydown', 'pointerdown']);
+        fireEvent.pointerDown(secondDocument.body);
+        expect(getInteractionModality(secondDocument)).toBe('keyboard');
+        removeEventListener.mockRestore();
+      });
     });
   });
 

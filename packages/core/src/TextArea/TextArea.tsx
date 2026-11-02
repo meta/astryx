@@ -41,12 +41,13 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {isRenderable} from '../utils/isRenderable';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
+import {joinAriaIDs} from '../utils/inputAria';
 import type {BaseProps} from '../BaseProps';
 import {
   type FieldInputBaseProps,
@@ -61,10 +62,17 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {characterCount} from '../utils/characters';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TextArea/TextArea.generated';
+
+registerEnglishFallback(english);
 const COUNTER_WARNING_THRESHOLD = 0.8;
 
 const styles = stylex.create({
@@ -303,7 +311,7 @@ export interface TextAreaProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field (label, control, and status) so they
@@ -417,6 +425,7 @@ export function TextArea({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TextAreaProps) {
   const {rest, container} = useFieldInputStyling('TextArea', restProps, {
@@ -425,11 +434,16 @@ export function TextArea({
     containerStyle,
   });
   const size = useSize(sizeProp, 'md');
-  const t = useTranslator();
+  // One presence check for the start icon's slot and its padding
+  // (`architecture:react-component-runtime` INV16), on the value the caller
+  // passed: an icon component counts as present, as any non-empty value does.
+  const hasStartIcon = isRenderable(startIcon as ReactNode);
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const announce = useAnnounce();
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
   const counterID = useId();
@@ -572,6 +586,7 @@ export function TextArea({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}
@@ -618,7 +633,7 @@ export function TextArea({
           controlClassName,
           controlStyle,
         )}>
-        {startIcon && (
+        {hasStartIcon && (
           <span {...stylex.props(styles.startIcon)}>
             {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
           </span>
@@ -644,6 +659,13 @@ export function TextArea({
           spellCheck={hasSpellCheck}
           autoFocus={hasAutoFocus}
           data-autofocus={hasAutoFocus || undefined}
+          // A caller aria-labelledby names the textarea together with the
+          // field's own label, which it would otherwise replace.
+          aria-labelledby={
+            ariaLabelledByProp != null
+              ? joinAriaIDs(fieldLabelID, ariaLabelledByProp)
+              : undefined
+          }
           aria-describedby={
             [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
             undefined
@@ -662,7 +684,7 @@ export function TextArea({
               styles.textarea,
               textareaSizeStyles[size],
               isDisabled && styles.textareaDisabled,
-              Boolean(startIcon) && styles.textareaWithStartIcon,
+              hasStartIcon && styles.textareaWithStartIcon,
               // Reserve trailing space only when the end slot actually renders
               // something (spinner or on-field status icon). The `detached`
               // status variant suppresses the on-field icon — its glyph lives
@@ -680,6 +702,7 @@ export function TextArea({
             {statusIcon}
           </span>
         )}
+        {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
         {maxLength != null && (
           <div
             id={counterID}
@@ -696,7 +719,10 @@ export function TextArea({
               // live-region announcement carry the meaning.
               <Icon icon="warning" size="sm" />
             )}
-            {valueLength}/{maxLength}
+            {t('@astryx.textArea.counter', {
+              count: valueLength,
+              limit: maxLength,
+            })}
           </div>
         )}
       </div>

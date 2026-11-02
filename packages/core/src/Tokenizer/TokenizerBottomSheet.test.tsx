@@ -72,9 +72,11 @@ function Harness({
   presentation?: Presentation;
   initial?: SearchableItem[];
   hasCreate?: boolean;
+  hasClear?: boolean;
   maxEntries?: number;
   isDisabled?: boolean;
   disabledMessage?: string;
+  'aria-labelledby'?: string;
   debounceMs?: number;
   onFocus?: (event: React.FocusEvent) => void;
   onBlur?: (event: React.FocusEvent) => void;
@@ -238,6 +240,16 @@ describe('Tokenizer experimental.presentation (FR16)', () => {
 });
 
 describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
+  it('names the sheet trigger by its label, then a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="billing-heading">Billing</span>
+        <Harness aria-labelledby="billing-heading" />
+      </>,
+    );
+    expect(screen.getByRole('button', {name: 'Tags Billing'})).toBeTruthy();
+  });
+
   it('keeps rows stable while open and applies selected-first order on reopen (FR19)', async () => {
     const spy = vi.fn();
     render(<Harness spy={spy} />);
@@ -797,6 +809,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           ),
         ).toHaveTextContent('All items removed'),
       );
+      // Exactly one live region says it: the field's own region stays silent
+      // for a Clear all the sheet already announced.
+      const saying = Array.from(
+        document.querySelectorAll(
+          '[aria-live], [role="status"], [role="alert"]',
+        ),
+      ).filter(region => region.textContent?.includes('All items removed'));
+      expect(saying).toHaveLength(1);
     } finally {
       modalSpy.mockRestore();
     }
@@ -1787,7 +1807,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // changes until the sheet closes.
     compact = false;
     act(() => {
-      for (const cb of listeners) cb();
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(screen.getByRole('dialog', {name: 'Tags'})).toBe(dialog);
     expect(trigger).toBeInTheDocument();
@@ -2531,7 +2553,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // the hand-off inside the field reports neither a blur nor a focus.
     compact = false;
     act(() => {
-      for (const cb of listeners) cb();
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(screen.getByRole('combobox')).toHaveFocus();
     expect(onFocus).toHaveBeenCalledTimes(1);
@@ -2539,15 +2563,150 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // And back: the input focused, the screen becomes compact again.
     compact = true;
     act(() => {
-      for (const cb of listeners) cb();
+      for (const cb of listeners) {
+        cb();
+      }
     });
     expect(openTrigger()).toHaveFocus();
     // Unfocused, a change moves nothing.
     openTrigger().blur();
     compact = false;
     act(() => {
-      for (const cb of listeners) cb();
+      for (const cb of listeners) {
+        cb();
+      }
     });
+    expect(document.body).toHaveFocus();
+  });
+
+  it('hands focus to the trigger when a swap removes a focused Remove button or Clear all (FR16)', () => {
+    let compact = false;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        get matches() {
+          return query === COMPACT_TOUCH_QUERY ? compact : false;
+        },
+        media: query,
+        onchange: null,
+        addEventListener: (_: string, cb: () => void) => listeners.add(cb),
+        removeEventListener: (_: string, cb: () => void) =>
+          listeners.delete(cb),
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      })),
+    );
+    const turn = (next: boolean) => {
+      compact = next;
+      act(() => {
+        for (const cb of listeners) {
+          cb();
+        }
+      });
+    };
+    render(<Harness presentation="adaptive" hasClear />);
+    // Inline: a token's Remove button holds focus, then the screen turns
+    // compact-touch.
+    // Enter the field first: focus arriving from the page is redirected to
+    // the input, so a Remove button only holds focus once inside.
+    screen.getByRole('combobox').focus();
+    const remove = screen.getByRole('button', {name: 'Remove Design'});
+    remove.focus();
+    expect(remove).toHaveFocus();
+    turn(true);
+    expect(openTrigger()).toHaveFocus();
+    // Back to inline, then the inline Clear all holds focus.
+    turn(false);
+    const clearAll = screen.getByRole('button', {name: 'Clear all'});
+    clearAll.focus();
+    expect(clearAll).toHaveFocus();
+    turn(true);
+    expect(openTrigger()).toHaveFocus();
+  });
+
+  it('owes no hand-off once focus has left the field, even after the wrapper re-attached while focused (FR16)', () => {
+    const onFocus = vi.fn();
+    const stableRef = () => {};
+    const field = (isDisabled: boolean, ref: () => void = stableRef) => (
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        isDisabled={isDisabled}
+        disabledMessage="You need the Editor role"
+        ref={ref}
+        experimental={{presentation: 'popover'}}
+      />
+    );
+    const {rerender} = render(field(false));
+    const input = screen.getByRole('combobox');
+    input.focus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    // Toggling isDisabled re-attaches the field's wrapper, not the input,
+    // while the input holds focus, which notes a hand-off.
+    rerender(field(true));
+    rerender(field(false));
+    expect(input).toHaveFocus();
+    // The user leaves the field.
+    act(() => {
+      input.blur();
+    });
+    expect(document.body).toHaveFocus();
+    // A later re-attach of the input (a new inline ref) must not pull focus
+    // back.
+    rerender(field(false, () => {}));
+    expect(document.body).toHaveFocus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves no focus when a control re-attaches without a swap, such as a new ref callback (FR16; react-component-runtime INV6)', () => {
+    const onFocus = vi.fn();
+    const {rerender} = render(
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        ref={() => {}}
+        experimental={{presentation: 'popover'}}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    // A new inline ref detaches and re-attaches the same input while it
+    // holds focus: nothing is handed off, and no focus is reported again.
+    rerender(
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        ref={() => {}}
+        experimental={{presentation: 'popover'}}
+      />,
+    );
+    expect(input).toHaveFocus();
+    expect(onFocus).toHaveBeenCalledTimes(1);
+    // Focus elsewhere: a later re-attach takes nothing back.
+    input.blur();
+    rerender(
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        onFocus={onFocus}
+        ref={() => {}}
+        experimental={{presentation: 'popover'}}
+      />,
+    );
     expect(document.body).toHaveFocus();
   });
 

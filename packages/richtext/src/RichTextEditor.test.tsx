@@ -14,9 +14,22 @@
  */
 
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  act,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {createRef, StrictMode, useEffect, useState} from 'react';
+import {
+  createRef,
+  StrictMode,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import type {EditorState, LexicalEditor} from 'lexical';
@@ -1328,9 +1341,19 @@ describe('markdown serializers', () => {
 });
 
 describe('RichTextEditorToolbar', () => {
-  it('treats a false conditional toolbar as absent', () => {
+  // A slot is empty for exactly the values React renders as nothing.
+  it.each([
+    ['false', false],
+    ['an empty string', ''],
+    ['true', true],
+    ['null', null],
+  ])('treats a %s conditional toolbar as absent', (_name, value) => {
     const {container, rerender} = render(
-      <RichTextEditor label="Notes" toolbar={false} tabEscapeHint="" />,
+      <RichTextEditor
+        label="Notes"
+        toolbar={value as ReactNode}
+        tabEscapeHint=""
+      />,
     );
     const conditionalBodyClass = container.querySelector(
       '.astryx-rich-text-editor',
@@ -2254,5 +2277,45 @@ describe('RichTextEditor translation', () => {
     expect(screen.getByRole('textbox')).toHaveAccessibleDescription(
       'Custom hint',
     );
+  });
+});
+
+describe('RichTextEditorToolbar end content', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('adds no divider for %s', (_name, value) => {
+    const html = () =>
+      within(
+        screen.getByRole('toolbar', {name: 'Text formatting'}),
+      ).queryAllByRole('separator').length;
+    const {unmount} = render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar endContent={value as ReactNode} />}
+      />,
+    );
+    const withEnd = html();
+    unmount();
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    expect(withEnd).toBe(html());
+  });
+
+  it('renders 0 as end content, as React does', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        toolbar={<RichTextEditorToolbar endContent={0} />}
+      />,
+    );
+    expect(
+      within(screen.getByRole('toolbar', {name: 'Text formatting'})).getByText(
+        '0',
+      ),
+    ).toBeInTheDocument();
   });
 });

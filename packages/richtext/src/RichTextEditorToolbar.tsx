@@ -82,7 +82,7 @@ import {
 } from '@astryxdesign/core/Layout';
 import {getExtendedIcon} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
-import {rtlStyles} from '@astryxdesign/core/utils';
+import {isRenderable, rtlStyles} from '@astryxdesign/core/utils';
 import {
   fontWeightVars,
   spacingVars,
@@ -988,7 +988,7 @@ export function RichTextEditorToolbar({
                 onPressedChange={toggleLink}
               />
             )}
-            {endContent != null && (
+            {isRenderable(endContent) && (
               <>
                 <Divider orientation="vertical" />
                 {endContent}

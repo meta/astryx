@@ -21,7 +21,7 @@ export {
   type SyntaxToken,
 } from '@astryxdesign/core/CodeBlock';
 
-// InfoTip — accessible info-icon help affordance (RFC facebook/astryx#3349)
+// InfoTip — accessible info-icon help affordance (RFC meta/astryx#3349)
 export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
 
 // EmojiPicker — standalone searchable emoji panel
@@ -88,7 +88,7 @@ export {
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
 
-// Tour — guided product-tour / NUX walkthrough (facebook/astryx#4239)
+// Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {
   Tour,
   type TourProps,
@@ -333,6 +333,6 @@ export {
   type MobilePowerSearchProps,
 } from './MobilePowerSearch';
 
-// RichTextEditor (RFC facebook/astryx#3899) moved out of @astryxdesign/lab into
+// RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';

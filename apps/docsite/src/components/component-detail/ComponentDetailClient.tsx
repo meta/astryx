@@ -4,7 +4,8 @@
 
 /**
  * @file Composes a generated component's overview, examples, and detail tabs.
- * @input Component metadata, package metadata, and its showcase block.
+ * @input Component metadata (including its stability), package metadata, and
+ *   its showcase block.
  * @output The interactive component detail article with stable example targets.
  * @position Client content for /components/[name].
  */
@@ -12,6 +13,7 @@
 import * as stylex from '@stylexjs/stylex';
 import {Suspense} from 'react';
 import {useSearchParams, useRouter, usePathname} from 'next/navigation';
+import {Badge, type BadgeVariant} from '@astryxdesign/core/Badge';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Section} from '@astryxdesign/core/Section';
@@ -100,6 +102,15 @@ interface ComponentDetailClientProps {
   pkgVersion: string | undefined;
   showcase: BlockEntry | undefined;
 }
+
+/** The header badge for each stability other than stable, which shows none. */
+const STABILITY_BADGES: Record<
+  NonNullable<ComponentEntry['stability']>,
+  {label: string; variant: BadgeVariant}
+> = {
+  experimental: {label: 'Experimental', variant: 'orange'},
+  lab: {label: 'Lab', variant: 'purple'},
+};
 
 function OverviewContent({
   comp,
@@ -390,6 +401,8 @@ export function ComponentDetailClient({
     accessibilityRequirements.length > 0 ||
     accessibilityThemeCoverage.length > 0;
   const hasTabs = hasPlayground || hasThemingTab || hasAccessibilityTab;
+  const stabilityBadge =
+    comp.stability != null ? STABILITY_BADGES[comp.stability] : null;
 
   return (
     <Section
@@ -406,6 +419,15 @@ export function ComponentDetailClient({
             {!comp.isReady ? 'Canary · ' : ''}
             {pkg}
             {pkgVersion ? ` v${pkgVersion}` : ''} · {comp.moduleName}
+            {stabilityBadge && (
+              <>
+                {' '}
+                <Badge
+                  label={stabilityBadge.label}
+                  variant={stabilityBadge.variant}
+                />
+              </>
+            )}
             {!comp.isReady && pkg ? ` · npm install ${pkg}@canary` : ''}
           </Text>
         </VStack>

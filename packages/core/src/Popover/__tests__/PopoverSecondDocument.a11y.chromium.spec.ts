@@ -8,12 +8,13 @@
  * @output Real-browser evidence that a Popover rendered into a second document
  *   (a same-origin iframe, a Document Picture-in-Picture window) focuses its
  *   first control on open, keeps Tab inside, closes on Escape through the layer
- *   stack with and without light dismiss, and hands focus back to its trigger
- *   after an outside click, exactly as the same Popover does in the page.
+ *   stack with and without light dismiss, hands focus back to its trigger after
+ *   an outside click, and scrolls once its own window is too short for it or
+ *   its content grows past it, exactly as the same Popover does in the page.
  * @position The half of the second-document rule jsdom cannot honestly reach:
- *   real key delivery to another window, native light dismiss, and the
- *   browser's own close watcher. The Vitest cases in `Popover/Popover.test.tsx`
- *   model the same rule with an iframe.
+ *   real key delivery to another window, native light dismiss, the browser's
+ *   own close watcher, and layout in another window. The Vitest cases in
+ *   `Popover/Popover.test.tsx` model the same rule with an iframe.
  *
  * SYNC: Fixture lives in
  *   /apps/storybook/stories/PopoverSecondDocumentA11y.stories.tsx.
@@ -54,6 +55,8 @@ type Where = 'page' | 'iframe' | 'Picture-in-Picture window';
 interface Surface {
   frame: Frame;
   keyboard: Keyboard;
+  /** Give the document's own window this height, in CSS pixels. */
+  resize: (height: number) => Promise<void>;
 }
 
 /** Load the story and return the document the test drives. */
@@ -67,20 +70,39 @@ async function mountStory(page: Page, where: Where): Promise<Surface> {
   await popOut.waitFor();
 
   if (where === 'page') {
-    return {frame: page.mainFrame(), keyboard: page.keyboard};
+    const viewport = page.viewportSize();
+    if (viewport == null) {
+      throw new Error('the page has no viewport size');
+    }
+    return {
+      frame: page.mainFrame(),
+      keyboard: page.keyboard,
+      resize: async height => {
+        await page.setViewportSize({width: viewport.width, height});
+      },
+    };
   }
   if (where === 'iframe') {
     const element = await page
       .locator('iframe[title="Second document"]')
       .elementHandle();
     const frame = await element?.contentFrame();
-    if (frame == null) {
+    if (element == null || frame == null) {
       throw new Error('the story renders no iframe');
     }
     await frame.getByRole('button', {name: 'Settings', exact: true}).waitFor();
     // Key presses go to whichever frame holds focus; the clicks below put it
     // in this one.
-    return {frame, keyboard: page.keyboard};
+    return {
+      frame,
+      keyboard: page.keyboard,
+      // The frame's window is as tall as the iframe element.
+      resize: async height => {
+        await element.evaluate((iframe, to) => {
+          (iframe as HTMLElement).style.height = `${to}px`;
+        }, height);
+      },
+    };
   }
   // Opening the window needs a user gesture; the click is one.
   const [pictureInPicture] = await Promise.all([
@@ -90,9 +112,19 @@ async function mountStory(page: Page, where: Where): Promise<Surface> {
   await pictureInPicture
     .getByRole('button', {name: 'Settings', exact: true})
     .waitFor();
+  const pictureInPictureViewport = pictureInPicture.viewportSize();
+  if (pictureInPictureViewport == null) {
+    throw new Error('the Picture-in-Picture window has no viewport size');
+  }
   return {
     frame: pictureInPicture.mainFrame(),
     keyboard: pictureInPicture.keyboard,
+    resize: async height => {
+      await pictureInPicture.setViewportSize({
+        width: pictureInPictureViewport.width,
+        height,
+      });
+    },
   };
 }
 
@@ -179,6 +211,36 @@ for (const where of [
       await frame.getByText('Outside', {exact: true}).click();
       await expect(trigger).toHaveAttribute('aria-expanded', 'false');
       await expect(trigger).toBeFocused();
+    });
+
+    test('scrolls once its own window is too short for it, and stops once it fits', async ({
+      page,
+    }) => {
+      const {frame, resize} = await mountStory(page, where);
+      await resize(700);
+      await open(frame, 'Long list');
+      const surface = frame.getByRole('dialog', {name: 'Long list'});
+      await expect(surface).toHaveCSS('overflow-y', 'visible');
+
+      await resize(240);
+      await expect(surface).toHaveCSS('overflow-y', 'auto');
+      await resize(700);
+      await expect(surface).toHaveCSS('overflow-y', 'visible');
+    });
+
+    test('scrolls once its content grows past its window', async ({page}) => {
+      const {frame, resize} = await mountStory(page, where);
+      await resize(700);
+      await open(frame, 'Long list');
+      const surface = frame.getByRole('dialog', {name: 'Long list'});
+      await expect(surface).toHaveCSS('overflow-y', 'visible');
+
+      // An inline style is an attribute change the popover's mutation
+      // observer ignores, so only its ResizeObserver can see the growth.
+      await surface.evaluate(element => {
+        (element.firstElementChild as HTMLElement).style.minHeight = '2000px';
+      });
+      await expect(surface).toHaveCSS('overflow-y', 'auto');
     });
 
     if (where !== 'page') {

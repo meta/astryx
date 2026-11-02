@@ -60,6 +60,19 @@ afterEach(() => {
 });
 
 describe('Drawer', () => {
+  it('clips its panel with `clip`, not `hidden`: the panel is no scroll container', () => {
+    // `hidden` clips exactly as well, so it reads as a harmless tidy-up, but it
+    // makes the panel a scroll container, and in Chromium its overscroll
+    // containment then holds a drag on the page beside a non-modal drawer
+    // (__tests__/DrawerNonModalPageScroll.a11y.chromium.spec.ts).
+    render(
+      <Drawer isOpen onOpenChange={() => {}} label="Details" hasScrim={false}>
+        Content
+      </Drawer>,
+    );
+    expect(getComputedStyle(screen.getByRole('dialog')).overflow).toBe('clip');
+  });
+
   it('renders children when open', () => {
     render(
       <Drawer isOpen onOpenChange={() => {}} label="Host details">
@@ -238,6 +251,28 @@ describe('Drawer', () => {
       fireEvent(screen.getByRole('dialog'), cancelEvent);
       expect(handleOpenChange).toHaveBeenCalledWith(false);
       expect(cancelEvent.defaultPrevented).toBe(true);
+    });
+
+    // A file input fires a bubbling `cancel` at itself when its picker is
+    // dismissed (Escape, or Cancel in the chooser). It reaches the <dialog>
+    // like a close request but is not one.
+    it('stays open when a file picker inside it is dismissed', () => {
+      const handleOpenChange = vi.fn();
+      render(
+        <Drawer isOpen onOpenChange={handleOpenChange} label="Details">
+          <input type="file" aria-label="Picture" />
+        </Drawer>,
+      );
+      const fromPicker = new Event('cancel', {bubbles: true, cancelable: true});
+      screen.getByLabelText('Picture').dispatchEvent(fromPicker);
+      expect(handleOpenChange).not.toHaveBeenCalled();
+      expect(fromPicker.defaultPrevented).toBe(false);
+      // Its own close request still closes it.
+      screen
+        .getByRole('dialog')
+        .dispatchEvent(new Event('cancel', {cancelable: true}));
+      expect(handleOpenChange).toHaveBeenCalledTimes(1);
+      expect(handleOpenChange).toHaveBeenCalledWith(false);
     });
 
     it('ignores other keys', () => {

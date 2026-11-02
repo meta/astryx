@@ -842,7 +842,7 @@ describe('audit mode contract', () => {
 describe('issue plumbing', () => {
   it('links a filed BLOCK and says so when one is not filed', () => {
     expect(blockLink({id: 'A8', summary: 'x', issue: 3885})).toContain(
-      'https://github.com/facebook/astryx/issues/3885',
+      'https://github.com/meta/astryx/issues/3885',
     );
     expect(blockLink({id: 'A8', summary: 'x', issue: null})).toContain('no issue filed');
   });
@@ -987,15 +987,15 @@ describe('the commit message', () => {
 
 describe('wiki URLs', () => {
   it('reads the repo out of a wiki remote, https or ssh', () => {
-    expect(repoFromWikiRemote('https://github.com/facebook/astryx.wiki.git')).toBe(
-      'facebook/astryx',
+    expect(repoFromWikiRemote('https://github.com/meta/astryx.wiki.git')).toBe(
+      'meta/astryx',
     );
-    expect(repoFromWikiRemote('git@github.com:facebook/astryx.wiki.git')).toBe('facebook/astryx');
+    expect(repoFromWikiRemote('git@github.com:meta/astryx.wiki.git')).toBe('meta/astryx');
   });
 
   it('builds a commit URL GitHub actually serves', () => {
     expect(wikiCommitUrl('deadbeef')).toBe(
-      'https://github.com/facebook/astryx/wiki/_compare/deadbeef',
+      'https://github.com/meta/astryx/wiki/_compare/deadbeef',
     );
   });
 });

@@ -23,7 +23,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/Tokenizer.tsx (the trigger and the lazy host)
- * - /packages/core/src/Tokenizer/Tokenizer.spec.md (FR16–FR24, AR6, PR6)
+ * - /docs/specs/components/Tokenizer/Tokenizer.spec.md (FR16–FR24, AR6, PR6)
  */
 
 import {
@@ -35,24 +35,31 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {AlertDialog} from '../AlertDialog/AlertDialog';
 import {BottomSheet} from '../BottomSheet/BottomSheet';
 import {Button} from '../Button/Button';
 import {EmptyState} from '../EmptyState/EmptyState';
 import {PanelSearchInput} from '../Field/PanelSearchInput';
-import {Icon} from '../Icon';
+import {Icon} from '../Icon/Icon';
 import {CheckboxIndicator} from '../Indicator/CheckboxIndicator';
-import {Spinner} from '../Spinner';
+import {Spinner} from '../Spinner/Spinner';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {Text} from '../Text/Text';
-import {useTranslator} from '../i18n';
 import {warnOnce} from '../utils/devWarning';
 import type {SearchableItem, SearchSource} from '../Typeahead/types';
 import {colorVars, radiusVars, spacingVars} from '../theme/tokens.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Tokenizer/TokenizerBottomSheet.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Sentinel prefix for the create row's synthetic item. Kept identical to the
@@ -316,7 +323,7 @@ function TokenizerSheetContent<T extends SearchableItem>({
   onClearAll,
   onChangeQuery,
 }: TokenizerSheetContentProps<T>) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   // Whether a checkbox row holds focus, kept by the list's own focus events,
@@ -328,8 +335,9 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // trigger's press — so an open sheet with no confirmation pending carries
   // no closed dialog (`architecture:component-style-authoring` INV7). Dialog
   // has an entrance animation and no exit, so a close is its unmount; the
-  // sheet then places focus itself, in the Effect below, once the modal is
-  // gone and the sheet's content can take focus again: on the search field
+  // close handler commits that unmount at once and then places focus itself,
+  // now that the modal is gone and the sheet's content can take focus again
+  // (`architecture:react-component-runtime` INV2): on the search field
   // after a confirmed clear — the clear is spent, and the search field is
   // where the next selection starts (FR24, `spec:AST-085` FR4) — and back on
   // Clear all after a cancel. A confirmed clear is announced there too — a
@@ -341,25 +349,17 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // dialog, so FR14 routes the words into it while the sheet is open.
   const [isClearConfirmationOpen, setIsClearConfirmationOpen] = useState(false);
   const clearAllRef = useRef<HTMLButtonElement>(null);
-  const afterConfirmationRef = useRef<'search' | 'clear-all' | null>(null);
   const announce = useAnnounce();
   const closeClearConfirmation = (confirmed: boolean) => {
-    afterConfirmationRef.current = confirmed ? 'search' : 'clear-all';
-    setIsClearConfirmationOpen(false);
-  };
-  useEffect(() => {
-    if (isClearConfirmationOpen || afterConfirmationRef.current == null) {
-      return;
-    }
-    const destination = afterConfirmationRef.current;
-    afterConfirmationRef.current = null;
-    if (destination === 'search') {
+    // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the confirmation must be gone before focus moves into the sheet and the words are routed into it
+    flushSync(() => setIsClearConfirmationOpen(false));
+    if (confirmed) {
       searchRef.current?.focus();
       announce(t('@astryx.tokenizer.allRemoved'));
     } else {
       clearAllRef.current?.focus();
     }
-  }, [announce, isClearConfirmationOpen, t]);
+  };
   const selectedIds = useMemo(() => new Set(value.map(v => v.id)), [value]);
 
   // ---- sheet session ----

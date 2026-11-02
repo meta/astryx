@@ -38,7 +38,7 @@ import {useThemeName} from '../theme/useTheme';
 import {resolveIcon} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
 import type {IconVariant} from './index';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useIconSize} from './IconDefaultSizeContext';
 import {iconSizeStyles, type IconSize} from './IconSize.stylex';
