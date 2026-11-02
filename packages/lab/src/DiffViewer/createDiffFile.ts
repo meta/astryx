@@ -10,8 +10,8 @@
  *
  * Shared leading and trailing lines are matched without a search. The minimal
  * search over the rest stops after MAX_EDIT_DISTANCE changed lines, so memory
- * stays bounded for any input; a middle that differs more than that is shown
- * as one replaced block rather than a minimal diff.
+ * stays bounded for any input; a middle that differs more than that becomes
+ * one replaced block, marked with `isReplacedBlock` on its hunk.
  *
  * SYNC: When modified, update:
  * - /packages/lab/src/DiffViewer/createDiffFile.test.ts
@@ -70,13 +70,19 @@ function splitLines(value: string): string[] {
  */
 const MAX_EDIT_DISTANCE = 2000;
 
+interface EditScript {
+  ops: Op[];
+  /** True when the middle was replaced as a whole, not compared line by line. */
+  isReplacedBlock: boolean;
+}
+
 /**
  * Line edit script from `a` to `b`. Shared leading and trailing lines are
  * context without a search; the middle uses Myers' O(ND) shortest edit script,
  * or, when it needs more than MAX_EDIT_DISTANCE edits, removes the old middle
  * and adds the new one.
  */
-function diffLines(a: string[], b: string[]): Op[] {
+function diffLines(a: string[], b: string[]): EditScript {
   let head = 0;
   while (head < a.length && head < b.length && a[head] === b[head]) {
     head++;
@@ -92,7 +98,10 @@ function diffLines(a: string[], b: string[]): Op[] {
   for (let i = 0; i < head; i++) {
     ops.push({kind: 'context', a: i, b: i});
   }
-  const middle = myers(a, b, head, tailA, tailB);
+  // When one side of the middle is empty, adding or removing the other side
+  // is already the minimal script.
+  const isOneSided = tailA === head || tailB === head;
+  const middle = isOneSided ? null : myers(a, b, head, tailA, tailB);
   if (middle != null) {
     // A loop, not a spread: one call argument per op overflows the stack on
     // long inputs.
@@ -110,7 +119,7 @@ function diffLines(a: string[], b: string[]): Op[] {
   for (let i = 0; tailA + i < a.length; i++) {
     ops.push({kind: 'context', a: tailA + i, b: tailB + i});
   }
-  return ops;
+  return {ops, isReplacedBlock: middle == null && !isOneSided};
 }
 
 /**
@@ -225,7 +234,7 @@ export function createDiffFile({
 
   const a = splitLines(oldValue);
   const b = splitLines(newValue);
-  const ops = diffLines(a, b);
+  const {ops, isReplacedBlock} = diffLines(a, b);
 
   const changed: number[] = [];
   ops.forEach((op, i) => {
@@ -302,6 +311,8 @@ export function createDiffFile({
       newStart,
       newLines: newCount,
       lines,
+      // A replaced block is the only change, so it fills the only hunk.
+      ...(isReplacedBlock ? {isReplacedBlock: true} : {}),
     });
     g = h;
   }
