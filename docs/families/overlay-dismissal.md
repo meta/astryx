@@ -15,6 +15,7 @@ verified_by:
     packages/core/src/Layer/useLayerDismissal.test.tsx,
     packages/core/src/Layer/layerDismissalInvariants.test.tsx,
     packages/core/src/Layer/layerDismissalFamilies.test.tsx,
+    packages/core/src/Layer/useBackdropPress.test.tsx,
     packages/core/src/Drawer/Drawer.test.tsx,
     packages/core/src/hooks/useFocusTrap.test.tsx,
     packages/core/src/BottomSheet/BottomSheetSwitcher.test.tsx,
@@ -214,6 +215,14 @@ this record's current membership snapshot must be updated with it.
   document calls for (`architecture:interaction-modality` INV1); a BottomSheet,
   BottomSheetSwitcher, or Lightbox does the same in a Picture-in-Picture window.
 
+- **FR10 — A backdrop press starts and ends on the backdrop.** A member that
+  dismisses on a press on its modal backdrop (a Dialog with `purpose="info"`,
+  a Drawer's scrim, a CommandPalette through its Dialog) dismisses only when the
+  press both started and ended on the backdrop. A press that starts inside the
+  member and ends on the backdrop, such as a text selection or a slider drag
+  released past the edge, does not dismiss it. The rule is the same for a
+  mouse, a pen, and a finger, and the members share one implementation.
+
 ## Allowed component variation
 
 - **AV1 — Focus.** Members own focus entry, containment, movement, and the
@@ -223,7 +232,8 @@ this record's current membership snapshot must be updated with it.
 - **AV3 — Positioning and hosting.** Members may use native dialog placement,
   CSS anchor positioning, fixed coordinates, or a component-owned host.
 - **AV4 — Outside dismissal.** Members own whether and how pointer, hover,
-  focus-loss, backdrop, touch, or gesture interaction dismisses them.
+  focus-loss, backdrop, touch, or gesture interaction dismisses them; a
+  backdrop press follows FR10.
 - **AV5 — Open-state API.** Members own controlled and uncontrolled state,
   defaults, callback names, and imperative commands.
 - **AV6 — Presentation.** Members own animation, visual treatment, and theming
@@ -282,6 +292,7 @@ modality, positioning, outside-dismissal, and open-state contracts.
 | FR8, FR9           | Real-browser second-document checks; implementation gap: only Dialog and Popover have them                      | Dialog, Popover, DropdownMenu, MoreMenu, ContextMenu, Selector, MultiSelector, TopNavHeading, TopNavMenu, TopNavMegaMenu, SideNavHeading, SideNavItem, Tooltip and HoverCard, each in a same-origin iframe and in a Picture-in-Picture window: opens and takes Escape in the document it renders in (an unpinned Tooltip only when no other member is present; a pinned Tooltip or HoverCard before the member beneath it), and returns focus in the opener's document | The member opens or ranks in another document, a pinned Tooltip lets Escape reach the member beneath it, or focus lands on the frame element, the page, or the body |
 | FR8, FR9           | Real-browser second-document checks; implementation gap: none has them                                          | BottomSheet, BottomSheetSwitcher, and Lightbox in a Picture-in-Picture window: opens, takes Escape, and returns focus to its return target there                                                                                                                                                                                                                                                                                                                       | The surface ranks in the page, or focus lands on the page or the body                                                                                               |
 | FR8                | Source check over Drawer and MobileNav                                                                          | Drawer and MobileNav rendered from a control in a second document                                                                                                                                                                                                                                                                                                                                                                                                      | A page-level surface moves into the second document                                                                                                                 |
+| FR10               | `useBackdropPress.test.tsx`; `BackdropPress.a11y.chromium.spec.ts`                                              | Dialog (`purpose="info"`), Drawer scrim, and CommandPalette, with a mouse and a finger: a press that starts and ends on the backdrop, one that starts inside and ends on it, and a backdrop start followed by a press inside                                                                                                                                                                                                                                           | A press that started inside dismisses, a backdrop start carries over to the next press, or a press on the backdrop alone does not dismiss                           |
 
 ## Decision links
 

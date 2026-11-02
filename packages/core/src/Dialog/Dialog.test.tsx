@@ -1348,6 +1348,7 @@ describe('Dialog', () => {
       </Dialog>,
     );
 
+    fireEvent.pointerDown(screen.getByTestId('click-dialog'));
     fireEvent.click(screen.getByTestId('click-dialog'));
 
     expect(onClick).toHaveBeenCalledTimes(1);

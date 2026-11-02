@@ -52,6 +52,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useBackdropPress} from '../Layer/useBackdropPress';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {
   colorVars,
@@ -687,16 +688,16 @@ export function Dialog({
     }
   }, [isOpen, isInline, hasConsumerName, titleId]);
 
-  // Handle backdrop click — when the user clicks the ::backdrop pseudo-element,
-  // the event target is the <dialog> element itself; clicks on child content
-  // always target the child. This avoids false positives from native browser
+  // A press on the ::backdrop targets the <dialog> itself, so native browser
   // popups (date pickers, selects, color pickers) that render outside the
-  // dialog's bounding rect.
-  const handleClick = (event: React.MouseEvent<HTMLDialogElement>) => {
-    if (event.target === event.currentTarget && allowBackdropClick) {
-      onOpenChange(false);
-    }
-  };
+  // dialog's rect never count. The press must start and end there.
+  const handleBackdropPress = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const backdropPress = useBackdropPress(
+    handleBackdropPress,
+    allowBackdropClick,
+  );
 
   // The native `cancel` event is the browser's own close-watcher firing: an
   // Android back gesture, or a close request the stack never saw a press for.
@@ -854,7 +855,13 @@ export function Dialog({
       // written.
       {...layerClickBoundary({
         ...safeProps,
-        onClick: chainEventHandlers(handleClick, onClickProp),
+        onClick: chainEventHandlers(backdropPress.onClick, onClickProp),
+        onPointerDown: chainEventHandlers(
+          backdropPress.onPointerDown,
+          safeProps.onPointerDown as
+            | ((event: React.PointerEvent<HTMLDialogElement>) => void)
+            | undefined,
+        ),
       })}
       onCancel={handleCancel}
       aria-modal={isHydrating ? undefined : 'true'}

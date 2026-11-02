@@ -77,6 +77,7 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {useBackdropPress} from '../Layer/useBackdropPress';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
@@ -537,15 +538,14 @@ export function Drawer({
     [allowEscape, handleDismiss, shouldDismissOnCloseRequest],
   );
 
-  // Clicks on the ::backdrop target the <dialog> element itself; clicks on
-  // drawer content always target a child (the content area fills the panel).
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLDialogElement>) => {
-      if (event.target === event.currentTarget && hasScrim && allowScrimClick) {
-        onOpenChange(false);
-      }
-    },
-    [allowScrimClick, hasScrim, onOpenChange],
+  // A press on the ::backdrop targets the <dialog> itself (the content area
+  // fills the panel). The press must start and end there.
+  const handleScrimPress = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const scrimPress = useBackdropPress(
+    handleScrimPress,
+    hasScrim && allowScrimClick,
   );
 
   const widthValue = typeof width === 'number' ? `${width}px` : width;
@@ -606,7 +606,15 @@ export function Drawer({
       // written.
       {...layerClickBoundary({
         ...safeProps,
-        onClick: composeEventHandlers(onClickProp, handleClick),
+        onClick: composeEventHandlers(onClickProp, scrimPress.onClick),
+        // Where the press started is recorded first, whatever the caller's
+        // handler does with the event.
+        onPointerDown: composeEventHandlers(
+          scrimPress.onPointerDown,
+          safeProps.onPointerDown as
+            | ((event: React.PointerEvent<HTMLDialogElement>) => void)
+            | undefined,
+        ),
       })}
       onKeyDown={onKeyDownProp}
       onCancel={handleCancel}>
