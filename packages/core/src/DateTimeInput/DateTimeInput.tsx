@@ -63,6 +63,7 @@ import {
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
+import {useOutsidePress} from '../Layer/outsidePress';
 import {useTooltip} from '../Tooltip';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -1154,10 +1155,9 @@ function PointerDateTimeField({
   const timeListboxId = useId();
   const [highlightedTimeIndex, setHighlightedTimeIndex] = useState(-1);
 
-  // With popover="auto", showing the popover between pointerdown and
-  // pointerup/click lets the browser's light-dismiss treat that same click as
-  // "outside" and close it again. Defer the show past the click, as
-  // BaseTypeahead does for the same reason.
+  // Defer a show that happens during a press past that press's click, so the
+  // list's outside-press watch starts after the press ends and never judges
+  // it, as BaseTypeahead does.
   const timePointerActiveRef = useRef(false);
 
   // Whether the highlight is still the one typing derived, or the user has
@@ -1177,14 +1177,41 @@ function PointerDateTimeField({
     );
   }, []);
 
+  // The time list is a manual popover: the browser's light dismiss counts a
+  // press in the time input as outside (a text input cannot be an invoker), so
+  // a press in the field would close the list it just opened. A press on the
+  // time field or in the list is inside; a press anywhere else closes it
+  // (architecture:layer-runtime, component:BaseTypeahead FR12's rule).
+  const timeOutsidePress = useOutsidePress();
   const timePopover = usePopover({
-    hasLightDismiss: true,
+    hasLightDismiss: false,
     hasCloseButton: false,
     hasAutoFocus: false,
     // The popup's own role="listbox" carries the semantics; the input keeps
     // DOM focus, so announcing a dialog here would misrepresent it.
     role: 'none',
-    onHide: () => setHighlightedTimeIndex(-1),
+    onShow: () => {
+      const field = timeContainerRef.current;
+      if (field == null) {
+        return;
+      }
+      timeOutsidePress.start(
+        field,
+        // The list may be hosted outside the field, so it counts on its own.
+        path =>
+          path.some(
+            target =>
+              target === field ||
+              (target instanceof Element && target.id === timePopover.id),
+          ),
+        // Called after usePopover has returned, so `timePopover` is assigned.
+        () => timePopover.hide(),
+      );
+    },
+    onHide: () => {
+      timeOutsidePress.stop();
+      setHighlightedTimeIndex(-1);
+    },
   });
 
   // Anchor the list to the time wrapper, not the date input the field's own
@@ -1421,9 +1448,9 @@ function PointerDateTimeField({
     (e: FocusEvent<HTMLInputElement>) => {
       setIsTimeFocused(false);
 
-      // Native light dismiss only fires on outside clicks and Escape, so a focus
-      // move that is neither — Tab handled elsewhere, or a programmatic focus —
-      // would strand the listbox open in the top layer. Focus landing inside the
+      // The outside-press watch only answers pointer presses and Escape stays
+      // on the layer stack, so a focus move that is neither — Tab handled
+      // elsewhere, or a programmatic focus — would strand the listbox open. Focus landing inside the
       // field or the popup itself is not a leave. Mirrors BaseTypeahead.
       if (timePopover.isOpen) {
         const next = e.relatedTarget as Node | null;
@@ -1829,7 +1856,7 @@ function PointerDateTimeField({
           }
           // On the wrapper, not just the input: clicking the clock icon or the
           // padding is routed to the input as a synthetic click, which would
-          // otherwise open the list mid-gesture and let light dismiss eat it.
+          // otherwise open the list mid-gesture.
           onPointerDown={hasTimeOptions ? markTimePointerActive : undefined}
           {...mergeProps(
             themeProps('date-time-input-time-segment', {
