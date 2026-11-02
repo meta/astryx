@@ -23,6 +23,7 @@ import {createPressTracker} from '../PressTracker';
 import type {SelectionLock} from '../GestureRecognizer';
 import {VelocityTracker} from '../VelocityTracker';
 import {ScreenEdgePanGestureRecognizer} from '../ScreenEdgePanGestureRecognizer';
+import {SwipeGestureRecognizer} from '../SwipeGestureRecognizer';
 import {lockSelection} from '../../utils/selectionLock';
 import {TapGestureRecognizer} from '../TapGestureRecognizer';
 import {createNativeScrollProbe} from '../nativeScroll';
@@ -5519,6 +5520,85 @@ describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () =>
       await new Promise(resolve => setTimeout(resolve, 0));
       expect(box.style.getPropertyValue('user-select')).toBe('');
     }
+  });
+
+  it('holds the selection for a swipe that claims a mouse or a pen drag: it recognizes as ended while the button is still down', async () => {
+    const {box} = mount('<div id="box">Some text a drag would select</div>');
+    const fine = fineHost();
+    const swipe = new SwipeGestureRecognizer({direction: 'right'});
+    const states: string[] = [];
+    swipe.addTransitionListener((_current, _from, to) => states.push(to));
+    detachers.push(fine.attach(box, swipe));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      selection.removeAllRanges();
+      states.length = 0;
+      time = drag(box, pointerType, time + 1000, [10]);
+      // The drag selects text before the swipe recognizes at 50 px.
+      select(box);
+      time = drag(box, pointerType, time, [40, 70, 100], true);
+      expect(states).toContain('ended');
+      expect(selection.rangeCount).toBe(0);
+      expect(box.style.getPropertyValue('user-select')).toBe('none');
+      const start = new Event('selectstart', {bubbles: true, cancelable: true});
+      box.dispatchEvent(start);
+      expect(start.defaultPrevented).toBe(true);
+      pointer('pointerup', box, {pointerType, x: 100, y: 10, time: time + 16});
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(box.style.getPropertyValue('user-select')).toBe('');
+    }
+  });
+
+  it('holds the selection from the claim of a pan that waits on another to fail, and lets it go when that claim is given back', async () => {
+    const {box} = mount('<div id="box">Some text a drag would select</div>');
+    const fine = fineHost();
+    // The pan wants to begin at 10 px; a hold that allows 15 px of movement
+    // is still possible then, so the pan waits on it, claiming the drag. The
+    // hold takes no selection lock of its own at the press (its hold does
+    // nothing to the selection), so only the claim can hold it.
+    const hold = new LongPressGestureRecognizer({
+      name: 'hold',
+      allowableMovement: 15,
+      selectionLock: null,
+    });
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+    }).requireToFail(hold);
+    detachers.push(fine.attach(box, pan), fine.attach(box, hold));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      selection.removeAllRanges();
+      time = drag(box, pointerType, time + 1000, [10]);
+      select(box);
+      // 12 px: the pan claims while it waits, still possible.
+      time = drag(box, pointerType, time, [22], true);
+      expect(pan.state).toBe('possible');
+      expect(selection.rangeCount).toBe(0);
+      expect(box.style.getPropertyValue('user-select')).toBe('none');
+      // 30 px: the hold fails and the pan begins; the hold stays.
+      time = drag(box, pointerType, time, [40], true);
+      expect(['began', 'changed']).toContain(pan.state);
+      expect(box.style.getPropertyValue('user-select')).toBe('none');
+      pointer('pointerup', box, {pointerType, x: 40, y: 10, time: time + 16});
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(box.style.getPropertyValue('user-select')).toBe('');
+    }
+    // A waiting pan disabled mid-drag gives its claim back: the drag is the
+    // browser's again, and selects.
+    time = drag(box, 'mouse', time + 1000, [10]);
+    time = drag(box, 'mouse', time, [22], true);
+    expect(box.style.getPropertyValue('user-select')).toBe('none');
+    pan.setEnabled(false);
+    expect(pan.state).not.toBe('possible');
+    expect(box.style.getPropertyValue('user-select')).toBe('');
+    pointer('pointerup', box, {
+      pointerType: 'mouse',
+      x: 22,
+      y: 10,
+      time: time + 16,
+    });
   });
 
   it("never clears the page's existing selection: a claimed drag puts back what its press collapsed, what it selected, and what WebKit extends, through the lift", async () => {

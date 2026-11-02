@@ -312,7 +312,12 @@ presses nothing.
   task after the lift (the press's own `mouseup` and `click` come in its
   task), the claiming elements and the document refuse a selection, and the
   selection the page had when the press began is put back over whatever the
-  press or the drag made of it. A drag that starts on selectable text (a
+  press or the drag made of it. The hold starts at the claim of whichever
+  recognizer makes it, whatever its state: a swipe recognizes as `ended`
+  while the button is still down, and a recognizer that waits on another's
+  failure claims while still `possible`. A claim given back to the browser
+  (that waiting recognizer failing or cancelled, with no other owner) lets
+  the hold go, and the drag selects again. A drag that starts on selectable text (a
   character of text that allows a selection, or a text field) is not
   claimed: no recognizer recognizes with it while it is down, so it selects
   text, and content under a sheet's or a pager's pan stays selectable. A

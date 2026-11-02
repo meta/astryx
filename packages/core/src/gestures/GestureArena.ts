@@ -90,8 +90,18 @@ export interface ArenaBeganInput extends TouchBeganInput {
 export interface GestureArenaOptions {
   clock?: GestureClock;
   environment?: GestureEnvironment;
-  /** Touches a recognizer now owns: cancel the browser's default for them. */
-  onClaim?: (touchIds: ReadonlyArray<number>) => void;
+  /**
+   * Touches a recognizer now owns, and the recognizer that claimed them,
+   * whatever its state: one waiting on another's failure claims while still
+   * `possible`, and a discrete one (a swipe) as `ended`. Each claim is
+   * reported once.
+   */
+  onClaim?: (
+    touchIds: ReadonlyArray<number>,
+    claimer: GestureRecognizer,
+  ) => void;
+  /** Claimed touches given back to the browser (releaseClaim). */
+  onRelease?: (touchIds: ReadonlyArray<number>) => void;
   /** A click deferred at touch end resolved: replay it, or drop it. */
   onDeferredClick?: (touch: GestureTouch, allowed: boolean) => void;
   /**
@@ -699,6 +709,7 @@ export class GestureArena {
     recognizer: GestureRecognizer,
     keep: ReadonlySet<number> = new Set(),
   ): void {
+    const released: number[] = [];
     for (const touch of recognizer.trackedTouches) {
       const record = this.records.get(touch.id);
       if (record == null || !record.isClaimed || keep.has(touch.id)) {
@@ -717,7 +728,11 @@ export class GestureArena {
       );
       if (!isOwned) {
         record.isClaimed = false;
+        released.push(touch.id);
       }
+    }
+    if (released.length > 0) {
+      this.options.onRelease?.(released);
     }
   }
 
@@ -793,7 +808,7 @@ export class GestureArena {
       }
     }
     if (claimed.length > 0) {
-      this.options.onClaim?.(claimed);
+      this.options.onClaim?.(claimed, recognizer);
     }
   }
 

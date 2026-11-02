@@ -669,6 +669,11 @@ export class GestureHost {
   private readonly dragHolds = new Set<
     (options?: DragSelectionReleaseOptions) => void
   >();
+  /** Each claimed contact's drag hold, until its lift or a give-back. */
+  private readonly claimHolds = new Map<
+    number,
+    (options?: DragSelectionReleaseOptions) => void
+  >();
   private readonly presentedHitTesting: 'auto' | 'always' | 'never';
   /**
    * Contacts sent to what is drawn instead of what the engine hit, by host
@@ -852,7 +857,8 @@ export class GestureHost {
       // A mouse or pen drag a recognizer claims takes no new selection and
       // keeps the page's; one that starts on selectable text is the
       // browser's, and selects text (FR41).
-      onClaim: ids => this.lockClaimedDrags(ids),
+      onClaim: (ids, claimer) => this.lockClaimedDrags(ids, claimer),
+      onRelease: ids => this.releaseClaimedDrags(ids),
       refusesClaim: touch =>
         this.selectingContacts.has(touch.id) &&
         (touch.x !== touch.startX || touch.y !== touch.startY),
@@ -2559,18 +2565,32 @@ export class GestureHost {
    * it is down and never clears the page's (`spec:AST-094` FR41): the
    * claiming recognizers' elements refuse one, and whatever replaced the
    * selection the page had when the press began (the press's own collapse,
-   * or a selection the drag made before its claim) is put back. A drag that
+   * or a selection the drag made before its claim) is put back. The claiming
+   * recognizer's element holds from its claim whatever its state (one that
+   * waits on another's failure claims while possible, a swipe as ended),
+   * with those of the participants already recognizing; a claim given back
+   * to the browser lets its hold go (releaseClaimedDrags). A drag that
    * starts on selectable text never gets here: no recognizer claims it
    * (`selectingContacts`). A tap claims only at its lift, so a click keeps
    * the selection it made. A finger keeps the touch-down lock alone.
    */
-  private lockClaimedDrags(ids: ReadonlyArray<number>): void {
+  private lockClaimedDrags(
+    ids: ReadonlyArray<number>,
+    claimer: GestureRecognizer,
+  ): void {
     for (const id of ids) {
       if (this.lockedBy.has(id)) {
         continue;
       }
       const touch = this.arena.touches.find(each => each.id === id);
-      if (touch == null || touch.pointerType === 'touch') {
+      // A claim made at the contact's own lift (a tap's) holds nothing: the
+      // drag is over, and a click keeps the selection it made.
+      if (
+        touch == null ||
+        touch.pointerType === 'touch' ||
+        touch.phase === 'ended' ||
+        touch.phase === 'cancelled'
+      ) {
         continue;
       }
       const elements = new Set<Element>();
@@ -2581,6 +2601,9 @@ export class GestureHost {
         ) {
           elements.add(recognizer.view);
         }
+      }
+      if (claimer.view instanceof Element) {
+        elements.add(claimer.view);
       }
       if (elements.size === 0) {
         continue;
@@ -2595,6 +2618,27 @@ export class GestureHost {
       );
       this.dragHolds.add(release);
       this.lockedBy.set(id, release);
+      this.claimHolds.set(id, release);
+    }
+  }
+
+  /**
+   * Claimed contacts given back to the browser (a waiting recognizer that
+   * failed or was cancelled, with no other owner): their drag holds end at
+   * once, so the browser's drag selects again (`spec:AST-094` FR41). A
+   * contact's press lock (lockSelection) is not a drag hold and stays.
+   */
+  private releaseClaimedDrags(ids: ReadonlyArray<number>): void {
+    for (const id of ids) {
+      const release = this.claimHolds.get(id);
+      if (release == null) {
+        continue;
+      }
+      this.claimHolds.delete(id);
+      if (this.lockedBy.get(id) === release) {
+        this.lockedBy.delete(id);
+      }
+      release({isCancel: true});
     }
   }
 
@@ -2703,6 +2747,7 @@ export class GestureHost {
   private unlockSelection(id: number, isCancel = false): void {
     this.lockedBy.get(id)?.({isCancel});
     this.lockedBy.delete(id);
+    this.claimHolds.delete(id);
     this.pressSelections.delete(id);
     this.selectingContacts.delete(id);
   }
