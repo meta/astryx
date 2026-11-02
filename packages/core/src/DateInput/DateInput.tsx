@@ -661,10 +661,8 @@ function PointerDateField({
       outsidePress.start(
         field,
         path => path.includes(field),
-        () =>
-          field
-            .querySelector<HTMLElement>('[popover]:popover-open')
-            ?.hidePopover(),
+        // Called after usePopover has returned, so `popover` is assigned.
+        () => popover.hide(),
       );
     },
     dialogLabel: t('@astryx.dateInput.dialogLabel'),

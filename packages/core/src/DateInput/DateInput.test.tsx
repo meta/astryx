@@ -421,6 +421,55 @@ describe('DateInput', () => {
     expect(input).toHaveAttribute('aria-expanded', 'true');
   });
 
+  // architecture:layer-runtime: a press on the field is inside the calendar.
+  describe('press inside and outside the open calendar', () => {
+    function press(target: Element) {
+      fireEvent.pointerDown(target, {composed: true});
+      fireEvent.pointerUp(target, {composed: true});
+    }
+
+    it('keeps the calendar open on a press in its own input, closes it on a press elsewhere', async () => {
+      render(
+        <>
+          <DateInput label="Date" onChange={() => {}} />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      // The calendar is a manual popover, so the browser does not
+      // light-dismiss it on a press in the input.
+      expect(document.querySelector('[popover]')).toHaveAttribute(
+        'popover',
+        'manual',
+      );
+
+      press(input);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('keeps the calendar open when a scroll starts outside (pointercancel)', () => {
+      render(
+        <>
+          <DateInput label="Date" onChange={() => {}} />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      const elsewhere = screen.getByText('Elsewhere');
+      fireEvent.pointerDown(elsewhere, {composed: true});
+      fireEvent.pointerCancel(elsewhere, {composed: true});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+
   it('does not open on ArrowDown when disabled', () => {
     render(<DateInput label="Date" isDisabled onChange={() => {}} />);
     const input = screen.getByRole('combobox');
