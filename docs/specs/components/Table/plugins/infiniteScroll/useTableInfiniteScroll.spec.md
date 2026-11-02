@@ -1,6 +1,6 @@
 ---
 schema_version: 3
-template_version: 3
+template_version: 4
 kind: module
 id: module:Table/useTableInfiniteScroll
 authority: draft
@@ -28,6 +28,7 @@ references:
     spec:AST-002,
     spec:AST-009,
     spec:AST-020,
+    spec:AST-086,
   ]
 ---
 
@@ -35,210 +36,231 @@ references:
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | Candidate `useTableInfiniteScroll` hook returning one `TablePlugin` from controlled `hasMore`, controlled `isLoading`, and `onLoadMore`; root, reset, fallback, and look-ahead inputs remain unadmitted until their owner decisions pass.                                            |
-| Behavior                | One end sentinel requests the next batch as it approaches the relevant block-scroll viewport, never overlaps requests, and rearms when loading completes while more data remains.                                                                                                    |
-| End-user impact         | People can continue through incrementally loaded rows without duplicate requests, focus disruption, inaccessible progress, or a dead end when automatic observation is unavailable.                                                                                                  |
-| Builder impact          | Builders own data, request state, errors, and appended rows. The plugin owns observation, duplicate suppression, progress/fallback presentation, and cleanup.                                                                                                                        |
-| Compatibility/readiness | Additive, unreleased module. This draft is not implementation authority. Scroll-root ownership, request completion/reset, parent rendering-mode seam, fallback policy, loading/error composition, customization, and announcement evidence require owner decisions before promotion. |
-| Review checks           | Reject viewport assumptions, overlapping loads, stale callbacks, a permanently visible sentinel loop, unexplained focusable sentinels, progress announced on every observer tick, a mouse-only fallback, invalid table DOM, retained observers, or router/data-client dependencies.  |
-| Governing rules         | `component:Table` FR9-FR12 and ORD1-ORD4 own plugin composition; `architecture:react-component-runtime` owns observer lifetime; `architecture:public-component-api` and `spec:AST-002` own public caller burden.                                                                     |
+| Area                    | Contract                                                                                                                                                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `useTableInfiniteScroll<T>` returns one `TablePlugin<T>` with only controlled `hasMore`, controlled `isLoading`, and `onLoadMore` returning `Promise<void>`.                                                                  |
+| Behavior                | One after-table sentinel observes the parent-owned block viewport, or the browser viewport when absent. Requests latch before invocation; completion and committed controlled state gate short-batch rearming.                |
+| End-user impact         | An always-available manual command, coherent progress, preserved focus, and failure-loop suppression keep incremental data loading operable.                                                                                  |
+| Builder impact          | The caller owns rows, requests, errors, and stale-data suppression. A dataset reset remounts the component owning the hook together with its Table; no reset/root/look-ahead/loading-renderer API exists.                     |
+| Compatibility/readiness | Additive and unreleased. Module and parent row-count decisions await exact-head owner approval; source implementation and runtime evidence remain release gates.                                                              |
+| Review checks           | Reject overlapping/reentrant loads, immediate failure loops, stale-generation rearming, DOM-inferred mode, ancestor discovery, focus loss, duplicate announcements/chrome, or invalid table content.                          |
+| Governing rules         | `component:Table` owns wrapper/context, render planning, and viewport. Required FR17-FR20, FR22 and DEC-4/DEC-5 parent additions remain subject to owner review; runtime, public API, and evidence rules retain their owners. |
 
-This table is a review projection; the body below is authoritative.
+This table is a review projection; the body below defines the module contract.
 
 ## Intent
 
-`useTableInfiniteScroll` connects incremental data loading to a data-driven Table
-without making Table own a router, cache, query client, cursor format, or product data.
-It owns an end sentinel, observation lifecycle, one-request-at-a-time behavior,
-rearming, accessible progress, and a keyboard-operable fallback.
-
-Infinite scroll is distinct from client pagination and virtualization. It appends data;
-it does not choose the caller's page/cursor protocol or bound the number of rendered rows.
+`useTableInfiniteScroll` coordinates incremental append requests for a flat data-driven Table without owning product data, a router, query client, cache, cursor, or page format. Observation is progressive enhancement; a manual load command is always available while more data exists. Loading does not itself paginate existing rows or bound the number of rendered rows.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`; Table behavior remains unchanged unless the new plugin is supplied.
-- Compatibility class: additive public hook, types, documentation, and examples.
-- Migration decision: `module:Table/useTableInfiniteScroll/DEC-1` after the open ownership decisions are approved.
+- Released default preserved: `yes`; absent this opt-in capability, legacy Table and plugin behavior is unchanged.
+- Compatibility class: additive unreleased hook; unsupported new-capability combinations are neutralised while legacy plugins remain available.
+- Migration decision: `module:Table/useTableInfiniteScroll/DEC-1`, DEC-6, and DEC-7.
 
-Consumer migration instructions belong in consumer docs and release notes.
+Consumer signatures, imports, examples, and reset instructions belong in consumer docs. Owner approval establishes the normative module and parent decisions; implementation and release evidence remain separate. Merged code or passing checks alone do not establish approval.
 
 ## Ownership boundary
 
 **Owns**
 
-- The public hook, configuration, sentinel, observer lifecycle, and loading trigger boundary.
-- Duplicate-request suppression, rearming after completion, and short-batch behavior.
-- Default progress and manual fallback behavior, accessibility, performance, and evidence.
-- Composition with Table's scroll wrapper, empty state, loading state, appended rows, other plugins, and the candidate children-mode warning/no-op, blocked on OQ8's parent contract decision.
+- The public hook, end sentinel, observation lifecycle, single-request latch, completion gates, and automatic rearming.
+- Fixed progress/manual presentation, failure-loop pause, deterministic command-removal focus handoff, and evidence.
+- Contributions to the parent's wrapper/render plan and mode/admission handling without changing caller rows or control state.
 
 **Does not own / non-goals**
 
-- Aggregate `TablePlugin` protocol, transform order, or scroll-wrapper implementation — owned by `component:Table`.
-- Product data, request/cursor/page state, cache policy, retry policy, or error content — owned by the caller or another module.
-- Client pagination, server pagination, Relay integration, row virtualization, or column virtualization.
-- Scroll restoration, URL state, routing, or prefetching.
-- A new public Table theme target unless a separate approved decision establishes a distinct theme-author need.
-- Caller-composed children-mode semantics or the parent rendering-mode contract. The candidate warning/no-op depends on OQ8; the module never interprets caller children or infers mode from DOM to append loading UI.
+- Parent transform ordering, render-mode/context seam, flat admission, empty-state placement, shared viewport, or virtual logical metadata: `component:Table`.
+- Data/cursor/page/cache state, transport cancellation, stale response commits, error content, or the decision to fetch again: the caller.
+- Client/server pagination, Relay or router integration, scroll restoration, prefetching, or row/column virtualization.
+- Children-mode loading; tree/grouped/detail/custom-row v1 loading; public reset, root-ref, look-ahead, or loading-renderer customization.
 
 ## Public API and concepts
 
-The candidate minimum shape is:
+`hasMore` and `isLoading` are booleans. `onLoadMore()` returns `Promise<void>` and receives no data-client object. An async wrapper can express synchronous append completion without a required loading-flag cycle. These are the complete v1 configuration fields. The module exposes no `resetKey`, `rootRef`, `lookAhead`, or `loadingRenderer` field and no equivalent renderer/root/mode option.
 
-```ts
-export interface UseTableInfiniteScrollConfig {
-  hasMore: boolean;
-  isLoading: boolean;
-  onLoadMore: () => void | Promise<void>;
-}
-
-export function useTableInfiniteScroll<T extends Record<string, unknown>>(
-  config: UseTableInfiniteScrollConfig,
-): TablePlugin<T>;
-```
-
-The final shape is blocked on OQ1-OQ8. Consumer docs own final signatures,
-defaults, imports, and examples after promotion.
-
-| Concept         | Closed values or states                     | Meaning                                                                                          | Default                  | Owner                                 | Stability |
-| --------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------ | ------------------------------------- | --------- |
-| More-data state | `hasMore` true or false                     | Whether another load may be requested.                                                           | Controlled               | Caller through this module            | Candidate |
-| Loading state   | `isLoading` true or false                   | Whether a request is already in flight.                                                          | Controlled               | Caller through this module            | Candidate |
-| Load request    | `void` or promise-returning callback        | Starts one caller-owned append operation without prescribing its data protocol.                  | No request while blocked | Caller through this module            | Unsettled |
-| Look-ahead      | Optional non-negative distance, if admitted | Starts loading before the sentinel reaches the visible block-end edge.                           | Not yet admitted         | Caller/module boundary                | Unsettled |
-| Sentinel        | Observed, loading, exhausted, unavailable   | Coordinates automatic loading without becoming unexplained table data or an accidental tab stop. | Derived                  | `module:Table/useTableInfiniteScroll` | Candidate |
-| Manual fallback | Available or hidden                         | Provides an explicit load command when automatic observation is unavailable or unsuitable.       | Unsettled                | `module:Table/useTableInfiniteScroll` | Unsettled |
+| Concept            | Closed values or states                          | Meaning                                                          | Default                | Owner                      | Stability                        |
+| ------------------ | ------------------------------------------------ | ---------------------------------------------------------------- | ---------------------- | -------------------------- | -------------------------------- |
+| More data          | True/false                                       | Permits requests and controls load affordance presence.          | Controlled             | Caller through this module | Unreleased; owner review pending |
+| Controlled loading | True/false                                       | Blocks requests and contributes to current loading presentation. | Controlled             | Caller through this module | Unreleased; owner review pending |
+| Request            | Idle, in flight, awaiting commit, failure-paused | One shared automatic/manual request lifecycle.                   | Idle                   | This module                | Unreleased; owner review pending |
+| Root               | Parent block viewport, else browser viewport     | Shared geometry, with native ancestor clipping.                  | Derived                | Parent                     | Unreleased; owner review pending |
+| Look-ahead         | Zero                                             | No ahead-of-viewport loading distance.                           | Internal zero          | This module                | Not public                       |
+| Manual command     | Ready, busy/nonoperable, absent                  | Present whenever admitted and `hasMore=true`.                    | Present with more data | This module                | Unreleased; owner review pending |
 
 ## Behavioral contract
 
-| ID   | Candidate invariant                                                                                                                                                                                                                                                                                                                                        | Basis                                            | Draft review state                      |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ | --------------------------------------- |
-| FR1  | Stable configuration callbacks and unchanged primitive inputs preserve one stable `TablePlugin`.                                                                                                                                                                                                                                                           | Parent plugin identity and runtime architecture  | Settled candidate                       |
-| FR2  | The plugin contributes one end sentinel after the semantic `<table>`, inside the Table scroll-wrapper content. It never inserts non-row content inside `<table>`, `<thead>`, `<tbody>`, or `<tr>`.                                                                                                                                                         | Valid HTML and parent wrapper contract           | Settled candidate                       |
-| FR3  | Automatic loading is armed only when `hasMore` is true and `isLoading` is false. One visibility episode produces at most one active request.                                                                                                                                                                                                               | Duplicate suppression                            | Settled candidate                       |
-| FR4  | While a load is in flight, the module does not call `onLoadMore` again, including through repeated observation, manual activation, or rerender. Completion can make another call eligible only for the current configuration, subject to the controlled inputs and FR14. The caller remains solely responsible for suppressing stale product-data commits. | Controlled state and async ownership             | Callback completion contract unsettled  |
-| FR5  | When a short append leaves the sentinel visible and `hasMore` remains true, completing the prior load can request the next batch without requiring the user to scroll away and back.                                                                                                                                                                       | Continuous loading behavior                      | Settled outcome; mechanism free         |
-| FR6  | `hasMore=false` disconnects observation, removes the manual command, and presents no loading state. Changing back to true can arm a new request.                                                                                                                                                                                                           | Exhausted-state boundary                         | Settled candidate                       |
-| FR7  | An observer-unavailable environment preserves server rendering/hydration and exposes the approved manual fallback rather than throwing or silently dead-ending the user.                                                                                                                                                                                   | Progressive enhancement                          | Fallback policy unsettled               |
-| FR8  | Loading progress is shown and announced at most once per state transition, not once per observer callback. Error and retry UI remain caller-owned and do not render duplicate progress chrome.                                                                                                                                                             | Accessibility and module boundary                | Composition surface unsettled           |
-| FR9  | The module does not call another plugin's callbacks, mutate selection/activation/expansion/sort/filter state, replace product rows, or reset scroll position. Preservation of caller-controlled state follows from that non-interference; caller data updates remain caller-owned.                                                                         | Plugin independence                              | Settled candidate                       |
-| FR10 | Empty data may still load when `hasMore=true`; default EmptyState and load affordance do not obscure each other or communicate contradictory states.                                                                                                                                                                                                       | Empty/loading composition                        | Human layout decision                   |
-| FR11 | Approved scroll-root or look-ahead changes reconnect observation without leaking the old observer or triggering from a detached sentinel. Unmount and node replacement release every observer and retained node.                                                                                                                                           | `architecture:react-component-runtime`           | Settled candidate                       |
-| FR12 | The plugin remains data-protocol agnostic. `onLoadMore` receives no Table-owned page, cursor, Relay, router, cache, or request-client object.                                                                                                                                                                                                              | Public ownership boundary                        | Settled candidate                       |
-| FR13 | In children mode the module is a no-op and emits at most one deduplicated development warning. This candidate outcome depends on OQ8's missing parent contract; it does not establish a rendering-mode signal on the current Table wrapper transform or permit mode inference from DOM.                                                                    | Missing `component:Table` dependency, OQ8        | Hold: parent contract decision required |
-| FR14 | Reconfiguration during a load follows one approved caller-visible reset or React remount boundary. Settlement from a load started before that boundary neither calls `onLoadMore`, makes a call eligible, nor changes loading presentation for the current configuration. Caller response ownership remains unchanged.                                     | Caller-visible reset and stale-completion safety | Human API decision                      |
+| ID   | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Basis                           | Draft review state                                        |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | --------------------------------------------------------- |
+| FR1  | One mounted hook returns one stable plugin and reads current callbacks/configuration without restarting its request generation. Callback identity changes do not clear a latch or failure pause.                                                                                                                                                                                                                                                                                                                                                                                                                       | DEC-1; parent identity contract | Choice closed; evidence pending                           |
+| FR2  | One sentinel and one load/progress surface append to accumulated `afterTable` inside the parent scroll-wrapper content box, outside the semantic table. Prior props, refs, styles, before/after content, and chrome survive. No non-row content enters table sections or rows.                                                                                                                                                                                                                                                                                                                                         | Parent wrapper contract; DEC-2  | Choice closed; evidence pending                           |
+| FR3  | Automatic requests require admitted data mode, `hasMore=true`, committed `isLoading=false`, no outstanding latch, no failure pause, and a currently intersecting sentinel. The latch is set before calling the current callback; observer/manual/reentrant paths share it.                                                                                                                                                                                                                                                                                                                                             | DEC-1                           | Choice closed; evidence pending                           |
+| FR4  | A fulfilled Promise completes after settlement and the first subsequent commit observing current `isLoading=false`; no true phase is required. Invocation never rearms from a pre-call false snapshot. A non-Promise result is invalid configuration: release the invocation latch, pause automatic loading, emit one development diagnostic and restore the manual command once controlled loading is false. An invalid callback cannot create a permanent inferred-busy state.                                                                                                                                       | DEC-1                           | Choice closed; evidence pending                           |
+| FR5  | After a successful current request reaches FR4's gate, a still-visible sentinel with `hasMore=true` rearms after commit without needing an exit/re-entry gesture. Each following batch uses a fresh latch, never a recursive same-stack callback loop.                                                                                                                                                                                                                                                                                                                                                                 | DEC-1                           | Choice closed; evidence pending                           |
+| FR6  | `hasMore=false` disconnects observation and removes command/progress without an unsolicited exhaustion announcement. Before removing a focused command, focus moves to the parent's programmatic Scroll-region destination with `preventScroll`; other focus is untouched. False-to-true may rearm only under current completion/pause gates.                                                                                                                                                                                                                                                                          | DEC-3                           | Choice closed; parent review and evidence pending         |
+| FR7  | Missing IntersectionObserver disables automatic observation without throwing or breaking SSR/hydration. The same manual Button remains available; unsupported observation never creates a silent dead end.                                                                                                                                                                                                                                                                                                                                                                                                             | DEC-3                           | Choice closed; evidence pending                           |
+| FR8  | One fixed progress presentation uses the mounted Load more Button's `isLoading` state for current effective loading. Button's persistent polite loading region is the sole announcement owner under `spec:AST-086` FR3/FR4/FR8; its Spinner is silent. The module does not announce the same loading message through `useAnnounce` or add another live region. Latch/controlled updates coalesce into one busy transition, without observer-event or appended-row announcements. No module-owned error chrome or public progress renderer exists.                                                                      | DEC-4/DEC-5                     | Choice closed; implementation/AT evidence pending         |
+| FR9  | Loading does not call other plugin callbacks, mutate selection/activation/sort/filter state, replace rows, or reset scroll. Caller data updates remain caller-owned.                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Ownership boundary              | Choice closed; evidence pending                           |
+| FR10 | Empty data can load. The stable plugin publishes its effective loading snapshot through `TablePlugin.renderState` before sections are constructed, together with immutable `hasMore` availability from the same controlled configuration: a current outstanding latch or controlled loading contributes true while `hasMore` is true, and exhaustion contributes false. Parent FR22 gates that contribution by current mode/model/wrapper admission before suppressing only the default initial EmptyState. Completion without rows restores ordinary empty behavior; caller empty/error content remains caller-owned. | Parent FR22; DEC-4              | Choice closed; parent implementation and evidence pending |
+| FR11 | The root is the parent-owned Table block viewport when present, otherwise the browser viewport. Native IntersectionObserver ancestor clipping handles outer nested scrolling; no nearest-scroll-ancestor discovery or second viewport exists. Root/sentinel replacement disconnects obsolete resources before acquisition.                                                                                                                                                                                                                                                                                             | Parent FR19; DEC-2              | Choice closed; parent review and evidence pending         |
+| FR12 | The module stays data-protocol agnostic and adds no cursor, page, router, cache, request-client, reset, root-ref, look-ahead, or loading-renderer API. Internal look-ahead is zero.                                                                                                                                                                                                                                                                                                                                                                                                                                    | DEC-6                           | Choice closed; evidence pending                           |
+| FR13 | The parent's mode/admission context drives children-mode no-op and one deduplicated development warning. Missing/unknown mode or non-flat/unsupported custom body modifiers disable the new capability in all builds with deduplicated diagnostics, preserving legacy props and plugins. Mode is never inferred from DOM.                                                                                                                                                                                                                                                                                              | Parent FR17-FR18; DEC-7         | Choice closed; parent review and evidence pending         |
+| FR14 | A reset remounts the component owning this hook and its Table together. Settlements from a prior generation cannot invoke, rearm, announce, or paint the new generation. Remounting only the Table child is not a reset. Ordinary callback/config changes do not reset outstanding work or failure pause.                                                                                                                                                                                                                                                                                                              | DEC-6                           | Choice closed; evidence pending                           |
 
 ### Transformation and precedence order
 
-- **ORD1 — Exhausted/loading gate.** Resolve `hasMore` and `isLoading` before observing or exposing a manual command.
-- **ORD2 — Current configuration.** Calls use the current `onLoadMore` and respect the approved reset/remount boundary; changing callback identity alone does not end an in-flight load or silently redefine product-data ownership.
-- **ORD3 — One load at a time.** From invocation of `onLoadMore` until the approved completion condition, no observation or manual activation invokes it again, including reentrant activation from caller code. Synchronous throws and asynchronous settlement follow OQ2's completion rule.
-- **ORD4 — Completion after reset.** FR14 excludes settlement from before a reset/remount from invoking or enabling a call or changing current loading presentation. Completion of a current-configuration load follows OQ2/OQ5 and the controlled inputs; the plugin never commits or rejects caller data.
-- **ORD5 — Rearm.** Controlled completion and continued `hasMore` rearm the current sentinel, including when it remains visible.
-- **ORD6 — Presentation.** Exhausted, loading, automatic, fallback, and error-adjacent states render one coherent after-table surface.
-- **ORD7 — Parent pipeline.** In data mode the module appends to accumulated `afterTable` content and preserves prior wrapper props, styles, refs, and chrome; children mode returns prior props unchanged, subject to OQ8's parent contract dependency.
+- **ORD1 — Parent mode and admission.** Consume optional second context to `transformScrollWrapper` before adding resources/chrome; children, missing context, and unsupported row models retain prior props unchanged.
+- **ORD2 — Gates and current values.** Resolve `hasMore`, committed `isLoading`, outstanding latch, failure pause, and current generation before every automatic/manual attempt.
+- **ORD3 — One invocation.** Set the latch before the current callback; reentrant/manual/observer attempts see it immediately. Callback identity never resets it.
+- **ORD4 — Completion barrier.** Apply FR4's Promise completion or invalid-result recovery and the current generation check. Rearming happens after commit, not synchronously inside callback settlement.
+- **ORD5 — Failure.** Throws/rejections pause automatic loading under DEC-5. Manual retry is the only in-place recovery; owning-hook remount starts a new generation. More-data toggles and observer churn do not clear a pause.
+- **ORD6 — Presentation and focus.** Apply the surface states below, suppress conflicting initial empty state through parent render planning, and transfer focus before removing a focused command.
+- **ORD7 — Parent pipeline.** Declare `rowModel: 'flat'` without claiming `wholeRowOwner`; append after existing `afterTable` and preserve prior wrapper contributions. Use the one parent viewport, not a private scroll layer.
+
+### Completion, failure, and surface states
+
+A Promise remains latched through settlement and a subsequent current false commit, including a synchronously fulfilled Promise without a true loading phase. A still-pending Promise or caller-controlled `isLoading=true` remains busy because a known owner reports loading, not because a cycle is missing. A non-Promise result releases the invocation latch and pauses automatic requests; after a false commit the same manual command is operable again, without requiring a remount.
+A throw/rejection ends the invocation and pauses automatic loading. Once settled and committed false, manual retry starts a fresh latch; success resumes rearming and failure retains the pause. Errors/stale data remain caller-owned, without duplicate error chrome or visible-sentinel retries.
+
+| State                                           | Surface and request behavior                                                                                        |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Admitted, more data, ready                      | One localized Load more Button, including when observation works; visible sentinel can request automatically.       |
+| Current loading or outstanding completion latch | Same mounted/focusable Button, visibly busy and nonoperable for click/Enter/Space; one fixed progress presentation. |
+| Initial loading with no rows                    | Loading surface rather than the default empty-state message; no prefilled or duplicated live region.                |
+| Failure-paused and committed not loading        | Same operable manual Button retries; no automatic loop and no module-owned error chrome.                            |
+| Exhausted                                       | No command/progress/observer; hand off focus only if the removed command owns it.                                   |
+| Unsupported observation                         | Same manual/loading/exhausted states; automatic observation is absent.                                              |
+| Children/unsupported admission                  | No module sentinel, loading chrome, requests, or empty-state changes; deduplicated development diagnostic.          |
+
+The shared Button receives effective loading through `isLoading`, owning its
+`aria-busy`, Spinner and persistent polite loading region; request guards preserve
+focus and block repeated activation without native disabling. Its localized
+loading region alone announces the busy transition, including an initially busy
+mount under Button's empty-before-content rule. The module contributes no channel
+call, live role or second loading message. Coalesced latch/controlled updates and
+StrictMode replay must not create another busy occasion. The sentinel is not a tab
+stop. A focused command's exhaustion successor follows parent FR22; fitting content
+uses temporary programmatic focusability while explicit caller attributes remain
+intact. No focus moves merely because loading settles or observation churns.
 
 ### Performance and resources
 
-- **PR1 — One observer.** At most one `IntersectionObserver` and one observed sentinel exist per mounted plugin instance.
-- **PR2 — No scroll listener.** Native observation, not a per-frame or per-scroll JavaScript listener, drives automatic loading.
-- **PR3 — Stable resources.** Callback updates do not recreate observation when the approved root/look-ahead geometry and sentinel are unchanged.
-- **PR4 — Complete cleanup.** Unmount, sentinel replacement, root replacement, exhaustion, and loading transitions release obsolete observation.
-- **PR5 — Constant callback work.** An observer entry performs constant coordination work and never scans rows or columns.
+- **PR1 — One observer.** At most one IntersectionObserver and one observed sentinel exist per mounted hook; there is no row/column scan in an entry callback.
+- **PR2 — Native observation.** No per-scroll/per-frame JavaScript listener drives loading; unsupported IO uses manual operation.
+- **PR3 — Stable resources.** Current callback updates and no-op rerenders do not reconnect unchanged root/sentinel geometry; internal look-ahead remains zero.
+- **PR4 — Closed cleanup cases.** Loading, exhaustion, children/unsupported mode, root/sentinel replacement, unmount, and StrictMode replay release obsolete observation. Loading-to-ready and exhausted-to-more acquire at most one current observer after gates pass; queued obsolete entries are ignored.
+- **PR5 — Generation isolation.** Cleanup invalidates old node/async/announcement work without cancelling or committing caller data; settlement cannot touch a new mounted generation.
 
 ## Accessibility contract
 
-- **AR1 — Valid structure.** Sentinel, progress, and fallback UI stay outside the semantic table and do not appear as data rows or cells (WCAG 2.2 SC 1.3.1; DOM/accessibility-tree and browser evidence).
-- **AR2 — Progress announcement.** Loading transitions use a non-interruptive status that does not repeat for observer churn or every appended row (WCAG 2.2 SC 4.1.3). Deterministic transition tests prove event count/order, and the approved implementation requires NVDA + Chrome on Windows and VoiceOver + Safari on macOS to prove spoken announcement timing under `spec:AST-009` FR4 and FR12.
-- **AR3 — Operable fallback.** The approved fallback is a real keyboard-operable control with a localized name and visible focus; the sentinel itself is not an unexplained tab stop (WCAG 2.2 SC 2.1.1, 2.4.7, and 4.1.2; DOM/axe/real-browser evidence).
-- **AR4 — Focus stability.** Appending rows does not move focus, reset focused descendants, or make the fallback disappear while it owns focus without a deterministic successor (WCAG 2.2 SC 2.4.3 and 2.4.7; real-browser keyboard evidence).
-- **AR5 — Reduced motion.** Progress presentation does not require motion to communicate loading state and respects platform motion settings; real-browser visual evidence proves the supported states.
-- **AR6 — Touch and zoom.** Automatic loading and fallback remain available without hover, precision pointing, or a fixed viewport size (WCAG 2.2 SC 1.4.10 and 2.1.1; responsive/touch real-browser evidence).
-- **AR7 — Evidence boundaries.** Real AT evidence is limited to AR2's announcement claim or any later approved AT-dependent outcome; it supplements rather than replaces deterministic state, DOM, keyboard, and browser coverage.
+- **AR1 — Valid structure.** Sentinel/progress/Button remain outside the semantic table and never become announced data rows/cells (WCAG 2.2 SC 1.3.1).
+- **AR2 — Progress timing.** The mounted Load more Button's persistent polite loading region is the sole owner of each current busy-start message; the composed Spinner is silent and the module adds no channel call or live region (`spec:AST-086` FR3/FR4/FR6/FR8). Deterministic ownership/count tests verify one delivery per coalesced busy transition. Cross-platform spoken timing is recommended follow-up under `spec:AST-009`, not a fabricated completed test or extra owner.
+- **AR3 — Manual operation.** A shared Button with localized name and visible focus exists whenever admitted and `hasMore=true`, independent of IO. Busy state preserves focus while blocking pointer and keyboard requests (SC 2.1.1, 2.4.7, 4.1.2).
+- **AR4 — Focus stability.** Appending/loading do not move focus or remount the command. Exhaustion moves focus before focused-command removal to the parent destination with `preventScroll`, never stealing unrelated focus (SC 2.4.3, 2.4.7).
+- **AR5 — Motion.** Progress stays understandable without motion and respects reduced motion.
+- **AR6 — Touch and zoom.** Manual and automatic paths require neither hover nor precise pointing and remain usable under touch, zoom, and responsive layout (SC 1.4.10).
+- **AR7 — Evidence layers.** DOM/accessibility-tree and deterministic tests prove the single Button-region route, silent Spinner, state/keyboard/focus and cleanup. Spoken timing on NVDA + Chrome or VoiceOver + Safari follows the recommended `spec:AST-009` follow-up; no new virtual-cursor or precise speech claim is added by this module.
 
 ## Design relationships
 
-| Anatomy or state    | Design requirement                                                                    | Representation authority  | Module contract   |
-| ------------------- | ------------------------------------------------------------------------------------- | ------------------------- | ----------------- |
-| End sentinel        | Supplies observation geometry without masquerading as table data or a control.        | This module               | FR2-FR7, AR1      |
-| Loading progress    | Communicates one active append operation without duplicating caller-owned chrome.     | Unsettled pending OQ4     | FR3-FR8, AR2, AR5 |
-| Manual load command | Provides an explicit fallback with normal control semantics and focus treatment.      | Unsettled pending OQ3/OQ4 | FR7-FR10, AR3-AR4 |
-| Exhausted state     | Stops requesting and removes load affordances without adding an unsolicited message.  | This module               | FR6, ORD1, ORD5   |
-| Error/retry         | Remains outside the module unless a later loading/error composition contract owns it. | Caller or another module  | FR8, non-goal     |
+| Anatomy or state | Design requirement                                                    | Representation authority                     | Module contract     |
+| ---------------- | --------------------------------------------------------------------- | -------------------------------------------- | ------------------- |
+| Sentinel         | Geometry only; no false row or control semantics.                     | Internal, no public target                   | FR2, FR11, AR1      |
+| Manual command   | Always present with more data; mounted focus-preserving busy state.   | `component:Button`, existing `button` target | FR6-FR8, AR3-AR4    |
+| Progress         | One fixed localized presentation, not duplicate loading/error chrome. | DEC-4; shared primitives; no module target   | FR8, FR10, AR2, AR5 |
+| Exhaustion       | No unsolicited message; deterministic focus successor.                | DEC-3; parent Scroll region                  | FR6, AR4            |
+| Error            | Caller-owned content and request decision.                            | Caller                                       | DEC-5               |
 
-The module adds no direct theme target. OQ3/OQ4 must select any progress/fallback component and then name its exact existing target or record a classified `none`; no delegation is promised yet. Sentinel geometry is implementation detail rather than theme API.
+No new Table/module theme target or state is public. Button retains its existing delegated target; sentinel/supporting status text is internal and non-customizable. This draft claims no current module-doc anatomy inventory or completed target verification.
 
 ## Parent and system relationships
 
-- `component:Table` owns the scroll-wrapper phase and accumulated `afterTable` slot. **Missing parent dependency (OQ8):** its current contract does not establish a data/children mode signal at that phase. The module remains on hold until the parent contract records the approved mode distinction or makes the invalid combination unrepresentable; FR13 then cites that owning claim. This draft neither supplies a field nor approves a parent API change.
-- `architecture:react-component-runtime` owns observer acquisition, current-value synchronization, node replacement, StrictMode replay, and cleanup boundaries.
-- `architecture:public-component-api` and `spec:AST-002` require a protocol-agnostic API whose inputs express caller-owned state rather than implementation clients.
-- `spec:AST-009` and `spec:AST-020` own announcement evidence and the WCAG/evidence-layer boundary; AR2 is the only current real-AT-dependent claim.
-- Pagination and virtualization remain separate modules. Infinite loading can compose with them only where their current contracts explicitly permit it.
+- `component:Table` FR17 and DEC-4 supply optional second `TableRenderContext` to `transformScrollWrapper`, with `mode`, admitted row model, logical/header counts, and a stable shared viewport reference; per-row `key`, `identityStatus`, and product/synthetic/unknown `kind` belong to `TableRowContext`, not wrapper inference. Unsupported structural models disable flat capabilities before transforms. FR18 owns pre-cell admission; FR19/DEC-5 own the both-axis viewport with inline containment and block allowance. The stable `renderState` source feeds effective loading into FR22 before section construction; parent mode/model/wrapper admission gates consumption, default empty suppression and exhaustion-focus ownership.
+- Parent optional `rowModel` and `wholeRowOwner` declarations, not names/order/DOM, decide new-capability compatibility. V1 admits flat data only; tree/grouped/detail/custom-row models and undeclared custom body modifiers are unsupported opt-ins while legacy plugins retain their behavior.
+- Flat selection, sorting, filtering, sticky columns, context menus, and row indices compose. Infinite loading and windowing share the parent viewport/render plan jointly after relevant module and parent approval; parent FR20 alone owns full virtual row metadata and totals. This module publishes `hasMore` through its render-state snapshot, preserving snapshot identity until loading or availability changes: `hasMore=true` makes the admitted nonempty windowed total unknown (`aria-rowcount=-1`), independently of busy/failure-pause state; exhaustion restores the parent H+N total. No module sets or infers a second count from mounted/loaded rows. Nonwindowed legacy caller counts and empty-table metadata remain unchanged.
+- Runtime architecture owns observer acquisition, current-value synchronization, node replacement and StrictMode cleanup; public API rules keep the hook protocol-agnostic. Button owns its persistent loading-region machinery under `spec:AST-086`; the module supplies effective loading and does not duplicate its announcement.
 
 ## Verification map
 
-| Contract                            | Verification                                                                                                    | Representative states                                                                                     | Mutation or failure expectation                                                                                                                                                         |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR3-FR7, FR14, ORD1-ORD5       | Deterministic observer events, callback count/order assertions, and controlled rerenders                        | Visible/hidden, loading, exhausted, short batch, reentrant activation, throw, async settle, reset/remount | Calls overlap, pre-reset completion invokes or enables a call or changes current loading presentation, short batches dead-end, observation throws, or rearm fails.                      |
-| FR2, FR8-FR10, FR12-FR13, ORD6-ORD7 | Table render and plugin-composition tests against the parent rendering-mode contract once OQ8 is resolved       | Data/children mode, empty/non-empty, wrapper chrome, loading, exhausted, caller error UI                  | Invalid DOM appears, children mode renders a sentinel, warning repeats, prior chrome is lost, caller state is mutated, or states contradict; absent parent authority keeps OQ8 on hold. |
-| FR11, PR1-PR5                       | Observer lifecycle tests under StrictMode, root/sentinel/look-ahead change, unmount, and no-op rerender         | Every approved acquisition, replacement, and release path                                                 | More than one observer survives, detached nodes remain observed, or stable inputs churn resources.                                                                                      |
-| AR1, AR3-AR7                        | DOM/accessibility-tree assertions, axe, and real-browser keyboard/touch/zoom/reduced-motion/focus flows         | Automatic, fallback, loading, append, exhaustion, observer unavailable                                    | Sentinel becomes a row/tab stop, focus is lost, fallback is inoperable, or responsive/motion behavior carries required meaning.                                                         |
-| AR2                                 | Deterministic status-transition count/order tests plus NVDA + Chrome on Windows and VoiceOver + Safari on macOS | Initial load, repeated observer entries, short batches, completion, exhaustion                            | Status repeats, arrives out of order, is skipped, or announces observer churn/appended rows instead of loading transitions.                                                             |
-| Public API and docs                 | Public-subpath compile fixture, `.doc.mjs`, generated inventory, Storybook, and one generic async-cache recipe  | Controlled state, promise/void callback, approved reset/root/fallback/look-ahead inputs                   | API leaks a client, exposes look-ahead without admission, cannot express the approved reset boundary, promises unsettled behavior, or permits contradictions.                           |
-| Performance                         | Extend Table performance coverage with stable no-op, observer callback, and repeated append budgets             | Large representative data and repeated batches                                                            | Stable rerenders recreate resources, callbacks scan rows, or appends exceed recorded budgets.                                                                                           |
-| Structural ownership                | `pnpm check:knowledge`                                                                                          | Draft module and parent backlink                                                                          | A missing, orphaned, misnamed, wrong-kind, or duplicate module record passes validation.                                                                                                |
+Required implementation checks remain pending; recommended spoken-timing follow-up
+is identified separately and is not a second announcement owner or release gate.
+Frontmatter paths are verification targets, not assertions that files exist or pass.
+
+| Contract                            | Verification                                                                                                                                       | Representative states                                                                                                                                                                                                                                                    | Mutation or failure expectation                                                                                                              |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR3-FR7, FR14, ORD1-ORD5       | Pending deterministic observer/manual events and controlled-commit tests in the module unit suite.                                                 | Reentry; Promise pending/fulfilled/rejected with controlled true/false; synchronous fulfillment without a true phase; invalid non-Promise result and operable manual recovery; visible short batches; callback replacement; hook-owning reset versus child-only remount. | Overlap, stale-false rearm, same-stack recursion, immediate failure loop, dead-ended short batches, or prior-generation request/paint fails. |
+| FR2, FR8-FR10, FR12-FR13, ORD6-ORD7 | Pending render/composition tests through the parent mode/render plan.                                                                              | Data/children/unknown context; flat/non-flat/custom; empty initial loading; chrome/refs; caller errors.                                                                                                                                                                  | Invalid DOM, children sentinel, repeated warning, replaced chrome, contradictory empty/progress, or duplicated error UI fails.               |
+| FR11, PR1-PR5                       | Pending lifecycle and geometry tests under StrictMode.                                                                                             | Parent block root/viewport fallback/nested ancestor clipping; root/node replacement; ready/loading/exhausted/false-to-true; absent IO; unmount.                                                                                                                          | Ancestor discovery, leaked/multiple observers, stale entries, callback churn, or new-generation effects fails.                               |
+| AR1, AR3-AR7                        | Pending `TableInfiniteScroll.a11y.chromium.spec.ts`, DOM/tree, axe, browser keyboard/touch/zoom/motion/focus flows.                                | Ready/busy/manual/unsupported IO, append, focused and unrelated-focus exhaustion, fitting Scroll region.                                                                                                                                                                 | Native disabling loses focus, busy requests fire, missing manual command, false row semantics, or focus handoff scroll/steal fails.          |
+| AR2                                 | Pending DOM/accessibility-tree and transition-count checks of the single Button region and silent Spinner; spoken timing is recommended follow-up. | Initial load, latch/controlled updates, repeated entries, short batches, completion/failure/exhaustion, replay, reset.                                                                                                                                                   | Duplicate/skipped/out-of-order or stale-generation progress, prefilled regions, and churn announcements fail.                                |
+| Public API and docs                 | Pending compile fixture, inventory, `.doc.mjs`, Storybook, and generic async recipe.                                                               | Three fields; Promise completion and invalid void-result diagnostics/recovery; owning-hook React key reset; manual fallback.                                                                                                                                             | Client/root/reset/look-ahead/renderer API leaks, wrong reset owner, or undocumented completion obligations fails.                            |
+| Performance                         | Pending extensions to `Table.perf.test.tsx` for stable identities, callback work, and repeated appends.                                            | No-op rerender, many batches, flat load/window composition.                                                                                                                                                                                                              | Resource churn, row scans, or recorded budget regressions fails.                                                                             |
+| Structural ownership                | `pnpm check:knowledge` structural check; implementation evidence is separate.                                                                      | Draft module/backlink, schema 3/template 4.                                                                                                                                                                                                                              | Missing, duplicate, wrong-kind, misnamed, or orphaned records must fail.                                                                     |
 
 ## Decision log
 
-### DEC-1 — Infinite scroll owns loading coordination, not data
+### DEC-1 — Latch before request and complete after commit
 
 **Reference:** `module:Table/useTableInfiniteScroll/DEC-1`
-**Decider:** pending owner approval
+**Decider:** pending owner review
 
-The module observes the end of rendered Table content and asks the caller for another batch. It owns at-most-one-in-flight loading, callback eligibility after completion/reset, rearming, and presentation under FR4/FR14 and ORD2-ORD5, not an internal coordination mechanism. The caller remains the sole owner of rows, request protocol, cache, cursor/page, stale-response suppression, errors, and retry policy.
+All paths share a pre-invocation latch and require a Promise. Settlement plus a subsequent committed false snapshot completes a valid request without requiring a true phase. Invalid non-Promise results release the invocation latch, pause automatic attempts, and preserve operable manual recovery once controlled loading is false. Successful short batches rearm after commit.
+Rejected: unobservable void completion, a mandatory true-to-false cycle, or treating invalid callback output as permanently pending.
 
-Rejected: importing a router/query client, mutating Table data, or combining cursor,
-server-pagination, Relay, and infinite-loading contracts.
-
-### DEC-2 — The sentinel is after the table
+### DEC-2 — Parent geometry and after-table placement
 
 **Reference:** `module:Table/useTableInfiniteScroll/DEC-2`
-**Decider:** pending owner approval
+**Decider:** pending owner review
 
-Observation and progress UI use the parent scroll wrapper's `afterTable` slot. They never
-insert non-row elements into semantic table structure or synthesize a fake data row.
+The parent's block viewport is the root when present, otherwise the browser viewport. Native ancestor clipping handles nesting. One surface appends outside the table.
 
-Rejected: a `<div>` inside `<tbody>`, a sentinel `<tr>` announced as data, and a focusable
-sentinel with no user command.
-
-### DEC-3 — Automatic loading requires an operable fallback
+### DEC-3 — Always-operable manual path and deterministic focus
 
 **Reference:** `module:Table/useTableInfiniteScroll/DEC-3`
-**Decider:** pending owner approval
+**Decider:** pending owner review
 
-Automatic observation is progressive enhancement. An approved fallback prevents a dead
-end when observation is unsupported, disabled, or unsuitable and gives keyboard users an
-explicit command without making the sentinel itself interactive.
+A Load more Button exists with more data, stays mounted/focusable while busy, and is nonoperable until completion. Exhaustion transfers only its owned focus to the parent Scroll region before removal with `preventScroll`.
+Rejected: IO-only loading, hiding the command during loading, or stealing unrelated focus on exhaustion.
 
-Rejected: silently doing nothing without IntersectionObserver and making automatic loading
-the only path.
+### DEC-4 — The Load more Button owns loading announcements
+
+**Reference:** `module:Table/useTableInfiniteScroll/DEC-4`
+**Decider:** pending owner review
+
+Shared Button primitives render one fixed loading surface. Its persistent polite
+loading region is the sole busy-message owner; the module supplies coalesced
+loading state and adds no channel call. Initial loading suppresses only the default
+empty message. Required verification checks routing and ownership deterministically;
+real spoken timing remains recommended follow-up.
+Rejected: a public loading renderer, a second channel/region for Button's loading message, or duplicate error/progress chrome.
+
+### DEC-5 — Failure pauses automatic loading
+
+**Reference:** `module:Table/useTableInfiniteScroll/DEC-5`
+**Decider:** pending owner review
+
+Throws/rejections pause automatic loading until gated manual retry or owning-hook remount. Manual success resumes rearming. Caller-owned errors/stale data, more-data toggles, and callback changes never silently reset failure.
+Rejected: immediately retrying a visible failed sentinel or module-owned error/retry panels.
+
+### DEC-6 — Zero look-ahead and hook-owning remount reset
+
+**Reference:** `module:Table/useTableInfiniteScroll/DEC-6`
+**Decider:** pending owner review
+
+Look-ahead is internal zero. Dataset reset keys the component owning both hook and Table; old settlements cannot affect the new generation. The caller still suppresses stale product-data commits.
+Rejected: public look-ahead/reset APIs, Table-child-only remount as reset, or module cancellation of caller data.
+
+### DEC-7 — Parent mode and flat admission
+
+**Reference:** `module:Table/useTableInfiniteScroll/DEC-7`
+**Decider:** pending owner review
+
+Parent context/declarations admit flat data loading and the shared viewport. Children mode is a deduplicated-warning no-op; unknown/non-flat/custom-body incompatibility neutralises the capability while preserving legacy plugins.
 
 ## Open questions
 
-- **OQ1 — Who owns the block-scroll root?** (`human-api`) Decide viewport default versus an explicit caller root/ref, and how Table nested in a vertical `ScrollableArea` identifies the correct root without brittle ancestor discovery.
-- **OQ2 — What observable event completes a load?** (`human-api`) Decide whether controlled `isLoading`, a returned promise, or both permit another `onLoadMore` call after synchronous throw and asynchronous settlement.
-- **OQ3 — When is manual fallback shown?** (`human-design`) Decide always-visible, observer-unavailable-only, user-selected, or another policy; define focus behavior when loading/exhaustion removes it.
-- **OQ4 — What loading customization is public?** (`human-api`) Decide whether the module renders one fixed default, accepts `renderLoadingIndicator`, composes an existing loading-state module, or stays behavior-only while still meeting progress requirements.
-- **OQ5 — How do error and retry compose?** (`human-api`) Keep error content caller-owned, but define how a failed request rearms automatic loading and avoids immediate retry loops or duplicate loading/error chrome.
-- **OQ6 — Is caller-configurable look-ahead admitted?** (`human-api`) First prove a non-derivable caller distinction under `spec:AST-002`; if admitted, choose an intent-named distance API with explicit units/default rather than reusing browser `threshold` terminology, which conventionally means an intersection ratio. Keep it out of the candidate interface until then.
-- **OQ7 — What is the caller-visible reset boundary?** (`human-api`) Decide an explicit caller-owned reset identity versus a documented React remount/key boundary when dataset/query configuration changes during a load. Pre-reset settlement neither invokes nor enables a call nor changes loading presentation for the current configuration; stale product-data suppression remains the caller's job.
-- **OQ8 — Which parent contract distinguishes data from children mode?** (`human-api`) Decide a parent-owned rendering-mode signal at the wrapper transform versus making the invalid combination unrepresentable, preserving FR13's warning/no-op outcome for children mode. The chosen behavior belongs in `component:Table`, and FR13 must cite its approved owning claim before this module is promoted. This missing dependency remains on hold; no parent field or approval is assumed.
+None. Actual owner review and all implementation, browser, performance, and AT evidence remain pending.
 
 ## Content boundary
 
-This record does not duplicate consumer signatures/examples, the parent Table wrapper
-protocol, general observer mechanics, current usage audits, implementation steps, or
-pagination/virtualization/data-client contracts. It links to their canonical owners.
+This record links rather than duplicates consumer examples, parent protocol, observer/live-region machinery, audit results, implementation plans, or caller data/error and pagination/virtualization contracts.
