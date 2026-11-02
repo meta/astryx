@@ -8,6 +8,10 @@
  * tarball response for each package before the release workflow reports
  * success. Packages that are already visible are not fetched again while a
  * slower package continues propagating.
+ *
+ * The wait between checks starts at 15 s and grows to at most 60 s, for up to
+ * 30 minutes in total. A new version of a package with a very large registry
+ * document (Core keeps every canary) can take minutes to become readable.
  */
 
 import fs from 'node:fs';
@@ -21,8 +25,31 @@ import {
   fetchVersionDocument,
 } from './registry.mjs';
 
-const DEFAULT_ATTEMPTS = 41;
 const DEFAULT_INTERVAL_MS = 15_000;
+const DEFAULT_MAX_INTERVAL_MS = 60_000;
+const DEFAULT_MAX_WAIT_MS = 30 * 60_000;
+const INTERVAL_GROWTH = 1.5;
+
+/**
+ * The waits between checks: `intervalMs`, growing by half each time up to
+ * `maxIntervalMs`, while their sum stays within `maxWaitMs`.
+ */
+export function verificationWaits({
+  intervalMs = DEFAULT_INTERVAL_MS,
+  maxIntervalMs = DEFAULT_MAX_INTERVAL_MS,
+  maxWaitMs = DEFAULT_MAX_WAIT_MS,
+} = {}) {
+  const waits = [];
+  let total = 0;
+  let wait = intervalMs;
+  while (total + wait <= maxWaitMs && waits.length < 10_000) {
+    waits.push(wait);
+    total += wait;
+    wait = Math.min(Math.round(wait * INTERVAL_GROWTH), maxIntervalMs);
+    if (wait <= 0) break;
+  }
+  return waits;
+}
 
 async function jsonResponse(response, label) {
   if (response.status !== 200) {
@@ -84,16 +111,17 @@ export async function verifyPublishedPackages({
   version,
   tag = 'latest',
   registry = DEFAULT_REGISTRY,
-  attempts = DEFAULT_ATTEMPTS,
-  intervalMs = DEFAULT_INTERVAL_MS,
+  waits = verificationWaits(),
   fetchImpl = fetch,
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   onAttempt = () => {},
 }) {
   const pending = new Map(packages.map(name => [name, 'not checked']));
+  const attempts = waits.length + 1;
+  let waitedMs = 0;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const names = [...pending.keys()];
-    onAttempt({attempt, attempts, names});
+    onAttempt({attempt, attempts, names, waitedMs});
     await Promise.all(
       names.map(async name => {
         try {
@@ -111,7 +139,10 @@ export async function verifyPublishedPackages({
       }),
     );
     if (pending.size === 0) return;
-    if (attempt < attempts) await sleep(intervalMs);
+    if (attempt < attempts) {
+      await sleep(waits[attempt - 1]);
+      waitedMs += waits[attempt - 1];
+    }
   }
   throw new Error(
     [...pending]
@@ -156,7 +187,7 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (!key?.startsWith('--') || value == null) {
       throw new Error(
-        'expected --version X.Y.Z and optional --tag, --registry, --attempts, or --interval-ms',
+        'expected --version X.Y.Z and optional --tag, --registry, --interval-ms, --max-interval-ms, or --max-wait-ms',
       );
     }
     values[key.slice(2)] = value;
@@ -181,11 +212,16 @@ async function main() {
     version,
     tag: values.tag ?? 'latest',
     registry: values.registry ?? DEFAULT_REGISTRY,
-    attempts: Number(values.attempts ?? DEFAULT_ATTEMPTS),
-    intervalMs: Number(values['interval-ms'] ?? DEFAULT_INTERVAL_MS),
-    onAttempt({attempt, attempts, names}) {
+    waits: verificationWaits({
+      intervalMs: Number(values['interval-ms'] ?? DEFAULT_INTERVAL_MS),
+      maxIntervalMs: Number(
+        values['max-interval-ms'] ?? DEFAULT_MAX_INTERVAL_MS,
+      ),
+      maxWaitMs: Number(values['max-wait-ms'] ?? DEFAULT_MAX_WAIT_MS),
+    }),
+    onAttempt({attempt, attempts, names, waitedMs}) {
       console.log(
-        `Registry verification ${attempt}/${attempts}: ${names.length} package(s) pending`,
+        `Registry verification ${attempt}/${attempts} after ${Math.round(waitedMs / 1000)} s: ${names.length} package(s) pending`,
       );
     },
   });

@@ -8,6 +8,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 
 import {
   stablePackageNames,
+  verificationWaits,
   verifyPublishedPackages,
   verifyRegistryEntry,
 } from './verify-published.mjs';
@@ -110,8 +111,7 @@ describe('verifyPublishedPackages', () => {
     await verifyPublishedPackages({
       packages: ['@astryxdesign/cli', '@astryxdesign/core'],
       version: '0.7.5',
-      attempts: 2,
-      intervalMs: 1,
+      waits: [1],
       fetchImpl,
       sleep: async ms => sleeps.push(ms),
     });
@@ -129,8 +129,7 @@ describe('verifyPublishedPackages', () => {
       verifyPublishedPackages({
         packages: ['@astryxdesign/core'],
         version: '0.7.5',
-        attempts: 2,
-        intervalMs: 0,
+        waits: [0],
         fetchImpl: async () => response({}, 404),
         sleep: async () => {},
       }),
@@ -180,5 +179,36 @@ describe('stablePackageNames', () => {
     expect(() => stablePackageNames(root, '0.7.5')).toThrow(
       '@astryxdesign/core declares 0.7.4, expected 0.7.5',
     );
+  });
+});
+
+describe('verificationWaits', () => {
+  it('waits 15 s first, grows by half to at most 60 s, and stops within 30 minutes', () => {
+    const waits = verificationWaits();
+    expect(waits.slice(0, 5)).toEqual([15_000, 22_500, 33_750, 50_625, 60_000]);
+    expect(Math.max(...waits)).toBe(60_000);
+    const total = waits.reduce((sum, wait) => sum + wait, 0);
+    expect(total).toBeLessThanOrEqual(30 * 60_000);
+    expect(total).toBeGreaterThan(29 * 60_000);
+  });
+
+  it('waits longer in total than the slowest propagation seen so far', () => {
+    // A new Core version has taken more than 10 minutes to become readable.
+    const total = verificationWaits().reduce((sum, wait) => sum + wait, 0);
+    expect(total).toBeGreaterThan(2 * 10 * 60_000);
+  });
+
+  it('keeps a version that stays unreadable failing once the budget is spent', async () => {
+    const sleeps = [];
+    await expect(
+      verifyPublishedPackages({
+        packages: ['@astryxdesign/core'],
+        version: '0.7.5',
+        waits: verificationWaits({maxWaitMs: 100_000}),
+        fetchImpl: async () => response({}, 404),
+        sleep: async ms => sleeps.push(ms),
+      }),
+    ).rejects.toThrow('version document returned HTTP 404');
+    expect(sleeps).toEqual([15_000, 22_500, 33_750]);
   });
 });
