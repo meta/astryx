@@ -785,6 +785,7 @@
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useListFocusHookUsage/",
     "/templates/usePressFeedbackHookUsage/",
+    "/templates/useScrollLockHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",
     "/templates/useToastHookUsage/",

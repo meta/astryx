@@ -3685,6 +3685,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-scroll-lock-full-screen-mobile-menu",
+      "path": "examples/use-scroll-lock/full-screen-mobile-menu",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
       "aliases": []
