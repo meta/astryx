@@ -242,6 +242,29 @@ function approvalGroupFor(content, filePath) {
   return 'spec';
 }
 
+/**
+ * The `authority` the file's leading fields state, or null: the front-matter
+ * block when there is one, else the `key: value` lines it opens with. A
+ * README may show a front-matter example in its body; that never counts.
+ */
+function leadingAuthority(content) {
+  if (content == null) return null;
+  const block = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(content);
+  let lines;
+  if (block) {
+    lines = block[1].split(/\r?\n/);
+  } else {
+    const all = content.split(/\r?\n/);
+    const end = all.findIndex(line => !/^[a-z_]+:\s/.test(line));
+    lines = end === -1 ? all : all.slice(0, end);
+  }
+  for (const line of lines) {
+    const match = /^authority:\s*['"]?([a-z-]+)['"]?\s*$/.exec(line);
+    if (match) return match[1];
+  }
+  return null;
+}
+
 function requiredApprovalGroups(
   records,
   {complete = true, touchesDesignAssets = false} = {},
@@ -263,11 +286,7 @@ function requiredApprovalGroups(
           version.path.endsWith('.md') &&
           !version.path.startsWith('docs/design/assets/'),
       ) &&
-      versions.every(
-        version =>
-          version.content == null ||
-          parseAuthority(version.content, version.path) == null,
-      ) &&
+      versions.every(version => leadingAuthority(version.content) == null) &&
       versions.some(version => version.content != null)
     ) {
       groups.spec = true;

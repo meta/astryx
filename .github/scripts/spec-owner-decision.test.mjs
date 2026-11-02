@@ -104,6 +104,34 @@ describe('spec owner decision', () => {
         },
       ]),
     ).toEqual({spec: true, design: false, theme: false});
+    // A README whose body shows a front-matter example still has no
+    // authority of its own, even with two example lines.
+    const example = [
+      '# Native specs',
+      '',
+      '```md',
+      '---',
+      'authority: draft',
+      '---',
+      '```',
+      '',
+      '```md',
+      '---',
+      'authority: current',
+      '---',
+      '```',
+      '',
+    ].join('\n');
+    expect(
+      groupsFor([
+        {
+          path: 'packages/native/specs/README.md',
+          previousPath: 'packages/native/specs/README.md',
+          baseContent: example,
+          headContent: `${example}More.\n`,
+        },
+      ]),
+    ).toEqual({spec: true, design: false, theme: false});
     // Added, too.
     expect(
       groupsFor([

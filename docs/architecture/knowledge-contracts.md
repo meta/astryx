@@ -765,10 +765,11 @@ this flow passes the historical review benchmark and is enforced on pull request
   outside a valid optional block.
 - `.github/scripts/knowledge-paths.cjs` holds the one list of record paths.
   It names the records `check:knowledge` discovers and the owner-gated paths:
-  every record, every Markdown file in a record location (`docs/specs/`, a
-  package's `specs/` or `docs/architecture/`, the family, design and
-  architecture folders, and theme record locations), and the normative design
-  assets. Ignored locations stay ignored.
+  every record; every Markdown file under `docs/specs/` or a package's
+  `specs/` or `docs/architecture/`, READMEs included; every Markdown file in
+  the family, design, architecture and theme-docs folders except each
+  folder's `README.md` index; every `*.spec.md` in a theme package; and the
+  normative design assets. Ignored locations stay ignored.
 - `.github/scripts/change-scope.cjs` identifies pure spec-record changes and
   the owner-gated paths a change touches, and classifies paths for callers
   outside the workflow (`--classify-paths`).
