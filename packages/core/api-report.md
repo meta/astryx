@@ -4257,6 +4257,7 @@ interface FieldStatusInput
   message?: string
   messageID?: string
   type: FieldStatusType
+type FieldStatusPlacement = keyof FieldStatusVariantMap | 'tooltip'
 interface FieldStatusProps extends BaseProps<HTMLDivElement>
   message: string
   ref?: React.Ref<HTMLDivElement>
@@ -6956,6 +6957,7 @@ FieldPartStyleProps (.)
 FieldProps (.)
 FieldStatus (.)
 FieldStatusInput (.)
+FieldStatusPlacement (.)
 FieldStatusProps (.)
 FieldStatusType (.)
 FieldStatusVariant (.)

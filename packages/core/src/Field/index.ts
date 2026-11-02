@@ -21,6 +21,7 @@ export type {
   FieldStatusVariant,
   FieldStatusVariantMap,
 } from '../FieldStatus';
+export type {FieldStatusPlacement} from './fieldStatusPlacement';
 
 // Shared input types
 export type {InputStatus, InputStatusType, InputSize} from './types';
