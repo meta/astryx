@@ -3640,6 +3640,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-clickable-container-clickable-project-card",
+      "path": "examples/use-clickable-container/clickable-project-card",
+      "aliases": []
+    },
+    {
       "name": "example-use-collapsible-custom-disclosure",
       "path": "examples/use-collapsible/custom-disclosure",
       "aliases": []
