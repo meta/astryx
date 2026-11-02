@@ -99,10 +99,14 @@ const COARSE = '@media (pointer: coarse)';
  * attribute is the system's own (`data-astryx-*`, like the pressable marker),
  * outside the namespace a theme's state keys generate into (`[data-<state>]`),
  * so a theme state can never collide with it.
+ *
+ * The press selectors are typed `string`, not as literals. As a computed key,
+ * a `string` gives the object an index signature, and StyleX reads the value
+ * type from it. See {@link ByAttribute}.
  */
-const PRESSED_ON = '[data-astryx-press="on"]';
+const PRESSED_ON: string = '[data-astryx-press="on"]';
 /** Written by the touch press controller for the release's exit. */
-const PRESSED_FADING = '[data-astryx-press="fading"]';
+const PRESSED_FADING: string = '[data-astryx-press="fading"]';
 
 const PRESS_ALPHA = pressVars['--astryx-press-alpha'];
 
@@ -163,7 +167,28 @@ const pressStrength = {
   '[data-astryx-press="on"]': 1,
   '[data-astryx-press="fading"]': 1,
 };
-const pressReleaseAnimation = {
+/**
+ * A value that only attribute selectors choose, such as the press arms.
+ *
+ * StyleX infers a value's type from its `default`, its `:` and `@`
+ * conditions, and an index signature. Literal attribute keys are none of
+ * these. For a property whose conditions are all literal attribute keys, it
+ * infers `unknown`, and no component's `xstyle` accepts that. This type gives
+ * the hoisted press arms an index signature.
+ */
+type ByAttribute<Value> = Readonly<{
+  default: null;
+  [attribute: string]: Value | null;
+}>;
+
+const pressReleaseAnimation: Readonly<{
+  animationName: ByAttribute<string>;
+  animationDuration: ByAttribute<
+    Readonly<{default: string; [media: `@media ${string}`]: string}>
+  >;
+  animationTimingFunction: ByAttribute<string>;
+  animationFillMode: ByAttribute<'both'>;
+}> = {
   animationName: {
     default: null,
     '[data-astryx-press="fading"]': pressRelease,

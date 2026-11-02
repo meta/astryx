@@ -13,6 +13,7 @@ import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-i
 import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
 import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
 import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/no-comment-provenance.js';
 
 /* global process */
 
@@ -56,6 +57,20 @@ const privateAttributeBaseline = JSON.parse(
     path.join(
       import.meta.dirname,
       'internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Record ids, claim ids, pull request and issue references, date stamps, and
+// quote blocks in source comments that predate
+// `@astryx/no-comment-provenance`, by repo-relative file, once per site. The
+// list only shrinks.
+const commentProvenanceBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
     ),
     'utf8',
   ),
@@ -965,6 +980,26 @@ export default defineConfig(
       '@astryx/no-raw-private-attribute': [
         reactSeverity,
         {baseline: privateAttributeBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A source comment explains a reason, a constraint, or a quirk. It does not
+  // cite a record, a claim, a pull request, an issue, or a date, and it does
+  // not quote requirement text: the record links the code, and
+  // `pnpm specs:for <path>` finds it. The sites that predate this block are
+  // listed in the baseline, once per site, and that many stay allowed until
+  // they are removed; one more is reported (an error in strict mode, so a pull
+  // request that adds one fails lint, while main stays green).
+  {
+    files: commentProvenanceScope.files,
+    ignores: commentProvenanceScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-comment-provenance': [
+        reactSeverity,
+        {baseline: commentProvenanceBaseline, root: import.meta.dirname},
       ],
     },
   },

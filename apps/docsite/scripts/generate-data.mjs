@@ -57,6 +57,11 @@ import {
   docs as readDocs,
   template as queryTemplates,
 } from '@astryxdesign/cli/api';
+import {
+  discoverAll,
+  pkgOf,
+  replaceDemoContent,
+} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import docsiteConfig from '../astryx.config.mjs';
 import {
   integrationContentEnabled,
@@ -1462,6 +1467,9 @@ export const groupedComponents: Record<string, GroupedComponents> = ${JSON.strin
 
 // ── 3. Block Registry ──────────────────────────────────────────────────
 
+/** The authored file of each integration block, by block `dirName`. */
+const integrationBlockFiles = new Map();
+
 async function generateBlockRegistry() {
   console.log('Generating block registry...');
 
@@ -1527,6 +1535,11 @@ async function generateBlockRegistry() {
     } catch {
       /* ignore */
     }
+    // Displayed source: the Code tab, Open in Playground, and the MCP server
+    // show each demo-content element as the placeholder a copy writes, and keep
+    // fixture media. The live preview renders the original file (see
+    // writeBlockPreview). A use that cannot be replaced safely fails the build.
+    source = replaceDemoContent(source).source;
 
     const resolvedName = meta.name || basename;
     blocks.push({
@@ -1565,6 +1578,7 @@ async function generateBlockRegistry() {
     const integrationBlocks = templateList.data.filter(entry =>
       CONFIGURED_COMPONENT_PACKAGES.has(entry.package),
     );
+    const discovered = await discoverAll(DOCSITE_ROOT);
     for (const entry of integrationBlocks) {
       const shown = await queryTemplates(entry.id, {
         show: true,
@@ -1572,8 +1586,14 @@ async function generateBlockRegistry() {
         package: entry.package,
         cwd: DOCSITE_ROOT,
       });
+      const dirName = `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+      const authored = discovered.find(
+        t => t.type === 'block' && t.dirName === entry.id && pkgOf(t) === entry.package,
+      );
+      if (!authored) throw new Error(`No authored file for ${dirName}`);
+      integrationBlockFiles.set(dirName, authored.filePath);
       blocks.push({
-        dirName: `${entry.package}-${entry.id}`.replace(/[^a-zA-Z0-9_-]/g, '-'),
+        dirName,
         name: entry.name,
         displayName: entry.displayName || entry.name,
         description: entry.description,
@@ -1687,6 +1707,10 @@ async function generateTemplateRegistry() {
     } catch {
       /* ignore */
     }
+
+    // Displayed source, like each block's: the playground and the MCP server
+    // hand out the demo-content replacement a copy applies, with fixture media.
+    source = replaceDemoContent(source).source;
 
     templates.push({
       slug: dir.name,
@@ -2222,6 +2246,17 @@ function blockSourcePath(block) {
   );
 }
 
+function templateSourcePath(template) {
+  return path.join(
+    CLI_ROOT,
+    'assets',
+    'templates',
+    'pages',
+    template.slug,
+    'page.tsx',
+  );
+}
+
 function writeBlockPreview(block, outDir, basename) {
   const destFile = `${basename}.tsx`;
   const destination = path.join(outDir, destFile);
@@ -2665,8 +2700,17 @@ async function main() {
     outDir: path.join(DOCSITE_ROOT, 'public', 'shadcn'),
     packages,
     allComponents,
-    blocks,
-    templates,
+    // The registries carry displayed source. A shadcn install is a copy, so it
+    // starts from the file as authored.
+    blocks: blocks.map(block => ({
+      ...block,
+      authoredSourcePath:
+        blockSourcePath(block) ?? integrationBlockFiles.get(block.dirName),
+    })),
+    templates: templates.map(template => ({
+      ...template,
+      authoredSourcePath: templateSourcePath(template),
+    })),
     cliRoot: CLI_ROOT,
     dependencyTag: DOCSITE_TARGET === 'canary' ? 'canary' : null,
     externalDependencySpecs: registryExternalDependencySpecs(),

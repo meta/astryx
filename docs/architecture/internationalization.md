@@ -378,6 +378,10 @@ inferred from an implementation pull request.
   `packages/core/src/hooks/useStreamingText.ts` — locale-independent grapheme
   segmentation; this does not admit locale-sensitive word/sentence segmentation
   without the provider-locale helper contract.
+- `packages/core/src/utils/typeaheadMatch.ts` — the shared fold that
+  type-to-select matching uses (INV17): it ignores marks and folds stroked
+  letters and dotless or dotted i, and changes no sorting, filtering, or
+  displayed text.
 - `packages/core/locales/en.json` — source key set, default English messages, and
   translator descriptions.
 - `packages/core/locales/*.json` — partial translated catalogs, rich shape, the

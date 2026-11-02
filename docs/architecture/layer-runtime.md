@@ -300,14 +300,14 @@ during a press so native light dismissal does not mistake them for outside
 interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
-A text input cannot be an invoker, so BaseTypeahead's list, DateTimeInput's
-time list and ChatComposerInput's trigger menu, which their text fields own,
-are manual popovers. A press that starts and ends on the field's input or its
-buttons, or in the list, is inside, judged across open shadow roots; a press
-that starts and ends anywhere else closes the list, a scroll or pinch that
-starts outside does not, and Escape stays on the shared stack. Implementation
-gap: DateInput's calendar is still an auto popover with native light dismiss,
-so a press in its own text input closes it.
+A text input cannot be an invoker, so BaseTypeahead's list, DateInput's
+calendar, DateTimeInput's time list and ChatComposerInput's trigger menu, which
+their text fields own, are manual popovers. A press that starts and ends on the
+field's input or its buttons (and DateInput's label), or in the layer, is
+inside, judged across open shadow roots; a press that starts and ends anywhere
+else closes the layer, a scroll or pinch that starts outside does not, and
+Escape stays on the shared stack. Focus leaving the field stays each owner's to
+handle (`family:overlay-dismissal` AV4).
 
 ### Current dismissal plumbing
 
@@ -333,8 +333,9 @@ Outside interaction is not coordinated by the shared stack. Current paths are
 independent:
 
 - auto popovers use native light dismiss;
-- BaseTypeahead's list, DateTimeInput's time list and ChatComposerInput's
-  trigger menu, manual popovers, use Layer's outside-press watch,
+- BaseTypeahead's list, DateInput's calendar, DateTimeInput's time list and
+  ChatComposerInput's trigger menu, manual popovers, use Layer's outside-press
+  watch,
   which closes on a press that starts and ends outside the field and the list
   and forgets a cancelled press (a scroll);
 - native dialogs handle backdrop clicks locally;
@@ -661,8 +662,8 @@ is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
 - `Layer/useTouchTrigger.ts` owns touch trigger classification and the current
   touch-only outside listener for Tooltip/HoverCard.
 - `Layer/outsidePress.ts` owns the outside-press watch for a text field's
-  manual layer, used by BaseTypeahead, DateTimeInput and ChatComposerInput's
-  trigger menu.
+  manual layer, used by BaseTypeahead, DateInput, DateTimeInput and
+  ChatComposerInput's trigger menu.
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
