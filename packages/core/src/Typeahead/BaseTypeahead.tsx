@@ -40,7 +40,11 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {isFocusInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
@@ -842,13 +846,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       dropdownRef.current?.closest<HTMLElement>('[popover]') ?? null;
     outsidePress.start(
       anchorEl,
-      path => {
-        const anchor = anchorRef?.current ?? fallbackAnchorRef.current;
-        const layer = findLayer();
-        return path.some(
-          target => target === anchor || (layer != null && target === layer),
-        );
-      },
+      path =>
+        isPressInsideOwnedLayer(
+          path,
+          anchorRef?.current ?? fallbackAnchorRef.current ?? anchorEl,
+          findLayer()?.id ?? '',
+        ),
       () => findLayer()?.hidePopover(),
     );
   }, [onOpenChange, anchorRef, outsidePress]);

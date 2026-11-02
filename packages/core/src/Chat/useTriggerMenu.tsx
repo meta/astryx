@@ -32,7 +32,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
-import {useOutsidePress} from '../Layer/outsidePress';
+import {isPressInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {
@@ -414,13 +414,7 @@ export function useTriggerMenu(
       }
       outsidePress.start(
         editable,
-        // The menu is hosted outside the editor, so it counts on its own.
-        path =>
-          path.some(
-            target =>
-              target === editable ||
-              (target instanceof Element && target.id === popover.id),
-          ),
+        path => isPressInsideOwnedLayer(path, editable, popover.id),
         // Called after usePopover has returned, so `popover` is assigned.
         () => popover.hide(),
       );

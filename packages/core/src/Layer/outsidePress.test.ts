@@ -43,6 +43,11 @@ describe('isFocusInsideOwnedLayer', () => {
     );
   });
 
+  it('never matches a layer by an empty id', () => {
+    const {field, outside} = setup();
+    expect(isPressInsideOwnedLayer([outside], field, '')).toBe(false);
+  });
+
   it('counts anything else, and no target, as outside', () => {
     const {field, outside} = setup();
     expect(isFocusInsideOwnedLayer(outside, field, 'owned-layer')).toBe(false);

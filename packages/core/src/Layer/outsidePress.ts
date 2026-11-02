@@ -150,7 +150,10 @@ export function isPressInsideOwnedLayer(
   return path.some(
     target =>
       target === field ||
-      (isNode(target) && isElement(target) && target.id === layerId),
+      (layerId !== '' &&
+        isNode(target) &&
+        isElement(target) &&
+        target.id === layerId),
   );
 }
 
