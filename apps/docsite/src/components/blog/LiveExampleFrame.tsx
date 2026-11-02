@@ -16,7 +16,7 @@
  *   the post around it.
  */
 
-import {useCallback, useEffect, useRef} from 'react';
+import {useEffect, useEffectEvent, useRef} from 'react';
 import {
   PreviewFrame,
   usePreviewFrame,
@@ -33,15 +33,9 @@ export interface LiveExampleFrameProps {
 
 export function LiveExampleFrame({code, post}: LiveExampleFrameProps) {
   const {mode} = useThemeMode();
+  // Whether the current frame's document has said it is ready for code.
   const readyRef = useRef(false);
-  // The latest values the ready handler sends, read at send time.
-  const latest = useRef({code, post, mode});
-  useEffect(() => {
-    latest.current = {code, post, mode};
-  });
 
-  // Sends the latest theme and source; a no-op until the frame is ready.
-  const sendRef = useRef(() => {});
   const {
     frame,
     attachFrame,
@@ -51,7 +45,7 @@ export function LiveExampleFrame({code, post}: LiveExampleFrameProps) {
     onMessage: event => {
       if ((event.data as {type?: unknown} | null)?.type === 'preview-ready') {
         readyRef.current = true;
-        sendRef.current();
+        sendExample();
       }
     },
     // A new frame is coming (the first, or after the example navigated or
@@ -61,23 +55,20 @@ export function LiveExampleFrame({code, post}: LiveExampleFrameProps) {
     },
   });
 
-  const sendAll = useCallback(() => {
+  // Sends this render's theme and source; a no-op until the frame is ready.
+  const sendExample = useEffectEvent(() => {
     if (!readyRef.current) {
       return;
     }
-    const {code: source, post: slug, mode: themeMode} = latest.current;
-    postToFrame({type: 'preview-theme', mode: themeMode});
-    postToFrame({type: 'preview-code', code: source, source, post: slug});
-  }, [postToFrame]);
-  useEffect(() => {
-    sendRef.current = sendAll;
-  }, [sendAll]);
+    postToFrame({type: 'preview-theme', mode});
+    postToFrame({type: 'preview-code', code, source: code, post});
+  });
 
   // A new source, post or site color mode re-sends once the frame is ready;
   // any other render leaves the running example alone.
   useEffect(() => {
-    sendAll();
-  }, [code, post, mode, sendAll]);
+    sendExample();
+  }, [code, post, mode]);
 
   return (
     <figure className={css.frame} data-live-example="">

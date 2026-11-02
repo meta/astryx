@@ -101,7 +101,7 @@ describe('the tsx live fence rule', () => {
     );
   });
 
-  it('reads fences as the page does: in blockquotes and list items, and never inside another block', () => {
+  it('rewrites exactly the fences the page runs: in blockquotes and list items, nested, after an unclosed quoted fence, and never inside another block', () => {
     const body = [
       '> ```tsx live',
       '> export default function Quoted() { return null; }',
@@ -116,6 +116,25 @@ describe('the tsx live fence rule', () => {
       'quoted syntax stays as written',
       '```',
       '````',
+      '',
+      '- > ```tsx live',
+      '  > export default function ListQuote() { return null; }',
+      '  > ```',
+      '',
+      '- - ```tsx live',
+      '    export default function Nested() { return null; }',
+      '    ```',
+      '',
+      '> ```tsx',
+      '> an unclosed fence ends with its quote',
+      '',
+      '```tsx live',
+      'export default function AfterQuote() { return null; }',
+      '```',
+      '',
+      '    ```tsx live',
+      '    quoted inside an indented code block',
+      '    ```',
     ].join('\n');
     expect(toStaticLiveBlocks(body)).toBe(
       [
@@ -132,6 +151,25 @@ describe('the tsx live fence rule', () => {
         'quoted syntax stays as written',
         '```',
         '````',
+        '',
+        '- > ```tsx',
+        '  > export default function ListQuote() { return null; }',
+        '  > ```',
+        '',
+        '- - ```tsx',
+        '    export default function Nested() { return null; }',
+        '    ```',
+        '',
+        '> ```tsx',
+        '> an unclosed fence ends with its quote',
+        '',
+        '```tsx',
+        'export default function AfterQuote() { return null; }',
+        '```',
+        '',
+        '    ```tsx live',
+        '    quoted inside an indented code block',
+        '    ```',
       ].join('\n'),
     );
   });

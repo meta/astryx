@@ -19,6 +19,7 @@
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -78,11 +79,14 @@ export interface PreviewFrameHandle {
 export function usePreviewFrame(
   options: UsePreviewFrameOptions,
 ): PreviewFrameHandle {
-  // The latest callbacks, read when the connector fires.
-  const optionsRef = useRef(options);
-  useEffect(() => {
-    optionsRef.current = options;
-  });
+  // The connector fires these long after the Effect that wires it ran, so
+  // each reads the latest callbacks.
+  const onMessage = useEffectEvent((event: MessageEvent) =>
+    options.onMessage(event),
+  );
+  const onIssue = useEffectEvent(() => options.onIssue?.());
+  const onAttested = useEffectEvent(() => options.onAttested?.());
+  const onReplaced = useEffectEvent(() => options.onReplaced?.());
   const [frame, setFrame] = useState<PreviewFrameGeneration | null>(null);
   const connectorRef = useRef<PreviewConnector | null>(null);
   const restartRef = useRef<() => void>(() => {});
@@ -92,13 +96,13 @@ export function usePreviewFrame(
     const issue = () => {
       generation += 1;
       setFrame({key: generation, src: previewSrc(connector.issue())});
-      optionsRef.current.onIssue?.();
+      onIssue();
     };
     const connector = createPreviewConnector({
-      onMessage: event => optionsRef.current.onMessage(event),
-      onAttested: () => optionsRef.current.onAttested?.(),
+      onMessage,
+      onAttested,
       onReplaced: () => {
-        optionsRef.current.onReplaced?.();
+        onReplaced();
         issue();
       },
     });
