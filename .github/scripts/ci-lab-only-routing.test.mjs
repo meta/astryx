@@ -198,8 +198,10 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
       "needs.build-storybook.outputs.lab_only != 'true'",
     );
     // The default visual check is a focused check of touched Core
-    // components, so a Lab-only change has none; a maintainer's label still
-    // runs the visual, accessibility or RTL suite on Lab's components (FR12).
+    // components, so a Lab-only change has none. A maintainer's `ci:run-a11y`
+    // or `ci:run-rtl` label still audits Lab's components (FR12);
+    // `ci:run-visual` runs the stable visual suite, which leaves out
+    // canary-only Lab.
     for (const name of ['visual-scout', 'pr-visual']) {
       const specialized = steps(name).find(s => s.env?.SPECIALIZED)?.env
         .SPECIALIZED;
