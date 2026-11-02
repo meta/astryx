@@ -26,6 +26,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -81,24 +82,6 @@ import {
 import {useDevWarning} from '../hooks/useDevWarning';
 
 const styles = stylex.create({
-  // While disabled or busy the field takes no hover ring, but the focus ring
-  // returns while this field's own input holds focus (spec:AST-085 FR6).
-  // Defaults repeat the shared border and shadow.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(input:focus)': {
-        default: colorVars['--color-accent'],
-        // Forced colors repaint author borders in one system color and drop
-        // the inset shadow; Highlight keeps the focused field visible.
-        '@media (forced-colors: active)': 'Highlight',
-      },
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(input:focus)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -861,7 +844,7 @@ function PointerDateField({
           // keeps its ordinary paint and shows the Spinner (spec:AST-085
           // FR6, family:buttons FR4).
           isDisabled && inputWrapperStyles.disabled,
-          isEffectivelyDisabled && styles.disabledFocusRing,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&

@@ -32,6 +32,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
@@ -294,25 +295,6 @@ const styles = stylex.create({
         '@media (pointer: coarse)': 'scale(1)',
       },
       '[data-astryx-press="on"]': 'scale(0.98)',
-    },
-  },
-  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
-  // and the shared disabled wrapper style drops the field focus ring, so the
-  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
-  // itself, a direct child, so a focused status button keeps its own outline.
-  triggerDisabledFocus: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)': {
-        default: colorVars['--color-accent'],
-        // Forced colors repaint author borders in one system color and drop
-        // the inset shadow; Highlight keeps the focused field visible.
-        '@media (forced-colors: active)': 'Highlight',
-      },
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   triggerGhostDisabled: {
@@ -2012,7 +1994,7 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'input' &&
               isDisabled &&
               !surface.isTriggerFocusRingSuppressed &&
-              styles.triggerDisabledFocus,
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&

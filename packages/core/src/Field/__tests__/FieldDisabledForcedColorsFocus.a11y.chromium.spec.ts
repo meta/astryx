@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/Field/inputDisabledFocus\.ts|packages/core/src/Field/__tests__/FieldDisabledForcedColorsFocus|packages/core/src/(Selector|MultiSelector|DateInput|TimeInput|TextInput|Typeahead)/|apps/storybook/stories/(TextInput|Selector|DateInput|TimeInput|Typeahead)\.stories)
+// @pr-a11y scope ^(packages/core/src/Field/inputDisabledFocus\.ts|packages/core/src/Field/__tests__/FieldDisabledForcedColorsFocus|packages/core/src/(Selector|MultiSelector|DateInput|TimeInput|DateRangeInput|DateTimeInput|TextInput|Typeahead)/|apps/storybook/stories/(TextInput|Selector|DateInput|TimeInput|DateRangeInput|DateTimeInput|Typeahead)\.stories)
 
 /**
  * @file FieldDisabledForcedColorsFocus.a11y.chromium.spec.ts
@@ -53,6 +53,23 @@ for (const [story, selector] of [
   ['core-selector--disabled', '[aria-disabled="true"]'],
   ['core-dateinput--disabled', 'input[aria-disabled="true"]'],
   ['core-timeinput--disabled', '[aria-disabled="true"]'],
+  [
+    'core-dateinput--disabled&args=presentation:native',
+    'input[aria-disabled="true"]',
+  ],
+  [
+    'core-dateinput--disabled&args=presentation:bottom-sheet',
+    'input[aria-disabled="true"]',
+  ],
+  [
+    'core-timeinput--disabled&args=presentation:bottom-sheet',
+    '[aria-disabled="true"]:not([tabindex="-1"])',
+  ],
+  [
+    'core-daterangeinput--disabled',
+    '[aria-disabled="true"]:not([tabindex="-1"])',
+  ],
+  ['core-datetimeinput--disabled', 'input[aria-disabled="true"]'],
 ] as const) {
   test(`${story}: a focusable disabled field shows keyboard focus under forced colors`, async ({
     page,
