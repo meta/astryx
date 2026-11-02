@@ -444,10 +444,12 @@ export function ResizeHandle({
     isReversed,
     isCollapsed,
   );
-  // The pane the Handle resizes, while it has any length: an inline zone
-  // reaches at most half of it, and an overlay Handle takes at most half of
-  // it. A collapsed pane has nothing to protect and keeps the whole zone.
-  const paneLength = isCollapsed ? undefined : resizable?._size;
+  // An inline zone reaches at most half of the pane the Handle resizes. An
+  // overlay Handle takes at most half of it. A collapsed pane, or one at 0px,
+  // has nothing to protect and keeps the whole zone.
+  const paneSize = resizable?._size;
+  const paneLength =
+    isCollapsed || paneSize == null || paneSize <= 0 ? undefined : paneSize;
   const isInteracting = isHovered || isFocused;
 
   // A handle whose axis disagrees with its region drags along one axis while
@@ -576,8 +578,6 @@ export function ResizeHandle({
         {...stylex.props(
           styles.hitArea,
           isHorizontal ? styles.hitAreaHorizontal : styles.hitAreaVertical,
-          // The zone sits centred on the Handle; `pillPlacement` moves only
-          // the pill.
           isHorizontal
             ? rtlStyles.centerInline('0px')
             : styles.hitAreaCenteredY,
