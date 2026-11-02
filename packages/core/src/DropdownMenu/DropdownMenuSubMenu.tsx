@@ -120,7 +120,13 @@ import {
 } from './DropdownMenuContext';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {DropdownMenuItem} from './DropdownMenuItem';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DropdownMenu/DropdownMenuSubMenu.generated';
+
+registerEnglishFallback(english);
 
 // The flyout's own lower cap on the placement axis; the viewport cap under
 // it and the inline gutter beside it are the layer runtime's (spec:AST-059).
@@ -506,7 +512,7 @@ export function DropdownMenuSubMenu(
     ...rest
   } = props;
 
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const menuCtx = useDropdownMenuContext();
   const rootSurface = use(DropdownMenuSurfaceContext);
   const rootHasRegions = use(MenuRegionsContext);
