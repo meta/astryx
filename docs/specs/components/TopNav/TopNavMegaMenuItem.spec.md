@@ -28,15 +28,15 @@ system_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | `TopNavMegaMenuItem` with `title`, `description`, `icon`, `href`, `onClick`, and `as`; target `top-nav-mega-menu-item` with a `mode` state.                                   |
-| Behavior                | One destination in a mega menu: a rich tile in the desktop panel and a row in the drawer. A drawer row closes the drawer on activation.                                       |
-| End-user impact         | Users see a title, description, and icon per destination. Keyboard users cannot reach or activate a desktop item that has `onClick` but no `href` (see Current-state impact). |
-| Builder impact          | None.                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no public change. Two implementation gaps (see Current-state impact).                                                                               |
-| Review checks           | Reject a drawer item that leaves the drawer open after activation or drops caller props and styling.                                                                          |
-| Governing rules         | `architecture:interaction-modality` INV4; WCAG 2.1.1; `component:TopNav` render modes.                                                                                        |
+| Area                    | Contract                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `TopNavMegaMenuItem` with `title`, `description`, `icon`, `href`, `onClick`, and `as`; target `top-nav-mega-menu-item` with a `mode` state. |
+| Behavior                | One destination in a mega menu: a rich tile in the desktop panel and a row in the drawer. A drawer row closes the drawer on activation.     |
+| End-user impact         | Users see a title, description, and icon per destination.                                                                                   |
+| Builder impact          | None.                                                                                                                                       |
+| Compatibility/readiness | Records shipped behavior; no public change. One implementation gap (see Current-state impact).                                              |
+| Review checks           | Reject a drawer item that leaves the drawer open after activation or drops caller props and styling.                                        |
+| Governing rules         | `architecture:interaction-modality` INV4; WCAG 2.1.1; `component:TopNav` render modes.                                                      |
 
 This table is a review projection; the body below is authoritative.
 
@@ -57,10 +57,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **Desktop action items are not keyboard operable.** In the desktop panel, an
-  item with `onClick` and no `href` renders a `div` with no role and no tab
-  stop, so keyboard users cannot reach or activate it. WCAG 2.1.1 and
-  `architecture:interaction-modality` INV4 require an operable keyboard path.
 - **Color transition under reduced motion.** The desktop tile's background color
   still animates when reduced motion is requested; `design:reduced-motion` DR3
   allows no animated property for a fine pointer.

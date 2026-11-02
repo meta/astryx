@@ -212,11 +212,12 @@ export function TopNavItem({
   // disabled paths of Link and SideNavItem.)
   const isAction = href == null && onClick != null;
   const Root = isDisabled && !isAction ? 'a' : LinkComponent;
-  // A Space press activates on release, like a native button; the key-up
-  // handler checks the node and the disabled state, so nothing else resets it.
+  // Space activates on release, like a native button. The key-up handler
+  // checks the node and the disabled state, so no other code resets the press.
   const spacePressedRef = useRef<HTMLAnchorElement | null>(null);
 
-  // Keep the anchor host/ref contract while adding button keyboard behavior.
+  // The host stays an anchor because the public ref and event types are
+  // HTMLAnchorElement.
   const actionKeyboardProps = isAction
     ? {
         role: props.role ?? 'button',

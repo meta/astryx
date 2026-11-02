@@ -45,7 +45,7 @@ system_specs: []
 | Behavior                | In the bar, a button that opens a menu of rich items on hover or click, with APG menu keyboard support. In the drawer, a disclosure that expands its items inline. Hidden in the mobile bar. |
 | End-user impact         | Mouse users preview destinations on hover; keyboard users move through items with arrows and typeahead; drawer users expand the group in place.                                              |
 | Builder impact          | None.                                                                                                                                                                                        |
-| Compatibility/readiness | Records shipped behavior; no public change. Three current-state gaps (see Current-state impact).                                                                                             |
+| Compatibility/readiness | Records shipped behavior; no public change. Two current-state gaps (see Current-state impact).                                                                                               |
 | Review checks           | Reject wrapping the popup in a modal dialog, more than one tab stop among items, a collapsed drawer group that stays reachable, or caller trigger handlers that replace the built-in ones.   |
 | Governing rules         | `architecture:public-component-api` INV5 and INV7; `architecture:interaction-modality`; `component:TopNav` render modes.                                                                     |
 
@@ -69,10 +69,6 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- **Drawer action items are not keyboard operable.** A drawer item with only
-  `onClick` renders a link without `href`, so keyboard users cannot reach or
-  activate it. WCAG 2.1.1 and `architecture:interaction-modality` INV4 require an
-  operable keyboard path.
 - **Motion under reduced motion.** The drawer group's height, the bar and
   drawer chevrons' rotation, the trigger's background and text color, and each
   bar item's background color still animate when reduced motion is requested;
@@ -186,7 +182,7 @@ recorded.
 | FR11                | `TopNavMenu.test.tsx` action-group suite (touch and mouse slides)                                             | Touch and mouse slides across items; undraggable link items | Removing the adoption fails the slide tests.                                  | —                                |
 | RTL relation        | RTL audit curated D4 target (`apps/storybook/rtl-audit/targets.json`) on `TopNavMenu / Default` (menu opened) | An open start-aligned menu panel; LTR and RTL               | A panel that does not move to the mirrored side of the page in RTL fails D4.  | `audit:TopNavMenu/i18n-rtl`      |
 
-Read from source, with no focused test yet: the visually hidden close button after the menu (FR3); the native `<a>` for bar items, the icon box, and the description (FR4); the forwarded `ref`, the `top-nav-menu` target, and the bar and drawer chevrons' turn (FR1, FR7); the drawer group's clipping while it expands and its height animation (FR7); the caller `preventDefault()` cancellation (FR6); hover opening and closing with `delay` and `hideDelay` (FR2); slot alignment (FR3); FR8; FR9; and the bar trigger and item parts of FR10.
+Read from source, with no focused test yet: the visually hidden close button after the menu (FR3); the native `<a>` for bar items, the icon box, and the description (FR4); the forwarded `ref`, the `top-nav-menu` target, and the bar and drawer chevrons' turn (FR1, FR7); the drawer group's clipping while it expands and its height animation (FR7); the caller `preventDefault()` cancellation (FR6); hover opening and closing with `delay` and `hideDelay` (FR2); slot alignment (FR3); FR9; and the bar trigger and item parts of FR10.
 
 ## Decision log
 
