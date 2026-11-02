@@ -101,6 +101,41 @@ describe('the tsx live fence rule', () => {
     );
   });
 
+  it('reads fences as the page does: in blockquotes and list items, and never inside another block', () => {
+    const body = [
+      '> ```tsx live',
+      '> export default function Quoted() { return null; }',
+      '> ```',
+      '',
+      '- ```tsx live',
+      '  export default function Listed() { return null; }',
+      '  ```',
+      '',
+      '````md',
+      '```tsx live',
+      'quoted syntax stays as written',
+      '```',
+      '````',
+    ].join('\n');
+    expect(toStaticLiveBlocks(body)).toBe(
+      [
+        '> ```tsx',
+        '> export default function Quoted() { return null; }',
+        '> ```',
+        '',
+        '- ```tsx',
+        '  export default function Listed() { return null; }',
+        '  ```',
+        '',
+        '````md',
+        '```tsx live',
+        'quoted syntax stays as written',
+        '```',
+        '````',
+      ].join('\n'),
+    );
+  });
+
   it('leaves no live fence in the fixture plain-text body', () => {
     const fallback = toStaticLiveBlocks(fixturePost().body);
     expect(fallback).not.toMatch(/^\s*(`{3,}|~{3,})\s*tsx\s+live/m);
