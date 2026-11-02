@@ -16,10 +16,11 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
   type RefCallback,
 } from 'react';
-import {isFocusForTrigger} from '../utils/triggerFocus';
+import {createTriggerFocusGate} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayer,
@@ -61,7 +62,7 @@ const styles = stylex.create({
 });
 
 /**
- * Focus trigger behavior for hover cards
+ * When focus on the trigger opens the hover card
  */
 export type HoverCardFocusTrigger = 'auto' | 'always' | 'never';
 
@@ -97,9 +98,10 @@ export interface HoverCardOptions {
 
   /**
    * When to trigger on focus:
-   * - `auto`: Only if element is naturally focusable
-   * - `always`: Always attach focus listeners
-   * - `never`: Never attach focus listeners (for composite widgets)
+   * - `auto`: focus on the trigger itself, or within a trigger that is
+   *   focusable when focus arrives
+   * - `always`: focus on the trigger or anything inside it
+   * - `never`: never on focus (for composite widgets)
    *
    * @default 'auto'
    */
@@ -404,16 +406,13 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     [handleTouchPointerDown],
   );
 
-  // Whether the trigger's current focus counted when it arrived, so its blur
-  // hides the card even if the trigger has since left the tab order.
-  const focusCountedRef = useRef(false);
+  // Under `auto`, whether focus counts is decided when it arrives, and a
+  // focus that counted still hides on blur (utils/triggerFocus.ts).
+  const [focusGate] = useState(createTriggerFocusGate);
 
   const handleFocusIn = useCallback(
     (e: Event) => {
-      // Under `auto`, whether focus counts is decided when it arrives
-      // (utils/triggerFocus.ts).
-      focusCountedRef.current = isFocusForTrigger(e, focusTrigger);
-      if (!isEnabled || !focusCountedRef.current) {
+      if (!focusGate.focusIn(e, focusTrigger) || !isEnabled) {
         return;
       }
       // A tap focuses the trigger it activates. Opening on that focus would
@@ -430,15 +429,21 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
       clearTimeouts();
       showLayer();
     },
-    [focusTrigger, isEnabled, isTouchInteraction, clearTimeouts, showLayer],
+    [
+      focusGate,
+      focusTrigger,
+      isEnabled,
+      isTouchInteraction,
+      clearTimeouts,
+      showLayer,
+    ],
   );
 
   const handleFocusOut = useCallback(
     (e: FocusEvent) => {
-      if (!focusCountedRef.current && !isFocusForTrigger(e, focusTrigger)) {
+      if (!focusGate.focusOut(e, focusTrigger)) {
         return;
       }
-      focusCountedRef.current = false;
       // Check if focus is moving to the hover card content
       const relatedTarget = e.relatedTarget as HTMLElement | null;
       const popoverElement = document.getElementById(layerId);
@@ -450,7 +455,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
       scheduleHide();
     },
-    [focusTrigger, layerId, scheduleHide],
+    [focusGate, focusTrigger, layerId, scheduleHide],
   );
 
   // Escape dismissal (WCAG 1.4.13) goes through the shared layer stack: a

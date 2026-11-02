@@ -231,6 +231,32 @@ describe('useHoverCard — focusTrigger="auto" decides when focus arrives', () =
     expect(onShow).not.toHaveBeenCalled();
   });
 
+  it('hides on blur from inside a focusable trigger that left the tab order', async () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableRow() {
+      const card = useHoverCard({onShow, onHide, delay: 0, hideDelay: 0});
+      return (
+        <div>
+          <div tabIndex={0} ref={card.ref} data-testid="row">
+            <button type="button">Inside</button>
+          </div>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<FocusableRow />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    // Focus inside a focusable trigger counts.
+    fireEvent.focusIn(inside);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+    // The trigger leaves the tab order before focus moves on: the focus that
+    // counted still hides the card.
+    screen.getByTestId('row').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1));
+  });
+
   it('hides on blur of a trigger that left the tab order while focused', async () => {
     const onShow = vi.fn();
     const onHide = vi.fn();

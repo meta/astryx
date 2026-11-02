@@ -3,7 +3,8 @@
 /**
  * @file triggerFocus.ts
  * @input A focus event on a hover-layer trigger and its focusTrigger value
- * @output Whether that focus counts as focus on the trigger
+ * @output Whether that focus counts as focus on the trigger, and a gate that
+ *   remembers it for the matching blur
  * @position Shared focus-trigger judgement for Tooltip and HoverCard
  */
 
@@ -47,4 +48,33 @@ export function isFocusForTrigger(
   return (
     trigger != null && (event.target === trigger || isFocusableTrigger(trigger))
   );
+}
+
+/** Remembers whether a trigger's current focus counted when it arrived. */
+export interface TriggerFocusGate {
+  /** On focusin: whether this focus opens the layer. */
+  focusIn(event: Event, mode: TriggerFocusMode): boolean;
+  /**
+   * On focusout: whether this blur closes the layer. A focus that counted
+   * closes on blur even if the trigger has since left the tab order.
+   */
+  focusOut(event: Event, mode: TriggerFocusMode): boolean;
+}
+
+/** A gate for one trigger; each hook keeps one for its lifetime. */
+export function createTriggerFocusGate(): TriggerFocusGate {
+  let isCounted = false;
+  return {
+    focusIn(event, mode) {
+      isCounted = isFocusForTrigger(event, mode);
+      return isCounted;
+    },
+    focusOut(event, mode) {
+      if (!isCounted && !isFocusForTrigger(event, mode)) {
+        return false;
+      }
+      isCounted = false;
+      return true;
+    },
+  };
 }
