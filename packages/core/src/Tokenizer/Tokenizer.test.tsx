@@ -1215,7 +1215,13 @@ describe('Tokenizer', () => {
   // After the tokens change, the list the field shows is the current one
   // (spec:AST-092 FR4, component:Tokenizer FR13).
   describe('list after the tokens change', () => {
-    function Controlled({initial}: {initial: SearchableItem[]}) {
+    function Controlled({
+      initial,
+      maxEntries,
+    }: {
+      initial: SearchableItem[];
+      maxEntries?: number;
+    }) {
       const [value, setValue] = useState(initial);
       return (
         <>
@@ -1225,9 +1231,15 @@ describe('Tokenizer', () => {
             value={value}
             onChange={setValue}
             hasEntriesOnFocus
+            maxEntries={maxEntries}
           />
           <button type="button" onClick={() => setValue([users[2]])}>
             Set Charlie
+          </button>
+          <button
+            type="button"
+            onClick={() => setValue([users[0], users[1], users[2]])}>
+            Set all three
           </button>
         </>
       );
@@ -1249,6 +1261,47 @@ describe('Tokenizer', () => {
         expect(
           screen.getByRole('option', {name: 'Alice', hidden: true}),
         ).toBeInTheDocument();
+      });
+    });
+
+    // FR15: an open list with no eligible choice left closes.
+    it('closes the open list when its last choice is set from outside', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0], users[1]]} />);
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Set all three'}).click();
+      });
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes the open list when a value set from outside reaches the maximum', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0]]} maxEntries={3} />);
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Set all three'}).click();
+      });
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
       });
     });
 

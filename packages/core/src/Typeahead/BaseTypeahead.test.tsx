@@ -485,6 +485,41 @@ describe('BaseTypeahead', () => {
       expect(updatedBootstrap).not.toHaveBeenCalled();
     });
 
+    it('closes an open focus list when the reload finds nothing', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(
+        renderField({search: () => [], bootstrap: () => [resultItem]}, 'a'),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      rerender(renderField({search: () => [], bootstrap: () => []}, 'b'));
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes an open focus list when focus entries are turned off', async () => {
+      const user = userEvent.setup();
+      const source = {search: () => [], bootstrap: () => [resultItem]};
+      const {rerender} = render(renderField(source, 'a'));
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      rerender(renderField(source, 'b', {hasEntriesOnFocus: false}));
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
     it('does not reload or move the highlight when only the source is rebuilt', async () => {
       const user = userEvent.setup();
       const items = [

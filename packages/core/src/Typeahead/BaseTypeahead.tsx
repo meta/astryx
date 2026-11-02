@@ -1092,9 +1092,21 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setHighlightedIndex(nextHighlightedIndex);
       if (bootstrapResults.length > 0) {
         showLayer();
+      } else {
+        // An open list whose focus entries are now all gone (each one
+        // committed as a Tokenizer token, say) closes rather than staying
+        // open and empty (component:Tokenizer FR15).
+        popover.hide();
       }
     },
-    [highlightedIndex, maxMenuItems, results.length, showLayer, replaceResults],
+    [
+      highlightedIndex,
+      maxMenuItems,
+      results.length,
+      showLayer,
+      replaceResults,
+      popover,
+    ],
   );
 
   // Perform bootstrap
@@ -1145,6 +1157,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       void performSearch(query);
     } else if (query.length === 0 && hasEntriesOnFocus) {
       void performBootstrap();
+    } else if (query.length === 0) {
+      // Nothing current can be loaded (a Tokenizer at its maximum turns its
+      // focus entries off), so the old list closes instead of staying stale.
+      popover.hide();
     }
   }, [
     isDisabled,
@@ -1153,6 +1169,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     hasEntriesOnFocus,
     performSearch,
     performBootstrap,
+    popover,
   ]);
   // The latest reload, read when the key changes, as an effect event.
   const reloadForCommittedChoicesRef = useRef(reloadForCommittedChoices);
