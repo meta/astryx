@@ -2,9 +2,10 @@
 
 /**
  * @file benchmark.ts
- * @input A workload id: a multi-file change set or one file of a given size
- * @output Deterministic old/new file contents, their totals, and small
- *   formatting helpers for the DiffViewer performance sandbox
+ * @input A workload: a multi-file preset (file count and changed lines) or
+ *   one file of a given size
+ * @output Deterministic old/new file contents, their line and changed-line
+ *   totals, and small formatting helpers for the DiffViewer performance sandbox
  * @position Pure support utilities for the DiffViewer performance sandbox;
  *   no React and no DOM, so any harness can render the same fixtures
  *
@@ -13,6 +14,9 @@
  * edits, a handful of new and deleted files, and a few full rewrites. Every
  * value comes from a seeded generator, so a workload is byte-identical on
  * every run and in every harness.
+ *
+ * A changed line is an added or a removed line, the way a diff summary counts
+ * them; a replaced line counts once on each side.
  */
 
 export interface DiffBenchmarkFile {
@@ -29,15 +33,25 @@ export interface DiffBenchmarkWorkload {
   readonly files: ReadonlyArray<DiffBenchmarkFile>;
   /** Lines across every file's newer side (the older side for a deleted file). */
   readonly totalLines: number;
+  /** Added plus removed lines across every file. */
+  readonly changedLines: number;
+  /** Added plus removed lines in the file that changes the most. */
+  readonly largestFileChangedLines: number;
 }
 
-/** Multi-file workloads: file count and the total lines they target. */
+/**
+ * Multi-file presets by file count and changed lines, from a typical change
+ * set to the upper bound: large diffs up to 1,000 files and 100,000 changed
+ * lines.
+ */
 export const MULTI_FILE_WORKLOADS = [
-  {files: 50, totalLines: 10_000},
-  {files: 200, totalLines: 50_000},
-  {files: 500, totalLines: 100_000},
-  {files: 1000, totalLines: 150_000},
+  {id: 'typical', label: 'Typical', files: 5, changedLines: 200},
+  {id: 'large', label: 'Large', files: 50, changedLines: 4000},
+  {id: 'very-large', label: 'Very large', files: 200, changedLines: 20_000},
+  {id: 'upper-bound', label: 'Upper bound', files: 1000, changedLines: 100_000},
 ] as const;
+
+export type MultiFileWorkloadId = (typeof MULTI_FILE_WORKLOADS)[number]['id'];
 
 /** Single-file workloads: line counts, each with sparse edits or a rewrite. */
 export const SINGLE_FILE_LINES = [100, 1000, 5000, 20_000] as const;
@@ -62,11 +76,15 @@ function between(random: () => number, min: number, max: number): number {
 
 /**
  * One line of TypeScript-like source, varied by its file and position. A
- * variant changes every non-blank line, so two variants share no code.
+ * variant changes every line, blank ones included, so two variants share no
+ * line and a rewrite changes each line on both sides.
  */
 function sourceLine(fileIndex: number, line: number, variant = ''): string {
   const base = baseSourceLine(fileIndex, line, variant);
-  return variant === '' || base === '' ? base : `${base} // ${variant}`;
+  if (variant === '') {
+    return base;
+  }
+  return base === '' ? `// ${variant}` : `${base} // ${variant}`;
 }
 
 function baseSourceLine(
@@ -109,6 +127,12 @@ function fileLines(fileIndex: number, count: number, variant = ''): string[] {
   );
 }
 
+interface EditedLines {
+  readonly lines: string[];
+  /** Added plus removed lines: two per replaced line, one per inserted line. */
+  readonly changedLines: number;
+}
+
 /**
  * Edit roughly one site per `spacing` lines: each site replaces one to three
  * lines and sometimes inserts one or two more.
@@ -117,8 +141,9 @@ function applySparseEdits(
   lines: ReadonlyArray<string>,
   random: () => number,
   spacing: number,
-): string[] {
+): EditedLines {
   const next: string[] = [];
+  let changedLines = 0;
   let line = 0;
   let isFirst = true;
   while (line < lines.length) {
@@ -134,13 +159,15 @@ function applySparseEdits(
     const replaced = between(random, 1, 3);
     for (let i = 0; i < replaced && line < lines.length; i++, line++) {
       next.push(`${lines[line]} // updated`);
+      changedLines += 2;
     }
     const inserted = between(random, 0, 2);
     for (let i = 0; i < inserted; i++) {
       next.push(`  void track('edit-${line}-${i}');`);
+      changedLines += 1;
     }
   }
-  return next;
+  return {lines: next, changedLines};
 }
 
 const DIRECTORIES = [
@@ -177,46 +204,98 @@ function fileSizes(
   return raw.map(size => Math.max(12, Math.round(size * scale)));
 }
 
+interface ChangeSet {
+  readonly files: DiffBenchmarkFile[];
+  readonly changedLines: number;
+  readonly largestFileChangedLines: number;
+}
+
 /**
- * A change set of `files` files whose sides total about `totalLines` lines.
  * About 5% of the files are new, 2% deleted and 2% rewritten in full; the
  * rest carry sparse edits.
  */
-export function createMultiFileWorkload(
+function createChangeSet(
+  seed: number,
   files: number,
   totalLines: number,
-): DiffBenchmarkWorkload {
-  const random = createRandom(files * 7919 + totalLines);
+): ChangeSet {
+  const random = createRandom(seed);
   const sizes = fileSizes(random, files, totalLines);
-  const result: DiffBenchmarkFile[] = sizes.map((size, index) => {
+  const kinds = sizes.map(() => random());
+  let changedLines = 0;
+  let largestFileChangedLines = 0;
+  const result = sizes.map((size, index): DiffBenchmarkFile => {
     const directory = DIRECTORIES[index % DIRECTORIES.length];
     const path = `${directory}/module_${String(index).padStart(4, '0')}.ts`;
     const original = fileLines(index, size);
-    const kind = random();
+    const kind = kinds[index];
+    let file: DiffBenchmarkFile;
+    let changed: number;
     if (kind < 0.05) {
-      return {path, oldContents: null, newContents: original.join('\n')};
-    }
-    if (kind < 0.07) {
-      return {path, oldContents: original.join('\n'), newContents: null};
-    }
-    if (kind < 0.09) {
-      return {
+      file = {path, oldContents: null, newContents: original.join('\n')};
+      changed = size;
+    } else if (kind < 0.07) {
+      file = {path, oldContents: original.join('\n'), newContents: null};
+      changed = size;
+    } else if (kind < 0.09) {
+      file = {
         path,
         oldContents: original.join('\n'),
         newContents: fileLines(index, size, 'v2').join('\n'),
       };
+      changed = 2 * size;
+    } else {
+      // Each file draws its own edits, so a file's size never shifts the
+      // edits of the files after it.
+      const edited = applySparseEdits(
+        original,
+        createRandom(seed + index + 1),
+        40,
+      );
+      file = {
+        path,
+        oldContents: original.join('\n'),
+        newContents: edited.lines.join('\n'),
+      };
+      changed = edited.changedLines;
     }
-    return {
-      path,
-      oldContents: original.join('\n'),
-      newContents: applySparseEdits(original, random, 40).join('\n'),
-    };
+    changedLines += changed;
+    largestFileChangedLines = Math.max(largestFileChangedLines, changed);
+    return file;
   });
+  return {files: result, changedLines, largestFileChangedLines};
+}
+
+/**
+ * First guess at file lines per changed line, from the mix of sparse edits,
+ * new, deleted and rewritten files; the second pass corrects it.
+ */
+const FILE_LINES_PER_CHANGED_LINE = 5;
+
+/**
+ * A change set of `files` files that changes about `changedLines` lines. The
+ * first pass measures how many lines the mix changes and the second scales
+ * the file sizes to the target; both draw the same file kinds.
+ */
+export function createMultiFileWorkload(
+  files: number,
+  changedLines: number,
+): DiffBenchmarkWorkload {
+  const seed = files * 7919 + changedLines;
+  const firstTotal = changedLines * FILE_LINES_PER_CHANGED_LINE;
+  const first = createChangeSet(seed, files, firstTotal);
+  const changeSet = createChangeSet(
+    seed,
+    files,
+    Math.round((firstTotal * changedLines) / first.changedLines),
+  );
   return {
-    id: `files-${files}`,
+    id: `files-${files}-changed-${changedLines}`,
     label: `${files.toLocaleString()} files`,
-    files: result,
-    totalLines: countLines(result),
+    files: changeSet.files,
+    totalLines: countLines(changeSet.files),
+    changedLines: changeSet.changedLines,
+    largestFileChangedLines: changeSet.largestFileChangedLines,
   };
 }
 
@@ -229,13 +308,13 @@ export function createSingleFileWorkload(
   const original = fileLines(0, lines);
   const next =
     change === 'rewrite'
-      ? fileLines(0, lines, 'v2')
+      ? {lines: fileLines(0, lines, 'v2'), changedLines: 2 * lines}
       : applySparseEdits(original, random, 40);
   const files = [
     {
       path: 'src/large_module.ts',
       oldContents: original.join('\n'),
-      newContents: next.join('\n'),
+      newContents: next.lines.join('\n'),
     },
   ];
   return {
@@ -243,6 +322,8 @@ export function createSingleFileWorkload(
     label: `${lines.toLocaleString()} lines, ${change === 'rewrite' ? 'full rewrite' : 'sparse edits'}`,
     files,
     totalLines: countLines(files),
+    changedLines: next.changedLines,
+    largestFileChangedLines: next.changedLines,
   };
 }
 
