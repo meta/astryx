@@ -2,7 +2,7 @@
 
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Card} from '@astryxdesign/core/Card';
 import {useAnnounce} from '@astryxdesign/core/hooks';
 import {VStack} from '@astryxdesign/core/Layout';
@@ -23,27 +23,46 @@ const PRODUCTS = [
 
 const ANNOUNCE_DELAY_MS = 500;
 
+function filterProducts(query: string): string[] {
+  const needle = query.trim().toLowerCase();
+  return PRODUCTS.filter(product => product.toLowerCase().includes(needle));
+}
+
 export default function UseAnnounceHookUsage() {
   const announce = useAnnounce({hasReplace: true});
   const [query, setQuery] = useState('');
-  const matches = PRODUCTS.filter(product =>
-    product.toLowerCase().includes(query.trim().toLowerCase()),
-  );
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matches = filterProducts(query);
   const count = matches.length;
 
-  useEffect(() => {
-    if (query === '') {
+  const handleChange = (value: string) => {
+    setQuery(value);
+    if (timerRef.current != null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (value === '') {
       return;
     }
-    const timer = setTimeout(() => {
+    const nextCount = filterProducts(value).length;
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
       announce(
-        count === 0
+        nextCount === 0
           ? 'No results'
-          : `${count} ${count === 1 ? 'result' : 'results'}`,
+          : `${nextCount} ${nextCount === 1 ? 'result' : 'results'}`,
       );
     }, ANNOUNCE_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [announce, count, query]);
+  };
+
+  // A count still pending at unmount would be spoken for a filter that is gone.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current != null) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, []);
 
   return (
     <Card width={360} padding={4}>
@@ -51,7 +70,7 @@ export default function UseAnnounceHookUsage() {
         <TextInput
           label="Filter products"
           value={query}
-          onChange={setQuery}
+          onChange={handleChange}
           hasClear
         />
         {count === 0 ? (
