@@ -18,6 +18,7 @@
 import {useCallback, useRef, type ReactElement, type ReactNode} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
+import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {
   useHoverCard,
   type HoverCardFocusTrigger,
@@ -428,7 +429,9 @@ export function HoverCard({
           // No aria-expanded: this wrapper is a role-less <span>, and
           // aria-expanded is invalid on it (see EXPANDABLE_ROLES above).
           aria-describedby={label ? undefined : hoverCard.describedBy}
-          {...stylex.props(
+          // The span is a tab stop Astryx adds: it draws the shared ring,
+          // which a theme restyles through the focus-outline tokens.
+          {...focusOutlineProps.focusVisible(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
           )}>

@@ -26,7 +26,8 @@
 
 import {type ReactNode, useEffect, useMemo, useRef, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {spacingVars} from '../theme/tokens.stylex';
+import {focusVars, spacingVars} from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {
   ChatListContext,
   type ChatDensity,
@@ -120,6 +121,14 @@ const styles = stylex.create({
     flexDirection: 'column',
     flex: 1,
     minHeight: 0,
+  },
+  // The log fills the area that scrolls it, which clips at its edges, so its
+  // keyboard ring sits inside its own box instead of around it.
+  focusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   inner: {
     display: 'flex',
@@ -303,7 +312,14 @@ export function ChatMessageList({
         data-testid={testId}
         {...mergeProps(
           themeProps('chat-message-list', {density}),
-          stylex.props(styles.root, xstyle),
+          // A tab stop: the shared ring, which a theme restyles through the
+          // focus-outline tokens.
+          stylex.props(
+            styles.root,
+            focusOutlineStyles.focusVisible,
+            styles.focusRingInset,
+            xstyle,
+          ),
           className,
           style,
         )}>
