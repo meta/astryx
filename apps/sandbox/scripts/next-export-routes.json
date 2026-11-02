@@ -788,6 +788,7 @@
     "/templates/useGridFocusHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useListFocusHookUsage/",
+    "/templates/useLocaleHookUsage/",
     "/templates/useOutlineFromMarkdownHookUsage/",
     "/templates/useOverflowHookUsage/",
     "/templates/usePressFeedbackHookUsage/",
