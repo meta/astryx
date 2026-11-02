@@ -735,16 +735,42 @@ describe('PickerWheel — keyboard and clicks', () => {
     expect(onChange).toHaveBeenLastCalledWith(17);
   });
 
-  it('moves a key past a disabled row to the next enabled one', () => {
-    const gap = HOURS.map(option => ({
-      ...option,
-      isDisabled: option.isDisabled === true || option.value === 14,
-    }));
-    const {column, onChange} = renderOwnedWheel(gap, 13);
+  it('at a 12:00–17:00 bound on a 12-hour hour wheel, steps in time order: nothing after 5 PM, and 1 PM after 12 PM', () => {
+    // The PM hours as the 12-hour wheel lists them, 1 to 12, each standing for
+    // its full hour: 12 (noon) comes before 1. Noon to 5 PM are in the bound.
+    const pmHours = Array.from({length: 12}, (_, index) => {
+      const hour = index + 1;
+      const hour24 = hour === 12 ? 12 : hour + 12;
+      return {
+        value: hour,
+        label: String(hour),
+        order: hour24,
+        isDisabled: hour24 > 17,
+      };
+    });
+    const {column, onChange} = renderOwnedWheel(pmHours, 5);
+    for (const key of ['ArrowDown', 'PageDown', 'End']) {
+      fireEvent.keyDown(column, {key});
+    }
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(column, {key: 'Home'});
+    expect(onChange).toHaveBeenLastCalledWith(12);
     fireEvent.keyDown(column, {key: 'ArrowDown'});
-    expect(onChange).toHaveBeenLastCalledWith(15);
+    expect(onChange).toHaveBeenLastCalledWith(1);
     fireEvent.keyDown(column, {key: 'ArrowUp'});
-    expect(onChange).toHaveBeenLastCalledWith(13);
+    expect(onChange).toHaveBeenLastCalledWith(12);
+  });
+
+  it('moves a key from a row outside the bounds onto the first enabled row in its direction', () => {
+    const bound = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.value < 12 || option.value > 17,
+    }));
+    const {column, onChange} = renderOwnedWheel(bound, 20);
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(column, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(17);
   });
 
   it('keeps the band’s mark on the last row when a key has nowhere further to go', () => {

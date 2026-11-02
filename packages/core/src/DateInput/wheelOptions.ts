@@ -29,6 +29,12 @@ export interface WheelOption {
    * stops on one travels on to the nearest enabled row.
    */
   isDisabled?: boolean;
+  /**
+   * Where the row falls when a key steps the wheel; without it, rows step in
+   * list order. A 12-hour hour column sets the full hour, so 12 PM comes before
+   * 1 PM.
+   */
+  order?: number;
 }
 
 export interface WheelProps {
@@ -89,11 +95,22 @@ export function nearestEnabledIndex(
   return towardIndex;
 }
 
+/** The rows' indices in the order keys step them: by `order`, else list order. */
+function inKeyOrder(options: ReadonlyArray<WheelOption>): number[] {
+  const indices = options.map((_, index) => index);
+  if (options.every(option => option.order == null)) {
+    return indices;
+  }
+  return indices.sort(
+    (a, b) => (options[a].order ?? a) - (options[b].order ?? b),
+  );
+}
+
 /**
- * The row a key moves a wheel to from `from` by `delta` rows. It is the next
- * enabled row from the target in the key's direction. Past the last enabled
- * row, it is the last enabled row before the target. Null when no enabled row
- * lies in that direction, so the key commits nothing.
+ * The row a key moves a wheel to from `from` by `delta` rows, in key order. It
+ * is the next enabled row from the target in the key's direction. Past the
+ * last enabled row, it is the last enabled row before the target. Null when no
+ * enabled row lies in that direction, so the key commits nothing.
  */
 export function steppedIndex(
   options: ReadonlyArray<WheelOption>,
@@ -104,36 +121,35 @@ export function steppedIndex(
   if (count === 0 || delta === 0) {
     return null;
   }
-  const isEnabled = (index: number) => {
-    const option = options[index];
-    return option != null && !option.isDisabled;
-  };
+  const rows = inKeyOrder(options);
+  const start = Math.max(0, rows.indexOf(from));
+  const isEnabled = (position: number) => !options[rows[position]].isDisabled;
   const step = Math.sign(delta);
-  const target = Math.min(count - 1, Math.max(0, from + delta));
-  for (let index = target; index >= 0 && index < count; index += step) {
-    if (isEnabled(index)) {
-      return index === from ? null : index;
+  const target = Math.min(count - 1, Math.max(0, start + delta));
+  for (
+    let position = target;
+    position >= 0 && position < count;
+    position += step
+  ) {
+    if (isEnabled(position)) {
+      return position === start ? null : rows[position];
     }
   }
-  for (let index = target; index !== from; index -= step) {
-    if (isEnabled(index)) {
-      return index;
+  for (let position = target; position !== start; position -= step) {
+    if (isEnabled(position)) {
+      return rows[position];
     }
   }
   return null;
 }
 
-/** The first or the last enabled row: where Home or End moves a wheel. */
+/** The first or the last enabled row in key order: where Home or End moves a wheel. */
 export function endIndex(
   options: ReadonlyArray<WheelOption>,
   end: 'first' | 'last',
 ): number | null {
-  const step = end === 'first' ? 1 : -1;
-  const start = end === 'first' ? 0 : options.length - 1;
-  for (let index = start; index >= 0 && index < options.length; index += step) {
-    if (!options[index].isDisabled) {
-      return index;
-    }
-  }
-  return null;
+  const enabled = inKeyOrder(options).filter(
+    index => !options[index].isDisabled,
+  );
+  return (end === 'first' ? enabled[0] : enabled[enabled.length - 1]) ?? null;
 }
