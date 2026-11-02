@@ -270,7 +270,7 @@ function deliverBeyond(
  * Move whatever `dialog`'s containers hold that assistive technology has not
  * had yet to the channel exposed now. Called when the dialog stops being
  * exposed — closed, taken inert or `aria-hidden` for its exit, or unmounted
- * while open — so a message sent just before is not lost (FR14).
+ * while open — so a message sent just before is not lost.
  */
 export function handOffUnexposed(dialog: HTMLDialogElement): void {
   for (const politeness of ['polite', 'assertive'] as const) {

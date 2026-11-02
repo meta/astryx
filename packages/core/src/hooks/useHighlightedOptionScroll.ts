@@ -31,7 +31,7 @@ interface UseHighlightedOptionScrollOptions {
  * Keep the highlighted option visible during keyboard navigation — but not for
  * hover highlights. Hover must highlight only: scrollIntoView moves the next
  * option under the stationary pointer, whose mouseenter re-highlights and
- * scrolls again — a runaway auto-scroll loop with no user input (#6077).
+ * scrolls again — a runaway auto-scroll loop with no user input.
  * Keyboard paths call the raw setter directly and keep their scrolling; hover
  * paths call the returned callback.
  */

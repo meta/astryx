@@ -34,7 +34,7 @@ export interface UseAnimatedLayoutOptions {
  *
  * `containerRef` names the area: an app passes the ref it already gives its
  * scroll container or panel (a ScrollableArea's ref reaches its native scroll
- * viewport). The handle has no public members (`spec:AST-105` FR1).
+ * viewport). The handle has no public members.
  *
  * @example
  * ```
