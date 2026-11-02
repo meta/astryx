@@ -4,7 +4,8 @@
  * @file useBackdropPress.test.tsx
  * @input Dialog, Drawer and CommandPalette with their backdrop dismissal on
  * @output Tests that a backdrop press dismisses only when it starts and ends
- *   on the backdrop, for a mouse and for a finger
+ *   on the backdrop, for a mouse and for a finger, and that a cancelled
+ *   pointer ends the press
  * @position The shared backdrop-press rule (useBackdropPress) through every
  *   member that uses it
  */
@@ -80,12 +81,18 @@ describe.each(MEMBERS)(
   ({render: renderMember}) => {
     for (const pointerType of ['mouse', 'touch'] as const) {
       describe(`with a ${pointerType}`, () => {
+        function press(down: Element, up: Element) {
+          fireEvent.pointerDown(down, {pointerType});
+          fireEvent.pointerUp(up, {pointerType});
+          // The browser sends the click to the common ancestor.
+          fireEvent.click(down === up ? down : backdropOf());
+        }
+
         it('dismisses when it starts and ends on the backdrop', () => {
           const onOpenChange = vi.fn();
           render(renderMember(onOpenChange));
           const backdrop = backdropOf();
-          fireEvent.pointerDown(backdrop, {pointerType});
-          fireEvent.click(backdrop);
+          press(backdrop, backdrop);
           expect(onOpenChange).toHaveBeenCalledWith(false);
         });
 
@@ -93,20 +100,35 @@ describe.each(MEMBERS)(
           const onOpenChange = vi.fn();
           render(renderMember(onOpenChange));
           const backdrop = backdropOf();
-          // Selecting text in the field and releasing past the edge: the
-          // browser sends the click to the common ancestor, the <dialog>.
-          fireEvent.pointerDown(insideOf(backdrop), {pointerType});
-          fireEvent.click(backdrop);
+          // Selecting text in the field and releasing past the edge.
+          press(insideOf(backdrop), backdrop);
           expect(onOpenChange).not.toHaveBeenCalled();
         });
 
-        it('does not carry a backdrop start over to the next press', () => {
+        it('does not dismiss when it starts on the backdrop and ends inside', () => {
+          const onOpenChange = vi.fn();
+          render(renderMember(onOpenChange));
+          const backdrop = backdropOf();
+          press(backdrop, insideOf(backdrop));
+          expect(onOpenChange).not.toHaveBeenCalled();
+        });
+
+        it('does not dismiss after the pointer is cancelled', () => {
           const onOpenChange = vi.fn();
           render(renderMember(onOpenChange));
           const backdrop = backdropOf();
           fireEvent.pointerDown(backdrop, {pointerType});
-          fireEvent.pointerDown(insideOf(backdrop), {pointerType});
+          fireEvent.pointerCancel(backdrop, {pointerType});
           fireEvent.click(backdrop);
+          expect(onOpenChange).not.toHaveBeenCalled();
+        });
+
+        it('does not carry one press over to the next', () => {
+          const onOpenChange = vi.fn();
+          render(renderMember(onOpenChange));
+          const backdrop = backdropOf();
+          fireEvent.pointerDown(backdrop, {pointerType});
+          press(insideOf(backdrop), backdrop);
           expect(onOpenChange).not.toHaveBeenCalled();
         });
       });

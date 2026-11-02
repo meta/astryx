@@ -467,6 +467,7 @@ describe('Drawer', () => {
         </Drawer>,
       );
       fireEvent.pointerDown(screen.getByRole('dialog'));
+      fireEvent.pointerUp(screen.getByRole('dialog'));
       fireEvent.click(screen.getByRole('dialog'));
       expect(handleClick).toHaveBeenCalledTimes(1);
       expect(handleOpenChange).toHaveBeenCalledWith(false);
@@ -570,6 +571,7 @@ describe('Drawer', () => {
         </Drawer>,
       );
       fireEvent.pointerDown(screen.getByRole('dialog'));
+      fireEvent.pointerUp(screen.getByRole('dialog'));
       fireEvent.click(screen.getByRole('dialog'));
       expect(handleOpenChange).toHaveBeenCalledWith(false);
     });
@@ -891,6 +893,7 @@ describe('Drawer', () => {
       const dialog = screen.getByRole('dialog');
       fireEvent.keyDown(dialog, {key: 'Escape'});
       fireEvent.pointerDown(dialog);
+      fireEvent.pointerUp(dialog);
       fireEvent.click(dialog);
       expect(handleOpenChange).toHaveBeenCalledTimes(2);
       expect(handleOpenChange).toHaveBeenNthCalledWith(1, false);

@@ -5,8 +5,8 @@
  * @file BackdropPress.a11y.chromium.spec.ts
  * @input The built A11y/BackdropPress story; real Chromium mouse and touch
  *   input
- * @output Browser evidence that a press which starts inside a Dialog, Drawer
- *   or CommandPalette and ends on its backdrop leaves it open, and that a
+ * @output Browser evidence that a press which crosses the edge of a Dialog,
+ *   Drawer or CommandPalette, either way, leaves it open, and that a
  *   press on the backdrop alone still dismisses it
  * @position Chromium proof for the shared backdrop-press rule
  *   (Layer/useBackdropPress.ts). jsdom has no backdrop hit testing and no
@@ -83,6 +83,18 @@ for (const {name, open, dialog, field} of MEMBERS) {
       await page.mouse.move(inside.x, inside.y);
       await page.mouse.down();
       await page.mouse.move(BACKDROP.x, BACKDROP.y, {steps: 8});
+      await page.mouse.up();
+      await expect(surface).toBeVisible();
+    });
+
+    test('a mouse press that starts on the backdrop and ends inside leaves it open', async ({
+      page,
+    }) => {
+      const surface = await openMember(page, open, dialog);
+      const inside = await insidePoint(page, dialog, field);
+      await page.mouse.move(BACKDROP.x, BACKDROP.y);
+      await page.mouse.down();
+      await page.mouse.move(inside.x, inside.y, {steps: 8});
       await page.mouse.up();
       await expect(surface).toBeVisible();
     });

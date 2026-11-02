@@ -85,6 +85,8 @@ import {focusForLastInput} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+
+type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 /**
  * Calculate a directional translate offset for dialog entry animation.
  * Returns a normalized vector from the trigger element toward the viewport
@@ -858,9 +860,15 @@ export function Dialog({
         onClick: chainEventHandlers(backdropPress.onClick, onClickProp),
         onPointerDown: chainEventHandlers(
           backdropPress.onPointerDown,
-          safeProps.onPointerDown as
-            | ((event: React.PointerEvent<HTMLDialogElement>) => void)
-            | undefined,
+          safeProps.onPointerDown as PointerHandler | undefined,
+        ),
+        onPointerUp: chainEventHandlers(
+          backdropPress.onPointerUp,
+          safeProps.onPointerUp as PointerHandler | undefined,
+        ),
+        onPointerCancel: chainEventHandlers(
+          backdropPress.onPointerCancel,
+          safeProps.onPointerCancel as PointerHandler | undefined,
         ),
       })}
       onCancel={handleCancel}

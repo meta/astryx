@@ -92,6 +92,8 @@ import {
 import type {SpacingStep, SpacingToken} from '../Layout';
 import {useDrawerDialogPresence} from './useDrawerDialogPresence';
 
+type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
+
 // =============================================================================
 // Styles
 // =============================================================================
@@ -611,9 +613,15 @@ export function Drawer({
         // handler does with the event.
         onPointerDown: composeEventHandlers(
           scrimPress.onPointerDown,
-          safeProps.onPointerDown as
-            | ((event: React.PointerEvent<HTMLDialogElement>) => void)
-            | undefined,
+          safeProps.onPointerDown as PointerHandler | undefined,
+        ),
+        onPointerUp: composeEventHandlers(
+          scrimPress.onPointerUp,
+          safeProps.onPointerUp as PointerHandler | undefined,
+        ),
+        onPointerCancel: composeEventHandlers(
+          scrimPress.onPointerCancel,
+          safeProps.onPointerCancel as PointerHandler | undefined,
         ),
       })}
       onKeyDown={onKeyDownProp}
