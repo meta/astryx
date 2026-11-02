@@ -321,6 +321,9 @@ These requirements apply to the text fields of `DateInput` and
     fix (FR5).
   - AR3's messages are additive announcements for input the field already
     rejects (FR5).
+  - FR11 keeps out-of-range typed text in the field with its error, where the
+    field reverts the text on blur on the latest stable release. The value
+    does not change in either case: a nonbreaking interaction change (FR5).
   - `parseDateInput` in `@astryxdesign/core/utils` does not change, and the
     Gregorian text field still commits any text it reads (FR9), so no caller
     changes.
