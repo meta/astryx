@@ -6,8 +6,7 @@
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const {
   isComponentSpecRecordPath,
-  isLegacyComponentSpecPath,
-  isPackageArchitectureRecordPath,
+  isOwnerGatedPath,
   isPlatformComponentSpecPath,
 } = require('./knowledge-paths.cjs');
 
@@ -105,18 +104,6 @@ function isSharedInfraPath(filePath) {
   );
 }
 
-const THEME_DOC_CANDIDATE = /^docs\/themes\/(?!README\.md$)[^/]+\.md$/;
-const THEME_PACKAGE_CANDIDATE =
-  /^packages\/themes\/[^/]+\/(?:.*\/)?[^/]+\.spec\.md$/;
-
-const KNOWLEDGE_RECORD_PATTERNS = [
-  ...SPEC_RECORD_PATTERNS,
-  THEME_DOC_CANDIDATE,
-  THEME_PACKAGE_CANDIDATE,
-  /^docs\/architecture\/(?!README\.md$)[^/]+\.md$/,
-  /^docs\/design\/assets\//,
-];
-
 function isSpecRecordPath(filePath) {
   return (
     isComponentSpecRecordPath(filePath) ||
@@ -143,15 +130,13 @@ function isPackageReleasePath(filePath) {
   return true;
 }
 
+/**
+ * A path the spec-owner gate decides (knowledge-paths.cjs's owner-gated
+ * paths): every record, every Markdown file in a record location, and the
+ * normative design assets.
+ */
 function isKnowledgeRecordPath(filePath) {
-  return (
-    isSpecRecordPath(filePath) ||
-    // Not a record and never spec-only, but the owner gate must still see it.
-    isLegacyComponentSpecPath(filePath) ||
-    // A package's architecture record, owner-gated like docs/architecture/.
-    isPackageArchitectureRecordPath(filePath) ||
-    KNOWLEDGE_RECORD_PATTERNS.some(pattern => pattern.test(filePath))
-  );
+  return isOwnerGatedPath(filePath);
 }
 
 function isNodeToolingPath(filePath) {
@@ -307,25 +292,55 @@ function parseNameStatus(input) {
     });
 }
 
+/**
+ * Each path's record classes, for a caller outside this workflow: whether it
+ * counts toward a spec-only change (`specRecord`) and whether its change needs
+ * a spec owner's approval (`ownerGatedRecord`). Reads the paths alone.
+ *
+ * @param {string[]} paths
+ * @returns {Record<string, {specRecord: boolean, ownerGatedRecord: boolean}>}
+ */
+function classifyPaths(paths) {
+  return Object.fromEntries(
+    paths.map(filePath => [
+      filePath,
+      {
+        specRecord: isSpecRecordPath(filePath),
+        ownerGatedRecord: isOwnerGatedPath(filePath),
+      },
+    ]),
+  );
+}
+
 if (require.main === module) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const fs = require('node:fs');
-  const result = classifyChanges(parseNameStatus(fs.readFileSync(0, 'utf8')));
-  if (result.specChangesetConflict) {
-    console.error(
-      'Pure spec-record changes must not add a Changeset; they do not release packages.',
-    );
-    process.exitCode = 1;
-  } else if (process.argv.includes('--github-output')) {
-    const outputPath = process.env.GITHUB_OUTPUT;
-    if (!outputPath)
-      throw new Error('GITHUB_OUTPUT is required with --github-output.');
-    fs.appendFileSync(
-      outputPath,
-      `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\n`,
-    );
+  // `--classify-paths`: newline-separated paths on stdin, JSON on stdout.
+  if (process.argv.includes('--classify-paths')) {
+    const paths = fs
+      .readFileSync(0, 'utf8')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    process.stdout.write(`${JSON.stringify(classifyPaths(paths))}\n`);
   } else {
-    process.stdout.write(`${JSON.stringify(result)}\n`);
+    const result = classifyChanges(parseNameStatus(fs.readFileSync(0, 'utf8')));
+    if (result.specChangesetConflict) {
+      console.error(
+        'Pure spec-record changes must not add a Changeset; they do not release packages.',
+      );
+      process.exitCode = 1;
+    } else if (process.argv.includes('--github-output')) {
+      const outputPath = process.env.GITHUB_OUTPUT;
+      if (!outputPath)
+        throw new Error('GITHUB_OUTPUT is required with --github-output.');
+      fs.appendFileSync(
+        outputPath,
+        `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\n`,
+      );
+    } else {
+      process.stdout.write(`${JSON.stringify(result)}\n`);
+    }
   }
 }
 
@@ -334,6 +349,7 @@ module.exports = {
   NODE_TOOLING_PATHS,
   SURFACES,
   classifyChanges,
+  classifyPaths,
   isKnowledgeRecordPath,
   isNodeToolingPath,
   isPackageReleasePath,

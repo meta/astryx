@@ -87,6 +87,51 @@ describe('spec owner decision', () => {
     expect(requiresOwnerApproval([], {complete: false})).toBe(true);
   });
 
+  it('requires an engineering owner for an owner-gated file with no authority of its own', () => {
+    const {
+      requiredApprovalGroups: groupsFor,
+    } = require('./spec-owner-decision.cjs');
+    // A generated table beside a spec: no front matter, so an engineering
+    // owner decides it.
+    expect(
+      groupsFor([
+        {
+          path: 'docs/specs/AST-094-touch-presentations/motion-roles.md',
+          previousPath:
+            'docs/specs/AST-094-touch-presentations/motion-roles.md',
+          baseContent: '# Motion roles\n',
+          headContent: '# Motion roles\n\n| role |\n',
+        },
+      ]),
+    ).toEqual({spec: true, design: false, theme: false});
+    // Added, too.
+    expect(
+      groupsFor([
+        {
+          path: 'packages/native/specs/swift/library/notes.md',
+          baseContent: null,
+          headContent: '# Notes\n',
+        },
+      ]).spec,
+    ).toBe(true);
+    // A draft record still needs no approval, and a design asset goes to the
+    // design group through its own flag.
+    expect(
+      groupsFor([
+        {
+          path: 'docs/specs/AST-999/spec.md',
+          baseContent: null,
+          headContent: 'authority: draft\n',
+        },
+        {
+          path: 'docs/design/assets/x.png',
+          baseContent: null,
+          headContent: null,
+        },
+      ]),
+    ).toEqual({spec: false, design: false, theme: false});
+  });
+
   it('requires an engineering owner when a platform record becomes current', () => {
     const swiftRecord = authority =>
       [

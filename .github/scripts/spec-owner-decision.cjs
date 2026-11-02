@@ -253,6 +253,26 @@ function requiredApprovalGroups(
       {content: record.baseContent, path: record.previousPath ?? record.path},
       {content: record.headContent, path: record.path},
     ];
+    // An owner-gated Markdown file with no authority of its own (a generated
+    // table beside a spec, a README or draft note in a record location) has
+    // nothing for the gate to read, so an engineering owner decides it.
+    if (
+      versions.some(
+        version =>
+          typeof version.path === 'string' &&
+          version.path.endsWith('.md') &&
+          !version.path.startsWith('docs/design/assets/'),
+      ) &&
+      versions.every(
+        version =>
+          version.content == null ||
+          parseAuthority(version.content, version.path) == null,
+      ) &&
+      versions.some(version => version.content != null)
+    ) {
+      groups.spec = true;
+      continue;
+    }
     const currentVersions = versions.filter(
       version => parseAuthority(version.content, version.path) === 'current',
     );
