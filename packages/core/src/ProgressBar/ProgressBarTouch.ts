@@ -27,10 +27,7 @@
 import {useEffect, useRef, useState, type RefObject} from 'react';
 import {formatMotionRoleValue} from '../motion/roles';
 import {resolveMotion} from '../motion/resolveMotion';
-import {
-  progressBar,
-  registerProgressBarTable,
-} from '../motion/uikit/progressBar';
+import {progressBar} from '../motion/uikit/progressBar';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {useTouchPresentation} from '../utils/touchPresentation';
 
@@ -86,9 +83,6 @@ export function useProgressBarTouch(
   const watchesTrack = isTouch && hasMarks;
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [trackWidth, setTrackWidth] = useState(0);
-  useEffect(() => {
-    registerProgressBarTable();
-  }, []);
   useEffect(() => {
     const element = trackRef.current;
     if (!watchesTrack || element == null) {

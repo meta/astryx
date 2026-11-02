@@ -435,13 +435,14 @@ test('in RTL the minimum and the motion mirror', async ({page}) => {
   expect(half.length).toBeCloseTo((tiny.length + 0.81 * half.width) / 2, 0);
 });
 
-test('in forced colors under a finger the fill is sized to the value, its outline whole, in either direction', async ({
+test('in forced colors under a finger the fill lands at once, sized to the value, its outline whole, in either direction', async ({
   page,
 }) => {
   // architecture:theme-tokens INV11: forced colors keep the fill's shape with
   // a CanvasText outline, and the track clips what it holds, so the fill is
   // sized to the value there (still at least two track heights above zero)
-  // rather than slid along the track.
+  // rather than slid along the track. Sizing is layout, which touch motion
+  // never animates (spec:AST-094 FR5), so the new size lands at once.
   await page.emulateMedia({forcedColors: 'active'});
   for (const {globals, fromLeft} of [
     {globals: '', fromLeft: true},
@@ -449,20 +450,51 @@ test('in forced colors under a finger the fill is sized to the value, its outlin
   ]) {
     await open(page, 0, {globals});
     for (const value of [1, 50]) {
-      await setValue(page, value);
-      await page.waitForTimeout(900);
-      const {track, fill, height} = await page.evaluate(() => {
-        const bar = document.querySelector('[role="progressbar"]') as Element;
-        const child = bar.firstElementChild as Element;
-        const t = bar.getBoundingClientRect();
-        const f = child.getBoundingClientRect();
-        return {
-          track: {left: t.left, right: t.right},
-          fill: {left: f.left, right: f.right},
-          height: t.height,
-        };
-      });
+      // Read the fill in the same task React commits the new value: a
+      // transition would show up there, before any frame could finish it.
+      const {track, fill, height, running} = await page.evaluate(
+        async ({storyId, next}) =>
+          new Promise<{
+            track: {left: number; right: number};
+            fill: {left: number; right: number};
+            height: number;
+            running: number;
+          }>(resolve => {
+            const bar = document.querySelector(
+              '[role="progressbar"]',
+            ) as Element;
+            const child = bar.firstElementChild as HTMLElement;
+            const observer = new MutationObserver(() => {
+              observer.disconnect();
+              const running = child.getAnimations().length;
+              const t = bar.getBoundingClientRect();
+              const f = child.getBoundingClientRect();
+              resolve({
+                track: {left: t.left, right: t.right},
+                fill: {left: f.left, right: f.right},
+                height: t.height,
+                running,
+              });
+            });
+            observer.observe(child, {
+              attributes: true,
+              attributeFilter: ['style'],
+            });
+            (
+              window as unknown as {
+                __STORYBOOK_ADDONS_CHANNEL__: {
+                  emit: (event: string, payload: unknown) => void;
+                };
+              }
+            ).__STORYBOOK_ADDONS_CHANNEL__.emit('updateStoryArgs', {
+              storyId,
+              updatedArgs: {value: next},
+            });
+          }),
+        {storyId: STORY, next: value},
+      );
       const label = `${globals || 'ltr'} ${value}%`;
+      expect(running, `${label}: no transition runs`).toBe(0);
       const expected = Math.max(
         ((track.right - track.left) * value) / 100,
         VIEW.minimumFillHeights * height,

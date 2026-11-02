@@ -325,6 +325,10 @@ const styles = stylex.create({
       // share moved), scaled by the theme's tempo (`spec:AST-108` FR3).
       '@media (pointer: coarse)':
         'calc(var(--_progress-bar-move, 0ms) * var(--_astryx-motion-tempo, 1))',
+      // Under forced colors the fill is sized instead, by `width`, a layout
+      // property touch motion never animates (`spec:AST-094` FR5): with a
+      // finger it lands at once there.
+      '@media (forced-colors: active) and (pointer: coarse)': '0s',
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
         '0s',
       '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '0s',

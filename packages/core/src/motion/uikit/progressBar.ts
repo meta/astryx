@@ -76,8 +76,9 @@ export const progressBar = {
 } as const;
 
 /**
- * Registers the table's two roles. Idempotent, and nothing runs on import:
- * ProgressBar's touch layer calls it before the fill first moves.
+ * Registers the table's two roles, for the generated motion role table and its
+ * test, which call it. Nothing at runtime reads the registry: `resolveMotion`
+ * returns the table value. Idempotent, and nothing runs on import.
  */
 export function registerProgressBarTable(): void {
   registerMotionTable('progress', progressBar, {

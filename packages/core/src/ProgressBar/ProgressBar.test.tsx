@@ -1203,9 +1203,17 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     expect(coarse).toContain(atLeast);
     // Mirrored in RTL: the fill stops at the same minimum from the right.
     expect(coarse).toContain('calc(100%-var(--_progress-bar-min,0px))');
-    // Under forced colors with a finger the sized fill keeps that minimum.
+    // Under forced colors with a finger the sized fill keeps that minimum,
+    // and lands at once: sizing is layout, which touch motion never animates.
     const width = fill.slice(fill.indexOf('width:{'), fill.indexOf('height:'));
     expect(width).toContain(atLeast);
+    const duration = fill.slice(
+      fill.indexOf('transitionDuration:{'),
+      fill.indexOf('transitionTimingFunction:'),
+    );
+    expect(duration).toContain(
+      "'@media(forced-colors:active)and(pointer:coarse)':'0s'",
+    );
     // At zero the fill paints nothing under a finger (UIKit's alpha 0)…
     expect(view.emptyFillAlpha).toBe(0);
     expect(valueOf(rulesOf(fillOf(), TOUCH), 'opacity')).toEqual(['0']);
