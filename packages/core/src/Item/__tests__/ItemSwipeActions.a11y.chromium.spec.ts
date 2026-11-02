@@ -282,8 +282,8 @@ test('opens the row on a fling without firing, and fires the outermost trailing 
   const rows = page.locator('.astryx-item');
   const row = rows.first();
   await expect(row.getByText('Message 1')).toBeVisible();
-  // The gesture arrives with the lazily loaded swipe layer; its panel is the
-  // sign the row can be dragged.
+  // The story's rows take `swipe={createSwipe(…)}`, so the gesture and its
+  // panel come with the row; the panel is the sign the row can be dragged.
   await expect(row.locator('[data-swipe-panel="trailing"]')).toBeAttached();
   const before = await rows.count();
   const rest = await boxOf(row);
@@ -347,7 +347,7 @@ test('the trailing panel: Delete is outermost and the panel wears its colour', a
   );
   const row = page.locator('.astryx-item').first();
   const panel = row.locator('[data-swipe-panel="trailing"]');
-  // The gesture arrives with the lazily loaded swipe layer.
+  // The gesture and its panel come with the row (`createSwipe`).
   await expect(panel).toBeAttached();
   const rest = await boxOf(row);
   const y = rest.y + rest.height / 2;
