@@ -576,6 +576,36 @@ describe('Drawer', () => {
       expect(handleOpenChange).toHaveBeenCalledWith(false);
     });
 
+    it("forwards the caller's pointer handlers when a child prevents default", () => {
+      const onPointerDown = vi.fn();
+      const onPointerUp = vi.fn();
+      const onPointerCancel = vi.fn();
+      render(
+        <Drawer
+          isOpen
+          onOpenChange={() => {}}
+          label="Details"
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}>
+          <button
+            type="button"
+            onPointerDown={event => event.preventDefault()}
+            onPointerUp={event => event.preventDefault()}
+            onPointerCancel={event => event.preventDefault()}>
+            Clear
+          </button>
+        </Drawer>,
+      );
+      const child = screen.getByRole('button', {name: 'Clear'});
+      fireEvent.pointerDown(child);
+      fireEvent.pointerUp(child);
+      fireEvent.pointerCancel(child);
+      expect(onPointerDown).toHaveBeenCalledTimes(1);
+      expect(onPointerUp).toHaveBeenCalledTimes(1);
+      expect(onPointerCancel).toHaveBeenCalledTimes(1);
+    });
+
     it('does not close when drawer content is clicked', () => {
       const handleOpenChange = vi.fn();
       render(

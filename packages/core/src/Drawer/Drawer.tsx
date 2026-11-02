@@ -81,6 +81,7 @@ import {useBackdropPress} from '../Layer/useBackdropPress';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {container, overlayPaddingReset} from '../Layout';
 import {
   containerPaddingBlockEndVarStyles,
@@ -609,17 +610,17 @@ export function Drawer({
       {...layerClickBoundary({
         ...safeProps,
         onClick: composeEventHandlers(onClickProp, scrimPress.onClick),
-        // Where the press started is recorded first, whatever the caller's
-        // handler does with the event.
-        onPointerDown: composeEventHandlers(
+        // Where the press started is recorded first. The caller's handler
+        // always runs after it, also when a child prevented default.
+        onPointerDown: chainEventHandlers(
           scrimPress.onPointerDown,
           safeProps.onPointerDown as PointerHandler | undefined,
         ),
-        onPointerUp: composeEventHandlers(
+        onPointerUp: chainEventHandlers(
           scrimPress.onPointerUp,
           safeProps.onPointerUp as PointerHandler | undefined,
         ),
-        onPointerCancel: composeEventHandlers(
+        onPointerCancel: chainEventHandlers(
           scrimPress.onPointerCancel,
           safeProps.onPointerCancel as PointerHandler | undefined,
         ),
