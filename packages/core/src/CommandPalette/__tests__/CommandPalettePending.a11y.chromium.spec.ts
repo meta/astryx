@@ -7,8 +7,8 @@
  *   in Chromium: bootstrap returns nothing, and search answers after 600 ms.
  * @output Real-browser proof of component:CommandPalette FR1's pending case:
  *   while the first query is pending, the result surface shows no message
- *   ("Type to search" never sits under a typed query) and keeps the empty
- *   surface's height, so the dialog does not jump.
+ *   ("Type to search" never sits under a typed query) and keeps the Empty
+ *   container's height, so the result surface does not jump.
  * @position Runs in pr-a11y when CommandPalette, its stories or this spec
  *   changes.
  */
@@ -39,15 +39,18 @@ test('the first pending query shows no message and keeps the height', async ({
   await page.locator('#storybook-root button').first().click();
   const dialog = page.locator('dialog[open]');
   await expect(dialog.getByText('Type to search')).toBeVisible();
-  const before = await dialog.boundingBox();
+  // The result surface's layout height (offsetHeight ignores the dialog's
+  // entry transform, which a bounding box would include mid-animation).
+  const empty = dialog.locator('.astryx-command-palette-empty');
+  const before = await empty.evaluate(element => element.offsetHeight);
 
   await dialog.getByRole('combobox').pressSequentially('butt');
   // The search answers after 600 ms; check while the spinner shows.
   await expect(dialog.locator('.astryx-spinner')).toBeVisible();
   await expect(dialog.getByText('Type to search')).toHaveCount(0);
   await expect(dialog.getByText('No results')).toHaveCount(0);
-  const pending = await dialog.boundingBox();
-  expect(pending?.height).toBe(before?.height);
+  const pending = await empty.evaluate(element => element.offsetHeight);
+  expect(pending).toBe(before);
 
   await expect(dialog.getByText('No results')).toBeVisible();
 });
