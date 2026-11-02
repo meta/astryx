@@ -18,7 +18,13 @@ import {
   waitFor,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import {Profiler, useEffect, useLayoutEffect, useState} from 'react';
+import {
+  Profiler,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import * as stylex from '@stylexjs/stylex';
@@ -1214,14 +1220,21 @@ describe('useLayer', () => {
     function FocusReturnHarness({onTooltipShow}: {onTooltipShow: () => void}) {
       const popover = useLayer({mode: 'context'});
       const tooltip = useLayer({mode: 'context', onShow: onTooltipShow});
+      // A stable ref: an inline one detaches and reattaches the trigger on
+      // every render, and each detach queues a microtask of its own that these
+      // tests, which hold the ledger's microtasks by hand, do not mean to hold.
+      const triggerRef = useCallback(
+        (el: HTMLButtonElement | null) => {
+          popover.ref(el);
+          tooltip.ref(el);
+        },
+        [popover.ref, tooltip.ref],
+      );
       return (
         <>
           <button
             type="button"
-            ref={el => {
-              popover.ref(el);
-              tooltip.ref(el);
-            }}
+            ref={triggerRef}
             onFocus={tooltip.show}
             onBlur={tooltip.hide}
             onClick={popover.show}>
