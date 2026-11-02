@@ -818,6 +818,23 @@ describe('busyWindowProof settledWithinSteps', () => {
     expect(proof.verdict.failures).toEqual([]);
   });
 
+  it("reads the run's own pace only for a step-counted bound: with settledWithin, that held frame fails as before", () => {
+    // The same coast with a pixel bound: the pace before the hold alone
+    // judges the held frame, as for every proof that does not opt in.
+    const proof = busyWindowProof(
+      webkit(webkitDecel.tracked),
+      webkitDecel.block,
+      {
+        axis: 'x',
+        settledWithin: 4,
+        control: webkit(webkitDecel.control),
+      },
+    );
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on 7 of the 8 frames the control moved/,
+    );
+  });
+
   it('reads a three-frame plateau that ends in a two-step change at about 1.3 px a frame as slow motion', () => {
     // Held at 192 px from +63 ms through +91, then 196 at +109.
     const proof = busyWindowProof(

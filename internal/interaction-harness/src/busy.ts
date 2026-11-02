@@ -935,19 +935,18 @@ export function busyWindowProof(
       // the catch-up.
       const catchUp = Math.abs(series[k].value - series[i].value);
       // The pace at the run: the component's motion over the frames before
-      // it, or, where the curve slows faster than those frames show, across
-      // the run itself, its catch-up over the frames from the run's start to
-      // the change. A freeze still fails: its run is longer than one frame at
-      // a step a frame or more, and at a steady pace of two steps a frame its
-      // catch-up carries two frames of that pace.
+      // it. A proof that bounds its settle in the cast's own steps also reads
+      // the pace across the run itself, its catch-up over the frames from the
+      // run's start to the change, where the curve slows faster than the
+      // frames before it show. A freeze still fails: its run is longer than
+      // one frame at a step a frame or more, and at a steady pace of two steps
+      // a frame its catch-up carries two frames of that pace.
       const paceBefore = pxPerFrameBefore(start);
       const runFrames = (series[k].t - series[start].t) / cadence;
       const pace =
-        paceBefore == null
-          ? null
-          : runFrames > 0
-            ? Math.min(paceBefore, catchUp / runFrames)
-            : paceBefore;
+        paceBefore == null || settledWithinSteps == null || runFrames <= 0
+          ? paceBefore
+          : Math.min(paceBefore, catchUp / runFrames);
       const shown =
         catchUp < 1.5 * stepPx ||
         (pace != null &&
