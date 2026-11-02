@@ -131,8 +131,15 @@ export const docs = {
       name: 'options.label',
       type: 'string',
       description:
-        'A plain element’s accessible name, used when it has no `aria-label` or `aria-labelledby` of its own. Without it, `useResizable` names the handle with the provider’s translation of the catalog message. The bare factory, used outside a provider, names the handle and announces its collapsed state with the shipped English messages, as every Astryx string outside a provider does. A ResizeHandle takes its own `label` prop.',
+        'A plain element’s accessible name, used when it has no `aria-label` or `aria-labelledby` of its own. Without it, `useResizable` names the handle with the provider’s translation of the catalog message. The bare factory, used outside a provider, names the handle with the shipped English message, as every Astryx string outside a provider does. A ResizeHandle takes its own `label` prop.',
       default: "'Resize handle'",
+    },
+    {
+      name: 'options.collapsedLabel',
+      type: 'string',
+      description:
+        'Replaces the “Collapsed” that the handle announces as its value text (`aria-valuetext`) while the region is collapsed, on a plain element or a ResizeHandle. Without it, `useResizable` announces the provider’s translation of the catalog message, and the bare factory, used outside a provider, the shipped English one, as every Astryx string outside a provider does.',
+      default: "'Collapsed'",
     },
   ],
   returns: [
@@ -192,7 +199,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Pass `label` when a page has more than one handle ("Resize sidebar", "Resize terminal"), and a translated one outside English. Outside a provider, the collapsed state is announced with the shipped English text, as every Astryx string outside a provider is.',
+          'Pass `label` when a page has more than one handle ("Resize sidebar", "Resize terminal"), and a translated one outside English. Outside a provider, the collapsed state is announced with the shipped English text, as every Astryx string outside a provider is; pass `collapsedLabel` to announce it in another language.',
       },
       {
         guidance: true,
@@ -261,6 +268,8 @@ export const docsDense = {
       'ignores input, aria-disabled; a plain element keeps its tab stop.',
     'options.label':
       "plain element's accessible name when it has none; outside a provider the shipped English one. ResizeHandle takes its own label.",
+    'options.collapsedLabel':
+      "replaces the catalog's 'Collapsed' aria-valuetext while collapsed, plain element or ResizeHandle; English outside a provider.",
   },
   returnDescriptions: {
     size: 'px, 0 while collapsed.',
@@ -286,7 +295,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Pass label per handle, translated outside English; outside a provider the collapsed text is the shipped English one.',
+          'Pass label per handle, translated outside English; outside a provider the collapsed text is the shipped English one unless collapsedLabel is passed.',
       },
       {
         guidance: true,
