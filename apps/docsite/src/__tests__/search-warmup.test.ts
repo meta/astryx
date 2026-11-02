@@ -248,6 +248,27 @@ describe('a query typed during a warm-up', () => {
     expect(search.pending).toHaveLength(1);
   });
 
+  it('waits for a warm-up that outlasts the hedge delay, then sends once more', async () => {
+    const warmup = heldWarmup();
+    warmSearch(warmup.fetchWarmup, 1_000);
+    const search = heldSearch();
+    const source = createCliSearchSource(search.fetchSearch, undefined, 50);
+    const results = source.search('app shell');
+    // Well past the hedge delay, the warm-up still runs: no second request to
+    // a server that is still starting.
+    await new Promise(resolve => setTimeout(resolve, 400));
+    expect(search.pending).toHaveLength(1);
+
+    warmup.answer();
+    await flush();
+    expect(search.pending).toHaveLength(2);
+    search.pending[1].answer([
+      {href: '/components/app-shell', name: 'AppShell'},
+    ]);
+    expect((await results).map(item => item.label)).toEqual(['AppShell']);
+    expect(search.pending[0].signal.aborted).toBe(true);
+  });
+
   it('stops both requests when a newer query replaces it', async () => {
     const warmup = heldWarmup();
     warmSearch(warmup.fetchWarmup, 1_000);

@@ -3,9 +3,9 @@
 /**
  * @file The search panel's source: each query goes to the site's search API
  * (app/api/search/route.ts), which runs `astryx search`, and its results come
- * back in the CLI's order. A query still unanswered after HEDGE_MS, or when
- * the page's warm-up answers first, is sent once more, so it can reach a warm
- * server instead of waiting out a cold one.
+ * back in the CLI's order. A query still unanswered when the page's warm-up
+ * answers, or after HEDGE_MS when none runs, is sent once more, so it can
+ * reach a warm server instead of waiting out a cold one.
  * @position Consumed by SearchPalette.tsx.
  *
  * Items carry no `group`, since CommandPalette orders grouped items by group
@@ -113,9 +113,10 @@ export function createCliSearchSource(
 
   /**
    * Fetch one query at once, so an answer the edge cache holds is never held
-   * back. If it is still unanswered after HEDGE_MS, or when the page's warm-up
-   * answers, send it once more and take whichever answer comes first: the
-   * first request may be waiting on a cold server while another is warm.
+   * back. If it is still unanswered when the page's running warm-up answers,
+   * or after HEDGE_MS when no warm-up runs, send it once more and take
+   * whichever answer comes first: the first request may be waiting on a cold
+   * server while another is warm.
    */
   async function sendQuery(url: string, signal: AbortSignal) {
     // Each attempt has its own controller, which the query's signal aborts
@@ -130,10 +131,16 @@ export function createCliSearchSource(
         response => ({response, index}),
       );
     };
+    // While the page's warm-up runs, the server it is starting is the one to
+    // resend to, so wait for its answer; otherwise resend after HEDGE_MS.
     let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
+    const warmup = runningWarmup();
     const hedge = new Promise<'again'>(resolve => {
-      hedgeTimer = setTimeout(() => resolve('again'), hedgeMs);
-      runningWarmup()?.then(() => resolve('again'));
+      if (warmup != null) {
+        warmup.then(() => resolve('again'));
+      } else {
+        hedgeTimer = setTimeout(() => resolve('again'), hedgeMs);
+      }
     });
     let winner = -1;
     try {
