@@ -109,3 +109,19 @@ test('a pointer-opened form still shows where typing goes', async ({page}) => {
   await page.keyboard.type('Ada');
   await expect(field).toHaveValue('Ada');
 });
+
+test('a Dialog mounted open is modal before its title takes focus, so its scroll host stays put (component:Dialog FR1)', async ({
+  page,
+}) => {
+  await mount(page, 'mounted-open-in-scroll-host');
+  const host = page.getByTestId('scroll-host');
+  await page
+    .getByRole('button', {name: 'Reset all settings', exact: true})
+    .click();
+  const title = page.getByRole('heading', {name: 'Reset all settings?'});
+  await expect(title).toBeFocused();
+  expect(await page.locator('dialog').evaluate(d => d.matches(':modal'))).toBe(
+    true,
+  );
+  expect(await host.evaluate(element => element.scrollTop)).toBe(0);
+});
