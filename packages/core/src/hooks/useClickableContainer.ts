@@ -111,9 +111,9 @@ export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
   return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
 }
 
-// The surface check keeps hasInteractiveAncestor's documented answer for
-// callers that ask from a native listener, until the next minor; React
-// handlers never see such a press, because the layer root stops it.
+// hasInteractiveAncestor documents this answer until the next minor.
+// A layer root stops such a press before any bubble-phase React handler.
+// A native listener or a capture-phase handler still sees it.
 function belongsToSomethingElse(element: Element): boolean {
   return matchesInteractiveSelectors(element) || isLayerSurface(element);
 }
