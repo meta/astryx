@@ -33,7 +33,7 @@ import {
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
-import React, {useRef} from 'react';
+import React, {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Popover} from './Popover';
 import {usePopover} from './usePopover';
@@ -907,6 +907,45 @@ describe('Popover', () => {
       } finally {
         vi.unstubAllGlobals();
       }
+    });
+
+    it('still focuses the content when the opening handler swaps it in', async () => {
+      function Swapped() {
+        const [mode, setMode] = useState<'view' | 'edit'>('view');
+        const popover = usePopover({dialogLabel: 'Details'});
+        return (
+          <>
+            <button
+              type="button"
+              ref={popover.triggerRef}
+              {...popover.triggerProps}
+              onClick={() => {
+                setMode('edit');
+                popover.show();
+              }}>
+              Edit details
+            </button>
+            {popover.render(
+              mode === 'view' ? (
+                <button type="button">View</button>
+              ) : (
+                <input aria-label="Name" />
+              ),
+            )}
+          </>
+        );
+      }
+      render(<Swapped />);
+
+      fireEvent.click(screen.getByRole('button', {name: 'Edit details'}), {
+        detail: 1,
+      });
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('textbox', {name: 'Name', hidden: true}),
+        ).toHaveFocus(),
+      );
     });
 
     it('keeps focus that onShow moves inside the popover', async () => {

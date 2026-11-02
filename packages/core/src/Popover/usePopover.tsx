@@ -34,6 +34,7 @@ import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
+import {isFocusDetached} from '../utils/focusReturn';
 import {themeProps} from '../utils/themeProps';
 import {paddingStyles} from '../Layout/padding.stylex';
 import type {SpacingStep} from '../utils/types';
@@ -422,6 +423,8 @@ function usePopoverImplementation(
 
   // Track whether to skip auto-focus for the current open event
   const skipAutoFocusRef = useRef(false);
+  // Whether `show` focused a content control within the opening event.
+  const hasFocusedInGestureRef = useRef(false);
 
   // Set when the layer reports it has shown, so `show` can tell a popover
   // that opened within the call from one whose content mounts later.
@@ -480,16 +483,23 @@ function usePopoverImplementation(
     // Reset the per-open focus preference after the popover closes.
     if (!layer.isOpen) {
       skipAutoFocusRef.current = false;
+      hasFocusedInGestureRef.current = false;
       return;
     }
     if (hasAutoFocus && !skipAutoFocusRef.current) {
       // Wait a frame so the content is mounted. A popover that closes or
       // unmounts first cancels it: the frame would otherwise move focus into
       // content that is no longer shown, after the close had left it alone.
-      const frame = requestAnimationFrame(focusInitialTarget);
+      const frame = requestAnimationFrame(() => {
+        const doc = contentRef.current?.ownerDocument ?? document;
+        if (hasFocusedInGestureRef.current && !isFocusDetached(doc)) {
+          return;
+        }
+        focusInitialTarget();
+      });
       return () => cancelAnimationFrame(frame);
     }
-  }, [layer.isOpen, hasAutoFocus, focusInitialTarget]);
+  }, [layer.isOpen, hasAutoFocus, focusInitialTarget, contentRef]);
 
   // Combined ref for trigger element (layer anchor + our ref). It is keyed on
   // the layer's own ref, not the whole layer: the layer object changes with
@@ -537,9 +547,11 @@ function usePopoverImplementation(
         !container.contains(container.ownerDocument.activeElement) &&
         focusFirstContentControl(container)
       ) {
-        // Initial focus is done: the effect's frame must not move focus the
-        // user has since moved elsewhere.
-        skipAutoFocusRef.current = true;
+        // Initial focus is done. The effect's frame stays only as a fallback
+        // for focus lost to the page (content swapped in the same handler
+        // unmounts the control just focused); it must not move focus the user
+        // has since moved elsewhere.
+        hasFocusedInGestureRef.current = true;
       }
     },
     [layer, hasAutoFocus, contentRef],
