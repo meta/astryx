@@ -3,7 +3,7 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {AppShell} from '@astryxdesign/core/AppShell';
-import {Layout} from '@astryxdesign/core/Layout';
+import {Layout, LayoutHeader} from '@astryxdesign/core/Layout';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
 import {Banner} from '@astryxdesign/core/Banner';
@@ -894,7 +894,7 @@ export const InsideLayoutHosts: StoryObj<{host: LayoutHost}> = {
         return (
           <Layout
             padding={4}
-            header={<Text type="body">Outer layout header</Text>}
+            header={<LayoutHeader>Outer layout header</LayoutHeader>}
             content={shell}
           />
         );

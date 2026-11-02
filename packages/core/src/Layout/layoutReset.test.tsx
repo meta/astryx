@@ -85,9 +85,8 @@ describe('layoutReset (component:Layout FR8)', () => {
       expect(computed.getPropertyValue(name), name).toBe('0px');
     }
     for (const name of RESET_VALUES.initial) {
-      // jsdom reads a custom property set to `initial` back as '' or
-      // 'initial'; either way the ancestor's value is gone.
-      expect(['', 'initial'], name).toContain(computed.getPropertyValue(name));
+      // An empty value would mean the reset declares nothing.
+      expect(computed.getPropertyValue(name), name).toBe('initial');
     }
   });
 });

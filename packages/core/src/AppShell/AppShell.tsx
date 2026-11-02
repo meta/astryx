@@ -46,8 +46,8 @@ import {LayoutContent} from '../Layout/LayoutContent';
 import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
 import {LayoutDividerContext} from '../Layout/LayoutDividerContext';
 import {
+  DEFAULT_LAYOUT_SLOTS,
   LayoutSlotsContext,
-  type LayoutSlots,
 } from '../Layout/LayoutSlotsContext';
 import {layoutReset} from '../Layout/layoutReset';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
@@ -1266,20 +1266,20 @@ export function AppShell({
           className,
           style,
         )}>
-        {/* Skip-to-content link */}
-        <a
-          href={`#${MAIN_CONTENT_ID}`}
-          onClick={handleSkipLinkClick}
-          {...focusOutlineProps.focusVisible(styles.skipLink)}
-          data-testid="skip-to-content">
-          {t('@astryx.appShell.skipToContent')}
-        </a>
-
         {/* The Layout area, slot and divider defaults an ancestor Layout
-            provides stop here too (FR18). */}
+            provides stop at the root too, for every child (FR18). */}
         <LayoutAreaContext value={null}>
-          <LayoutSlotsContext value={NO_LAYOUT_SLOTS}>
+          <LayoutSlotsContext value={DEFAULT_LAYOUT_SLOTS}>
             <LayoutDividerContext value={null}>
+              {/* Skip-to-content link */}
+              <a
+                href={`#${MAIN_CONTENT_ID}`}
+                onClick={handleSkipLinkClick}
+                {...focusOutlineProps.focusVisible(styles.skipLink)}
+                data-testid="skip-to-content">
+                {t('@astryx.appShell.skipToContent')}
+              </a>
+
               <Layout
                 height={height}
                 padding={0}
@@ -1292,48 +1292,41 @@ export function AppShell({
                 start={sideNavContent}
                 content={mainContent}
               />
+
+              {/* Mobile nav — always mounted below breakpoint via Activity so DOM
+            presence detection works. Hidden until the drawer opens. */}
+              {shouldRenderMobileNavReactNode && mobileNavReactNode}
+              {shouldRenderConfigContent && mobileNavConfigContent}
+              {isBelowBreakpoint &&
+                !mobileNavDisabled &&
+                mobileNavReactNode == null &&
+                !mobileNavConfigContent && (
+                  <ActivityWrapper
+                    mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
+                    {/* SideNav drawer — always mounted so presence detection works.
+                Hidden when TopNav owns the drawer (combined mode passes
+                sideNav via TopNav's mobile content context instead). */}
+                    {hasSideNav && !hasTopNav && (
+                      <SideNavRenderContext value="drawer">
+                        {sideNav}
+                      </SideNavRenderContext>
+                    )}
+                    {hasTopNav && (
+                      <TopNavMobileContentContext
+                        value={drawerMobileContentValue}>
+                        <TopNavRenderContext value="drawer">
+                          {topNav}
+                        </TopNavRenderContext>
+                      </TopNavMobileContentContext>
+                    )}
+                  </ActivityWrapper>
+                )}
             </LayoutDividerContext>
           </LayoutSlotsContext>
         </LayoutAreaContext>
-
-        {/* Mobile nav — always mounted below breakpoint via Activity so DOM
-            presence detection works. Hidden until the drawer opens. */}
-        {shouldRenderMobileNavReactNode && mobileNavReactNode}
-        {shouldRenderConfigContent && mobileNavConfigContent}
-        {isBelowBreakpoint &&
-          !mobileNavDisabled &&
-          mobileNavReactNode == null &&
-          !mobileNavConfigContent && (
-            <ActivityWrapper
-              mode={isMobileNavActivityVisible ? 'visible' : 'hidden'}>
-              {/* SideNav drawer — always mounted so presence detection works.
-                Hidden when TopNav owns the drawer (combined mode passes
-                sideNav via TopNav's mobile content context instead). */}
-              {hasSideNav && !hasTopNav && (
-                <SideNavRenderContext value="drawer">
-                  {sideNav}
-                </SideNavRenderContext>
-              )}
-              {hasTopNav && (
-                <TopNavMobileContentContext value={drawerMobileContentValue}>
-                  <TopNavRenderContext value="drawer">
-                    {topNav}
-                  </TopNavRenderContext>
-                </TopNavMobileContentContext>
-              )}
-            </ActivityWrapper>
-          )}
       </div>
     </AppShellMobileContext>
   );
 }
 
 AppShell.displayName = 'AppShell';
-
-/** The slot context at a page root: no Layout around the shell. */
-const NO_LAYOUT_SLOTS: LayoutSlots = {
-  hasHeader: false,
-  hasFooter: false,
-  hasStart: false,
-  hasEnd: false,
-};

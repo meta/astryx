@@ -97,11 +97,7 @@ for (const viewport of [
       right: 0,
       bottom: 0,
     });
-    for (const host of [
-      'shell-in-card',
-      'shell-in-layout',
-      'shell-in-section',
-    ]) {
+    for (const host of ['card', 'layout', 'section']) {
       const inHost = await measure(page, host);
       expect(inHost.overhang, `${host}: Layout overhang`).toEqual(
         atRoot.overhang,

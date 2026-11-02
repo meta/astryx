@@ -1353,7 +1353,9 @@ describe('AppShell main keyboard access', () => {
 });
 
 describe('AppShell layout root (FR18)', () => {
-  const CLEARED_READBACK = ['', 'initial'];
+  // A custom property set to `initial` reads back as `initial`; an empty
+  // value would mean the root declares nothing.
+  const CLEARED_READBACK = ['initial'];
 
   function shell(testId: string) {
     return (
@@ -1438,6 +1440,26 @@ describe('AppShell layout root (FR18)', () => {
       />,
     );
     expect(markup('shell')).toBe(atRoot);
+  });
+
+  it('stops an enclosing divider default for every child of the root, the mobile nav node too', () => {
+    render(
+      <Layout
+        defaultHasDividers
+        content={
+          <AppShell
+            data-testid="shell"
+            mobileNav={
+              <LayoutHeader data-testid="mobile-header">Menu</LayoutHeader>
+            }>
+            <p>Page content</p>
+          </AppShell>
+        }
+      />,
+    );
+    expect(screen.getByTestId('mobile-header')).not.toHaveAttribute(
+      'data-divider',
+    );
   });
 
   it('keeps the caller style and a Section host out of each other', () => {
