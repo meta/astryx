@@ -884,12 +884,15 @@ function PointerDateField({
         if (!isEffectivelyDisabled) {
           popover.show({skipAutoFocus: true});
         }
-      } else if (e.key === 'Enter') {
+      } else if (e.key === 'Enter' && pendingInput !== null) {
+        // Only typed text holds Enter back: a form would otherwise submit
+        // the value from before the commit. With nothing typed, Enter does
+        // what it does in any text field and submits the form.
         e.preventDefault();
         commitPendingInput();
       }
     },
-    [popover, commitPendingInput, isEffectivelyDisabled],
+    [popover, commitPendingInput, isEffectivelyDisabled, pendingInput],
   );
 
   const inputWrapper = (
