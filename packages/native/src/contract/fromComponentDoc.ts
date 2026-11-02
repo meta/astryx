@@ -158,9 +158,13 @@ export function fromComponentDoc(
       webOnly.push({name: prop.name, reason: declaredWebOnly});
       continue;
     }
+    // A styling input names a style object or class; a `…Style` prop whose
+    // type is a closed set of words, such as List's `listStyle`, is a
+    // semantic choice and stays in the core.
     if (
-      /(?:Xstyle|XStyle|ClassName|Style)$/.test(prop.name) ||
-      prop.name === 'xstyle'
+      /(?:Xstyle|XStyle|ClassName)$/.test(prop.name) ||
+      prop.name === 'xstyle' ||
+      (/Style$/.test(prop.name) && !isClosedWordSet(prop.type))
     ) {
       webOnly.push({name: prop.name, reason: 'web styling input'});
       continue;
@@ -289,4 +293,16 @@ export function fromComponentDoc(
       name => name in core,
     ),
   };
+}
+
+/** A documented type that is a union of string literals, like `'a' | 'b'`. */
+function isClosedWordSet(type: unknown): boolean {
+  if (typeof type !== 'string') {
+    return false;
+  }
+  const members = type
+    .split('|')
+    .map(member => member.trim())
+    .filter(member => member !== 'undefined' && member !== 'null');
+  return members.length > 0 && members.every(m => /^'[^']*'$/.test(m));
 }
