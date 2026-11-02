@@ -83,7 +83,11 @@ function LivePreview({
         justifyContent: 'center',
       }}
       {...previewNavigationProps}>
-      <div style={{minWidth: 'fit-content', padding: 'var(--spacing-4)'}}>
+      {/* The Card's padding is the example's only inline frame, so the
+          example lines up with the title above it; the block spacing matches
+          that padding and separates the example from the title and the tabs. */}
+      <div
+        style={{minWidth: 'fit-content', paddingBlock: 'var(--spacing-3)'}}>
         <Component />
       </div>
     </div>
