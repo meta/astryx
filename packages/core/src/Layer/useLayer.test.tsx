@@ -1223,12 +1223,14 @@ describe('useLayer', () => {
       // A stable ref: an inline one detaches and reattaches the trigger on
       // every render, and each detach queues a microtask of its own that these
       // tests, which hold the ledger's microtasks by hand, do not mean to hold.
+      const {ref: popoverRef} = popover;
+      const {ref: tooltipRef} = tooltip;
       const triggerRef = useCallback(
         (el: HTMLButtonElement | null) => {
-          popover.ref(el);
-          tooltip.ref(el);
+          popoverRef(el);
+          tooltipRef(el);
         },
-        [popover.ref, tooltip.ref],
+        [popoverRef, tooltipRef],
       );
       return (
         <>

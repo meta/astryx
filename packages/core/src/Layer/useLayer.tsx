@@ -911,8 +911,8 @@ function isAnchorReady(anchor: HTMLElement): boolean {
  * anchor's own layout box). Anchoring a layer to the trigger's box mid
  * transition, rather than the one it settles into, has produced a CSS
  * anchor-positioning resolution that never gets revisited once the trigger
- * stops moving — the layer is stranded at its unanchored fallback position
- * for the rest of that open (#5398).
+ * stops moving: the layer is stranded at its unanchored fallback position
+ * for the rest of that open.
  *
  * The check itself waits one frame before reading `document.getAnimations()`:
  * a CSS animation just triggered by a `display`/class change (exactly what
@@ -1702,8 +1702,7 @@ function useLayerImplementation(
       openNow();
       return;
     }
-    // The wait is driven by signals, never by polling (INV12: the runtime
-    // polls nothing). Any of them re-reads `isAnchorReady`; the first that
+    // The wait is driven by signals, never by polling. Any of them re-reads `isAnchorReady`; the first that
     // finds the anchor ready wins. None resolves against a boxless trigger, so
     // a layer whose container gains layout much later still ends up anchored,
     // not opened against a 0x0 box because a cap gave up first:
@@ -1711,7 +1710,7 @@ function useLayerImplementation(
     // - ResizeObserver: a block-level trigger gaining a box.
     // - IntersectionObserver: reports a `display: inline` trigger, which
     //   ResizeObserver never delivers an entry for, such as the wrapper
-    //   `<span>` of a text-only Tooltip or HoverCard (#5398). It also fires
+    //   `<span>` of a text-only Tooltip or HoverCard. It also fires
     //   when a hidden ancestor is displayed.
     // - The enclosing `<dialog>`'s `open` attribute and `toggle` event: the
     //   trigger can have a box before the dialog is modal (see
@@ -1724,7 +1723,7 @@ function useLayerImplementation(
     const dialog = anchor.closest('dialog');
     let cancelSettleWait: () => void = () => {};
     let resolved = false;
-    // The shared observers (INV16) hand back an unsubscribe for this
+    // The shared observers hand back an unsubscribe for this
     // registration only, so the teardown does not touch other observers of the
     // same element.
     let stopResize: () => void = () => {};
@@ -1831,8 +1830,8 @@ function useLayerImplementation(
   // Removing `anchor-name` on that `null` call and re-adding it on the
   // reattach is a real DOM mutation each time, and an already-open layer's
   // `position-try-fallbacks` resolution does not automatically get revisited
-  // once the anchor comes back — the layer is left stuck at the unanchored
-  // fallback position for the rest of that open (#5398), even though the
+  // once the anchor comes back: the layer is left stuck at the unanchored
+  // fallback position for the rest of that open, even though the
   // trigger never actually left the document.
   //
   // `addAnchorName` is already idempotent (skips the DOM write if the name
@@ -1865,7 +1864,7 @@ function useLayerImplementation(
           removeAnchorName(stale, anchorId);
           triggerRef.current = null;
           // A real unmount: stop waiting on an element that will never get a
-          // box, and release the observers an open layer kept on it (INV6).
+          // box, and release the observers an open layer kept on it.
           if (pendingAnchorElementRef.current === stale) {
             cancelPendingAnchorWait();
           }
@@ -1901,7 +1900,7 @@ function useLayerImplementation(
 
       // A trigger replaced while the layer is open (React detaches the old
       // node with `null`, then attaches the new one): the old trigger's
-      // observers are removed before the new trigger's are added (INV6), and
+      // observers are removed before the new trigger's are added, and
       // binding them reads the new trigger's geometry at once.
       if (keepsAnchorClear && isOpenRef.current && el !== previous) {
         clearObserversRef.current?.();
@@ -2197,7 +2196,7 @@ function useLayerImplementation(
     return () => observer.disconnect();
   }, [isOpen, mode, updateAnchorInView]);
 
-  // A layer that keeps its anchor clear (FR4) re-reads its geometry while it
+  // A layer that keeps its anchor clear re-reads its geometry while it
   // is open: content that grows, an anchor that resizes or moves (in layout or
   // by a scroll) or a viewport resize can each re-settle the standard list over the anchor or
   // give the layer a scroll range (`observeAnchorClearance`). The external
