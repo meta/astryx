@@ -78,6 +78,7 @@ import {HorizontalRuleExtension} from '@lexical/extension';
 import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
+import {CodePastePlugin} from './CodePastePlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
@@ -722,6 +723,8 @@ export const RichTextEditor = function RichTextEditor({
               <TableColumnFloorPlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              {/* A rich paste into a code block goes in as plain lines. */}
+              <CodePastePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
