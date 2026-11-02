@@ -3013,7 +3013,7 @@ function formatDisplayTime12h: (time: ISOTimeString | undefined, includeSeconds?
 function formatDisplayTime24h: (time: ISOTimeString | undefined, includeSeconds?: boolean) => string
 function formatHex: (r: number, g: number, b: number) => string
 function formatISOTime: (time: ParsedTime, includeSeconds?: boolean) => ISOTimeString
-function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale) => string
+function formatSharedDate: (pd: PlainDate, format: SharedDateFormat, locale?: Locale, calendar?: CalendarSystem) => string
 function generateAdaptationCSS: (theme: DefinedTheme, warnings?: string[]) => ThemeCSSOutput
 function generateColumns: <T extends Record<string, unknown>>(data: T[]) => TableColumn<T>[]
 function generateOnMediaCSS: (theme: DefinedTheme, warnings?: string[]) => string

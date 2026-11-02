@@ -9,6 +9,7 @@
 
 import type {ISODateString, PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
+import type {CalendarSystem} from './calendarSystem';
 import {firstCharacter} from './characters';
 import {standaloneMonthCapitalLanguages} from './standaloneMonthCapitals.generated';
 
@@ -639,14 +640,21 @@ export const SHARED_DATE_FORMAT_OPTIONS: Record<
  * members. The shared entry point DateInput uses for the named-format path;
  * Timestamp maps the same members onto {@link SHARED_DATE_FORMAT_OPTIONS} in
  * its own `formatTimestamp` switch (its input is a `Date`, not a `PlainDate`).
+ * The locale-aware members write the date in `calendar`, which defaults to
+ * Gregorian. `system_date` stays the Gregorian ISO date in every calendar.
  */
 export function formatSharedDate(
   pd: PlainDate,
   format: SharedDateFormat,
   locale: Locale = 'en',
+  calendar: CalendarSystem = 'gregory',
 ): string {
   if (format === 'system_date') {
     return plainDateToISO(pd);
   }
-  return plainDateFormat(pd, SHARED_DATE_FORMAT_OPTIONS[format], locale);
+  return plainDateFormat(
+    pd,
+    {...SHARED_DATE_FORMAT_OPTIONS[format], calendar},
+    locale,
+  );
 }
