@@ -38,7 +38,7 @@ export const docs = {
       name: 'Stack',
       displayName: 'Stack',
       description:
-        'Unified stack layout component with a direction prop. Use direction="horizontal" for left-to-right flow or direction="vertical" (default) for top-to-bottom. For convenience, HStack and VStack are pre-configured wrappers.',
+        'Unified stack layout component with a direction prop. Use direction="horizontal" to flow along the inline axis (left to right in LTR, right to left in RTL) or direction="vertical" (default) for top-to-bottom. For convenience, HStack and VStack are pre-configured wrappers.',
       playground: {
         defaults: {
           direction: 'horizontal',
@@ -55,7 +55,7 @@ export const docs = {
           name: 'direction',
           type: "'horizontal' | 'vertical'",
           description:
-            "Direction of the stack layout. 'horizontal' flows items left-to-right (like HStack), 'vertical' flows top-to-bottom (like VStack). Note: the value is 'horizontal', NOT 'row'.",
+            "Direction of the stack layout. 'horizontal' flows items along the inline axis, left to right in LTR and right to left in RTL (like HStack), 'vertical' flows top-to-bottom (like VStack). Note: the value is 'horizontal', NOT 'row'.",
           default: "'vertical'",
         },
         {
@@ -175,6 +175,21 @@ export const docs = {
           type: 'StyleXStyles',
           description:
             'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'Class name added to the stack element, after the component styles.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the stack element. width, height, maxWidth, and minHeight win over the same properties here.',
+        },
+        {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description: 'Ref to the rendered stack element.',
         },
       ],
     },
@@ -461,6 +476,27 @@ export const docs = {
           type: 'ReactNode',
           description: 'Stack content.',
         },
+        {
+          name: 'xstyle',
+          type: 'StyleXStyles',
+          description:
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'Class name added to the stack element, after the component styles.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the stack element. width, height, maxWidth, and minHeight win over the same properties here.',
+        },
+        {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description: 'Ref to the rendered stack element.',
+        },
       ],
     },
     {
@@ -507,6 +543,27 @@ export const docs = {
           name: 'children',
           type: 'ReactNode',
           description: 'Item content.',
+        },
+        {
+          name: 'xstyle',
+          type: 'StyleXStyles',
+          description:
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'Class name added to the item element, after the component styles.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the item element.',
+        },
+        {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description: 'Ref to the rendered item element.',
         },
       ],
     },
