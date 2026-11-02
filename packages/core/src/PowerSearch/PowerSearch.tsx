@@ -378,7 +378,13 @@ export interface PowerSearchProps extends Omit<
   maxSearchResults?: number;
   /** Label for the save button in edit popover. @default 'Apply' */
   popoverSaveButtonLabel?: string;
-  /** Timezone ID for date formatting. */
+  /**
+   * IANA zone a date-only `date_absolute` value, and each absolute part of a
+   * `date_range`, is read and written in: the token, the label and the editor
+   * show its day there, and a picked day stores as that midnight. Unset, a
+   * day is its UTC day. A `date_absolute` with `isDateOnly: false` formats
+   * its label in it.
+   */
   timezoneID?: string;
   /**
    * Controls how tokens overflow when the container is too narrow.
@@ -713,11 +719,14 @@ export function PowerSearch({
               10,
             ),
             locale,
+            undefined,
+            undefined,
+            timezoneID,
           )
         : null;
       return {label, value, full: value != null ? `${label} ${value}` : label};
     },
-    [config, maxTokenLength, t, locale],
+    [config, maxTokenLength, t, locale, timezoneID],
   );
   // The built-in token being edited. A token from a `components` override
   // names itself, so its editor keeps the plain popover.
@@ -1090,6 +1099,7 @@ export function PowerSearch({
             onClick={handleClick}
             onRemove={handleRemove}
             isDisabled={isDisabled}
+            timezoneID={timezoneID}
           />
         );
       }
@@ -1166,6 +1176,7 @@ export function PowerSearch({
       );
     },
     [
+      timezoneID,
       filters,
       config,
       configProp,
@@ -1260,6 +1271,7 @@ export function PowerSearch({
           onCancel={handlePopoverCancel}
           saveButtonLabel={popoverSaveButtonLabel}
           isReadOnly={isReadOnly}
+          timezoneID={timezoneID}
         />
       );
     }
@@ -1275,9 +1287,11 @@ export function PowerSearch({
         saveButtonLabel={popoverSaveButtonLabel}
         maxMenuItems={maxOperatorMenuItems}
         isReadOnly={isReadOnly}
+        timezoneID={timezoneID}
       />
     );
   }, [
+    timezoneID,
     popoverPartialFilter,
     popoverState,
     EditorOverride,
@@ -1574,6 +1588,7 @@ export function PowerSearch({
             isDisabled={isDisabled}
             hasClear={hasClear}
             maxOperatorMenuItems={maxOperatorMenuItems}
+            timezoneID={timezoneID}
             maxSearchResults={maxSearchResults}
             saveButtonLabel={popoverSaveButtonLabelFromProps}
             components={componentOverrides}

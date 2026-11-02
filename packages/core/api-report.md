@@ -1856,6 +1856,7 @@ component PowerSearchToken(props: PowerSearchTokenProps)
   prop onClick?: () => void
   prop onRemove?: () => void
   prop operator: PowerSearchOperator
+  prop timezoneID?: string
 component ProgressBar(props: ProgressBarProps)
   prop data-testid?: string
   prop formatValueLabel?: (value: number, max: number) => string = (value, max) => `${Math.round((value / max) * 100)}%`
