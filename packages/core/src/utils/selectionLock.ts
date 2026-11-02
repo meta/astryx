@@ -29,6 +29,7 @@
 // A mouse never takes the lock, so its released behavior stays (AST-017).
 
 import {containsAlongFlatTree, parentAcrossShadow} from './flatTree';
+import {subscribeInput} from './inputStream';
 import {isIosWebKit} from './touchQueries';
 
 /** What a held finger must not start on a control or a cell. */
@@ -125,39 +126,42 @@ export interface DragSelectionReleaseOptions {
  * selection with inline styles, on every engine. The document refuses one
  * too, because WebKit extends a drag's selection over text outside the
  * elements without another `selectstart`. So a `selectstart` anywhere is
- * refused, and the selection is put back. The press's own `mouseup` and
- * `click` come after its `pointerup` in the same task, and WebKit settles
- * the drag's selection there. So the document's hold ends a task after a
- * lift. A cancel ends it at once, because nothing follows a cancel.
- * `onReleased` runs once the document's hold has ended. The page listeners
- * exist only during a press. Idempotent.
+ * refused, and the selection is put back. A `selectstart` does not leave its
+ * shadow tree. So the document refuses only one that starts outside every
+ * shadow tree, and a claiming element inside one refuses its own. The
+ * press's own `mouseup` and `click` come after its `pointerup` in the same
+ * task, and WebKit settles the drag's selection there. So the document's
+ * hold ends a task after a lift. A cancel ends it at once, because nothing
+ * follows a cancel. `onReleased` runs once the document's hold has ended.
+ * The page listeners exist only during a press. Idempotent.
  */
 export function lockDragSelection(
   elements: Iterable<Element>,
   view: Window | null | undefined,
-  kept: ReadonlyArray<Range>,
+  kept: ReadonlyArray<AbstractRange>,
   onReleased?: () => void,
 ): (options?: DragSelectionReleaseOptions) => void {
   const doc = view?.document ?? null;
+  const roots = shadowRootsOfRanges(kept);
   const restore = () => {
     const selection = view?.getSelection();
     // The focused field keeps its own selection (a drag never starts in one).
-    if (selection == null || isTextEntry(doc?.activeElement ?? null)) {
+    if (selection == null || isTextEntry(deepActiveElement(doc))) {
       return;
     }
+    const held = heldRanges(selection, roots);
     if (kept.length === 0) {
-      if (selection.rangeCount > 0 && !selection.isCollapsed) {
+      if (held.some(range => !range.collapsed)) {
         selection.removeAllRanges();
       }
       return;
     }
-    if (holdsRanges(selection, kept)) {
+    // A render can remove what the kept selection held: then there is
+    // nothing to put back.
+    if (sameRanges(held, kept) || !kept.every(isValidRange)) {
       return;
     }
-    selection.removeAllRanges();
-    for (const range of kept) {
-      selection.addRange(range.cloneRange());
-    }
+    selectRanges(selection, kept);
   };
   restore();
   const set = new Set(elements);
@@ -169,8 +173,13 @@ export function lockDragSelection(
   for (const element of set) {
     element.addEventListener('selectstart', refuse);
   }
-  doc?.addEventListener('selectstart', refuse, true);
-  doc?.addEventListener('selectionchange', restore);
+  const stopDocument =
+    view == null
+      ? []
+      : [
+          subscribeInput(view, 'selectstart', refuse, {cancels: true}),
+          subscribeInput(view, 'selectionchange', restore),
+        ];
   const unlockStyles = lockStyles(set);
   let stage: 'held' | 'lifted' | 'done' = 'held';
   let timer: number | null = null;
@@ -183,10 +192,14 @@ export function lockDragSelection(
       view?.clearTimeout(timer);
       timer = null;
     }
-    restore();
-    doc?.removeEventListener('selectstart', refuse, true);
-    doc?.removeEventListener('selectionchange', restore);
-    onReleased?.();
+    try {
+      restore();
+    } finally {
+      for (const stop of stopDocument) {
+        stop();
+      }
+      onReleased?.();
+    }
   };
   return ({isCancel = false}: DragSelectionReleaseOptions = {}) => {
     if (stage === 'held') {
@@ -214,9 +227,16 @@ export function lockDragSelection(
  */
 export function selectionRangesOf(
   view: Window | null | undefined,
-): ReadonlyArray<Range> {
+): ReadonlyArray<AbstractRange> {
   const selection = view?.getSelection();
-  if (selection == null || selection.isCollapsed) {
+  if (selection == null) {
+    return [];
+  }
+  const composed = composedRangesOf(selection, []);
+  if (composed != null) {
+    return composed.filter(range => !range.collapsed).map(liveWhereItCan);
+  }
+  if (selection.isCollapsed) {
     return [];
   }
   const ranges: Range[] = [];
@@ -230,9 +250,9 @@ export function selectionRangesOf(
  * Whether a press at (`x`, `y`) lands on text a drag would select. That is a
  * text field, or a character of non-empty text whose element allows a
  * selection. A native button's label, slotted or not, is not selectable text,
- * because the engine starts no selection from a drag inside a button. A point beside text, which a
- * caret query snaps to the nearest character, lands on none. Where the engine
- * has no caret query, nothing is selectable text.
+ * because the engine starts no selection from a drag inside a button. A point
+ * beside text, which a caret query snaps to the nearest character, lands on
+ * none. Where the engine has no caret query, nothing is selectable text.
  */
 export function startsOnSelectableText(
   doc: Document,
@@ -243,7 +263,10 @@ export function startsOnSelectableText(
   if (isTextEntry(target)) {
     return true;
   }
-  const caret = caretAt(doc, x, y);
+  const caret = caretAt(doc, x, y, [
+    ...ownShadowRoot(target),
+    ...openShadowRootsOf(target),
+  ]);
   if (caret == null) {
     return false;
   }
@@ -251,7 +274,12 @@ export function startsOnSelectableText(
   if (node.nodeType !== 3 || (node.textContent ?? '').trim() === '') {
     return false;
   }
-  const element = node.parentElement;
+  // Text directly under a shadow root takes its host's style.
+  const element =
+    node.parentElement ??
+    (node.parentNode?.nodeType === 11
+      ? (node.parentNode as ShadowRoot).host
+      : null);
   if (element == null || !allowsSelection(element) || isInButton(node)) {
     return false;
   }
@@ -295,16 +323,24 @@ function caretAt(
   doc: Document,
   x: number,
   y: number,
+  shadowRoots: ReadonlyArray<ShadowRoot>,
 ): {node: Node; offset: number} | null {
   const queries = doc as Document & {
     caretPositionFromPoint?: (
       x: number,
       y: number,
+      options?: {shadowRoots?: ShadowRoot[]},
     ) => {offsetNode: Node; offset: number} | null;
     caretRangeFromPoint?: (x: number, y: number) => Range | null;
   };
   if (typeof queries.caretPositionFromPoint === 'function') {
-    const position = queries.caretPositionFromPoint(x, y);
+    // Without the roots, a point over shadow text answers at its host.
+    const position =
+      shadowRoots.length > 0
+        ? queries.caretPositionFromPoint(x, y, {
+            shadowRoots: [...shadowRoots],
+          })
+        : queries.caretPositionFromPoint(x, y);
     return position == null
       ? null
       : {node: position.offsetNode, offset: position.offset};
@@ -330,26 +366,235 @@ function allowsSelection(element: Element): boolean {
   );
 }
 
-/** Whether `selection` holds exactly `ranges`, in order. */
-function holdsRanges(
+/**
+ * The ranges `selection` holds, with boundaries inside `shadowRoots` where the
+ * engine reads composed ranges.
+ */
+function heldRanges(
   selection: Selection,
-  ranges: ReadonlyArray<Range>,
-): boolean {
-  if (selection.rangeCount !== ranges.length) {
-    return false;
+  shadowRoots: ReadonlyArray<ShadowRoot>,
+): ReadonlyArray<AbstractRange> {
+  const composed = composedRangesOf(selection, shadowRoots);
+  if (composed != null) {
+    return composed;
   }
-  return ranges.every((range, index) => {
-    const held = selection.getRangeAt(index);
-    return (
-      held.startContainer === range.startContainer &&
-      held.startOffset === range.startOffset &&
-      held.endContainer === range.endContainer &&
-      held.endOffset === range.endOffset
-    );
-  });
+  const ranges: Range[] = [];
+  for (let index = 0; index < selection.rangeCount; index++) {
+    ranges.push(selection.getRangeAt(index));
+  }
+  return ranges;
 }
 
-/** The selection-lock styles on `set`, refcounted per element; idempotent release. */
+/**
+ * A live copy of `range` when both boundaries share a root, so it follows
+ * DOM changes. A range across roots stays static: no live range holds it.
+ */
+function liveWhereItCan(range: StaticRange): AbstractRange {
+  const live = range.startContainer.ownerDocument?.createRange();
+  if (
+    live == null ||
+    range.startContainer.getRootNode() !== range.endContainer.getRootNode()
+  ) {
+    return range;
+  }
+  live.setStart(range.startContainer, range.startOffset);
+  live.setEnd(range.endContainer, range.endOffset);
+  return live;
+}
+
+/** Whether both of `range`'s boundaries still exist in the document. */
+function isValidRange(range: AbstractRange): boolean {
+  return (
+    isValidBoundary(range.startContainer, range.startOffset) &&
+    isValidBoundary(range.endContainer, range.endOffset)
+  );
+}
+
+function isValidBoundary(node: Node, offset: number): boolean {
+  const length =
+    node.nodeType === 3 || node.nodeType === 4 || node.nodeType === 8
+      ? (node as CharacterData).length
+      : node.childNodes.length;
+  return node.isConnected && offset >= 0 && offset <= length;
+}
+
+/** Whether two range lists have the same boundaries, in order. */
+function sameRanges(
+  held: ReadonlyArray<AbstractRange>,
+  kept: ReadonlyArray<AbstractRange>,
+): boolean {
+  return (
+    held.length === kept.length &&
+    kept.every((range, index) => {
+      const other = held[index];
+      return (
+        other.startContainer === range.startContainer &&
+        other.startOffset === range.startOffset &&
+        other.endContainer === range.endContainer &&
+        other.endOffset === range.endOffset
+      );
+    })
+  );
+}
+
+/**
+ * Put `ranges` back as the selection. One range goes through
+ * `setBaseAndExtent`, which also reaches inside a shadow root.
+ */
+function selectRanges(
+  selection: Selection,
+  ranges: ReadonlyArray<AbstractRange>,
+): void {
+  const [only] = ranges;
+  if (ranges.length === 1 && typeof selection.setBaseAndExtent === 'function') {
+    selection.setBaseAndExtent(
+      only.startContainer,
+      only.startOffset,
+      only.endContainer,
+      only.endOffset,
+    );
+    return;
+  }
+  selection.removeAllRanges();
+  for (const range of ranges) {
+    const copy = range.startContainer.ownerDocument?.createRange();
+    if (copy == null) {
+      continue;
+    }
+    copy.setStart(range.startContainer, range.startOffset);
+    copy.setEnd(range.endContainer, range.endOffset);
+    selection.addRange(copy);
+  }
+}
+
+/**
+ * The selection's composed ranges, reaching into each open shadow root a
+ * boundary lands on; null where the engine has no `getComposedRanges`.
+ * Without the roots, a selection inside a shadow root reads as one around
+ * its host.
+ */
+function composedRangesOf(
+  selection: Selection,
+  known: ReadonlyArray<ShadowRoot>,
+): StaticRange[] | null {
+  const query = (
+    selection as Selection & {
+      getComposedRanges?: (options?: {
+        shadowRoots?: ShadowRoot[];
+      }) => StaticRange[];
+    }
+  ).getComposedRanges;
+  if (typeof query !== 'function') {
+    return null;
+  }
+  // Engines take the roots as a dictionary, or, in older releases, as
+  // arguments.
+  const read = (roots: ShadowRoot[]): StaticRange[] | null => {
+    try {
+      return query.call(selection, {shadowRoots: roots});
+    } catch {
+      try {
+        return (query as (...roots: ShadowRoot[]) => StaticRange[]).call(
+          selection,
+          ...roots,
+        );
+      } catch {
+        return null;
+      }
+    }
+  };
+  const roots = [...known];
+  for (;;) {
+    const ranges = read([...roots]);
+    if (ranges == null) {
+      return null;
+    }
+    const found = new Set<ShadowRoot>();
+    for (const range of ranges) {
+      for (const [node, offset] of [
+        [range.startContainer, range.startOffset],
+        [range.endContainer, range.endOffset],
+      ] as const) {
+        for (const child of [
+          node.childNodes[offset],
+          node.childNodes[offset - 1],
+        ]) {
+          const root =
+            child?.nodeType === 1 ? (child as Element).shadowRoot : null;
+          if (root != null && !roots.includes(root)) {
+            found.add(root);
+          }
+        }
+      }
+    }
+    if (found.size === 0) {
+      return ranges;
+    }
+    roots.push(...found);
+  }
+}
+
+/** The open shadow roots on the root chains of `ranges`' boundaries. */
+function shadowRootsOfRanges(
+  ranges: ReadonlyArray<AbstractRange>,
+): ReadonlyArray<ShadowRoot> {
+  const roots = new Set<ShadowRoot>();
+  for (const range of ranges) {
+    for (const root of [
+      ...openShadowRootsOf(range.startContainer),
+      ...openShadowRootsOf(range.endContainer),
+    ]) {
+      roots.add(root);
+    }
+  }
+  return [...roots];
+}
+
+/**
+ * The open shadow root `target` hosts, if any. A press on text directly under
+ * a shadow root targets its host.
+ */
+function ownShadowRoot(target: EventTarget | null): ShadowRoot[] {
+  const root =
+    (target as Node | null)?.nodeType === 1
+      ? (target as Element).shadowRoot
+      : null;
+  return root == null ? [] : [root];
+}
+
+/** The open shadow roots on `target`'s root chain, innermost first. */
+function openShadowRootsOf(target: EventTarget | null): ShadowRoot[] {
+  const roots: ShadowRoot[] = [];
+  let root =
+    target != null && typeof (target as Node).nodeType === 'number'
+      ? (target as Node).getRootNode()
+      : null;
+  while (root != null && root.nodeType === 11) {
+    const host = (root as ShadowRoot).host as Element | undefined;
+    if (host == null) {
+      break;
+    }
+    if ((root as ShadowRoot).mode === 'open') {
+      roots.push(root as ShadowRoot);
+    }
+    root = host.getRootNode();
+  }
+  return roots;
+}
+
+/** The focused element, inside open shadow roots too. */
+function deepActiveElement(doc: Document | null): Element | null {
+  let active = doc?.activeElement ?? null;
+  while (active?.shadowRoot?.activeElement != null) {
+    active = active.shadowRoot.activeElement;
+  }
+  return active;
+}
+
+/**
+ * The selection-lock styles on `set`, refcounted per element; idempotent
+ * release.
+ */
 function lockStyles(set: ReadonlySet<Element>): () => void {
   const locked: Element[] = [];
   for (const element of set) {

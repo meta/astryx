@@ -649,7 +649,10 @@ export class GestureHost {
    * The page's selection when each mouse or pen press began: a drag a
    * recognizer claims keeps it.
    */
-  private readonly pressSelections = new Map<number, ReadonlyArray<Range>>();
+  private readonly pressSelections = new Map<
+    number,
+    ReadonlyArray<AbstractRange>
+  >();
   /**
    * Mouse and pen contacts that began on selectable text. Once one moves, the
    * browser keeps the drag for a selection, and no recognizer claims it.
@@ -2587,13 +2590,13 @@ export class GestureHost {
       for (const recognizer of this.arena.participantsOf(id)) {
         if (
           (recognizer.state === 'began' || recognizer.state === 'changed') &&
-          recognizer.view instanceof Element
+          (recognizer.view as Node | null)?.nodeType === 1
         ) {
-          elements.add(recognizer.view);
+          elements.add(recognizer.view as Element);
         }
       }
-      if (claimer.view instanceof Element) {
-        elements.add(claimer.view);
+      if ((claimer.view as Node | null)?.nodeType === 1) {
+        elements.add(claimer.view as Element);
       }
       if (elements.size === 0) {
         continue;

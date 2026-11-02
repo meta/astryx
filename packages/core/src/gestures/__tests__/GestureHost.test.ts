@@ -5630,6 +5630,92 @@ describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () =>
     }
   });
 
+  it.each([
+    ['in a paragraph', '<p>Card text a drag selects</p>'],
+    ['directly under the root', 'Card text a drag selects'],
+  ])(
+    'does not claim a mouse drag that starts on text inside an open shadow root (%s): the caret query gets the press target’s open roots, so the browser selects',
+    async (_where, html) => {
+      const {box, card} = mount(
+        '<div id="box"><x-card id="card"></x-card></div>',
+      );
+      const root = card.attachShadow({mode: 'open'});
+      root.innerHTML = html;
+      const text = (root.querySelector('p') ?? root).firstChild as Text;
+      const paragraph = root.querySelector<HTMLElement>('p') ?? card;
+      // As Chromium answers: inside the shadow root only when it is passed.
+      Object.defineProperty(document, 'caretPositionFromPoint', {
+        configurable: true,
+        value: (
+          _x: number,
+          _y: number,
+          options?: {shadowRoots?: ReadonlyArray<ShadowRoot>},
+        ) =>
+          options?.shadowRoots?.includes(root) === true
+            ? {offsetNode: text, offset: 1}
+            : {offsetNode: card, offset: 0},
+      });
+      const rects = Object.getOwnPropertyDescriptor(
+        Range.prototype,
+        'getClientRects',
+      );
+      Object.defineProperty(Range.prototype, 'getClientRects', {
+        configurable: true,
+        value: () => [{left: 0, right: 1000, top: 0, bottom: 1000}],
+      });
+      try {
+        const fine = fineHost();
+        const pan = new PanGestureRecognizer({direction: 'horizontal'});
+        detachers.push(fine.attach(box, pan));
+        const time = drag(paragraph, 'mouse', 1000, [10, 30, 50, 70]);
+        expect(['began', 'changed']).not.toContain(pan.state);
+        expect(box.style.getPropertyValue('user-select')).toBe('');
+        pointer('pointerup', paragraph, {
+          pointerType: 'mouse',
+          x: 70,
+          y: 10,
+          time: time + 16,
+        });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      } finally {
+        delete (document as {caretPositionFromPoint?: unknown})
+          .caretPositionFromPoint;
+        if (rects == null) {
+          delete (Range.prototype as {getClientRects?: unknown}).getClientRects;
+        } else {
+          Object.defineProperty(Range.prototype, 'getClientRects', rects);
+        }
+      }
+    },
+  );
+
+  it('holds a claimed drag’s selection through the shared window listener: the document gets no selectstart or selectionchange listener of its own (architecture:react-component-runtime INV13)', async () => {
+    const {box} = mount('<div id="box"></div>');
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    const added = vi.spyOn(document, 'addEventListener');
+    detachers.push(() => added.mockRestore());
+    const time = drag(box, 'mouse', 1000, [10, 30, 50]);
+    expect(['began', 'changed']).toContain(pan.state);
+    expect(
+      added.mock.calls
+        .map(([type]) => type)
+        .filter(type => type === 'selectstart' || type === 'selectionchange'),
+    ).toEqual([]);
+    // The hold still refuses a selection that starts anywhere on the page.
+    const start = new Event('selectstart', {bubbles: true, cancelable: true});
+    document.body.dispatchEvent(start);
+    expect(start.defaultPrevented).toBe(true);
+    pointer('pointerup', box, {
+      pointerType: 'mouse',
+      x: 50,
+      y: 10,
+      time: time + 16,
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
   it('does not claim a mouse or a pen drag that starts on selectable text: the pan fails and the browser selects, while a tap on text still recognizes at the lift', async () => {
     const {box, label} = mount(
       '<div id="box">Card text a drag selects</div><div id="label">A label</div>',

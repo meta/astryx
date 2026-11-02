@@ -2207,6 +2207,157 @@ test.describe('where the primary pointer is fine', () => {
     });
   });
 
+  test('a mouse drag that starts on text inside an open shadow root in a pan selects it, and the pan never begins (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="card" style="width: 360px; padding: 16px; background: #ccd"><x-words id="words"></x-words></div>';
+      const words = document.getElementById('words') as HTMLElement;
+      words.attachShadow({mode: 'open'}).innerHTML =
+        '<p style="margin: 0; font: 20px sans-serif">Shadow words to select</p>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const words = await page.locator('#words').boundingBox();
+    if (words == null) {
+      throw new Error('no box for #words');
+    }
+    const y = words.y + words.height / 2;
+    await page.mouse.move(words.x + 4, y);
+    await page.mouse.down();
+    await page.mouse.move(words.x + 150, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({began: states.includes('began'), selected}).toEqual({
+      began: false,
+      selected: expect.stringMatching(/^Shadow/),
+    });
+  });
+
+  test('a selection inside an open shadow root survives a claimed mouse drag on a pan elsewhere (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<x-words id="words"></x-words><div id="card" style="width: 320px; height: 120px; margin-top: 24px; background: #ccd"></div>';
+      const words = document.getElementById('words') as HTMLElement;
+      words.attachShadow({mode: 'open'}).innerHTML =
+        '<p style="margin: 0; font: 20px sans-serif">Shadow words to keep</p>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const words = await page.locator('#words').boundingBox();
+    const card = await page.locator('#card').boundingBox();
+    if (words == null || card == null) {
+      throw new Error('no box for #words or #card');
+    }
+    const y = words.y + words.height / 2;
+    await page.mouse.move(words.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(words.x + 160, y, {steps: 8});
+    await page.mouse.up();
+    const before = await paintedSelection(page);
+    expect(before).toMatch(/^Shadow/);
+    await page.mouse.move(card.x + 40, card.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 160, card.y + 60, {steps: 10});
+    await page.mouse.up();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      began: states.includes('began'),
+      after: await paintedSelection(page),
+    }).toEqual({began: true, after: before});
+  });
+
+  test("a render that shortens the kept selection's text during a claimed drag throws nothing, and the page selects again after the release (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<p id="words" style="margin: 0; font: 20px sans-serif">Hello world text</p><div id="card" style="width: 320px; height: 120px; margin: 24px 0; background: #ccd"></div><p id="other" style="margin: 0; font: 20px sans-serif">Other words to select</p>';
+      const words = (document.getElementById('words') as HTMLElement)
+        .firstChild as Text;
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => {
+        states.push(to);
+        // A render during the drag shortens the selected text.
+        if (to === 'changed' && words.data !== 'Hi') {
+          words.data = 'Hi';
+        }
+      });
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+      const range = document.createRange();
+      range.setStart(words, 6);
+      range.setEnd(words, 16);
+      window.getSelection()?.addRange(range);
+    });
+    expect(await paintedSelection(page)).toBe('world text');
+    const card = await page.locator('#card').boundingBox();
+    const other = await page.locator('#other').boundingBox();
+    if (card == null || other == null) {
+      throw new Error('no box for #card or #other');
+    }
+    await page.mouse.move(card.x + 40, card.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 160, card.y + 60, {steps: 10});
+    await page.mouse.up();
+    // The hold ends a task after the lift.
+    await page.evaluate(
+      async () => new Promise(resolve => setTimeout(resolve, 50)),
+    );
+    const y = other.y + other.height / 2;
+    await page.mouse.move(other.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(other.x + 120, y, {steps: 8});
+    await page.mouse.up();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      began: states.includes('began'),
+      errors,
+      selected: await paintedSelection(page),
+    }).toEqual({
+      began: true,
+      errors: [],
+      selected: expect.stringMatching(/^Other/),
+    });
+  });
+
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
   }) => {
