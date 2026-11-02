@@ -704,6 +704,99 @@ describe('render(): every write stays inside the current folder', () => {
     }
   }, 90_000);
 
+  it('resolves tsconfig paths by TypeScript rules: exact keys, a star anywhere, targets in order', async () => {
+    put(
+      'tsp/tsconfig.json',
+      JSON.stringify({
+        compilerOptions: {
+          baseUrl: '.',
+          paths: {
+            '@lib': ['./libsrc/index.ts'],
+            '@lib/*': ['./libsrc/*'],
+            '~*': ['./missing/*', './other/*'],
+            'theme-*-x': ['./themes/*.ts'],
+          },
+        },
+      }),
+    );
+    put('tsp/package.json', '{"name":"tsp","private":true}');
+    put('tsp/libsrc/index.ts', "export const Lib = 'lib-index';\n");
+    put('tsp/libsrc/button.tsx', "export const Button = () => <b>lib-button</b>;\n");
+    put('tsp/other/util.ts', "export const util = 'second-target';\n");
+    put('tsp/themes/blue.ts', "export const theme = 'mid-star';\n");
+    put(
+      'tsp/page.tsx',
+      [
+        "import {Lib} from '@lib';",
+        "import {Button} from '@lib/button';",
+        "import {util} from '~util';",
+        "import {theme} from 'theme-blue-x';",
+        'export default function Page() { return <p>{Lib} {util} {theme} <Button /></p>; }',
+        '',
+      ].join('\n'),
+    );
+    await render('tsp/page.tsx', {cwd: dir});
+    const html = fs.readFileSync(path.join(dir, 'tsp/page.html'), 'utf8');
+    for (const text of ['lib-index', 'lib-button', 'second-target', 'mid-star']) expect(html).toContain(text);
+  }, 60_000);
+
+  it('leaves relative and package imports alone under a catch-all paths key', async () => {
+    put('catchall/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'*': ['./types/*']}}}));
+    put('catchall/package.json', '{"name":"catchall","private":true}');
+    // A decoy at baseUrl that `./Header` must not load.
+    put('catchall/Header.tsx', "export const Header = () => <b>decoy</b>;\n");
+    put('catchall/src/Header.tsx', "export const Header = () => <b>local-header</b>;\n");
+    put('catchall/src/styles.css', '.c { color: red; }\n');
+    put('catchall/src/logo.png', PNG);
+    put(
+      'catchall/src/page.tsx',
+      [
+        "import './styles.css';",
+        "import '@astryxdesign/core/astryx.css';",
+        "import logo from './logo.png';",
+        "import {Header} from './Header';",
+        'export default function Page() { return <p className="c"><img src={logo} alt="" /><Header /></p>; }',
+        '',
+      ].join('\n'),
+    );
+    const r = /** @type {any} */ (await render('catchall/src/page.tsx', {cwd: dir}));
+    const html = fs.readFileSync(path.join(dir, 'catchall/src/page.html'), 'utf8');
+    expect(html).toContain('local-header');
+    expect(html).not.toContain('decoy');
+    expect(html).toContain('color: red');
+    expect(html).toContain('data:image/png;base64,');
+    expect(r.data.stylesheets).toEqual(expect.arrayContaining(['@astryxdesign/core/astryx.css']));
+  }, 60_000);
+
+  it('gives back a file reached through a target with text before its star', async () => {
+    put('starseg/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@icon/*': ['./icons/icon-*']}}}));
+    put('starseg/package.json', '{"name":"starseg","private":true}');
+    put('starseg/icons/icon-home.tsx', "export const Home = () => <i>home-icon</i>;\n");
+    put('starseg/page.tsx', "import {Home} from '@icon/home';\nexport default function Page() { return <p><Home /></p>; }\n");
+    await render('starseg/page.tsx', {cwd: dir});
+    fs.mkdirSync(path.join(dir, 'starseg-to'), {recursive: true});
+    put('starseg-to/tsconfig.json', JSON.stringify({compilerOptions: {baseUrl: '.', paths: {'@icon/*': ['./icons/icon-*']}}}));
+    put('starseg-to/package.json', '{"name":"starseg-to","private":true}');
+    fs.copyFileSync(path.join(dir, 'starseg/page.html'), path.join(dir, 'starseg-to/page.html'));
+    const cwd = path.join(dir, 'starseg-to');
+    const back = /** @type {any} */ (await render('page.html', {cwd, reverse: true, out: 'icons/app/page.tsx'}));
+    expect(back.data.files).toEqual(expect.arrayContaining(['icons/icon-home.tsx']));
+  }, 60_000);
+
+  it('refuses a rendered file whose source block was stripped, in its own words', async () => {
+    put('stripped-own.html', '<!doctype html><html><head><meta name="generator" content="Astryx 0.7.5"></head><body><p>Hello</p></body></html>');
+    /** @type {any} */
+    let error;
+    try {
+      await render('stripped-own.html', {cwd: dir, reverse: true});
+    } catch (e) {
+      error = e;
+    }
+    expect(error?.code).toBe('ERR_RENDER_SOURCE_DAMAGED');
+    expect(error.message).toContain('rendered by Astryx');
+    expect(error.message).not.toContain('not an Astryx page');
+  });
+
   it('refuses a carried "image" whose bytes are not one', async () => {
     const {sourceBlock} = await import('../../foundation/render/source-block.mjs');
     put('fake-img.html', `<body><p class="astryx-text">x</p>${sourceBlock('page.tsx', [{path: 'page.tsx', bytes: Buffer.from('export default () => null;\n')}, {path: 'hook.png', bytes: Buffer.from('process.exit(1)\n')}])}</body>`);
