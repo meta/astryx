@@ -172,7 +172,17 @@ describe.each(Object.entries(WORKFLOWS))(
       if (graphScoped) {
         expect(share.run.trim()).toBe(
           [
-            'if [ "$SCOPED" = true ]; then',
+            'if [ "$LAB_ONLY" = true ]; then',
+            '  # A change only to the Lab package runs every Lab test across the',
+            '  # same legs, and the guards below as any scoped run does',
+            '  # (spec:AST-030 FR26).',
+            `  pnpm test:ui --passWithNoTests ${SHARD_ARG} packages/lab/`,
+            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
+            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
+            `    pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  fi',
+            'elif [ "$SCOPED" = true ]; then',
             `  pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
             '  # that read sources, and tests that load a changed package from',
@@ -221,8 +231,11 @@ describe.each(Object.entries(WORKFLOWS))(
       expect(job.steps.indexOf(isolated)).toBeGreaterThan(
         job.steps.indexOf(share),
       );
+      // The core benchmark is not a Lab test (spec:AST-030 FR26).
       expect(isolated.if).toBe(
-        share.if ? `matrix.shard == 1 && ${share.if}` : 'matrix.shard == 1',
+        share.if
+          ? `matrix.shard == 1 && ${share.if} && steps.scope.outputs.lab_only != 'true'`
+          : 'matrix.shard == 1',
       );
     });
 
