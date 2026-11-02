@@ -2,56 +2,12 @@
 
 /**
  * @file actionGroupTracker.ts
- * @input The elements whose actions are tracked, the actions' selector and
- *   hit expansion, and the press paint and fade clocks
- * @output Exports createActionGroupTracker, ActionGroupTracker,
- *   ActionGroupTrackerOptions and ActionGroupTarget: UIKit's tracking of a
- *   held finger across a group of targets, as a plain object any gesture
- *   recognizer can drive
- * @position The one tracker for a held finger that slides onto an action,
- *   internal to core. Gesture recognizers drive it: an alert's or an action
- *   sheet's long press on its group of actions, a menu trigger whose held
- *   finger slides into the menu it opened, a menu's list, a segmented
- *   control's segments, a page control's dots
- *
- * UIKit tracks a group of actions (an alert's, an action sheet's, a menu's)
- * as one control, not as separate buttons (measured on iOS 26.2):
- *
- * - the action under the finger highlights; sliding off it cuts its highlight
- *   and sliding onto another highlights that one; between or outside the
- *   actions nothing is highlighted;
- * - lifting runs the action under the finger, and nothing when there is none;
- *   the lifted action's highlight fades (PRESS_FADE_MS);
- * - a press the owner calls inert (an alert during its transitions) is taken
- *   but paints and runs nothing.
- *
- * Which target a finger is on is the hit test above by default; an owner
- * whose targets are a row of segments or dots resolves it itself
- * (`resolveTarget`: the nearest segment along the axis, the end one past the
- * ends), from the same rects. The finger's raw position reaches `onMove`
- * (a lens that chases it), and an owner that shows the highlight another way
- * (focus, a dimmed title) turns the paint off and follows
- * `onHighlightChange(next, previous)`.
- *
- * Nothing reads layout after a press begins: the actions' rects are read once
- * in `begin`, then hit-tested; `offsetBy` shifts them when the content moves
- * under a still finger (autoscroll). A move costs at most two attribute writes
- * and never a render. The action runs through its own `click()` inside `end`,
- * so the recognizer must call `end` from the lift's event (its touchend): that
- * keeps the user activation and every click handler. `onActivated` learns
- * whether a handler cancelled that click (`preventDefault()` vetoes, and the
- * owner can undo its visual at once). A recognizer that does not claim the
- * touch leaves the browser its own click for it; `swallowsNativeClick` takes
- * that one click, so the action runs exactly once (the swallower listens only
- * from that lift until the click, or the next press or key).
- *
- * This is core's one track-across-items loop. Menus still run their own copy
- * of it in useMenuPress.ts; the change after the in-flight menu press work
- * moves that copy here, and useMenuPress keeps only its menu-only parts (a
- * trigger's press or held finger opening the menu, the settle rule, edge
- * autoscroll, the highlight as DOM focus). Add no third copy meanwhile.
- * Nothing in core drives this tracker yet; its first adopters (the segmented
- * control and the action groups) arrive in their own changes.
+ * @input The tracked elements, the action selector and hit expansion, and the
+ *   press paint and fade clocks
+ * @output createActionGroupTracker, ActionGroupTracker,
+ *   ActionGroupTrackerOptions, ActionGroupTarget
+ * @position Internal core tracker for a held finger that slides across a
+ *   group of actions. Gesture recognizers drive it.
  *
  * SYNC: When modified, update actionGroupTracker.test.ts
  */
@@ -171,11 +127,11 @@ interface TrackedAction {
 }
 
 /**
- * The browser's own click for a touch the lift already acted on: swallowed
- * once, by listeners that exist only from that lift until the click, or the
- * next press or key (whichever comes first). An activation with
- * `detail === 0` (a key, assistive technology) is not that click: it always
- * passes, and the swallower keeps waiting (`spec:AST-094` FR21).
+ * Swallow the browser's own click for a touch that the lift already acted
+ * on. The listeners exist only from that lift until the click, the next
+ * press, or the next key. An activation with `detail === 0` (a key or
+ * assistive technology) always passes, and the swallower keeps waiting
+ * (`AST-094`).
  */
 function swallowNextClick(view: Window): void {
   const disarm = () => {
@@ -221,6 +177,18 @@ function clickAndReport(element: HTMLElement): boolean {
 /**
  * Create a tracker. `getOptions` is read on every call, so a hook can pass
  * the latest props without recreating it.
+ *
+ * The tracker treats a group of actions as one control, as UIKit does:
+ * - The action under the finger highlights. Between or outside the actions,
+ *   nothing highlights.
+ * - The lift runs the action under the finger, and its highlight fades.
+ * - An inert press is taken but paints and runs nothing.
+ *
+ * Layout is read only in `begin`. `offsetBy` shifts the cached rects when
+ * the content moves under a still finger. The action runs through its own
+ * `click()` in `end`, so call `end` from the lift's event to keep the user
+ * activation. useMenuPress.ts has its own copy of this loop. Do not add a
+ * third copy.
  */
 export function createActionGroupTracker(
   getOptions: () => ActionGroupTrackerOptions,
