@@ -33,6 +33,7 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
+import {useCommittedChoicesKey} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -779,8 +780,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [searchSource]);
 
   // True from the moment the list is asked to open until it closes, including
-  // a show deferred past the active click, so a source replaced in the same
-  // event that opened the list still reloads it.
+  // a show deferred past the active click, so committed values that change in
+  // the same event that opened the list still reload it.
   const isShowingRef = useRef(false);
 
   // Layer for dropdown
@@ -1098,12 +1099,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [searchSource, applyBootstrapResults, setLoading, replaceResults]);
 
-  // A list shown from a replaced search source is no longer current
-  // (spec:AST-092 FR4). While the list is open, the replacement loads the same
-  // query, its typed text or the focus list, so the menu offers what the new
-  // source offers (a Tokenizer token removed or set from outside, for
-  // example). A closed list stays closed; opening it loads the new source.
-  const reloadFromReplacedSource = useCallback(() => {
+  // A list shown before the caller's committed values changed is no longer
+  // current (component:Tokenizer FR13, spec:AST-092 FR4). While the list is
+  // open, it reloads the same query, its typed text or the focus list, from
+  // the source those values now filter. A closed list stays closed; opening it
+  // loads that source.
+  const committedChoicesKey = useCommittedChoicesKey();
+  const reloadForCommittedChoices = useCallback(() => {
     if (isDisabled || !isMountedRef.current || !isShowingRef.current) {
       return;
     }
@@ -1120,25 +1122,25 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     performSearch,
     performBootstrap,
   ]);
-  // The latest reload, read when the source changes, as an effect event.
-  const reloadFromReplacedSourceRef = useRef(reloadFromReplacedSource);
+  // The latest reload, read when the key changes, as an effect event.
+  const reloadForCommittedChoicesRef = useRef(reloadForCommittedChoices);
   useIsomorphicLayoutEffect(() => {
-    reloadFromReplacedSourceRef.current = reloadFromReplacedSource;
+    reloadForCommittedChoicesRef.current = reloadForCommittedChoices;
   });
-  const reloadedSourceRef = useRef(searchSource);
+  const reloadedKeyRef = useRef(committedChoicesKey);
   useEffect(() => {
-    if (reloadedSourceRef.current === searchSource) {
+    if (reloadedKeyRef.current === committedChoicesKey) {
       return;
     }
-    reloadedSourceRef.current = searchSource;
+    reloadedKeyRef.current = committedChoicesKey;
     // The reload is a source request, started after the commit like one a
     // keystroke starts.
     queueMicrotask(() => {
-      if (reloadedSourceRef.current === searchSource) {
-        reloadFromReplacedSourceRef.current();
+      if (reloadedKeyRef.current === committedChoicesKey) {
+        reloadForCommittedChoicesRef.current();
       }
     });
-  }, [searchSource]);
+  }, [committedChoicesKey]);
 
   // Handle query change
   const handleQueryChange = useCallback(

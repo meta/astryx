@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `Typeahead` and `Tokenizer`: an open list reloads when its search source is replaced, so after a `Tokenizer`'s tokens change (a token removed, the value set from outside) the open list shows current choices instead of the old ones — a removed token is offered again, and a value just set is no longer listed.
+[fix] `Tokenizer`: an open list reloads when the tokens change, so it shows current choices instead of the old ones — a token removed with its button is offered again, and a value set from outside is no longer listed.
 
 @cixzhang

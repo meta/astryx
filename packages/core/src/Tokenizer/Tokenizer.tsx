@@ -47,6 +47,7 @@ import {
   type BusyIndicatorLane,
 } from '../Typeahead/busyIndicatorLane';
 import {TrailingKeyDownContext} from '../Typeahead/trailingKeyDown';
+import {CommittedChoicesKeyContext} from '../Typeahead/committedChoicesKey';
 import {
   type FieldInputBaseProps,
   useFieldInputStyling,
@@ -1090,10 +1091,13 @@ export function Tokenizer<T extends SearchableItem>({
   const isAtMax = maxEntries != null && value.length >= maxEntries;
 
   // Filter out already-selected items from search results. Keyed by the ids,
-  // not the array, so a caller that passes an equal new `value` array on
-  // every render does not replace the search source, which would reload an
-  // open list (spec:AST-092 FR4) each time.
-  const selectedIdKey = JSON.stringify(value.map(item => item.id));
+  // not the array: an equal new `value` array on every render keeps the
+  // filtered source, and the key tells an open list to reload only when the
+  // committed values really change (FR13).
+  const selectedIdKey = useMemo(
+    () => JSON.stringify(value.map(item => item.id)),
+    [value],
+  );
   const selectedIds = useMemo(
     () => new Set<string>(JSON.parse(selectedIdKey) as string[]),
     [selectedIdKey],
@@ -1422,68 +1426,70 @@ export function Tokenizer<T extends SearchableItem>({
           button rather than as a second one inside the base. */}
       <BusyIndicatorLaneProvider value={busyLane}>
         <TrailingKeyDownContext value={onKeyDown}>
-          <BaseTypeahead
-            {...rest}
-            ref={useMergedRefs(
-              inputRef,
-              // With `experimental`, the ref type admits the trigger too; in
-              // this presentation it receives the input.
-              ref as React.Ref<HTMLInputElement> | undefined,
-              handOffFocusRef,
-            )}
-            searchSource={isAtMax ? emptySource : filteredSource}
-            value={null}
-            onChange={handleAdd}
-            renderItem={renderItem}
-            // A space keeps :placeholder-shown available as the CSS-only empty
-            // query signal without painting placeholder text beside tokens.
-            placeholder={value.length === 0 ? placeholder : ' '}
-            hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
-            maxMenuItems={maxMenuItems}
-            menuWidth={menuWidth}
-            minQueryLength={minQueryLength}
-            emptySearchText={emptySearchText}
-            isDisabled={isDisabled}
-            // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
-            // unfocusedLayer mode, where the input lives in a layer a disabled
-            // field never opens; how that field takes focus is undecided.
-            isFocusableDisabled={
-              showsDisabledMessage || (isDisabled && !isLayerMode)
-            }
-            hasAutoFocus={hasAutoFocus}
-            inputId={inputId}
-            ariaLabelledBy={fieldLabelledBy}
-            ariaDescribedBy={
-              [ariaDescribedByProp, ariaDescribedBy]
-                .filter(Boolean)
-                .join(' ') || undefined
-            }
-            onChangeQuery={onChangeQuery}
-            // The resolved required state reaches the combobox, also when a
-            // FormLayout default hides the visible marker (component:FormLayout
-            // FR5, AR2).
-            aria-required={isEffectivelyRequired || rest['aria-required']}
-            // An error status is exposed on the combobox as on every other field
-            // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
-            // aria-required / aria-invalid still applies.
-            aria-invalid={status?.type === 'error' || rest['aria-invalid']}
-            __queryEntries={createEntries}
-            debounceMs={debounceMs}
-            onKeyDown={handleKeyDown}
-            anchorRef={wrapperRef}
-            size={size}
-            inputXStyle={[
-              isAtMax || isTruncated
-                ? styles.inputAtMax
-                : value.length > 0
-                  ? styles.inputCompact
-                  : undefined,
-              // With tokens, wrapperWithTokens reserves the lane for every row.
-              // This rule is only for an empty Tokenizer; it still resolves to
-              // zero until the lane publishes a width.
-              !(isAtMax || isTruncated || value.length > 0) && laneReserve,
-            ]}
-          />
+          <CommittedChoicesKeyContext value={selectedIdKey}>
+            <BaseTypeahead
+              {...rest}
+              ref={useMergedRefs(
+                inputRef,
+                // With `experimental`, the ref type admits the trigger too; in
+                // this presentation it receives the input.
+                ref as React.Ref<HTMLInputElement> | undefined,
+                handOffFocusRef,
+              )}
+              searchSource={isAtMax ? emptySource : filteredSource}
+              value={null}
+              onChange={handleAdd}
+              renderItem={renderItem}
+              // A space keeps :placeholder-shown available as the CSS-only empty
+              // query signal without painting placeholder text beside tokens.
+              placeholder={value.length === 0 ? placeholder : ' '}
+              hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
+              maxMenuItems={maxMenuItems}
+              menuWidth={menuWidth}
+              minQueryLength={minQueryLength}
+              emptySearchText={emptySearchText}
+              isDisabled={isDisabled}
+              // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
+              // unfocusedLayer mode, where the input lives in a layer a disabled
+              // field never opens; how that field takes focus is undecided.
+              isFocusableDisabled={
+                showsDisabledMessage || (isDisabled && !isLayerMode)
+              }
+              hasAutoFocus={hasAutoFocus}
+              inputId={inputId}
+              ariaLabelledBy={fieldLabelledBy}
+              ariaDescribedBy={
+                [ariaDescribedByProp, ariaDescribedBy]
+                  .filter(Boolean)
+                  .join(' ') || undefined
+              }
+              onChangeQuery={onChangeQuery}
+              // The resolved required state reaches the combobox, also when a
+              // FormLayout default hides the visible marker (component:FormLayout
+              // FR5, AR2).
+              aria-required={isEffectivelyRequired || rest['aria-required']}
+              // An error status is exposed on the combobox as on every other field
+              // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
+              // aria-required / aria-invalid still applies.
+              aria-invalid={status?.type === 'error' || rest['aria-invalid']}
+              __queryEntries={createEntries}
+              debounceMs={debounceMs}
+              onKeyDown={handleKeyDown}
+              anchorRef={wrapperRef}
+              size={size}
+              inputXStyle={[
+                isAtMax || isTruncated
+                  ? styles.inputAtMax
+                  : value.length > 0
+                    ? styles.inputCompact
+                    : undefined,
+                // With tokens, wrapperWithTokens reserves the lane for every row.
+                // This rule is only for an empty Tokenizer; it still resolves to
+                // zero until the lane publishes a width.
+                !(isAtMax || isTruncated || value.length > 0) && laneReserve,
+              ]}
+            />
+          </CommittedChoicesKeyContext>
         </TrailingKeyDownContext>
       </BusyIndicatorLaneProvider>
       {htmlName != null &&
