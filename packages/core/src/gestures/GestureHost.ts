@@ -2508,9 +2508,10 @@ export class GestureHost {
 
   /**
    * End the wheel gesture a recognizer still drives, when the page loses
-   * focus or hides, and return its contacts to cancel. A gesture the page
-   * keeps stays as it is. So does a pan its lift released: its momentum
-   * stays latched and prevented until the stream ends.
+   * focus or hides, and return its contacts to cancel. The rest of its
+   * stream is the page's until the stream ends, as a touch the browser takes
+   * is. A gesture the page keeps stays as it is. So does a pan its lift
+   * released: its momentum stays latched and prevented until the stream ends.
    */
   private dropDrivenWheel(): ReadonlyArray<number> {
     const gesture = this.wheel;
@@ -2521,13 +2522,11 @@ export class GestureHost {
     ) {
       return [];
     }
-    this.wheel = null;
-    if (gesture.timer != null) {
-      this.clock.clearTimeout(gesture.timer);
-    }
+    const kept: WheelGesture = {...gesture, ids: [], takers: []};
+    delete kept.follow;
+    this.wheel = kept;
     this.stopWheelLatch?.();
     this.stopWheelLatch = null;
-    this.segmenter.end();
     return gesture.ids;
   }
 

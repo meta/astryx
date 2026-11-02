@@ -167,7 +167,7 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     ['a hidden page', 'hidden', false],
     ['a blur, under a coarse primary pointer', 'blur', true],
   ] as const)(
-    'cancels a trackpad pan mid-swipe at %s: it reads cancelled, never ended, and the next wheel is decided afresh',
+    'cancels a trackpad pan mid-swipe at %s: it reads cancelled, never ended, the rest of that stream is the page’s, and the next stream is decided afresh',
     (_name, how, isCoarse) => {
       const {box, outside} = mount(
         '<div id="box"></div><div id="outside"></div>',
@@ -202,13 +202,26 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
         document.dispatchEvent(new Event('visibilitychange'));
       }
       expect(states.slice(-2)).toEqual(['cancelled', 'possible']);
-      // Its end window releases nothing later.
-      clock.runDue(32 + 400);
+      // The rest of the stream is the page's: the fingers' wheels, then the
+      // momentum after their lift.
+      const rest = [10, 10, 10, 10, 12, 11.4, 10.8, 10.3, 9.8, 9.3, 8.8, 8.4];
+      rest.forEach((dx, i) => {
+        expect(
+          wheel(box, {trackpad: true, dx, time: 48 + i * 16}).defaultPrevented,
+        ).toBe(false);
+      });
+      expect(states.filter(state => state === 'began')).toHaveLength(1);
       expect(states).not.toContain('ended');
       // The latch is gone: a wheel outside the pan is the page's.
       expect(
-        wheel(outside, {trackpad: true, dx: 10, time: 500}).defaultPrevented,
+        wheel(outside, {trackpad: true, dx: 8, time: 48 + 12 * 16})
+          .defaultPrevented,
       ).toBe(false);
+      // After the stream's pause, a new stream is decided afresh.
+      clock.runDue(48 + 12 * 16 + 400);
+      expect(
+        wheel(box, {trackpad: true, dx: 10, time: 700}).defaultPrevented,
+      ).toBe(true);
     },
   );
 
@@ -1259,6 +1272,29 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
     expect(
       seen.slice(seen.indexOf(ended[0]) + 1).map(entry => entry.state),
     ).toEqual(['possible']);
+  });
+
+  it('cancels nothing when focus moves between elements mid-swipe: only the window’s own blur ends a trackpad pan', () => {
+    const {box, field} = mount(
+      '<div id="box"></div><input id="field" type="text" />',
+    );
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(box, pan));
+    for (const time of [0, 16, 32]) {
+      wheel(box, {trackpad: true, dx: 10, time});
+    }
+    expect(states.at(-1)).toBe('changed');
+    field.dispatchEvent(new FocusEvent('focus'));
+    field.dispatchEvent(new FocusEvent('blur'));
+    expect(states).not.toContain('cancelled');
+    expect(
+      wheel(box, {trackpad: true, dx: 10, time: 48}).defaultPrevented,
+    ).toBe(true);
+    expect(states.at(-1)).toBe('changed');
   });
 
   it('keeps the momentum of a pan its lift released latched through a blur: the blur cancels nothing, and the momentum still moves no surface (spec:AST-094 FR43)', () => {
