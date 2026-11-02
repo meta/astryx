@@ -65,7 +65,12 @@ test('runs each tsx live block in its own sandboxed frame and contains failures'
     'This example fails on purpose',
     POLL,
   );
-  await expect(uncompilable.locator('body')).toContainText('[compile]', POLL);
+  // The compiler transpiles without diagnostics, so a syntax error surfaces
+  // when the frame evaluates the output.
+  await expect(uncompilable.locator('body')).toContainText(
+    'Unexpected token',
+    POLL,
+  );
 
   // The frame has an opaque origin: the example cannot reach the post.
   expect(
