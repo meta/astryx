@@ -20,6 +20,8 @@ export default function UseFocusTrapHookUsage() {
     onEscape: close,
   });
 
+  // Runs after commit, once the panel is mounted and useFocusTrap has recorded
+  // the opener, so closing the panel returns focus to it.
   useEffect(() => {
     if (isOpen) {
       focusFirst();

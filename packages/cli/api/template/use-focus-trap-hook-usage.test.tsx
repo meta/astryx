@@ -11,7 +11,7 @@
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, describe, expect, it} from 'vitest';
-import UseFocusTrapHookUsage from './useFocusTrapHookUsage';
+import UseFocusTrapHookUsage from '../../assets/templates/blocks/components/Hooks/useFocusTrapHookUsage';
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
