@@ -1121,9 +1121,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       const shown = bootstrapResults.slice(0, maxMenuItems);
       const nextHighlightedIndex = shown.length > 0 ? 0 : -1;
       // A focus load that yields no choice, or fails (it arrives here empty),
-      // closes the list rather than leaving it open and empty (FR2;
-      // component:Tokenizer FR15). A typed query's empty search is not a
-      // focus load and still shows FR4's message.
+      // closes the list rather than leaving it open and empty. A typed
+      // query's empty search is not a focus load and keeps its empty-search
+      // message.
       if (
         results.length === 0 &&
         shown.length === 0 &&
