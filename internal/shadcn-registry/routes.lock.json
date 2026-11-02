@@ -3675,6 +3675,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
       "aliases": []

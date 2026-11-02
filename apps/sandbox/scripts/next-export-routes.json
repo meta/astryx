@@ -783,6 +783,7 @@
     "/templates/useCollatorHookUsage/",
     "/templates/useContainerRevealHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
+    "/templates/usePressFeedbackHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",
     "/templates/useToastHookUsage/",
