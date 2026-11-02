@@ -695,6 +695,29 @@ describe('InputGroup', () => {
         ),
         'input[type="time"]',
       ],
+      [
+        'bottom-sheet TimeInput',
+        () => (
+          <TimeInput
+            label="Start"
+            presentation="bottom-sheet"
+            onChange={() => {}}
+          />
+        ),
+        '[aria-invalid]',
+      ],
+      [
+        'Typeahead',
+        () => (
+          <Typeahead
+            label="Fruit"
+            searchSource={fruitSource}
+            value={null}
+            onChange={() => {}}
+          />
+        ),
+        '[role="combobox"]',
+      ],
     ])('marks a %s invalid too', (_name, renderMember, selector) => {
       // The sheet surface observes its size; jsdom has no ResizeObserver.
       vi.stubGlobal(

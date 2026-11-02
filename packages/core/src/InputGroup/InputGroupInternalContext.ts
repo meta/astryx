@@ -16,8 +16,8 @@ import {createLayerScopedContext as createContext} from '../Layer/layerScopedCon
 export const InputGroupInternalContext = createContext({
   isDisabled: false,
   /**
-   * Whether the group's status is an error. The group's `role="group"` cannot
-   * carry `aria-invalid`, so its members carry it.
+   * The group's `role="group"` cannot carry `aria-invalid`. Its members carry
+   * it.
    */
   isInvalid: false,
 });
