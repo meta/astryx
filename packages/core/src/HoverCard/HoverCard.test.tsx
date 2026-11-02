@@ -807,6 +807,39 @@ describe('HoverCard', () => {
       await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
     });
 
+    it('releases the old element when the children are reordered', async () => {
+      const first = (
+        <button key="a" type="button">
+          Alpha
+        </button>
+      );
+      const second = (
+        <button key="b" type="button">
+          Beta
+        </button>
+      );
+      const {rerender} = render(
+        <HoverCard label="Profile" content={<span>Card</span>}>
+          {[first, second]}
+        </HoverCard>,
+      );
+      const alpha = screen.getByRole('button', {name: 'Alpha'});
+      expect(alpha).toHaveAttribute('aria-haspopup', 'dialog');
+
+      rerender(
+        <HoverCard label="Profile" content={<span>Card</span>}>
+          {[second, first]}
+        </HoverCard>,
+      );
+      const beta = screen.getByRole('button', {name: 'Beta'});
+      await waitFor(() =>
+        expect(beta).toHaveAttribute('aria-haspopup', 'dialog'),
+      );
+      // The old element stays in the DOM, released.
+      expect(alpha).toBeInTheDocument();
+      expect(alpha).not.toHaveAttribute('aria-haspopup');
+    });
+
     it('describes the new element of an unnamed card', async () => {
       render(
         <HoverCard content={<span>Card</span>} delay={0}>

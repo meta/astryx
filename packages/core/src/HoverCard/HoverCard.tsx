@@ -23,6 +23,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -313,21 +314,22 @@ export function HoverCard({
   // mount: by new children, or by a child component that swaps its own root
   // without a render here. Syncs with the DOM: on a replacement the wiring
   // below re-runs, so the old element is released before the new one is wired.
-  const [replacedTrigger, setReplacedTrigger] = useState<Element | null>(null);
+  const [triggerReplacements, setTriggerReplacements] = useState(0);
+  const observedTriggerRef = useRef<Element | null>(null);
   useIsomorphicLayoutEffect(() => {
     const wrapper = wrapperRef.current;
-    if (
-      textOnly ||
-      wrapper == null ||
-      typeof MutationObserver === 'undefined'
-    ) {
+    if (textOnly || wrapper == null) {
       return;
     }
-    const observer = new MutationObserver(() => {
-      setReplacedTrigger(wrapper.firstElementChild);
+    observedTriggerRef.current = wrapper.firstElementChild;
+    return observeMutations(wrapper, {childList: true}, () => {
+      const trigger = wrapper.firstElementChild;
+      if (trigger === observedTriggerRef.current) {
+        return;
+      }
+      observedTriggerRef.current = trigger;
+      setTriggerReplacements(count => count + 1);
     });
-    observer.observe(wrapper, {childList: true});
-    return () => observer.disconnect();
   }, [textOnly]);
 
   // For element children with display:contents, attach ref to first child
@@ -434,7 +436,7 @@ export function HoverCard({
     hoverCard.id,
     hoverCard.isOpen,
     hoverCard.describedBy,
-    replacedTrigger,
+    triggerReplacements,
   ]);
 
   // While closed, useLayer leaves only an inert <template> marker at this JSX
