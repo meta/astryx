@@ -360,16 +360,43 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     }, delay);
   }, [isEnabled, isOpen, clearTimeouts, showLayer, delay]);
 
-  // A show scheduled while the triggers were enabled must not outlive them:
-  // disabling also detaches the leave listener that would have cancelled it,
-  // so the timer would open a tooltip that nothing ever closes. Only the
-  // pending show is dropped; a pending hide still runs.
+  // A caller can remove the surface and its trigger ref while disabled (the
+  // Button inside DropdownMenu does). Drop interaction-owned state as well as
+  // timers, or mounting the surface again restores a stale open tooltip.
+  // Explicit controlled visibility still belongs to the caller.
+  const wasEnabledRef = useRef(isEnabled);
   useEffect(() => {
-    if (!isEnabled && showTimeoutRef.current) {
-      clearTimeout(showTimeoutRef.current);
-      showTimeoutRef.current = null;
+    const wasEnabled = wasEnabledRef.current;
+    wasEnabledRef.current = isEnabled;
+    if (!isEnabled) {
+      clearTimeouts();
+      if (isOpen === undefined) {
+        hideLayer();
+      }
+    } else if (!wasEnabled && isOpen === undefined) {
+      // Focus may have returned while the listeners were detached. Recover
+      // keyboard discovery from the current focus, never the old open state.
+      const trigger = triggerRef.current;
+      if (
+        trigger != null &&
+        (focusTrigger === 'always' ||
+          (focusTrigger === 'auto' && isFocusable(trigger))) &&
+        trigger.ownerDocument.activeElement === trigger &&
+        trigger.matches(':focus-visible') &&
+        !isTouchInteraction()
+      ) {
+        showLayer();
+      }
     }
-  }, [isEnabled]);
+  }, [
+    isEnabled,
+    isOpen,
+    focusTrigger,
+    clearTimeouts,
+    hideLayer,
+    showLayer,
+    isTouchInteraction,
+  ]);
 
   // Schedule hide with delay (suppressed when isOpen is true).
   // A small hover bridge (when hideDelay is 0) lets the pointer travel from the
