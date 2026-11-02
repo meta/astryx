@@ -2,12 +2,14 @@
 
 /**
  * @file ProgressBarMotion.a11y.chromium.spec.ts
- * @input Built ProgressBar stories in real Chromium (CDP screencast, tracing)
+ * @input Built ProgressBar stories in real Chromium (CDP screencast, tracing,
+ *   the interaction harness's animation holds and busy-window control)
  * @output Browser evidence that a determinate value change moves the fill on
  *   the compositor: it keeps moving while a script holds the main thread,
  *   lays out and paints nothing per frame, and its leading edge lands on the
  *   value (mirrored in RTL). Writes a storyboard (contact sheet + JSON trace)
- *   to test-results/progress-bar-motion/.
+ *   to test-results/progress-bar-motion/, the change held and seeked frame by
+ *   frame.
  * @position Chromium proof for ProgressBar's sliding fill; the iOS Safari side
  *   of the same proof is a simulator recording attached to the pull request.
  *
@@ -22,7 +24,17 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
-import {inPresentationOrder} from '@astryxdesign/interaction-harness';
+import {
+  armHold,
+  busyWindowProof,
+  CONTROL_RGB,
+  inPresentationOrder,
+  releaseAnimations,
+  seekAnimations,
+  startBusyControl,
+  trackMarker,
+  type TrackedFrame,
+} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -43,6 +55,8 @@ const EVIDENCE = path.resolve(
 const STORY = 'core-progressbar--default';
 const BLOCK_MS = 700;
 const DPR = 2;
+/** One frame at 60 Hz, in ms. */
+const FRAME_MS = 1000 / 60;
 
 test.use({viewport: {width: 402, height: 200}, deviceScaleFactor: DPR});
 
@@ -81,12 +95,13 @@ async function setValue(page: Page, value: number) {
  * Sets a new value and, once the fill's transition has started and one more
  * frame has been presented, holds the main thread: the pattern of a progress
  * update followed by the work it reports on. Returns the block's start and
- * end (epoch ms).
+ * end (epoch ms), and where the fill's leading edge was as the block started
+ * (CSS px from the track's start, read on the page).
  */
 async function setValueThenBlock(page: Page, value: number, ms: number) {
   return page.evaluate(
     async ({storyId, updatedArgs, duration}) =>
-      new Promise<{from: number; to: number}>(resolve => {
+      new Promise<{from: number; to: number; startEdge: number}>(resolve => {
         const channel = (
           window as unknown as {
             __STORYBOOK_ADDONS_CHANNEL__: {
@@ -103,12 +118,20 @@ async function setValueThenBlock(page: Page, value: number, ms: number) {
           document.removeEventListener('transitionstart', onStart, true);
           requestAnimationFrame(() =>
             setTimeout(() => {
+              const fill = bar.firstElementChild as Element;
+              const startEdge =
+                fill.getBoundingClientRect().right -
+                bar.getBoundingClientRect().left;
               const from = performance.timeOrigin + performance.now();
               const end = performance.now() + duration;
               while (performance.now() < end) {
                 // hold
               }
-              resolve({from, to: performance.timeOrigin + performance.now()});
+              resolve({
+                from,
+                to: performance.timeOrigin + performance.now(),
+                startEdge,
+              });
             }),
           );
         };
@@ -274,29 +297,72 @@ test('the fill keeps moving to a new value while a script holds the main thread'
   const track = await trackBox(page);
   const cast = await startScreencast(page);
   await page.waitForTimeout(300);
+  // The harness's busy-window control, through the block: a box the
+  // compositor moves along the top edge, above the track, in the same
+  // screencast.
+  const control = await startBusyControl(page);
   const busy = await setValueThenBlock(page, 90, BLOCK_MS);
+  // Gone once the block ends, so the page is still again when the
+  // screencast stops.
+  await control.remove();
   await page.waitForTimeout(300);
   const frames = await cast.stop();
   const edges = await leadingEdges(page, frames, track);
   const start = track.width * 0.1;
   const target = track.width * 0.9;
+  // The main thread reached the block before the fill arrived: the one thing
+  // this test cannot arrange, since the page can block only after the frame
+  // that hands the transition to the compositor, and a loaded machine can
+  // keep the main thread from the block for most of the move. Read on the
+  // page as the block starts; the fill still had a step of the cast to go.
+  expect(busy.startEdge).toBeGreaterThanOrEqual(start);
+  expect(busy.startEdge).toBeLessThan(target - 1 / DPR);
   // Inside the block, a frame clear of each edge.
   const inside = frames
     .map((frame, i) => ({t: frame.t, edge: edges[i]}))
     .filter(f => f.t >= busy.from + 20 && f.t <= busy.to - 20);
-  // The transition (the theme's `--duration-medium`) is shorter than the
-  // block, so the fill must make its whole trip inside it: frame after frame
-  // through distinct positions…
-  const positions = new Set(inside.map(f => Math.round(f.edge)));
-  expect(positions.size).toBeGreaterThanOrEqual(5);
-  // …and arrives before the block ends (the transition is shorter than it).
+  // The fill moves through the block: its leading edge shows a new position
+  // on every frame the control moved on, and stalls no longer than the
+  // control, until it is within half a pixel of its end (the harness's busy
+  // proof: the screencast's capture rate thins both alike). On the change's
+  // own clock each half-pixel step of the reading takes 10 ms or less until
+  // the last, which takes 20 ms, longer than a frame, so two frames can read
+  // it while the fill still moves.
+  const controlFrames = await trackMarker(
+    page,
+    frames
+      .filter(f => f.t >= busy.from - 250 && f.t <= busy.to)
+      .map(f => ({
+        t: f.t,
+        data: f.data,
+        format: 'png' as const,
+        viewportWidth: page.viewportSize()?.width ?? 402,
+        viewportHeight: page.viewportSize()?.height ?? 200,
+      })),
+    {rgb: CONTROL_RGB},
+  );
+  const fill: TrackedFrame[] = frames.map((f, i) => ({
+    t: f.t,
+    box: {x: edges[i], y: 0, width: 1, height: 1},
+    pixels: 1,
+  }));
+  const proof = busyWindowProof(fill, busy, {
+    axis: 'x',
+    settledWithin: 1 / DPR,
+    settledAt: target,
+    control: controlFrames,
+  });
+  test
+    .info()
+    .annotations.push({type: 'busy window', description: proof.summary});
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
+  // It arrives before the block ends (the transition is shorter than it)…
   const last = inside[inside.length - 1].edge;
   expect(Math.abs(last - target)).toBeLessThan(2);
-  // It never runs backwards.
+  // …and never runs backwards.
   for (let i = 1; i < inside.length; i += 1) {
     expect(inside[i].edge).toBeGreaterThanOrEqual(inside[i - 1].edge - 1);
   }
-  expect(inside[0].edge).toBeLessThan(target - (target - start) * 0.2);
 });
 
 test('moving the fill lays out and paints nothing per frame', async ({
@@ -735,12 +801,26 @@ test('storyboard: the fill moving from 20% to 80% @storyboard', async ({
 }, testInfo) => {
   await open(page, 20);
   const track = await trackBox(page);
-  const cast = await startScreencast(page);
-  await page.waitForTimeout(200);
+  // The change's own frames, on its own clock: the page holds the fill's
+  // transition as soon as it runs, and each frame is the transition seeked
+  // one frame interval on and photographed, through its end. A screencast of
+  // the change shows only the frames a loaded runner gets to capture, and one
+  // it misses doubles the step between the two around it.
+  const hold = await armHold(page, page.getByRole('progressbar'));
   await setValue(page, 80);
-  // Recorded until the change has finished, however long the machine takes.
-  await settle(page);
-  const frames = await cast.stop();
+  const held = await hold.held();
+  const end = Math.max(...held.map(a => a.offsetMs + a.curveEndMs));
+  const times: number[] = [];
+  for (let t = 0; t < end; t += FRAME_MS) {
+    times.push(t);
+  }
+  times.push(end);
+  const frames: Frame[] = [];
+  for (const t of times) {
+    const shown = await seekAnimations(page, t);
+    frames.push({t: shown, data: (await page.screenshot()).toString('base64')});
+  }
+  await releaseAnimations(page, {finish: true});
   const edges = await leadingEdges(page, frames, track);
   // The trace is the assertion: the edge moves forward only, from 20% to
   // 80%, with no jump bigger than a quarter of the travel between frames.
