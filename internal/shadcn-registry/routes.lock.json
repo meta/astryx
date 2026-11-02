@@ -3675,6 +3675,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
       "name": "example-use-streaming-text-streaming-response",
       "path": "examples/use-streaming-text/streaming-response",
       "aliases": []
@@ -3732,6 +3737,11 @@
     {
       "name": "example-use-toast-settings-saved",
       "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
       "aliases": []
     },
     {

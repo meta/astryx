@@ -19,7 +19,8 @@ nested `AGENTS.md`.
   `docs/README.md`.
 - Pull requests: choose one primary intent and use its template under
   `.github/PULL_REQUEST_TEMPLATE/`; read `docs/contributing/pull-requests.md`
-  before opening or reviewing a mixed change.
+  before opening or reviewing a mixed change. Before you request review, run
+  `pnpm review:pre` and its checklist from a fresh session.
 - Component work: derive the review's semantic triggers, load matching `current`
   global baseline claims with `node scripts/review-global-baselines.mjs
 --authority-commit <base-sha> --review-head <head-sha> --triggers

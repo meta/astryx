@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[chore] MultiSelector's source is formatted with the repository's Prettier settings. No behavior changes.
+[chore] MultiSelector's source is formatted with the repository's Prettier settings. No behavior changes. (#9247)
 
 @cixzhang
