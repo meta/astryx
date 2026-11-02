@@ -152,8 +152,7 @@ authoring check; it does not replace runtime catalog validation.
 - **INV8 — Copying is a self-contained snapshot.** The emitted source belongs to the
   adopting project. Repository-only demo assets and demo-content elements are
   replaced with generic placeholders during copy; `template copy` and the
-  docsite's shadcn Install item are copies. Example source handed out without a
-  copy replaces only demo-content elements. Live previews render the originals.
+  docsite's shadcn Install item are copies. `template show` returns the same source a copy writes. Other example source handed out without a copy replaces only demo-content elements. Live previews render the originals.
   Later catalog updates do not mutate copied projects.
 - **INV9 — Catalog values may evolve.** Template ids, labels, metadata, categories,
   example data, and starter source are mutable catalog data under
