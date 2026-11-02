@@ -31,6 +31,7 @@ import {
   borderVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboard} from '../hooks/useClipboard';
@@ -133,6 +134,14 @@ const styles = stylex.create({
   // shrink and scroll; 0 lets the root's bound reach it.
   viewport: {
     minHeight: 0,
+  },
+  // The root clips (overflow: hidden, for its corners), so the viewport's
+  // keyboard ring sits inside its own box instead of around it.
+  viewportFocusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   // With no header, Copy sits in its own inline-end column beside the code
   // viewport rather than over it, so no line, scrolled or wrapped, runs under
@@ -1192,7 +1201,12 @@ export function CodeBlock({
   const codeBody = (
     <div
       {...getViewportProps<HTMLDivElement>({
-        ...stylex.props(styles.viewport),
+        // A tab stop while the code overflows: the shared ring, which a theme
+        // restyles through the focus-outline tokens.
+        ...focusOutlineProps.focusVisible(
+          styles.viewport,
+          styles.viewportFocusRingInset,
+        ),
         style: scrollStyle,
       })}>
       <div

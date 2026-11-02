@@ -41,7 +41,9 @@ import {
   radiusVars,
   durationVars,
   easeVars,
+  focusVars,
 } from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
@@ -161,6 +163,14 @@ const styles = stylex.create({
     maxWidth: '100%',
     overflow: 'clip',
     overflowClipMargin: '1px',
+  },
+  // The root clips at a 1px margin, so the scroller's keyboard ring sits
+  // inside its own box instead of around it.
+  scrollerFocusRingInset: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   scroller: {
     display: 'flex',
@@ -610,6 +620,10 @@ export function Carousel({
           }),
           stylex.props(
             styles.scroller,
+            // A tab stop: the shared ring, which a theme restyles through the
+            // focus-outline tokens.
+            focusOutlineStyles.focusVisible,
+            styles.scrollerFocusRingInset,
             gapStyles[gap],
             padding != null && paddingStyles[padding],
             hasSnap && styles.snap,
