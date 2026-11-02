@@ -6,7 +6,8 @@
  * @input The shipped PanPlayingCard (usePanGesture) and PanPlayingCardVanilla
  *   (createPanGesture) blocks, rendered in jsdom with the pan itself stubbed.
  * @output Guards the keyboard path: a second Discard while the first throw
- *   still runs deals one card, not two, in both blocks.
+ *   still runs deals one card, not two, in both blocks. Guards the card's
+ *   theme colors too.
  * @position CLI template regression coverage; runs in the node test project,
  *   under jsdom for this file. The pan is stubbed because the Discard button
  *   is the drag's keyboard path and never goes through it.
@@ -45,6 +46,31 @@ describe('the playing-card pan blocks', () => {
     ['usePanGesture', PanPlayingCard],
     ['createPanGesture', PanPlayingCardVanilla],
   ] as ReadonlyArray<[string, ComponentType]>) {
+    it(`paints the card in the theme's surface and text colors, so its face reads in dark mode too (${name})`, async () => {
+      const container = document.createElement('div');
+      document.body.append(container);
+      const root = createRoot(container);
+      await act(async () => {
+        root.render(createElement(Block));
+      });
+      const card = container.querySelector<HTMLElement>(
+        '[aria-label="Top card"]',
+      );
+      if (card == null) {
+        throw new Error('the block renders no top card');
+      }
+      expect({
+        background: card.style.backgroundColor,
+        color: card.style.color,
+      }).toEqual({
+        background: 'var(--color-background-surface)',
+        color: 'var(--color-text-primary)',
+      });
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
     it(`deals one card for a second Discard pressed while the first throw runs (${name})`, async () => {
       const container = document.createElement('div');
       document.body.append(container);
