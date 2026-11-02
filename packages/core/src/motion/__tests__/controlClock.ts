@@ -4,7 +4,8 @@
  * @file controlClock.ts
  * @input Screencast frames: each one's timestamp and the harness's control
  *   box's x on it (240 px out in 400 ms, back in 400 ms, repeating)
- * @output Exports controlClock: the control's own time at each usable frame
+ * @output Exports controlClock: the control's own time at each usable frame;
+ *   and CYCLE, one out-and-back, ms
  * @position Test support for animator.interaction.browser.spec.ts, whose
  *   busy-window proof reads the spring against the control's clock
  */
@@ -12,7 +13,7 @@
 /** The control's speed, px per ms: 240 px in 400 ms. */
 const SPEED = 0.6;
 /** One out-and-back, ms. */
-const CYCLE = 800;
+export const CYCLE = 800;
 /**
  * Frames this near a turn are left out: there the two times a position
  * gives are under 80 ms apart.
