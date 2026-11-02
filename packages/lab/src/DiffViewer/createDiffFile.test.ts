@@ -135,9 +135,28 @@ describe('createDiffFile', () => {
     expect(kinds[0]).toBe('context');
     expect(kinds[kinds.length - 1]).toBe('context');
     expect(kinds.indexOf('added')).toBe(lineCount + 1);
+    expect(hunk.isReplacedBlock).toBe(true);
     const {oldSide, newSide} = sides(file);
     expect(oldSide).toEqual(['head', ...oldLines, 'tail']);
     expect(newSide).toEqual(['head', ...newLines, 'tail']);
+  });
+
+  it('does not mark a minimal diff as a replaced block', () => {
+    const file = createDiffFile({oldValue: 'a\nb\n', newValue: 'a\nB\n'});
+    expect(file.hunks[0].isReplacedBlock).toBeUndefined();
+  });
+
+  it('keeps a long one-sided change minimal, not a replaced block', () => {
+    // Only additions: adding every new line is already the minimal diff.
+    const lineCount = 6000;
+    const added = Array.from({length: lineCount}, (_, i) => `new ${i}`);
+    const file = createDiffFile({
+      oldValue: ['head', 'tail'].join('\n'),
+      newValue: ['head', ...added, 'tail'].join('\n'),
+    });
+    expect(file.hunks).toHaveLength(1);
+    expect(file.hunks[0].isReplacedBlock).toBeUndefined();
+    expect(file.hunks[0].newLines).toBe(lineCount + 2);
   });
 
   it('handles a very long text changed only at both ends', () => {
