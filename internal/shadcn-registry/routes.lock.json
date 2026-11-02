@@ -3670,6 +3670,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-list-focus-recent-files",
+      "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
       "aliases": []
