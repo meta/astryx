@@ -19,6 +19,8 @@ export default function PanPlayingCard() {
   const [announcement, setAnnouncement] = useState('');
   /** A throw is in flight: the next card is dealt when it ends. */
   const throwing = useRef(false);
+  /** The drag in progress met a throw: the rest of it moves nothing. */
+  const ignoringDrag = useRef(false);
 
   /** Move the card, with a transition unless the person reduces motion. */
   function moveTo(x: number, y: number, transition: string) {
@@ -40,6 +42,8 @@ export default function PanPlayingCard() {
       return;
     }
     throwing.current = true;
+    // The drag in progress, if any, moves nothing more.
+    ignoringDrag.current = true;
     moveTo(direction * THROW_DISTANCE, 0, THROW);
     element.style.opacity = '0';
     const deal = () => {
@@ -59,6 +63,14 @@ export default function PanPlayingCard() {
   // The drag writes the card's style in onPan: no render per move.
   usePanGesture(card, {
     onPan: ({state, translation, velocity}) => {
+      // A drag that meets a throw is ignored to its end. Its moves would
+      // cancel the throw's transitions, and the next card would jump to it.
+      if (state === 'began') {
+        ignoringDrag.current = throwing.current;
+      }
+      if (ignoringDrag.current) {
+        return;
+      }
       if (state === 'began' || state === 'changed') {
         moveTo(translation.x, translation.y, 'none');
       } else if (state === 'ended' && Math.abs(velocity.x) > THROW_SPEED) {

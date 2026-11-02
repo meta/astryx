@@ -22,6 +22,8 @@ function mountDeck(table: HTMLElement, discardButton: HTMLButtonElement) {
   let top = 0;
   /** A throw is in flight: the next card is dealt when it ends. */
   let isThrowing = false;
+  /** The drag in progress met a throw: the rest of it moves nothing. */
+  let isIgnoringDrag = false;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const card = document.createElement('div');
   card.textContent = DECK[0];
@@ -64,6 +66,8 @@ function mountDeck(table: HTMLElement, discardButton: HTMLButtonElement) {
       return;
     }
     isThrowing = true;
+    // The drag in progress, if any, moves nothing more.
+    isIgnoringDrag = true;
     moveTo(direction * THROW_DISTANCE, 0, THROW);
     card.style.opacity = '0';
     const deal = () => {
@@ -83,6 +87,14 @@ function mountDeck(table: HTMLElement, discardButton: HTMLButtonElement) {
 
   const pan = createPanGesture(card, {
     onPan: ({state, translation, velocity}) => {
+      // A drag that meets a throw is ignored to its end. Its moves would
+      // cancel the throw's transitions, and the next card would jump to it.
+      if (state === 'began') {
+        isIgnoringDrag = isThrowing;
+      }
+      if (isIgnoringDrag) {
+        return;
+      }
       if (state === 'began' || state === 'changed') {
         // Follows the finger: translation leaves out the travel the drag
         // needed to begin, so the card does not jump.
