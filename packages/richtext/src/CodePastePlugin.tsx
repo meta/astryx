@@ -9,18 +9,17 @@
  * @output Exports CodePastePlugin, which makes rich content pasted or dropped
  *   into a code block go in as plain lines of code.
  * @position Rendered by RichTextEditor; always on, and not exported from the
- *   package (spec:AST-061 DEC-8). A code block holds only code. Lexical's own
- *   insertion puts pasted headings, lists, tables, and formatted text inside
- *   the code block, which Markdown cannot hold: the export writes them as
- *   plain lines of the fence, so the document reads back differently from
- *   what the editor showed (spec:AST-062 FR3). A paste whose clipboard also
- *   carries plain text, as every browser copy does, inserts that text, as
- *   pasting as plain text would. Content inserted from a clipboard without
- *   it (an HTML-only clipboard, blocks copied from an editor, a drop) goes in
- *   as the text of its blocks, one line each. A paste lands where the
- *   selection starts, so a selection that starts in a code block takes it.
- *   Pastes outside code blocks, and plain-text pastes, keep Lexical's
- *   behavior.
+ *   package. A code block holds only code. Lexical's own insertion puts
+ *   pasted headings, lists, tables, and formatted text inside the code block,
+ *   which Markdown cannot hold: the export writes them as plain lines of the
+ *   fence, so the document reads back differently from what the editor
+ *   showed. A paste whose clipboard also carries plain text, as every browser
+ *   copy does, inserts that text, as pasting as plain text would. Content
+ *   inserted from a clipboard without it (an HTML-only clipboard, blocks
+ *   copied from an editor, a drop) goes in as the text of its blocks, one
+ *   line each. A paste lands where the selection starts, so a selection that
+ *   starts in a code block takes it. Pastes outside code blocks, and
+ *   plain-text pastes, keep Lexical's behavior.
  */
 
 import {useEffect} from 'react';
