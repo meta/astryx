@@ -53,7 +53,9 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     vi.restoreAllMocks();
   });
 
-  function renderScroller() {
+  function renderScroller({
+    onVisibleMonthChange = () => {},
+  }: {onVisibleMonthChange?: (monthIndex: number) => void} = {}) {
     const handleRef = createRef<MonthScrollerHandle>();
     const view = render(
       <MonthScroller
@@ -61,7 +63,7 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
         minMonthIndex={0}
         maxMonthIndex={23}
         initialMonthIndex={9}
-        onVisibleMonthChange={() => {}}
+        onVisibleMonthChange={onVisibleMonthChange}
         selectedDate={null}
         today={{year: 2026, month: 10, day: 15}}
         isDateDisabled={() => false}
@@ -115,6 +117,32 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     expect(
       scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
     ).toEqual([8 * 300]);
+  });
+
+  it('reports a trackpad scroll after a step lands, even with an earlier steer that never arrived', () => {
+    const onVisibleMonthChange = vi.fn();
+    const {handleRef, container} = renderScroller({onVisibleMonthChange});
+    const scroller = container.querySelector<HTMLElement>(
+      '[data-scroller="months"]',
+    );
+    if (scroller == null) {
+      throw new Error('no scroller');
+    }
+    // The re-assert when the wheels close: a steer to the month already in
+    // view, whose scroll never arrives.
+    act(() => handleRef.current?.scrollToMonth(9, 'auto'));
+    // A step lands at its dip's middle.
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    // A trackpad scroll on to the next month: no touch ends the steer.
+    act(() => {
+      scroller.scrollLeft = 11 * 300;
+      scroller.dispatchEvent(new Event('scroll'));
+      vi.advanceTimersByTime(50);
+    });
+    expect(onVisibleMonthChange).toHaveBeenLastCalledWith(11);
   });
 
   it('scrolls nothing once unmounted within the dip', () => {

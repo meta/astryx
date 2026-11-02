@@ -23,10 +23,6 @@
  * scroll, so snap offsets are constant and momentum is never interrupted —
  * which is the failure mode of the usual "append months at the edge" approach.
  *
- * Under reduced motion a step the arrows, Reset or the keyboard ask for
- * changes the month without travel: at once with a mouse or a keyboard,
- * through a short opacity dip on a touch screen.
- *
  * SYNC: When modified, update:
  * - /packages/core/src/DateInput/TouchDateField.tsx
  * - /packages/core/src/DateTimeInput/TouchDateTimeField.tsx
@@ -453,8 +449,8 @@ export function MonthScroller({
 
   const scrollToMonth = useCallback(
     (monthIndex: number, behavior: ScrollBehavior = 'smooth') => {
-      // Every step replaces a running dip, whichever way it moves: the dip's
-      // landing would otherwise undo a jump or a step at once made after it.
+      // Every step replaces a running dip, whichever way it moves. Otherwise
+      // the dip's landing would undo a jump or an immediate step made after it.
       stopDip();
       const scroller = scrollerRef.current;
       if (scroller == null || paneSize === 0) {
@@ -482,17 +478,21 @@ export function MonthScroller({
         return;
       }
       const left = scrollOffsetForRow(row, paneSize, isRTL);
-      // Under reduced motion the month changes without travel, at once with
-      // a mouse or a keyboard and through an opacity dip on a touch screen,
-      // the scroll landing at the dip (reducedMotionFade).
+      // Under reduced motion the month changes without travel: at once on a fine
+      // primary pointer, under an opacity dip on a coarse one (reducedMotionFade).
       const fade = behavior === 'smooth' ? reducedMotionFade(scroller) : null;
       if (fade != null) {
-        // The window mounts around the target first and the scroll lands in
-        // the layout effect below, as a far jump does, so nothing moves the
-        // window after the jump: a jump that the window then follows is
-        // re-snapped by WebKit one pane further on every frame. A scroll that
-        // lands on the centre row reports nothing.
+        // The window mounts around the target first, and the scroll lands in
+        // the layout effect below, as a far jump does. So nothing moves the
+        // window after the jump. If the window followed the jump, WebKit would
+        // re-snap it one pane further on every frame. A scroll that lands on
+        // the centre row reports nothing.
         const land = () => {
+          // The landing is the newest steer. An earlier steer whose scroll
+          // never arrived would otherwise hide every scroll after it, a
+          // trackpad's included. Closing the wheels makes such a steer: it
+          // re-asserts the month already in view.
+          steeredRowRef.current = null;
           if (row === centerRowRef.current) {
             scroller.scrollTo({left, behavior: 'auto'});
             return;
