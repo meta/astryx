@@ -7,7 +7,7 @@ export const doc = {
   name: 'useToast — Settings Saved',
   displayName: 'useToast — Settings Saved',
   description:
-    'A settings form that calls the function from useToast on Save: a "Settings saved" toast with an Undo action, a uniqueID so pressing Save again replaces the toast instead of stacking another, and an error toast when the save fails.',
+    'Shows a toast from the function useToast returns: a "Settings saved" confirmation with an Undo action, a uniqueID so pressing the button again replaces the toast instead of stacking another, and an error toast when the request fails.',
   isReady: true,
   aspectRatio: 4 / 3,
   componentsUsed: ['Toast', 'Card', 'TextInput', 'Switch', 'Button', 'Layout'],
