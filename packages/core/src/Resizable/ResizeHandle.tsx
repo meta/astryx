@@ -12,7 +12,8 @@
  * absolutely-positioned wider hit area (the Grab zone) for pointer
  * interaction, centred on the Handle whatever `pillPlacement` says; on a
  * pane shorter than the zone it takes at most half the pane, so a short item
- * keeps its own pointer targets.
+ * keeps its own pointer targets. The Grip pill takes the pointer too,
+ * wherever it is drawn, while it is painted.
  * Pill grip indicator can sit on either side of the divider (or centered)
  * via pillPlacement. Default 'auto' places the pill on the panel side and
  * flips when the panel collapses to 0px so it stays accessible.
@@ -33,7 +34,7 @@
  */
 
 import {useEffect, useRef, useState} from 'react';
-import type {ReactNode} from 'react';
+import type {HTMLAttributes, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -204,13 +205,26 @@ const styles = stylex.create({
   pill: {
     position: 'absolute',
     zIndex: 2,
-    pointerEvents: 'none',
+    touchAction: 'none',
+    userSelect: 'none',
     borderRadius: radiusVars['--radius-full'],
     backgroundColor: colorVars['--color-border'],
     transitionProperty: 'opacity, background-color, transform',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
     top: '50%',
+  },
+  pillGrabHorizontal: {
+    cursor: {
+      default: 'col-resize',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+  },
+  pillGrabVertical: {
+    cursor: {
+      default: 'row-resize',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
   },
   pillHorizontal: {
     width: 3,
@@ -220,14 +234,17 @@ const styles = stylex.create({
     width: spacingVars['--spacing-8'],
     height: 3,
   },
-  pillHidden: {opacity: 0},
+  // A hidden pill paints nothing, so it takes no pointer either.
+  pillHidden: {opacity: 0, pointerEvents: 'none'},
   pillVisible: {opacity: 1},
   pillHover: {
     opacity: 1,
+    pointerEvents: 'auto',
     backgroundColor: colorVars['--color-border'],
   },
   pillActive: {
     opacity: 1,
+    pointerEvents: 'auto',
     backgroundColor: colorVars['--color-border-emphasized'],
   },
 });
@@ -512,6 +529,35 @@ export function ResizeHandle({
       ? t('@astryx.resizable.collapsed')
       : undefined;
 
+  // The Grip pill takes the pointer as the Grab zone does, so a pill drawn
+  // outside the zone still resizes.
+  const grabHandlers: Pick<
+    HTMLAttributes<HTMLDivElement>,
+    | 'onPointerDown'
+    | 'onPointerMove'
+    | 'onPointerUp'
+    | 'onPointerCancel'
+    | 'onLostPointerCapture'
+    | 'onPointerEnter'
+    | 'onPointerLeave'
+  > = {
+    onPointerDown: e => {
+      if (!isDisabled) {
+        gesture?.pointerDown(e);
+      }
+    },
+    onPointerMove: e => gesture?.pointerMove(e),
+    onPointerUp: e => gesture?.pointerUp(e),
+    onPointerCancel: e => gesture?.pointerCancel(e),
+    onLostPointerCapture: e => gesture?.pointerCancel(e),
+    onPointerEnter: () => setIsHovered(true),
+    onPointerLeave: () => {
+      if (!isDragging) {
+        setIsHovered(false);
+      }
+    },
+  };
+
   return (
     <div
       ref={useMergedRefs(ref, handleRef)}
@@ -592,21 +638,7 @@ export function ResizeHandle({
               : dynamicStyles.hitAreaLengthY(paneLength)),
           isDisabled && styles.disabled,
         )}
-        onPointerDown={e => {
-          if (!isDisabled) {
-            gesture?.pointerDown(e);
-          }
-        }}
-        onPointerMove={e => gesture?.pointerMove(e)}
-        onPointerUp={e => gesture?.pointerUp(e)}
-        onPointerCancel={e => gesture?.pointerCancel(e)}
-        onLostPointerCapture={e => gesture?.pointerCancel(e)}
-        onPointerEnter={() => setIsHovered(true)}
-        onPointerLeave={() => {
-          if (!isDragging) {
-            setIsHovered(false);
-          }
-        }}
+        {...grabHandlers}
       />
       {/* Pill grip indicator — themed via .astryx-resize-handle-pill */}
       {children ?? (
@@ -625,11 +657,16 @@ export function ResizeHandle({
                   : dynamicStyles.pillOffsetY(
                       effectiveSide === 'start' ? -1 : 1,
                     ),
+              isHorizontal
+                ? styles.pillGrabHorizontal
+                : styles.pillGrabVertical,
               isAlwaysVisible ? styles.pillVisible : styles.pillHidden,
               isInteracting && !isDragging && styles.pillHover,
               isDragging && styles.pillActive,
+              isDisabled && styles.disabled,
             ),
           )}
+          {...grabHandlers}
         />
       )}
     </div>

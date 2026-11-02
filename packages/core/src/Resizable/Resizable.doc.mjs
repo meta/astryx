@@ -12,13 +12,13 @@ const anatomy = [
     name: 'Grip pill',
     required: false,
     description:
-      'Default visible grip indicator; custom handle content can replace it.',
+      'Default visible grip indicator; dragging it resizes, wherever it sits. Custom handle content can replace it.',
   },
   {
     name: 'Grab zone',
     required: true,
     description:
-      'Invisible enlarged pointer region centred on the divider; on a pane shorter than it, it takes at most half the pane.',
+      'Invisible enlarged pointer region centred on the divider. An inline zone takes at most half of a pane shorter than it; an overlay handle takes at most half of its pane.',
   },
 ];
 
@@ -225,7 +225,7 @@ const region = useResizable({
             'Which side of the divider the pill sits on. ' +
             'auto = content side (derived from isReversed), flips when collapsed. ' +
             'start = left/top, end = right/bottom, center = centered on divider. ' +
-            'It moves only the pill; the grab zone stays centred on the divider.',
+            'It moves only the pill, which a drag can still take wherever it sits; the grab zone stays centred on the divider.',
           default: "'auto'",
         },
         {
@@ -318,7 +318,7 @@ export const docsDense = {
         isAlwaysVisible:
           'show pill grip at rest instead of only on hover. Use when discoverability important',
         pillPlacement:
-          'which side of divider pill sits on. auto = content side (derived from isReversed), flips when collapsed; start = left/top, end = right/bottom, center = centered on divider. Moves only the pill; grab zone stays on the divider',
+          'which side of divider pill sits on. auto = content side (derived from isReversed), flips when collapsed; start = left/top, end = right/bottom, center = centered on divider. Moves only the pill (still draggable); grab zone stays on the divider',
         label: 'accessible label for separator',
         resizable: 'resize props from useResizable: connects handle to panel',
       },
