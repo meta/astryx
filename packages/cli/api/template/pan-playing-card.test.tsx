@@ -27,6 +27,7 @@ type PanEvent = {
 // The stubbed pan keeps the block's listener, so a case can drive a drag.
 const pan = vi.hoisted(() => ({
   onPan: null as null | ((event: PanEvent) => void),
+  destroyed: 0,
 }));
 vi.mock('@astryxdesign/core/hooks', () => ({
   usePanGesture: (
@@ -42,7 +43,11 @@ vi.mock('@astryxdesign/core', () => ({
     options: {onPan: (event: PanEvent) => void},
   ) => {
     pan.onPan = options.onPan;
-    return {destroy: () => {}};
+    return {
+      destroy: () => {
+        pan.destroyed += 1;
+      },
+    };
   },
 }));
 
@@ -61,6 +66,24 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
+});
+
+describe('the plain-JavaScript pan block', () => {
+  it('mounts its deck with its wrapper and takes it down, pan included, when it unmounts', async () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(createElement(PanPlayingCardVanilla));
+    });
+    expect(container.querySelector('[aria-label="Top card"]')).not.toBeNull();
+    const destroyed = pan.destroyed;
+    await act(async () => {
+      root.unmount();
+    });
+    expect(container.querySelector('[aria-label="Top card"]')).toBeNull();
+    expect(pan.destroyed).toBe(destroyed + 1);
+  });
 });
 
 describe('the playing-card pan blocks', () => {

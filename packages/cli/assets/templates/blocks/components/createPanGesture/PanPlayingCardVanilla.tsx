@@ -2,7 +2,6 @@
 
 'use client';
 
-import {useEffect, useRef} from 'react';
 import {createPanGesture} from '@astryxdesign/core';
 
 const DECK = ['A\u2660', 'K\u2665', 'Q\u2663', 'J\u2666'];
@@ -117,19 +116,25 @@ function mountDeck(table: HTMLElement, discardButton: HTMLButtonElement) {
   };
 }
 
+/**
+ * Mounts the deck when the wrapper attaches, and takes it down when it
+ * detaches: its cleanup is the callback ref's.
+ */
+function mountTable(wrapper: HTMLDivElement | null) {
+  if (wrapper == null) {
+    return undefined;
+  }
+  const table = wrapper.firstElementChild as HTMLElement;
+  const button = wrapper.querySelector('button') as HTMLButtonElement;
+  return mountDeck(table, button);
+}
+
 export default function PanPlayingCardVanilla() {
-  const table = useRef<HTMLDivElement>(null);
-  const button = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (table.current == null || button.current == null) {
-      return undefined;
-    }
-    return mountDeck(table.current, button.current);
-  }, []);
   return (
-    <div style={{display: 'grid', gap: 16, padding: 16, maxWidth: 360}}>
+    <div
+      ref={mountTable}
+      style={{display: 'grid', gap: 16, padding: 16, maxWidth: 360}}>
       <div
-        ref={table}
         style={{
           height: 200,
           display: 'grid',
@@ -137,9 +142,7 @@ export default function PanPlayingCardVanilla() {
           overflow: 'hidden',
         }}
       />
-      <button ref={button} type="button">
-        Discard the top card
-      </button>
+      <button type="button">Discard the top card</button>
     </div>
   );
 }
