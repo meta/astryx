@@ -12,6 +12,7 @@ import {
 } from '../../../authoring/shadcn/source-variants.mjs';
 import {
   createRegistryReceipt,
+  REGISTRY_RECEIPT_SCHEMA_VERSION,
   registryReceiptTarget,
   serializeRegistryReceipt,
 } from '../../../authoring/shadcn/receipt.mjs';
@@ -32,6 +33,21 @@ const SOURCE_TARGET = 'components/astryx/examples/ButtonBasic.tsx';
 const REGISTRY_PATH = 'registry/example-button-basic/ButtonBasic.tsx';
 const RECEIPT_TARGET = registryReceiptTarget(SOURCE_TARGET, ITEM.name);
 const JAVASCRIPT_TARGET = shadcnJavaScriptTarget(SOURCE_TARGET);
+
+/**
+ * The receipt shape an early canary install wrote: no install variants and no
+ * replacement counts.
+ * @param {ReturnType<typeof createRegistryReceipt>} current
+ */
+function versionOneReceipt(current) {
+  const {
+    demoMediaReplaced: _media,
+    demoContentReplaced: _content,
+    files: [{variants: _variants, ...legacyFile}],
+    ...rest
+  } = current;
+  return {...rest, schemaVersion: 1, files: [legacyFile]};
+}
 
 function javascriptVariant(content) {
   return {
@@ -54,6 +70,8 @@ function receipt(content, overrides = {}) {
     item,
     sourceVersion: overrides.version ?? '0.5.0',
     receiptTarget,
+    demoMediaReplaced: 0,
+    demoContentReplaced: 0,
     files: [
       {
         id: 'primary',
@@ -107,6 +125,8 @@ function remote(latest, overrides = {}) {
     item: itemIdentity,
     sourceVersion: overrides.version ?? '0.6.0',
     receiptTarget: receiptBaseTarget,
+    demoMediaReplaced: 0,
+    demoContentReplaced: 0,
     files: receiptFiles,
   });
   const item = {
@@ -188,6 +208,8 @@ describe('registry composition upgrades', () => {
         item,
         sourceVersion: '0.5.0',
         receiptTarget,
+        demoMediaReplaced: 0,
+        demoContentReplaced: 0,
         files: [
           {
             id: 'primary',
@@ -201,6 +223,8 @@ describe('registry composition upgrades', () => {
         item,
         sourceVersion: '0.6.0',
         receiptTarget,
+        demoMediaReplaced: 0,
+        demoContentReplaced: 0,
         files: [
           {
             id: 'primary',
@@ -369,7 +393,7 @@ describe('registry composition upgrades', () => {
     );
     expect(fs.existsSync(path.join(root, SOURCE_TARGET))).toBe(false);
     const nextReceipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
-    expect(nextReceipt.schemaVersion).toBe(2);
+    expect(nextReceipt.schemaVersion).toBe(REGISTRY_RECEIPT_SCHEMA_VERSION);
     expect(nextReceipt.files[0].variants[0].registryTarget).toBe(
       JAVASCRIPT_TARGET,
     );
@@ -454,12 +478,7 @@ describe('registry composition upgrades', () => {
     const base = "export const value: string = 'old';\n";
     const latest = "export const value: string = 'new';\n";
     const currentReceipt = receipt(base);
-    const {variants: _variants, ...legacyFile} = currentReceipt.files[0];
-    const legacyReceipt = {
-      ...currentReceipt,
-      schemaVersion: 1,
-      files: [legacyFile],
-    };
+    const legacyReceipt = versionOneReceipt(currentReceipt);
     const sourcePath = path.join(root, JAVASCRIPT_TARGET);
     const receiptPath = path.join(root, RECEIPT_TARGET);
     fs.mkdirSync(path.dirname(sourcePath), {recursive: true});
@@ -485,7 +504,7 @@ describe('registry composition upgrades', () => {
       transformShadcnJavaScriptSource(latest),
     );
     expect(JSON.parse(fs.readFileSync(receiptPath, 'utf8')).schemaVersion).toBe(
-      2,
+      REGISTRY_RECEIPT_SCHEMA_VERSION,
     );
   });
 
@@ -498,12 +517,7 @@ describe('registry composition upgrades', () => {
     const latest =
       "export default function CompiledExample() { return 'new'; }\n";
     const currentReceipt = receipt(base, {target, registryPath, receiptTarget});
-    const {variants: _variants, ...legacyFile} = currentReceipt.files[0];
-    const legacyReceipt = {
-      ...currentReceipt,
-      schemaVersion: 1,
-      files: [legacyFile],
-    };
+    const legacyReceipt = versionOneReceipt(currentReceipt);
     const {sourcePath, receiptPath} = seed({
       base,
       receiptValue: legacyReceipt,
@@ -539,7 +553,7 @@ describe('registry composition upgrades', () => {
     );
     expect(result.writtenFiles).toContain(path.join(root, typesTarget));
     const nextReceipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
-    expect(nextReceipt.schemaVersion).toBe(2);
+    expect(nextReceipt.schemaVersion).toBe(REGISTRY_RECEIPT_SCHEMA_VERSION);
     expect(nextReceipt.files.map(file => file.id)).toEqual([
       'primary',
       'types',
@@ -553,10 +567,9 @@ describe('registry composition upgrades', () => {
     const base =
       "export default function CompiledExample() { return 'old'; }\n";
     const currentReceipt = receipt(base, {target, registryPath, receiptTarget});
-    const {variants: _variants, ...legacyFile} = currentReceipt.files[0];
     seed({
       base,
-      receiptValue: {...currentReceipt, schemaVersion: 1, files: [legacyFile]},
+      receiptValue: versionOneReceipt(currentReceipt),
       sourceTarget: target,
       receiptTarget,
     });

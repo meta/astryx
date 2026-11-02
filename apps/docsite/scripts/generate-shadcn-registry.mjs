@@ -11,6 +11,8 @@
  * items create public re-exports; blocks and pages copy app-level composition
  * source that already imports published package paths and add adjacent receipts
  * so Astryx can reconcile later releases without taking ownership of user edits.
+ * An install is a copy: each block and page source arrives as authored, and its
+ * demo content and demo media are replaced as `template copy` replaces them.
  */
 
 import * as fs from 'node:fs';
@@ -21,6 +23,7 @@ import stylexPlugin from '@stylexjs/babel-plugin';
 import ts from 'typescript';
 import {registryItemSchema, registrySchema} from 'shadcn/schema';
 import {stripCopyrightHeader} from '../../../packages/cli/foundation/text/copyright-header.mjs';
+import {replaceTemplateDemos} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   createShadcnPrecompiledDeclaration,
   shadcnJavaScriptTarget,
@@ -311,7 +314,7 @@ function precompiledDeclarationFile(itemName, sourceTarget) {
   };
 }
 
-function withCompositionReceipt(item, identity, sourceVersion) {
+function withCompositionReceipt(item, identity, sourceVersion, replaced) {
   const [sourceFile, ...supportFiles] = item.files;
   const receiptTarget = registryReceiptTarget(sourceFile.target, item.name);
   const javascriptTarget = shadcnJavaScriptTarget(sourceFile.target);
@@ -334,6 +337,8 @@ function withCompositionReceipt(item, identity, sourceVersion) {
     },
     sourceVersion,
     receiptTarget,
+    demoMediaReplaced: replaced.demoMediaReplaced,
+    demoContentReplaced: replaced.demoContentReplaced,
     files: [
       {
         id: 'primary',
@@ -397,8 +402,11 @@ function blockItem(
     block.category,
     `${block.dirName}.tsx`,
   );
+  const {source: copiedSource, ...replaced} = replaceTemplateDemos(
+    block.source,
+  );
   const compiled = precompileStylexSource(
-    stripCopyrightHeader(block.source),
+    stripCopyrightHeader(copiedSource),
     fileName,
   );
   const sourceTarget = `components/astryx/${kind === 'block' ? 'blocks' : `${kind}s`}/${block.dirName}.${compiled.extension}`;
@@ -440,6 +448,7 @@ function blockItem(
     },
     identity,
     sourceVersion,
+    replaced,
   );
 }
 
@@ -460,8 +469,11 @@ function pageItem(
     template.slug,
     'page.tsx',
   );
+  const {source: copiedSource, ...replaced} = replaceTemplateDemos(
+    template.source,
+  );
   const compiled = precompileStylexSource(
-    stripCopyrightHeader(template.source),
+    stripCopyrightHeader(copiedSource),
     fileName,
   );
   const sourceTarget = `app/astryx/${template.slug}/page.${compiled.extension}`;
@@ -505,6 +517,7 @@ function pageItem(
     },
     identity,
     sourceVersion,
+    replaced,
   );
 }
 

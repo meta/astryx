@@ -33,8 +33,10 @@ import {
 } from '../../packages/cli/authoring/shadcn/source-variants.mjs';
 import {
   parseRegistryReceipt,
+  REGISTRY_RECEIPT_SCHEMA_VERSION,
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
+import {DEMO_CONTENT_MODULE} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   buildShadcnRegistry,
   generateShadcnRegistry,
@@ -575,7 +577,9 @@ describe('buildShadcnRegistry', () => {
       });
       const receipt = parseRegistryReceipt(JSON.parse(receiptFile.content));
       expect(receipt).toMatchObject({
-        schemaVersion: 2,
+        schemaVersion: REGISTRY_RECEIPT_SCHEMA_VERSION,
+        demoMediaReplaced: 0,
+        demoContentReplaced: 0,
         item: {
           name: item.name,
           path: item.astryx.path,
@@ -691,6 +695,109 @@ describe('buildShadcnRegistry', () => {
       expect(installedSource).toBe(block.files[0].content);
       expect(installedReceipt.files[0].content).toBe(installedSource);
       expect(installedSource).toContain('// Keep this consumer guidance.');
+    } finally {
+      rmSync(project, {recursive: true, force: true});
+    }
+  });
+
+  it('installs a block and a page as a copy writes them, and the receipt counts each replacement', async () => {
+    const project = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-demo-'));
+    try {
+      writeConsumerProject(project);
+      const base = fixture();
+      const {items} = buildShadcnRegistry(
+        fixture({
+          packages: packages.map(pkg =>
+            pkg.name === '@astryxdesign/core'
+              ? {
+                  ...pkg,
+                  packageExports: {
+                    ...pkg.packageExports,
+                    './Card': './dist/Card/index.js',
+                    './Text': './dist/Text/index.js',
+                  },
+                }
+              : pkg,
+          ),
+          blocks: [
+            {
+              ...base.blocks[0],
+              componentsUsed: ['Card'],
+              source:
+                "import {Card} from '@astryxdesign/core/Card';\n" +
+                `import {PlayingCardContents} from '${DEMO_CONTENT_MODULE}';\n` +
+                'export default function ButtonShowcase() {\n' +
+                '  return (\n' +
+                '    <Card padding={4}>\n' +
+                '      <PlayingCardContents rank="Q" suit="hearts" />\n' +
+                '      <img src="/template-assets/hero.jpg" alt="" />\n' +
+                '    </Card>\n' +
+                '  );\n' +
+                '}\n',
+            },
+          ],
+          templates: [
+            {
+              ...base.templates[0],
+              source:
+                "import {Card} from '@astryxdesign/core/Card';\n" +
+                'export default function Page() {\n' +
+                '  return <Card><img src="/template-assets/hero.jpg" alt="" /></Card>;\n' +
+                '}\n',
+            },
+          ],
+        }),
+      );
+      const block = items.find(item => item.name === 'showcase-button-variants');
+      const page = items.find(item => item.name === 'template-dashboard');
+      for (const [item, demoContentReplaced] of [
+        [block, 1],
+        [page, 0],
+      ]) {
+        const copied = item.files[0].content;
+        expect(copied).not.toContain(DEMO_CONTENT_MODULE);
+        expect(copied).not.toContain('PlayingCardContents');
+        expect(copied).not.toContain('/template-assets/');
+        expect(
+          parseRegistryReceipt(JSON.parse(item.files.at(-1).content)),
+        ).toMatchObject({demoMediaReplaced: 1, demoContentReplaced});
+      }
+      expect(block.files[0].content).toContain(
+        '<Card padding={4}>\n      <Text>Card content</Text>',
+      );
+      expect(block.dependencies).not.toContainEqual(
+        expect.stringContaining('demo-content'),
+      );
+
+      const itemPath = path.join(project, 'block.json');
+      writeFileSync(itemPath, JSON.stringify(block));
+      await execFileAsync(
+        process.execPath,
+        [SHADCN_ENTRY, 'add', itemPath, '--yes'],
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
+      );
+      const showcases = path.join(
+        project,
+        'src',
+        'components',
+        'astryx',
+        'showcases',
+      );
+      const installedSource = readFileSync(
+        path.join(showcases, 'ButtonShowcase.tsx'),
+        'utf8',
+      );
+      expect(installedSource).toBe(block.files[0].content);
+      expect(
+        parseRegistryReceipt(
+          JSON.parse(
+            readFileSync(
+              path.join(showcases, '.astryx', 'showcase-button-variants.json'),
+              'utf8',
+            ),
+          ),
+        ),
+      ).toMatchObject({demoMediaReplaced: 1, demoContentReplaced: 1});
     } finally {
       rmSync(project, {recursive: true, force: true});
     }

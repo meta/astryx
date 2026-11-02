@@ -85,6 +85,8 @@ function writeRegistryFixture(
     },
     sourceVersion: '0.5.0',
     receiptTarget,
+    demoMediaReplaced: 0,
+    demoContentReplaced: 0,
     files: [
       {
         id: 'primary',
@@ -98,6 +100,8 @@ function writeRegistryFixture(
     item: installedReceipt.item,
     sourceVersion: version,
     receiptTarget,
+    demoMediaReplaced: 0,
+    demoContentReplaced: 0,
     files: [
       {
         id: 'primary',

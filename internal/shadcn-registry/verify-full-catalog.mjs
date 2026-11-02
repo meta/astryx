@@ -33,8 +33,10 @@ import {
 } from '../../packages/cli/authoring/shadcn/source-variants.mjs';
 import {
   parseRegistryReceipt,
+  REGISTRY_RECEIPT_SCHEMA_VERSION,
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
+import {DEMO_CONTENT_MODULE} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {expandWorkspaceDirs} from '../../scripts/lib/workspace-globs.mjs';
 import {registryNameForPath} from '../../apps/docsite/src/lib/shadcnRegistry.mjs';
 
@@ -202,8 +204,18 @@ function verifyItemFileShape(item) {
         );
       }
     }
-    if (receipt.schemaVersion !== 2) {
-      fail(`${item.name} receipt is not schema version 2`);
+    if (receipt.schemaVersion !== REGISTRY_RECEIPT_SCHEMA_VERSION) {
+      fail(
+        `${item.name} receipt is not schema version ${REGISTRY_RECEIPT_SCHEMA_VERSION}`,
+      );
+    }
+    if (
+      source.content.includes('/template-assets/') ||
+      source.content.includes(DEMO_CONTENT_MODULE)
+    ) {
+      fail(
+        `${item.name} installs demo media or demo content that a copy replaces`,
+      );
     }
     const expectedJavaScriptTarget = shadcnJavaScriptTarget(source.target);
     const javascript = receipt.files[0].variants.find(

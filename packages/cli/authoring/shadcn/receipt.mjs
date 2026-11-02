@@ -11,7 +11,7 @@ import {createHash} from 'node:crypto';
 import * as path from 'node:path';
 import {z} from 'zod';
 
-export const REGISTRY_RECEIPT_SCHEMA_VERSION = 2;
+export const REGISTRY_RECEIPT_SCHEMA_VERSION = 3;
 export const PUBLIC_SHADCN_REGISTRY_ORIGIN = 'https://astryx.atmeta.com/shadcn';
 
 const receiptTargetSchema = z
@@ -105,15 +105,33 @@ const receiptV1Schema = z
 
 const receiptV2Schema = z
   .object({
-    schemaVersion: z.literal(REGISTRY_RECEIPT_SCHEMA_VERSION),
+    schemaVersion: z.literal(2),
     item: receiptItemSchema,
     source: receiptSourceSchema,
     files: z.array(receiptFileV2Schema).min(1),
   })
   .strict();
 
+const replacedCountSchema = z.number().int().nonnegative();
+
+/** Version 3 adds what the copy replaced, as the CLI copy receipt reports it. */
+const receiptV3Schema = z
+  .object({
+    schemaVersion: z.literal(REGISTRY_RECEIPT_SCHEMA_VERSION),
+    item: receiptItemSchema,
+    source: receiptSourceSchema,
+    demoMediaReplaced: replacedCountSchema,
+    demoContentReplaced: replacedCountSchema,
+    files: z.array(receiptFileV2Schema).min(1),
+  })
+  .strict();
+
 export const registryReceiptSchema = z
-  .discriminatedUnion('schemaVersion', [receiptV1Schema, receiptV2Schema])
+  .discriminatedUnion('schemaVersion', [
+    receiptV1Schema,
+    receiptV2Schema,
+    receiptV3Schema,
+  ])
   .superRefine((receipt, context) => {
     const identities = [
       {label: 'id', values: receipt.files.map(file => file.id)},
@@ -200,6 +218,8 @@ export function registryReceiptTarget(sourceTarget, itemName) {
  *   item: {name: string, path: string, aliases: string[], kind: 'showcase'|'example'|'block'|'page'},
  *   sourceVersion: string,
  *   receiptTarget: string,
+ *   demoMediaReplaced: number,
+ *   demoContentReplaced: number,
  *   files: Array<{
  *     id: string,
  *     target: string,
@@ -218,6 +238,8 @@ export function createRegistryReceipt(input) {
       package: '@astryxdesign/cli',
       version: input.sourceVersion,
     },
+    demoMediaReplaced: input.demoMediaReplaced,
+    demoContentReplaced: input.demoContentReplaced,
     files: input.files.map(file => ({
       id: file.id,
       target: path.posix.relative(receiptDir, file.target),

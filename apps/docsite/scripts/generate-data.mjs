@@ -1528,11 +1528,10 @@ async function generateBlockRegistry() {
     } catch {
       /* ignore */
     }
-    // The displayed (and registry-published) source is the code a copy writes:
-    // docs-only demo content becomes the same generic placeholder `template
-    // copy` emits. The live preview still renders the original file (see
-    // writeBlockPreview). Throws, failing the build, on a use it cannot
-    // replace safely.
+    // Displayed source: the Code tab, Open in Playground, and the MCP server
+    // show each demo-content element as the placeholder a copy writes, and keep
+    // fixture media. The live preview renders the original file (see
+    // writeBlockPreview). A use that cannot be replaced safely fails the build.
     source = replaceDemoContent(source).source;
 
     const resolvedName = meta.name || basename;
@@ -1694,6 +1693,10 @@ async function generateTemplateRegistry() {
     } catch {
       /* ignore */
     }
+
+    // Displayed source, like each block's: the playground and the MCP server
+    // hand out the demo-content replacement a copy applies, with fixture media.
+    source = replaceDemoContent(source).source;
 
     templates.push({
       slug: dir.name,
@@ -2229,6 +2232,21 @@ function blockSourcePath(block) {
   );
 }
 
+function templateSourcePath(template) {
+  return path.join(CLI_ROOT, 'assets', 'templates', 'pages', template.slug, 'page.tsx');
+}
+
+/**
+ * The registries carry displayed source. A shadcn install is a copy, so it
+ * starts from the file as authored and applies every copy replacement itself.
+ * Integration blocks have no file here: their source is already a copy.
+ */
+function withAuthoredSource(entry, sourcePath) {
+  return sourcePath
+    ? {...entry, source: fs.readFileSync(sourcePath, 'utf-8')}
+    : entry;
+}
+
 function writeBlockPreview(block, outDir, basename) {
   const destFile = `${basename}.tsx`;
   const destination = path.join(outDir, destFile);
@@ -2672,8 +2690,10 @@ async function main() {
     outDir: path.join(DOCSITE_ROOT, 'public', 'shadcn'),
     packages,
     allComponents,
-    blocks,
-    templates,
+    blocks: blocks.map(block => withAuthoredSource(block, blockSourcePath(block))),
+    templates: templates.map(template =>
+      withAuthoredSource(template, templateSourcePath(template)),
+    ),
     cliRoot: CLI_ROOT,
     dependencyTag: DOCSITE_TARGET === 'canary' ? 'canary' : null,
     externalDependencySpecs: registryExternalDependencySpecs(),
