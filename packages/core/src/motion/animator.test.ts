@@ -262,6 +262,12 @@ function parse(value: string | number | null | undefined): number[] {
     .map(part => Number.parseFloat(part));
 }
 
+/** The x of the element's inline translate; `none` is no translate. */
+function inlineX(element: HTMLElement): number {
+  const value = element.style.translate;
+  return value === 'none' ? 0 : parse(value)[0];
+}
+
 /** What the browser would show: the keyframes interpolated linearly at `time`. */
 function sampleAt(
   animation: Recorded,
@@ -900,6 +906,202 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       });
       await Promise.resolve();
       expect(started).toBe(false);
+    });
+
+    it('a late first frame that leaves the start unread: a read and a retarget take the curve from that frame', async () => {
+      // The first frame comes 70 ms after the call, late behind other work.
+      // The page itself does not block. The page still has no start to read,
+      // but the compositor has the call moving by then.
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      expect(animation.startTime).toBeNull();
+      clock = 1170;
+      expect(animator.get('x')).toBeCloseTo(curve.value(0.1), 9);
+      animator.animate({x: 400}, {spring: springs.settle});
+      const retarget = live('translate').at(-1) as Recorded;
+      expect(sampleAt(retarget, 'translate', 1170)[0]).toBeCloseTo(
+        curve.value(0.1),
+        1,
+      );
+    });
+
+    it('a late first frame that leaves the start unread: the browser\u2019s start, once read, still decides', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      const [animation] = live('translate');
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      // The browser started it at 1060 and tells the page now.
+      animation.commit(1060);
+      await Promise.resolve();
+      await Promise.resolve();
+      clock = 1170;
+      expect(animator.get('x')).toBeCloseTo(curve.value(0.11), 9);
+    });
+
+    it('a rebase after a late first frame reads what the rebuilt animation shows, from the first value it starts at the frame that commits it', async () => {
+      const {element, animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.rebase({x: -16});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(rebuilt.startTime).toBeNull();
+      // Until the frame that commits it, the screen shows its first keyframe.
+      // The inline value and the hit-test origin show it too.
+      const first = parse(rebuilt.keyframes[0].translate)[0];
+      expect(animator.get('x')).toBeCloseTo(first, 1);
+      expect(inlineX(element)).toBeCloseTo(first, 1);
+      expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
+      // It starts at that frame, which bounds its start again.
+      clock = 1186;
+      await commitFrame(1186, {startUnread: true});
+      clock = 1202;
+      const shown = sampleAt(rebuilt, 'translate', rebuilt.createdAt + 16)[0];
+      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      animator.animate({x: 400}, {spring: springs.settle});
+      const retarget = live('translate').at(-1) as Recorded;
+      expect(sampleAt(retarget, 'translate', 1202)[0]).toBeCloseTo(shown, 1);
+    });
+
+    it('a set of the other axis after a late first frame reads what the rebuilt animation shows, from the first value it starts at the frame that commits it', async () => {
+      const {element, animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.set({y: 10});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(rebuilt.startTime).toBeNull();
+      const first = parse(rebuilt.keyframes[0].translate)[0];
+      expect(animator.get('x')).toBeCloseTo(first, 1);
+      expect(inlineX(element)).toBeCloseTo(first, 1);
+      expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
+      clock = 1186;
+      await commitFrame(1186, {startUnread: true});
+      clock = 1202;
+      const shown = sampleAt(rebuilt, 'translate', rebuilt.createdAt + 16)[0];
+      expect(animator.get('x')).toBeCloseTo(shown, 1);
+    });
+
+    it('a retarget of the other axis without a clock after a late first frame reads the first value the adopted curve starts from', async () => {
+      const {element, animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.animate({y: 50}, {spring: springs.settle});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(rebuilt.startTime).toBeNull();
+      // The new call takes the x curve and starts it again from its first
+      // keyframe. The reads, the inline value and the hit-test origin show it.
+      const first = parse(rebuilt.keyframes[0].translate)[0];
+      expect(animator.get('x')).toBeCloseTo(first, 1);
+      expect(inlineX(element)).toBeCloseTo(first, 1);
+      expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
+    });
+
+    it('a retarget that joins a call by its clock after a late first frame reads the first value the rebuilt animation starts from', async () => {
+      const {element, animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.animate({y: 50}, {spring: springs.settle}, {at: 1000});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(rebuilt.startTime).toBeNull();
+      const first = parse(rebuilt.keyframes[0].translate)[0];
+      expect(animator.get('x')).toBeCloseTo(first, 1);
+      expect(inlineX(element)).toBeCloseTo(first, 1);
+      expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
+      // The frame that commits it starts the joined call: the call is that
+      // frame's own task's.
+      clock = 1186;
+      await commitFrame(1186, {startUnread: true});
+      clock = 1202;
+      expect(animator.get('x')).toBeCloseTo(
+        sampleAt(rebuilt, 'translate', 1202)[0],
+        1,
+      );
+    });
+
+    it('a curve that joins a call by an older clock reads, after a late first frame, where the compositor has it', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      animator.animate({y: 50}, {spring: springs.settle}, {at: 990});
+      const [joined] = live('translate').slice(-1);
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      // The compositor started the joined animation at that frame: 100 ms
+      // into its keyframes, which run from the call's own time.
+      const shown = sampleAt(joined, 'translate', joined.createdAt + 100);
+      expect(animator.get('x')).toBeCloseTo(shown[0], 1);
+      expect(animator.get('y')).toBeCloseTo(shown[1], 1);
+    });
+
+    it('a late first frame that leaves the start unread: a read of a later time takes the curve from that frame, as the velocity does', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      // A companion samples a frame ahead of now.
+      expect(animator.get('x', 1186)).toBeCloseTo(curve.value(0.116), 9);
+      expect(animator.getVelocity('x', 1186)).toBeCloseTo(
+        curve.velocity(0.116),
+        9,
+      );
+    });
+
+    it("a rebase of one channel after a late first frame keeps the call's other channels reading from that frame", async () => {
+      const {animator} = setup();
+      animator.animate({x: 300, opacity: 0}, {spring: springs.settle});
+      const fade = live('opacity').at(-1) as Recorded;
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.rebase({x: -16});
+      expect(live('opacity').at(-1)).toBe(fade);
+      expect(animator.get('opacity')).toBeCloseTo(
+        sampleAt(fade, 'opacity', fade.createdAt + 100)[0],
+        2,
+      );
+      clock = 1186;
+      await commitFrame(1186, {startUnread: true});
+      clock = 1202;
+      const shown = sampleAt(fade, 'opacity', fade.createdAt + 132)[0];
+      expect(animator.get('opacity')).toBeCloseTo(shown, 2);
+      animator.animate({opacity: 1}, {spring: springs.settle});
+      const retarget = live('opacity').at(-1) as Recorded;
+      expect(sampleAt(retarget, 'opacity', 1202)[0]).toBeCloseTo(shown, 2);
+    });
+
+    it("a set of the other axis after a late first frame keeps the call's other channels reading from that frame", async () => {
+      const {animator} = setup();
+      animator.animate({x: 300, opacity: 0}, {spring: springs.settle});
+      const fade = live('opacity').at(-1) as Recorded;
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.set({y: 10});
+      expect(live('opacity').at(-1)).toBe(fade);
+      expect(animator.get('opacity')).toBeCloseTo(
+        sampleAt(fade, 'opacity', fade.createdAt + 100)[0],
+        2,
+      );
+      clock = 1186;
+      await commitFrame(1186, {startUnread: true});
+      clock = 1202;
+      const shown = sampleAt(fade, 'opacity', fade.createdAt + 132)[0];
+      expect(animator.get('opacity')).toBeCloseTo(shown, 2);
+      animator.animate({opacity: 1}, {spring: springs.settle});
+      const retarget = live('opacity').at(-1) as Recorded;
+      expect(sampleAt(retarget, 'opacity', 1202)[0]).toBeCloseTo(shown, 2);
     });
 
     it('a call the page pauses before its first frame waits for its start', async () => {
