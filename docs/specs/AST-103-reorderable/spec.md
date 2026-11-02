@@ -148,8 +148,8 @@ const {detach} = reorderable.attach(listElement, {
   (`architecture:internationalization` INV3a):
   - announcements: `pickedUp` and `dropped` (a drag's pick-up and drop, with
     position and count), `cancelled` (a cancelled drag, back to its
-    position), `place`, `placeAtTop`, `placeAtEnd`, and `placeInGrid` (FR4's
-    move announcements), `refused` (a move past a rejected row), `notMoved`
+    position), `place`, `placeAtTop`, `placeAtEnd`, `placeInGrid`, and `placeInTree` (FR4's
+    move announcements, `placeInTree` adding the parent), `refused` (a move past a rejected row), `notMoved`
     (FR4b's move the app did not apply), `modeDone` (leaving reorder mode),
     and `unnamedItem` (what announcements call an item with no text, such as
     "Item 2");

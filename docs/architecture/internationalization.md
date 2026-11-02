@@ -197,7 +197,9 @@ for all 30 shipped locales plus `pseudo`.
   announces or shows Astryx text (a live-region announcement, an `aria-*` or
   `title` value, or a visible label) takes an option for each such string. A
   factory with one string takes a flat optional string option for it, such as
-  `createResizable`'s `collapsedLabel`; a factory with more than one groups
+  `createResizable`'s `collapsedLabel` (a caller-supplied accessible name that
+  already exists as its own option, such as `label`, stays flat and does not
+  count toward the factory's strings); a factory with more than one groups
   them under one optional `labels` object, each key optional. An absent option
   or key falls back to the catalog message, translated when the factory's
   React wrapper runs under a provider and English without one; a given string
