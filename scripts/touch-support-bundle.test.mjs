@@ -15,7 +15,11 @@
  *   `internal/touch` entry reaches it, and no consumer doc or component
  *   `import()` does, but for `Item`'s loader for its deprecated swipe props
  *   (`spec:AST-057` DEP-0017), the one `import()` of swipe code, which this
- *   guard counts out of `Item`'s import by name
+ *   guard counts out of `Item`'s import by name; and `spec:AST-057` FR10's
+ *   module attribution: what `Item` alone and `ListItem` alone load at once
+ *   (the entry output and the chunks it reaches by static import, built with
+ *   the size report's code splitting) holds no byte of a swipe module, while
+ *   `Item` with `createSwipe` holds them
  * @position Node test over source, so it needs no build
  */
 
@@ -32,6 +36,16 @@ const esbuild = require('esbuild');
 
 /** The gesture core the internal entry re-exports. */
 const PRIMITIVE_INPUT = /^packages\/core\/src\/gestures\//;
+
+/**
+ * The modules the swipe runs on (`spec:AST-057` FR10): the shared gesture
+ * core, the animator, the snap-point drag, the panels' rendering, and the
+ * row's gesture code with its UIKit table. The reader of a swipe value and
+ * DEP-0017's row style are `Item`'s handoff and deprecated path, not swipe
+ * modules.
+ */
+const SWIPE_MODULE =
+  /^packages\/core\/src\/(gestures\/|animator\/|dragToSnapPoints\/|motion\/animator\.ts$|motion\/uikit\/swipeActions\.ts$|Swipe\/(?!swipeHost(\.stylex)?\.ts$))/;
 
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-touch-module-'));
 afterAll(() => {
@@ -118,6 +132,49 @@ function outputsOf(entries) {
       ]),
     ),
   );
+}
+
+/**
+ * The bytes each source module puts in what an import of `entry` loads at
+ * once: its entry output and the chunks it reaches by static import, built
+ * with the size report's code splitting, so a chunk only an `import()` reaches
+ * is left out.
+ */
+function eagerBytesOf(entry) {
+  const {metafile} = esbuild.buildSync({
+    ...BUILD_OPTIONS,
+    entryPoints: [entry],
+    splitting: true,
+  });
+  const {outputs} = metafile;
+  // An import() target is an entry point of its own in the metafile: start
+  // from this entry's output only.
+  const pending = Object.keys(outputs).filter(
+    file => outputs[file].entryPoint === path.relative(REPO, entry),
+  );
+  expect(pending).toHaveLength(1);
+  const eager = new Set();
+  while (pending.length > 0) {
+    const file = pending.pop();
+    if (eager.has(file)) {
+      continue;
+    }
+    eager.add(file);
+    for (const {path: next, kind} of outputs[file].imports) {
+      if (kind === 'import-statement' && outputs[next] != null) {
+        pending.push(next);
+      }
+    }
+  }
+  const bytes = {};
+  for (const file of eager) {
+    for (const [input, {bytesInOutput}] of Object.entries(
+      outputs[file].inputs,
+    )) {
+      bytes[input] = (bytes[input] ?? 0) + bytesInOutput;
+    }
+  }
+  return bytes;
 }
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */
@@ -365,6 +422,43 @@ export const ${name} = () => new GestureArena();
     for (const bytes of outputs.filter(output => output !== holding[0])) {
       expect(bytesOf(bytes)).toEqual([]);
     }
+  });
+});
+
+describe('the swipe modules in bundles (spec:AST-057 FR10)', () => {
+  const ITEM = path.join(CORE_SRC, 'Item/Item');
+  const LIST_ITEM = path.join(CORE_SRC, 'List/ListItem');
+  const CREATE_SWIPE = path.join(CORE_SRC, 'Swipe/createSwipe');
+
+  it.each([
+    ['Item', `export {Item} from ${JSON.stringify(ITEM)};`],
+    ['ListItem', `export {ListItem} from ${JSON.stringify(LIST_ITEM)};`],
+  ])('put no byte in what %s alone loads at once', (name, source) => {
+    const bytes = eagerBytesOf(entryWith(`fr10-${name}.ts`, source));
+    // The row is in the build, so a swipe module would be found if it were.
+    expect(bytes[`${path.relative(REPO, ITEM)}.tsx`]).toBeGreaterThan(0);
+    expect(bytesOf(bytes, SWIPE_MODULE)).toEqual([]);
+  });
+
+  it('are in what Item with createSwipe loads at once', () => {
+    const bytes = eagerBytesOf(
+      entryWith(
+        'fr10-item-with-create-swipe.ts',
+        `export {Item} from ${JSON.stringify(ITEM)};\n` +
+          `export {createSwipe} from ${JSON.stringify(CREATE_SWIPE)};`,
+      ),
+    );
+    const swipeModules = bytesOf(bytes, SWIPE_MODULE).map(([input]) => input);
+    for (const module of [
+      'packages/core/src/Swipe/createSwipe.ts',
+      'packages/core/src/Swipe/SwipeActionsLayer.tsx',
+      'packages/core/src/Swipe/useSwipeAction.ts',
+      'packages/core/src/dragToSnapPoints/createSnapDrag.ts',
+      'packages/core/src/motion/animator.ts',
+    ]) {
+      expect(swipeModules).toContain(module);
+    }
+    expect(swipeModules.some(input => PRIMITIVE_INPUT.test(input))).toBe(true);
   });
 });
 
