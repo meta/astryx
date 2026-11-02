@@ -4,8 +4,7 @@
 
 /**
  * @file PickerWheel.tsx
- * @input Wheel's props (wheelOptions.ts): options, value and change callback;
- *   optionally a rest rule and a ref for programmatic turns
+ * @input Wheel's props (wheelOptions.ts): options, value and change callback
  * @output PickerWheel: one picker column that moves like UIPickerView
  * @position Internal component; the Wheel under a finger (Wheel.tsx picks it)
  *
@@ -16,14 +15,7 @@
  * DateInputTouch.test.tsx, DateInput.doc.mjs and TimeInput.doc.mjs.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {scrollTypeOf} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
@@ -58,7 +50,6 @@ import {
   type WheelLayout,
 } from './wheelPhysics';
 import {
-  canSpinTo,
   nearestEnabledIndex,
   WHEEL_ROW_HEIGHT,
   type WheelProps,
@@ -200,8 +191,6 @@ export function PickerWheel({
   value,
   onChange,
   isActive = true,
-  resolveRest,
-  ref,
 }: WheelProps) {
   const columnRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<HTMLDivElement | null>(null);
@@ -221,9 +210,9 @@ export function PickerWheel({
 
   // The latest props, for the motion's and the gesture listeners' callbacks,
   // which are attached once and outlive a render.
-  const latestRef = useRef({options, value, onChange, resolveRest, layout});
+  const latestRef = useRef({options, value, onChange, layout});
   useIsomorphicLayoutEffect(() => {
-    latestRef.current = {options, value, onChange, resolveRest, layout};
+    latestRef.current = {options, value, onChange, layout};
   });
 
   // The row under the band is marked as today's column marks it. At rest that
@@ -301,17 +290,9 @@ export function PickerWheel({
       // the scrolling column.
       let step = 0;
       if (row !== committed) {
-        if (current.resolveRest) {
-          // The owner's rest: the row it names.
-          const resolved = current.resolveRest(row);
-          if (current.options[resolved] != null) {
-            step = resolved - row;
-          }
-        } else {
-          step =
-            nearestEnabledIndex(current.options, row, Math.max(0, committed)) -
-            row;
-        }
+        step =
+          nearestEnabledIndex(current.options, row, Math.max(0, committed)) -
+          row;
       }
       if (step !== 0) {
         const target = row + step;
@@ -583,33 +564,6 @@ export function PickerWheel({
     isEnabled: isActive,
     isPointerKept: true,
   });
-
-  // A spin turns only onto a row a rest would keep (canSpinTo). So its arrival
-  // commits that row, and nothing turns on past it. It reports the row it was
-  // asked for, as the scrolling column does.
-  const spinTo = useCallback(
-    async (index: number): Promise<boolean> =>
-      new Promise(resolve => {
-        const {options: currentOptions, resolveRest: currentResolveRest} =
-          latestRef.current;
-        if (!canSpinTo(currentOptions, index, currentResolveRest)) {
-          resolve(false);
-          return;
-        }
-        const offset = motion.offset();
-        move(turnCurve(columnRef.current, offset, index * ROW_HEIGHT), {
-          onEnd: (outcome, end) => {
-            if (outcome === 'arrived') {
-              arrive(end);
-            }
-            resolve(outcome === 'arrived');
-          },
-        });
-      }),
-    [motion, move, arrive],
-  );
-
-  useImperativeHandle(ref, () => ({spinTo}), [spinTo]);
 
   // A key commits the row at `position` at once and turns the wheel there
   // from `offset`.

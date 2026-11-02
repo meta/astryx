@@ -13,13 +13,11 @@
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {createRef} from 'react';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
   nearestEnabledIndex,
   ScrollWheel,
   Wheel,
-  type WheelHandle,
   type WheelOption,
 } from './Wheel';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
@@ -519,18 +517,11 @@ describe('Wheel — by pointer', () => {
   }
 
   function renderPicker() {
-    const ref = createRef<WheelHandle>();
     const onChange = vi.fn();
     const view = render(
-      <Wheel
-        ref={ref}
-        label="Hour"
-        options={HOURS}
-        value={12}
-        onChange={onChange}
-      />,
+      <Wheel label="Hour" options={HOURS} value={12} onChange={onChange} />,
     );
-    return {...view, ref, onChange};
+    return {...view, onChange};
   }
 
   it.each([
@@ -557,38 +548,6 @@ describe('Wheel — by pointer', () => {
     expect(
       screen.getByRole('listbox', {name: 'Hour'}).parentElement?.parentElement,
     ).toBe(container);
-  });
-
-  it('commits a spin at once under a fine pointer', async () => {
-    stubDevice({ios: false, coarse: false});
-    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
-    const {ref, onChange} = renderPicker();
-    await expect(ref.current?.spinTo(14)).resolves.toBe(true);
-    expect(onChange).toHaveBeenCalledWith(14);
-    // A disabled row is not a place to rest.
-    await expect(ref.current?.spinTo(3)).resolves.toBe(false);
-    expect(onChange).toHaveBeenCalledTimes(1);
-  });
-
-  it('refuses a spin onto a row the owner’s rest moves off, as the touch column does', async () => {
-    stubDevice({ios: false, coarse: false});
-    const ref = createRef<WheelHandle>();
-    const onChange = vi.fn();
-    render(
-      <Wheel
-        ref={ref}
-        label="Hour"
-        options={HOURS}
-        value={12}
-        onChange={onChange}
-        resolveRest={index => (index % 2 === 0 ? index : index + 1)}
-      />,
-    );
-    await expect(ref.current?.spinTo(13)).resolves.toBe(false);
-    await expect(ref.current?.spinTo(24)).resolves.toBe(false);
-    expect(onChange).not.toHaveBeenCalled();
-    await expect(ref.current?.spinTo(14)).resolves.toBe(true);
-    expect(onChange).toHaveBeenCalledWith(14);
   });
 });
 

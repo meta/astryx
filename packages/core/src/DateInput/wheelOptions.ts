@@ -3,8 +3,8 @@
 /**
  * @file wheelOptions.ts
  * @input Nothing; types, the row height and pure functions
- * @output WheelOption, WheelProps, WheelHandle, WHEEL_ROW_HEIGHT, canSpinTo
- *   and nearestEnabledIndex: what both wheels share
+ * @output WheelOption, WheelProps, WHEEL_ROW_HEIGHT and nearestEnabledIndex:
+ *   what both wheels share
  * @position Internal; read by Wheel.tsx (which re-exports all of it) and
  *   PickerWheel.tsx
  *
@@ -12,8 +12,6 @@
  * - /packages/core/src/DateInput/Wheel.tsx
  * - /packages/core/src/DateInput/PickerWheel.tsx
  */
-
-import type {Ref} from 'react';
 
 /**
  * Today's row, px (`dateInputTouchSizes.wheelItemSize`): the pitch of both
@@ -33,21 +31,6 @@ export interface WheelOption {
   isDisabled?: boolean;
 }
 
-/** Options for a programmatic turn. */
-/** What a Wheel's `ref` exposes. */
-export interface WheelHandle {
-  /**
-   * Turn the wheel onto `index` (an index into `options`) on the tap spin, then
-   * commit it as a rest would. Resolves true once that row is the committed
-   * one, false if a finger or another turn interrupted it or the wheel went
-   * away first. An index outside `options`, a disabled row, or a row
-   * `resolveRest` would move off resolves false at once and nothing turns.
-   * Under a fine pointer the row commits at once. The column then scrolls to it
-   * as for any new value, on the same rule.
-   */
-  spinTo(index: number): Promise<boolean>;
-}
-
 export interface WheelProps {
   /** Accessible name for the column, e.g. "Month". */
   label: string;
@@ -64,32 +47,6 @@ export interface WheelProps {
    * motion.
    */
   isActive?: boolean;
-  /**
-   * The row the wheel rests on after stopping on `index`. When it differs,
-   * the wheel turns on to it and commits that one. Under a finger only.
-   * @default the nearest enabled row (`nearestEnabledIndex`)
-   */
-  resolveRest?: (index: number) => number;
-  /** Programmatic turns: `spinTo(index)`. */
-  ref?: Ref<WheelHandle>;
-}
-
-/**
- * Whether `spinTo(index)` may turn onto `index`: a row of `options`, enabled,
- * and one `resolveRest` (when given) keeps. The touch wheel and the scrolling
- * column answer a spin by the same rule.
- */
-export function canSpinTo(
-  options: ReadonlyArray<WheelOption>,
-  index: number,
-  resolveRest?: (index: number) => number,
-): boolean {
-  const option = options[index];
-  return (
-    option != null &&
-    !option.isDisabled &&
-    (resolveRest == null || resolveRest(index) === index)
-  );
 }
 
 /**
