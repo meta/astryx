@@ -25,6 +25,7 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {STYLEX_GENERATED_VARIABLE} from '../lib/stylex-generated-variable.mjs';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -68,11 +69,7 @@ const cap = s =>
 const kebabAttr = p =>
   `data-${p.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
 
-// StyleX names a `defineVars` key that is not a literal `--` name as `--`,
-// the class name prefix, and a base-36 hash of a 32-bit value (1 to 7
-// characters). Package builds use the default prefix `x`. Do not give a public
-// custom property this form: the report leaves it out.
-const STYLEX_HASHED_VAR = /^--x[0-9a-z]{1,7}$/;
+const STYLEX_HASHED_NAME = new RegExp(`^${STYLEX_GENERATED_VARIABLE}$`);
 
 /**
  * Whether a stylesheet's custom property is public: not a private `--_*`
@@ -81,7 +78,7 @@ const STYLEX_HASHED_VAR = /^--x[0-9a-z]{1,7}$/;
  * @returns {boolean}
  */
 const isPublicCustomProperty = name =>
-  !name.startsWith('--_') && !STYLEX_HASHED_VAR.test(name);
+  !name.startsWith('--_') && !STYLEX_HASHED_NAME.test(name);
 
 /**
  * The file an entry point publishes: its stylesheet for a stylesheet entry,

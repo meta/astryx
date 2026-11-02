@@ -104,6 +104,10 @@ describe('generateReport', () => {
     expect(report).toContain('var --astryx-demo-offset (./demo.css)');
   });
 
+  it('still lists a short authored name in the StyleX prefix form', () => {
+    expect(report).toContain('var --xl (./demo.css)');
+  });
+
   it('details a declaration once and points later entry points at it', () => {
     expect(report.match(/^component Chip\(/gm)).toHaveLength(1);
     expect(report).toContain('Chip (.)');
