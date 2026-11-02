@@ -421,6 +421,23 @@ describe('DateInput', () => {
     expect(input).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('typing a day-first date in en-GB never reports a month-first date', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <InternationalizationProvider locale="en-GB">
+        <DateInput label="Start date" onChange={onChange} />
+      </InternationalizationProvider>,
+    );
+    await user.type(screen.getByRole('combobox'), '12/01/2026');
+    const reported = onChange.mock.calls.map(call => String(call[0]));
+    expect(reported.at(-1)).toBe('2026-01-12');
+    // Every value on the way reads 12 January; none reads 1 December.
+    for (const value of reported) {
+      expect(value).toMatch(/-01-12$/);
+    }
+  });
+
   describe('press inside and outside the open calendar', () => {
     function press(target: Element) {
       fireEvent.pointerDown(target, {composed: true});

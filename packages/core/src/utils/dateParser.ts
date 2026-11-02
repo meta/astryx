@@ -138,6 +138,13 @@ export function parseDateInput(
   if (/^\d+$/.test(trimmed)) {
     return null;
   }
+  // Numeric text that is not one of the locale-ordered forms above is no
+  // date either. Native `Date` reads `a/b/c` month-first in every locale and
+  // accepts a one- to three-digit year, so "12/0" or "12/01/2" in a
+  // day-first locale would become a wrong date.
+  if (/^[\d\s./-]+$/.test(trimmed)) {
+    return null;
+  }
 
   const parsed = new Date(trimmed);
   if (!isNaN(parsed.getTime())) {
