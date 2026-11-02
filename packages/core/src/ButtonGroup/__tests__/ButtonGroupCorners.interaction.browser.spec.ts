@@ -71,7 +71,7 @@ test('only the last member rounds its trailing corners, in every shape', async (
 }) => {
   await openShapes(page);
   const corners = await trailingCorners(page);
-  expect(corners.length).toBeGreaterThanOrEqual(22);
+  expect(corners).toHaveLength(24);
   for (const {shape, label, expected, trailing} of corners) {
     const rounded = trailing.map(value => parseFloat(value) > 0);
     expect(rounded, `${shape} / ${label}`).toEqual(
