@@ -4,39 +4,42 @@
  * @file layoutReset.ts
  * @input The layout custom properties Layout, its regions, Section and the
  *   container styles publish to their descendants.
- * @output `layoutReset`: one StyleX style that stops every one of them at an
+^ * @output `layoutReset`: the StyleX styles that stop every one of them at an
  *   element, so what renders inside lays out as it does at a page root.
  * @position Layout owns the reset (`component:Layout` FR8). A layout root
  *   applies it, as AppShell does at its root (`component:AppShell` FR18).
  *   Internal: no package entry exports it. `layoutReset.test.tsx` fails when
  *   Layout writes a custom property this reset does not cover.
  *
- * SYNC: the docsite's example root mirrors this list
- * (apps/docsite/src/components/component-detail/ExampleBlock.tsx), under a
- * parity test.
+ * SYNC: the docsite's example root composes `overlayPaddingReset` and
+ * mirrors the rest of this list (apps/docsite/src/components/component-detail/
+ * ExampleBlock.tsx); a parity test against it is pending until that mirror is
+ * on main.
  */
 
 import * as stylex from '@stylexjs/stylex';
+import {overlayPaddingReset} from './padding.stylex';
 
-export const layoutReset = stylex.create({
+const resetBeyondOverlays = stylex.create({
   root: {
-    // Subtracted by descendants: nothing outside is left to escape.
-    '--container-padding-inline-start': '0px',
-    '--container-padding-inline-end': '0px',
-    '--container-padding-block-start': '0px',
-    '--container-padding-block-end': '0px',
-    // Added by descendants: each reader falls back to its own default.
-    '--layout-padding-outer-x': 'initial',
-    '--layout-padding-outer-y': 'initial',
-    '--layout-padding-own-outer-x': 'initial',
-    '--layout-padding-own-outer-y': 'initial',
-    '--layout-padding-inner-x': 'initial',
-    '--layout-padding-inner-y': 'initial',
+    // Added by descendants, beyond what an overlay root resets: each reader
+    // falls back to its own default.
     '--layout-content-width': 'initial',
     '--layout-alignment-width': 'initial',
     '--_layout-flush-block-start': 'initial',
     '--_layout-flush-block-end': 'initial',
-    '--_section-padding-propagated': 'initial',
     '--container-max-height': 'initial',
   },
 });
+
+/**
+ * The full layout reset, for `stylex.props(...)`: `overlayPaddingReset` (the
+ * published container padding to `0px`; Layout insets and Section padding
+ * propagation to `initial`) plus the Layout widths, flush values and height
+ * cap. The shared declarations keep one owner, so a fix to either reaches
+ * every root that applies them.
+ */
+export const layoutReset = [
+  overlayPaddingReset.reset,
+  resetBeyondOverlays.root,
+] as const;

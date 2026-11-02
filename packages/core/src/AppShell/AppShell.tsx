@@ -1252,7 +1252,7 @@ export function AppShell({
             styles.root,
             // A layout root (FR18): nothing an ancestor Layout, Card or
             // Section publishes reaches the shell (component:Layout FR8).
-            layoutReset.root,
+            layoutReset,
             variant === 'wash'
               ? styles.variantWash
               : variant === 'surface'

@@ -77,7 +77,7 @@ describe('layoutReset (component:Layout FR8)', () => {
   it('stops each of them at the element it is applied to', () => {
     render(
       <Section padding={10}>
-        <div data-testid="root" {...stylex.props(layoutReset.root)} />
+        <div data-testid="root" {...stylex.props(layoutReset)} />
       </Section>,
     );
     const computed = getComputedStyle(screen.getByTestId('root'));
