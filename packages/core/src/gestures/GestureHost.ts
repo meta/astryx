@@ -920,7 +920,9 @@ export class GestureHost {
         wheel.takers.includes(recognizer) &&
         !this.wheelHasTaker(wheel)
       ) {
-        this.endWheel();
+        // At its last wheel: a later stamp would move the arena's clock past
+        // the next input's own time (FR16).
+        this.endWheel(wheel.last);
       }
       this.refresh(element, registration);
       // Even when the element keeps other attachments: one left disabled
@@ -2177,8 +2179,8 @@ export class GestureHost {
       // cancelled): the rest of the gesture is the page's. A followed pan's
       // own lift does not count: its momentum stays latched and prevented
       // until the splitter's next gesture or the end timer, and moves
-      // nothing (FR43).
-      this.endWheel();
+      // nothing (FR43). The release is stamped at its last wheel (FR16).
+      this.endWheel(gesture.last);
       const left = wheelPixels(wheel, this.doc.defaultView);
       gesture = {
         kind,
@@ -2514,10 +2516,10 @@ export class GestureHost {
   }
 
   /**
-   * End the wheel gesture in progress. On its own (its timer, a taker
-   * leaving, a detach) it ends `WHEEL_END_MS` after its last wheel; an input
-   * that ends it sooner (a press, the next gesture's first wheel) passes its
-   * own time. Both are on the wheels' time base (eventTime), never the
+   * End the wheel gesture in progress. On its own timer it ends its end
+   * window after its last wheel; a taker leaving (a detach, a disable)
+   * passes that last wheel's time, and an input that ends it sooner (a
+   * press, the next gesture's first wheel) its own time. Both are on the wheels' time base (eventTime), never the
    * host's clock, which need not share it.
    */
   private endWheel(endTime?: number): void {
