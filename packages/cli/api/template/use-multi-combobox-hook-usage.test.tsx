@@ -127,6 +127,22 @@ describe('useMultiCombobox example', () => {
     expect(document.activeElement).toBe(input);
   });
 
+  it('leaves Home and End to the field so they move the caret', () => {
+    const input = renderExample();
+    press(input, 'ArrowDown');
+    for (const key of ['Home', 'End']) {
+      const event = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        cancelable: true,
+      });
+      act(() => {
+        input.dispatchEvent(event);
+      });
+      expect(event.defaultPrevented).toBe(false);
+    }
+  });
+
   it('closes the list on Escape', () => {
     const input = renderExample();
     press(input, 'ArrowDown');

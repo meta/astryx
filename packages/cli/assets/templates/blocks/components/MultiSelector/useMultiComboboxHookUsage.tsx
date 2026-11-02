@@ -85,7 +85,13 @@ export default function UseMultiComboboxHookUsage() {
             );
           }}
           onClick={combobox.onTriggerClick}
-          onKeyDown={combobox.onKeyDown}
+          onKeyDown={event => {
+            // Home and End move the caret in a text field.
+            if (event.key === 'Home' || event.key === 'End') {
+              return;
+            }
+            combobox.onKeyDown(event);
+          }}
           onBlur={() => {
             setIsOpen(false);
             combobox.setHighlightedIndex(-1);
