@@ -8,7 +8,8 @@
  * @output Browser proof of the negotiation the unit tests cannot see:
  *   touch-action per element, touchmove cancelled exactly while a recognizer
  *   owns the finger, native scrolling untouched otherwise, click suppression
- *   with no ghost click, a drag that began as a scroll staying the browser's, pinch-zoom
+ *   with no ghost click or late mouse event, a drag that began as a scroll
+ *   staying the browser's, pinch-zoom
  *   left to the browser, a second finger that never breaks the first,
  *   timing taken from event timestamps under a blocked main thread, gestures
  *   for every pointer with nothing listening while idle where the primary
@@ -1049,6 +1050,70 @@ test('a tap recognizer replaces the click: no ghost click, no compatibility mous
   expect(entries.filter(entry => entry.name === 'click:hbutton')).toHaveLength(
     1,
   );
+});
+
+test("a tap a recognizer claims keeps its late mouse events from the page until their click: WebKit sends them after a held tap's cancelled touchend (spec:AST-094 FR21)", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.evaluate(() => {
+    const late = window as unknown as {
+      __late: string[];
+      __lateSent: boolean;
+      __sendLate: () => void;
+    };
+    late.__late = [];
+    late.__lateSent = false;
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      document.body.addEventListener(type, event =>
+        late.__late.push(`${type}:${(event as MouseEvent).detail}`),
+      );
+    }
+    const tapper = document.getElementById('tapper') as HTMLElement;
+    late.__sendLate = () => {
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        tapper.dispatchEvent(
+          new MouseEvent(type, {bubbles: true, cancelable: true, detail: 1}),
+        );
+      }
+    };
+    // Neither engine here sends a held tap's late compatibility events, so
+    // the page sends them just after the tap's touchend, as iOS WebKit does.
+    window.addEventListener(
+      'touchend',
+      () =>
+        setTimeout(() => {
+          late.__sendLate();
+          late.__lateSent = true;
+        }, 0),
+      {once: true},
+    );
+  });
+  await driver.tap(await center(page, 'tapper'));
+  expect(states(await log(page), 'tap')).toEqual(['ended', 'possible']);
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as {__lateSent: boolean}).__lateSent,
+      ),
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(() => (window as unknown as {__late: string[]}).__late),
+  ).toEqual([]);
+  // That click spent the guard: the next ones reach the page.
+  expect(
+    await page.evaluate(() => {
+      const late = window as unknown as {
+        __late: string[];
+        __sendLate: () => void;
+      };
+      late.__late.length = 0;
+      late.__sendLate();
+      return [...late.__late];
+    }),
+  ).toEqual(['mousedown:1', 'mouseup:1', 'click:1']);
 });
 
 test('a keyboard activation inside the click window after a claimed drag still clicks: the swallower passes a click whose detail is 0 (FR21)', async ({

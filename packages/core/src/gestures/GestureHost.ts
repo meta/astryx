@@ -1202,12 +1202,17 @@ export class GestureHost {
    * cancels it (or the click guard drops it, a late one included) and this one
    * is the tap's single activation.
    */
-  private clickRetargeted(target: EventTarget, x: number, y: number): void {
+  private clickRetargeted(
+    target: EventTarget,
+    x: number,
+    y: number,
+    pointerType: string,
+  ): void {
     const view = this.doc.defaultView;
     if (!(target instanceof Element) || !target.isConnected || view == null) {
       return;
     }
-    armClickGuard(this.doc);
+    armClickGuard(this.doc, {takesLateMouse: pointerType === 'touch'});
     if (
       target instanceof view.HTMLElement &&
       target.matches('input, textarea, select, [contenteditable]')
@@ -3143,7 +3148,14 @@ export class GestureHost {
     // A tap sent to what is drawn: the engine's click would hit the layout
     // position, so it is cancelled and the tap clicks what it touched.
     for (const end of retargetedEnds) {
-      if (this.clickRetargetedTap(end.landed, end, dispositions.get(end.id))) {
+      if (
+        this.clickRetargetedTap(
+          end.landed,
+          end,
+          dispositions.get(end.id),
+          'touch',
+        )
+      ) {
         cancelsClick = true;
       }
     }
@@ -3151,7 +3163,7 @@ export class GestureHost {
       if (event.cancelable) {
         event.preventDefault();
       }
-      armClickGuard(this.doc);
+      armClickGuard(this.doc, {takesLateMouse: true});
     }
   };
 
@@ -3165,6 +3177,7 @@ export class GestureHost {
     landed: {x: number; y: number; target: EventTarget} | undefined,
     end: {x: number; y: number},
     disposition: ClickDisposition | undefined,
+    pointerType: string,
   ): boolean {
     if (landed == null || disposition !== 'allow') {
       return false;
@@ -3173,7 +3186,7 @@ export class GestureHost {
     if (moved > UIKIT_TAP.allowableMovement.value) {
       return false;
     }
-    this.clickRetargeted(landed.target, end.x, end.y);
+    this.clickRetargeted(landed.target, end.x, end.y, pointerType);
     return true;
   }
 
@@ -3607,9 +3620,10 @@ export class GestureHost {
       landed,
       {x: event.clientX, y: event.clientY},
       dispositions.get(id),
+      event.pointerType,
     );
     if (!clicked && needsSuppression(dispositions)) {
-      armClickGuard(this.doc);
+      armClickGuard(this.doc, {takesLateMouse: event.pointerType === 'touch'});
     }
     // A finger read from its pointer events: the touchend that follows the
     // lift is cancelled when a gesture took it, which the lift itself may

@@ -372,11 +372,13 @@ a measured, sourced difference exists.
   scroll to the lift (DEC-7).
 - **FR21 — Clicks follow the gesture.** When a gesture takes a touch, its
   `touchend` MUST be cancelled, and no click or compatibility mouse event
-  reaches the page. A click held for a recognizer that may still recognize (a
-  tap that a double tap may claim) MUST be replayed on its target if that
-  recognizer fails. Activation with `detail === 0` (keyboard, assistive
-  technology) MUST always pass. A tap MUST NOT wait for the browser's
-  double-tap delay.
+  reaches the page. The click guard that the gesture host arms at that lift
+  takes them: the click, and the late `mousedown` and `mouseup` that WebKit
+  sends after a held tap's cancelled `touchend`. A click held for a
+  recognizer that may still recognize (a tap that a double tap may claim)
+  MUST be replayed on its target if that recognizer fails. Activation with
+  `detail === 0` (keyboard, assistive technology) MUST always pass. A tap
+  MUST NOT wait for the browser's double-tap delay.
 - **FR22 — The platform keeps its edge gestures.** iOS Safari's back swipe
   from the screen edge and Android's system back gesture MUST stay the
   browser's and the system's; a touch presentation never overrides them.
