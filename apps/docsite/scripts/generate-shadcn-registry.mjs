@@ -11,6 +11,8 @@
  * items create public re-exports; blocks and pages copy app-level composition
  * source that already imports published package paths and add adjacent receipts
  * so Astryx can reconcile later releases without taking ownership of user edits.
+ * An install is a copy: it replaces demo content and demo media as `template
+ * copy` does. The item description discloses that; the receipt keeps its shape.
  */
 
 import * as fs from 'node:fs';
@@ -21,6 +23,10 @@ import stylexPlugin from '@stylexjs/babel-plugin';
 import ts from 'typescript';
 import {registryItemSchema, registrySchema} from 'shadcn/schema';
 import {stripCopyrightHeader} from '../../../packages/cli/foundation/text/copyright-header.mjs';
+import {
+  MARKED_VIDEO_PLACEHOLDER,
+  replaceTemplateDemos,
+} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   createShadcnPrecompiledDeclaration,
   shadcnJavaScriptTarget,
@@ -311,6 +317,42 @@ function precompiledDeclarationFile(itemName, sourceTarget) {
   };
 }
 
+/**
+ * The item description, plus a sentence that discloses the replaced demo
+ * content when there is any. The install writes into a project and returns no
+ * response, so the description and the marked placeholders are the disclosure.
+ * @param {string} description
+ * @param {{demoMediaReplaced: number, demoContentReplaced: number}} replaced
+ */
+export function withReplacementNote(description, replaced) {
+  const {demoMediaReplaced, demoContentReplaced} = replaced;
+  if (demoMediaReplaced + demoContentReplaced === 0) return description;
+  const counts = [
+    demoMediaReplaced > 0 &&
+      `${demoMediaReplaced} demo media ${demoMediaReplaced === 1 ? 'reference' : 'references'}`,
+    demoContentReplaced > 0 &&
+      `${demoContentReplaced} demo content ${demoContentReplaced === 1 ? 'element' : 'elements'}`,
+  ].filter(Boolean);
+  const lead = /[.!?]$/u.test(description.trimEnd())
+    ? description.trimEnd()
+    : `${description.trimEnd()}.`;
+  return `${lead} Astryx replaced ${counts.join(' and ')} with marked placeholders; put your own content there.`;
+}
+
+/**
+ * The entry with the source a copy starts from. An entry whose `source` is
+ * already a copy, such as `template show` output, names its authored file in
+ * `authoredSourcePath`; the install applies every copy replacement to that file.
+ * @template {{source: string, authoredSourcePath?: string | null}} T
+ * @param {T} entry
+ * @returns {T}
+ */
+function withAuthoredSource(entry) {
+  return entry.authoredSourcePath
+    ? {...entry, source: fs.readFileSync(entry.authoredSourcePath, 'utf-8')}
+    : entry;
+}
+
 function withCompositionReceipt(item, identity, sourceVersion) {
   const [sourceFile, ...supportFiles] = item.files;
   const receiptTarget = registryReceiptTarget(sourceFile.target, item.name);
@@ -397,8 +439,12 @@ function blockItem(
     block.category,
     `${block.dirName}.tsx`,
   );
+  const {source: copiedSource, ...replaced} = replaceTemplateDemos(
+    block.source,
+    {videoPlaceholder: MARKED_VIDEO_PLACEHOLDER},
+  );
   const compiled = precompileStylexSource(
-    stripCopyrightHeader(block.source),
+    stripCopyrightHeader(copiedSource),
     fileName,
   );
   const sourceTarget = `components/astryx/${kind === 'block' ? 'blocks' : `${kind}s`}/${block.dirName}.${compiled.extension}`;
@@ -408,7 +454,10 @@ function blockItem(
       name: itemName,
       type: 'registry:block',
       title: block.displayName || block.name,
-      description: block.description || `Astryx ${kind}: ${block.name}.`,
+      description: withReplacementNote(
+        block.description || `Astryx ${kind}: ${block.name}.`,
+        replaced,
+      ),
       author: 'Astryx',
       dependencies: dependenciesForSource(
         compiled.source,
@@ -460,8 +509,12 @@ function pageItem(
     template.slug,
     'page.tsx',
   );
+  const {source: copiedSource, ...replaced} = replaceTemplateDemos(
+    template.source,
+    {videoPlaceholder: MARKED_VIDEO_PLACEHOLDER},
+  );
   const compiled = precompileStylexSource(
-    stripCopyrightHeader(template.source),
+    stripCopyrightHeader(copiedSource),
     fileName,
   );
   const sourceTarget = `app/astryx/${template.slug}/page.${compiled.extension}`;
@@ -471,7 +524,10 @@ function pageItem(
       name: itemName,
       type: 'registry:page',
       title: template.name,
-      description: template.description || `Astryx page: ${template.name}.`,
+      description: withReplacementNote(
+        template.description || `Astryx page: ${template.name}.`,
+        replaced,
+      ),
       author: 'Astryx',
       dependencies: dependenciesForSource(
         compiled.source,
@@ -617,7 +673,7 @@ export function buildShadcnRegistry({
   const packageCatalog = new Map(packages.map(pkg => [pkg.name, pkg]));
   const blockItems = [];
   let skippedUnpublishedBlocks = 0;
-  for (const block of blocks) {
+  for (const block of blocks.map(withAuthoredSource)) {
     // A released subpath can still lack a named component added after the last
     // package release. Production blocks must satisfy both contracts: the
     // imported subpath below and the published component snapshot here.
@@ -663,7 +719,7 @@ export function buildShadcnRegistry({
 
   const pageItems = [];
   let skippedUnpublishedPages = 0;
-  for (const template of templates) {
+  for (const template of templates.map(withAuthoredSource)) {
     try {
       pageItems.push(
         pageItem(

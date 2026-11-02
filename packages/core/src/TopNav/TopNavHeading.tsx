@@ -49,6 +49,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TopNav/TopNavHeading.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -463,7 +464,7 @@ export function TopNavHeading({
     />
   );
 
-  const headerEndContentElement = headerEndContent && (
+  const headerEndContentElement = isRenderable(headerEndContent) && (
     <span {...stylex.props(styles.headerEndContent)}>{headerEndContent}</span>
   );
 
@@ -475,7 +476,7 @@ export function TopNavHeading({
       {...stylex.props(styles.popoverHeading)}
       // A close affordance, not the trigger: dismiss only.
       onClick={closeMenu}>
-      {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+      {isRenderable(logo) && <span {...stylex.props(styles.logo)}>{logo}</span>}
       {renderTextContent(
         <Icon
           icon="chevronDown"
@@ -507,7 +508,9 @@ export function TopNavHeading({
           style,
         )}
         {...props}>
-        {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+        {isRenderable(logo) && (
+          <span {...stylex.props(styles.logo)}>{logo}</span>
+        )}
       </Element>
     );
   }
@@ -526,7 +529,9 @@ export function TopNavHeading({
           style,
         )}
         {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-        {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+        {isRenderable(logo) && (
+          <span {...stylex.props(styles.logo)}>{logo}</span>
+        )}
         {renderTextContent()}
         {headerEndContentElement}
         {chevronElement}
@@ -548,7 +553,9 @@ export function TopNavHeading({
             className,
             style,
           )}>
-          {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+          {isRenderable(logo) && (
+            <span {...stylex.props(styles.logo)}>{logo}</span>
+          )}
           {renderTextContent(
             // Stays a <button>: this box is the popover trigger, so it carries
             // the accessible name and handlers — only the glyph moves to Icon.
@@ -620,7 +627,7 @@ export function TopNavHeading({
             className,
             style,
           )}>
-          {logo &&
+          {isRenderable(logo) &&
             (headingHref ? (
               <LinkComponent
                 href={headingHref}
@@ -705,7 +712,7 @@ export function TopNavHeading({
           style,
         )}
         {...props}>
-        {logo &&
+        {isRenderable(logo) &&
           (headingHref ? (
             <LinkComponent
               href={headingHref}
@@ -759,7 +766,7 @@ export function TopNavHeading({
         style,
       )}
       {...props}>
-      {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+      {isRenderable(logo) && <span {...stylex.props(styles.logo)}>{logo}</span>}
       {renderTextContent()}
       {headerEndContentElement}
       {chevronElement}
