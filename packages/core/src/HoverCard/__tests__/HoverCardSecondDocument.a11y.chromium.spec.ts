@@ -94,6 +94,9 @@ test('Escape pressed in a Picture-in-Picture window closes the card there, and f
   await pictureInPicture.keyboard.press('Escape');
   await expect(message).toBeHidden();
 
+  // Leave the trigger first: a hover where the pointer already rests fires no
+  // mouseenter.
+  await pictureInPicture.mouse.move(0, 0);
   await trigger.hover();
   await expect(message).toBeVisible();
   await message.focus();

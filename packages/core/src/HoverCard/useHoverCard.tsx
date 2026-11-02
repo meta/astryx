@@ -60,9 +60,8 @@ const styles = stylex.create({
 });
 
 /**
- * The document the card lives in: its trigger's, which may be an iframe or a
- * Picture-in-Picture window. This page's before a trigger attaches; null with
- * no DOM.
+ * The card lives in its trigger's document, which can be an iframe or a
+ * Picture-in-Picture window rather than this page.
  */
 function ownerDocumentOf(el: HTMLElement | null): Document | null {
   if (el != null) {
