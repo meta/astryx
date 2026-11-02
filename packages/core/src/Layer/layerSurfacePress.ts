@@ -3,15 +3,11 @@
 /**
  * @file layerSurfacePress.ts
  * @input The content element of an open Tooltip or HoverCard surface.
- * @output A registry of those elements, so the shared "does this press belong
- *   to something else" walk (hasInteractiveAncestor) treats a press inside one
- *   as not the container's.
- * @position component:Tooltip FR11 and component:HoverCard FR11. The surfaces
- *   register their content element; every clickable container that asks
- *   hasInteractiveAncestor (useClickableContainer, TreeListItem, Table row
- *   plugins), or walks with isLayerSurface (Item, Token), leaves the press
- *   alone. The event
- *   keeps propagating, so document and window listeners still see it. Not
+ * @output A registry of those elements, read only by the public
+ *   hasInteractiveAncestor, whose documentation promises that a press inside
+ *   one answers true.
+ * @position Kept until the next minor for that public answer; Core's own
+ *   containers rely on layer roots stopping such presses instead. Not
  *   exported from the package.
  */
 

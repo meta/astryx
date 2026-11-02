@@ -48,7 +48,6 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
-import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
@@ -57,10 +56,7 @@ import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {
-  innermostInteractive,
-  useClickableContainer,
-} from '../hooks/useClickableContainer';
+import {useClickableContainer} from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -768,12 +764,7 @@ export function Item({
       return;
     }
     const target = e.target as HTMLElement;
-    if (
-      target.closest('button, a, input, select, textarea') ||
-      // A press inside an open Tooltip or HoverCard belongs to it
-      // (component:Tooltip FR11, component:HoverCard FR11).
-      innermostInteractive(target, e.currentTarget, isLayerSurface) != null
-    ) {
+    if (target.closest('button, a, input, select, textarea')) {
       return;
     }
     onClick?.(e);
