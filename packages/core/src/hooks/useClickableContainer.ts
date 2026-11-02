@@ -111,7 +111,9 @@ export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
   return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
 }
 
-// A press inside an open Tooltip or HoverCard surface belongs to that surface.
+// hasInteractiveAncestor documents this answer until the next minor.
+// A layer root stops such a press before any bubble-phase React handler.
+// A native listener or a capture-phase handler still sees it.
 function belongsToSomethingElse(element: Element): boolean {
   return matchesInteractiveSelectors(element) || isLayerSurface(element);
 }

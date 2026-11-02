@@ -32,6 +32,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
+import {isPressInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {
@@ -402,8 +403,24 @@ export function useTriggerMenu(
     }
   }, []);
 
+  const outsidePress = useOutsidePress();
   const popover = usePopover({
+    // A text input cannot be an invoker, so native light dismiss would count
+    // a press in the editor as outside and close the menu.
+    onShow: () => {
+      const editable = editableRef.current;
+      if (editable == null) {
+        return;
+      }
+      outsidePress.start(
+        editable,
+        path => isPressInsideOwnedLayer(path, editable, popover.id),
+        // Called after usePopover has returned, so `popover` is assigned.
+        () => popover.hide(),
+      );
+    },
     onHide: useCallback(() => {
+      outsidePress.stop();
       if (isMenuSuppressedRef.current) {
         return;
       }
@@ -425,8 +442,8 @@ export function useTriggerMenu(
         isLoading: false,
         isHidden: false,
       }));
-    }, [removeAnchorSpan]),
-    hasLightDismiss: true,
+    }, [outsidePress, removeAnchorSpan]),
+    hasLightDismiss: false,
     hasCloseButton: false,
     hasAutoFocus: false,
     // The popup's own role="listbox" is the exposed semantics; focus stays in
@@ -573,8 +590,8 @@ export function useTriggerMenu(
           isLoading: false,
           isHidden,
         }));
-        // A hidden menu closes its popover, which also releases the popover's
-        // Escape and light-dismiss handling; matches reopen it at the caret.
+        // A hidden menu closes its popover. That also stops its Escape and
+        // outside-press handling. Matches reopen it at the caret.
         if (isHidden && !isMenuSuppressedRef.current) {
           isMenuSuppressedRef.current = true;
           hidePopover();
