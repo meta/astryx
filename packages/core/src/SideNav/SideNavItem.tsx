@@ -83,6 +83,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -788,7 +789,7 @@ export function SideNavItem({
           color: isSelected ? 'inherit' : isDisabled ? 'disabled' : 'secondary',
         })}
       {!isCollapsed && <span {...stylex.props(styles.label)}>{label}</span>}
-      {!isCollapsed && endContent && (
+      {!isCollapsed && isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>
       )}
       {!isCollapsed && isItemCollapsible && !hasIndependentToggle && (
