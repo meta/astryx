@@ -1077,6 +1077,30 @@ describe('Selector', () => {
       expect(screen.getByRole('combobox', h)).toBeInTheDocument();
     });
 
+    it('asks a touch keyboard for its Search key and no autocorrection in the search row, and Enter still selects the highlighted option', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Apple"
+          onChange={onChange}
+          hasSearch
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Fruit'}));
+      const search = screen.getByRole('combobox', h);
+      expect(search).toHaveAttribute('enterkeyhint', 'search');
+      expect(search).toHaveAttribute('autocorrect', 'off');
+
+      await user.type(search, 'ban');
+      await user.keyboard('{ArrowDown}');
+      expect(search).toHaveAttribute('aria-activedescendant');
+      fireEvent.keyDown(search, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith('Banana');
+    });
+
     // The search input's expanded state, popup relationship, and active option
     // are bound to the shared Combobox contract (Selector.combobox.a11y.test.tsx,
     // search-active); this keeps only the Selector-specific wiring.

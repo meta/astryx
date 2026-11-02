@@ -720,6 +720,31 @@ describe('BaseTypeahead focus-out', () => {
 });
 
 describe('Typeahead', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection, and Enter still picks the highlighted result', async () => {
+    const onChange = vi.fn();
+    render(
+      <Typeahead
+        label="Fruit"
+        searchSource={fruitSource}
+        value={null}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox', {name: 'Fruit'});
+    expect(input).toHaveAttribute('enterkeyhint', 'search');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+
+    fireEvent.change(input, {target: {value: 'App'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({label: 'Apple'}),
+    );
+  });
+
   describe('out-of-order async results', () => {
     it('discards a stale response that resolves after a newer query', async () => {
       const resolvers = new Map<string, (items: SearchableItem[]) => void>();

@@ -398,7 +398,8 @@ separate React root under `document.body` and mirrors root theme attributes onto
 it.
 
 ToastViewport uses `popover="manual"` for top-layer promotion. Each open modal
-Dialog and each open scrim BottomSheet supplies its `<dialog>` as an outlet
+Dialog, each open modal Drawer, and each open scrim BottomSheet supplies its
+`<dialog>` as an outlet
 through the private `Layer/modalOutlet.ts` registry (`spec:AST-003` FR18:
 every active native modal supplies one, a covered sheet included); a modal
 BottomSheetSwitcher flow supplies its active step's dialog, following each
@@ -415,7 +416,8 @@ supplied later stays the latest until it closes. A BottomSheet releases its
 outlet when it starts closing: its dialog stays modal through the exit
 animation, but inert, except that a sheet closing with focus inside it stays
 out of `inert` until that focus leaves or the exit ends (`component:BottomSheet`
-FR9). A top-layer viewport renders into a host element
+FR9). A modal Drawer also releases its outlet when it starts closing, so toasts
+do not slide out with it. A top-layer viewport renders into a host element
 it owns, moves that host into the latest open outlet, returns it to the
 viewport's tree position when no outlet is open, and enters the top layer again
 after each move. Toasts therefore paint above the modal and stay operable inside

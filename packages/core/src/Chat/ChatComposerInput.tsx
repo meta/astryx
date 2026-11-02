@@ -68,6 +68,7 @@ import {
 import {Badge, type BadgeProps} from '../Badge';
 import {useChatComposerContext} from './ChatContext';
 import {themeProps} from '../utils/themeProps';
+import type {EnterKeyHint} from '../Field/textEntryTraits';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -247,6 +248,14 @@ export interface ChatComposerInputProps extends Omit<
    * never submits while a composition is in progress.
    */
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  /**
+   * What the Return key of a touch keyboard says (the native
+   * `enterkeyhint`). Enter sends the message, so the key says so: iOS shows
+   * its Send key. When `onKeyDown` makes Enter insert a line break on touch
+   * keyboards, pass `'enter'` so the key shows Return again.
+   * @default 'send'
+   */
+  enterKeyHint?: EnterKeyHint;
 }
 
 // =============================================================================
@@ -373,6 +382,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     onFiles,
     onSubmit = composerCtx?.onSubmit,
     onKeyDown: onKeyDownProp,
+    enterKeyHint = 'send',
     xstyle,
     className,
     style,
@@ -941,6 +951,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         // Explicit in both states: losing editability must not lose focus.
         tabIndex={0}
         contentEditable={!isDisabled}
+        enterKeyHint={enterKeyHint}
         suppressContentEditableWarning
         onInput={handleInput}
         onClick={handleEditorClick}

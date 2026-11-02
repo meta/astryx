@@ -200,6 +200,32 @@ describe('Tokenizer press inside and outside', () => {
 });
 
 describe('Tokenizer', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection, and Enter still adds the highlighted result', async () => {
+    const onChange = vi.fn();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[users[0]]}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveAttribute('enterkeyhint', 'search');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+
+    fireEvent.change(input, {target: {value: 'Bob'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      [users[0], expect.objectContaining({label: 'Bob'})],
+      expect.objectContaining({type: 'add'}),
+    );
+  });
+
   it('forwards DOM props and ref to the combobox input while preserving focus callbacks', () => {
     const ref = createRef<HTMLInputElement>();
     const onClick = vi.fn();
@@ -1288,7 +1314,7 @@ describe('Tokenizer', () => {
       maxEntries?: number;
       source?: () => SearchSource;
       steps: string[];
-      expanded: boolean;
+      expanded?: boolean;
       listed?: string[];
       notListed?: string[];
     };
@@ -1322,10 +1348,11 @@ describe('Tokenizer', () => {
         expanded: false,
       },
       {
-        situation: 'token picked from the list (inside add): closes, no reopen',
+        // Whether a pick keeps the list open is FR14's, not this table's.
+        situation: 'token picked from the list (inside add): not offered again',
         initial: [users[0]],
         steps: ['open', 'listed:Charlie', 'pick:Charlie'],
-        expanded: false,
+        notListed: ['Charlie'],
       },
       {
         situation: 'focus list open, slow reload: new token never listed',
@@ -1456,10 +1483,12 @@ describe('Tokenizer', () => {
         await new Promise(resolve => setTimeout(resolve, 300));
       });
 
-      expect(input).toHaveAttribute(
-        'aria-expanded',
-        row.expanded ? 'true' : 'false',
-      );
+      if (row.expanded != null) {
+        expect(input).toHaveAttribute(
+          'aria-expanded',
+          row.expanded ? 'true' : 'false',
+        );
+      }
       for (const name of row.listed ?? []) {
         expect(option(name)).toBeInTheDocument();
       }
