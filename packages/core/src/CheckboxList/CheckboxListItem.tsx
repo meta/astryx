@@ -178,8 +178,8 @@ function DescribedCheckboxInput(
         describedBy ?? undefined,
         listContext?.disabledMessageID,
       )}
-      // An error on the list makes each checkbox invalid. A status without a
-      // message renders nothing of its own; the list shows the message.
+      // The status has no message, so CheckboxInput renders nothing. The list
+      // renders the message.
       status={listContext?.isInvalid ? ERROR_STATUS : undefined}
     />
   );
