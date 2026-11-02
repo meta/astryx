@@ -10,7 +10,7 @@
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import UseClipboardHookUsage from './useClipboardHookUsage';
+import UseClipboardHookUsage from '../../assets/templates/blocks/components/Hooks/useClipboardHookUsage';
 
 const INVITE_LINK = 'https://example.com/invite/q7x2k9';
 
