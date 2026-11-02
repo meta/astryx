@@ -113,6 +113,14 @@ import english from '../i18n/generated-english/Selector/Selector.generated';
 
 registerEnglishFallback(english);
 
+/**
+ * A guess, confirmed by the open measure: more options than this overflow
+ * the popover listbox's 300 px block size even at 24 px rows, under the
+ * smallest default row (28 px). A wrong guess (a theme with shorter rows, a
+ * taller bottom sheet) costs only the measure's correction.
+ */
+const MOST_ROWS_THAT_FIT = 12;
+
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
   triggerContainer: {
@@ -1407,10 +1415,13 @@ export function Selector<T extends SelectorOptionType>(
     return match == null ? -1 : Number(match[1]);
   }, []);
   // Re-measured when the option set changes; the count is the dependency.
+  // A list longer than the most rows that can fit cannot fit, so it starts
+  // as a scroll container and the open measure only confirms it.
   const listboxHasOverflow = useMenuOverflow(
     listboxRef,
     filteredItems.length,
     surface.isOpen,
+    filteredItems.length > MOST_ROWS_THAT_FIT,
   );
   const listboxPress = useMenuPress({
     menuRef: listboxRef,

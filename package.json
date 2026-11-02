@@ -99,6 +99,7 @@
     "dev:sandbox:source": "pnpm generate:i18n-runtime && ASTRYX_SOURCE=1 pnpm -F @astryxdesign/sandbox dev",
     "npm:prune-canaries": "node scripts/npm/prune-canaries.mjs",
     "check:knowledge": "node scripts/check-knowledge.mjs",
+    "review:pre": "node scripts/pre-review.mjs",
     "specs:for": "node scripts/specs-for-file.mjs"
   },
   "devDependencies": {

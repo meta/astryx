@@ -3645,6 +3645,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-collator-locale-aware-name-sort",
+      "path": "examples/use-collator/locale-aware-name-sort",
+      "aliases": []
+    },
+    {
       "name": "example-use-combobox-assign-to-field",
       "path": "examples/use-combobox/assign-to-field",
       "aliases": []
@@ -3672,6 +3677,11 @@
     {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
       "aliases": []
     },
     {
@@ -3727,6 +3737,16 @@
     {
       "name": "example-use-theme-token-values",
       "path": "examples/use-theme/token-values",
+      "aliases": []
+    },
+    {
+      "name": "example-use-toast-settings-saved",
+      "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
       "aliases": []
     },
     {

@@ -3341,11 +3341,11 @@ const focusVars: stylex.VarGroup<Readonly<{ readonly '--focus-outline-width': "2
 const fontWeightDefaults: { readonly '--font-weight-normal': "400"; readonly '--font-weight-medium': "500"; readonly '--font-weight-semibold': "600"; readonly '--font-weight-bold': "700" }
 const fontWeightVars: stylex.VarGroup<Readonly<{ readonly '--font-weight-normal': "400"; readonly '--font-weight-medium': "500"; readonly '--font-weight-semibold': "600"; readonly '--font-weight-bold': "700" }>, symbol>
 const indicatorScope: ReturnType<typeof stylex.defineMarker>
-const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
+const inputStatusBorderStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusFocusStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
-const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)"> }>; readonly error: Readonly … #a9ac1cbc
+const inputStatusFocusWithinStyles: Readonly<{ readonly warning: Readonly<{ readonly borderColor: stylex.StyleXClassNameFor<"borderColor", "var(--color-text-warning)" | "Highlight"> }>; readonly e … #739ff723
 const inputStatusHoverShadowStyles: Readonly<{ readonly warning: Readonly<{ readonly boxShadow: stylex.StyleXClassNameFor<"boxShadow", "none" | { readonly '@media (hover: hover)': stylex.StyleXVar … #de6f47e5
-const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #2e7e1cc8
+const inputWrapperStyles: Readonly<{ readonly base: Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly position: stylex.StyleXClassNameFor<"pos … #90a96087
 const interactionOverlayStyles: Readonly<{ readonly backgroundColor: Readonly<{ readonly backgroundColor: stylex.StyleXClassNameFor<"backgroundColor", "light-dark(#0536590C, #FFFFFF0C)" | "lig … #3522ad34
 const overlayPaddingReset: Readonly<{ readonly reset: Readonly<{ readonly '--container-padding-inline-start': stylex.StyleXClassNameFor<"--container-padding-inline-start", "0px">; readonl … #15cd7287
 const radiusDefaults: object
@@ -8703,7 +8703,7 @@ const capsizeStyles: Readonly<{ readonly enabled: Readonly<{ readonly textBoxEdg
 const colorStyles: Readonly<{ readonly primary: Readonly<{ readonly color: stylex.StyleXClassNameFor<"color", "light-dark(#0A1317, #DFE2E5)"> }>; readonly secondary: Readonly<{ re … #ee16b085
 const decorationStyles: Readonly<{ readonly strikethrough: Readonly<{ readonly textDecoration: stylex.StyleXClassNameFor<"textDecoration", "line-through"> }> }>
 const defaultWeightByTypeStyles: Readonly<{ readonly body: Readonly<{ readonly fontWeight: stylex.StyleXClassNameFor<"fontWeight", "var(--font-weight-normal)"> }>; readonly large: Readonly<{ re … #7b93196d
-const displayStyles: Readonly<{ readonly inline: Readonly<{ readonly display: stylex.StyleXClassNameFor<"display", "inline"> }>; readonly block: Readonly<{ readonly display: stylex. … #58a69ee2
+const displayStyles: Readonly<{ readonly inline: Readonly<{ readonly display: stylex.StyleXClassNameFor<"display", "inline">; readonly overflowWrap: stylex.StyleXClassNameFor<"overf … #81cb0621
 const justifyStyles: Readonly<{ readonly start: Readonly<{ readonly textAlign: stylex.StyleXClassNameFor<"textAlign", "start"> }>; readonly center: Readonly<{ readonly textAlign: st … #8d088e19
 const sizeByLevelStyles: Readonly<{ readonly 1: Readonly<{ readonly fontSize: stylex.StyleXClassNameFor<"fontSize", "var(--font-size-2xl)">; readonly lineHeight: stylex.StyleXClassNameF … #c4a3a9df
 const sizeByTypeStyles: Readonly<{ readonly body: Readonly<{ readonly fontSize: stylex.StyleXClassNameFor<"fontSize", "var(--font-size-base)">; readonly lineHeight: stylex.StyleXClassN … #2041d898
@@ -9970,6 +9970,7 @@ var --text-supporting-size (./astryx.css)
 var --text-supporting-weight (./astryx.css)
 var --tree-list-indent (./astryx.css)
 var --tree-list-row-gap (./astryx.css)
+var --x1ue0wla (./astryx.css)
 var --border-color-error (./tailwind-theme.css)
 var --border-color-info (./tailwind-theme.css)
 var --border-color-success (./tailwind-theme.css)
