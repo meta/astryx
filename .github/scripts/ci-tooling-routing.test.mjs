@@ -37,14 +37,19 @@ const BROAD_ONLY =
 const BUILD_TESTS = 'packages/build/src';
 const PLUGIN_BUILD = 'pnpm -F @astryxdesign/build build';
 const CASCADE_GUARD = 'node .github/scripts/theme-layer-cascade.js';
+const PACKED_CONSUMER =
+  'vitest run packages/build/src/packed-consumer.test.mjs --project node --maxWorkers=1';
 const VITEST_COMMAND =
-  /^(?:(ASTRYX_[A-Z0-9_]+)=1 )?vitest run (\S+\.test\.mjs) --project node --maxWorkers=1$/;
-const OPT_IN = /\.runIf\(process\.env\.(ASTRYX_[A-Z0-9_]+) === '1'\)/;
+  /^(?:(ASTRYX_[A-Z0-9_]+)=1 )?vitest run (\S+\.test\.(?:mjs|ts|tsx)) --project node --maxWorkers=1$/;
+// A file opts in on a switch when it compares it to '1' anywhere, inline in a
+// runIf or hoisted into a constant.
+const OPT_IN = /process\.env\.(ASTRYX_[A-Z0-9_]+) === '1'/;
+const TEST_FILE = /\.test\.(?:mjs|ts|tsx)$/;
 // A Build package script the list calls, and a Vitest command inside one (its
 // paths are relative to the package).
 const PACKAGE_SCRIPT = /^pnpm -F @astryxdesign\/build (\S+)$/;
 const PACKAGE_VITEST =
-  /^(?:(ASTRYX_[A-Z0-9_]+)=1 )?(?:pnpm exec |npx )?vitest run (\S+\.test\.mjs)(?: .*)?$/;
+  /^(?:(ASTRYX_[A-Z0-9_]+)=1 )?(?:pnpm exec |npx )?vitest run (\S+\.test\.(?:mjs|ts|tsx)) --project node --maxWorkers=1$/;
 
 /**
  * What is wrong with the Build owner's `test:build` command list, or [] when
@@ -63,6 +68,8 @@ function buildContractProblems({
   if (commands.every(command => !command.trim()))
     return ['test:build lists no commands'];
   const problems = [];
+  if (!commands.includes(PACKED_CONSUMER))
+    problems.push(`missing: ${PACKED_CONSUMER}`);
   const build = commands.indexOf(PLUGIN_BUILD);
   const cascade = commands.indexOf(CASCADE_GUARD);
   if (build === -1) problems.push(`missing: ${PLUGIN_BUILD}`);
@@ -94,13 +101,18 @@ function buildContractProblems({
         problems.push(`@astryxdesign/build has no script ${script}`);
         continue;
       }
-      for (const part of body.split(' && ')) {
-        const inner = PACKAGE_VITEST.exec(part.trim());
-        if (inner)
-          checkRun(
-            path.posix.join('packages/build', inner[2]),
-            inner[1] ?? null,
+      // Its other steps (a browser install, say) are the package's own; each
+      // Vitest step is held to the same serial Node-project rule.
+      for (const part of body.split(' && ').map(item => item.trim())) {
+        if (!/\bvitest\b/.test(part)) continue;
+        const inner = PACKAGE_VITEST.exec(part);
+        if (!inner) {
+          problems.push(
+            `@astryxdesign/build ${script}: not a Build contract: ${part}`,
           );
+          continue;
+        }
+        checkRun(path.posix.join('packages/build', inner[2]), inner[1] ?? null);
       }
       continue;
     }
@@ -145,7 +157,7 @@ describe('the Build contract check', () => {
     });
   const browserScript = {
     'test:browser':
-      'ASTRYX_TURBOPACK_E2E=1 vitest run src/next.turbopack.test.mjs --project node',
+      'npx playwright install chromium && ASTRYX_TURBOPACK_E2E=1 vitest run src/next.turbopack.test.mjs --project node --maxWorkers=1',
   };
   const withPackageScript = [
     ...good.slice(0, 4),
@@ -159,13 +171,40 @@ describe('the Build contract check', () => {
   it('fails a package script that runs the fixture without its switch, or is missing', () => {
     expect(
       check(withPackageScript, {
-        'test:browser': 'vitest run src/next.turbopack.test.mjs',
+        'test:browser':
+          'vitest run src/next.turbopack.test.mjs --project node --maxWorkers=1',
       }),
     ).toContain(
       'packages/build/src/next.turbopack.test.mjs opts in on ASTRYX_TURBOPACK_E2E, but runs with nothing',
     );
     expect(check(withPackageScript, {})).toContain(
       '@astryxdesign/build has no script test:browser',
+    );
+    expect(
+      check(withPackageScript, {
+        'test:browser':
+          'ASTRYX_TURBOPACK_E2E=1 vitest run src/next.turbopack.test.mjs --project node',
+      }),
+    ).toContain(
+      '@astryxdesign/build test:browser: not a Build contract: ASTRYX_TURBOPACK_E2E=1 vitest run src/next.turbopack.test.mjs --project node',
+    );
+  });
+
+  it('requires an opt-in test however it is written or nested', () => {
+    const nested = 'packages/build/src/turbopack/dev.test.ts';
+    expect(
+      buildContractProblems({
+        commands: good,
+        readFile: file =>
+          file === nested
+            ? "const RUN = process.env.ASTRYX_TURBOPACK_DEV === '1';\ndescribe.runIf(RUN)('x', () => {});"
+            : (files[file] ?? null),
+        buildTests: [...Object.keys(files), nested].filter(file =>
+          file.startsWith(BUILD_TESTS),
+        ),
+      }),
+    ).toContain(
+      `opt-in Build test never runs: ${nested} (ASTRYX_TURBOPACK_DEV=1)`,
     );
   });
 
@@ -195,6 +234,11 @@ describe('the Build contract check', () => {
       'guards the cascade before the plugin is built',
       [good[0], CASCADE_GUARD, PLUGIN_BUILD, ...good.slice(3)],
       'the cascade guard runs before the plugin is built',
+    ],
+    [
+      'drops the packed consumer',
+      good.filter(command => command !== PACKED_CONSUMER),
+      `missing: ${PACKED_CONSUMER}`,
     ],
     [
       'drops the plugin build',
@@ -322,8 +366,9 @@ describe('Node-tooling CI routing', () => {
         readFile: relative =>
           fs.existsSync(path.join(root, relative)) ? read(relative) : null,
         buildTests: fs
-          .readdirSync(path.join(root, BUILD_TESTS))
-          .filter(name => name.endsWith('.test.mjs'))
+          .readdirSync(path.join(root, BUILD_TESTS), {recursive: true})
+          .map(name => String(name).split(path.sep).join('/'))
+          .filter(name => TEST_FILE.test(name))
           .map(name => `${BUILD_TESTS}/${name}`),
         packageScripts: JSON.parse(read('packages/build/package.json')).scripts,
       }),
