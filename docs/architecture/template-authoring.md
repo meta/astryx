@@ -150,9 +150,10 @@ authoring check; it does not replace runtime catalog validation.
   own `AppShell` and global navigation because demonstrating that chrome is its
   purpose. The contributor guide owns the exact root-component recipe.
 - **INV8 — Copying is a self-contained snapshot.** The emitted source belongs to the
-  adopting project. Repository-only demo assets are replaced during copy so the
-  scaffold does not depend on Astryx preview hosting. Later catalog updates do not
-  mutate copied projects.
+  adopting project. Repository-only demo assets and demo-content elements are
+  replaced with generic placeholders during copy and in displayed code; live
+  previews render the originals. Later catalog updates do not mutate copied
+  projects.
 - **INV9 — Catalog values may evolve.** Template ids, labels, metadata, categories,
   example data, and starter source are mutable catalog data under
   `spec:AST-017/DEC-2`.
@@ -218,6 +219,15 @@ This record does not absorb adjacent facts:
   runtime template envelope.
 - `packages/cli/foundation/discovery/template-adapter.mjs` — current source loaders,
   normalization, projections, and shared template IO.
+- `replaceDemoMedia` in `template-adapter.mjs` — the INV8 replacement step that
+  copy and displayed code share. It replaces `/template-assets/` media URLs. In
+  motion and gesture examples, where a real Astryx component wraps docs-only
+  contents, such as `<Card><PlayingCardContents /></Card>`, it also replaces each
+  element imported from the one demo-content module with a generic placeholder
+  and drops that import, keeping the outer component, and the copy receipt
+  reports the count as `demoContentReplaced`. The docsite Code tab runs the same
+  function (`spec:AST-033` FR23). Implementation gap: the demo-content module,
+  the element pass, and `demoContentReplaced` are not built.
 - `packages/cli/foundation/config/project.mjs` — project diagnostics and current
   integration-template re-collection.
 - `packages/cli/api/template/` — list, show, skeleton, and copy operations.
@@ -234,14 +244,15 @@ This record does not absorb adjacent facts:
 
 ## Verification
 
-| Scope                                 | Current evidence                                                              | Missing before `current`                                                                        |
-| ------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Source shapes and integration parsing | `parse.test.mjs`, `template-suffix.test.mjs`, `template-integration.test.mjs` | One corpus check that runs every shipped page and block through the normalized boundary         |
-| Catalog membership and diagnostics    | `template-adapter.test.mjs`, `project.test.mjs`                               | One catalog implementation; no duplicate collection; every invalid source reported consistently |
-| `init` projection                     | `init.test.mjs`                                                               | Selection of every named built-in page from the catalog instead of a directory scan             |
-| Docsite and sandbox projections       | `data-extraction.test.ts`, generated registry checks                          | Membership parity and live-preview coverage derived from catalog metadata                       |
-| Copy boundary                         | `template.test.mjs`, `template-suffix.test.mjs`                               | Mutation coverage for preview-only asset removal and snapshot independence                      |
-| Rubric evidence                       | Versioned scorecards carrying `commit` and `rubricVersion`                    | None for architecture; scores remain audit evidence rather than authority                       |
+| Scope                                 | Current evidence                                                              | Missing before `current`                                                                                  |
+| ------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Source shapes and integration parsing | `parse.test.mjs`, `template-suffix.test.mjs`, `template-integration.test.mjs` | One corpus check that runs every shipped page and block through the normalized boundary                   |
+| Catalog membership and diagnostics    | `template-adapter.test.mjs`, `project.test.mjs`                               | One catalog implementation; no duplicate collection; every invalid source reported consistently           |
+| `init` projection                     | `init.test.mjs`                                                               | Selection of every named built-in page from the catalog instead of a directory scan                       |
+| Docsite and sandbox projections       | `data-extraction.test.ts`, generated registry checks                          | Membership parity and live-preview coverage derived from catalog metadata                                 |
+| Copy boundary                         | `template.test.mjs`, `template-suffix.test.mjs`                               | Mutation coverage for preview-only asset removal and snapshot independence                                |
+| Demo-content replacement              | None; not built                                                               | The copy receipt and Code-tab output contain no demo-content element; a live preview renders the original |
+| Rubric evidence                       | Versioned scorecards carrying `commit` and `rubricVersion`                    | None for architecture; scores remain audit evidence rather than authority                                 |
 
 ## Shipped-catalog audit
 
