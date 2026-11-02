@@ -158,10 +158,12 @@ For component-specific documentation, see the `{Name}.doc.mjs` file in each comp
 
 Documentation lives in two places:
 
-1. **File Headers** — Each source file has a structured JSDoc header with `@input`, `@output`, `@position`
+1. **File Headers** — Each source file has a structured JSDoc header with `@input`, `@output`, `@position`, in about 12 lines at most
 2. **Component Docs** — `{Name}.doc.mjs` files in each component directory (props, features, examples)
 
-**Update Protocol**: When modifying code, update the file's header comment. Look for `SYNC:` comments as reminders.
+**Update Protocol**: When modifying code, keep the file's header comment accurate. Look for `SYNC:` comments as reminders.
+
+**Source comments** ([`architecture:knowledge-contracts`](docs/architecture/knowledge-contracts.md#source-comments) INV29): make the code explain itself with names, structure, and control flow. A comment explains only non-obvious work: a reason, a constraint, an invariant, or a browser quirk. Never narrate the code, restate names or types, or cite pull requests, issues, dates, or spec records (`pnpm specs:for <path>` finds the record). When a citation is a file's only link to a record or claim, add that link to a record before you remove it: for a whole record, link the file through `applies_to`, `verified_by`, or `path-applicability:v1`; for a claim such as `AST-108 FR4`, add a claim-scoped reference such as `system_specs: [spec:AST-108/FR4]` to the file's own component, module, or theme record. Write in ASD-STE100 Simplified Technical English: short sentences, one topic each, active voice, present tense. Keep public JSDoc, the Effect note naming the system it syncs, and directives a tool reads: lint and TypeScript directives, `@pr-a11y` lines, and any other comment line a repository tool parses. The record has a worked before/after example.
 
 **Audience**: every `.doc.mjs`, and everything under `packages/cli/assets/docs/`, is written for people **building with** Astryx — not for people building Astryx. Internal review rubrics, readiness gates, audit checklists and lab→core criteria belong in the wiki. A public authoring-quality rubric belongs in shipped docs when callers use it to evaluate an artifact they create through Astryx and a current system spec assigns that ownership. [`packages/cli/assets/docs/README.md`](packages/cli/assets/docs/README.md) has the test and the page each kind of material goes to.
 
