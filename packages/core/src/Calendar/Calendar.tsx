@@ -519,11 +519,9 @@ export function Calendar({ref, ...props}: CalendarProps) {
         !(maxDateForKeys && plainDateIsAfter(pd, maxDateForKeys));
       let targetPd: PlainDate;
       if (unit === 'months' || unit === 'years') {
-        // A page targets the same day of the month a month or a year away,
-        // clamped to that month's length. Past `min`/`max` nothing moves; a
-        // month with no enabled day is no destination either, the same as an
-        // arrow with no enabled day in its direction; a target disabled by a
-        // constraint lands on that month's first enabled day instead.
+        // A page or a year step keeps the day of the month and clamps it to the
+        // target month's length. A month with no enabled day is no target, the
+        // same as for an arrow.
         const candidate = plainDateAddMonths(
           currentPd,
           unit === 'years' ? delta * 12 : delta,
@@ -964,8 +962,8 @@ function MonthGrid({
     [getFocusedDate, onNavigateNext],
   );
 
-  // PageUp/PageDown move by a month. useGridFocus calls these without the
-  // event, so handleKeyDown below catches Shift+PageUp/PageDown first.
+  // useGridFocus calls these without the event, so handleKeyDown below
+  // catches Shift+PageUp/PageDown first.
   const handlePageUp = useCallback(() => {
     const focusedDate = getFocusedDate();
     if (focusedDate) {
