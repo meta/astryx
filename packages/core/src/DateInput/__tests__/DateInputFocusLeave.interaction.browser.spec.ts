@@ -12,28 +12,20 @@
  */
 
 import {expect, test, type Page} from '@playwright/test';
-import {
-  DEFAULT_STORYBOOK_DIR,
-  serveStorybook,
-  type StaticServer,
-} from '@astryxdesign/a11y-spec/storybook';
+import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
-let storybook: StaticServer;
+const storybook = withStorybook(test);
 
-test.beforeAll(async () => {
-  storybook = await serveStorybook(
-    process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
-  );
-});
-
-test.afterAll(async () => {
-  await storybook?.close();
+// A fine pointer on a desktop-sized page, where the calendar is the anchored
+// popover this record covers (a coarse pointer presents a bottom sheet).
+test.use({
+  isMobile: false,
+  hasTouch: false,
+  viewport: {width: 1024, height: 768},
 });
 
 async function openFirst(page: Page) {
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=core-dateinput--formats&viewMode=story`,
-  );
+  await openStory(page, storybook(), 'core-dateinput--formats');
   const fields = page.getByRole('combobox');
   await fields.first().waitFor();
   await fields.first().click();
