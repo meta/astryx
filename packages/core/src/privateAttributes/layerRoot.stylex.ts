@@ -5,12 +5,10 @@
  * @input A layer content root
  * @output layerRootProps, which marks an element as a layer root, and
  *   closestLayerRoot, which finds the nearest marked root
- * @position Owner module of the private layer-root attribute
- *   (`architecture:public-component-api` INV23): the only file that writes
- *   its name. Layer's click boundary (`architecture:layer-runtime` INV17)
- *   spreads the mark on every layer root; SelectableCard reads it for its
- *   compatibility path (`component:SelectableCard` CLN-0026). No package
- *   entry exports it.
+ * @position Owner module of the private layer-root attribute: the only
+ *   file that writes its name. Layer's click boundary spreads the mark on
+ *   every layer root; SelectableCard reads it for its compatibility path
+ *   until the next minor. No package entry exports it.
  */
 
 const LAYER_ROOT = 'data-astryx-layer-root';

@@ -825,7 +825,7 @@ export function ToastViewport({
           style: Object.keys(insetStyle).length > 0 ? insetStyle : undefined,
         },
       )}
-      // A press inside the viewport stops at its root (layer-runtime INV17).
+      // Presses on toasts do not reach handlers around the viewport.
       {...layerClickBoundary()}>
       <LayerContentBoundary>
         {visibleToasts.map(entry => (

@@ -6,11 +6,10 @@
  *   Lightbox, MobileNav, BottomSheet, ToastViewport), ClickableCard,
  *   ContextMenu, BaseTypeahead, SelectableCard, Tooltip and
  *   useKeepLayerOpenProps
- * @output architecture:layer-runtime INV17: a press inside a layer stops at
- *   the layer root in the React tree, and the native press still reaches
- *   document listeners (ContextMenu's outside mousedown, Typeahead's deferred
- *   click, the keep-open pointerup). component:SelectableCard FR2's
- *   compatibility path until the next minor.
+ * @output A press inside a layer stops at the layer root in the React tree,
+ *   and the native press still reaches document listeners (ContextMenu's
+ *   outside mousedown, Typeahead's deferred click, the keep-open pointerup);
+ *   SelectableCard's compatibility path until the next minor.
  */
 
 import {
@@ -37,6 +36,7 @@ import {ContextMenu} from '../ContextMenu/ContextMenu';
 import {BaseTypeahead} from '../Typeahead/BaseTypeahead';
 import {SelectableCard} from '../SelectableCard/SelectableCard';
 import {Tooltip} from '../Tooltip/Tooltip';
+import {Button} from '../Button/Button';
 import {useKeepLayerOpenProps} from './useLayer';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 
@@ -284,7 +284,7 @@ describe('layer click boundary (layer-runtime INV17)', () => {
         </div>,
       );
       press(screen.getByText('Step text'));
-      // component:BottomSheetSwitcher FR9: the step's dialog carries them.
+      // The switcher forwards these to the step's dialog.
       expect(switcher.click).toHaveBeenCalledTimes(1);
       expect(switcher.pointerDown).toHaveBeenCalledTimes(1);
       expect(wrapperClick).not.toHaveBeenCalled();
@@ -397,8 +397,7 @@ describe('document listeners still receive presses inside a layer', () => {
   });
 });
 
-// component:SelectableCard FR2 keeps its released promise until the next
-// minor (CLN-0026): the caller's onClick still runs for a click inside an
+// Until the next minor, the caller's onClick still runs for a click inside an
 // open layer within the card, during capture, and the card does not toggle.
 describe('SelectableCard compatibility until the next minor', () => {
   it("still calls the caller's onClick for a click inside an open tooltip, without toggling", () => {
@@ -451,6 +450,29 @@ describe('SelectableCard compatibility until the next minor', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Inside', hidden: true}));
     expect(onClick).toHaveBeenCalledTimes(1);
     expect(inside).toHaveBeenCalledTimes(1);
+  });
+
+  it("a caller onClick that prevents default does not cancel a Button's clickAction inside the layer, and the default stays cancelled", () => {
+    const clickAction = vi.fn();
+    render(
+      <SelectableCard
+        label="Plan"
+        isSelected={false}
+        onChange={() => {}}
+        onClick={event => event.preventDefault()}>
+        <Popover
+          isOpen
+          label="Details"
+          content={<Button label="Apply" clickAction={clickAction} />}>
+          <button type="button">Trigger</button>
+        </Popover>
+      </SelectableCard>,
+    );
+    const isNotCancelled = fireEvent.click(
+      screen.getByRole('button', {name: 'Apply', hidden: true}),
+    );
+    expect(clickAction).toHaveBeenCalledTimes(1);
+    expect(isNotCancelled).toBe(false);
   });
 
   it('calls onClick once for a click inside a caller-written popover, which is not a layer root', () => {

@@ -1024,8 +1024,7 @@ export const PinnedTooltipInModal: Story = {
  * A menu and a popover written inside a clickable card. A press inside either
  * open layer stays in the layer: choosing "Rename" counts a menu choice, and a
  * click on the popover's text does nothing, but neither activates the card
- * around them (`architecture:layer-runtime` INV17). A click on the card's own
- * text still activates it.
+ * around them. A click on the card's own text still activates it.
  */
 function PressInsideLayerExample() {
   const [cardActivations, setCardActivations] = useState(0);

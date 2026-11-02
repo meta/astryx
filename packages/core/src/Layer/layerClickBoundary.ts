@@ -6,7 +6,7 @@
  * @file layerClickBoundary.ts
  * @input React pointer, mouse, touch and click events on a layer root
  * @output Exports layerClickBoundary, the props every layer content root
- *   spreads (architecture:layer-runtime INV17), including the layer-root mark
+ *   spreads, including the layer-root mark
  * @position Internal to Layer; used by useLayer's renderers and the Dialog,
  *   Drawer, Lightbox, MobileNav, BottomSheetPanel and ToastViewport roots.
  *   Not exported from the package.

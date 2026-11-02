@@ -846,9 +846,8 @@ function StandaloneBottomSheet({
         hasScrim && stackView.depth > 0 ? stackView.depth : undefined
       }
       onCancel={handleCancel}
-      // The dialog hosting the panel is the sheet's layer root: a press
-      // inside stops here (layer-runtime INV17), after the panel's and the
-      // dialog's own handlers run.
+      // Presses inside the sheet do not reach handlers around where it is
+      // written. The dialog, not the panel, is the root, as in a switcher.
       {...layerClickBoundary({onClick: handleClick})}>
       <BottomSheetPanel
         {...props}
@@ -1184,10 +1183,9 @@ function SwitcherBottomSheetItem({
       role={purpose === 'required' ? 'alertdialog' : switcherDialogProps.role}
       onCancel={onDialogCancel}
       onKeyDown={onDialogKeyDown}
-      // The step's dialog hosting the panel is the sheet's layer root: a
-      // press inside stops here (layer-runtime INV17), after the switcher's
-      // forwarded handlers (component:BottomSheetSwitcher FR9) and the
-      // dialog's own handlers run.
+      // Presses inside the sheet do not reach handlers around where it is
+      // written. The step's dialog, not the panel, is the root, because the
+      // switcher's handlers sit here and must still run.
       {...layerClickBoundary({
         ...switcherDialogProps,
         onClick: onDialogClick,

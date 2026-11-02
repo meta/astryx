@@ -602,8 +602,8 @@ export function Drawer({
       {...(purpose === 'required' && hasScrim
         ? {role: 'alertdialog'}
         : undefined)}
-      // A press inside the drawer stops at its root (layer-runtime INV17),
-      // after the caller's and the drawer's own handlers run.
+      // Presses inside the drawer do not reach handlers around where it is
+      // written.
       {...layerClickBoundary({
         ...safeProps,
         onClick: composeEventHandlers(onClickProp, handleClick),

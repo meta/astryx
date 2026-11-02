@@ -850,8 +850,8 @@ export function Dialog({
         className,
         style,
       )}
-      // A press inside the dialog stops at its root (layer-runtime INV17),
-      // after the caller's and the dialog's own handlers run.
+      // Presses inside the dialog do not reach handlers around where it is
+      // written.
       {...layerClickBoundary({
         ...safeProps,
         onClick: chainEventHandlers(handleClick, onClickProp),

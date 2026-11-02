@@ -713,8 +713,8 @@ export function MobileNav({
           ? header
           : t('@astryx.mobileNav.navigation'))
       }
-      // A press inside the navigation stops at its root (layer-runtime
-      // INV17), after the caller's and the navigation's own handlers run.
+      // Presses inside the navigation do not reach handlers around where it
+      // is written.
       {...layerClickBoundary({
         ...rest,
         onClick: composeEventHandlers(onClickProp, handleDialogClick),

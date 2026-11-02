@@ -1911,7 +1911,8 @@ function useLayerImplementation(
           }}
           onMouseEnter={onMouseEnter}
           onMouseLeave={onMouseLeave}
-          // A press inside the layer stops at its root (INV17).
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
           {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </Container>
@@ -1974,7 +1975,8 @@ function useLayerImplementation(
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
           style={{...stylexResult.style, ...positionStyle, ...extraStyle}}
-          // A press inside the layer stops at its root (INV17).
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
           {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </div>

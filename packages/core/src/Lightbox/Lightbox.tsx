@@ -667,8 +667,8 @@ export function Lightbox({
         style,
       )}
       {...props}
-      // A press inside the lightbox stops at its root (layer-runtime INV17),
-      // after the caller's and the lightbox's own handlers run.
+      // Presses inside the lightbox do not reach handlers around where it is
+      // written.
       {...layerClickBoundary({
         ...props,
         onClick: (e: React.MouseEvent<HTMLDialogElement>) => {

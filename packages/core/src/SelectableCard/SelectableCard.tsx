@@ -325,6 +325,44 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
 // =============================================================================
 
 /**
+ * Call a caller's click handler during capture, before the layer's own
+ * handlers, without letting it change what those handlers see. Its
+ * stopPropagation() would keep the press from the control inside the layer,
+ * so it does nothing here. Its preventDefault() would mark the event handled
+ * for those controls (a Button skips its clickAction), so it is applied to
+ * the native event only after the press has bubbled to the document, where it
+ * still cancels the browser's default action.
+ */
+function callBeforeLayerHandlers(
+  handler: (event: MouseEvent<HTMLElement>) => void,
+  event: MouseEvent<HTMLElement>,
+): void {
+  const {stopPropagation, preventDefault} = event;
+  let isDefaultPreventedByCaller = false;
+  event.stopPropagation = () => {};
+  event.preventDefault = () => {
+    isDefaultPreventedByCaller = true;
+  };
+  try {
+    handler(event);
+  } finally {
+    event.stopPropagation = stopPropagation;
+    event.preventDefault = preventDefault;
+  }
+  if (isDefaultPreventedByCaller) {
+    const nativeEvent = event.nativeEvent;
+    const doc = event.currentTarget.ownerDocument;
+    const cancelDefault = (bubbled: Event) => {
+      doc.removeEventListener(nativeEvent.type, cancelDefault);
+      if (bubbled === nativeEvent) {
+        nativeEvent.preventDefault();
+      }
+    };
+    doc.addEventListener(nativeEvent.type, cancelDefault);
+  }
+}
+
+/**
  * A card that toggles between selected and unselected states.
  *
  * Composes Card for visual styling and adds selection state with
@@ -416,11 +454,10 @@ export function SelectableCard({
       }
     : onClick;
 
-  // Compatibility until the next minor (component:SelectableCard FR2,
-  // CLN-0026): a click that starts inside an open layer within the card still
-  // reaches the caller's onClick. The layer boundary (layer-runtime INV17)
-  // stops it before the bubble phase, so it is delivered here during capture,
-  // before the layer's own handlers. It never toggles. Delete with CLN-0026.
+  // Until the next minor, a click inside an open layer within the card still
+  // reaches the caller's onClick. The layer root stops that click before the
+  // bubble phase, so it is delivered here, during capture. It never toggles.
+  // Remove at the next minor, when that click stops reaching onClick.
   const handleLayerClickCapture = onClickProp
     ? (e: MouseEvent<HTMLElement>) => {
         const target = e.target;
@@ -431,16 +468,7 @@ export function SelectableCard({
         if (layerRoot == null || layerRoot.contains(e.currentTarget)) {
           return;
         }
-        // In capture, a caller's stopPropagation() would keep the press from
-        // the menu item or control inside the layer, which bubble delivery
-        // never could; it is a no-op for this call.
-        const stopPropagation = e.stopPropagation;
-        e.stopPropagation = () => {};
-        try {
-          onClickProp(e);
-        } finally {
-          e.stopPropagation = stopPropagation;
-        }
+        callBeforeLayerHandlers(onClickProp, e);
       }
     : undefined;
 
