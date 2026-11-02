@@ -45,7 +45,14 @@ import {TimeInput} from '../TimeInput';
 import {Selector} from '../Selector';
 import {Tokenizer} from '../Tokenizer';
 import {Typeahead} from '../Typeahead';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/PowerSearch/PowerSearchValueEditor.generated';
+
+registerEnglishFallback(english);
 
 export interface PowerSearchValueEditorProps {
   operatorValue: OperatorValue;
@@ -114,7 +121,7 @@ function StringEditor({
   maxMenuItems?: number;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue = filterValue?.type === 'string' ? filterValue.value : '';
 
   // When a searchSource is provided, render a typeahead instead of a plain
@@ -172,7 +179,7 @@ function StringListEditor({
   maxMenuItems?: number;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue: SearchableItem[] = useMemo(() => {
     if (filterValue?.type !== 'string_list') {
       return [];
@@ -293,7 +300,7 @@ function IntegerEditor({
   onEnter?: () => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue =
     filterValue?.type === 'integer' ? filterValue.value : undefined;
   const handlers = useNumberEditorHandlers({
@@ -338,7 +345,7 @@ function FloatEditor({
   onEnter?: () => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue =
     filterValue?.type === 'float' ? filterValue.value : undefined;
   const handlers = useNumberEditorHandlers({
@@ -380,7 +387,7 @@ function TimeEditor({
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue =
     filterValue?.type === 'time'
       ? (filterValue.value as ISOTimeString)
@@ -413,7 +420,7 @@ function DateAbsoluteEditor({
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Convert unixSeconds to ISO date string for the date input
   const currentValue = useMemo(() => {
     if (filterValue?.type !== 'date_absolute') {
@@ -450,7 +457,7 @@ function DateRelativeEditor({
   onChange: (value: FilterValue, shouldSave?: boolean) => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue =
     filterValue?.type === 'date_relative' ? filterValue.value : undefined;
 
@@ -510,7 +517,7 @@ function DateRangeEditor({
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue = useMemo<DateRange | null>(() => {
     if (filterValue?.type !== 'date_range') {
       return null;
@@ -578,7 +585,7 @@ function EnumEditor({
   onChange: (value: FilterValue, shouldSave?: boolean) => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue =
     filterValue?.type === 'enum' ? filterValue.value : undefined;
 
@@ -616,7 +623,7 @@ function EnumListEditor({
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const items = useMemo(
     () => enumItemsToSearchableItems(operatorValue.values),
     [operatorValue.values],
@@ -671,7 +678,7 @@ function EntityListEditor({
   maxMenuItems?: number;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const source = useMemo<SearchSource<SearchableItem>>(() => {
     if (operatorValue.searchSource) {
       return operatorValue.searchSource;
@@ -734,7 +741,7 @@ function CustomEditor({
   onChange: (value: FilterValue) => void;
   isDisabled?: boolean;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const currentValue =
     filterValue?.type === 'custom' ? filterValue.value : null;
   const EditorComponent = operatorValue.Editor;

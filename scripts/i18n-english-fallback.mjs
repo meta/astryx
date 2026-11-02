@@ -20,11 +20,11 @@
  * key resolves wherever the module that names it is loaded, including a key a
  * helper module looks up with a translator another module created.
  *
- * Public paths that resolve any Astryx key (the public `useTranslator` and
- * the public context export) register the whole catalog through
- * `registerFullEnglishFallback()`. Only the modules in FULL_FALLBACK_MODULES
- * may do that. A Core module that names keys and has not moved to its own map
- * still uses the public `useTranslator`, so it carries the whole catalog.
+ * Public paths that resolve any Astryx key (the public `useTranslator`, the
+ * public context export, and operator labels whose keys callers supply)
+ * register the whole catalog through `registerFullEnglishFallback()`. Only the
+ * modules in FULL_FALLBACK_MODULES may do that, and no other Core module may
+ * import the public `useTranslator` or the public context export.
  *
  * A key reference is any string literal in a module that equals a catalog key.
  * That is wider than the translator call sites check-i18n-catalog verifies, so
@@ -62,6 +62,8 @@ export const FULL_FALLBACK_MODULES = Object.freeze([
   'i18n/useTranslator.ts',
   // The public context export: application code may read `translate` from it.
   'i18n/publicContext.ts',
+  // A caller-defined PowerSearch operator may name any Astryx key in `i18nKey`.
+  'PowerSearch/resolveOperatorLabel.ts',
 ]);
 
 /**
@@ -183,9 +185,12 @@ const SLICE_IMPORT_PATTERN = new RegExp(
 );
 const FULL_CATALOG_IMPORT_PATTERN = /generated-locales\/en\.generated['"]/;
 const FULL_FALLBACK_CALL_PATTERN = /^registerFullEnglishFallback\(\);$/m;
-// A value import of the public hook, from the i18n barrel or its module.
+// A value import of the public hook or the public context export, from the
+// i18n barrel or their modules. Both carry the whole catalog.
 const PUBLIC_TRANSLATOR_IMPORT_PATTERN =
   /^import\s*\{[^}]*\buseTranslator\b[^}]*\}\s*from\s*'(?:\.\.?\/)+i18n(?:\/index|\/useTranslator)?';/m;
+const PUBLIC_CONTEXT_IMPORT_PATTERN =
+  /^import\s*\{[^}]*\bInternationalizationContext\b[^}]*\}\s*from\s*'(?:\.\.?\/)+i18n(?:\/index|\/publicContext)?';/m;
 
 /**
  * Wiring problems: a module that names keys without importing and registering
@@ -198,22 +203,26 @@ export function findWiringProblems(slices, srcDir = CORE_SRC_DIR) {
     const text = fs.readFileSync(path.join(srcDir, rel), 'utf8');
     const imports = [...text.matchAll(SLICE_IMPORT_PATTERN)];
     const expected = getSliceImportSpecifier(rel);
-    const usesPublicTranslator = PUBLIC_TRANSLATOR_IMPORT_PATTERN.test(text);
+    if (!rel.startsWith('i18n/')) {
+      if (PUBLIC_TRANSLATOR_IMPORT_PATTERN.test(text)) {
+        problems.push(
+          `${rel}: imports the public useTranslator, which carries the whole ` +
+            `catalog; use useComponentTranslator`,
+        );
+      }
+      if (PUBLIC_CONTEXT_IMPORT_PATTERN.test(text)) {
+        problems.push(
+          `${rel}: imports the public InternationalizationContext export, which ` +
+            `carries the whole catalog; import i18n/InternationalizationContext`,
+        );
+      }
+    }
     if (slices.has(rel)) {
       const own = imports.find(([, , specifier]) => specifier === expected);
       if (own === undefined) {
-        // A module not yet moved to its own map still resolves its keys
-        // through the public hook, which registers the whole catalog.
-        if (!usesPublicTranslator) {
-          problems.push(
-            `${rel}: names catalog keys but does not import its English fallback ` +
-              `(import english from '${expected}';)`,
-          );
-        }
-      } else if (usesPublicTranslator) {
         problems.push(
-          `${rel}: registers its English fallback but also imports the public ` +
-            `useTranslator, which carries the whole catalog; use useComponentTranslator`,
+          `${rel}: names catalog keys but does not import its English fallback ` +
+            `(import english from '${expected}';)`,
         );
       } else if (
         !new RegExp(

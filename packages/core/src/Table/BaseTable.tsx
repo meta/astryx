@@ -48,7 +48,13 @@ import {devError} from '../utils/devWarning';
 import {EmptyState} from '../EmptyState';
 import {Text} from '../Text';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Table/BaseTable.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   table: {
@@ -361,7 +367,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   ref,
   ...rest
 }: BaseTableProps<T> & {ref?: Ref<HTMLTableElement>}): ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Use stable empty array when no plugins provided
   const plugins = pluginsProp ?? (EMPTY_PLUGINS as TablePlugin<T>[]);
 

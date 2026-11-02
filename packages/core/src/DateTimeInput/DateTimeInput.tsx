@@ -33,6 +33,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -98,7 +99,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {
   formatLocaleTime,
   parseLocaleTime,
@@ -116,6 +117,13 @@ import {
   type PickerPresentation,
 } from '../utils/inputPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateTimeInput/DateTimeInput.generated';
+
+registerEnglishFallback(english);
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -149,18 +157,6 @@ export type {
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   row: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -668,7 +664,7 @@ function PointerDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const usesNativePicker = nativeMode !== 'off';
   // `forced` (`presentation="native"`, FR2): no Astryx fallback. `adaptive`
@@ -1692,7 +1688,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1841,7 +1837,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
