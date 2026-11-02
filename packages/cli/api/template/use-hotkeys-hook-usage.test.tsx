@@ -10,7 +10,7 @@
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import UseHotkeysHookUsage from './useHotkeysHookUsage';
+import UseHotkeysHookUsage from '../../assets/templates/blocks/components/Hooks/useHotkeysHookUsage';
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -35,12 +35,19 @@ function searchInput(): HTMLInputElement {
   return input;
 }
 
-function press(key: string, target: EventTarget = document.body): void {
-  act(() => {
-    target.dispatchEvent(
-      new KeyboardEvent('keydown', {key, bubbles: true, cancelable: true}),
-    );
+function press(
+  key: string,
+  target: EventTarget = document.body,
+): KeyboardEvent {
+  const event = new KeyboardEvent('keydown', {
+    key,
+    bubbles: true,
+    cancelable: true,
   });
+  act(() => {
+    target.dispatchEvent(event);
+  });
+  return event;
 }
 
 function isHelpOpen(): boolean {
@@ -84,6 +91,7 @@ describe('useHotkeys example', () => {
   it('ignores both keys while typing in the search field', () => {
     renderExample();
     act(() => searchInput().focus());
+    expect(press('/', searchInput()).defaultPrevented).toBe(false);
     press('?', searchInput());
     expect(isHelpOpen()).toBe(false);
   });
