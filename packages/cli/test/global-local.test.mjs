@@ -2644,7 +2644,11 @@ describe.skipIf(!POSIX)(
               "const log = process.cwd() + '/interrupts.log';",
               "fs.writeFileSync(log, '');",
               onInterrupt,
-              "fs.writeFileSync(process.cwd() + '/child.pid', String(process.pid));",
+              // Written whole under another name, then renamed into place:
+              // a reader never finds the file empty.
+              "const pidFile = process.cwd() + '/child.pid';",
+              "fs.writeFileSync(pidFile + '.tmp', String(process.pid));",
+              "fs.renameSync(pidFile + '.tmp', pidFile);",
               'setInterval(() => {}, 1000);',
             ].join('\n'),
           );
@@ -2668,11 +2672,21 @@ describe.skipIf(!POSIX)(
             detached: true,
           });
           const pidFile = path.join(dir, 'child.pid');
-          for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+          // The CLI writes its pid once it handles interrupts. Wait for that,
+          // or for the run to end without it, however long a busy machine
+          // takes to get there.
+          while (
+            !fs.existsSync(pidFile) &&
+            child.exitCode === null &&
+            child.signalCode === null
+          ) {
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
           expect(fs.existsSync(pidFile)).toBe(true);
           const childPid = Number(fs.readFileSync(pidFile, 'utf8'));
+          // A pid of 0 would make the checks below ask about this process's
+          // own process group.
+          expect(childPid).toBeGreaterThan(0);
           const started = Date.now();
           if (target === 'group') {
             process.kill(-(/** @type {number} */ (child.pid)), 'SIGINT');
