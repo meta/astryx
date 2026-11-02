@@ -69,6 +69,12 @@ export default defineConfig({
         find: /^@astryxdesign\/core$/,
         replacement: path.join(coreSrc, 'index.ts'),
       },
+      // Same for charts: vega package tests import the shared categorical
+      // palette from the package root, and no test run builds charts' dist.
+      {
+        find: /^@astryxdesign\/charts$/,
+        replacement: path.join(rootDir, 'packages/charts/src/index.ts'),
+      },
     ],
   },
   test: {

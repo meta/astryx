@@ -3,16 +3,23 @@
 /**
  * @file vegaLiteConfig.ts
  * @input Astryx theme tokens via useTheme
- * @output Predefined Vega-Lite Config object for Astryx-themed charts
+ * @output Predefined Vega-Lite Config object for Astryx-themed charts, plus the
+ *   compile-options merge that applies it
  * @position Utility module; consumed by VegaChart and exported standalone
  *
  * Ported from the internal Astryx data-viz config — structural config only.
  * Colors are wired through Astryx data tokens (see domainTokens/dataTokens.ts).
+ * The categorical palette and the token-resolver type come from
+ * `@astryxdesign/charts`, so this package and the compositional charts share
+ * one source of truth instead of two lists that can drift apart.
  *
- * SYNC: When modified, update this header and /packages/lab/src/VegaChart/README.md
+ * SYNC: When modified, update this header and /packages/vega/README.md
  */
 
+import {mergeConfig} from 'vega';
 import type {Config as VegaLiteConfig} from 'vega-lite';
+import {CATEGORICAL_TOKENS, type TokenResolver} from '@astryxdesign/charts';
+import type {CompileOptions} from './types';
 
 // ---------------------------------------------------------------------------
 // Constants (ported from XDSDataVizVegaLiteConstants)
@@ -32,17 +39,6 @@ export const LEGEND_OFFSET = 16;
 
 /** Offset between title and chart area */
 export const TITLE_OFFSET = 16;
-
-// ---------------------------------------------------------------------------
-// Token resolution helper
-// ---------------------------------------------------------------------------
-
-/**
- * A token resolver function — matches the `token` function returned by
- * `useXDSTheme()`. Accepts a CSS custom property name, returns its
- * resolved value for the current color mode.
- */
-type TokenResolver = (name: string) => string;
 
 // ---------------------------------------------------------------------------
 // Config builder
@@ -126,18 +122,8 @@ export function buildVegaLiteConfig(token: TokenResolver): VegaLiteConfig {
     },
 
     range: {
-      category: [
-        token('--color-data-categorical-blue'),
-        token('--color-data-categorical-orange'),
-        token('--color-data-categorical-purple'),
-        token('--color-data-categorical-green'),
-        token('--color-data-categorical-pink'),
-        token('--color-data-categorical-cyan'),
-        token('--color-data-categorical-red'),
-        token('--color-data-categorical-teal'),
-        token('--color-data-categorical-brown'),
-        token('--color-data-categorical-indigo'),
-      ],
+      // Same slot order as the compositional charts — one shared list.
+      category: CATEGORICAL_TOKENS.map(name => token(name)),
       diverging: [
         token('--color-data-blue-5'),
         token('--color-data-blue-4'),
@@ -194,4 +180,50 @@ export function buildVegaLiteConfig(token: TokenResolver): VegaLiteConfig {
       stroke: null,
     },
   } satisfies VegaLiteConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Compile options
+// ---------------------------------------------------------------------------
+
+/**
+ * `mergeConfig` is a generic recursive merge of plain config objects where the
+ * later argument wins — the same helper vega-lite itself uses to fold
+ * `opt.config` into a spec's own `config`. Vega types it against *Vega*'s
+ * `Config`, whose `signals` shape differs from Vega-Lite's, so it is retyped
+ * here for the Vega-Lite config we actually pass it.
+ */
+const mergeVegaLiteConfig = mergeConfig as unknown as (
+  ...configs: VegaLiteConfig[]
+) => VegaLiteConfig;
+
+/**
+ * Layer the Astryx theme underneath a caller's Vega-Lite compile options.
+ *
+ * The themed config is the **base**; anything the caller passed in
+ * `compileOptions.config` is merged on top and wins, key by key
+ * (`vega`'s `mergeConfig`, so a partial override like `{axis: {grid: true}}`
+ * only replaces that key rather than the whole `axis` block). A spec's own
+ * inline `config` still wins over both — that is vega-lite's own precedence,
+ * which compiles `mergeConfig(opt.config, spec.config)`.
+ *
+ * Pure and React-free, so `VegaChart`'s theming is testable without a DOM.
+ *
+ * @example
+ * ```
+ * const {token} = useTheme();
+ * compile(spec, withAstryxConfig(token, compileOptions));
+ * ```
+ */
+export function withAstryxConfig(
+  token: TokenResolver,
+  compileOptions?: CompileOptions,
+): CompileOptions {
+  const theme = buildVegaLiteConfig(token);
+  return {
+    ...compileOptions,
+    config: compileOptions?.config
+      ? mergeVegaLiteConfig(theme, compileOptions.config)
+      : theme,
+  };
 }

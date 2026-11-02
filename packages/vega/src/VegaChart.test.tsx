@@ -2,7 +2,7 @@
 
 /**
  * @file VegaChart.test.tsx
- * @input Uses vitest, @testing-library/react, VegaChart, mocked vega + vega-lite
+ * @input Uses vitest, @testing-library/react, VegaChart, core's Theme, mocked vega + vega-lite
  * @output Functional tests for the VegaChart View lifecycle and error contract
  * @position Colocated test for VegaChart.tsx (issue #4295 vega coverage)
  */
@@ -10,7 +10,10 @@
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, act} from '@testing-library/react';
 import React from 'react';
+import type * as Vega from 'vega';
+import {defineTheme, resolveThemeTokens, Theme} from '@astryxdesign/core/theme';
 import {VegaChart} from './VegaChart';
+import {buildVegaLiteConfig} from './vegaLiteConfig';
 import type {AnySpec} from './types';
 
 const {parseMock, compileMock, views, FakeView} = vi.hoisted(() => {
@@ -46,7 +49,13 @@ const {parseMock, compileMock, views, FakeView} = vi.hoisted(() => {
   return {parseMock, compileMock, views, FakeView};
 });
 
-vi.mock('vega', () => ({parse: parseMock, View: FakeView}));
+// Only the runtime entry points are faked: the theme config is folded into
+// compileOptions with vega's real mergeConfig.
+vi.mock('vega', async importOriginal => ({
+  ...(await importOriginal<typeof Vega>()),
+  parse: parseMock,
+  View: FakeView,
+}));
 vi.mock('vega-lite', () => ({compile: compileMock}));
 
 const VEGA_LITE_SPEC = {
@@ -59,6 +68,12 @@ const VEGA_SPEC = {
   marks: [],
 } as unknown as AnySpec;
 
+/** The Astryx config a Vega-Lite spec compiles under outside any <Theme>. */
+const defaultTokens = resolveThemeTokens(null, {mode: 'light'});
+const DEFAULT_THEME_CONFIG = buildVegaLiteConfig(
+  name => defaultTokens[name] ?? '',
+);
+
 beforeEach(() => {
   vi.clearAllMocks();
   views.length = 0;
@@ -66,14 +81,18 @@ beforeEach(() => {
 
 describe('VegaChart', () => {
   describe('spec handling', () => {
-    it('compiles vega-lite specs with compileOptions and parses the compiled output', () => {
+    it('compiles vega-lite specs with compileOptions over the Astryx theme and parses the compiled output', () => {
       const compileOptions = {config: {background: 'red'}};
       render(
         <VegaChart spec={VEGA_LITE_SPEC} compileOptions={compileOptions} />,
       );
 
       expect(compileMock).toHaveBeenCalledTimes(1);
-      expect(compileMock).toHaveBeenCalledWith(VEGA_LITE_SPEC, compileOptions);
+      // The caller's config wins over the theme it is merged onto; theme keys
+      // it does not set are kept.
+      expect(compileMock).toHaveBeenCalledWith(VEGA_LITE_SPEC, {
+        config: {...DEFAULT_THEME_CONFIG, background: 'red'},
+      });
       const compiled = compileMock.mock.results[0].value.spec;
       expect(parseMock).toHaveBeenCalledTimes(1);
       expect(parseMock.mock.calls[0][0]).toBe(compiled);
@@ -260,10 +279,90 @@ describe('VegaChart', () => {
       expect(views).toHaveLength(2);
     });
 
+    // Vega-Lite compiles a fresh merge of the theme and the caller's options,
+    // not the caller's object itself: an equal merge must keep the View, and
+    // an edit to the caller's object has to reach the comparison through it.
+    it('keeps a Vega-Lite View when a re-render passes equal inline compileOptions', () => {
+      const {rerender} = render(
+        <VegaChart
+          spec={VEGA_LITE_SPEC}
+          compileOptions={{config: {background: 'red'}}}
+        />,
+      );
+
+      rerender(
+        <VegaChart
+          spec={VEGA_LITE_SPEC}
+          compileOptions={{config: {background: 'red'}}}
+        />,
+      );
+
+      expect(views).toHaveLength(1);
+      expect(compileMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('rebuilds a Vega-Lite View when compileOptions.config is mutated in place', () => {
+      const compileOptions = {config: {background: 'red'}};
+      const {rerender} = render(
+        <VegaChart spec={VEGA_LITE_SPEC} compileOptions={compileOptions} />,
+      );
+
+      compileOptions.config.background = 'blue';
+      rerender(
+        <VegaChart spec={VEGA_LITE_SPEC} compileOptions={compileOptions} />,
+      );
+
+      expect(views).toHaveLength(2);
+      expect(compileMock).toHaveBeenLastCalledWith(VEGA_LITE_SPEC, {
+        config: {...DEFAULT_THEME_CONFIG, background: 'blue'},
+      });
+    });
+
     it('hands Vega the caller’s own spec object, not a copy', () => {
       render(<VegaChart spec={VEGA_SPEC} />);
 
       expect(parseMock.mock.calls[0][0]).toBe(VEGA_SPEC);
+    });
+
+    // A theme or color-mode switch changes the Astryx config a Vega-Lite spec
+    // is compiled with, so that View is rebuilt. A native Vega spec never
+    // reads that config, so its View -- and its live state -- is kept.
+    describe('theme changes', () => {
+      const theme = defineTheme({name: 'vega-theme-change'});
+
+      function renderInLightMode(spec: AnySpec) {
+        const ui = (mode: 'light' | 'dark') => (
+          <Theme theme={theme} mode={mode}>
+            <VegaChart spec={spec} />
+          </Theme>
+        );
+        const {rerender} = render(ui('light'));
+        return {switchToDark: () => rerender(ui('dark'))};
+      }
+
+      it('keeps a native Vega View when the color mode changes', () => {
+        const {switchToDark} = renderInLightMode(VEGA_SPEC);
+        expect(views).toHaveLength(1);
+
+        switchToDark();
+
+        expect(views).toHaveLength(1);
+        expect(views[0].finalize).not.toHaveBeenCalled();
+      });
+
+      it('rebuilds a Vega-Lite View with the new mode’s theme config', () => {
+        const {switchToDark} = renderInLightMode(VEGA_LITE_SPEC);
+        expect(views).toHaveLength(1);
+
+        switchToDark();
+
+        expect(views).toHaveLength(2);
+        expect(views[0].finalize).toHaveBeenCalledTimes(1);
+        const dark = resolveThemeTokens(theme, {mode: 'dark'});
+        expect(compileMock).toHaveBeenLastCalledWith(VEGA_LITE_SPEC, {
+          config: buildVegaLiteConfig(name => dark[name] ?? ''),
+        });
+      });
     });
 
     // A spec the comparison cannot copy — a reference cycle, or nesting past

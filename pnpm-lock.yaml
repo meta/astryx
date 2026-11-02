@@ -1201,6 +1201,12 @@ importers:
 
   packages/vega:
     dependencies:
+      '@astryxdesign/charts':
+        specifier: 0.1.9
+        version: link:../charts
+      '@astryxdesign/core':
+        specifier: 0.6.3
+        version: link:../core
       react:
         specifier: '>=19.2.0'
         version: 19.2.7
