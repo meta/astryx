@@ -38,9 +38,7 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {innermostInteractive} from '../hooks/useClickableContainer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {isLayerSurface} from '../Layer/layerSurfacePress';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {
@@ -497,12 +495,7 @@ export function Token({
   if (effectiveOnClick != null) {
     const handleContainerClick = (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (
-        target.closest('button, a') ||
-        // A press inside an open Tooltip or HoverCard belongs to it
-        // (component:Tooltip FR11, component:HoverCard FR11).
-        innermostInteractive(target, e.currentTarget, isLayerSurface) != null
-      ) {
+      if (target.closest('button, a')) {
         return;
       }
       effectiveOnClick(e);
