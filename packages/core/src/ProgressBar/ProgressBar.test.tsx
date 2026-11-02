@@ -929,10 +929,11 @@ describe('ProgressBar theme target names', () => {
 
 /**
  * The value the browser would give `property` on `el` with this pointer and
- * reduced-motion preference: the last rule (in stylesheet order) for one of
- * its classes whose media conditions all hold. StyleX rewrites a key into
- * conditions that negate its later siblings, so this evaluates them rather
- * than matching their text. `@supports` blocks never hold (no engine gate).
+ * reduced-motion preference. That is the last rule (in stylesheet order) for
+ * one of its classes whose media conditions all hold. StyleX rewrites a key
+ * into conditions that negate its later siblings, so this evaluates them
+ * rather than matching their text. `@supports` blocks never hold (no engine
+ * gate).
  */
 function valueUnder(
   el: Element,
@@ -1027,10 +1028,10 @@ function valueUnder(
 }
 
 /**
- * The declarations the element's classes carry in rules at the top level
- * (`media` null), inside `@media <media>`, or inside exactly the nested
- * conditions listed (`@media` texts as they are, `@supports` ones prefixed,
- * in either nesting order), as `prop: value`.
+ * The declarations the element's classes carry, as `prop: value`. It reads
+ * rules at the top level (`media` null), inside `@media <media>`, or inside
+ * exactly the nested conditions listed. Those are `@media` texts as they are
+ * and `@supports` ones prefixed, in either nesting order.
  */
 function rulesOf(
   el: Element,
@@ -1157,7 +1158,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
       formatMotionRoleValue('curve', progressBar.curves.fill),
     );
     const touch = {coarse: true, reduce: false};
-    // CSS scales the move by the theme's tempo (spec:AST-108 FR3).
+    // CSS scales the move by the theme's tempo.
     expect(valueUnder(fillOf(), 'transition-duration', touch)).toMatch(
       /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\)$/,
     );
@@ -1186,9 +1187,9 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     expect(fillOf().style.getPropertyValue('--_progress-bar-min')).toBe(
       `${minimum}px`,
     );
-    // Read from the source: the touch transform sits under a negated StyleX
-    // condition (the forced-colors key after it), which the jsdom runtime
-    // injects only in part; the Chromium spec checks what a browser draws.
+    // Read from the source. The touch transform sits under a negated StyleX
+    // condition (the forced-colors key after it). The jsdom runtime injects
+    // that only in part; the Chromium spec checks what a browser draws.
     const compact = source().replace(/\s+/g, '');
     const fill = compact.slice(compact.indexOf('fill:{'));
     const transform = fill.slice(
@@ -1223,8 +1224,6 @@ describe('ProgressBar under a finger: UIProgressView', () => {
   });
 
   it('plays the progress table roles, never a literal', () => {
-    // component:ProgressBar FR4; spec:AST-094 FR4: touch motion plays its
-    // roles, never a literal.
     registerProgressBarTable();
     expect(motionRole('progress.fillTrackMs')?.value).toBe(
       progressBar.fillTrackMs,

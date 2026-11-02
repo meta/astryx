@@ -45,6 +45,14 @@ system_specs:
 
 # ProgressBar component contract
 
+<!-- path-applicability:v1 -->
+
+```json
+{
+  "paths": ["packages/core/src/motion/uikit/progressBar.ts"]
+}
+```
+
 ## Contract at a glance
 
 | Area                    | Contract                                                                                                                                                                                                                                                                              |

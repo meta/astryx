@@ -4,9 +4,7 @@
 
 /**
  * @file ProgressBar.tsx
- * @input Uses React, useId, stylex, color/spacing/radius/transition tokens,
- *   and the touch layer (ProgressBarTouch: the progress table's motion roles
- *   and the 16px touch minimum)
+ * @input Uses React, useId, stylex, tokens and ProgressBarTouch
  * @output Exports ProgressBar component, ProgressBarProps, ProgressBarVariant types
  * @position Core implementation; consumed by index.ts
  *
@@ -14,7 +12,6 @@
  * - /packages/core/src/ProgressBar/ProgressBar.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/ProgressBar/ProgressBar.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/ProgressBar/ProgressBarMarkTooltip.tsx (the lazy Tooltip wrapper for labeled marks)
- * - /packages/core/src/ProgressBar/ProgressBarTouch.ts (the touch layer's variables)
  * - /packages/core/src/ProgressBar/index.ts (exports if types change)
  * - /apps/storybook/stories/ProgressBar.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/ProgressBar/ (showcase blocks)
@@ -254,14 +251,14 @@ const styles = stylex.create({
   // outline's start cap off a slid fill, and that outline is what keeps the
   // fill's shape visible there (architecture:theme-tokens INV11).
   //
-  // Under a finger (the touch presentation's TOUCH_QUERY, one touch model on
-  // every touch device) the fill moves the way UIProgressView's
-  // setProgress(_:animated: true) does: linearly, for the `progress.fillTrackMs`
-  // role times the share of the track the value moved (`--_progress-bar-move`)
-  // on the `progress.curves.fill` role (`--_progress-bar-curve`), both played
-  // by the touch layer (ProgressBarTouch) and scaled here by the theme's tempo,
-  // starting from wherever it is drawn. Above zero it never draws shorter than
-  // the touch minimum (`--_progress-bar-min`, 16px on the 8px track), and at
+  // Under a finger (TOUCH_QUERY, on every touch device), the fill moves as
+  // UIProgressView's setProgress(_:animated: true) does. It moves linearly
+  // from wherever it is drawn. Its duration is the `progress.fillTrackMs` role
+  // times the share of the track the value moved (`--_progress-bar-move`).
+  // Its curve is the `progress.curves.fill` role (`--_progress-bar-curve`).
+  // The touch layer (ProgressBarTouch) writes both, and this rule scales the
+  // duration by the theme's tempo. Above zero, the fill never draws shorter
+  // than the touch minimum (`--_progress-bar-min`, 16px on the 8px track). At
   // zero it paints nothing (`fillEmpty`). Under reduced motion it lands at
   // once, as everywhere (below). A mouse or trackpad keeps the theme's timing.
   fill: {
@@ -292,10 +289,10 @@ const styles = stylex.create({
         '@media (forced-colors: active)': 'none',
       },
       '@media (pointer: coarse)': {
-        // `--_progress-bar-flip` steps 0, 1, 2, 0… on every change and moves
-        // the fill by that many hundredths of a pixel, so a change back to
-        // the value it just left is never the running transition's own start
-        // value: CSS shortens a transition that reverses to its start, which
+        // `--_progress-bar-flip` steps 0, 1, 2, 0… on every change. It moves
+        // the fill by that many hundredths of a pixel. So a change back to the
+        // value it just left is never the running transition's own start
+        // value. CSS shortens a transition that reverses to its start, which
         // would halve a return mid-flight (10 → 90 → 10). It takes three
         // values because two would repeat on that return.
         default:
@@ -315,20 +312,19 @@ const styles = stylex.create({
       '@media (forced-colors: active)': 'width',
     },
     // Under reduced motion a new value lands at once, with a mouse as with a
-    // finger: the fill never travels (design:reduced-motion DR1). The keys are
-    // the shared reduced-motion queries, spelled as the record's other
-    // transitions spell them; the coarse one comes after the touch key so it
-    // wins there.
+    // finger: the fill never travels. The keys are the shared reduced-motion
+    // queries, as the other transitions spell them. The coarse key comes after
+    // the touch key, so it wins there.
     transitionDuration: {
       default: durationVars['--duration-medium'],
       // The touch layer's move (the `progress.fillTrackMs` role times the
-      // share moved), scaled by the theme's tempo (`spec:AST-108` FR3).
+      // share moved), scaled by the theme's tempo.
       '@media (pointer: coarse)': {
         default:
           'calc(var(--_progress-bar-move, 0ms) * var(--_astryx-motion-tempo, 1))',
-        // Under forced colors the fill is sized instead, by `width`, a layout
-        // property touch motion never animates (`spec:AST-094` FR5): with a
-        // finger it lands at once there.
+        // Under forced colors the fill is sized by `width` instead. Touch
+        // motion never animates a layout property, so with a finger the new
+        // size lands at once there.
         '@media (forced-colors: active)': '0s',
       },
       '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':

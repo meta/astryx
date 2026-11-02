@@ -4,20 +4,11 @@
  * @file ProgressBarTouch.a11y.chromium.spec.ts
  * @input Built ProgressBar stories in real Chromium with a coarse (touch)
  *   pointer (Web Animations seeking, CDP screencast)
- * @output Browser evidence that under a finger (a coarse primary pointer, on
- *   every touch device; Chromium as a phone here) a determinate value
- *   change runs the way UIProgressView's setProgress(_:animated: true) does:
- *   the `progress.fillTrackMs` role per whole track of the change on the
- *   `progress.curves.fill` role (linear), scaled by the theme's tempo,
- *   retargeted from where the fill is drawn with the model change's
- *   duration, never narrower than two track
- *   heights above zero, transparent at zero, and still moving while a script
- *   holds the main thread; and that a mouse or trackpad keeps the theme's
- *   timing and no minimum. Writes a storyboard (contact sheet + JSON trace)
- *   to test-results/progress-bar-touch/.
- * @position Chromium proof for ProgressBar's touch presentation. Mobile
- *   Safari and Chrome on Android are simulator and emulator recordings
- *   attached to the pull request.
+ * @output Browser evidence that under a finger a value change runs as
+ *   UIProgressView's setProgress(_:animated: true) does, and that a mouse
+ *   keeps the theme's timing. Writes a storyboard to
+ *   test-results/progress-bar-touch/.
+ * @position Chromium proof for ProgressBar's touch presentation
  *
  * SYNC: Keep in step with ProgressBar.tsx (`styles.fill`, `fillEmpty`),
  * ProgressBarTouch.ts and motion/uikit/progressBar.ts.
@@ -192,8 +183,8 @@ test('a value change runs linearly for the progress.fillTrackMs role per whole t
 });
 
 test('a theme\u2019s tempo scales the move', async ({page}) => {
-  // A theme with a tempo writes it beside its tokens (spec:AST-108 FR3);
-  // the move's duration is the role times the share moved, times tempo.
+  // A theme with a tempo writes it beside its tokens. The move's duration is
+  // the role times the share moved, times the tempo.
   await open(page, 10);
   await page.addStyleTag({content: ':root { --_astryx-motion-tempo: 1.5; }'});
   await changeAndPause(page, 90);
@@ -312,9 +303,9 @@ test('a change back to the value it just left keeps the model change\u2019s dura
 }) => {
   await open(page, 10);
   await changeAndPause(page, 90);
-  // Hold the first change halfway, then send it back to 10%: CSS shortens
-  // a transition that reverses to its own start value, which would halve
-  // this return.
+  // Hold the first change halfway, then send it back to 10%. CSS shortens a
+  // transition that reverses to its own start value, which would halve this
+  // return.
   await page.evaluate(() => {
     const fill = document.querySelector('[role="progressbar"]')
       ?.firstElementChild as Element;
@@ -438,11 +429,11 @@ test('in RTL the minimum and the motion mirror', async ({page}) => {
 test('in forced colors under a finger the fill lands at once, sized to the value, its outline whole, in either direction', async ({
   page,
 }) => {
-  // architecture:theme-tokens INV11: forced colors keep the fill's shape with
-  // a CanvasText outline, and the track clips what it holds, so the fill is
-  // sized to the value there (still at least two track heights above zero)
-  // rather than slid along the track. Sizing is layout, which touch motion
-  // never animates (spec:AST-094 FR5), so the new size lands at once.
+  // Forced colors keep the fill's shape with a CanvasText outline, and the
+  // track clips what it holds. So the fill is sized to the value there (still
+  // at least two track heights above zero), not slid along the track. Sizing
+  // is layout, which touch motion never animates, so the new size lands at
+  // once.
   await page.emulateMedia({forcedColors: 'active'});
   for (const {globals, fromLeft} of [
     {globals: '', fromLeft: true},

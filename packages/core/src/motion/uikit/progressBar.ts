@@ -2,38 +2,33 @@
 
 /**
  * @file progressBar.ts
- * @input Nothing; data only
+ * @input Nothing: data only
  * @output Exports `progressBar` (UIProgressView's fill: the whole-track
  *   duration and curve, its minimum length and its empty alpha) and
  *   `registerProgressBarTable`
- * @position ProgressBar's rows of the UIKit constants table (motion/uikit);
- *   read by ProgressBar's touch layer (ProgressBar/ProgressBarTouch.ts)
+ * @position ProgressBar's rows of the UIKit constants table (motion/uikit).
+ *   Lengths are in pt (CSS px), durations in ms, alphas in 0..1. Tests check
+ *   each leaf's `@source`.
  *
- * Every leaf carries one or more `@source`; webkit and GUESS values also carry
- * the `@measure` task that will confirm or replace them. uikit.test.ts
- * enforces both.
- *
- * Lengths are in points (CSS px), durations in ms, alphas in 0..1.
- *
- * Two values are motion roles, named by `component:ProgressBar` FR4 and
- * listed in the generated motion role table (`spec:AST-094` DEC-5): the
- * whole-track duration, `progress.fillTrackMs`, and its curve,
- * `progress.curves.fill`. Every other value is an internal constant.
- *
- * SYNC: When modified, update /packages/core/src/ProgressBar/ProgressBarTouch.ts
- * (the touch layer that plays these values) and
+ * SYNC: When modified, update
+ * /packages/core/src/ProgressBar/ProgressBarTouch.ts and
  * /packages/core/src/ProgressBar/ProgressBar.test.tsx.
  */
 
 import {registerMotionTable} from '../roles';
 
-/** UIProgressView's values, for ProgressBar. */
+/**
+ * UIProgressView's values, for ProgressBar. Two values are motion roles in the
+ * generated motion role table: the whole-track duration,
+ * `progress.fillTrackMs`, and its curve, `progress.curves.fill`. Every other
+ * value is an internal constant.
+ */
 export const progressBar = {
   /**
    * setProgress(_:animated: true) runs this long for a change of the whole
-   * track (0 → 1), and in proportion for less, measured on the model values
-   * (0.2 → 0.8 takes 0.6 s), starting from wherever the fill is drawn when
-   * it is retargeted.
+   * track (0 → 1). A smaller change runs in proportion, measured on the model
+   * values: 0.2 → 0.8 takes 0.6 s. A retargeted fill starts from wherever it
+   * is drawn.
    * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
    *   iPhone 17 Pro, UIView animation on the fill's frame (duration,
    *   beginFromCurrentState) for jumps of 0.6, 0.4 and 0.6, Oct 23 2026
@@ -57,9 +52,9 @@ export const progressBar = {
      */
     heightPt: 4,
     /**
-     * Once progress is above zero the fill is never narrower than this many
-     * track heights (8 pt on the 4 pt track): at 0.005 of a 300 pt track it
-     * is 8 pt wide, at 0.05 it is 15.
+     * Above zero progress, the fill is never narrower than this many track
+     * heights: 8 pt on the 4 pt track. At 0.005 of a 300 pt track it is 8 pt
+     * wide; at 0.05 it is 15 pt.
      * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
      *   iPhone 17 Pro, the fill image view's frame at progress 0, 0.005,
      *   0.01, 0.05, 0.5 and 1, Oct 23 2026

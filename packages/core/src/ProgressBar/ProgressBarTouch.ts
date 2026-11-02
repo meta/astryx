@@ -4,20 +4,12 @@
 
 /**
  * @file ProgressBarTouch.ts
- * @input Uses React (useEffect, useRef, useState), the touch presentation
- *   resolver (useTouchPresentation), the shared resize observer, and the
- *   progress table's roles (motion/uikit progressBar, read through
- *   resolveMotion)
- * @output useProgressBarTouch: what the touch presentation needs from script,
- *   the length of the move a change makes (`--_progress-bar-move`: the
- *   `progress.fillTrackMs` role times the share of the track it moved), its
- *   curve (`--_progress-bar-curve`: the `progress.curves.fill` role), the
- *   three-step offset that keeps a return off CSS's reversing path
- *   (`--_progress-bar-flip`), and, under a finger with marks, the share of
- *   the track the fill draws at least (TOUCH_MIN_FILL_PX), measured on the
- *   track
- * @position ProgressBar's touch layer, with one import site (ProgressBar.tsx):
- *   everything ProgressBar runs in script for a finger lives here
+ * @input Uses React, the touch presentation resolver, the shared resize
+ *   observer, and the progress table's roles (through resolveMotion)
+ * @output useProgressBarTouch: the fill's touch variables (move length,
+ *   curve, return offset, minimum length) and, under a finger with marks,
+ *   the share of the track the fill draws
+ * @position ProgressBar's touch layer, imported only by ProgressBar.tsx
  *
  * SYNC: When modified, update /packages/core/src/ProgressBar/ProgressBar.tsx
  * (its touch styles read these variables and the 16px minimum) and
@@ -31,7 +23,7 @@ import {progressBar} from '../motion/uikit/progressBar';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {useTouchPresentation} from '../utils/touchPresentation';
 
-/** The track's height (`component:ProgressBar` FR4). */
+/** The track's height. */
 const TRACK_HEIGHT_PX = 8;
 
 /**
@@ -61,8 +53,8 @@ export function useProgressBarTouch(
   hasMarks: boolean,
 ): ProgressBarTouch {
   // The touch fill's duration comes from how far the value moved since the
-  // last one (the model change, as UIKit measures it), held until the next
-  // change so a re-render with the same value does not touch it.
+  // last value, the model change that UIKit measures. It holds until the next
+  // change, so a re-render with the same value keeps it.
   const [motion, setMotion] = useState({percentage, change: 0, flip: 0});
   const isNewValue = motion.percentage !== percentage;
   // The share of the track the value moved (0–1). `flip` steps through three
@@ -77,8 +69,8 @@ export function useProgressBarTouch(
 
   // Under a finger the fill draws at least TOUCH_MIN_FILL_PX long, so a mark
   // it covers there sits on the fill. That length is a share of the track's
-  // width, which only layout knows: the track is measured only under a
-  // finger, and only when the bar has marks.
+  // width, which only layout knows. So the track is measured, but only under
+  // a finger and only when the bar has marks.
   const {isTouch} = useTouchPresentation();
   const watchesTrack = isTouch && hasMarks;
   const trackRef = useRef<HTMLDivElement | null>(null);
@@ -101,9 +93,7 @@ export function useProgressBarTouch(
       ? Math.max(percentage, (TOUCH_MIN_FILL_PX / trackWidth) * 100)
       : percentage;
 
-  // The move plays the progress table's roles: the whole-track duration
-  // times the share of the track moved, on its linear curve. CSS scales the
-  // duration by the theme's tempo.
+  // CSS applies the theme's tempo to this duration.
   const fillTrackMs = resolveMotion(null, progressBar, 'fillTrackMs');
   const curve = resolveMotion(null, progressBar.curves.fill);
   return {
