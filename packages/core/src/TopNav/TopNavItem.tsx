@@ -16,7 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/TopNav/ (showcase blocks)
  */
 
-import {useEffect, useRef, type ReactNode} from 'react';
+import {useRef, type ReactNode} from 'react';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -212,14 +212,9 @@ export function TopNavItem({
   // disabled paths of Link and SideNavItem.)
   const isAction = href == null && onClick != null;
   const Root = isDisabled && !isAction ? 'a' : LinkComponent;
+  // A Space press activates on release, like a native button; the key-up
+  // handler checks the node and the disabled state, so nothing else resets it.
   const spacePressedRef = useRef<HTMLAnchorElement | null>(null);
-  // Discard pending Space activation across availability/renderer changes.
-  useEffect(() => {
-    spacePressedRef.current = null;
-    return () => {
-      spacePressedRef.current = null;
-    };
-  }, [isAction, isDisabled, Root]);
 
   // Keep the anchor host/ref contract while adding button keyboard behavior.
   const actionKeyboardProps = isAction

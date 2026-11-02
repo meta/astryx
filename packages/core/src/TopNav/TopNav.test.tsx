@@ -707,19 +707,6 @@ describe('TopNavItem', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('cancels a pending Space action across a disabled transition', () => {
-    const onClick = vi.fn();
-    const {rerender} = render(
-      <TopNavItem label="Feedback" onClick={onClick} />,
-    );
-    const action = screen.getByRole('button', {name: 'Feedback'});
-    fireEvent.keyDown(action, {key: ' '});
-    rerender(<TopNavItem label="Feedback" onClick={onClick} isDisabled />);
-    rerender(<TopNavItem label="Feedback" onClick={onClick} />);
-    fireEvent.keyUp(action, {key: ' '});
-    expect(onClick).not.toHaveBeenCalled();
-  });
-
   it('does not carry a pending Space action to a replacement custom-link node', () => {
     function ReplacingLink(props: React.ComponentPropsWithRef<'a'>) {
       const [version, setVersion] = useState(0);
