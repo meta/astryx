@@ -206,12 +206,25 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
     // Reads theme sources, not their specs.
     'scripts/theme-sources.test.mjs':
       "import fs from 'node:fs';\nconst dirs = fs.readdirSync('packages/themes');",
+    // A computed segment: the prefix ends inside a directory name.
+    'scripts/segment.test.mjs':
+      "import fs from 'node:fs';\nconst read = n => fs.readFileSync(`docs/specs/AST-${n}/spec.md`, 'utf8');",
     // Names a record as data but reads no files.
     'scripts/classify.test.mjs':
       "const path = 'docs/specs/AST-094-x/spec.md';\nexpect(classify(path)).toBe(true);",
   };
-  const files = Object.keys(sources);
-  const read = file => sources[file];
+  // The records themselves are tracked too: a named path that is neither a
+  // tracked file nor a directory is cut back to its last `/`.
+  const files = [
+    ...Object.keys(sources),
+    'docs/specs/AST-094-x/spec.md',
+    'docs/specs/AST-001/spec.md',
+    'docs/specs/components/Button/Button.spec.md',
+    'docs/families/action-groups.md',
+    'docs/design/motion.md',
+    'packages/themes/butter/butter.spec.md',
+  ];
+  const read = file => sources[file] ?? '';
 
   it('lists every test whose imports read files and name a spec path in code', () => {
     expect(specReaderTests(files, read)).toEqual([
@@ -221,6 +234,7 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
       'scripts/joined.test.mjs',
       'scripts/contracts.test.mjs',
       'scripts/theme-records.test.mjs',
+      'scripts/segment.test.mjs',
     ]);
   });
 
@@ -231,6 +245,7 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
       'packages/core/src/motion/roles.test.ts',
       'scripts/any.test.mjs',
       'scripts/joined.test.mjs',
+      'scripts/segment.test.mjs',
     ]);
     expect(
       specReaderTests(files, read, [
@@ -240,11 +255,16 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
       'scripts/components.test.mjs',
       'scripts/any.test.mjs',
       'scripts/joined.test.mjs',
+      'scripts/segment.test.mjs',
     ]);
     // A record no test names at all still runs the whole-tree readers.
     expect(
       specReaderTests(files, read, ['docs/specs/AST-001/spec.md']),
-    ).toEqual(['scripts/any.test.mjs', 'scripts/joined.test.mjs']);
+    ).toEqual([
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+      'scripts/segment.test.mjs',
+    ]);
   });
 
   it('covers every record a spec-only change may touch: family, design and theme spec records', () => {
@@ -290,6 +310,50 @@ describe('spec readers on this repository (contract)', () => {
     expect(
       specReaderTests(files, read, ['docs/specs/AST-084-icon-sets/spec.md']),
     ).toContain('packages/cli/foundation/discovery/icon-set-checks.test.mjs');
+  });
+
+  it("each leg lists only its own Vitest project's readers", () => {
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'spec-readers-'));
+    const git = (...args) =>
+      execFileSync('git', args, {cwd: work, encoding: 'utf8'});
+    const write = (file, text) => {
+      fs.mkdirSync(path.join(work, path.dirname(file)), {recursive: true});
+      fs.writeFileSync(path.join(work, file), text);
+    };
+    const list = project =>
+      execFileSync(
+        process.execPath,
+        [
+          path.join(root, '.github/scripts/fs-guard-tests.mjs'),
+          '--spec-readers',
+          '--project',
+          project,
+          '--changed',
+          'HEAD^1',
+        ],
+        {cwd: work, encoding: 'utf8'},
+      )
+        .trim()
+        .split('\n');
+    try {
+      git('init', '-q');
+      git('config', 'user.email', 'test@example.com');
+      git('config', 'user.name', 'test');
+      write('vitest.config.ts', read('vitest.config.ts'));
+      write('docs/specs/AST-1/spec.md', '# Record\n');
+      const reader =
+        "import fs from 'node:fs';\nfs.readFileSync('docs/specs/AST-1/spec.md');\n";
+      write('packages/core/src/x.test.ts', reader);
+      write('scripts/y.test.mjs', reader);
+      git('add', '-A');
+      git('commit', '-qm', 'base');
+      write('docs/specs/AST-1/spec.md', '# Record, changed\n');
+      git('commit', '-qam', 'change');
+      expect(list('ui')).toEqual(['packages/core/src/x.test.ts']);
+      expect(list('node')).toEqual(['scripts/y.test.mjs']);
+    } finally {
+      fs.rmSync(work, {recursive: true, force: true});
+    }
   });
 
   it("a renamed record runs the readers of its old name: the lister's diff turns renames off", () => {
@@ -381,9 +445,9 @@ describe('spec readers on this repository (contract)', () => {
           step.name.endsWith(' tests that read a changed record'),
       );
       expect(runner.if).toBe("steps.spec-readers.outputs.any == 'true'");
-      expect(runner.run).toContain(
-        `pnpm ${script} --passWithNoTests "\${READERS[@]}"`,
-      );
+      expect(runner.run).toContain(`pnpm ${script} "\${READERS[@]}"`);
+      // A run that finds no test fails: the list is this project's own.
+      expect(runner.run).not.toContain('--passWithNoTests');
       // Before the steps a spec-only change skips.
       expect(steps.indexOf(runner)).toBeLessThan(
         steps.findIndex(

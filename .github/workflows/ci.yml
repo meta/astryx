@@ -757,11 +757,13 @@ jobs:
       - uses: ./.github/actions/setup
         if: steps.spec-readers.outputs.any == 'true'
 
+      # No --passWithNoTests: the list holds this project's tests only, so a
+      # run that finds none is a lister fault.
       - name: Run the UI tests that read a changed record
         if: steps.spec-readers.outputs.any == 'true'
         run: |
           mapfile -t READERS < "$RUNNER_TEMP/spec-readers.txt"
-          pnpm test:ui --passWithNoTests "${READERS[@]}"
+          pnpm test:ui "${READERS[@]}"
 
       # Two commits: a pull request's merge commit and its base parent, the
       # diff a scoped run follows.
@@ -904,11 +906,13 @@ jobs:
       - uses: ./.github/actions/setup
         if: steps.spec-readers.outputs.any == 'true'
 
+      # No --passWithNoTests: the list holds this project's tests only, so a
+      # run that finds none is a lister fault.
       - name: Run the Node tests that read a changed record
         if: steps.spec-readers.outputs.any == 'true'
         run: |
           mapfile -t READERS < "$RUNNER_TEMP/spec-readers.txt"
-          pnpm test:node --passWithNoTests "${READERS[@]}"
+          pnpm test:node "${READERS[@]}"
 
       - uses: actions/checkout@v7
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'

@@ -214,10 +214,16 @@ function code(source) {
 
 /**
  * The record paths a file names in its code, as repository paths: an exact
- * record, a directory, or a prefix where a template computes the rest
- * (`docs/specs/${id}/spec.md` names the whole spec tree).
+ * record, a directory, or a prefix where code computes the rest. A path that
+ * is neither a tracked file nor a tracked directory (`docs/specs/AST-` before
+ * `${id}` or `+ id`, or a record since renamed) is cut back to its last `/`:
+ * `docs/specs/AST-${id}/spec.md` names the whole spec tree.
+ *
+ * @param {string} file
+ * @param {string} source
+ * @param {(candidate: string) => boolean} isPath a tracked file or directory
  */
-function recordPathsIn(file, source) {
+function recordPathsIn(file, source, isPath) {
   const body = code(source);
   const paths = new Set();
   // Theme packages hold sources as well as their spec, and many tests read
@@ -233,8 +239,15 @@ function recordPathsIn(file, source) {
     const root = RECORD_ROOTS.find(
       prefix => joined === prefix.slice(0, -1) || joined.startsWith(prefix),
     );
-    if (root && counts(root))
-      paths.add(joined.length < root.length ? root : joined);
+    if (!root || !counts(root)) continue;
+    if (joined.length < root.length) {
+      paths.add(root);
+      continue;
+    }
+    const bare = joined.replace(/\/$/, '');
+    paths.add(
+      isPath(bare) ? joined : joined.slice(0, joined.lastIndexOf('/') + 1),
+    );
   }
   for (const [, , first, , second] of body.matchAll(RECORD_SEGMENTS)) {
     const root = `${first}/${second}/`;
@@ -280,6 +293,13 @@ export function uiTestRoots(config) {
  */
 export function specReaderTests(files, read, changedFiles = null) {
   const tracked = new Set(files);
+  const directories = new Set();
+  for (const file of files) {
+    for (let at = file.indexOf('/'); at !== -1; at = file.indexOf('/', at + 1))
+      directories.add(file.slice(0, at));
+  }
+  const isPath = candidate =>
+    tracked.has(candidate) || directories.has(candidate);
   const memo = new Map();
   const visit = (file, visiting) => {
     if (memo.has(file)) return memo.get(file);
@@ -293,7 +313,8 @@ export function specReaderTests(files, read, changedFiles = null) {
       source = '';
     }
     result.reads = READS_FILES.test(source);
-    for (const named of recordPathsIn(file, source)) result.paths.add(named);
+    for (const named of recordPathsIn(file, source, isPath))
+      result.paths.add(named);
     for (const [, raw] of source.matchAll(SPECIFIER)) {
       if (!raw.startsWith('.')) continue;
       const target = resolve(file, raw, tracked);
