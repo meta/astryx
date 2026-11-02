@@ -3682,6 +3682,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-container-search-field-wrapper",
+      "path": "examples/use-input-container/search-field-wrapper",
+      "aliases": []
+    },
+    {
       "name": "example-use-keyboard-hint-arrow-key-hint",
       "path": "examples/use-keyboard-hint/arrow-key-hint",
       "aliases": []
