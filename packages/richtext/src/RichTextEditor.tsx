@@ -79,6 +79,7 @@ import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
+import {CodeTabPlugin} from './CodeTabPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
 import type {RichTextMarkdownExtension} from './markdownExtensions';
 import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
@@ -728,6 +729,9 @@ export const RichTextEditor = function RichTextEditor({
                   transformers={markdownTransformers}
                 />
               ) : null}
+              {/* In a code block, Tab indents the lines the selection
+                  touches instead of inserting a tab character. */}
+              <CodeTabPlugin />
               <TabIndentationPlugin />
               <TabFocusEscapePlugin />
               {hasMarkdownShortcuts && (
@@ -820,7 +824,8 @@ const ESCAPE_REARM_EXEMPT_KEYS = new Set([
  * listeners from the highest priority down, stopping at the first one that
  * returns true. Registering at COMMAND_PRIORITY_LOW (1) therefore runs first;
  * when the escape is armed we return true WITHOUT calling
- * `event.preventDefault()`, so the indentation handler never sees the event
+ * `event.preventDefault()`, so the indentation handlers (TabIndentationPlugin,
+ * and CodeTabPlugin at the front of the same priority) never see the event
  * and the browser performs its default Tab focus navigation.
  */
 function TabFocusEscapePlugin(): null {
