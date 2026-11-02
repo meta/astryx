@@ -28,6 +28,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
+ * What `isAmbient` found for each file, per TypeScript, kept while the
+ * file's size and modification time stay the same. A check reads the same
+ * package's config many times in one process, and reading a file the way
+ * TypeScript does costs far more than a stat.
+ * @type {WeakMap<object, Map<string, {mtimeNs: bigint, size: bigint, ambient: boolean}>>}
+ */
+const ambientByFile = new WeakMap();
+
+/**
  * Whether a file the config includes declares types every file sees: a
  * declaration file, a file that declares globals or augments a module, or a
  * script (a `.ts` file that TypeScript reads as no module).
@@ -36,6 +45,33 @@ import * as path from 'node:path';
  */
 function isAmbient(ts, file) {
   if (/\.d\.[cm]?ts$/.test(file)) return true;
+  let stat;
+  try {
+    stat = fs.statSync(file, {bigint: true});
+  } catch {
+    return false;
+  }
+  let known = ambientByFile.get(ts);
+  if (known == null) {
+    known = new Map();
+    ambientByFile.set(ts, known);
+  }
+  const key = path.resolve(file);
+  const seen = known.get(key);
+  if (seen && seen.mtimeNs === stat.mtimeNs && seen.size === stat.size) {
+    return seen.ambient;
+  }
+  const ambient = readAmbient(ts, file);
+  known.set(key, {mtimeNs: stat.mtimeNs, size: stat.size, ambient});
+  return ambient;
+}
+
+/**
+ * `isAmbient` for a file that is not a declaration file, read afresh.
+ * @param {any} ts
+ * @param {string} file
+ */
+function readAmbient(ts, file) {
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
