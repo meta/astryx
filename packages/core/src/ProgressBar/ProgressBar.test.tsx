@@ -1211,8 +1211,8 @@ describe('ProgressBar under a finger: UIProgressView', () => {
       fill.indexOf('transitionDuration:{'),
       fill.indexOf('transitionTimingFunction:'),
     );
-    expect(duration).toContain(
-      "'@media(forced-colors:active)and(pointer:coarse)':'0s'",
+    expect(duration).toMatch(
+      /'@media\(pointer:coarse\)':\{default:[^}]*'@media\(forced-colors:active\)':'0s'/,
     );
     // At zero the fill paints nothing under a finger (UIKit's alpha 0)…
     expect(view.emptyFillAlpha).toBe(0);
@@ -1249,7 +1249,7 @@ describe('ProgressBar under a finger: UIProgressView', () => {
     const fill = text.slice(text.indexOf('  fill: {'));
     const duration = fill.slice(
       fill.indexOf('transitionDuration: {'),
-      fill.indexOf('},', fill.indexOf('transitionDuration: {')),
+      fill.indexOf('transitionTimingFunction:'),
     );
     const keys = [REDUCED_MOTION_INSTANT_QUERY, REDUCED_MOTION_FADE_QUERY].map(
       query => duration.indexOf(`'@media ${query}':`),
