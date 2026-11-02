@@ -73,7 +73,7 @@
     "@stylexjs/stylex": "catalog:",
     "enhanced-resolve": "^5.21.6",
     "esbuild": "catalog:",
-    "next": "16.3.6"
+    "next": "16.4.1"
   },
   "peerDependenciesMeta": {
     "@stylexjs/unplugin": {
