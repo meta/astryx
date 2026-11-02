@@ -719,4 +719,29 @@ describe('stable publish requires the cut commit release-check (spec:AST-030 FR1
       'still not readable on the registry after three verification windows',
     );
   });
+
+  it('lets nothing act on a stable release before the final verification decides the run', () => {
+    // Every job that depends on the publish job is the next verification
+    // window, so no release step can start on the publish job's pass alone.
+    const dependents = name =>
+      Object.entries(workflow.jobs)
+        .filter(([, job]) => [job.needs].flat().includes(name))
+        .map(([jobName]) => jobName);
+    expect(dependents('publish')).toEqual(['verify-registry-1']);
+    expect(dependents('verify-registry-1')).toEqual(['verify-registry-2']);
+    expect(dependents('verify-registry-2')).toEqual([]);
+
+    // Pending in the publish job and in follow-up 1, still unreadable in
+    // follow-up 2: the run ends failed, so anything that waits for the run's
+    // conclusion does not proceed.
+    const publish = runStablePublish({verifyExit: 2});
+    const first = runFollowUp(workflow.jobs['verify-registry-1'], 2);
+    const last = runFollowUp(workflow.jobs['verify-registry-2'], 2);
+    const jobResults = [publish.status, first.status, last.status];
+    expect(jobResults).toEqual([0, 0, 2]);
+    expect(jobResults.some(status => status !== 0)).toBe(true);
+    expect(stable.outputs.verified).toBeDefined();
+    expect(publish.output).toContain('verified=pending');
+    expect(first.output).toContain('verified=pending');
+  });
 });

@@ -26,7 +26,11 @@
 #     skipped, so re-running (or a `dry-run` first) is safe.
 #     Registry verification runs in bounded windows: the publish job's own,
 #     then at most two follow-up verification jobs while packages are not yet
-#     readable.
+#     readable. Anything that acts on a stable release (the GitHub
+#     Release, deployment, merge-back, release receipts, release tracking)
+#     waits for this workflow run's conclusion, never the publish job's: while
+#     packages are still propagating, the publish job passes and a follow-up
+#     job decides the run.
 #   - canary: push to main only. Main normally declares the next planned version,
 #     so this publishes <declared>-canary.<short-sha> to the `canary` dist-tag.
 #     The trusted release merge-back briefly leaves main equal to the stable tag;
