@@ -23,6 +23,10 @@
  * scroll, so snap offsets are constant and momentum is never interrupted —
  * which is the failure mode of the usual "append months at the edge" approach.
  *
+ * Under reduced motion a step the arrows, Reset or the keyboard ask for
+ * changes the month without travel: at once with a mouse or a keyboard,
+ * through a short opacity dip on a touch screen.
+ *
  * SYNC: When modified, update:
  * - /packages/core/src/DateInput/TouchDateField.tsx
  * - /packages/core/src/DateTimeInput/TouchDateTimeField.tsx
@@ -62,6 +66,7 @@ import {
   plainDateToISO,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils';
+import {reducedMotionFade} from '../motion/reducedMotion';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
@@ -431,6 +436,21 @@ export function MonthScroller({
     );
   }, [paneSize, initialMonthIndex, minMonthIndex, isRTL]);
 
+  // The Reduced Motion dip of a step on a touch screen, owned here so a
+  // second step or the unmount clears it.
+  const dipRef = useRef<{animation: Animation; timer: number} | null>(null);
+  const stopDip = useCallback(() => {
+    const dip = dipRef.current;
+    if (dip != null) {
+      window.clearTimeout(dip.timer);
+      dip.animation.cancel();
+      dipRef.current = null;
+    }
+  }, []);
+  // Synchronizes with the dip's timer and animation: neither outlives the
+  // scroller.
+  useEffect(() => stopDip, [stopDip]);
+
   const scrollToMonth = useCallback(
     (monthIndex: number, behavior: ScrollBehavior = 'smooth') => {
       const scroller = scrollerRef.current;
@@ -458,13 +478,49 @@ export function MonthScroller({
         recenter(scroller, row);
         return;
       }
+      const left = scrollOffsetForRow(row, paneSize, isRTL);
+      // Under reduced motion the month changes without travel, at once with
+      // a mouse or a keyboard and through an opacity dip on a touch screen,
+      // the scroll landing at the dip (reducedMotionFade).
+      const fade = behavior === 'smooth' ? reducedMotionFade(scroller) : null;
+      if (fade != null) {
+        // The window mounts around the target first and the scroll lands in
+        // the layout effect below, as a far jump does, so nothing moves the
+        // window after the jump: a jump that the window then follows is
+        // re-snapped by WebKit one pane further on every frame. A scroll that
+        // lands on the centre row reports nothing.
+        const land = () => {
+          if (row === centerRowRef.current) {
+            scroller.scrollTo({left, behavior: 'auto'});
+            return;
+          }
+          pendingScrollRef.current = row;
+          centerRowRef.current = row;
+          setCenterRow(row);
+        };
+        if (fade.duration === 0) {
+          land();
+          return;
+        }
+        // A second step within the dip replaces the first: only its scroll
+        // lands, at its own dip's middle.
+        stopDip();
+        dipRef.current = {
+          animation: scroller.animate(
+            [{opacity: 1}, {opacity: 0}, {opacity: 1}],
+            {duration: fade.duration, easing: fade.easing},
+          ),
+          timer: window.setTimeout(() => {
+            dipRef.current = null;
+            land();
+          }, fade.duration / 2),
+        };
+        return;
+      }
       steeredRowRef.current = row;
-      scroller.scrollTo({
-        left: scrollOffsetForRow(row, paneSize, isRTL),
-        behavior,
-      });
+      scroller.scrollTo({left, behavior});
     },
-    [paneSize, minMonthIndex, rowCount, isRTL, recenter],
+    [paneSize, minMonthIndex, rowCount, isRTL, recenter, stopDip],
   );
 
   // Deliberately un-keyed: it runs after every render, costs a null check, and
