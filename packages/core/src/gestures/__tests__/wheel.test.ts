@@ -974,6 +974,38 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
     ).toEqual(['possible']);
   });
 
+  it('keeps the momentum after the lift prevented, latched to the pan it released: momentum never moves a surface or continues a gesture (spec:AST-094 FR43)', () => {
+    const {box, seen} = followed();
+    // Four steady wheels, then sixteen shrinking ones 16 ms apart: the lift
+    // is read at the fourth shrinking wheel (112 ms), and twelve momentum
+    // wheels follow it.
+    const deltas = [
+      10, 10, 10, 10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5.5, 5, 4.5, 4, 3.5, 3,
+      2.5, 2,
+    ];
+    const events = deltas.map((dx, i) =>
+      wheel(box, {trackpad: true, dx, time: i * 16}),
+    );
+    const lift = seen.findIndex(entry => entry.state === 'ended');
+    expect(lift).toBeGreaterThan(-1);
+    // Every wheel was the pan's: none after the lift reached the page.
+    expect(events.slice(8).map(event => event.defaultPrevented)).toEqual(
+      Array.from({length: 12}, () => true),
+    );
+    expect(events.every(event => event.defaultPrevented)).toBe(true);
+    // The momentum moved nothing and began nothing.
+    expect(seen.slice(lift + 1).map(entry => entry.state)).toEqual([
+      'possible',
+    ]);
+    // The fingers' next swipe, past the momentum's 50 ms pause, is a new
+    // gesture the pan takes.
+    const next = [0, 16, 32].map(t =>
+      wheel(box, {trackpad: true, dx: 10, time: 20 * 16 + 60 + t}),
+    );
+    expect(next.every(event => event.defaultPrevented)).toBe(true);
+    expect(seen.filter(entry => entry.state === 'began')).toHaveLength(2);
+  });
+
   it('absorbs what the undecided stretch showed when the fingers carry on: never a step back, and no extra travel', () => {
     const {box, seen} = followed();
     const deltas = [10, 10, 10, 10, 9.5, 9, 10, 10, 10, 10, 10, 10];
