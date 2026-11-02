@@ -5854,8 +5854,8 @@ interface UseGridFocusOptions
   isCellFocusable?: (cell: HTMLElement) => boolean
   onNavigateAfter?: (column: number, offset: number) => void
   onNavigateBefore?: (column: number, offset: number) => void
-  onPageDown?: () => void
-  onPageUp?: () => void
+  onPageDown?: (event: React.KeyboardEvent) => void
+  onPageUp?: (event: React.KeyboardEvent) => void
 interface UseGridFocusReturn<T extends HTMLElement = HTMLElement>
   focusCell: (index: number) => void
   focusFirst: () => void
