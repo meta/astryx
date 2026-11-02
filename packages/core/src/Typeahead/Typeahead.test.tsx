@@ -2105,6 +2105,46 @@ describe('Typeahead edit mode', () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  // FR8: Escape with the list shown hides the list and edit mode stays; with
+  // the list hidden it restores the Token and focuses its button, so focus
+  // never falls to the page body.
+  it('hides the list on the first Escape, then restores the Token and focuses its button', async () => {
+    const user = userEvent.setup();
+    function Controlled() {
+      const [value, setValue] = useState<SearchableItem | null>(fruits[0]);
+      return (
+        <Typeahead
+          label="Fruit"
+          searchSource={fruitSource}
+          value={value}
+          onChange={setValue}
+        />
+      );
+    }
+    render(<Controlled />);
+    const input = screen.getByRole<HTMLInputElement>('combobox');
+
+    await user.click(screen.getByText(fruits[0].label, VISIBLE));
+    await waitFor(() => {
+      expect(input.value).toBe(fruits[0].label);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    await user.keyboard('{Escape}');
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(input).toHaveFocus();
+    expect(input).not.toHaveAttribute('tabindex', '-1');
+
+    await user.keyboard('{Escape}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', {name: new RegExp(fruits[0].label)}),
+      ).toHaveFocus();
+    });
+    expect(input).toHaveAttribute('tabindex', '-1');
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
   it('does not exit edit mode on a composing Escape (IME)', async () => {
     const onChange = vi.fn();
     render(
