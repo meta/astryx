@@ -72,7 +72,6 @@ import {
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useThemeDefinition} from '../theme/useTheme';
 import {
   DEFAULT_WIDTH_BREAKPOINTS,
@@ -83,6 +82,13 @@ import type {AppShellVariantMap} from './index';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {attachScrollKeyboardDelegation} from '../hooks/scrollKeyboardDelegation';
 import {observeMainOverflow} from './observeMainOverflow';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/AppShell/AppShell.generated';
+
+registerEnglishFallback(english);
 const HasActivity = typeof React.Activity !== 'undefined';
 const ActivityWrapper = HasActivity
   ? ({
@@ -537,7 +543,7 @@ export function AppShell({
   ref,
   ...rest
 }: AppShellProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const activeTheme = useThemeDefinition();
   // =========================================================================
   // Parse mobileNav prop — normalize to config, custom element, or disabled

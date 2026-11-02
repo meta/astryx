@@ -94,8 +94,15 @@ import type {
 } from '../utils/dateTypes';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {themeProps} from '../utils/themeProps';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {VisuallyHidden} from '../VisuallyHidden';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Calendar/Calendar.generated';
+
+registerEnglishFallback(english);
 
 /** How a month navigation moves the focused day: by its row offset in days, or by whole months. */
 type NavigationUnit = 'days' | 'months';
@@ -249,7 +256,7 @@ function firstEnabledDayOfMonth(
  * ```
  */
 export function Calendar({ref, ...props}: CalendarProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const {
     handleRef,
@@ -1253,7 +1260,7 @@ function DayCell({
   onDayClick,
   onDayHover,
 }: DayCellProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const pressable = usePressFeedback();
   const {date, isOutside, dayNumber} = day;
