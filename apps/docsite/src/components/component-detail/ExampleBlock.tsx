@@ -136,7 +136,9 @@ function LivePreview({
         minHeight: 200,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
+        // Center an example that fits, but keep the leading edge of a wider
+        // one in the scroll area, where a reader can scroll to it.
+        justifyContent: 'safe center',
       }}
       {...previewNavigationProps}>
       <ExampleLayoutRoot>
