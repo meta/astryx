@@ -163,7 +163,27 @@ const pressStrength = {
   '[data-astryx-press="on"]': 1,
   '[data-astryx-press="fading"]': 1,
 };
-const pressReleaseAnimation = {
+/**
+ * A value that only attribute selectors choose, such as the press arms.
+ *
+ * StyleX infers a value's type from its `default` and its `:` and `@`
+ * conditions only. For a property whose conditions are all attribute
+ * selectors, it infers `unknown`, and no component's `xstyle` accepts that.
+ * This type gives StyleX the value type explicitly.
+ */
+type ByAttribute<Value> = Readonly<{
+  default: null;
+  [attribute: string]: Value | null;
+}>;
+
+const pressReleaseAnimation: Readonly<{
+  animationName: ByAttribute<string>;
+  animationDuration: ByAttribute<
+    Readonly<{default: string; [media: `@media ${string}`]: string}>
+  >;
+  animationTimingFunction: ByAttribute<string>;
+  animationFillMode: ByAttribute<'both'>;
+}> = {
   animationName: {
     default: null,
     '[data-astryx-press="fading"]': pressRelease,
@@ -180,6 +200,15 @@ const pressReleaseAnimation = {
     '[data-astryx-press="fading"]': RELEASE_EASE,
   },
   animationFillMode: {default: null, '[data-astryx-press="fading"]': 'both'},
+};
+/**
+ * The press paint as the overlay image, for a variant whose hover is a
+ * colour. It has literal keys for the reason given at `pressStrength`.
+ */
+const pressOverlayImage: ByAttribute<string> = {
+  default: null,
+  '[data-astryx-press="on"]': pressedOverlayImage,
+  '[data-astryx-press="fading"]': pressedOverlayImage,
 };
 
 export const interactionOverlayStyles = stylex.create({
@@ -210,11 +239,7 @@ export const interactionOverlayStyles = stylex.create({
     },
     backgroundImage: {
       default: null,
-      [ENABLED]: {
-        default: null,
-        [PRESSED_ON]: pressedOverlayImage,
-        [PRESSED_FADING]: pressedOverlayImage,
-      },
+      [ENABLED]: pressOverlayImage,
     },
   },
   backgroundImage: {
@@ -287,11 +312,7 @@ export const interactionOverlayStyles = stylex.create({
     },
     backgroundImage: {
       default: null,
-      [ENABLED]: {
-        default: null,
-        [PRESSED_ON]: pressedOverlayImage,
-        [PRESSED_FADING]: pressedOverlayImage,
-      },
+      [ENABLED]: pressOverlayImage,
     },
   },
   /**

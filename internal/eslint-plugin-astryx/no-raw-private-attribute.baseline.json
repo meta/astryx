@@ -144,6 +144,8 @@
     "data-astryx-press",
     "data-astryx-press",
     "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
     "data-astryx-press"
   ],
   "packages/core/src/utils/pressFeedback.ts": ["data-astryx-press"],
