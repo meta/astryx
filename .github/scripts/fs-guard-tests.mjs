@@ -209,7 +209,11 @@ const RECORD_PATH =
 
 /** The source without block comments and whole-line `//` comments, where prose names records. */
 function code(source) {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  // A comment starts a line or follows whitespace; `/**/` inside a glob
+  // string (`'docs/specs/**/spec.md'`) does neither.
+  return source
+    .replace(/(^|\s)\/\*[\s\S]*?\*\//g, '$1')
+    .replace(/^\s*\/\/.*$/gm, '');
 }
 
 /**
@@ -232,7 +236,8 @@ function recordPathsIn(file, source, isPath) {
   const namesSpecFile = /\.spec\.md['"`]/.test(body);
   const counts = root => root !== 'packages/themes/' || namesSpecFile;
   for (const [, , literal] of body.matchAll(RECORD_LITERAL)) {
-    const fixed = literal.split('${')[0];
+    // Code or a glob computes the rest: keep the fixed part.
+    const fixed = literal.split(/\$\{|[*?[{]/)[0];
     const joined = fixed.startsWith('.')
       ? path.posix.normalize(path.posix.join(path.posix.dirname(file), fixed))
       : fixed;

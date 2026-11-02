@@ -209,6 +209,11 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
     // A computed segment: the prefix ends inside a directory name.
     'scripts/segment.test.mjs':
       "import fs from 'node:fs';\nconst read = n => fs.readFileSync(`docs/specs/AST-${n}/spec.md`, 'utf8');",
+    // Globs over the tree, with `**` and with `*`.
+    'scripts/glob-deep.test.mjs':
+      "import fs from 'node:fs';\nconst records = fs.globSync('docs/specs/**/spec.md');",
+    'scripts/glob-star.test.mjs':
+      "import fs from 'node:fs';\nconst records = fs.globSync('docs/specs/*/spec.md');",
     // Names a record as data but reads no files.
     'scripts/classify.test.mjs':
       "const path = 'docs/specs/AST-094-x/spec.md';\nexpect(classify(path)).toBe(true);",
@@ -235,6 +240,8 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
       'scripts/contracts.test.mjs',
       'scripts/theme-records.test.mjs',
       'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
     ]);
   });
 
@@ -246,6 +253,8 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
       'scripts/any.test.mjs',
       'scripts/joined.test.mjs',
       'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
     ]);
     expect(
       specReaderTests(files, read, [
@@ -256,6 +265,8 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
       'scripts/any.test.mjs',
       'scripts/joined.test.mjs',
       'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
     ]);
     // A record no test names at all still runs the whole-tree readers.
     expect(
@@ -264,6 +275,8 @@ describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)'
       'scripts/any.test.mjs',
       'scripts/joined.test.mjs',
       'scripts/segment.test.mjs',
+      'scripts/glob-deep.test.mjs',
+      'scripts/glob-star.test.mjs',
     ]);
   });
 
