@@ -2150,10 +2150,14 @@ export class GestureHost {
     if (
       gesture != null &&
       gesture.ids.length > 0 &&
+      gesture.follow?.lifted !== true &&
       !this.wheelHasTaker(gesture)
     ) {
       // Every recognizer that took it has left (detached, disabled or
-      // cancelled): the rest of the gesture is the page's.
+      // cancelled): the rest of the gesture is the page's. A followed pan's
+      // own lift does not count: its momentum stays latched and prevented
+      // until the splitter's next gesture or the end timer, and moves
+      // nothing (FR43).
       this.endWheel();
       gesture = {
         kind,

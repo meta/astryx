@@ -1846,6 +1846,11 @@ test.describe('where the primary pointer is fine', () => {
         );
       });
       host.attach(document.getElementById('card') as HTMLElement, pan);
+      // After every listener of the host's: whether each wheel reached the
+      // page (not prevented) or was the pan's.
+      window.addEventListener('wheel', event => {
+        window.__wheelLog.push(`wheel:${String(event.defaultPrevented)}`);
+      });
     });
   }
 
@@ -1895,6 +1900,12 @@ test.describe('where the primary pointer is fine', () => {
     expect(
       log.slice(log.indexOf(ended[0]) + 1).map(entry => entry.split(':')[1]),
     ).toEqual(['possible']);
+    // No wheel reached the page, the momentum after the lift included
+    // (spec:AST-094 FR43).
+    const wheels = await page.evaluate(() =>
+      window.__wheelLog.filter(entry => entry.startsWith('wheel:')),
+    );
+    expect(wheels).toEqual(Array.from({length: 12}, () => 'wheel:true'));
   });
 
   test('absorbs what the undecided stretch showed when the fingers carry on: never a step back, and the pan ends on their travel (spec:AST-094 FR43)', async ({
