@@ -3645,6 +3645,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-collator-locale-aware-name-sort",
+      "path": "examples/use-collator/locale-aware-name-sort",
+      "aliases": []
+    },
+    {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
       "aliases": []
