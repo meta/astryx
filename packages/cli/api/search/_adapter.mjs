@@ -95,7 +95,7 @@ export async function gatherCandidates(options) {
 
 /**
  * @typedef {Awaited<ReturnType<typeof gatherCandidates>>} Gathered
- * @type {Map<string, {reads: Map<string, string>, value: Promise<Gathered>}>}
+ * @type {Map<string, {reads: Map<string, string>, value: Promise<Gathered>, running: boolean}>}
  */
 const gathered = new Map();
 
@@ -105,8 +105,11 @@ const gathered = new Map();
  * gathered when none of the files that gather read, and none of the folders
  * it listed or probed, changed since (each is checked by its change time and
  * size, so an edited doc in a linked package is seen on the next call). A
- * long-running caller (a docs site's search, an agent harness) then pays the
- * gather once. A one-shot `astryx search` gathers once, as before.
+ * search that starts while that gather is still running waits for it instead
+ * of gathering again, so searches that arrive together (a docs site's
+ * search right after it starts) pay one gather. A long-running caller (a docs
+ * site's search, an agent harness) then pays the gather once. A one-shot
+ * `astryx search` gathers once, as before.
  * @param {{cwd?: string, type?: string}} options
  * @returns {Promise<Gathered>}
  */
@@ -114,19 +117,21 @@ export async function gatherCandidatesReused(options) {
   const cwd = path.resolve(options.cwd ?? process.cwd());
   const key = `${cwd}\0${options.type ?? ''}`;
   const hit = gathered.get(key);
-  if (hit && unchangedSince(hit.reads)) return hit.value;
+  if (hit && (hit.running || unchangedSince(hit.reads))) return hit.value;
   /** @type {Map<string, string>} */
   const seen = new Map();
   const value = recordReads(seen, () => gatherCandidates({...options, cwd}));
+  const entry = {reads: seen, value, running: true};
+  gathered.set(key, entry);
   try {
     await value;
   } catch (error) {
-    if (gathered.get(key)?.value === value) gathered.delete(key);
+    if (gathered.get(key) === entry) gathered.delete(key);
     throw error;
   }
   // Each path's state was taken as it was first read, so an edit made while
   // the gather ran shows as a change on the next call.
-  gathered.set(key, {reads: seen, value});
+  entry.running = false;
   return value;
 }
 
