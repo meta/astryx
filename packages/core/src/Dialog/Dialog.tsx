@@ -80,7 +80,11 @@ import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {focusForLastInput, isFocusLost} from '../utils/focusReturn';
+import {
+  focusForLastInput,
+  isFocusDetached,
+  isFocusLost,
+} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -652,9 +656,20 @@ export function Dialog({
       // leaves the dialog in the document, and only a real removal returns
       // focus.
       queueMicrotask(() => {
-        // isFocusLost reads the dialog's own document, so a dialog in an
-        // iframe opened from the page is covered too.
-        if (!dialog.isConnected && trigger.isConnected && isFocusLost(dialog)) {
+        if (dialog.isConnected || !trigger.isConnected) {
+          return;
+        }
+        // isFocusLost reads the dialog's own document. For a dialog in an
+        // iframe opened from the page, the page's focus must be lost too, or
+        // rest on the frame that hosted the dialog: a page control the user
+        // pressed to remove the dialog keeps its focus.
+        const triggerDocument = trigger.ownerDocument;
+        const host = dialog.ownerDocument.defaultView?.frameElement ?? null;
+        const isPageFocusLost =
+          dialog.ownerDocument === triggerDocument ||
+          isFocusDetached(triggerDocument) ||
+          triggerDocument.activeElement === host;
+        if (isFocusLost(dialog) && isPageFocusLost) {
           focusForLastInput(trigger);
         }
       });

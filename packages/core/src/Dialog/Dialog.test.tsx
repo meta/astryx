@@ -205,6 +205,9 @@ describe('Dialog', () => {
             <button type="button" onClick={() => setIsOpen(true)}>
               Edit framed
             </button>
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Remove framed
+            </button>
             {isOpen
               ? createPortal(
                   <Dialog isOpen onOpenChange={setIsOpen} aria-label="Framed">
@@ -219,7 +222,7 @@ describe('Dialog', () => {
         );
       }
       try {
-        render(<FramedEditor />);
+        const {unmount} = render(<FramedEditor />);
         const edit = screen.getByRole('button', {name: 'Edit framed'});
         edit.focus();
         fireEvent.click(edit);
@@ -230,6 +233,18 @@ describe('Dialog', () => {
 
         expect(frameDocument.querySelector('dialog')).toBeNull();
         expect(document.activeElement).toBe(edit);
+
+        // A page control that removes the framed dialog keeps its focus.
+        fireEvent.click(edit);
+        frameDocument.querySelector('button')!.focus();
+        const remove = screen.getByRole('button', {name: 'Remove framed'});
+        remove.focus();
+        fireEvent.click(remove);
+        await Promise.resolve();
+
+        expect(frameDocument.querySelector('dialog')).toBeNull();
+        expect(document.activeElement).toBe(remove);
+        unmount();
       } finally {
         frame.remove();
       }
