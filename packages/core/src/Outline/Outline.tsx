@@ -45,9 +45,15 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Outline/Outline.generated';
+
+registerEnglishFallback(english);
 export type {OutlineItem} from './types';
 
 export interface OutlineProps extends BaseProps<HTMLElement> {
@@ -259,6 +265,28 @@ function getIndentStyle(level: number) {
   }
 }
 
+/**
+ * A followed in-page link moves the sequential focus starting point to its
+ * target, so the next Tab continues inside that section. Outline cancels the
+ * link's default to scroll itself, so it restores that by focusing the target
+ * without scrolling (WCAG 2.4.3). A target that is not focusable becomes
+ * programmatically focusable only.
+ */
+function moveFocusTo(id: string) {
+  const target = document.getElementById(id);
+  if (target == null) {
+    return;
+  }
+  // A target that already takes focus (a link, a button) keeps its place in
+  // the Tab order; only one that refuses focus is made focusable by script.
+  target.focus({preventScroll: true});
+  // A caller's own tabindex is never overwritten.
+  if (document.activeElement !== target && !target.hasAttribute('tabindex')) {
+    target.setAttribute('tabindex', '-1');
+    target.focus({preventScroll: true});
+  }
+}
+
 // =============================================================================
 // Component
 // =============================================================================
@@ -325,7 +353,7 @@ export function Outline({
   ...props
 }: OutlineProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.outline.label');
   const rootRef = useRef<HTMLElement | null>(null);
   const LinkComponent = useLinkComponent();
@@ -392,6 +420,7 @@ export function Outline({
   const navigate = (id: string) => {
     if (scrollTo(id)) {
       window.history.pushState(null, '', `#${id}`);
+      moveFocusTo(id);
     }
   };
 

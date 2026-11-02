@@ -2,6 +2,8 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {CodeBlock} from '@astryxdesign/core/CodeBlock';
+import {java} from '@astryxdesign/core/CodeBlock/languages/java';
+import {thrift} from '@astryxdesign/core/CodeBlock/languages/thrift';
 import {IconButton} from '@astryxdesign/core/IconButton';
 
 const meta: Meta<typeof CodeBlock> = {
@@ -224,6 +226,52 @@ export const EndContentTall: Story = {
     ),
     width: '360px',
   },
+};
+
+// Built-in languages colour with no setup.
+export const BuiltInLanguages: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 16, maxWidth: 520}}>
+      <CodeBlock
+        language="cpp"
+        code={
+          '#include <vector>\n// Sum a vector\nint sum(const std::vector<int>& v) {\n  int total = 0;\n  for (int x : v) total += x;\n  return total;\n}'
+        }
+      />
+      <CodeBlock
+        language="rust"
+        code={
+          '// Parse a port\nfn port(s: &str) -> Result<u16, String> {\n    s.parse::<u16>().map_err(|e| e.to_string())\n}'
+        }
+      />
+      <CodeBlock
+        language="sql"
+        code={
+          "-- Active users this week\nSELECT id, name FROM users\nWHERE last_seen > NOW() - INTERVAL '7 days'\nORDER BY name;"
+        }
+      />
+    </div>
+  ),
+};
+
+// A less common language is one import, passed as the language.
+export const LanguageModules: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 16, maxWidth: 520}}>
+      <CodeBlock
+        language={thrift}
+        code={
+          '# A user record\nstruct User {\n  1: required i64 id;\n  2: optional string name;\n}'
+        }
+      />
+      <CodeBlock
+        language={java}
+        code={
+          '// Greet a user\npublic final class Greeter {\n  String greet(String name) { return "hello, " + name; }\n}'
+        }
+      />
+    </div>
+  ),
 };
 
 export const JSON: Story = {

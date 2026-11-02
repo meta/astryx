@@ -84,7 +84,7 @@ export const docs = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control. tap always opens; use it for an info icon rendered as a button, whose only job is to reveal the tooltip. none never opens on touch.',
+            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens; use it for an info icon rendered as a button, whose only job is to reveal the tooltip. none never opens on touch.',
           default: "'auto'",
         },
         {
@@ -197,7 +197,7 @@ export const docsZh = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有。tap：始终轻点打开——适用于以按钮形式呈现、唯一作用就是显示工具提示的信息图标。none：触摸永不打开。',
+            '在没有悬停的触摸设备上，轻点的行为。auto：轻点即打开，除非触发元素本身会执行操作（按钮、链接、表单控件），此时轻点归该控件所有；设置了 aria-disabled 的控件不执行操作，因此轻点它会显示其原因。tap：始终轻点打开——适用于以按钮形式呈现、唯一作用就是显示工具提示的信息图标。none：触摸永不打开。',
           default: "'auto'",
         },
         {
@@ -274,7 +274,7 @@ export const docsDense = {
         delay: 'Show delay in ms.',
         hideDelay: 'Hide delay in ms.',
         focusTrigger: 'Controls when focus events trigger tooltip.',
-        touchTrigger: 'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control); tap = always opens (info icon rendered as a button); none = never on touch.',
+        touchTrigger: 'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens (info icon rendered as a button); none = never on touch.',
         isEnabled: 'Enables/disables tooltip triggers.',
         onOpenChange: 'Callback when visibility changes; true=shown, false=hidden.',
         hasHoverIndication: 'Dashed underline on trigger element.',

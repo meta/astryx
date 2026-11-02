@@ -17,6 +17,7 @@
  */
 
 import {
+  use,
   useId,
   useState,
   useCallback,
@@ -25,6 +26,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -40,12 +42,12 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {groupStyles} from '../InputGroup/groupStyles';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
 import {
@@ -80,19 +82,6 @@ import {
 import {useDevWarning} from '../hooks/useDevWarning';
 
 const styles = stylex.create({
-  // While disabled or busy the field takes no hover ring, but the focus ring
-  // returns while this field's own input holds focus (spec:AST-085 FR6).
-  // Defaults repeat the shared border and shadow.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(input:focus)': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(input:focus)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -210,9 +199,17 @@ import {
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/DateInput.generated';
+
+registerEnglishFallback(english);
 export interface DateInputProps extends Omit<
   FieldInputBaseProps<HTMLInputElement>,
   'onChange' | 'defaultValue'
@@ -342,7 +339,7 @@ export interface DateInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -531,7 +528,7 @@ function PointerDateField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -678,7 +675,7 @@ function PointerDateField({
   // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
     (newValue: ISODateString | undefined) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange?.(newValue);
@@ -689,7 +686,13 @@ function PointerDateField({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Handle clear button click
@@ -712,11 +715,16 @@ function PointerDateField({
   // Handle date selection from calendar
   const handleDateSelect = useCallback(
     (selectedDate: ISODateString) => {
+      // An already-open calendar can outlive an enabled owner. Reject the
+      // whole selection, including dismissal, so its focused day stays put.
+      if (isDisabled) {
+        return;
+      }
       fireChange(selectedDate);
       setPendingInput(null);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   // Handle input text change - update immediately if valid and allowed
@@ -829,6 +837,7 @@ function PointerDateField({
         // compose, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
+      {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
           size,
@@ -842,7 +851,7 @@ function PointerDateField({
           // keeps its ordinary paint and shows the Spinner (spec:AST-085
           // FR6, family:buttons FR4).
           isDisabled && inputWrapperStyles.disabled,
-          isEffectivelyDisabled && styles.disabledFocusRing,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&
@@ -945,17 +954,21 @@ function PointerDateField({
       {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       {popover.render(
-        <Calendar
-          handleRef={calendarRef}
-          mode="single"
-          value={optimisticValue ?? null}
-          onChange={handleDateSelect}
-          min={min}
-          max={max}
-          dateConstraints={dateConstraints}
-          numberOfMonths={numberOfMonths}
-          weekStartsOn={weekStartsOn}
-        />,
+        // The layer renders its children open or closed, so mount the
+        // calendar only while it is open; it opens on the current value.
+        !popover.isOpen ? null : (
+          <Calendar
+            handleRef={calendarRef}
+            mode="single"
+            value={optimisticValue ?? null}
+            onChange={handleDateSelect}
+            min={min}
+            max={max}
+            dateConstraints={dateConstraints}
+            numberOfMonths={numberOfMonths}
+            weekStartsOn={weekStartsOn}
+          />
+        ),
         {placement: 'below', alignment: 'start'},
       )}
       {showsDisabledMessage &&
@@ -1045,6 +1058,8 @@ PointerDateField.displayName = 'PointerDateField';
  * ```
  */
 export function DateInput(props: DateInputProps) {
+  const inputGroupState = use(InputGroupInternalContext);
+  const isDisabled = props.isDisabled || inputGroupState.isDisabled;
   const isTouch = useMediaQuery(TOUCH_POINTER_QUERY);
   useDevWarning(
     'DateInput',
@@ -1062,11 +1077,11 @@ export function DateInput(props: DateInputProps) {
   } = props;
   switch (surface) {
     case 'native':
-      return <NativeDateField {...rest} />;
+      return <NativeDateField {...rest} isDisabled={isDisabled} />;
     case 'sheet':
-      return <TouchDateField {...rest} />;
+      return <TouchDateField {...rest} isDisabled={isDisabled} />;
     case 'desktop':
-      return <PointerDateField {...rest} />;
+      return <PointerDateField {...rest} isDisabled={isDisabled} />;
   }
 }
 

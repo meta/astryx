@@ -25,6 +25,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
   plainDateToday,
@@ -50,7 +51,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {Spinner} from '../Spinner';
@@ -80,8 +80,16 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import type {Locale} from '../i18n/types';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateRangeInput/DateRangeInput.generated';
+
+registerEnglishFallback(english);
 
 export type {DateRange} from '../Calendar';
 
@@ -98,18 +106,6 @@ export type {
 } from '../Field';
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   trigger: {
     display: 'block',
     flex: 1,
@@ -443,7 +439,7 @@ export interface DateRangeInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -541,7 +537,7 @@ export function DateRangeInput({
     onClick: onClickProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -613,7 +609,7 @@ export function DateRangeInput({
 
   const fireChange = useCallback(
     (newValue: DateRange | null) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange(newValue);
@@ -624,7 +620,13 @@ export function DateRangeInput({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   const handleToggle = useCallback(() => {
@@ -639,10 +641,13 @@ export function DateRangeInput({
 
   const handleRangeSelect = useCallback(
     (range: DateRange) => {
+      if (isDisabled) {
+        return;
+      }
       fireChange(range);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -711,7 +716,7 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             sizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
-            isEffectivelyDisabled && styles.disabledFocusRing,
+            isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],
             status &&
               !isEffectivelyDisabled &&
@@ -813,6 +818,7 @@ export function DateRangeInput({
                 const presetRange = preset.getRange();
                 const isActive = isRangeEqual(value, presetRange);
                 const isPresetDisabled =
+                  isDisabled ||
                   !isRangeWithinSpan(presetRange, maxRangeSpan, minRangeSpan) ||
                   isDateDisabled(plainDateFromISO(presetRange.start)) ||
                   isDateDisabled(plainDateFromISO(presetRange.end));
@@ -828,6 +834,11 @@ export function DateRangeInput({
                     aria-current={isActive ? 'true' : undefined}
                     // Focusable while disabled (AR3, spec:AST-085 FR1).
                     aria-disabled={isPresetDisabled || undefined}
+                    aria-describedby={
+                      showsDisabledMessage
+                        ? disabledMessageTooltip.describedBy
+                        : undefined
+                    }
                     onClick={() => {
                       if (!isPresetDisabled) {
                         handleRangeSelect(presetRange);
@@ -851,18 +862,22 @@ export function DateRangeInput({
               })}
             </div>
           )}
-          <Calendar
-            mode="range"
-            value={optimisticValue}
-            onChange={handleRangeSelect}
-            min={min}
-            max={max}
-            dateConstraints={dateConstraints}
-            maxRangeSpan={maxRangeSpan}
-            minRangeSpan={minRangeSpan}
-            numberOfMonths={numberOfMonths}
-            weekStartsOn={weekStartsOn}
-          />
+          {/* The layer renders its children open or closed, so mount the
+              calendar only while it is open. */}
+          {popover.isOpen && (
+            <Calendar
+              mode="range"
+              value={optimisticValue}
+              onChange={handleRangeSelect}
+              min={min}
+              max={max}
+              dateConstraints={dateConstraints}
+              maxRangeSpan={maxRangeSpan}
+              minRangeSpan={minRangeSpan}
+              numberOfMonths={numberOfMonths}
+              weekStartsOn={weekStartsOn}
+            />
+          )}
         </div>,
         {placement: 'below', alignment: 'start'},
       )}

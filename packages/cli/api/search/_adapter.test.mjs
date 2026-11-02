@@ -2,8 +2,9 @@
 
 /**
  * @file Tests for search's adapter: a long-running caller reuses the gathered
- * candidates while their inputs are unchanged (gatherCandidatesReused), and
- * gathers again when an input changes or for another folder or `type`.
+ * candidates while their inputs are unchanged (gatherCandidatesReused), shares
+ * a gather that is still running, and gathers again when an input changes or
+ * for another folder or `type`.
  *
  * Whether inputs changed is read-record's answer (tested in
  * read-record.test.mjs). Other tests running at the same time change shared
@@ -48,6 +49,22 @@ describe('gatherCandidatesReused', () => {
       expect(JSON.parse(JSON.stringify(first))).toEqual(
         JSON.parse(JSON.stringify(await gatherCandidates({cwd, type: 'doc'}))),
       );
+    },
+    SLOW,
+  );
+
+  it(
+    'shares one gather between searches that start while it runs',
+    async () => {
+      const cwd = scratchProject();
+      const all = await Promise.all(
+        Array.from({length: 9}, () =>
+          gatherCandidatesReused({cwd, type: 'doc'}),
+        ),
+      );
+      // One gather: every search got the same candidates object.
+      for (const each of all) expect(each).toBe(all[0]);
+      expect(all[0].all.length).toBeGreaterThan(0);
     },
     SLOW,
   );

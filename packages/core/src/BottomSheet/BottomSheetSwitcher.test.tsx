@@ -1562,10 +1562,11 @@ describe('BottomSheetSwitcher', () => {
       expect(withId()).toEqual([dialogs[1]]);
     });
 
-    it("renders the switcher id and data-testid once, on the active sheet's dialog, in the server markup of a flow that mounts open", () => {
-      // The active sheet is known from props, so the host needs no commit:
-      // server markup carries both attributes on that sheet's dialog, once.
-      const markup = renderToString(
+    it('renders a flow that mounts open closed in server markup, then opens its active sheet, with the switcher id once, after hydration (component:BottomSheet FR17)', () => {
+      // Nothing can enter a native host before hydration, so a flow with an
+      // active sheet renders as a closed one on the server: no dialog open,
+      // none claiming aria-modal, the id on no element.
+      const flow = (
         <BottomSheetSwitcher
           id="checkout"
           data-testid="checkout-flow"
@@ -1577,18 +1578,40 @@ describe('BottomSheetSwitcher', () => {
           <BottomSheet sheetId="confirm" label="Confirm">
             Content
           </BottomSheet>
-        </BottomSheetSwitcher>,
+        </BottomSheetSwitcher>
       );
+      const markup = renderToString(flow);
       const dialogs = markup.match(/<dialog\b[^>]*>/g) ?? [];
       expect(dialogs).toHaveLength(2);
-      expect(markup.match(/id="checkout"/g)).toHaveLength(1);
-      expect(markup.match(/data-testid="checkout-flow"/g)).toHaveLength(1);
-      const host = dialogs.find(tag => tag.includes('id="checkout"'));
-      expect(host).toContain('aria-label="Confirm"');
-      expect(host).toContain('data-testid="checkout-flow"');
+      expect(markup).not.toMatch(/<dialog[^>]*\sopen/);
+      expect(markup).not.toContain('aria-modal');
+      expect(markup.match(/id="checkout"/g) ?? []).toHaveLength(0);
+
+      // Hydrating opens the active sheet in the render after it, with the
+      // id and data-testid on its dialog, once.
+      const container = document.createElement('div');
+      container.innerHTML = markup;
+      document.body.appendChild(container);
+      let root!: ReturnType<typeof hydrateRoot>;
+      act(() => {
+        root = hydrateRoot(container, flow);
+      });
+      const withId = container.querySelectorAll('[id="checkout"]');
+      expect(withId).toHaveLength(1);
+      expect(withId[0]).toHaveAttribute('aria-label', 'Confirm');
+      expect(withId[0]).toHaveAttribute('data-testid', 'checkout-flow');
+      expect(withId[0]).toHaveAttribute('aria-modal', 'true');
+      // Present on page load, the active sheet opens where it rests
+      // (spec:AST-013 FR13).
       expect(
-        dialogs.find(tag => tag.includes('aria-label="Details"')),
-      ).not.toContain('id=');
+        getComputedStyle(
+          withId[0].querySelector('.astryx-bottom-sheet') as HTMLElement,
+        ).transitionDuration,
+      ).toBe('.01s');
+      // The open flow holds the sheet stack and the page's scroll lock; leave
+      // nothing behind for the next test.
+      act(() => root.unmount());
+      container.remove();
     });
 
     it('renders every sheet dialog closed in server markup, with the switcher id on no element until the first commit', () => {

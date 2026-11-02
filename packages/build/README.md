@@ -93,6 +93,8 @@ module.exports = {
 };
 ```
 
+A custom Babel config turns off Next.js's SWC compiler, and `next/font` needs SWC. Remove `next/font` from your layout (a fresh `create-next-app` layout imports `next/font/google`), or the build fails with `"next/font" requires SWC although Babel is being used`.
+
 ### 2. postcss.config.js
 
 ```js
@@ -238,6 +240,8 @@ Compiles StyleX from both library and product source files in two separate passe
 Wraps `@stylexjs/unplugin` and intercepts the dev CSS endpoint (`/virtual:stylex.css`). Partitions the collected rules by file path and serves split-layer CSS. Production builds write those rules to one cache-safe shared stylesheet and link it from every emitted HTML entry, without cross-loading entry-owned CSS.
 
 Unsupported declarations fail the build by default with StyleX's replacement guidance. Set `propertyValidationMode` explicitly in `stylexOverrides` (modern API) or `stylexOptions` (legacy API) only when a migration needs the upstream `warn` or `silent` behavior.
+
+A production build also checks the StyleX stylesheet for generated custom properties (`--<prefix><hash>`) that it reads but no stylesheet in the build declares, which browsers drop: a `.stylex.ts` export read in a style that is not a `defineVars`/`defineConsts` value, or one whose module never reached the build. It warns, naming the variable and the rule that reads it. Only stylesheets count as declarations, so a property the app sets at runtime (an inline style) is reported too: give it a name outside the StyleX class-name prefixes.
 
 ---
 

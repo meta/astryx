@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit DropdownMenuDivider
 
 /**
  * @file DropdownMenuDividerAudit.a11y.chromium.spec.ts

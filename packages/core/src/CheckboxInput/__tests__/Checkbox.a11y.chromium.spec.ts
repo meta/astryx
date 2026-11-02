@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit CheckboxList, CheckboxListItem
 
 /**
  * @file Checkbox.a11y.chromium.spec.ts

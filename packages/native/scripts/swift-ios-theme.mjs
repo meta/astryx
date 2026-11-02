@@ -10,7 +10,9 @@
  *   Theme.<swiftName>
  * @position Implements the Swift theme generator spec
  *   (specs/swift/library/theme-generator.md). Run by `generate:swift-ios`; the
- *   Swift output is committed and a test fails when any file drifts.
+ *   Swift output is committed and a test fails when any file drifts. CSS
+ *   values convert in css-values.mjs; this file turns its notes into
+ *   warnings and its errors into a fallback or a failed run (G15).
  *
  * SYNC: When modified, update this header and the theme generator spec.
  */
@@ -18,6 +20,18 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {
+  checkFamilyIsStatic,
+  CssValueError,
+  toColor,
+  toLeading,
+  toPoints,
+  toShadow,
+  toWeight,
+  valueForMode,
+} from './css-values.mjs';
+
+export {toColor, toLeading, toPoints, toShadow, toWeight, valueForMode};
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -36,11 +50,11 @@ export const SWIFT_TOKENS_FILE = path.join(SWIFT_THEME_DIR, 'Tokens.swift');
 const THEMES_DIR = path.join(REPO_ROOT, 'packages', 'themes');
 const REGENERATE = 'pnpm -F @astryxdesign/native generate:swift-ios';
 
-// G5: the token groups Swift keeps. Everything else (shadows, motion, layout
-// breakpoints) stays out until a component needs it.
+// G5: the token groups Swift keeps, the elevation shadows included. Everything
+// else (inset rings, motion, layout breakpoints) stays out until a component
+// needs it.
 const KEEP =
-  /^--(color-|spacing-|radius-|size-element-|border-width$|font-size-|font-weight-|font-family-|text-(heading-\d|body|large|label|supporting)-)/;
-const REM = 16;
+  /^--(color-|spacing-|radius-|size-element-|border-width$|font-size-|font-weight-|font-family-|text-(heading-\d|display-\d|body|large|label|supporting|code)-|shadow-(low|med|high)$)/;
 
 // Words Swift reserves as identifiers. A member or theme name that equals one
 // fails the run (G3, G6).
@@ -91,11 +105,20 @@ export function swiftMember(token) {
     return {group: 'size', member: camel(['element', ...m[1].split('-')])};
   }
   if (name === 'border-width') return {group: 'size', member: 'borderWidth'};
+  // Font tokens group by kind (G6): a type style's size, weight and leading
+  // under the style, and the family, size and weight scales under their own.
   if ((m = /^font-(size|weight|family)-(.+)$/.exec(name))) {
-    return {group: 'font', member: camel([m[1], ...m[2].split('-')])};
+    const leaf = camel(m[2].split('-'));
+    return {
+      group: 'font',
+      member: `${m[1]}.${/^\d/.test(leaf) ? `s${leaf}` : leaf}`,
+    };
   }
   if ((m = /^text-(.+)-(size|weight|leading)$/.exec(name))) {
-    return {group: 'font', member: camel([...m[1].split('-'), m[2]])};
+    return {group: 'font', member: `${camel(m[1].split('-'))}.${m[2]}`};
+  }
+  if ((m = /^shadow-(.+)$/.exec(name))) {
+    return {group: 'shadow', member: camel(m[1].split('-'))};
   }
   return null;
 }
@@ -118,106 +141,13 @@ const swiftIdent = name => (SWIFT_KEYWORDS.has(name) ? `\`${name}\`` : name);
 // Values (G7)
 // ---------------------------------------------------------------------------
 
-function hex2(n) {
-  return Math.round(n).toString(16).padStart(2, '0').toUpperCase();
-}
-
-// The CSS color keywords core's resolved tokens use.
-const NAMED_COLORS = {
-  black: '#000000FF',
-  white: '#FFFFFFFF',
-  transparent: '#00000000',
-};
-
-/** A CSS color as `#RRGGBBAA`, or null when it is not a plain color. */
-export function toHexColor(value) {
-  const v = value.trim();
-  let m = /^#([0-9a-f]{3,8})$/i.exec(v);
-  if (m) {
-    let h = m[1];
-    if (h.length === 3 || h.length === 4) h = [...h].map(c => c + c).join('');
-    if (h.length === 6) h += 'FF';
-    return h.length === 8 ? `#${h.toUpperCase()}` : null;
-  }
-  m =
-    /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+%?))?\s*\)$/i.exec(
-      v,
-    );
-  if (m) {
-    const alpha =
-      m[4] === undefined
-        ? 1
-        : m[4].endsWith('%')
-          ? parseFloat(m[4]) / 100
-          : parseFloat(m[4]);
-    return `#${hex2(+m[1])}${hex2(+m[2])}${hex2(+m[3])}${hex2(alpha * 255)}`;
-  }
-  m =
-    /^hsla?\(\s*(-?[\d.]+)(?:deg)?[,\s]+([\d.]+)%[,\s]+([\d.]+)%(?:[,\s/]+([\d.]+%?))?\s*\)$/i.exec(
-      v,
-    );
-  if (m) {
-    // Exact sRGB, then each channel rounded to the nearest of 256 steps,
-    // halves up (G7).
-    const h = (((+m[1] % 360) + 360) % 360) / 360;
-    const sat = +m[2] / 100;
-    const l = +m[3] / 100;
-    const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat;
-    const p = 2 * l - q;
-    const channel = t => {
-      const u = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
-      if (u < 1 / 6) return p + (q - p) * 6 * u;
-      if (u < 1 / 2) return q;
-      if (u < 2 / 3) return p + (q - p) * (2 / 3 - u) * 6;
-      return p;
-    };
-    const alpha =
-      m[4] === undefined
-        ? 1
-        : m[4].endsWith('%')
-          ? parseFloat(m[4]) / 100
-          : parseFloat(m[4]);
-    // Round away float noise first so an exact half rounds up.
-    const byte = c => hex2(Math.round(c * 255 * 1e6) / 1e6);
-    return `#${byte(channel(h + 1 / 3))}${byte(channel(h))}${byte(channel(h - 1 / 3))}${byte(alpha)}`;
-  }
-  return NAMED_COLORS[v.toLowerCase()] ?? null;
-}
-
-/**
- * The value of a token in one mode: a whole-value `light-dark(a, b)` is `a` in
- * light and `b` in dark (G1); any other value is returned unchanged.
- */
-export function valueForMode(value, mode) {
-  const m = /^\s*light-dark\((.*)\)\s*$/s.exec(value);
-  if (!m) return value;
-  let depth = 0;
-  for (let i = 0; i < m[1].length; i++) {
-    const c = m[1][i];
-    if (c === '(') depth++;
-    else if (c === ')') depth--;
-    else if (c === ',' && depth === 0) {
-      const part = mode === 'light' ? m[1].slice(0, i) : m[1].slice(i + 1);
-      return part.trim();
-    }
-  }
-  return value;
-}
-
-/** A CSS length or unitless number as points, or null. */
-export function toPoints(value) {
-  const m = /^(-?[\d.]+)(rem|px)?$/.exec(value.trim());
-  if (!m) return null;
-  return m[2] === 'rem' ? parseFloat(m[1]) * REM : parseFloat(m[1]);
-}
-
 /** A CSS font-family stack as family names in order, or null. */
 export function toFamilies(value) {
   const families = [];
   const re = /\s*("([^"]*)"|'([^']*)'|([^,]+?))\s*(,|$)/gy;
   let m;
   const v = value.trim();
-  if (!v || /var\(|calc\(/.test(v)) return null;
+  if (!v || /\b(var|calc|env|attr)\(/.test(v)) return null;
   while (re.lastIndex < v.length && (m = re.exec(v))) {
     const name = (m[2] ?? m[3] ?? m[4] ?? '').trim();
     if (!name) return null;
@@ -233,6 +163,7 @@ const GROUP_TYPES = {
   radius: 'CGFloat',
   size: 'CGFloat',
   font: null, // per member: [String] for families, CGFloat otherwise
+  shadow: '[ShadowLayer]',
 };
 const GROUP_STRUCTS = {
   color: 'ColorTokens',
@@ -240,6 +171,7 @@ const GROUP_STRUCTS = {
   radius: 'RadiusTokens',
   size: 'SizeTokens',
   font: 'FontTokens',
+  shadow: 'ShadowTokens',
 };
 const GROUPS = Object.keys(GROUP_STRUCTS);
 
@@ -289,43 +221,111 @@ export function localTokensLeftOut(theme) {
   return Object.keys(theme.localTokens ?? {}).sort();
 }
 
+const isWeight = token => /^--font-weight-|-weight$/.test(token);
+const isLeading = token => token.endsWith('-leading');
+
+/**
+ * One token's value in one mode as its Swift value (G7). A loss goes into
+ * `notes`; a value with no static form throws CssValueError.
+ */
+function convertToken(token, value, group, typedSoFar, notes) {
+  if (group === 'color') return toColor(value, notes);
+  if (group === 'shadow') return toShadow(value, notes);
+  if (isFamily(token)) {
+    checkFamilyIsStatic(value);
+    const families = toFamilies(value);
+    if (!families) throw new CssValueError('a font family is a list of names');
+    return families;
+  }
+  if (isWeight(token)) return toWeight(value, notes);
+  if (isLeading(token)) {
+    const size = typedSoFar[token.replace(/-leading$/, '-size')]?.value;
+    return toLeading(value, size, notes);
+  }
+  return toPoints(value, notes, {borderWidth: token === '--border-width'});
+}
+
 /**
  * Every kept token of a theme in one mode, read only from core's resolver:
- * `{token: {group, member, value}}` with typed values (G1, G5, G7).
+ * `{token: {group, member, value}}` with typed values (G1, G5, G7). Each loss
+ * is pushed onto `warnings` (G15). A value with no static form takes core's
+ * default for that token with a warning; with no default that converts, the
+ * run fails.
  */
-async function resolveMode(theme, mode) {
+async function resolveMode(theme, mode, warnings) {
   const {resolveThemeTokens} = await core();
+  const defaults =
+    theme === CORE_DEFAULTS ? {} : resolveThemeTokens(null, {mode});
   const out = {};
-  for (let [token, value] of Object.entries(
+  const entries = Object.entries(
     resolveThemeTokens(theme === CORE_DEFAULTS ? null : theme, {mode}),
-  )) {
-    if (!KEEP.test(token) || typeof value !== 'string') continue;
-    value = valueForMode(value, mode);
+  )
+    .filter(([token, value]) => KEEP.test(token) && typeof value === 'string')
+    // A length line height divides by its style's size, so sizes go first.
+    .sort(([a], [b]) => Number(isLeading(a)) - Number(isLeading(b)));
+  for (const [token, value] of entries) {
     const {group, member} = swiftMember(token);
-    const fail = kind => {
-      throw new Error(
-        `${theme.name} ${mode}: ${token} is not a ${kind} Swift can read: ${value}`,
-      );
-    };
+    const where = `${theme.name} ${mode}: ${token} = ${value}`;
+    const notes = [];
     let typed;
-    if (group === 'color') typed = toHexColor(value) ?? fail('color');
-    else if (isFamily(token)) typed = toFamilies(value) ?? fail('font family');
-    else typed = toPoints(value) ?? fail('size');
+    try {
+      typed = convertToken(token, valueForMode(value, mode), group, out, notes);
+    } catch (error) {
+      if (!(error instanceof CssValueError)) throw error;
+      // Notes from the failed read describe a value that is not emitted.
+      notes.length = 0;
+      const fallback = error.hasNoStaticForm ? defaults[token] : undefined;
+      const outcome = error.hasNoStaticForm
+        ? 'Swift has no static value'
+        : 'the Swift theme generator does not read this form';
+      try {
+        if (fallback === undefined) throw error;
+        typed = convertToken(
+          token,
+          valueForMode(fallback, mode),
+          group,
+          out,
+          [],
+        );
+      } catch {
+        throw new Error(`${where}: ${error.message}; ${outcome}`);
+      }
+      notes.push(`${error.message}; core's default ${fallback} used instead`);
+    }
+    const emitted = swiftValue(memberType(group, token), typed);
+    for (const note of new Set(notes)) {
+      warnings.push(`${where} → ${emitted}: ${note}`);
+    }
     out[token] = {group, member, value: typed};
   }
   return out;
 }
 
-/** Light and dark tokens of a theme, checked for matching names (G7). */
-export async function resolveTheme(theme) {
-  const light = await resolveMode(theme, 'light');
-  const dark = await resolveMode(theme, 'dark');
+/** The error `--strict` raises for a run's warnings (G15). */
+export function strictError(warnings) {
+  return new Error(
+    `${warnings.length} warning(s), which --strict treats as errors:\n${warnings.map(w => `error: ${w}`).join('\n')}`,
+  );
+}
+
+/**
+ * Light and dark tokens of a theme, checked for matching names (G7).
+ * `warnings` collects every loss (G15); without a list, each prints to
+ * standard error. `strict` fails on the first theme with any.
+ */
+export async function resolveTheme(theme, {warnings, strict = false} = {}) {
+  const own = [];
+  const light = await resolveMode(theme, 'light', own);
+  const dark = await resolveMode(theme, 'dark', own);
   for (const token of new Set([...Object.keys(light), ...Object.keys(dark)])) {
     if (!(token in light) || !(token in dark)) {
       const missing = token in light ? 'dark' : 'light';
       throw new Error(`${theme.name} ${missing}: ${token} is missing`);
     }
   }
+  if (strict && own.length) throw strictError(own);
+  if (warnings) warnings.push(...own);
+  else for (const warning of own) console.warn(`warning: ${warning}`);
   return {light, dark};
 }
 
@@ -340,7 +340,11 @@ export function tokenSurface(resolved) {
         `${seen.get(key)} and ${token} both become ${key} in Swift`,
       );
     }
-    if (!/^[a-z][A-Za-z0-9_]*$/.test(member) || SWIFT_KEYWORDS.has(member)) {
+    if (
+      !member
+        .split('.')
+        .every(p => /^[a-z][A-Za-z0-9_]*$/.test(p) && !SWIFT_KEYWORDS.has(p))
+    ) {
       throw new Error(`${token} becomes ${key}, which Swift cannot name`);
     }
     seen.set(key, token);
@@ -357,9 +361,137 @@ export function tokenSurface(resolved) {
 
 const GENERATED_NOTE = `// Do not edit. Run \`${REGENERATE}\` after a theme or core token change.`;
 
+// Font sub-groups (G6): the family, size and weight scales each have their own
+// struct; every other sub-group is a type style with a size, weight and leading.
+const FONT_SCALES = {
+  family: 'FontFamilyTokens',
+  size: 'FontSizeTokens',
+  weight: 'FontWeightTokens',
+};
+const TYPE_STYLE_PARTS = ['size', 'weight', 'leading'];
+
+/** Font members by sub-group: `[[name, [{token, leaf, type}]]]`, sorted. */
+function fontGroups(members) {
+  const groups = new Map();
+  for (const m of members) {
+    const [name, leaf] = m.member.split('.');
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push({...m, leaf});
+  }
+  for (const [name, parts] of groups) {
+    if (name in FONT_SCALES) {
+      parts.sort((a, b) => a.leaf.localeCompare(b.leaf, 'en'));
+      continue;
+    }
+    const leaves = parts.map(p => p.leaf).sort();
+    if (leaves.join() !== [...TYPE_STYLE_PARTS].sort().join()) {
+      throw new Error(
+        `type style ${name} needs a size, weight and leading token, got ${leaves.join(', ')}`,
+      );
+    }
+    parts.sort(
+      (a, b) =>
+        TYPE_STYLE_PARTS.indexOf(a.leaf) - TYPE_STYLE_PARTS.indexOf(b.leaf),
+    );
+  }
+  return [...groups].sort(([a], [b]) => a.localeCompare(b, 'en'));
+}
+
+const fontStructName = name => FONT_SCALES[name] ?? 'TypeStyleTokens';
+
+function renderStruct(name, doc, members) {
+  return `${doc}
+public struct ${name}: Equatable, Sendable {
+${members.map(m => `${m.doc ? `  /// ${m.doc}\n` : ''}  public var ${m.name}: ${m.type}`).join('\n')}
+
+  public init(
+${members.map(m => `    ${m.name}: ${m.type}`).join(',\n')}
+  ) {
+${members.map(m => `    self.${m.name} = ${m.name}`).join('\n')}
+  }
+}`;
+}
+
+/** FontTokens and its sub-group structs, for the font members of a surface. */
+function renderFontTypes(members) {
+  const groups = fontGroups(members);
+  const cssName = t => t.replace(/^--/, '');
+  const lookup = type =>
+    members
+      .filter(m => m.type === type)
+      .map(m => `    case "${cssName(m.token)}": ${m.member}`)
+      .join('\n');
+  const font = renderStruct(
+    'FontTokens',
+    "/// The theme's `font` tokens, grouped by kind: each type style's size,\n/// weight and leading, and the family, size and weight scales.",
+    groups.map(([name, parts]) => ({
+      name,
+      type: fontStructName(name),
+      doc:
+        name in FONT_SCALES
+          ? `\`--font-${name}-*\``
+          : `\`--text-${cssName(parts[0].token)
+              .replace(/^text-/, '')
+              .replace(/-(size|weight|leading)$/, '')}-*\``,
+    })),
+  ).replace(
+    /\n}$/,
+    `
+
+  /// A size, weight, or line-height token by its CSS name, for code that
+  /// only has the name. Components read the typed members instead.
+  func number(named token: String) -> CGFloat? {
+    switch token {
+${lookup('CGFloat')}
+    default: nil
+    }
+  }
+
+  /// A font family token by its CSS name, for code that only has the name.
+  func families(named token: String) -> [String]? {
+    switch token {
+${lookup('[String]')}
+    default: nil
+    }
+  }
+}`,
+  );
+  const typeStyle = renderStruct(
+    'TypeStyleTokens',
+    '/// One type style: its font size, numeric weight, and line height.',
+    TYPE_STYLE_PARTS.map(name => ({name, type: 'CGFloat'})),
+  );
+  const scales = Object.entries(FONT_SCALES)
+    .map(([name, struct]) => {
+      const parts = groups.find(([n]) => n === name)?.[1] ?? [];
+      return renderStruct(
+        struct,
+        `/// The theme's \`font-${name}\` tokens.`,
+        parts.map(p => ({name: p.leaf, type: p.type, doc: `\`${p.token}\``})),
+      );
+    })
+    .join('\n\n');
+  return `${font}\n\n${typeStyle}\n\n${scales}`;
+}
+
+/** The Swift initializer of FontTokens for one mode. */
+function renderFontValue(members, resolved, pad) {
+  const groups = fontGroups(members);
+  const args = groups
+    .map(([name, parts]) => {
+      const inner = parts
+        .map(p => `${p.leaf}: ${swiftValue(p.type, resolved[p.token].value)}`)
+        .join(', ');
+      return `${pad}    ${name}: ${fontStructName(name)}(${inner})`;
+    })
+    .join(',\n');
+  return `${pad}  font: FontTokens(\n${args}\n${pad}  )`;
+}
+
 /** The generated Tokens.swift for a token surface. */
 export function renderTokenTypes(surface) {
   const structs = GROUPS.map(group => {
+    if (group === 'font') return renderFontTypes(surface.font);
     const members = surface[group];
     const props = members
       .map(
@@ -372,7 +504,7 @@ export function renderTokenTypes(surface) {
       .map(m => `    self.${m.member} = ${m.member}`)
       .join('\n');
     const lookupType =
-      group === 'color' ? 'Color' : group === 'font' ? null : 'CGFloat';
+      group === 'font' ? null : (GROUP_TYPES[group] ?? 'CGFloat');
     const lookup =
       lookupType === null
         ? `  /// A size, weight, or line-height token by its CSS name, for code that
@@ -435,20 +567,69 @@ ${GROUPS.map(g => `    self.${g} = ${g}`).join('\n')}
   }
 }
 
+/// One layer of a theme's shadow, as CSS \`box-shadow\` draws it: a drop
+/// shadow (an offset and a blur), or an inset ring \`spread\` points wide.
+public struct ShadowLayer: Equatable, Sendable {
+  public var x: CGFloat
+  public var y: CGFloat
+  public var blur: CGFloat
+  public var spread: CGFloat
+  public var isInset: Bool
+  public var color: Color
+
+  public init(
+    x: CGFloat, y: CGFloat, blur: CGFloat, spread: CGFloat = 0, isInset: Bool = false, color: Color
+  ) {
+    self.x = x
+    self.y = y
+    self.blur = blur
+    self.spread = spread
+    self.isInset = isInset
+    self.color = color
+  }
+}
+
 ${structs}
 `;
 }
 
+/**
+ * SwiftUI's own color for `RRGGBBAA` in a color space (`sRGB` or
+ * `displayP3`), each 8-bit
+ * channel written as `0`, `1`, or the exact decimal of its step over 255
+ * (G7). A decimal literal, not `n / 255`, keeps Swift's type checker fast on
+ * a theme's hundreds of colors.
+ */
+function swiftColor(space, hex) {
+  const [r, g, b, a] = hex
+    .match(/../g)
+    .map(h => parseInt(h, 16))
+    .map(n => (n === 0 ? '0' : n === 255 ? '1' : String(n / 255)));
+  return `Color(.${space}, red: ${r}, green: ${g}, blue: ${b}, opacity: ${a})`;
+}
+
 function swiftValue(type, value) {
-  if (type === 'Color') return `Color(astryxRGBA: 0x${value.slice(1)})`;
+  if (type === 'Color') {
+    return value.startsWith('#')
+      ? swiftColor('sRGB', value.slice(1))
+      : swiftColor('displayP3', value.split('#')[1]);
+  }
   if (type === '[String]')
     return `[${value.map(v => JSON.stringify(v)).join(', ')}]`;
+  if (type === '[ShadowLayer]')
+    return `[${value
+      .map(
+        l =>
+          `ShadowLayer(x: ${swiftNumber(l.x)}, y: ${swiftNumber(l.y)}, blur: ${swiftNumber(l.blur)}${l.isInset ? `, spread: ${swiftNumber(l.spread)}, isInset: true` : ''}, color: ${swiftValue('Color', l.color)})`,
+      )
+      .join(', ')}]`;
   return swiftNumber(value);
 }
 
 function renderMode(surface, resolved, indent) {
   const pad = ' '.repeat(indent);
   const groups = GROUPS.map(group => {
+    if (group === 'font') return renderFontValue(surface.font, resolved, pad);
     const args = surface[group]
       .map(
         m =>
@@ -467,14 +648,16 @@ export const themeFileName = swiftName => `${capitalize(swiftName)}Theme.swift`;
  * The generated Swift file for one theme (G3). `source` names where the theme
  * comes from, such as `@astryxdesign/theme-neutral`. A product theme
  * (`regenerate` set) lives in the app's own target, so it imports `Astryx` and
- * its header names the app's own regenerate command.
+ * its header names the app's own regenerate command. Each loss goes onto
+ * `warnings` (printed to standard error when no list is passed); `strict`
+ * turns a loss into an error (G15).
  */
 export async function renderSwiftTheme(
   theme,
-  {source = 'a product theme', regenerate} = {},
+  {source = 'a product theme', regenerate, warnings, strict} = {},
 ) {
   const swiftName = swiftThemeName(theme.name);
-  const {light, dark} = await resolveTheme(theme);
+  const {light, dark} = await resolveTheme(theme, {warnings, strict});
   const surface = tokenSurface(light);
   const header =
     regenerate === undefined
@@ -555,18 +738,22 @@ export async function generatedThemes(load) {
   return themes;
 }
 
-/** Every generated file as `{file: contents}`, keyed by absolute path. */
-export async function renderAll(load) {
+/**
+ * Every generated file as `{file: contents}`, keyed by absolute path. Each
+ * loss goes onto `warnings`, or prints to standard error without a list
+ * (G15).
+ */
+export async function renderAll(load, {warnings} = {}) {
   const themes = await generatedThemes(load);
   const files = {};
-  const {light} = await resolveTheme(themes[0].theme);
+  const {light} = await resolveTheme(themes[0].theme, {warnings: []});
   files[SWIFT_TOKENS_FILE] = renderTokenTypes(tokenSurface(light));
   for (const {theme, source} of themes) {
     const file = path.join(
       SWIFT_THEME_DIR,
       themeFileName(swiftThemeName(theme.name)),
     );
-    files[file] = await renderSwiftTheme(theme, {source});
+    files[file] = await renderSwiftTheme(theme, {source, warnings});
   }
   return files;
 }
@@ -582,10 +769,22 @@ async function viteLoad(file) {
   return module;
 }
 
+/**
+ * Prints a run's warnings at its end, or with `--strict` fails on them before
+ * any file is written (G15).
+ */
+export function finishRun(warnings, strict, write) {
+  if (strict && warnings.length) throw strictError(warnings);
+  write();
+  for (const warning of warnings) console.warn(`warning: ${warning}`);
+}
+
 async function main(argv) {
+  const strict = argv.includes('--strict');
+  const warnings = [];
   const at = argv.indexOf('--theme');
   if (at !== -1) {
-    // A product's own theme: `--theme <module>#<export> [--out <dir>]`.
+    // A product's own theme: `--theme <module>#<export> [--out <dir>] [--strict]`.
     const [modulePath, exportName] = argv[at + 1].split('#');
     const module = await viteLoad(path.resolve(modulePath));
     const theme = module[exportName];
@@ -593,36 +792,48 @@ async function main(argv) {
     const outAt = argv.indexOf('--out');
     const outDir = outAt === -1 ? process.cwd() : path.resolve(argv[outAt + 1]);
     const file = path.join(outDir, themeFileName(swiftThemeName(theme.name)));
-    const regenerate = `node packages/native/scripts/swift-ios-theme.mjs --theme ${argv[at + 1]}${outAt === -1 ? '' : ` --out ${argv[outAt + 1]}`}`;
-    fs.writeFileSync(
-      file,
-      await renderSwiftTheme(theme, {source: modulePath, regenerate}),
-    );
-    for (const token of localTokensLeftOut(theme)) {
-      console.warn(`left out: ${theme.name} local token ${token}`);
-    }
-    console.log(`wrote ${file}`);
+    const regenerate = `node packages/native/scripts/swift-ios-theme.mjs --theme ${argv[at + 1]}${outAt === -1 ? '' : ` --out ${argv[outAt + 1]}`}${strict ? ' --strict' : ''}`;
+    const swift = await renderSwiftTheme(theme, {
+      source: modulePath,
+      regenerate,
+      warnings,
+    });
+    finishRun(warnings, strict, () => {
+      fs.writeFileSync(file, swift);
+      for (const token of localTokensLeftOut(theme)) {
+        console.warn(`left out: ${theme.name} local token ${token}`);
+      }
+      console.log(`wrote ${file}`);
+    });
     return;
   }
-  const files = await renderAll(viteLoad);
-  for (const {theme} of await generatedThemes(viteLoad)) {
-    for (const token of localTokensLeftOut(theme)) {
-      console.warn(
-        `left out: ${theme.name} local token ${token} (core's resolver does not return local tokens per mode yet)`,
-      );
+  const files = await renderAll(viteLoad, {warnings});
+  const themes = await generatedThemes(viteLoad);
+  finishRun(warnings, strict, () => {
+    for (const {theme} of themes) {
+      for (const token of localTokensLeftOut(theme)) {
+        console.warn(
+          `left out: ${theme.name} local token ${token} (core's resolver does not return local tokens per mode yet)`,
+        );
+      }
     }
-  }
-  fs.mkdirSync(SWIFT_THEME_DIR, {recursive: true});
-  for (const existing of fs.readdirSync(SWIFT_THEME_DIR)) {
-    const file = path.join(SWIFT_THEME_DIR, existing);
-    if (existing.endsWith('.swift') && !(file in files)) fs.rmSync(file);
-  }
-  for (const [file, contents] of Object.entries(files)) {
-    fs.writeFileSync(file, contents);
-    console.log(`wrote ${path.relative(PACKAGE_ROOT, file)}`);
-  }
+    fs.mkdirSync(SWIFT_THEME_DIR, {recursive: true});
+    for (const existing of fs.readdirSync(SWIFT_THEME_DIR)) {
+      const file = path.join(SWIFT_THEME_DIR, existing);
+      if (existing.endsWith('.swift') && !(file in files)) fs.rmSync(file);
+    }
+    for (const [file, contents] of Object.entries(files)) {
+      fs.writeFileSync(file, contents);
+      console.log(`wrote ${path.relative(PACKAGE_ROOT, file)}`);
+    }
+  });
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  await main(process.argv.slice(2));
+  try {
+    await main(process.argv.slice(2));
+  } catch (error) {
+    console.error(`error: ${error.message}`);
+    process.exitCode = 1;
+  }
 }

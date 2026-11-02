@@ -177,9 +177,11 @@ export function declaresPressPaint(el: Element): boolean {
   );
 }
 
-/** `.2s`, `200ms`, `0.2s` → 200. */
+/** `.2s`, `200ms`, `0.2s` → 200; a scaled clock reads its base, at tempo 1. */
 export function durationToMs(value: string): number {
-  const match = value.trim().match(/^([\d.]+)(ms|s)$/);
+  // The press release scales its base clock by the theme's tempo, capped under
+  // Reduce Motion: `calc(<ms> * …)`, `min(<ms>, …)` (`spec:AST-108` FR4).
+  const match = value.trim().match(/^(?:(?:calc|min)\(\s*)?([\d.]+)(ms|s)\b/);
   if (match == null) {
     return Number.NaN;
   }
@@ -203,10 +205,12 @@ export function hasReleaseFade(el: Element): boolean {
   const onArmAnimates = rulesWithSelector(el, '[data-astryx-press="on"]').some(
     rule => rule.includes('animation'),
   );
+  // One duration and its Reduce Motion cap: both the machine's clock.
   return (
     named &&
-    durations.length === 1 &&
-    durations[0] === PRESS_FADE_MS &&
+    durations.length >= 1 &&
+    durations.length <= 2 &&
+    durations.every(duration => duration === PRESS_FADE_MS) &&
     !onArmAnimates
   );
 }

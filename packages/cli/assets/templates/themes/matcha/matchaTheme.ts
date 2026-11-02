@@ -103,9 +103,22 @@ export const matchaTheme = defineTheme({
     '--color-on-dark': neutral.light[100],
     '--color-on-light': neutral.light[20],
     '--color-on-accent': [neutral.light[100], neutral.dark[20]],
-    '--color-on-success': [neutral.light[100], neutral.dark[20]],
-    '--color-on-error': [neutral.light[100], neutral.dark[20]],
+    '--color-on-success': neutral.dark[5],
+    '--color-on-error': neutral.dark[5],
     '--color-on-warning': [neutral.light[20], neutral.dark[20]],
+
+    // Info is its own blue status, independent of the accent.
+    '--color-info': [blue.light[50], blue.dark[80]],
+    '--color-info-muted': 'var(--color-background-blue)',
+
+    '--color-text-info': [blue.light[35], blue.dark[75]],
+    '--color-text-success': [green.light[35], green.dark[75]],
+    '--color-text-warning': [yellow.light[45], yellow.dark[90]],
+    '--color-text-error': [red.light[35], red.dark[75]],
+    '--color-on-info-muted': [blue.light[35], blue.dark[75]],
+    '--color-on-success-muted': [green.light[35], green.dark[75]],
+    '--color-on-warning-muted': [yellow.light[45], yellow.dark[90]],
+    '--color-on-error-muted': [red.light[35], red.dark[75]],
 
     // Icon
     '--color-icon-accent': [neutral.light[20], neutral.dark[75]],

@@ -5,7 +5,10 @@ import {act, render, fireEvent, screen} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {StrictMode, useEffect, useRef} from 'react';
 import {ChatComposer} from './ChatComposer';
+import {ChatComposerInput} from './ChatComposerInput';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {useChatComposerContext} from './ChatContext';
+import {createStaticSource} from '../Typeahead/createStaticSource';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type * as AnnounceModule from '../hooks/useAnnounce';
 
@@ -71,6 +74,36 @@ describe('ChatComposer focus indication', () => {
     fireEvent.keyDown(document, {key: 'Tab'});
     fireEvent.focus(editor);
 
+    expect(body.className).not.toBe(restingClass);
+  });
+
+  it('adds the composer ring when Tab enters a disabled trigger editor', async () => {
+    const user = userEvent.setup();
+    render(
+      <ChatComposer
+        isDisabled
+        onSubmit={() => {}}
+        input={
+          <ChatComposerInput
+            triggers={[
+              {
+                character: '@',
+                searchSource: createStaticSource([]),
+                onSelect: () => '',
+              },
+            ]}
+          />
+        }
+      />,
+    );
+    const editor = screen.getByRole('combobox');
+    const body = editor.parentElement!.parentElement!.parentElement!;
+    const restingClass = body.className;
+    expect(editor).toHaveAttribute('aria-disabled', 'true');
+
+    await user.tab();
+
+    expect(editor).toHaveFocus();
     expect(body.className).not.toBe(restingClass);
   });
 
@@ -247,6 +280,28 @@ describe('ChatComposer input composition contract', () => {
     expect(focusSpy).toHaveBeenCalled();
   });
 
+  it('keeps a click on an open tooltip in the body from focusing the input (Tooltip FR11)', () => {
+    const {getByTestId} = render(
+      <ChatComposer
+        onSubmit={() => {}}
+        input={
+          <div>
+            <textarea data-testid="bare-textarea" />
+            <Tooltip content="Tooltip text" isOpen>
+              <span tabIndex={0}>Info</span>
+            </Tooltip>
+          </div>
+        }
+      />,
+    );
+    const textarea = getByTestId('bare-textarea') as HTMLTextAreaElement;
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(document.activeElement).not.toBe(textarea);
+    // Positive control: a click on the body's own space still focuses it.
+    fireEvent.click(textarea.parentElement!.parentElement!.parentElement!);
+    expect(document.activeElement).toBe(textarea);
+  });
+
   it('falls back to focusing a bare textarea when no control is registered', () => {
     const {getByTestId} = render(
       <ChatComposer
@@ -306,5 +361,27 @@ describe('ChatComposer status announcement (spec:AST-086)', () => {
   it('announces nothing for a status without a message', () => {
     render(composer({type: 'warning'}));
     expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('is silent for a status shown while the page loads, then announces a later one (FR11)', () => {
+    let readyState: DocumentReadyState = 'loading';
+    const spy = vi
+      .spyOn(document, 'readyState', 'get')
+      .mockImplementation(() => readyState);
+    try {
+      const {rerender} = render(composer({type: 'error', message: 'Offline'}));
+      expect(announce).not.toHaveBeenCalled();
+      readyState = 'complete';
+      rerender(composer({type: 'error', message: 'Send failed'}));
+      expect(announce.mock.calls).toEqual([['Send failed', 'assertive']]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('announces only the message, not the decorative icon (FR12)', () => {
+    const {rerender} = render(composer());
+    rerender(composer({type: 'warning', message: 'Offline'}));
+    expect(announce.mock.calls).toEqual([['Offline', 'polite']]);
   });
 });

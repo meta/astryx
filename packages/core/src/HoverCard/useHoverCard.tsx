@@ -31,6 +31,7 @@ import {
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {
   colorVars,
@@ -273,6 +274,7 @@ function isFocusable(element: HTMLElement): boolean {
  * {hoverCard.renderHoverCard(<ProfileCard user={user} />)}
  * ```
  */
+
 export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   const {
     placement = 'above',
@@ -666,6 +668,11 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
       return renderLayer(
         <div
+          // FR11: a press inside the card acts only within the card. A
+          // registered surface counts as something else in the shared
+          // interactive-ancestor walk, so a clickable container around the
+          // trigger leaves it alone; document listeners still see it.
+          ref={registerLayerSurface}
           {...stylex.props(styles.content)}
           onMouseEnter={() => {
             // Touch synthesizes these over the card too; letting a tap inside

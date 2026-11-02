@@ -1,20 +1,32 @@
-Results for "icon set" (20 of 366)
+Results for "icon set" (20 of 373)
 name:        authoring/building-blocks/templates/build-the-template/template-assets/template-icons
 section:     use-astryx-icon
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons use-astryx-icon
 parent:      pnpm exec astryx docs authoring/building-blocks/templates/build-the-template/template-assets/template-icons --index
-name:        ToolbarTableFilter
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ToolbarTableFilter --type block
 name:        icons
 section:     theme-overrides
 domain:      doc
 package:     @astryxdesign/cli
 command:     pnpm exec astryx docs icons theme-overrides
 parent:      pnpm exec astryx docs icons --index
+name:        icons
+section:     icon-variants
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons icon-variants
+parent:      pnpm exec astryx docs icons --index
+name:        theme
+section:     icon-sizes
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs theme icon-sizes
+parent:      pnpm exec astryx docs theme --index
+name:        ToolbarTableFilter
+domain:      template
+package:     @astryxdesign/core
+command:     pnpm exec astryx template ToolbarTableFilter --type block
 name:        Icon
 domain:      component
 package:     @astryxdesign/core
@@ -80,11 +92,3 @@ name:        ChatComposerDrawerShowcase
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template ChatComposerDrawerShowcase --type block
-name:        ChatComposerDrawerWithProgress
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatComposerDrawerWithProgress --type block
-name:        ChatComposerFooterActions
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatComposerFooterActions --type block

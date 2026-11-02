@@ -4,6 +4,18 @@ import {describe, expect, it} from 'vitest';
 import {parseDocType} from './parseDocType.js';
 
 describe('parseDocType', () => {
+  it('reads words-or-a-switch, and no other union of different kinds', () => {
+    expect(parseDocType('string | boolean')).toEqual({
+      ok: true,
+      type: {kind: 'textOrBoolean'},
+    });
+    expect(parseDocType('boolean | string')).toEqual({
+      ok: true,
+      type: {kind: 'textOrBoolean'},
+    });
+    expect(parseDocType('string | number').ok).toBe(false);
+  });
+
   it('reads portable forms', () => {
     expect(parseDocType('string')).toEqual({ok: true, type: {kind: 'string'}});
     expect(parseDocType("'sm' | 'md' | 'lg'")).toEqual({

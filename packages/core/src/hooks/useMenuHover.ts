@@ -40,6 +40,7 @@ import {useCallback, useEffect, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useListFocus} from './useListFocus';
 import {useMediaQuery} from './useMediaQuery';
+import {focusForLastInput} from '../utils/focusReturn';
 
 const DEFAULT_CLICK_GUARD_MS = 500;
 
@@ -279,10 +280,27 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     const menuHadFocus =
       menuRef.current?.contains(document.activeElement) ?? false;
     hide();
-    if (menuHadFocus) {
-      triggerElRef.current?.focus();
+    const trigger = triggerElRef.current;
+    if (menuHadFocus && trigger != null) {
+      // A pointer's pick leaves no keyboard ring on the trigger; a keyboard's
+      // keeps it (`architecture:interaction-modality` INV1).
+      focusForLastInput(trigger);
     }
   }, [hide, menuRef]);
+
+  // A menu placed in the content can own its own list keys (NavHeadingMenu
+  // runs useListFocus over the same `menuitem`s); a key it consumed must not
+  // move focus a second time here as it bubbles out (APG menu: one item per
+  // arrow press).
+  const handleContentKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      handleListKeyDown(event);
+    },
+    [handleListKeyDown],
+  );
 
   useEffect(() => {
     escapeHandlerRef.current = () => {
@@ -531,7 +549,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     contentProps: {
       onMouseEnter: handleContentMouseEnter,
       onMouseLeave: handleMouseLeave,
-      onKeyDown: handleListKeyDown,
+      onKeyDown: handleContentKeyDown,
     },
     menuRef,
     focusFirst,

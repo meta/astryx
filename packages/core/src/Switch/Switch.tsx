@@ -4,7 +4,7 @@
 
 /**
  * @file Switch.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip, i18n (useTranslator)
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip, i18n (useComponentTranslator)
  * @output Exports Switch component, SwitchProps, SwitchLabelPosition, SwitchLabelSpacing
  * @position Core implementation; consumed by index.ts, tested by Switch.test.tsx
  *
@@ -44,17 +44,23 @@ import type {InputStatus} from '../Field/types';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps, mergeRefs, rtlStyles} from '../utils';
-import {switchFocusScope, switchScope} from './switch.markers.stylex';
+import {switchFocusInput, switchScope} from './switch.markers.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Switch/Switch.generated';
+
+registerEnglishFallback(english);
 const wrapperSizeStyles = stylex.create({
   sm: {
     width: 32,
@@ -258,20 +264,22 @@ const styles = stylex.create({
     },
   },
   // The one ring in the system not drawn by focusOutlineStyles. The focusable
-  // input is a sibling of the track, so the condition has to reach the shared
-  // scope marker — and a marker cannot be shared across components without
-  // leaking focus state from an outer one, so it cannot live in the utility.
-  // StyleX also cannot inline a constant imported from another module, so the
-  // values are read from the tokens the utility reads.
+  // input is the track's preceding sibling, so the condition reads that input
+  // through its own marker: a sibling relation, never a `:has()` scan of the
+  // row, which would restyle everything under it on any change. A marker
+  // cannot be shared across components without leaking focus state from an
+  // outer one, so it cannot live in the utility. StyleX also cannot inline a
+  // constant imported from another module, so the values are read from the
+  // tokens the utility reads.
   trackFocus: {
     outline: {
       default: 'none',
-      [stylex.when.ancestor(':has(:focus-visible)', switchFocusScope)]:
+      [stylex.when.siblingBefore(':focus-visible', switchFocusInput)]:
         `${focusVars['--focus-outline-width']} ${focusVars['--focus-outline-style']} ${focusVars['--focus-outline-color']}`,
     },
     outlineOffset: {
       default: null,
-      [stylex.when.ancestor(':has(:focus-visible)', switchFocusScope)]:
+      [stylex.when.siblingBefore(':focus-visible', switchFocusInput)]:
         focusVars['--focus-outline-offset'],
     },
   },
@@ -571,7 +579,7 @@ export function Switch({
   'aria-labelledby': ariaLabelledByProp,
   ...rest
 }: SwitchProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const id = useId();
   // The row is the pressable: the input, the track and the label all sit
   // inside it, and the pressed arms above read the row's scope marker.
@@ -677,7 +685,11 @@ export function Switch({
         // than the field wrapper via `...rest`.
         aria-labelledby={ariaLabelledByProp}
         aria-describedby={ariaDescribedBy}
-        aria-invalid={status?.type === 'error' ? true : undefined}
+        // Chromium reports an unchecked native-required checkbox invalid before
+        // any interaction; the invalid state follows status instead.
+        aria-invalid={
+          status?.type === 'error' ? true : isRequired ? false : undefined
+        }
         aria-busy={isBusy || undefined}
         {...stylex.props(
           styles.input,
@@ -686,6 +698,7 @@ export function Switch({
           inputSizeStyles[size],
           isDisabled && styles.inputDisabled,
           isBusy && styles.inputBusy,
+          switchFocusInput,
         )}
       />
       <div
@@ -755,8 +768,12 @@ export function Switch({
         style,
       )}
       {...rest}
-      // Native `disabled` suppressed clicks on the switch (spec:AST-085 FR2).
-      onClick={isDisabled ? undefined : rest.onClick}>
+      // Native `disabled` suppressed clicks and key events on the switch; the
+      // switch is no longer natively disabled, so withhold the caller's
+      // handlers while disabled (spec:AST-085 FR2).
+      onClick={isDisabled ? undefined : rest.onClick}
+      onKeyDown={isDisabled ? undefined : rest.onKeyDown}
+      onKeyUp={isDisabled ? undefined : rest.onKeyUp}>
       <div
         ref={el => {
           // Interaction (hover/focus) listeners for the disabled-message
@@ -773,7 +790,6 @@ export function Switch({
           isLabelHidden && styles.containerLabelHidden,
           labelSpacing === 'spread' && styles.containerSpread,
           !isDisabled && switchScope,
-          switchFocusScope,
           // The touch press's strength and release live on the row the
           // controller writes to; the track and thumb inherit and paint it.
           !isDisabled && interactionOverlayStyles.pressedAlpha,

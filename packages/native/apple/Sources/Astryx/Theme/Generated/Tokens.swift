@@ -11,19 +11,44 @@ public struct Tokens: Equatable, Sendable {
   public var radius: RadiusTokens
   public var size: SizeTokens
   public var font: FontTokens
+  public var shadow: ShadowTokens
 
   public init(
     color: ColorTokens,
     space: SpaceTokens,
     radius: RadiusTokens,
     size: SizeTokens,
-    font: FontTokens
+    font: FontTokens,
+    shadow: ShadowTokens
   ) {
     self.color = color
     self.space = space
     self.radius = radius
     self.size = size
     self.font = font
+    self.shadow = shadow
+  }
+}
+
+/// One layer of a theme's shadow, as CSS `box-shadow` draws it: a drop
+/// shadow (an offset and a blur), or an inset ring `spread` points wide.
+public struct ShadowLayer: Equatable, Sendable {
+  public var x: CGFloat
+  public var y: CGFloat
+  public var blur: CGFloat
+  public var spread: CGFloat
+  public var isInset: Bool
+  public var color: Color
+
+  public init(
+    x: CGFloat, y: CGFloat, blur: CGFloat, spread: CGFloat = 0, isInset: Bool = false, color: Color
+  ) {
+    self.x = x
+    self.y = y
+    self.blur = blur
+    self.spread = spread
+    self.isInset = isInset
+    self.color = color
   }
 }
 
@@ -75,10 +100,14 @@ public struct ColorTokens: Equatable, Sendable {
   public var borderCyan: Color
   /// `--color-border-emphasized`
   public var borderEmphasized: Color
+  /// `--color-border-error`
+  public var borderError: Color
   /// `--color-border-gray`
   public var borderGray: Color
   /// `--color-border-green`
   public var borderGreen: Color
+  /// `--color-border-info`
+  public var borderInfo: Color
   /// `--color-border-orange`
   public var borderOrange: Color
   /// `--color-border-pink`
@@ -87,8 +116,12 @@ public struct ColorTokens: Equatable, Sendable {
   public var borderPurple: Color
   /// `--color-border-red`
   public var borderRed: Color
+  /// `--color-border-success`
+  public var borderSuccess: Color
   /// `--color-border-teal`
   public var borderTeal: Color
+  /// `--color-border-warning`
+  public var borderWarning: Color
   /// `--color-border-yellow`
   public var borderYellow: Color
   /// `--color-data-blue-1`
@@ -215,10 +248,14 @@ public struct ColorTokens: Equatable, Sendable {
   public var iconCyan: Color
   /// `--color-icon-disabled`
   public var iconDisabled: Color
+  /// `--color-icon-error`
+  public var iconError: Color
   /// `--color-icon-gray`
   public var iconGray: Color
   /// `--color-icon-green`
   public var iconGreen: Color
+  /// `--color-icon-info`
+  public var iconInfo: Color
   /// `--color-icon-orange`
   public var iconOrange: Color
   /// `--color-icon-pink`
@@ -231,10 +268,18 @@ public struct ColorTokens: Equatable, Sendable {
   public var iconRed: Color
   /// `--color-icon-secondary`
   public var iconSecondary: Color
+  /// `--color-icon-success`
+  public var iconSuccess: Color
   /// `--color-icon-teal`
   public var iconTeal: Color
+  /// `--color-icon-warning`
+  public var iconWarning: Color
   /// `--color-icon-yellow`
   public var iconYellow: Color
+  /// `--color-info`
+  public var info: Color
+  /// `--color-info-muted`
+  public var infoMuted: Color
   /// `--color-neutral`
   public var neutral: Color
   /// `--color-on-accent`
@@ -243,12 +288,22 @@ public struct ColorTokens: Equatable, Sendable {
   public var onDark: Color
   /// `--color-on-error`
   public var onError: Color
+  /// `--color-on-error-muted`
+  public var onErrorMuted: Color
+  /// `--color-on-info`
+  public var onInfo: Color
+  /// `--color-on-info-muted`
+  public var onInfoMuted: Color
   /// `--color-on-light`
   public var onLight: Color
   /// `--color-on-success`
   public var onSuccess: Color
+  /// `--color-on-success-muted`
+  public var onSuccessMuted: Color
   /// `--color-on-warning`
   public var onWarning: Color
+  /// `--color-on-warning-muted`
+  public var onWarningMuted: Color
   /// `--color-overlay`
   public var overlay: Color
   /// `--color-overlay-hover`
@@ -309,10 +364,14 @@ public struct ColorTokens: Equatable, Sendable {
   public var textCyan: Color
   /// `--color-text-disabled`
   public var textDisabled: Color
+  /// `--color-text-error`
+  public var textError: Color
   /// `--color-text-gray`
   public var textGray: Color
   /// `--color-text-green`
   public var textGreen: Color
+  /// `--color-text-info`
+  public var textInfo: Color
   /// `--color-text-orange`
   public var textOrange: Color
   /// `--color-text-pink`
@@ -325,8 +384,12 @@ public struct ColorTokens: Equatable, Sendable {
   public var textRed: Color
   /// `--color-text-secondary`
   public var textSecondary: Color
+  /// `--color-text-success`
+  public var textSuccess: Color
   /// `--color-text-teal`
   public var textTeal: Color
+  /// `--color-text-warning`
+  public var textWarning: Color
   /// `--color-text-yellow`
   public var textYellow: Color
   /// `--color-tint-hover`
@@ -362,13 +425,17 @@ public struct ColorTokens: Equatable, Sendable {
     borderBlue: Color,
     borderCyan: Color,
     borderEmphasized: Color,
+    borderError: Color,
     borderGray: Color,
     borderGreen: Color,
+    borderInfo: Color,
     borderOrange: Color,
     borderPink: Color,
     borderPurple: Color,
     borderRed: Color,
+    borderSuccess: Color,
     borderTeal: Color,
+    borderWarning: Color,
     borderYellow: Color,
     dataBlue1: Color,
     dataBlue2: Color,
@@ -432,23 +499,34 @@ public struct ColorTokens: Equatable, Sendable {
     iconBlue: Color,
     iconCyan: Color,
     iconDisabled: Color,
+    iconError: Color,
     iconGray: Color,
     iconGreen: Color,
+    iconInfo: Color,
     iconOrange: Color,
     iconPink: Color,
     iconPrimary: Color,
     iconPurple: Color,
     iconRed: Color,
     iconSecondary: Color,
+    iconSuccess: Color,
     iconTeal: Color,
+    iconWarning: Color,
     iconYellow: Color,
+    info: Color,
+    infoMuted: Color,
     neutral: Color,
     onAccent: Color,
     onDark: Color,
     onError: Color,
+    onErrorMuted: Color,
+    onInfo: Color,
+    onInfoMuted: Color,
     onLight: Color,
     onSuccess: Color,
+    onSuccessMuted: Color,
     onWarning: Color,
+    onWarningMuted: Color,
     overlay: Color,
     overlayHover: Color,
     overlayPressed: Color,
@@ -479,15 +557,19 @@ public struct ColorTokens: Equatable, Sendable {
     textBlue: Color,
     textCyan: Color,
     textDisabled: Color,
+    textError: Color,
     textGray: Color,
     textGreen: Color,
+    textInfo: Color,
     textOrange: Color,
     textPink: Color,
     textPrimary: Color,
     textPurple: Color,
     textRed: Color,
     textSecondary: Color,
+    textSuccess: Color,
     textTeal: Color,
+    textWarning: Color,
     textYellow: Color,
     tintHover: Color,
     track: Color,
@@ -517,13 +599,17 @@ public struct ColorTokens: Equatable, Sendable {
     self.borderBlue = borderBlue
     self.borderCyan = borderCyan
     self.borderEmphasized = borderEmphasized
+    self.borderError = borderError
     self.borderGray = borderGray
     self.borderGreen = borderGreen
+    self.borderInfo = borderInfo
     self.borderOrange = borderOrange
     self.borderPink = borderPink
     self.borderPurple = borderPurple
     self.borderRed = borderRed
+    self.borderSuccess = borderSuccess
     self.borderTeal = borderTeal
+    self.borderWarning = borderWarning
     self.borderYellow = borderYellow
     self.dataBlue1 = dataBlue1
     self.dataBlue2 = dataBlue2
@@ -587,23 +673,34 @@ public struct ColorTokens: Equatable, Sendable {
     self.iconBlue = iconBlue
     self.iconCyan = iconCyan
     self.iconDisabled = iconDisabled
+    self.iconError = iconError
     self.iconGray = iconGray
     self.iconGreen = iconGreen
+    self.iconInfo = iconInfo
     self.iconOrange = iconOrange
     self.iconPink = iconPink
     self.iconPrimary = iconPrimary
     self.iconPurple = iconPurple
     self.iconRed = iconRed
     self.iconSecondary = iconSecondary
+    self.iconSuccess = iconSuccess
     self.iconTeal = iconTeal
+    self.iconWarning = iconWarning
     self.iconYellow = iconYellow
+    self.info = info
+    self.infoMuted = infoMuted
     self.neutral = neutral
     self.onAccent = onAccent
     self.onDark = onDark
     self.onError = onError
+    self.onErrorMuted = onErrorMuted
+    self.onInfo = onInfo
+    self.onInfoMuted = onInfoMuted
     self.onLight = onLight
     self.onSuccess = onSuccess
+    self.onSuccessMuted = onSuccessMuted
     self.onWarning = onWarning
+    self.onWarningMuted = onWarningMuted
     self.overlay = overlay
     self.overlayHover = overlayHover
     self.overlayPressed = overlayPressed
@@ -634,15 +731,19 @@ public struct ColorTokens: Equatable, Sendable {
     self.textBlue = textBlue
     self.textCyan = textCyan
     self.textDisabled = textDisabled
+    self.textError = textError
     self.textGray = textGray
     self.textGreen = textGreen
+    self.textInfo = textInfo
     self.textOrange = textOrange
     self.textPink = textPink
     self.textPrimary = textPrimary
     self.textPurple = textPurple
     self.textRed = textRed
     self.textSecondary = textSecondary
+    self.textSuccess = textSuccess
     self.textTeal = textTeal
+    self.textWarning = textWarning
     self.textYellow = textYellow
     self.tintHover = tintHover
     self.track = track
@@ -677,13 +778,17 @@ public struct ColorTokens: Equatable, Sendable {
     case "color-border-blue": borderBlue
     case "color-border-cyan": borderCyan
     case "color-border-emphasized": borderEmphasized
+    case "color-border-error": borderError
     case "color-border-gray": borderGray
     case "color-border-green": borderGreen
+    case "color-border-info": borderInfo
     case "color-border-orange": borderOrange
     case "color-border-pink": borderPink
     case "color-border-purple": borderPurple
     case "color-border-red": borderRed
+    case "color-border-success": borderSuccess
     case "color-border-teal": borderTeal
+    case "color-border-warning": borderWarning
     case "color-border-yellow": borderYellow
     case "color-data-blue-1": dataBlue1
     case "color-data-blue-2": dataBlue2
@@ -747,23 +852,34 @@ public struct ColorTokens: Equatable, Sendable {
     case "color-icon-blue": iconBlue
     case "color-icon-cyan": iconCyan
     case "color-icon-disabled": iconDisabled
+    case "color-icon-error": iconError
     case "color-icon-gray": iconGray
     case "color-icon-green": iconGreen
+    case "color-icon-info": iconInfo
     case "color-icon-orange": iconOrange
     case "color-icon-pink": iconPink
     case "color-icon-primary": iconPrimary
     case "color-icon-purple": iconPurple
     case "color-icon-red": iconRed
     case "color-icon-secondary": iconSecondary
+    case "color-icon-success": iconSuccess
     case "color-icon-teal": iconTeal
+    case "color-icon-warning": iconWarning
     case "color-icon-yellow": iconYellow
+    case "color-info": info
+    case "color-info-muted": infoMuted
     case "color-neutral": neutral
     case "color-on-accent": onAccent
     case "color-on-dark": onDark
     case "color-on-error": onError
+    case "color-on-error-muted": onErrorMuted
+    case "color-on-info": onInfo
+    case "color-on-info-muted": onInfoMuted
     case "color-on-light": onLight
     case "color-on-success": onSuccess
+    case "color-on-success-muted": onSuccessMuted
     case "color-on-warning": onWarning
+    case "color-on-warning-muted": onWarningMuted
     case "color-overlay": overlay
     case "color-overlay-hover": overlayHover
     case "color-overlay-pressed": overlayPressed
@@ -794,15 +910,19 @@ public struct ColorTokens: Equatable, Sendable {
     case "color-text-blue": textBlue
     case "color-text-cyan": textCyan
     case "color-text-disabled": textDisabled
+    case "color-text-error": textError
     case "color-text-gray": textGray
     case "color-text-green": textGreen
+    case "color-text-info": textInfo
     case "color-text-orange": textOrange
     case "color-text-pink": textPink
     case "color-text-primary": textPrimary
     case "color-text-purple": textPurple
     case "color-text-red": textRed
     case "color-text-secondary": textSecondary
+    case "color-text-success": textSuccess
     case "color-text-teal": textTeal
+    case "color-text-warning": textWarning
     case "color-text-yellow": textYellow
     case "color-tint-hover": tintHover
     case "color-track": track
@@ -991,259 +1111,144 @@ public struct SizeTokens: Equatable, Sendable {
   }
 }
 
-/// The theme's `font` tokens, one typed member per token.
+/// The theme's `font` tokens, grouped by kind: each type style's size,
+/// weight and leading, and the family, size and weight scales.
 public struct FontTokens: Equatable, Sendable {
-  /// `--text-body-leading`
-  public var bodyLeading: CGFloat
-  /// `--text-body-size`
-  public var bodySize: CGFloat
-  /// `--text-body-weight`
-  public var bodyWeight: CGFloat
-  /// `--font-family-body`
-  public var familyBody: [String]
-  /// `--font-family-code`
-  public var familyCode: [String]
-  /// `--font-family-heading`
-  public var familyHeading: [String]
-  /// `--text-heading-1-leading`
-  public var heading1Leading: CGFloat
-  /// `--text-heading-1-size`
-  public var heading1Size: CGFloat
-  /// `--text-heading-1-weight`
-  public var heading1Weight: CGFloat
-  /// `--text-heading-2-leading`
-  public var heading2Leading: CGFloat
-  /// `--text-heading-2-size`
-  public var heading2Size: CGFloat
-  /// `--text-heading-2-weight`
-  public var heading2Weight: CGFloat
-  /// `--text-heading-3-leading`
-  public var heading3Leading: CGFloat
-  /// `--text-heading-3-size`
-  public var heading3Size: CGFloat
-  /// `--text-heading-3-weight`
-  public var heading3Weight: CGFloat
-  /// `--text-heading-4-leading`
-  public var heading4Leading: CGFloat
-  /// `--text-heading-4-size`
-  public var heading4Size: CGFloat
-  /// `--text-heading-4-weight`
-  public var heading4Weight: CGFloat
-  /// `--text-heading-5-leading`
-  public var heading5Leading: CGFloat
-  /// `--text-heading-5-size`
-  public var heading5Size: CGFloat
-  /// `--text-heading-5-weight`
-  public var heading5Weight: CGFloat
-  /// `--text-heading-6-leading`
-  public var heading6Leading: CGFloat
-  /// `--text-heading-6-size`
-  public var heading6Size: CGFloat
-  /// `--text-heading-6-weight`
-  public var heading6Weight: CGFloat
-  /// `--text-label-leading`
-  public var labelLeading: CGFloat
-  /// `--text-label-size`
-  public var labelSize: CGFloat
-  /// `--text-label-weight`
-  public var labelWeight: CGFloat
-  /// `--text-large-leading`
-  public var largeLeading: CGFloat
-  /// `--text-large-size`
-  public var largeSize: CGFloat
-  /// `--text-large-weight`
-  public var largeWeight: CGFloat
-  /// `--font-size-2xl`
-  public var size2xl: CGFloat
-  /// `--font-size-2xs`
-  public var size2xs: CGFloat
-  /// `--font-size-3xl`
-  public var size3xl: CGFloat
-  /// `--font-size-3xs`
-  public var size3xs: CGFloat
-  /// `--font-size-4xl`
-  public var size4xl: CGFloat
-  /// `--font-size-4xs`
-  public var size4xs: CGFloat
-  /// `--font-size-5xl`
-  public var size5xl: CGFloat
-  /// `--font-size-base`
-  public var sizeBase: CGFloat
-  /// `--font-size-lg`
-  public var sizeLg: CGFloat
-  /// `--font-size-sm`
-  public var sizeSm: CGFloat
-  /// `--font-size-xl`
-  public var sizeXl: CGFloat
-  /// `--font-size-xs`
-  public var sizeXs: CGFloat
-  /// `--text-supporting-leading`
-  public var supportingLeading: CGFloat
-  /// `--text-supporting-size`
-  public var supportingSize: CGFloat
-  /// `--text-supporting-weight`
-  public var supportingWeight: CGFloat
-  /// `--font-weight-bold`
-  public var weightBold: CGFloat
-  /// `--font-weight-medium`
-  public var weightMedium: CGFloat
-  /// `--font-weight-normal`
-  public var weightNormal: CGFloat
-  /// `--font-weight-semibold`
-  public var weightSemibold: CGFloat
+  /// `--text-body-*`
+  public var body: TypeStyleTokens
+  /// `--text-code-*`
+  public var code: TypeStyleTokens
+  /// `--text-display-1-*`
+  public var display1: TypeStyleTokens
+  /// `--text-display-2-*`
+  public var display2: TypeStyleTokens
+  /// `--text-display-3-*`
+  public var display3: TypeStyleTokens
+  /// `--font-family-*`
+  public var family: FontFamilyTokens
+  /// `--text-heading-1-*`
+  public var heading1: TypeStyleTokens
+  /// `--text-heading-2-*`
+  public var heading2: TypeStyleTokens
+  /// `--text-heading-3-*`
+  public var heading3: TypeStyleTokens
+  /// `--text-heading-4-*`
+  public var heading4: TypeStyleTokens
+  /// `--text-heading-5-*`
+  public var heading5: TypeStyleTokens
+  /// `--text-heading-6-*`
+  public var heading6: TypeStyleTokens
+  /// `--text-label-*`
+  public var label: TypeStyleTokens
+  /// `--text-large-*`
+  public var large: TypeStyleTokens
+  /// `--font-size-*`
+  public var size: FontSizeTokens
+  /// `--text-supporting-*`
+  public var supporting: TypeStyleTokens
+  /// `--font-weight-*`
+  public var weight: FontWeightTokens
 
   public init(
-    bodyLeading: CGFloat,
-    bodySize: CGFloat,
-    bodyWeight: CGFloat,
-    familyBody: [String],
-    familyCode: [String],
-    familyHeading: [String],
-    heading1Leading: CGFloat,
-    heading1Size: CGFloat,
-    heading1Weight: CGFloat,
-    heading2Leading: CGFloat,
-    heading2Size: CGFloat,
-    heading2Weight: CGFloat,
-    heading3Leading: CGFloat,
-    heading3Size: CGFloat,
-    heading3Weight: CGFloat,
-    heading4Leading: CGFloat,
-    heading4Size: CGFloat,
-    heading4Weight: CGFloat,
-    heading5Leading: CGFloat,
-    heading5Size: CGFloat,
-    heading5Weight: CGFloat,
-    heading6Leading: CGFloat,
-    heading6Size: CGFloat,
-    heading6Weight: CGFloat,
-    labelLeading: CGFloat,
-    labelSize: CGFloat,
-    labelWeight: CGFloat,
-    largeLeading: CGFloat,
-    largeSize: CGFloat,
-    largeWeight: CGFloat,
-    size2xl: CGFloat,
-    size2xs: CGFloat,
-    size3xl: CGFloat,
-    size3xs: CGFloat,
-    size4xl: CGFloat,
-    size4xs: CGFloat,
-    size5xl: CGFloat,
-    sizeBase: CGFloat,
-    sizeLg: CGFloat,
-    sizeSm: CGFloat,
-    sizeXl: CGFloat,
-    sizeXs: CGFloat,
-    supportingLeading: CGFloat,
-    supportingSize: CGFloat,
-    supportingWeight: CGFloat,
-    weightBold: CGFloat,
-    weightMedium: CGFloat,
-    weightNormal: CGFloat,
-    weightSemibold: CGFloat
+    body: TypeStyleTokens,
+    code: TypeStyleTokens,
+    display1: TypeStyleTokens,
+    display2: TypeStyleTokens,
+    display3: TypeStyleTokens,
+    family: FontFamilyTokens,
+    heading1: TypeStyleTokens,
+    heading2: TypeStyleTokens,
+    heading3: TypeStyleTokens,
+    heading4: TypeStyleTokens,
+    heading5: TypeStyleTokens,
+    heading6: TypeStyleTokens,
+    label: TypeStyleTokens,
+    large: TypeStyleTokens,
+    size: FontSizeTokens,
+    supporting: TypeStyleTokens,
+    weight: FontWeightTokens
   ) {
-    self.bodyLeading = bodyLeading
-    self.bodySize = bodySize
-    self.bodyWeight = bodyWeight
-    self.familyBody = familyBody
-    self.familyCode = familyCode
-    self.familyHeading = familyHeading
-    self.heading1Leading = heading1Leading
-    self.heading1Size = heading1Size
-    self.heading1Weight = heading1Weight
-    self.heading2Leading = heading2Leading
-    self.heading2Size = heading2Size
-    self.heading2Weight = heading2Weight
-    self.heading3Leading = heading3Leading
-    self.heading3Size = heading3Size
-    self.heading3Weight = heading3Weight
-    self.heading4Leading = heading4Leading
-    self.heading4Size = heading4Size
-    self.heading4Weight = heading4Weight
-    self.heading5Leading = heading5Leading
-    self.heading5Size = heading5Size
-    self.heading5Weight = heading5Weight
-    self.heading6Leading = heading6Leading
-    self.heading6Size = heading6Size
-    self.heading6Weight = heading6Weight
-    self.labelLeading = labelLeading
-    self.labelSize = labelSize
-    self.labelWeight = labelWeight
-    self.largeLeading = largeLeading
-    self.largeSize = largeSize
-    self.largeWeight = largeWeight
-    self.size2xl = size2xl
-    self.size2xs = size2xs
-    self.size3xl = size3xl
-    self.size3xs = size3xs
-    self.size4xl = size4xl
-    self.size4xs = size4xs
-    self.size5xl = size5xl
-    self.sizeBase = sizeBase
-    self.sizeLg = sizeLg
-    self.sizeSm = sizeSm
-    self.sizeXl = sizeXl
-    self.sizeXs = sizeXs
-    self.supportingLeading = supportingLeading
-    self.supportingSize = supportingSize
-    self.supportingWeight = supportingWeight
-    self.weightBold = weightBold
-    self.weightMedium = weightMedium
-    self.weightNormal = weightNormal
-    self.weightSemibold = weightSemibold
+    self.body = body
+    self.code = code
+    self.display1 = display1
+    self.display2 = display2
+    self.display3 = display3
+    self.family = family
+    self.heading1 = heading1
+    self.heading2 = heading2
+    self.heading3 = heading3
+    self.heading4 = heading4
+    self.heading5 = heading5
+    self.heading6 = heading6
+    self.label = label
+    self.large = large
+    self.size = size
+    self.supporting = supporting
+    self.weight = weight
   }
 
   /// A size, weight, or line-height token by its CSS name, for code that
   /// only has the name. Components read the typed members instead.
   func number(named token: String) -> CGFloat? {
     switch token {
-    case "text-body-leading": bodyLeading
-    case "text-body-size": bodySize
-    case "text-body-weight": bodyWeight
-    case "text-heading-1-leading": heading1Leading
-    case "text-heading-1-size": heading1Size
-    case "text-heading-1-weight": heading1Weight
-    case "text-heading-2-leading": heading2Leading
-    case "text-heading-2-size": heading2Size
-    case "text-heading-2-weight": heading2Weight
-    case "text-heading-3-leading": heading3Leading
-    case "text-heading-3-size": heading3Size
-    case "text-heading-3-weight": heading3Weight
-    case "text-heading-4-leading": heading4Leading
-    case "text-heading-4-size": heading4Size
-    case "text-heading-4-weight": heading4Weight
-    case "text-heading-5-leading": heading5Leading
-    case "text-heading-5-size": heading5Size
-    case "text-heading-5-weight": heading5Weight
-    case "text-heading-6-leading": heading6Leading
-    case "text-heading-6-size": heading6Size
-    case "text-heading-6-weight": heading6Weight
-    case "text-label-leading": labelLeading
-    case "text-label-size": labelSize
-    case "text-label-weight": labelWeight
-    case "text-large-leading": largeLeading
-    case "text-large-size": largeSize
-    case "text-large-weight": largeWeight
-    case "font-size-2xl": size2xl
-    case "font-size-2xs": size2xs
-    case "font-size-3xl": size3xl
-    case "font-size-3xs": size3xs
-    case "font-size-4xl": size4xl
-    case "font-size-4xs": size4xs
-    case "font-size-5xl": size5xl
-    case "font-size-base": sizeBase
-    case "font-size-lg": sizeLg
-    case "font-size-sm": sizeSm
-    case "font-size-xl": sizeXl
-    case "font-size-xs": sizeXs
-    case "text-supporting-leading": supportingLeading
-    case "text-supporting-size": supportingSize
-    case "text-supporting-weight": supportingWeight
-    case "font-weight-bold": weightBold
-    case "font-weight-medium": weightMedium
-    case "font-weight-normal": weightNormal
-    case "font-weight-semibold": weightSemibold
+    case "text-body-leading": body.leading
+    case "text-body-size": body.size
+    case "text-body-weight": body.weight
+    case "text-code-leading": code.leading
+    case "text-code-size": code.size
+    case "text-code-weight": code.weight
+    case "text-display-1-leading": display1.leading
+    case "text-display-1-size": display1.size
+    case "text-display-1-weight": display1.weight
+    case "text-display-2-leading": display2.leading
+    case "text-display-2-size": display2.size
+    case "text-display-2-weight": display2.weight
+    case "text-display-3-leading": display3.leading
+    case "text-display-3-size": display3.size
+    case "text-display-3-weight": display3.weight
+    case "text-heading-1-leading": heading1.leading
+    case "text-heading-1-size": heading1.size
+    case "text-heading-1-weight": heading1.weight
+    case "text-heading-2-leading": heading2.leading
+    case "text-heading-2-size": heading2.size
+    case "text-heading-2-weight": heading2.weight
+    case "text-heading-3-leading": heading3.leading
+    case "text-heading-3-size": heading3.size
+    case "text-heading-3-weight": heading3.weight
+    case "text-heading-4-leading": heading4.leading
+    case "text-heading-4-size": heading4.size
+    case "text-heading-4-weight": heading4.weight
+    case "text-heading-5-leading": heading5.leading
+    case "text-heading-5-size": heading5.size
+    case "text-heading-5-weight": heading5.weight
+    case "text-heading-6-leading": heading6.leading
+    case "text-heading-6-size": heading6.size
+    case "text-heading-6-weight": heading6.weight
+    case "text-label-leading": label.leading
+    case "text-label-size": label.size
+    case "text-label-weight": label.weight
+    case "text-large-leading": large.leading
+    case "text-large-size": large.size
+    case "text-large-weight": large.weight
+    case "font-size-base": size.base
+    case "font-size-lg": size.lg
+    case "font-size-2xl": size.s2xl
+    case "font-size-2xs": size.s2xs
+    case "font-size-3xl": size.s3xl
+    case "font-size-3xs": size.s3xs
+    case "font-size-4xl": size.s4xl
+    case "font-size-4xs": size.s4xs
+    case "font-size-5xl": size.s5xl
+    case "font-size-sm": size.sm
+    case "font-size-xl": size.xl
+    case "font-size-xs": size.xs
+    case "text-supporting-leading": supporting.leading
+    case "text-supporting-size": supporting.size
+    case "text-supporting-weight": supporting.weight
+    case "font-weight-bold": weight.bold
+    case "font-weight-medium": weight.medium
+    case "font-weight-normal": weight.normal
+    case "font-weight-semibold": weight.semibold
     default: nil
     }
   }
@@ -1251,9 +1256,157 @@ public struct FontTokens: Equatable, Sendable {
   /// A font family token by its CSS name, for code that only has the name.
   func families(named token: String) -> [String]? {
     switch token {
-    case "font-family-body": familyBody
-    case "font-family-code": familyCode
-    case "font-family-heading": familyHeading
+    case "font-family-body": family.body
+    case "font-family-code": family.code
+    case "font-family-heading": family.heading
+    default: nil
+    }
+  }
+}
+
+/// One type style: its font size, numeric weight, and line height.
+public struct TypeStyleTokens: Equatable, Sendable {
+  public var size: CGFloat
+  public var weight: CGFloat
+  public var leading: CGFloat
+
+  public init(
+    size: CGFloat,
+    weight: CGFloat,
+    leading: CGFloat
+  ) {
+    self.size = size
+    self.weight = weight
+    self.leading = leading
+  }
+}
+
+/// The theme's `font-family` tokens.
+public struct FontFamilyTokens: Equatable, Sendable {
+  /// `--font-family-body`
+  public var body: [String]
+  /// `--font-family-code`
+  public var code: [String]
+  /// `--font-family-heading`
+  public var heading: [String]
+
+  public init(
+    body: [String],
+    code: [String],
+    heading: [String]
+  ) {
+    self.body = body
+    self.code = code
+    self.heading = heading
+  }
+}
+
+/// The theme's `font-size` tokens.
+public struct FontSizeTokens: Equatable, Sendable {
+  /// `--font-size-base`
+  public var base: CGFloat
+  /// `--font-size-lg`
+  public var lg: CGFloat
+  /// `--font-size-2xl`
+  public var s2xl: CGFloat
+  /// `--font-size-2xs`
+  public var s2xs: CGFloat
+  /// `--font-size-3xl`
+  public var s3xl: CGFloat
+  /// `--font-size-3xs`
+  public var s3xs: CGFloat
+  /// `--font-size-4xl`
+  public var s4xl: CGFloat
+  /// `--font-size-4xs`
+  public var s4xs: CGFloat
+  /// `--font-size-5xl`
+  public var s5xl: CGFloat
+  /// `--font-size-sm`
+  public var sm: CGFloat
+  /// `--font-size-xl`
+  public var xl: CGFloat
+  /// `--font-size-xs`
+  public var xs: CGFloat
+
+  public init(
+    base: CGFloat,
+    lg: CGFloat,
+    s2xl: CGFloat,
+    s2xs: CGFloat,
+    s3xl: CGFloat,
+    s3xs: CGFloat,
+    s4xl: CGFloat,
+    s4xs: CGFloat,
+    s5xl: CGFloat,
+    sm: CGFloat,
+    xl: CGFloat,
+    xs: CGFloat
+  ) {
+    self.base = base
+    self.lg = lg
+    self.s2xl = s2xl
+    self.s2xs = s2xs
+    self.s3xl = s3xl
+    self.s3xs = s3xs
+    self.s4xl = s4xl
+    self.s4xs = s4xs
+    self.s5xl = s5xl
+    self.sm = sm
+    self.xl = xl
+    self.xs = xs
+  }
+}
+
+/// The theme's `font-weight` tokens.
+public struct FontWeightTokens: Equatable, Sendable {
+  /// `--font-weight-bold`
+  public var bold: CGFloat
+  /// `--font-weight-medium`
+  public var medium: CGFloat
+  /// `--font-weight-normal`
+  public var normal: CGFloat
+  /// `--font-weight-semibold`
+  public var semibold: CGFloat
+
+  public init(
+    bold: CGFloat,
+    medium: CGFloat,
+    normal: CGFloat,
+    semibold: CGFloat
+  ) {
+    self.bold = bold
+    self.medium = medium
+    self.normal = normal
+    self.semibold = semibold
+  }
+}
+
+/// The theme's `shadow` tokens, one typed member per token.
+public struct ShadowTokens: Equatable, Sendable {
+  /// `--shadow-high`
+  public var high: [ShadowLayer]
+  /// `--shadow-low`
+  public var low: [ShadowLayer]
+  /// `--shadow-med`
+  public var med: [ShadowLayer]
+
+  public init(
+    high: [ShadowLayer],
+    low: [ShadowLayer],
+    med: [ShadowLayer]
+  ) {
+    self.high = high
+    self.low = low
+    self.med = med
+  }
+
+  /// A token by its CSS name, for code that only has the name. Components
+  /// read the typed members instead.
+  func value(named token: String) -> [ShadowLayer]? {
+    switch token {
+    case "shadow-high": high
+    case "shadow-low": low
+    case "shadow-med": med
     default: nil
     }
   }

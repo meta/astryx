@@ -124,6 +124,26 @@ describe('useLongPress', () => {
     expect(onLongPress).toHaveBeenCalledTimes(1);
   });
 
+  it('measures the travel on each axis, as its documentation says: a (9, 9) drift keeps the press, 11 px on one axis ends it', () => {
+    const kept = vi.fn();
+    const {result: keeps} = renderHook(() => useLongPress({onLongPress: kept}));
+    act(() => {
+      keeps.current.onTouchStart(touchEvent([{clientX: 100, clientY: 100}]));
+      keeps.current.onTouchMove(touchEvent([{clientX: 109, clientY: 109}]));
+      vi.advanceTimersByTime(500);
+    });
+    expect(kept).toHaveBeenCalledTimes(1);
+
+    const ended = vi.fn();
+    const {result: ends} = renderHook(() => useLongPress({onLongPress: ended}));
+    act(() => {
+      ends.current.onTouchStart(touchEvent([{clientX: 100, clientY: 100}]));
+      ends.current.onTouchMove(touchEvent([{clientX: 100, clientY: 111}]));
+      vi.advanceTimersByTime(500);
+    });
+    expect(ended).not.toHaveBeenCalled();
+  });
+
   it('cancels on touch end', () => {
     const onLongPress = vi.fn();
     const {result} = renderHook(() => useLongPress({onLongPress}));
@@ -147,6 +167,24 @@ describe('useLongPress', () => {
     act(() => {
       vi.advanceTimersByTime(500);
     });
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
+  it('takes only the point in its public start: a second argument changes no tolerance (architecture:public-component-api INV12)', () => {
+    const onLongPress = vi.fn();
+    const {result} = renderHook(() =>
+      useLongPress({onLongPress, moveCancelPx: 10}),
+    );
+    // A caller passing a tolerance anyway, which the handlers do not declare.
+    const start: (
+      point: {x: number; y: number},
+      tolerance?: {moveCancelPx?: number},
+    ) => void = result.current.start;
+    act(() => {
+      start({x: 0, y: 0}, {moveCancelPx: 100});
+      result.current.moveTo({x: 20, y: 0});
+      vi.advanceTimersByTime(600);
+    });
+    // The public moveCancelPx (10 px) stands: the press was cancelled.
     expect(onLongPress).not.toHaveBeenCalled();
   });
 });

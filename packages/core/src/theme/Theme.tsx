@@ -83,11 +83,15 @@ const wrapperStyles = stylex.create({
 // =============================================================================
 
 /**
- * Context to detect whether this Theme is nested inside another.
- * The root provider (no parent context) syncs data-theme to <html>.
- * @internal
+ * True below a Theme; the root Theme (no parent context) syncs data-theme
+ * to <html>. A detached React root that conceptually sits inside the app
+ * (useToast's fallback viewport) provides it as `true` itself, so a Theme
+ * rendered in toast content themes its subtree without claiming <html> as
+ * if it were the app's root Theme.
+ * @internal Not exported from the theme barrel; useToast imports it from
+ * './theme/Theme' directly.
  */
-const ThemeNestingContext = React.createContext(false);
+export const ThemeNestingContext = React.createContext(false);
 ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 // =============================================================================

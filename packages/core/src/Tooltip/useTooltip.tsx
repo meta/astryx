@@ -21,7 +21,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
-  useLayer,
+  useLayerInternal,
   type ContextRenderProps,
   type LayerAlignment,
   type LayerPlacement,
@@ -31,6 +31,7 @@ import {
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -109,9 +110,10 @@ export interface TooltipOptions {
 
   /**
    * When to trigger on focus:
-   * - `auto`: Only if element is naturally focusable
-   * - `always`: Always attach focus listeners
-   * - `never`: Never attach focus listeners (for composite widgets)
+   * - `auto`: focus on the trigger itself, or within a trigger that is
+   *   focusable when focus arrives
+   * - `always`: focus on the trigger or anything inside it
+   * - `never`: never on focus (for composite widgets)
    *
    * @default 'auto'
    */
@@ -264,6 +266,7 @@ function isFocusable(element: HTMLElement): boolean {
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
+
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     placement = 'above',
@@ -279,10 +282,15 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     onHide,
   } = options;
 
-  const layer = useLayer({
+  // A tooltip stays open while its trigger is hovered, so it must never settle
+  // over the trigger: content taller than the room above and below opens
+  // beside it, or on the roomier side sized to that room, and scrolls what does not
+  // fit inside the surface, which stays hoverable (spec:AST-059 FR4).
+  const layer = useLayerInternal({
     mode: 'context',
     onShow,
     onHide,
+    keepsAnchorClear: true,
   });
   const {
     ref: layerRef,
@@ -420,9 +428,32 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     [isTouchPointerRef, layerId, scheduleHide],
   );
 
+  // Under `auto`, whether focus counts is decided when it arrives, not when
+  // the listeners attach: a roving-tabindex member that was `tabindex="-1"`
+  // then can be the tab stop now. A trigger that receives focus is focusable
+  // by definition; focus inside it counts only while the trigger is
+  // focusable too, so a plain wrapper still ignores its children's focus.
+  const isFocusForTrigger = useCallback(
+    (e: Event): boolean => {
+      if (focusTrigger === 'always') {
+        return true;
+      }
+      const triggerEl = e.currentTarget as HTMLElement | null;
+      return (
+        triggerEl != null && (e.target === triggerEl || isFocusable(triggerEl))
+      );
+    },
+    [focusTrigger],
+  );
+
+  // Whether the trigger's current focus counted when it arrived, so its blur
+  // hides the tooltip even if the trigger has since left the tab order.
+  const focusCountedRef = useRef(false);
+
   const handleFocusIn = useCallback(
     (e: Event) => {
-      if (!isEnabled) {
+      focusCountedRef.current = isFocusForTrigger(e);
+      if (!isEnabled || !focusCountedRef.current) {
         return;
       }
       // A tap focuses the trigger it activates, and `:focus-visible` does not
@@ -442,12 +473,25 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       clearTimeouts();
       showLayer();
     },
-    [isEnabled, isTouchInteraction, clearTimeouts, showLayer],
+    [
+      isEnabled,
+      isFocusForTrigger,
+      isTouchInteraction,
+      clearTimeouts,
+      showLayer,
+    ],
   );
 
-  const handleFocusOut = useCallback(() => {
-    scheduleHide();
-  }, [scheduleHide]);
+  const handleFocusOut = useCallback(
+    (e: Event) => {
+      if (!focusCountedRef.current && !isFocusForTrigger(e)) {
+        return;
+      }
+      focusCountedRef.current = false;
+      scheduleHide();
+    },
+    [isFocusForTrigger, scheduleHide],
+  );
 
   // Pressing the trigger hides its own tooltip: once the control is activated
   // the hint has served its purpose, and a tooltip lingering over a
@@ -499,12 +543,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
         el.addEventListener('pointerdown', handlePointerDown);
 
-        // Attach focus listeners based on focusTrigger option
-        const shouldAttachFocus =
-          focusTrigger === 'always' ||
-          (focusTrigger === 'auto' && isFocusable(el));
-
-        if (shouldAttachFocus) {
+        // Focus listeners unless focus never opens the tooltip; `auto` decides
+        // per event (isFocusForTrigger).
+        if (focusTrigger !== 'never') {
           el.addEventListener('focusin', handleFocusIn);
           el.addEventListener('focusout', handleFocusOut);
         }
@@ -631,7 +672,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       };
 
       return renderLayer(
-        <div {...stylex.props(styles.content)}>{children}</div>,
+        // FR11: React bubbles a press on the surface to the trigger's
+        // ancestors, portaled or not. A registered surface counts as
+        // something else in the shared interactive-ancestor walk, so a
+        // clickable container around the trigger leaves the press alone while
+        // document listeners still see it.
+        <div ref={registerLayerSurface} {...stylex.props(styles.content)}>
+          {children}
+        </div>,
         renderProps,
       );
     },

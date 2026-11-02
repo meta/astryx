@@ -23,7 +23,8 @@ import {
   typeScaleVars,
   radiusVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import type {BaseProps} from '../BaseProps';
 import {useNavHeadingMenuContext} from './NavMenuContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
@@ -32,6 +33,9 @@ import {themeProps} from '../utils/themeProps';
 const styles = stylex.create({
   root: {
     boxSizing: 'border-box',
+    // A held pointer slides across the items; it selects no item text.
+    // Caller content beside the items stays selectable.
+    userSelect: 'none',
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
@@ -144,16 +148,32 @@ export function NavHeadingMenuItem({
   }, [isDisabled, onClick, ctx]);
 
   const LinkComponent = useLinkComponent();
-  const Element = href ? LinkComponent : 'div';
+  // A disabled link item must not navigate (spec:AST-085 FR2). Cancelling the
+  // click would leave the destination live for middle-click, assistive
+  // technology activation, and "open in new tab", so the item drops its href
+  // instead. The router LinkComponent is skipped too: some routers reject a
+  // missing destination. A plain anchor keeps the row's element shape.
+  // (Mirrors the disabled paths of Link, Tab, and TopNavItem.)
+  const Element = href ? (isDisabled ? 'a' : LinkComponent) : 'div';
+
+  // The element type above changes when `isDisabled` flips, so React replaces
+  // the row; focus follows to the replacement (spec:AST-085 FR4).
+  const itemRef = useFocusAcrossSwap<HTMLElement>(ref);
 
   return (
     <Element
       {...restProps}
-      ref={ref}
+      ref={itemRef}
       role="menuitem"
-      tabIndex={isDisabled ? undefined : -1}
+      // A disabled link row has no href, so without tabIndex it could not take
+      // focus at all. -1 keeps it focusable but out of the Tab order, as an
+      // enabled row is (spec:AST-085 FR1).
+      tabIndex={isDisabled && !href ? undefined : -1}
       aria-disabled={isDisabled || undefined}
-      href={href}
+      href={isDisabled ? undefined : href}
+      // A menu row is never a draggable link: a mouse press that slides to
+      // another row would start a drag and cancel the press.
+      draggable={href != null ? false : undefined}
       onClick={handleClick}
       data-testid={testId}
       {...mergeProps(

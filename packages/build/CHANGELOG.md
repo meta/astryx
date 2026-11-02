@@ -1,5 +1,19 @@
 # @astryxdesign/build
 
+# 0.7.5
+
+#### Documentation
+
+- Package links now point to the project's GitHub home, `meta/astryx`.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+
+---
+
 # 0.7.4
 
 ---

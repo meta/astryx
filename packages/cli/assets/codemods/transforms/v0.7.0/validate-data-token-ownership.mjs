@@ -4,8 +4,9 @@
  * @file Reject stale generated theme CSS that still owns data-token defaults.
  *
  * @input Generated theme CSS
- * @output No rewritten source; an upgrade error for a generated theme
- *   stylesheet that still declares data-color defaults at `:root`
+ * @output No rewritten source; a regeneration report (`RegenerationRequired`,
+ *   with `astryx theme build`) for a generated theme stylesheet that still
+ *   declares data-color defaults at `:root`
  * @position Next-release upgrade validation for spec:AST-066 FR19
  *
  * Raw `var(--color-data-*)` uses are not checked: prebuilt
@@ -15,6 +16,7 @@
  */
 
 import * as path from 'node:path';
+import {RegenerationRequired} from '../../outcome.mjs';
 
 export const meta = {
   title: 'Validate data-token ownership',
@@ -36,8 +38,9 @@ export default function validateDataTokenOwnership(file) {
     file.source.includes(GENERATED_THEME_HEADER) &&
     ROOT_DATA_DECLARATION.test(file.source)
   ) {
-    throw new Error(
+    throw new RegenerationRequired(
       'This generated theme CSS still emits canonical data defaults at :root. Rebuild it with `astryx theme build`; defaults come from @astryxdesign/core/astryx.css in prebuilt mode, and in a source build from the @astryxdesign/build PostCSS integration or dataVars imports.',
+      {commands: ['astryx theme build']},
     );
   }
   return undefined;

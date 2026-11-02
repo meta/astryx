@@ -18,6 +18,7 @@ import {useCallback, useRef, useState} from 'react';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
+import {findTypeaheadMatch} from '../utils/typeaheadMatch';
 
 interface UseMultiComboboxOptions {
   selectableItems: MultiSelectorOptionData[];
@@ -335,11 +336,12 @@ export function useMultiCombobox({
         default:
           // Typeahead only when search is not present
           if (!hasSearch && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-            const newTypeahead = typeahead + e.key.toLowerCase();
-            const matchIndex = selectableItems.findIndex(
-              item =>
-                !item.disabled &&
-                item.label?.toLowerCase().startsWith(newTypeahead),
+            const newTypeahead = typeahead + e.key;
+            // INV17: the shared type-to-select fold, as Selector uses.
+            const matchIndex = findTypeaheadMatch(
+              selectableItems.flatMap((item, i) => (item.disabled ? [] : [i])),
+              i => selectableItems[i].label,
+              newTypeahead,
             );
             const didOpen = isOpen || matchIndex < 0 || onOpen() !== false;
             if (didOpen) {

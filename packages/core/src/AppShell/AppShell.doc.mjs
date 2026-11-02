@@ -96,7 +96,7 @@ export const docs = {
         name: 'Main content',
         required: true,
         description:
-          'children, rendered in the main landmark. Scrolls internally when height is fill, and with the page when it is auto.',
+          'children, rendered in the main landmark. Scrolls internally when height is fill, and with the page when it is auto. While it scrolls content that overflows, it is a stop in the tab order; Tab entry moves on when its first focusable element is a plain link or button, and otherwise main is one stop before it.',
       },
       {
         name: 'Mobile nav drawer',

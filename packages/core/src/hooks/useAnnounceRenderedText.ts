@@ -7,7 +7,7 @@
  * @input A ref to a rendered element, whether it is showing, and a token that
  *   marks a new occasion to speak
  * @output Announces that element's own rendered text through the persistent
- *   polite live region
+ *   polite live region, or through the announcer the owner passes
  * @position Core a11y hook; mirrors on-screen content into the shared live
  *   region by reading the DOM
  *
@@ -44,7 +44,11 @@
  */
 
 import {useEffect, useRef, useState, type RefObject} from 'react';
-import {useAnnounce} from './useAnnounce';
+import {
+  useAnnounce,
+  type AnnounceFn,
+  type AnnouncePoliteness,
+} from './useAnnounce';
 import {useIsHydrating} from './useIsHydrating';
 
 const LIVE_CONTAINER =
@@ -52,11 +56,26 @@ const LIVE_CONTAINER =
 const HIDDEN = '[aria-hidden="true"], [hidden]';
 const BLOCKS = 'p, div, li, br, h1, h2, h3, h4, h5, h6';
 
-/** Each child element's rendered text as its own block, joined by spaces. */
+/**
+ * Each child element's rendered text as its own block, joined by spaces. Text
+ * placed directly in the element, beside its child elements, counts as a block
+ * too (a status bar is an icon followed by its bare message).
+ */
 function blockText(element: HTMLElement): string {
-  return Array.from(element.children)
-    .filter(child => !child.matches(HIDDEN))
-    .map(child => renderedText(child as HTMLElement))
+  return Array.from(element.childNodes)
+    .map(child => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        return (child.textContent ?? '').replace(/\s+/g, ' ').trim();
+      }
+      // By node type, not `instanceof`: an element from another document's
+      // window (a portal into a same-origin iframe) fails this window's
+      // constructor checks.
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const part = child as HTMLElement;
+        return part.matches(HIDDEN) ? '' : renderedText(part);
+      }
+      return '';
+    })
     .filter(part => part !== '')
     .join(' ');
 }
@@ -69,6 +88,19 @@ export interface AnnounceRenderedTextOptions {
    * a block; a reveal without a re-render is read on the next render (FR13).
    */
   skipFirstRender?: boolean;
+  /**
+   * The channel's urgency: errors and time-critical failures are assertive,
+   * every other message polite (`spec:AST-086` FR5). Defaults to polite.
+   */
+  politeness?: AnnouncePoliteness;
+  /**
+   * The owner's announcer to speak through, when the rendered text states
+   * the next value of a state that announcer states: a picker's empty-panel
+   * message goes through its search's `hasReplace` instance, so the two
+   * replace each other while not yet exposed (`spec:AST-086` FR13).
+   * Defaults to this hook's own instance.
+   */
+  announce?: AnnounceFn;
 }
 
 /** The rendered text an assistive technology would read from `element`. */
@@ -105,9 +137,14 @@ export function useAnnounceRenderedText(
   ref: RefObject<HTMLElement | null>,
   isShown: boolean,
   occasion: string,
-  {skipFirstRender = false}: AnnounceRenderedTextOptions = {},
+  {
+    skipFirstRender = false,
+    politeness = 'polite',
+    announce: ownerAnnounce,
+  }: AnnounceRenderedTextOptions = {},
 ): void {
-  const announce = useAnnounce();
+  const ownAnnounce = useAnnounce();
+  const announce = ownerAnnounce ?? ownAnnounce;
   const spokenRef = useRef<string | null>(null);
   const isHydrating = useIsHydrating();
   // Captured once: an owner rendered before the document finished loading, or
@@ -157,6 +194,6 @@ export function useAnnounceRenderedText(
       // Part of the page the person arrived at: remember it, say nothing.
       return;
     }
-    announce(text);
+    announce(text, politeness);
   });
 }

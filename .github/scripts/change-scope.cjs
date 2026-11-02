@@ -4,7 +4,12 @@
 /* global console, module, process, require */
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const {isComponentSpecRecordPath} = require('./knowledge-paths.cjs');
+const {
+  isComponentSpecRecordPath,
+  isLegacyComponentSpecPath,
+  isPackageArchitectureRecordPath,
+  isPlatformComponentSpecPath,
+} = require('./knowledge-paths.cjs');
 
 /**
  * Classifies changed paths without reading PR-controlled content.
@@ -22,6 +27,10 @@ const SPEC_RECORD_PATTERNS = [
 ];
 
 const CHANGESET_PATTERN = /^\.changeset\/(?!README\.md$)[^/]+\.md$/;
+
+// The experimental Lab package: a change only here (and its release notes)
+// runs the Lab tests and the Storybook build (spec:AST-030 FR26).
+const LAB_ROOT = 'packages/lab/';
 
 const SURFACES = Object.freeze({
   KNOWLEDGE: 'knowledge',
@@ -61,6 +70,41 @@ const NODE_TOOLING_PATHS = new Set([
   '.github/workflows/crowdin-upload.yml',
 ]);
 
+// Inside a runtime package, files every component's tests or build read:
+// manifests, build and test configuration, shared test setup. A change to one
+// runs the full suite, like any shared-or-unknown or theme-build path.
+const PACKAGE_INFRA_PATTERNS = [
+  /^packages\/[^/]+\/package\.json$/,
+  /^packages\/[^/]+\/[^/]*\.config\.[^/]+$/,
+  /^packages\/[^/]+\/tsconfig[^/]*\.json$/,
+  /^packages\/[^/]+\/src\/(?:test-utils|testing|__mocks__)\//,
+  /^packages\/[^/]+\/src\/[^/]*setup[^/]*\.[^/]+$/i,
+  /^apps\/storybook\/\.storybook\//,
+  /^internal\//,
+  // A package's root scripts are build configuration (its Babel plugins).
+  /^packages\/[^/]+\/[^/]+\.(?:c|m)?js$/,
+];
+
+// Surfaces a pull request's tests can be scoped to by the import graph (the
+// components and modules it changed, and what imports them). Anything else,
+// or any infrastructure path above, runs the full suite; Node tooling keeps
+// its whole Node project (spec:AST-030 FR8).
+const SCOPABLE_SURFACES = new Set([
+  SURFACES.KNOWLEDGE,
+  SURFACES.DOCSITE,
+  'storybook-visual',
+  ...RUNTIME_PACKAGE_SURFACES.map(([, surface]) => surface),
+]);
+
+function isSharedInfraPath(filePath) {
+  // A Changeset records release notes; no test or build reads it.
+  if (CHANGESET_PATTERN.test(filePath)) return false;
+  return (
+    PACKAGE_INFRA_PATTERNS.some(pattern => pattern.test(filePath)) ||
+    surfacesForPath(filePath).some(surface => !SCOPABLE_SURFACES.has(surface))
+  );
+}
+
 const THEME_DOC_CANDIDATE = /^docs\/themes\/(?!README\.md$)[^/]+\.md$/;
 const THEME_PACKAGE_CANDIDATE =
   /^packages\/themes\/[^/]+\/(?:.*\/)?[^/]+\.spec\.md$/;
@@ -76,6 +120,9 @@ const KNOWLEDGE_RECORD_PATTERNS = [
 function isSpecRecordPath(filePath) {
   return (
     isComponentSpecRecordPath(filePath) ||
+    // A platform record (`<Root>/<PublicName>.swift.spec.md`) is a component
+    // record for its language, gated like the core record beside it.
+    isPlatformComponentSpecPath(filePath) ||
     SPEC_RECORD_PATTERNS.some(pattern => pattern.test(filePath))
   );
 }
@@ -99,6 +146,10 @@ function isPackageReleasePath(filePath) {
 function isKnowledgeRecordPath(filePath) {
   return (
     isSpecRecordPath(filePath) ||
+    // Not a record and never spec-only, but the owner gate must still see it.
+    isLegacyComponentSpecPath(filePath) ||
+    // A package's architecture record, owner-gated like docs/architecture/.
+    isPackageArchitectureRecordPath(filePath) ||
     KNOWLEDGE_RECORD_PATTERNS.some(pattern => pattern.test(filePath))
   );
 }
@@ -152,6 +203,9 @@ function classifyChanges(changes, {expectedCount} = {}) {
       touchesDesignAssets: false,
       specChangesetConflict: false,
       docsiteOnly: false,
+      labOnly: false,
+      // No paths to scope from runs everything (spec:AST-030 FR4).
+      fullSuite: true,
       surfaces: complete ? [] : [SURFACES.SHARED_OR_UNKNOWN],
       complete,
       reason: complete ? 'no changed files' : 'changed-file list is incomplete',
@@ -199,6 +253,17 @@ function classifyChanges(changes, {expectedCount} = {}) {
   const specOnly = exactSurface(SURFACES.KNOWLEDGE);
   const docsiteOnly = exactSurface(SURFACES.DOCSITE);
   const toolingOnly = exactSurface(SURFACES.NODE_TOOLING);
+  // Every changed path is in the Lab package, besides Changesets, which no
+  // test or build reads (spec:AST-030 FR26).
+  const labOnly =
+    complete &&
+    allPaths.some(filePath => filePath.startsWith(LAB_ROOT)) &&
+    allPaths.every(
+      filePath =>
+        filePath.startsWith(LAB_ROOT) || CHANGESET_PATTERN.test(filePath),
+    );
+  // An incomplete list, or any shared infrastructure, runs everything.
+  const fullSuite = !complete || allPaths.some(isSharedInfraPath);
   return {
     specOnly,
     toolingOnly,
@@ -206,6 +271,8 @@ function classifyChanges(changes, {expectedCount} = {}) {
     touchesDesignAssets,
     specChangesetConflict,
     docsiteOnly,
+    labOnly,
+    fullSuite,
     surfaces,
     complete,
     reason: !complete
@@ -216,7 +283,9 @@ function classifyChanges(changes, {expectedCount} = {}) {
           ? 'only docsite files changed'
           : toolingOnly
             ? 'only admitted Node tooling changed'
-            : 'changes include another surface',
+            : labOnly
+              ? 'only the Lab package changed'
+              : 'changes include another surface',
   };
 }
 
@@ -253,7 +322,7 @@ if (require.main === module) {
       throw new Error('GITHUB_OUTPUT is required with --github-output.');
     fs.appendFileSync(
       outputPath,
-      `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\n`,
+      `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\n`,
     );
   } else {
     process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -261,12 +330,14 @@ if (require.main === module) {
 }
 
 module.exports = {
+  LAB_ROOT,
   NODE_TOOLING_PATHS,
   SURFACES,
   classifyChanges,
   isKnowledgeRecordPath,
   isNodeToolingPath,
   isPackageReleasePath,
+  isSharedInfraPath,
   isSpecRecordPath,
   parseNameStatus,
 };
