@@ -25,6 +25,13 @@
     "spec quote",
     "spec:AST-105"
   ],
+  "packages/core/src/AppShell/observeMainOverflow.ts": [
+    "FR12",
+    "FR4",
+    "component:AppShell",
+    "spec quote",
+    "spec:AST-025"
+  ],
   "packages/core/src/Avatar/Avatar.tsx": ["OQ-4"],
   "packages/core/src/Badge/Badge.tsx": [
     "#5585",
@@ -110,6 +117,8 @@
     "design:reduced-motion",
     "spec quote",
     "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-013",
     "spec:AST-027",
     "spec:AST-027"
@@ -117,6 +126,11 @@
   "packages/core/src/BottomSheet/BottomSheetSwitcherContext.ts": [
     "FR13",
     "spec:AST-013"
+  ],
+  "packages/core/src/BottomSheet/bottomSheetEscape.ts": [
+    "DEC-8",
+    "component:Popover",
+    "spec quote"
   ],
   "packages/core/src/BottomSheet/bottomSheetStack.ts": [
     "DEP-0015",
@@ -136,6 +150,8 @@
     "component:BottomSheet",
     "design:reduced-motion",
     "design:reduced-motion",
+    "spec quote",
+    "spec quote",
     "spec quote"
   ],
   "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": [
@@ -170,10 +186,13 @@
   "packages/core/src/Calendar/hooks/useCalendarNavigation.ts": ["FR1"],
   "packages/core/src/Carousel/Carousel.tsx": [
     "2026-08-27",
+    "AST-025",
+    "FR12",
     "FR12",
     "FR2",
     "FR2",
     "component:Carousel",
+    "spec quote",
     "spec:AST-025"
   ],
   "packages/core/src/Chat/ChatComposer.tsx": [
@@ -203,7 +222,11 @@
   ],
   "packages/core/src/Chat/ChatMessageBubble.tsx": ["#2072", "#2574"],
   "packages/core/src/Chat/ChatMessageList.tsx": ["FR4", "FR8", "spec:AST-086"],
-  "packages/core/src/Chat/ChatSystemMessage.tsx": ["FR4", "spec:AST-086"],
+  "packages/core/src/Chat/ChatSystemMessage.tsx": [
+    "FR4",
+    "spec quote",
+    "spec:AST-086"
+  ],
   "packages/core/src/Chat/useTriggerMenu.tsx": [
     "#4681",
     "#6077",
@@ -335,6 +358,8 @@
     "FR8",
     "family:buttons",
     "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-043",
     "spec:AST-043",
     "spec:AST-043",
@@ -401,6 +426,9 @@
     "FR8",
     "architecture:layer-runtime",
     "component:BaseTypeahead",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-043",
     "spec:AST-043",
     "spec:AST-043",
@@ -486,11 +514,17 @@
   "packages/core/src/DropdownMenu/useMenuDrillIn.tsx": ["FR9", "spec:AST-012"],
   "packages/core/src/EmptyState/EmptyState.tsx": ["FR2", "spec:AST-086"],
   "packages/core/src/Field/Field.tsx": ["#5689", "AST-027"],
-  "packages/core/src/Field/fieldParts.ts": ["FR10"],
+  "packages/core/src/Field/fieldParts.ts": [
+    "FR10",
+    "FR10",
+    "family:input-fields",
+    "spec quote"
+  ],
   "packages/core/src/Field/fieldStatusPlacement.ts": [
     "DEC-2",
     "FR7",
-    "component:FieldStatus"
+    "component:FieldStatus",
+    "spec quote"
   ],
   "packages/core/src/Field/inputDisabledFocus.ts": ["FR6", "spec:AST-085"],
   "packages/core/src/Field/inputStyles.stylex.ts": ["FR1", "spec:AST-020"],
@@ -501,7 +535,8 @@
     "INV11",
     "architecture:theme-tokens",
     "component:FieldStatus",
-    "component:FieldStatus"
+    "component:FieldStatus",
+    "spec quote"
   ],
   "packages/core/src/FieldStatus/index.ts": ["FR7", "component:FieldStatus"],
   "packages/core/src/FileInput/FileInput.tsx": [
@@ -549,27 +584,66 @@
     "FR2",
     "INV11",
     "architecture:theme-tokens",
+    "spec quote",
     "spec:AST-085"
   ],
   "packages/core/src/Layer/LayerProvider.tsx": ["FR6", "spec:AST-059"],
+  "packages/core/src/Layer/clampInlineSize.ts": ["FR7", "spec:AST-059"],
   "packages/core/src/Layer/layerAnimations.stylex.ts": [
     "DR2",
     "DR2",
     "DR3",
     "design:reduced-motion",
-    "design:reduced-motion"
+    "design:reduced-motion",
+    "spec quote"
   ],
+  "packages/core/src/Layer/layerInset.ts": [
+    "FR6",
+    "spec quote",
+    "spec:AST-059"
+  ],
+  "packages/core/src/Layer/layerScopedContext.tsx": ["AST-038"],
   "packages/core/src/Layer/layerSlideRules.ts": [
     "FR3",
     "FR4",
     "FR4",
+    "FR4",
     "spec quote",
+    "spec quote",
+    "spec:AST-059",
     "spec:AST-059"
   ],
   "packages/core/src/Layer/layerStructureReset.stylex.ts": [
     "AST-038",
+    "AST-038",
     "FR2",
-    "FR3"
+    "FR3",
+    "FR7",
+    "spec quote"
+  ],
+  "packages/core/src/Layer/layerSurfacePress.ts": [
+    "FR11",
+    "FR11",
+    "component:HoverCard",
+    "component:Tooltip",
+    "spec quote"
+  ],
+  "packages/core/src/Layer/layerTextReset.stylex.ts": ["AST-038"],
+  "packages/core/src/Layer/layerViewportInset.stylex.ts": [
+    "FR1",
+    "FR7",
+    "spec quote",
+    "spec:AST-059"
+  ],
+  "packages/core/src/Layer/modalOutlet.ts": [
+    "FR18",
+    "spec quote",
+    "spec:AST-003"
+  ],
+  "packages/core/src/Layer/preserveAnimations.ts": [
+    "FR4",
+    "spec quote",
+    "spec:AST-059"
   ],
   "packages/core/src/Layer/useLayer.tsx": [
     "#3389",
@@ -604,6 +678,8 @@
     "spec quote",
     "spec quote",
     "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059",
@@ -614,6 +690,13 @@
     "spec:AST-059",
     "spec:AST-059",
     "spec:AST-059"
+  ],
+  "packages/core/src/Layout/layoutReset.ts": [
+    "FR18",
+    "FR8",
+    "component:AppShell",
+    "component:Layout",
+    "spec quote"
   ],
   "packages/core/src/Layout/padding.stylex.ts": ["#5208"],
   "packages/core/src/Link/Link.tsx": [
@@ -632,7 +715,13 @@
   "packages/core/src/List/List.tsx": ["FR29", "spec:AST-017"],
   "packages/core/src/List/ListContext.tsx": ["DEC-6", "spec:AST-061"],
   "packages/core/src/List/ListItem.tsx": ["FR11", "spec:AST-061"],
-  "packages/core/src/Markdown/Markdown.fr23.bench.ts": ["spec:AST-036"],
+  "packages/core/src/Markdown/Markdown.fr23.bench.ts": [
+    "AST-036",
+    "FR23",
+    "spec quote",
+    "spec:AST-036"
+  ],
+  "packages/core/src/Markdown/Markdown.fr23.sampling.ts": ["FR23"],
   "packages/core/src/Markdown/Markdown.tsx": [
     "AST-061",
     "DEC-6",
@@ -655,13 +744,29 @@
     "spec:AST-061"
   ],
   "packages/core/src/Markdown/characterReferences.ts": [
+    "DEC-3",
     "DEC-5",
+    "DEC-5",
+    "FR7",
+    "spec quote",
+    "spec quote",
+    "spec:AST-061",
+    "spec:AST-061",
     "spec:AST-061"
   ],
   "packages/core/src/Markdown/parser.ts": [
     "DEC-5",
     "module:Markdown/sourceLines",
     "spec:AST-061"
+  ],
+  "packages/core/src/Markdown/plugin-renderer/MarkdownPluginNodeRenderer.tsx": [
+    "DEC-6",
+    "FR8",
+    "spec quote",
+    "spec:AST-064"
+  ],
+  "packages/core/src/Markdown/plugins/HeadingLinksRenderer.tsx": [
+    "module:Markdown/headingLinks"
   ],
   "packages/core/src/Markdown/plugins/protocol.ts": [
     "DEC-6",
@@ -671,11 +776,15 @@
     "module:Markdown/sourceLines",
     "module:Markdown/sourceLines",
     "module:Markdown/sourceLines",
+    "spec quote",
     "spec:AST-064"
   ],
   "packages/core/src/Markdown/plugins/semanticFence.ts": [
     "FR14",
     "FR5",
+    "module:Markdown/sourceLines"
+  ],
+  "packages/core/src/Markdown/plugins/sourceLines.ts": [
     "module:Markdown/sourceLines"
   ],
   "packages/core/src/MobileNav/MobileNav.tsx": [
@@ -704,6 +813,7 @@
     "FR9",
     "INV1",
     "architecture:interaction-modality",
+    "spec quote",
     "spec quote",
     "spec quote",
     "spec:AST-011",
@@ -833,7 +943,11 @@
     "FR6",
     "spec:AST-085"
   ],
-  "packages/core/src/RadioList/RadioListReasonContext.ts": ["FR1", "FR5"],
+  "packages/core/src/RadioList/RadioListReasonContext.ts": [
+    "FR1",
+    "FR5",
+    "spec quote"
+  ],
   "packages/core/src/Resizable/resizableModel.ts": ["#4790"],
   "packages/core/src/Resizable/useResizable.ts": [
     "#5297",
@@ -895,11 +1009,14 @@
     "DEC-2",
     "FR6",
     "OQ2",
+    "spec quote",
+    "spec quote",
+    "spec:AST-075",
     "spec:AST-075",
     "spec:AST-075",
     "spec:AST-075"
   ],
-  "packages/core/src/Selector/types.ts": ["spec:AST-058"],
+  "packages/core/src/Selector/types.ts": ["spec quote", "spec:AST-058"],
   "packages/core/src/Selector/useSelectorPresentation.ts": [
     "AR3",
     "AR4",
@@ -928,6 +1045,11 @@
     "AR3",
     "component:SideNav"
   ],
+  "packages/core/src/SideNav/SideNavFocusTargetsContext.ts": [
+    "AR3",
+    "component:SideNav",
+    "spec quote"
+  ],
   "packages/core/src/SideNav/SideNavHeading.tsx": [
     "FR1",
     "FR5",
@@ -947,12 +1069,17 @@
     "spec:AST-085"
   ],
   "packages/core/src/SideNav/railMotion.ts": [
+    "DEC-2",
     "DR2",
     "DR3",
+    "FR17",
     "FR4",
+    "FR6",
     "FR9",
     "INV12",
     "architecture:react-component-runtime",
+    "component:AppShell",
+    "component:SideNav",
     "design:reduced-motion",
     "spec quote",
     "spec:AST-105"
@@ -1096,6 +1223,9 @@
     "FR3",
     "FR3",
     "FR8",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-043",
     "spec:AST-043",
     "spec:AST-043",
@@ -1107,8 +1237,10 @@
     "spec:AST-086"
   ],
   "packages/core/src/TimeInput/TouchTimeField.tsx": [
+    "DEC-3",
     "FR2",
     "FR8",
+    "spec:AST-043",
     "spec:AST-086"
   ],
   "packages/core/src/Timestamp/Timestamp.tsx": [
@@ -1176,6 +1308,7 @@
     "AR7",
     "DEC-3",
     "DEC-3",
+    "DEC-3",
     "FR1",
     "FR1",
     "FR1",
@@ -1197,6 +1330,7 @@
     "FR8",
     "FR9",
     "INV13",
+    "INV13",
     "INV3",
     "INV6",
     "INV7",
@@ -1205,6 +1339,7 @@
     "architecture:component-style-authoring",
     "architecture:component-style-authoring",
     "architecture:public-component-api",
+    "architecture:react-component-runtime",
     "architecture:react-component-runtime",
     "architecture:react-component-runtime",
     "component:FormLayout",
@@ -1216,10 +1351,14 @@
     "component:Tokenizer",
     "component:Tokenizer",
     "component:Tokenizer",
+    "component:Tokenizer",
     "family:input-fields",
     "family:input-fields",
     "family:input-fields",
     "family:input-fields",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec quote",
     "spec quote",
     "spec quote",
@@ -1289,8 +1428,11 @@
     "component:Tokenizer",
     "component:Tokenizer",
     "component:Tokenizer",
+    "component:Tokenizer",
     "family:input-fields",
     "family:input-fields",
+    "spec quote",
+    "spec quote",
     "spec quote",
     "spec quote",
     "spec quote",
@@ -1306,6 +1448,11 @@
     "spec:AST-086",
     "spec:AST-086",
     "spec:AST-086"
+  ],
+  "packages/core/src/Tokenizer/TokenizerClearAllMessageContext.ts": [
+    "AR7",
+    "component:Tokenizer",
+    "spec quote"
   ],
   "packages/core/src/Tooltip/useTooltip.tsx": ["FR11", "FR4", "spec:AST-059"],
   "packages/core/src/TopNav/TopNavHeading.tsx": [
@@ -1393,6 +1540,9 @@
     "component:BaseTypeahead",
     "family:input-fields",
     "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-056",
     "spec:AST-056",
     "spec:AST-058",
@@ -1406,6 +1556,7 @@
     "spec:AST-086",
     "spec:AST-086",
     "spec:AST-086",
+    "spec:AST-092",
     "spec:AST-092",
     "spec:AST-092",
     "spec:AST-092",
@@ -1434,13 +1585,20 @@
     "FR9",
     "component:FormLayout",
     "family:input-fields",
+    "spec quote",
     "spec:AST-020",
     "spec:AST-056",
     "spec:AST-085",
     "spec:AST-086"
   ],
+  "packages/core/src/Typeahead/trailingKeyDown.tsx": [
+    "FR10",
+    "family:input-fields",
+    "spec quote"
+  ],
   "packages/core/src/Typeahead/types.ts": ["spec:AST-058", "spec:AST-092"],
   "packages/core/src/VisuallyHidden/VisuallyHidden.tsx": [
+    "spec quote",
     "spec:AST-017/FR28",
     "spec:AST-017/FR53"
   ],
@@ -1458,6 +1616,8 @@
     "FR21",
     "FR24",
     "INV2",
+    "spec quote",
+    "spec quote",
     "spec quote",
     "spec:AST-094",
     "spec:AST-094",
@@ -1568,6 +1728,14 @@
     "family:action-groups",
     "spec quote",
     "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-017",
     "spec:AST-094",
     "spec:AST-094",
@@ -1614,6 +1782,8 @@
     "FR41",
     "INV13",
     "architecture:react-component-runtime",
+    "spec quote",
+    "spec quote",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094"
@@ -1638,6 +1808,7 @@
     "INV10",
     "architecture:interaction-modality",
     "spec quote",
+    "spec quote",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
@@ -1656,6 +1827,8 @@
     "FR41",
     "FR41",
     "INV13",
+    "INV13",
+    "architecture:react-component-runtime",
     "architecture:react-component-runtime",
     "spec quote",
     "spec:AST-094",
@@ -1699,9 +1872,15 @@
   "packages/core/src/gestures/VelocityTracker.ts": [
     "AST-100",
     "AST-100",
+    "FR1",
     "FR2",
     "FR2",
     "FR2",
+    "FR2",
+    "INV10",
+    "architecture:interaction-modality",
+    "spec quote",
+    "spec:AST-100",
     "spec:AST-100"
   ],
   "packages/core/src/gestures/fingerScroll.ts": [
@@ -1736,9 +1915,14 @@
     "spec:AST-094"
   ],
   "packages/core/src/gestures/touchActionRule.ts": [
+    "DEC-8",
+    "FR18",
+    "FR24",
     "FR24",
     "FR3",
+    "spec quote",
     "spec:AST-080",
+    "spec:AST-094",
     "spec:AST-094"
   ],
   "packages/core/src/gestures/types.ts": [
@@ -1768,11 +1952,19 @@
     "spec:AST-094",
     "spec:AST-094"
   ],
-  "packages/core/src/hooks/AnnounceRenderedText.tsx": ["FR11", "spec:AST-086"],
+  "packages/core/src/hooks/AnnounceRenderedText.tsx": [
+    "FR11",
+    "spec quote",
+    "spec:AST-002",
+    "spec:AST-086"
+  ],
   "packages/core/src/hooks/ModalAnnounceProvider.tsx": [
     "FR14",
+    "FR14",
     "INV5",
-    "architecture:react-component-runtime"
+    "architecture:react-component-runtime",
+    "spec quote",
+    "spec:AST-086"
   ],
   "packages/core/src/hooks/actionGroupTracker.ts": ["FR21", "spec:AST-094"],
   "packages/core/src/hooks/menuPressOnItems.ts": [
@@ -1780,7 +1972,16 @@
     "architecture:interaction-modality",
     "spec quote"
   ],
-  "packages/core/src/hooks/modalAnnounce.ts": ["FR14", "FR9", "spec quote"],
+  "packages/core/src/hooks/modalAnnounce.ts": [
+    "FR14",
+    "FR14",
+    "FR8",
+    "FR9",
+    "FR9",
+    "spec quote",
+    "spec quote",
+    "spec:AST-086"
+  ],
   "packages/core/src/hooks/useAdaptivePresentation.ts": [
     "FR9",
     "FR9",
@@ -1789,15 +1990,26 @@
     "spec:AST-012",
     "spec:AST-012"
   ],
-  "packages/core/src/hooks/useAnimatedLayout.ts": ["FR1", "spec:AST-105"],
+  "packages/core/src/hooks/useAnimatedLayout.ts": [
+    "FR1",
+    "INV12",
+    "architecture:react-component-runtime",
+    "spec quote",
+    "spec:AST-105",
+    "spec:AST-105"
+  ],
   "packages/core/src/hooks/useAnnounce.ts": [
     "FR14",
     "FR14",
     "FR14",
     "FR14",
+    "FR14",
+    "FR3",
+    "FR5",
     "FR8",
     "FR8",
     "FR8",
+    "FR9",
     "FR9",
     "FR9",
     "FR9",
@@ -1805,6 +2017,11 @@
     "FR9",
     "spec quote",
     "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec:AST-086",
     "spec:AST-086",
     "spec:AST-086",
     "spec:AST-086",
@@ -1847,8 +2064,19 @@
     "component:HoverCard",
     "component:Tooltip"
   ],
-  "packages/core/src/hooks/useEntryAnimation.ts": ["FR13", "spec:AST-013"],
+  "packages/core/src/hooks/useEntryAnimation.ts": [
+    "FR13",
+    "spec quote",
+    "spec:AST-013"
+  ],
   "packages/core/src/hooks/useHighlightedOptionScroll.ts": ["#6077"],
+  "packages/core/src/hooks/useHotkeys.ts": ["spec quote"],
+  "packages/core/src/hooks/useIsHydrating.ts": [
+    "FR13",
+    "FR9",
+    "spec quote",
+    "spec:AST-013"
+  ],
   "packages/core/src/hooks/useListFocus.ts": [
     "INV1",
     "architecture:interaction-modality"
@@ -1897,6 +2125,11 @@
     "spec quote",
     "spec:AST-025"
   ],
+  "packages/core/src/hooks/useSettledOpen.ts": [
+    "FR13",
+    "spec quote",
+    "spec:AST-013"
+  ],
   "packages/core/src/hooks/useTreeFocus.ts": [
     "AR2",
     "INV17",
@@ -1904,13 +2137,43 @@
   ],
   "packages/core/src/hooks/useTypeahead.ts": [
     "INV17",
-    "architecture:internationalization"
+    "architecture:internationalization",
+    "spec quote"
+  ],
+  "packages/core/src/i18n/useListFormatter.ts": [
+    "INV1a",
+    "INV8",
+    "architecture:internationalization",
+    "spec quote"
+  ],
+  "packages/core/src/internal/tokenizer-presentation.ts": [
+    "DEC-3",
+    "FR21",
+    "INV13",
+    "architecture:react-component-runtime",
+    "component:Tokenizer",
+    "spec quote",
+    "spec:AST-017"
+  ],
+  "packages/core/src/internal/touch.ts": [
+    "FR19",
+    "FR21",
+    "FR24",
+    "INV13",
+    "INV6",
+    "architecture:component-style-authoring",
+    "architecture:react-component-runtime",
+    "spec quote",
+    "spec:AST-017",
+    "spec:AST-094"
   ],
   "packages/core/src/motion/LayoutChangeSnapshot.tsx": [
+    "FR1",
     "INV1",
     "INV3",
     "architecture:react-component-runtime",
-    "spec quote"
+    "spec quote",
+    "spec:AST-105"
   ],
   "packages/core/src/motion/animatedLayout.ts": [
     "DEC-11",
@@ -1951,8 +2214,10 @@
     "FR9",
     "FR9",
     "INV12",
+    "INV12",
     "INV7",
     "architecture:component-style-authoring",
+    "architecture:react-component-runtime",
     "component:LayoutPanel",
     "component:Resizable",
     "component:SideNav",
@@ -1962,7 +2227,12 @@
     "design:reduced-motion",
     "design:reduced-motion",
     "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-094",
+    "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",
     "spec:AST-105",
@@ -2025,6 +2295,9 @@
     "spec quote",
     "spec quote",
     "spec quote",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
@@ -2050,24 +2323,31 @@
     "DR2",
     "DR3",
     "DR4",
-    "design:reduced-motion"
+    "design:reduced-motion",
+    "spec quote"
   ],
   "packages/core/src/motion/reducedMotion.ts": [
     "DR2",
     "DR2",
     "DR3",
     "DR4",
+    "design:reduced-motion",
     "spec quote"
   ],
   "packages/core/src/motion/reducedMotionPlan.ts": [
     "DR1",
+    "DR1",
     "DR2",
     "DR4",
-    "design:reduced-motion"
+    "DR4",
+    "design:reduced-motion",
+    "design:reduced-motion",
+    "spec quote"
   ],
   "packages/core/src/motion/resolveMotion.ts": [
     "DEC-15",
     "DEC-15",
+    "spec quote",
     "spec quote",
     "spec:AST-094",
     "spec:AST-094"
@@ -2078,6 +2358,13 @@
     "spec quote",
     "spec:AST-094"
   ],
+  "packages/core/src/motion/transientCopy.ts": [
+    "FR8",
+    "INV7",
+    "architecture:component-style-authoring",
+    "spec quote",
+    "spec:AST-105"
+  ],
   "packages/core/src/motion/uikit/gestures.ts": [
     "FR2",
     "FR2",
@@ -2087,10 +2374,17 @@
     "architecture:component-style-authoring",
     "architecture:interaction-modality",
     "architecture:interaction-modality",
+    "spec quote",
+    "spec quote",
     "spec:AST-100",
     "spec:AST-100"
   ],
-  "packages/core/src/motion/uikit/index.ts": ["FR1", "FR2", "spec:AST-094"],
+  "packages/core/src/motion/uikit/index.ts": [
+    "FR1",
+    "FR2",
+    "spec quote",
+    "spec:AST-094"
+  ],
   "packages/core/src/motion/uikit/navigation.ts": ["FR4", "spec:AST-094"],
   "packages/core/src/motion/uikit/scroll.ts": [
     "2026-10-06",
@@ -2102,6 +2396,7 @@
     "INV6",
     "architecture:component-style-authoring",
     "design:reduced-motion",
+    "spec quote",
     "spec:AST-094"
   ],
   "packages/core/src/motion/uikit/springs.ts": [
@@ -2116,6 +2411,9 @@
     "INV6",
     "architecture:component-style-authoring",
     "design:reduced-motion",
+    "spec quote",
+    "spec quote",
+    "spec quote",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
@@ -2141,9 +2439,24 @@
     "architecture:component-style-authoring",
     "design:reduced-motion",
     "design:reduced-motion",
+    "spec quote",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094"
+  ],
+  "packages/core/src/privateAttributes/hapticSwitch.stylex.ts": [
+    "INV13",
+    "INV23",
+    "architecture:public-component-api",
+    "architecture:react-component-runtime",
+    "spec quote"
+  ],
+  "packages/core/src/privateAttributes/segmentDisabled.stylex.ts": [
+    "FR2",
+    "INV23",
+    "architecture:public-component-api",
+    "component:SegmentedControl",
+    "spec quote"
   ],
   "packages/core/src/theme/defineTheme.ts": [
     "FR2",
@@ -2151,6 +2464,7 @@
     "FR5",
     "FR5",
     "architecture:theme-authoring-contract",
+    "spec quote",
     "spec quote",
     "spec:AST-108",
     "spec:AST-108",
@@ -2172,8 +2486,11 @@
   ],
   "packages/core/src/theme/motionKnobs.ts": [
     "FR1",
+    "FR1",
     "FR5",
     "FR6",
+    "spec quote",
+    "spec:AST-108",
     "spec:AST-108",
     "spec:AST-108"
   ],
@@ -2189,11 +2506,17 @@
   ],
   "packages/core/src/theme/statusColor.ts": [
     "INV11",
-    "architecture:theme-tokens"
+    "INV17",
+    "architecture:theme-compilation",
+    "architecture:theme-tokens",
+    "spec quote"
   ],
   "packages/core/src/theme/statusRoleDerivation.ts": [
     "INV17",
-    "architecture:theme-compilation"
+    "INV17",
+    "architecture:theme-compilation",
+    "architecture:theme-compilation",
+    "spec quote"
   ],
   "packages/core/src/theme/syntax/SyntaxTheme.tsx": [
     "https://github.com/meta/astryx/issues/1148"
@@ -2219,19 +2542,24 @@
     "spec:AST-108"
   ],
   "packages/core/src/theme/themeMotion.ts": [
+    "FR1",
     "FR15",
+    "FR2",
     "FR2",
     "FR4",
     "FR4",
     "FR5",
     "FR5",
+    "FR5",
+    "FR6",
     "FR6",
     "INV1",
     "INV6",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
     "component:Button",
-    "spec quote"
+    "spec quote",
+    "spec:AST-108"
   ],
   "packages/core/src/theme/tokens.stylex.ts": [
     "#2072",
@@ -2247,13 +2575,21 @@
     "architecture:theme-compilation",
     "architecture:theme-tokens"
   ],
+  "packages/core/src/utils/accessibleName.ts": [
+    "AR3",
+    "component:SideNav",
+    "spec quote"
+  ],
   "packages/core/src/utils/clickGuard.ts": [
     "FR24",
     "FR24",
     "FR24",
+    "FR5",
+    "FR6",
     "module:DropdownMenu/useMenuPress",
     "module:DropdownMenu/useMenuPress",
     "spec quote",
+    "spec:AST-057",
     "spec:AST-094",
     "spec:AST-094"
   ],
@@ -2264,13 +2600,22 @@
     "spec quote",
     "spec:AST-094"
   ],
+  "packages/core/src/utils/disabledInteraction.ts": [
+    "FR1",
+    "FR2",
+    "spec:AST-085"
+  ],
   "packages/core/src/utils/focusOutline.stylex.ts": [
     "INV3",
     "architecture:interaction-modality"
   ],
   "packages/core/src/utils/focusReturn.ts": [
+    "AR3",
     "INV1",
-    "architecture:interaction-modality"
+    "architecture:interaction-modality",
+    "component:SideNav",
+    "spec quote",
+    "spec quote"
   ],
   "packages/core/src/utils/hitArea.ts": [
     "FR24",
@@ -2282,6 +2627,7 @@
     "AST-043",
     "FR1",
     "FR3",
+    "spec:AST-043",
     "spec:AST-043",
     "spec:AST-043"
   ],
@@ -2305,8 +2651,10 @@
     "FR13",
     "FR3",
     "FR9",
+    "INV16",
     "INV5",
     "INV5",
+    "architecture:public-component-api",
     "architecture:react-component-runtime",
     "architecture:react-component-runtime",
     "spec quote",
@@ -2321,7 +2669,10 @@
   "packages/core/src/utils/pressDisabled.ts": [
     "FR23",
     "FR5",
+    "INV13",
+    "architecture:react-component-runtime",
     "component:Tooltip",
+    "spec quote",
     "spec:AST-094"
   ],
   "packages/core/src/utils/pressFeedback.ts": [
@@ -2351,15 +2702,22 @@
     "DEC-9",
     "FR41",
     "FR41",
+    "FR41",
     "FR59",
     "spec quote",
     "spec:AST-017",
     "spec:AST-094",
+    "spec:AST-094",
     "spec:AST-094"
   ],
   "packages/core/src/utils/touchPresentation.stylex.ts": [
+    "FR13",
     "FR9",
-    "spec:AST-012"
+    "FR9",
+    "spec quote",
+    "spec:AST-012",
+    "spec:AST-012",
+    "spec:AST-094"
   ],
   "packages/core/src/utils/touchPresentation.ts": [
     "FR9",
@@ -2373,7 +2731,26 @@
     "spec:AST-012"
   ],
   "packages/core/src/utils/touchQueries.ts": ["FR6", "spec:AST-013"],
-  "packages/core/src/utils/typeaheadMatch.ts": ["INV17", "INV17", "INV17"],
+  "packages/core/src/utils/typeaheadMatch.ts": [
+    "INV17",
+    "INV17",
+    "INV17",
+    "INV17",
+    "architecture:internationalization",
+    "spec quote"
+  ],
+  "packages/core/src/utils/useFocusAcrossSwap.ts": [
+    "FR4",
+    "spec quote",
+    "spec:AST-085"
+  ],
+  "packages/core/src/utils/useFocusLeavingChange.ts": [
+    "AR3",
+    "AR4",
+    "component:Collapsible",
+    "component:SideNav",
+    "spec quote"
+  ],
   "packages/lab/src/Chart/getChartColors.ts": ["#3739"],
   "packages/lab/src/Chat/ChatTypingIndicator.tsx": [
     "FR2",
@@ -2436,6 +2813,8 @@
     "FR4",
     "FR5",
     "FR6",
+    "spec quote",
+    "spec quote",
     "spec:AST-086",
     "spec:AST-086"
   ],
@@ -2463,23 +2842,39 @@
   "packages/lab/src/MobileTokenizer/MobileTokenizer.tsx": [
     "AR6",
     "AR6",
+    "AR6",
+    "AR6",
+    "AR6",
+    "DEC-3",
     "FR14",
+    "FR14",
+    "FR16",
     "FR16",
     "FR17",
     "FR17",
+    "FR17",
+    "FR17",
     "FR18",
     "FR18",
     "FR18",
+    "FR18",
     "FR20",
     "FR20",
     "FR20",
     "FR20",
+    "FR20",
+    "FR20",
+    "FR24",
+    "FR24",
     "FR3",
+    "FR3",
+    "FR5",
     "FR5",
     "FR5",
     "FR5",
     "FR7",
     "INV3",
+    "INV7",
     "INV7",
     "INV7",
     "INV7",
@@ -2489,15 +2884,20 @@
     "component:Tokenizer",
     "component:Tokenizer",
     "component:Tokenizer",
+    "component:Tokenizer",
     "family:input-fields",
     "spec quote",
     "spec quote",
     "spec quote",
     "spec quote",
+    "spec quote",
     "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085",
+    "spec:AST-085",
+    "spec:AST-085",
+    "spec:AST-086",
     "spec:AST-086"
   ],
   "packages/lab/src/Sankey/SankeyLabel.tsx": ["#0", "#1"],
@@ -2543,6 +2943,12 @@
     "spec quote"
   ],
   "packages/lab/src/Schedule/dateMath.ts": ["FR21", "component:Schedule"],
+  "packages/lab/src/Schedule/monthLayout.ts": [
+    "FR15",
+    "FR16",
+    "ORD4",
+    "component:Schedule"
+  ],
   "packages/lab/src/Schedule/shared.tsx": [
     "AR2",
     "FR15",
@@ -2554,6 +2960,12 @@
     "component:Schedule",
     "component:Schedule"
   ],
+  "packages/lab/src/Schedule/useScheduleViewPopover.ts": [
+    "FR17",
+    "FR20",
+    "component:Schedule",
+    "spec quote"
+  ],
   "packages/native/src/components/Icon.ts": ["AST-082", "FR17"],
   "packages/native/src/components/TextInput.ts": ["family:input-fields"],
   "packages/native/src/contract/fromComponentDoc.ts": [
@@ -2561,15 +2973,31 @@
     "AST-082",
     "AST-082",
     "AST-082",
+    "AST-082",
+    "FR16",
     "FR17",
     "FR3",
     "FR4",
     "FR4",
     "FR7",
-    "FR8"
+    "FR8",
+    "spec quote"
   ],
-  "packages/native/src/contract/generateSwift.ts": ["AST-082", "FR17"],
-  "packages/native/src/contract/names.ts": ["AST-082", "FR8"],
+  "packages/native/src/contract/generateSwift.ts": [
+    "AST-082",
+    "AST-082",
+    "FR17",
+    "FR5",
+    "spec quote"
+  ],
+  "packages/native/src/contract/generateTypeScript.ts": [
+    "AST-082",
+    "FR5",
+    "FR6"
+  ],
+  "packages/native/src/contract/names.ts": ["AST-082", "AST-082", "FR8", "FR8"],
+  "packages/native/src/contract/parseDocType.ts": ["AST-082", "FR4"],
+  "packages/native/src/contract/rules.ts": ["AST-082", "FR4", "FR8"],
   "packages/native/src/contract/types.ts": [
     "AST-082",
     "AST-082",
@@ -2584,23 +3012,62 @@
     "FR7",
     "FR8"
   ],
-  "packages/native/src/icons/defaults.ts": ["FR17"],
+  "packages/native/src/icons/defaults.ts": [
+    "AST-082",
+    "DEC-10",
+    "FR17",
+    "FR17"
+  ],
+  "packages/native/src/index.ts": ["AST-082", "FR15"],
+  "packages/native/src/logic/createLogicCore.ts": [
+    "AST-082",
+    "FR12",
+    "spec quote"
+  ],
   "packages/native/src/platforms.ts": ["AST-082", "AST-082", "FR6"],
   "packages/native/src/theme/defineNativeTheme.ts": [
     "AST-082",
     "AST-082",
+    "AST-082",
     "DEC-5",
+    "FR10",
     "FR17",
+    "FR18",
     "FR18",
     "FR18"
   ],
-  "packages/richtext/src/CodeBlockHeaderPlugin.tsx": ["spec:AST-061"],
-  "packages/richtext/src/CodeSyntaxPlugin.tsx": ["FR30", "component:Markdown"],
+  "packages/richtext/src/CodeBlockHeaderPlugin.tsx": [
+    "DEC-4",
+    "FR8",
+    "spec quote",
+    "spec:AST-061",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/CodeSyntaxPlugin.tsx": [
+    "FR1",
+    "FR30",
+    "component:Markdown",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/MarkdownExtensionsPlugin.tsx": [
+    "FR11",
+    "FR2",
+    "FR6",
+    "FR8",
+    "FR9",
+    "spec quote",
+    "spec:AST-064"
+  ],
   "packages/richtext/src/RichTextEditor.tsx": [
     "#5335",
     "spec:AST-061",
     "spec:AST-062",
     "spec:AST-064"
+  ],
+  "packages/richtext/src/RichTextEditorToolbar.tsx": [
+    "spec quote",
+    "spec:AST-061/DEC-8"
   ],
   "packages/richtext/src/RichTextView.tsx": [
     "FR2",
@@ -2608,18 +3075,33 @@
     "spec:AST-061",
     "spec:AST-064"
   ],
+  "packages/richtext/src/TableColumnFloorPlugin.tsx": [
+    "FR4",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/TaskCheckboxPlugin.tsx": [
+    "FR5",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/codeLanguages.ts": ["FR30", "component:Markdown"],
   "packages/richtext/src/editorNodes.ts": ["spec:AST-064"],
   "packages/richtext/src/editorTheme.ts": [
     "DEC-6",
     "DEC-6",
     "DEC-9",
     "FR2",
+    "FR2",
+    "FR4",
     "FR4",
     "FR5",
     "FR6",
     "FR9",
     "spec quote",
     "spec quote",
+    "spec quote",
+    "spec:AST-061",
     "spec:AST-061",
     "spec:AST-061",
     "spec:AST-061",
@@ -2627,16 +3109,46 @@
     "spec:AST-061",
     "spec:AST-061"
   ],
-  "packages/richtext/src/index.ts": ["spec:AST-061/DEC-8"],
+  "packages/richtext/src/index.ts": ["spec quote", "spec:AST-061/DEC-8"],
+  "packages/richtext/src/markdown.ts": [
+    "FR12",
+    "FR3",
+    "spec quote",
+    "spec:AST-064"
+  ],
   "packages/richtext/src/markdownCharacterReferences.ts": [
+    "DEC-5",
+    "FR3",
     "FR7",
-    "spec:AST-061"
+    "FR7",
+    "FR7",
+    "spec quote",
+    "spec quote",
+    "spec:AST-061",
+    "spec:AST-061",
+    "spec:AST-061",
+    "spec:AST-062"
+  ],
+  "packages/richtext/src/markdownCodeFence.ts": [
+    "FR5",
+    "spec quote",
+    "spec:AST-061",
+    "spec:AST-062"
+  ],
+  "packages/richtext/src/markdownExtensionNode.ts": [
+    "FR10",
+    "FR11",
+    "FR7",
+    "spec quote",
+    "spec:AST-064"
   ],
   "packages/richtext/src/markdownExtensions.ts": [
     "DEC-3",
     "DEC-4",
     "FR1",
     "FR1",
+    "FR1",
+    "FR10",
     "FR10",
     "FR4",
     "FR4",
@@ -2645,12 +3157,40 @@
     "FR5",
     "FR6",
     "FR6",
+    "FR6",
     "spec quote",
     "spec:AST-064",
     "spec:AST-064",
     "spec:AST-064",
     "spec:AST-064",
+    "spec:AST-064",
     "spec:AST-064"
+  ],
+  "packages/richtext/src/markdownHardLineBreak.ts": [
+    "FR3",
+    "spec quote",
+    "spec:AST-062"
+  ],
+  "packages/richtext/src/markdownLink.ts": [
+    "FR3",
+    "spec quote",
+    "spec:AST-062"
+  ],
+  "packages/richtext/src/markdownListExport.ts": [
+    "FR3",
+    "spec quote",
+    "spec:AST-062"
+  ],
+  "packages/richtext/src/markdownListIndentation.ts": [
+    "FR5",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/markdownOrderedList.ts": [
+    "DEC-6",
+    "DEC-6",
+    "spec quote",
+    "spec:AST-061"
   ],
   "packages/richtext/src/markdownSerializers.ts": ["spec:AST-064"],
   "packages/richtext/src/markdownSource.ts": [
@@ -2659,11 +3199,28 @@
     "FR3",
     "FR5",
     "FR5",
+    "spec quote",
     "spec:AST-061",
     "spec:AST-061",
+    "spec:AST-062",
     "spec:AST-062",
     "spec:AST-062",
     "spec:AST-062",
     "spec:AST-062"
+  ],
+  "packages/richtext/src/markdownTaskList.ts": [
+    "FR5",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/markdownThematicBreak.ts": [
+    "FR5",
+    "spec quote",
+    "spec:AST-061"
+  ],
+  "packages/richtext/src/textSemantics.ts": [
+    "FR7",
+    "spec quote",
+    "spec:AST-061"
   ]
 }
