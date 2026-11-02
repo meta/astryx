@@ -169,6 +169,82 @@ describe('DropdownMenu', () => {
     );
   });
 
+  describe('bottom sheet opened from a custom trigger', () => {
+    it("names the sheet and its heading after the caller's aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          aria-label="Create"
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Add
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Add'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', {name: 'Menu'})).toBeNull();
+    });
+
+    it("falls back to the trigger's own name without an aria-label", async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}, {label: 'Invoice'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Create'}));
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+      expect(screen.getByRole('heading', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('names an open controlled sheet from the trigger on its first render', () => {
+      render(
+        <DropdownMenu
+          isMenuOpen
+          presentation="bottom-sheet"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Create
+            </button>
+          )}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      expect(screen.getByRole('dialog', {name: 'Create'})).toBeInTheDocument();
+    });
+
+    it('keeps the default title when the trigger has no name to read', async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu
+          presentation="bottom-sheet"
+          renderTrigger={props => <button type="button" {...props} />}
+          items={[{label: 'Contact'}]}
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: ''}));
+
+      expect(screen.getByRole('dialog', {name: 'Menu'})).toBeInTheDocument();
+    });
+  });
+
   it('renders data-driven actions in a bottom sheet when requested', async () => {
     const user = userEvent.setup();
     const onEdit = vi.fn();

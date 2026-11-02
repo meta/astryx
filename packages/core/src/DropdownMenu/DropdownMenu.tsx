@@ -596,11 +596,27 @@ function DropdownMenuBottomSheet({
   useEffect(() => {
     void preloadMenuBottomSheetActionList();
   }, []);
+  // A custom trigger names the menu as the popover does: the caller's
+  // `aria-label`, else the control's own accessible name, read off the DOM once
+  // the sheet opens. The default button names it by its label.
+  const [triggerName, setTriggerName] = useState<string | undefined>(undefined);
+  useIsomorphicLayoutEffect(() => {
+    if (renderTrigger != null && isOpen) {
+      setTriggerName(readAccessibleName(buttonRef.current));
+    }
+  }, [renderTrigger, isOpen]);
+  const callerMenuLabel = rest['aria-label'];
+  const rootTitle =
+    renderTrigger != null
+      ? ((typeof callerMenuLabel === 'string' && callerMenuLabel.trim() !== ''
+          ? callerMenuLabel
+          : triggerName) ?? button.label)
+      : button.label;
   const currentSubmenu = submenuPath.at(-1);
   const currentItems = currentSubmenu?.items ?? items;
-  const currentTitle = currentSubmenu?.label ?? button.label;
+  const currentTitle = currentSubmenu?.label ?? rootTitle;
   const sheetLabel =
-    typeof currentTitle === 'string' ? currentTitle : button.label;
+    typeof currentTitle === 'string' ? currentTitle : rootTitle;
 
   const setOpen = useCallback(
     (nextIsOpen: boolean) => {
