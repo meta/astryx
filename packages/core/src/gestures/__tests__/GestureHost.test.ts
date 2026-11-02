@@ -566,7 +566,9 @@ describe('GestureHost', () => {
         .filter(t => /^(touch|pointer)/.test(t));
     // A fine primary pointer: nothing on the page while idle, and on the
     // element the one listener its press needs, plus the claiming pan's
-    // blocking touchmove, which FR24 counts outside that budget (FR19).
+    // blocking touchmove, which FR24 counts outside that budget (FR19). A pan
+    // takes no scroll unless its owner allows a trackpad's, so no wheel
+    // listener (FR43, DEC-24).
     const fine = new GestureHost(document, {
       clock,
       isPrimaryPointerCoarse: () => false,
