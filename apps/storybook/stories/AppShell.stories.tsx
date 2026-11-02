@@ -3,6 +3,9 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {AppShell} from '@astryxdesign/core/AppShell';
+import {VStack} from '@astryxdesign/core/Stack';
+import {Layout} from '@astryxdesign/core/Layout';
+import {Card} from '@astryxdesign/core/Card';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -840,6 +843,50 @@ export const WithBanner: Story = {
       <MockContent />
     </AppShell>
   ),
+};
+
+/**
+ * A layout root (FR18): the same With Banner shell as the page-root story,
+ * placed in a padded Card that clips overflow, as a docs example card does,
+ * and in an outer Layout's content area. It lays out exactly as it does at
+ * the page root: nothing an ancestor Layout, Card or Section publishes
+ * reaches its regions.
+ */
+export const InsideLayoutHosts: Story = {
+  render: () => {
+    const shell = (testId: string) => (
+      <AppShell
+        data-testid={testId}
+        contentPadding={6}
+        style={{height: 420}}
+        topNav={<AppTopNav />}
+        sideNav={<SideNavWithoutHeader />}
+        banner={
+          <Banner
+            status="info"
+            container="section"
+            title="System maintenance scheduled"
+            description="The system will undergo maintenance tonight at 10pm UTC."
+            isDismissable
+          />
+        }>
+        <MockContent />
+      </AppShell>
+    );
+    return (
+      <VStack gap={6}>
+        {shell('shell-root')}
+        <Card padding={3} style={{overflow: 'hidden'}}>
+          {shell('shell-in-card')}
+        </Card>
+        <Layout
+          padding={4}
+          header={<Text type="body">Outer layout header</Text>}
+          content={shell('shell-in-layout')}
+        />
+      </VStack>
+    );
+  },
 };
 
 /**

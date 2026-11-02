@@ -43,6 +43,13 @@ import {Layout} from '../Layout/Layout';
 import {LayoutHeader} from '../Layout/LayoutHeader';
 import {LayoutPanel} from '../Layout/LayoutPanel';
 import {LayoutContent} from '../Layout/LayoutContent';
+import {LayoutAreaContext} from '../Layout/LayoutAreaContext';
+import {LayoutDividerContext} from '../Layout/LayoutDividerContext';
+import {
+  LayoutSlotsContext,
+  type LayoutSlots,
+} from '../Layout/LayoutSlotsContext';
+import {overlayPaddingReset} from '../Layout/padding.stylex';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {MAX_CLOSE_DELAY_MS as MOBILE_NAV_MAX_CLOSE_DELAY_MS} from '../MobileNav/MobileNav';
 import {SideNavRenderContext} from '../SideNav/SideNavRenderContext';
@@ -302,6 +309,17 @@ const styles = stylex.create({
     flexDirection: 'column',
     position: 'relative',
     overflow: 'clip',
+  },
+  // A layout root (FR18): with `overlayPaddingReset`, the layout values an
+  // ancestor Layout, Card or Section publishes stop here, so the shell lays
+  // out as it does at the page root. These are the ones the overlay reset
+  // leaves to its own roots.
+  layoutRoot: {
+    '--layout-content-width': 'initial',
+    '--layout-alignment-width': 'initial',
+    '--_layout-flush-block-start': 'initial',
+    '--_layout-flush-block-end': 'initial',
+    '--container-max-height': 'initial',
   },
   variantWash: {
     backgroundColor: colorVars['--color-background-body'],
@@ -1243,6 +1261,8 @@ export function AppShell({
           themeProps('app-shell', {variant}),
           stylex.props(
             styles.root,
+            overlayPaddingReset.reset,
+            styles.layoutRoot,
             variant === 'wash'
               ? styles.variantWash
               : variant === 'surface'
@@ -1265,18 +1285,26 @@ export function AppShell({
           {t('@astryx.appShell.skipToContent')}
         </a>
 
-        <Layout
-          height={height}
-          padding={0}
-          header={
-            <>
-              {headerContent}
-              {autoMobileTopBar}
-            </>
-          }
-          start={sideNavContent}
-          content={mainContent}
-        />
+        {/* The Layout area, slot and divider defaults an ancestor Layout
+            provides stop here too (FR18). */}
+        <LayoutAreaContext value={null}>
+          <LayoutSlotsContext value={NO_LAYOUT_SLOTS}>
+            <LayoutDividerContext value={null}>
+              <Layout
+                height={height}
+                padding={0}
+                header={
+                  <>
+                    {headerContent}
+                    {autoMobileTopBar}
+                  </>
+                }
+                start={sideNavContent}
+                content={mainContent}
+              />
+            </LayoutDividerContext>
+          </LayoutSlotsContext>
+        </LayoutAreaContext>
 
         {/* Mobile nav — always mounted below breakpoint via Activity so DOM
             presence detection works. Hidden until the drawer opens. */}
@@ -1311,3 +1339,11 @@ export function AppShell({
 }
 
 AppShell.displayName = 'AppShell';
+
+/** The slot context at a page root: no Layout around the shell. */
+const NO_LAYOUT_SLOTS: LayoutSlots = {
+  hasHeader: false,
+  hasFooter: false,
+  hasStart: false,
+  hasEnd: false,
+};
