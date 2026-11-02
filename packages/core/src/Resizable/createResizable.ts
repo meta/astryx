@@ -117,9 +117,8 @@ export interface CreateResizableOptions {
   /**
    * A plain element's accessible name, when it has none of its own. Without
    * it, useResizable gives the provider's translation of the catalog message,
-   * and the bare factory, used outside a provider, the shipped English one
-   * (`architecture:internationalization` INV3). A ResizeHandle takes its own
-   * `label` prop.
+   * and the bare factory, used outside a provider, the shipped English one.
+   * A ResizeHandle takes its own `label` prop.
    * @default 'Resize handle'
    */
   label?: string;

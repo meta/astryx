@@ -233,8 +233,8 @@ export const docs = {
   relatedHooks: ['useResizable'],
   importPath: '@astryxdesign/core/Resizable',
   // No category: a factory documented as a hook is listed with the Resizable
-  // docs, beside useResizable, and is not a tile in the components gallery,
-  // which lists the documents that have one.
+  // docs, beside useResizable. The components gallery lists only documents
+  // with a category, so it shows no tile for it.
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */

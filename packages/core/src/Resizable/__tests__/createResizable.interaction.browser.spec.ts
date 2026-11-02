@@ -2,18 +2,14 @@
 
 /**
  * @file createResizable.interaction.browser.spec.ts
- * @input Uses @playwright/test and the interaction harness (a built
- *   Storybook): createResizable's story, a plain divider beside an embedded
- *   frame
- * @output Proves a createResizable handle holds its pointer for the whole
- *   drag: a drag that crosses an embedded frame keeps resizing, comes back,
- *   and ends at the release, in Chromium and WebKit
- * @position Interaction proof for packages/core/src/Resizable/createResizable.ts
- *   and resizeGesture.ts (component:Resizable FR3; spec:AST-107 FR6)
+ * @input @playwright/test and the interaction harness: createResizable's
+ *   story, a plain divider beside an embedded frame
+ * @output Proves that a drag across the frame keeps resizing and ends at the
+ *   release, in Chromium and WebKit
+ * @position Interaction proof for createResizable.ts and resizeGesture.ts
  *
- * Without pointer capture the browser hit-tests every move, and a move over
- * the frame goes to the frame's own document: the drag would stop the moment
- * the pointer crossed it.
+ * Without pointer capture the browser hit-tests every move. A move over the
+ * frame then goes to the frame's own document, and the drag stops there.
  */
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
