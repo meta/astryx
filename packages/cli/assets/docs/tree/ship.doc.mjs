@@ -9,7 +9,7 @@ export const docs = {
   placement: {parent: 'namespace:authoring', slot: 'guides', order: 30},
   title: 'Ship',
   summary: 'Test, publish, and upgrade your package.',
-  keywords: ['ship', 'publish', 'release', 'upgrade'],
+  keywords: ['authoring', 'ship', 'publish', 'release', 'upgrade'],
   slots: {
     guides: {title: 'Ship', accepts: {kinds: ['generic']}},
   },
