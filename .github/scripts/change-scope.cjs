@@ -28,6 +28,10 @@ const SPEC_RECORD_PATTERNS = [
 
 const CHANGESET_PATTERN = /^\.changeset\/(?!README\.md$)[^/]+\.md$/;
 
+// The experimental Lab package: a change only here (and its release notes)
+// runs the Lab tests and the Storybook build (spec:AST-030 FR26).
+const LAB_ROOT = 'packages/lab/';
+
 const SURFACES = Object.freeze({
   KNOWLEDGE: 'knowledge',
   DOCSITE: 'docsite',
@@ -199,6 +203,7 @@ function classifyChanges(changes, {expectedCount} = {}) {
       touchesDesignAssets: false,
       specChangesetConflict: false,
       docsiteOnly: false,
+      labOnly: false,
       // No paths to scope from runs everything (spec:AST-030 FR4).
       fullSuite: true,
       surfaces: complete ? [] : [SURFACES.SHARED_OR_UNKNOWN],
@@ -248,6 +253,15 @@ function classifyChanges(changes, {expectedCount} = {}) {
   const specOnly = exactSurface(SURFACES.KNOWLEDGE);
   const docsiteOnly = exactSurface(SURFACES.DOCSITE);
   const toolingOnly = exactSurface(SURFACES.NODE_TOOLING);
+  // Every changed path is in the Lab package, besides Changesets, which no
+  // test or build reads (spec:AST-030 FR26).
+  const labOnly =
+    complete &&
+    allPaths.some(filePath => filePath.startsWith(LAB_ROOT)) &&
+    allPaths.every(
+      filePath =>
+        filePath.startsWith(LAB_ROOT) || CHANGESET_PATTERN.test(filePath),
+    );
   // An incomplete list, or any shared infrastructure, runs everything.
   const fullSuite = !complete || allPaths.some(isSharedInfraPath);
   return {
@@ -257,6 +271,7 @@ function classifyChanges(changes, {expectedCount} = {}) {
     touchesDesignAssets,
     specChangesetConflict,
     docsiteOnly,
+    labOnly,
     fullSuite,
     surfaces,
     complete,
@@ -268,7 +283,9 @@ function classifyChanges(changes, {expectedCount} = {}) {
           ? 'only docsite files changed'
           : toolingOnly
             ? 'only admitted Node tooling changed'
-            : 'changes include another surface',
+            : labOnly
+              ? 'only the Lab package changed'
+              : 'changes include another surface',
   };
 }
 
@@ -305,7 +322,7 @@ if (require.main === module) {
       throw new Error('GITHUB_OUTPUT is required with --github-output.');
     fs.appendFileSync(
       outputPath,
-      `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nfull_suite=${result.fullSuite}\n`,
+      `spec_only=${result.specOnly}\ndocsite_only=${result.docsiteOnly}\ntooling_only=${result.toolingOnly}\nlab_only=${result.labOnly}\nfull_suite=${result.fullSuite}\n`,
     );
   } else {
     process.stdout.write(`${JSON.stringify(result)}\n`);
@@ -313,6 +330,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  LAB_ROOT,
   NODE_TOOLING_PATHS,
   SURFACES,
   classifyChanges,

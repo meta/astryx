@@ -172,7 +172,11 @@ describe.each(Object.entries(WORKFLOWS))(
       if (graphScoped) {
         expect(share.run.trim()).toBe(
           [
-            'if [ "$SCOPED" = true ]; then',
+            'if [ "$LAB_ONLY" = true ]; then',
+            '  # A change only to the Lab package runs every Lab test, and only',
+            '  # those, across the same legs (spec:AST-030 FR26).',
+            `  pnpm test:ui --passWithNoTests ${SHARD_ARG} packages/lab/`,
+            'elif [ "$SCOPED" = true ]; then',
             `  pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
             '  # that read sources, and tests that load a changed package from',
@@ -221,8 +225,11 @@ describe.each(Object.entries(WORKFLOWS))(
       expect(job.steps.indexOf(isolated)).toBeGreaterThan(
         job.steps.indexOf(share),
       );
+      // The core benchmark is not a Lab test (spec:AST-030 FR26).
       expect(isolated.if).toBe(
-        share.if ? `matrix.shard == 1 && ${share.if}` : 'matrix.shard == 1',
+        share.if
+          ? `matrix.shard == 1 && ${share.if} && steps.scope.outputs.lab_only != 'true'`
+          : 'matrix.shard == 1',
       );
     });
 

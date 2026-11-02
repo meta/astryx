@@ -46,6 +46,7 @@ const scopes = [
   ['docsite_only', process.env.DOCSITE_ONLY],
   ['spec_only', process.env.SPEC_ONLY],
   ['tooling_only', process.env.TOOLING_ONLY],
+  ['lab_only', process.env.LAB_ONLY],
 ];
 for (const [name, value] of scopes) {
   if (value !== 'true' && value !== 'false') {

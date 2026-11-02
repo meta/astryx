@@ -171,6 +171,7 @@ describe('per-job scope step', () => {
         'has_components',
         'has_rtl_components',
         'has_rtl_harness',
+        'lab_only',
         'release_bump',
         'spec_only',
         'tooling_only',
@@ -293,6 +294,53 @@ describe('per-job scope step', () => {
       files: changed('docs/specs/AST-030/spec.md'),
     });
     expect(outputs).toMatchObject({spec_only: 'true', applies: 'false'});
+  });
+
+  it('does not apply on the Lab-only lane, and reports it (spec:AST-030 FR26)', async () => {
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx', '.changeset/tour.md'),
+      inputs: {paths: INTERACTION_PATHS},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'true',
+      applies: 'false',
+      spec_only: 'false',
+    });
+    const mixed = await decide({
+      files: changed(
+        'packages/lab/src/Tour/Tour.tsx',
+        'packages/core/src/Button/Button.tsx',
+      ),
+    });
+    expect(mixed.outputs).toMatchObject({lab_only: 'false', applies: 'true'});
+  });
+
+  it('reports no Lab-only lane when the base classifier predates it', async () => {
+    const old = fs
+      .readFileSync(path.join(root, '.github/scripts/change-scope.cjs'), 'utf8')
+      .replace('\\nlab_only=${result.labOnly}', '');
+    expect(old).not.toContain('lab_only=');
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      baseOverrides: {'.github/scripts/change-scope.cjs': old},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'false',
+      applies: 'true',
+      decided: 'true',
+    });
+  });
+
+  it('reports no Lab-only lane outside a pull request or when undecidable', async () => {
+    const push = await decide({
+      context: {...pullRequestContext(), eventName: 'workflow_dispatch'},
+    });
+    expect(push.outputs.lab_only).toBe('false');
+    const broken = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      missingBase: ['.github/scripts/change-scope.cjs'],
+    });
+    expect(broken.outputs).toMatchObject({lab_only: 'false', decided: 'false'});
   });
 
   it('fails when the trusted classifier rejects the change', async () => {
