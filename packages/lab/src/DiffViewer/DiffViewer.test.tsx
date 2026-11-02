@@ -602,6 +602,106 @@ describe('DiffViewer', () => {
     expect(screen.getByText('No content changes')).toBeInTheDocument();
   });
 
+  describe('replaced blocks', () => {
+    // 2,100 lines on each side share none, so createDiffFile replaces the
+    // middle as a whole.
+    const LINE_COUNT = 2100;
+    const REPLACED = createDiffFile({
+      oldValue: [
+        'head',
+        ...Array.from({length: LINE_COUNT}, (_, i) => `old ${i}`),
+        'tail',
+      ].join('\n'),
+      newValue: [
+        'head',
+        ...Array.from({length: LINE_COUNT}, (_, i) => `new ${i}`),
+        'tail',
+      ].join('\n'),
+      path: 'big.txt',
+      contextLines: 1,
+    });
+
+    it('folds the changed lines behind a labeled control', () => {
+      const {container} = render(<DiffViewer file={REPLACED} />);
+      expect(
+        screen.getByText('Large change: 4,200 lines. Too large to compare line by line.'),
+      ).toBeTruthy();
+      const button = screen.getByRole('button', {name: 'Show full diff'});
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      // The hunk header, the leading context, the fold, the trailing context.
+      expect(codeRows(container)).toHaveLength(4);
+      expect(container.querySelector('[data-diff="removed"]')).toBeNull();
+      expect(screen.getByText('head')).toBeTruthy();
+      expect(screen.getByText('tail')).toBeTruthy();
+      // The header still counts the whole change.
+      expect(screen.getByText('2,100 lines added, 2,100 lines removed')).toBeTruthy();
+    });
+
+    it('shows and hides the full diff from the keyboard', async () => {
+      const user = userEvent.setup();
+      const {container} = render(<DiffViewer file={REPLACED} />);
+      const button = screen.getByRole('button', {name: 'Show full diff'});
+      button.focus();
+      await user.keyboard('{Enter}');
+      const hide = screen.getByRole('button', {name: 'Hide full diff'});
+      expect(hide.getAttribute('aria-expanded')).toBe('true');
+      expect(hide).toBe(document.activeElement);
+      expect(container.querySelectorAll('[data-diff="removed"]')).toHaveLength(
+        LINE_COUNT,
+      );
+      expect(container.querySelectorAll('[data-diff="added"]')).toHaveLength(
+        LINE_COUNT,
+      );
+      await user.keyboard(' ');
+      expect(
+        screen
+          .getByRole('button', {name: 'Show full diff'})
+          .getAttribute('aria-expanded'),
+      ).toBe('false');
+      expect(container.querySelector('[data-diff="added"]')).toBeNull();
+    });
+
+    it('gives the expanded block no inline highlight', async () => {
+      const user = userEvent.setup();
+      const {container} = render(<DiffViewer file={REPLACED} />);
+      await user.click(screen.getByRole('button', {name: 'Show full diff'}));
+      expect(changedText(container, 'removed')).toEqual([]);
+      expect(changedText(container, 'added')).toEqual([]);
+    });
+
+    it('puts one control in split view and labels the fold on both sides', async () => {
+      const user = userEvent.setup();
+      const {container} = render(
+        <DiffViewer file={REPLACED} viewMode="split" />,
+      );
+      expect(screen.getAllByRole('button', {name: 'Show full diff'})).toHaveLength(
+        1,
+      );
+      for (const side of ['old', 'new'] as const) {
+        const rows = paneRows(container, side);
+        // The hunk header, the leading context, the fold, the trailing context.
+        expect(rows).toHaveLength(4);
+        expect(rows[2].textContent).toContain('Large change: 4,200 lines.');
+      }
+      await user.click(screen.getByRole('button', {name: 'Show full diff'}));
+      expect(paneRows(container, 'old')).toHaveLength(4 + LINE_COUNT);
+      expect(paneRows(container, 'new')).toHaveLength(4 + LINE_COUNT);
+    });
+
+    it('folds the block again for a new file', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(<DiffViewer file={REPLACED} />);
+      await user.click(screen.getByRole('button', {name: 'Show full diff'}));
+      rerender(<DiffViewer file={{...REPLACED}} />);
+      expect(screen.getByRole('button', {name: 'Show full diff'})).toBeTruthy();
+    });
+
+    it('shows no fold for an ordinary diff', () => {
+      render(<DiffViewer file={FILE} />);
+      expect(screen.queryByRole('button', {name: 'Show full diff'})).toBeNull();
+    });
+  });
+
   it('shows a message for binary files', () => {
     const [binary] = parseUnifiedDiff(
       'diff --git a/x.png b/x.png\nBinary files a/x.png and b/x.png differ\n',

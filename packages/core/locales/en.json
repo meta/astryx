@@ -607,6 +607,18 @@
     "defaultMessage": "No content changes",
     "description": "Message in a lab DiffViewer when a file changed only its path or mode, so there are no line changes to show."
   },
+  "@astryx.diffViewer.largeChange": {
+    "defaultMessage": "Large change: {count, plural, one {# line} other {# lines}}. Too large to compare line by line.",
+    "description": "Label of a folded block in a lab DiffViewer when a change is too large to compare line by line, so its old lines are shown as removed and its new lines as added. `{count}` is the number of removed plus added lines in the block."
+  },
+  "@astryx.diffViewer.showFullDiff": {
+    "defaultMessage": "Show full diff",
+    "description": "Button beside `@astryx.diffViewer.largeChange` in a lab DiffViewer that shows the folded lines of a large change. Pairs with `@astryx.diffViewer.hideFullDiff`."
+  },
+  "@astryx.diffViewer.hideFullDiff": {
+    "defaultMessage": "Hide full diff",
+    "description": "Button beside `@astryx.diffViewer.largeChange` in a lab DiffViewer that folds the lines of a large change again after `@astryx.diffViewer.showFullDiff` showed them."
+  },
   "@astryx.markdownHeadingLinks.copied": {
     "defaultMessage": "Link copied",
     "description": "Accessible name on the Markdown heading copy button and text announced to a polite live region for ~1.5s after a successful copy. Sentence meaning \"Link copied\"; pairs with `markdownHeadingLinks.copy`."
