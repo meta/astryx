@@ -3,7 +3,8 @@
 /**
  * @file ProgressBarMotion.a11y.chromium.spec.ts
  * @input Built ProgressBar stories in real Chromium (CDP screencast, tracing,
- *   the interaction harness's animation holds and busy-window control)
+ *   the interaction harness's animation holds, storyboards and busy-window
+ *   control)
  * @output Browser evidence that a determinate value change moves the fill on
  *   the compositor: it keeps moving while a script holds the main thread,
  *   lays out and paints nothing per frame, and its leading edge lands on the
@@ -25,12 +26,12 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 import {
+  animationStoryboard,
   armHold,
   busyWindowProof,
   CONTROL_RGB,
   inPresentationOrder,
   releaseAnimations,
-  seekAnimations,
   startBusyControl,
   trackMarker,
   type TrackedFrame,
@@ -55,8 +56,6 @@ const EVIDENCE = path.resolve(
 const STORY = 'core-progressbar--default';
 const BLOCK_MS = 700;
 const DPR = 2;
-/** One frame at 60 Hz, in ms. */
-const FRAME_MS = 1000 / 60;
 
 test.use({viewport: {width: 402, height: 200}, deviceScaleFactor: DPR});
 
@@ -802,25 +801,21 @@ test('storyboard: the fill moving from 20% to 80% @storyboard', async ({
   await open(page, 20);
   const track = await trackBox(page);
   // The change's own frames, on its own clock: the page holds the fill's
-  // transition as soon as it runs, and each frame is the transition seeked
-  // one frame interval on and photographed, through its end. A screencast of
-  // the change shows only the frames a loaded runner gets to capture, and one
-  // it misses doubles the step between the two around it.
+  // transition as soon as it runs, and the harness films it, seeked one
+  // frame interval at a time through its end. A screencast of the change
+  // shows only the frames a loaded runner gets to capture, and one it misses
+  // doubles the step between the two around it.
   const hold = await armHold(page, page.getByRole('progressbar'));
   await setValue(page, 80);
-  const held = await hold.held();
-  const end = Math.max(...held.map(a => a.offsetMs + a.curveEndMs));
-  const times: number[] = [];
-  for (let t = 0; t < end; t += FRAME_MS) {
-    times.push(t);
-  }
-  times.push(end);
-  const frames: Frame[] = [];
-  for (const t of times) {
-    const shown = await seekAnimations(page, t);
-    frames.push({t: shown, data: (await page.screenshot()).toString('base64')});
-  }
+  const {storyboard} = await animationStoryboard(page, {
+    name: 'progress-bar-fill-move',
+    held: await hold.held(),
+  });
   await releaseAnimations(page, {finish: true});
+  const frames: Frame[] = storyboard.frames.map(f => ({
+    t: f.t,
+    data: f.png.toString('base64'),
+  }));
   const edges = await leadingEdges(page, frames, track);
   // The trace is the assertion: the edge moves forward only, from 20% to
   // 80%, with no jump bigger than a quarter of the travel between frames.
