@@ -3,7 +3,6 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {AppShell} from '@astryxdesign/core/AppShell';
-import {VStack} from '@astryxdesign/core/Stack';
 import {Layout} from '@astryxdesign/core/Layout';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
@@ -847,18 +846,27 @@ export const WithBanner: Story = {
 };
 
 /**
- * A layout root (FR18): the same With Banner shell as the page-root story,
- * placed in a padded Card that clips overflow, as a docs example card does,
- * in an outer Layout's content area, and in a Section with explicit padding.
- * It lays out exactly as it does at
- * the page root: nothing an ancestor Layout, Card or Section publishes
- * reaches its regions.
+ * A layout root (FR18): a With Banner shell at the page root (`host: root`)
+ * or placed in a padded Card that clips overflow, as a docs example card
+ * does (`card`), in an outer Layout's content area (`layout`), or in a
+ * Section with explicit padding (`section`). It lays out the same in each:
+ * nothing an ancestor Layout, Card or Section publishes reaches its regions.
  */
-export const InsideLayoutHosts: Story = {
-  render: () => {
-    const shell = (testId: string) => (
+type LayoutHost = 'root' | 'card' | 'layout' | 'section';
+
+export const InsideLayoutHosts: StoryObj<{host: LayoutHost}> = {
+  args: {host: 'card'},
+  argTypes: {
+    host: {
+      control: 'select',
+      options: ['root', 'card', 'layout', 'section'],
+      type: {name: 'string'},
+    },
+  },
+  render: ({host}) => {
+    const shell = (
       <AppShell
-        data-testid={testId}
+        data-testid="shell"
         contentPadding={6}
         style={{height: 420}}
         topNav={<AppTopNav />}
@@ -875,20 +883,26 @@ export const InsideLayoutHosts: Story = {
         <MockContent />
       </AppShell>
     );
-    return (
-      <VStack gap={6}>
-        {shell('shell-root')}
-        <Card padding={3} style={{overflow: 'hidden'}}>
-          {shell('shell-in-card')}
-        </Card>
-        <Layout
-          padding={4}
-          header={<Text type="body">Outer layout header</Text>}
-          content={shell('shell-in-layout')}
-        />
-        <Section padding={6}>{shell('shell-in-section')}</Section>
-      </VStack>
-    );
+    switch (host) {
+      case 'card':
+        return (
+          <Card padding={3} style={{overflow: 'hidden'}}>
+            {shell}
+          </Card>
+        );
+      case 'layout':
+        return (
+          <Layout
+            padding={4}
+            header={<Text type="body">Outer layout header</Text>}
+            content={shell}
+          />
+        );
+      case 'section':
+        return <Section padding={6}>{shell}</Section>;
+      default:
+        return shell;
+    }
   },
 };
 

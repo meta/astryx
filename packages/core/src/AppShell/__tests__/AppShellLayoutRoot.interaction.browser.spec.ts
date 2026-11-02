@@ -2,9 +2,9 @@
 
 /**
  * @file AppShellLayoutRoot.interaction.browser.spec.ts
- * @input The `Core/AppShell` Inside Layout Hosts story in a built Storybook:
- *   one shell at the page root, the same shell in a padded Card that clips
- *   overflow, in an outer Layout's content area, and in a Section with
+ * @input The `Core/AppShell` Inside Layout Hosts story in a built Storybook,
+ *   its `host` arg placing one shell at the page root, in a padded Card that
+ *   clips overflow, in an outer Layout's content area, or in a Section with
  *   explicit padding.
  * @output Real-browser geometry evidence for `component:AppShell` FR18: inside
  *   a padded Card, a Layout or a Section, the shell's internal Layout stays inside its
@@ -40,16 +40,20 @@ interface ShellGeometry {
 }
 
 /** Offsets from the shell's root of its regions, and its Layout's overhang. */
-async function measure(page: Page, testId: string): Promise<ShellGeometry> {
-  return page.evaluate(id => {
-    const shell = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+async function measure(page: Page, host: string): Promise<ShellGeometry> {
+  await page.goto(
+    `${storybook?.origin}/iframe.html?id=${STORY}&viewMode=story&args=host:${host}`,
+  );
+  await expect(page.getByTestId('shell')).toBeVisible();
+  return page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>('[data-testid="shell"]');
     if (shell == null) {
-      throw new Error(`no shell ${id}`);
+      throw new Error('no shell');
     }
     const root = shell.getBoundingClientRect();
     const layout = shell.querySelector<HTMLElement>('.astryx-layout');
     if (layout == null) {
-      throw new Error(`no layout in ${id}`);
+      throw new Error('no layout in the shell');
     }
     const inner = layout.getBoundingClientRect();
     const offset = (element: Element | null) => {
@@ -72,10 +76,10 @@ async function measure(page: Page, testId: string): Promise<ShellGeometry> {
       offsets: {
         logo: offset(shell.querySelector('.astryx-nav-icon')),
         side: offset(shell.querySelector('.astryx-side-nav')),
-        main: offset(shell.querySelector('main')),
+        main: offset(shell.querySelector('[role="main"]')),
       },
     };
-  }, testId);
+  });
 }
 
 for (const viewport of [
@@ -86,12 +90,7 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await page.goto(
-      `${storybook?.origin}/iframe.html?id=${STORY}&viewMode=story`,
-    );
-    await expect(page.getByTestId('shell-in-layout')).toBeVisible();
-
-    const atRoot = await measure(page, 'shell-root');
+    const atRoot = await measure(page, 'root');
     expect(atRoot.overhang, 'page root').toEqual({
       left: 0,
       top: 0,
