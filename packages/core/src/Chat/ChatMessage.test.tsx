@@ -392,12 +392,14 @@ describe('ChatMessage compiled avatar rule', () => {
   it('compiles no sibling-relative :has() and judges the name from the article', () => {
     const rules = compiledSelectors();
     expect(rules.filter(rule => rule.selector.includes(':has(~'))).toEqual([]);
-    const avatarSpacing = rules.filter(
+    // The article sets the avatar offset from its own :has(), and the
+    // avatar wrapper reads it.
+    const offset = rules.filter(
       rule =>
         rule.selector.includes(':has([data-chat-name])') &&
-        // StyleX emits marginBlockStart as margin-top.
-        /margin-(block-start|top):var\(--spacing-5\)/.test(rule.declaration),
+        rule.declaration.includes('var(--spacing-5)'),
     );
-    expect(avatarSpacing).toHaveLength(1);
+    expect(offset).toHaveLength(1);
+    expect(offset[0].selector).not.toContain(' ');
   });
 });
