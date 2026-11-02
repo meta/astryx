@@ -406,9 +406,7 @@ export function useTriggerMenu(
   const outsidePress = useOutsidePress();
   const popover = usePopover({
     // A text input cannot be an invoker, so native light dismiss would count
-    // a press in the editor as outside and close the menu. The menu is a
-    // manual popover; a press that starts and ends outside the editor and the
-    // menu closes it (architecture:layer-runtime).
+    // a press in the editor as outside and close the menu.
     onShow: () => {
       const editable = editableRef.current;
       if (editable == null) {
