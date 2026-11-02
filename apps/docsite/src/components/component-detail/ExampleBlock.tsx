@@ -83,10 +83,8 @@ function LivePreview({
         justifyContent: 'center',
       }}
       {...previewNavigationProps}>
-      {/* The Card's padding is the example's only inline frame, so the
-          example lines up with the title above it; the block spacing matches
-          that padding and separates the example from the title and the tabs. */}
-      <div style={{minWidth: 'fit-content', paddingBlock: 'var(--spacing-3)'}}>
+      {/* No padding here: the Card's padding is the example's only frame. */}
+      <div style={{minWidth: 'fit-content'}}>
         <Component />
       </div>
     </div>
@@ -105,16 +103,22 @@ export function ExampleBlock({entry, componentName}: ExampleBlockProps) {
     <ExampleAnchor id={entry.anchorId}>
       <ComponentPreviewTheme>
         <Card padding={3}>
-          <Text type="body" weight="medium">
-            {entry.name}
-          </Text>
-
-          <LivePreview entry={entry} componentName={componentName} />
-
+          {/* The card's layout gap separates the title from the example, and
+              the tabs' divider separates the example from the tabs; nothing
+              pads the example itself. */}
+          <VStack gap={3}>
+            <Text type="body" weight="medium">
+              {entry.name}
+            </Text>
+            <LivePreview entry={entry} componentName={componentName} />
+          </VStack>
           <Section variant="muted" padding={1} dividers={['top']}>
             <HStack
               gap={1}
-              style={{justifyContent: 'space-between', alignItems: 'center'}}>
+              style={{
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}>
               <TabList value={tab} onChange={setTab} size="sm">
                 <Tab value="description" label="Description" />
                 <Tab value="code" label="Code" />
@@ -132,7 +136,10 @@ export function ExampleBlock({entry, componentName}: ExampleBlockProps) {
                   // for analytics; the href handles navigation natively.
                   href={buildPlaygroundHref(entry.source)}
                   onClick={() => {
-                    trackOpenPlayground({page: 'components', item: entry.name});
+                    trackOpenPlayground({
+                      page: 'components',
+                      item: entry.name,
+                    });
                   }}
                 />
               )}
