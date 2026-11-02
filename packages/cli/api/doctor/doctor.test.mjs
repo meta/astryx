@@ -1666,19 +1666,21 @@ describe('integration-core-range: each loaded integration supports the installed
   };
   const theme = (range, name = '@acme/theme') =>
     ({name, __packageDir: packageDir({name, version: '0.2.0', peerDependencies: {'@astryxdesign/core': range}})});
+  /** An installed Core at `version`. @param {string} version */
+  const core = version => packageDir({name: '@astryxdesign/core', version});
 
   it('is left out when no loaded integration declares a Core range', () => {
     const plain = {name: '@acme/plain', __packageDir: packageDir({name: '@acme/plain', version: '1.0.0'})};
-    expect(checkIntegrationCoreRange({projectCore: '0.7.4', integrations: [plain]})).toBeNull();
+    expect(checkIntegrationCoreRange({coreDir: core('0.7.4'), integrations: [plain]})).toBeNull();
   });
 
-  it('is left out when the project Core is unknown', () => {
-    expect(checkIntegrationCoreRange({projectCore: null, integrations: [theme('>=0.6.3 <0.7.0')]})).toBeNull();
+  it('is left out when Core is not installed', () => {
+    expect(checkIntegrationCoreRange({coreDir: null, integrations: [theme('>=0.6.3 <0.7.0')]})).toBeNull();
   });
 
   it('passes and names the packages when every range includes the Core', () => {
     expect(
-      checkIntegrationCoreRange({projectCore: '0.7.4', integrations: [theme('>=0.7.0 <0.8.0')]}),
+      checkIntegrationCoreRange({coreDir: core('0.7.4'), integrations: [theme('>=0.7.0 <0.8.0')]}),
     ).toEqual({
       id: 'integration-core-range',
       label: 'Integrations support the installed Core',
@@ -1689,7 +1691,7 @@ describe('integration-core-range: each loaded integration supports the installed
 
   it('warns, naming the package, its range and the installed Core, when a range excludes it', () => {
     const check = checkIntegrationCoreRange({
-      projectCore: '0.7.4',
+      coreDir: core('0.7.4'),
       integrations: [theme('>=0.6.3 <0.7.0'), theme('^0.7.1', '@acme/ok')],
     });
     expect(check).toMatchObject({id: 'integration-core-range', status: 'warn'});
@@ -1701,7 +1703,26 @@ describe('integration-core-range: each loaded integration supports the installed
 
   it('skips a package that failed to load: configured-integrations reports it', () => {
     const broken = {...theme('>=0.6.3 <0.7.0'), __loadError: new Error('boom')};
-    expect(checkIntegrationCoreRange({projectCore: '0.7.4', integrations: [broken]})).toBeNull();
+    expect(checkIntegrationCoreRange({coreDir: core('0.7.4'), integrations: [broken]})).toBeNull();
+  });
+
+  it('leaves an added theme package to theme-core-peers, which applies the same rule', () => {
+    const check = checkIntegrationCoreRange({
+      coreDir: core('0.7.4'),
+      addedThemePackages: ['@acme/theme'],
+      integrations: [theme('>=0.6.3 <0.7.0'), theme('^0.7.1', '@acme/ok')],
+    });
+    expect(check).toMatchObject({
+      status: 'pass',
+      message: '1 loaded integration supports @astryxdesign/core 0.7.4 (@acme/ok).',
+    });
+    expect(
+      checkIntegrationCoreRange({
+        coreDir: core('0.7.4'),
+        addedThemePackages: ['@acme/theme'],
+        integrations: [theme('>=0.6.3 <0.7.0')],
+      }),
+    ).toBeNull();
   });
 
   it(
