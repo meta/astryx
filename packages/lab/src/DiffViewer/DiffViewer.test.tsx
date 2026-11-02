@@ -743,6 +743,20 @@ describe('DiffViewer', () => {
       expect(container.querySelector('[data-diff="removed"]')).toBeNull();
     });
 
+    it('keeps a block folded when its annotations render nothing', () => {
+      render(
+        <DiffViewer
+          file={REPLACED}
+          renderLineAnnotation={ref => (ref.side === 'old' ? '' : false)}
+        />,
+      );
+      expect(
+        screen
+          .getByRole('button', {name: 'Show full diff'})
+          .getAttribute('aria-expanded'),
+      ).toBe('false');
+    });
+
     it('shows no fold for an ordinary diff', () => {
       render(<DiffViewer file={FILE} />);
       expect(screen.queryByRole('button', {name: 'Show full diff'})).toBeNull();

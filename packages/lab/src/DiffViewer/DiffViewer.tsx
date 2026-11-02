@@ -84,6 +84,7 @@ import {
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {
   focusOutlineProps,
+  isRenderable,
   mergeProps,
   rtlStyles,
   themeProps,
@@ -345,6 +346,19 @@ type SplitRow =
   | FoldRow;
 
 /**
+ * The caller's annotation for a line, or null when it renders nothing. An
+ * annotation row is drawn only for a note that renders, so
+ * `hasThread && <Thread />` adds no empty row.
+ */
+function lineAnnotation(
+  renderLineAnnotation: (ref: DiffViewerLineRef) => ReactNode,
+  ref: DiffViewerLineRef,
+): ReactNode {
+  const note = renderLineAnnotation(ref);
+  return isRenderable(note) ? note : null;
+}
+
+/**
  * Replaced blocks with an annotation on one of their changed lines. Such a
  * block starts open, so a review comment is never hidden behind the fold.
  */
@@ -362,11 +376,7 @@ function findAnnotatedBlocks(
     }
     const isAnnotated = hunk.lines.some(line => {
       const ref = line.kind === 'context' ? null : lineRef(line, hunkIndex);
-      if (ref == null) {
-        return false;
-      }
-      const note = renderLineAnnotation(ref);
-      return note != null && typeof note !== 'boolean';
+      return ref != null && lineAnnotation(renderLineAnnotation, ref) != null;
     });
     if (isAnnotated) {
       blocks.add(hunkIndex);
@@ -1539,15 +1549,10 @@ export function DiffViewer({
     </span>
   );
 
-  // `null`, `undefined` and booleans render nothing in React, so they draw no
-  // row either; that keeps `hasThread && <Thread />` from adding empty rows.
-  const annotationFor = (cell: LineCell | null): ReactNode => {
-    if (cell == null || renderLineAnnotation == null) {
-      return null;
-    }
-    const note = renderLineAnnotation(cell.ref);
-    return typeof note === 'boolean' ? null : note;
-  };
+  const annotationFor = (cell: LineCell | null): ReactNode =>
+    cell == null || renderLineAnnotation == null
+      ? null
+      : lineAnnotation(renderLineAnnotation, cell.ref);
 
   // Name every column so a screen reader moving across a row hears which
   // number is which (and, in split view, which side's code it is in).
