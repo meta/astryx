@@ -28,12 +28,12 @@ import {
   type PressTracker,
   type PressTrackerOptions,
 } from './PressTracker';
+import {useAttachment} from '../hooks/useAttachment';
 import {
   isSyncingGestures,
   syncingGestures,
-  useAttachment,
   useIsUnmountedRef,
-} from './useAttachment';
+} from './gestureSync';
 
 export type UsePressTrackerOptions = Omit<
   PressTrackerOptions,

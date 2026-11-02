@@ -10,7 +10,8 @@
  *   ShadCN's own scratch directories stay inside each consumer, which is
  *   removed afterwards.
  * @input A generated preview or hidden production registry under
- *   apps/docsite/public/shadcn.
+ *   apps/docsite/public/shadcn, and `--mode typescript|javascript` to verify
+ *   one consumer mode (both by default; CI runs each in its own leg).
  * @output A clean-consumer proof for every canonical item and alias route.
  * @position Required CI contract for the public ShadCN compatibility surface.
  */
@@ -56,6 +57,17 @@ const USE_PUBLISHED_PACKAGES =
   process.env.ASTRYX_SHADCN_USE_PUBLISHED_PACKAGES === '1';
 const MAX_COMMAND_OUTPUT = 16 * 1024 * 1024;
 const COPIED_KINDS = new Set(['showcase', 'example', 'block', 'page']);
+const MODES = {typescript: [true], javascript: [false], all: [true, false]};
+
+/** The consumer modes to verify, as `tsx` flags: `--mode <name>`, or both. */
+export function selectedModes(argv) {
+  const index = argv.indexOf('--mode');
+  const name = index === -1 ? 'all' : argv[index + 1];
+  if (!Object.hasOwn(MODES, name ?? '')) {
+    fail(`unknown --mode ${String(name)}; use typescript, javascript or all`);
+  }
+  return MODES[name];
+}
 
 function fail(message) {
   throw new Error(`ShadCN registry CI: ${message}`);
@@ -630,11 +642,12 @@ async function compileSources(project, sources) {
 
 async function main() {
   const startedAt = Date.now();
+  const modes = selectedModes(process.argv.slice(2));
   const catalog = loadCatalog();
   const packageDirs = USE_PUBLISHED_PACKAGES ? null : localPackageDirs();
   const results = [];
 
-  for (const tsx of [true, false]) {
+  for (const tsx of modes) {
     const mode = tsx ? 'TypeScript' : 'JavaScript';
     const project = fs.mkdtempSync(
       path.join(os.tmpdir(), `astryx-shadcn-registry-${tsx ? 'tsx' : 'jsx'}-`),
@@ -672,7 +685,13 @@ async function main() {
   );
 }
 
-main().catch(error => {
-  console.error(error);
-  process.exitCode = 1;
-});
+// Run as a script; a test imports selectedModes without running it.
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
