@@ -788,6 +788,7 @@
     "/templates/useThemeHookUsage/",
     "/templates/useToastHookUsage/",
     "/templates/useTranslatorHookUsage/",
+    "/templates/useTypeaheadHookUsage/",
     "/templates/work-item-detail/",
     "/themes/",
     "/tools/"

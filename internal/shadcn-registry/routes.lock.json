@@ -3745,6 +3745,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
+      "aliases": []
+    },
+    {
       "name": "example-v-stack-basic",
       "path": "examples/v-stack/basic",
       "aliases": []
