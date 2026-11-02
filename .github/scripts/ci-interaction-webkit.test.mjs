@@ -163,6 +163,7 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
       'packages/core/src/motion/__tests__/animator.interaction',
+      'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
     ];
     for (const target of targets) {
@@ -174,6 +175,15 @@ describe('WebKit interaction proof routing', () => {
     // SideNav) stay with the Chromium proofs.
     expect(run).not.toContain('animatedLayoutAdopters');
     expect(run).not.toMatch(/motion\/ /);
+    // Carousel paging renders its Storybook story, so it stays there too, and
+    // its files start no WebKit run.
+    expect(run).not.toContain('CarouselPaging');
+    for (const file of [
+      'packages/core/src/Carousel/useCarouselPaging.ts',
+      'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
+    ]) {
+      expect(inScope(file), file).toBe(false);
+    }
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }
@@ -228,8 +238,6 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/usePager.ts',
       'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
       'packages/core/src/hooks/__tests__/pagerBundle.ts',
-      'packages/core/src/Carousel/useCarouselPaging.ts',
-      'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
       'internal/interaction-harness/src/webInput.ts',
       'playwright.interaction.config.ts',
       // Shared setup, as pr-interaction keeps (spec:AST-030 FR13): a
