@@ -22,10 +22,10 @@
 //   refcounted. A lock on only the element under the finger let a long press
 //   select a word beside it. WebKit makes every input selectable, so an input
 //   under the finger is locked too.
-//
-// A mouse never takes the lock, so its released behavior stays (AST-017).
 // - Elsewhere, cancelling `selectstart` refuses the selection with no style
 //   write, so nothing repaints.
+//
+// A mouse never takes the lock, so its released behavior stays (AST-017).
 
 import {containsAlongFlatTree} from './flatTree';
 import {isIosWebKit} from './touchQueries';
