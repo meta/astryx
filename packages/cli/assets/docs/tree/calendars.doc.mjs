@@ -11,7 +11,9 @@
 export const docs = {
   type: 'namespace',
   name: 'calendars',
-  title: 'Calendars',
+  // The docsite lists guide pages by title, so this one sorts directly below
+  // Internationalization, the page that links here.
+  title: 'Internationalization: calendars',
   summary:
     'Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, Chinese, and other calendars while values stay Gregorian ISO dates.',
   keywords: [
