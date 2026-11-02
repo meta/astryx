@@ -13,7 +13,8 @@
  * example block. That list is a report too and never fails the run.
  *
  * @input Authored component docs and template descriptors across documented
- *   packages, committed API reports, plus the generated block registry
+ *   packages, committed API reports, plus the generated block and component
+ *   registries
  * @output CI-visible coverage inventory (components and public hooks) and
  *   regression coverage for authored-block admission into the registry
  * @position Build-time docsite documentation-coverage reporting
@@ -30,11 +31,11 @@ import {
   formatCoverageReport,
   resolveTemplatesRoot,
   readReportedHooks,
-  inventoryHookDocNames,
   pairHookExampleCoverage,
   formatHookCoverageReport,
 } from '../lib/exampleCoverage.mjs';
 import {blocks as registeredBlocks} from '../generated/blockRegistry';
+import {components as registeredEntries} from '../generated/componentRegistry';
 import {packages} from '../generated/packageRegistry';
 
 const REPO_ROOT = path.resolve(__dirname, '../../../..');
@@ -123,12 +124,15 @@ describe('example coverage (report-only)', () => {
         continue;
       }
       const hooks = readReportedHooks(fs.readFileSync(reportPath, 'utf8'));
+      // The generator gives a hook page params; other pages get null.
+      const hookDocNames = new Set(
+        (registeredEntries[inventory.packageName] ?? [])
+          .filter(entry => entry.params != null)
+          .map(entry => entry.name),
+      );
       if (hooks.length === 0) {
         continue;
       }
-      const hookDocNames = await inventoryHookDocNames(
-        path.join(inventory.packageDir, 'src'),
-      );
       process.stdout.write(
         formatHookCoverageReport(
           inventory.packageName,

@@ -15,8 +15,10 @@
  * blocks attach to a page via exampleFor regardless of name.
  *
  * It also lists each public hook (a hook in a committed API report) that has
- * no hook doc, or no block that names it in exampleFor/alsoExampleFor. It
- * cannot tell whether a block really demonstrates its hook; review checks that.
+ * no hook doc, or no block that names it in exampleFor/alsoExampleFor. The
+ * caller supplies the hook-doc names from the generated component registry,
+ * so the list matches the hook pages the docsite renders. It cannot tell
+ * whether a block really demonstrates its hook; review checks that.
  *
  * REPORTS, NEVER GATES. Core does not require doc examples to have paired
  * blocks, and integration packages are intentionally no stricter (owner
@@ -335,45 +337,6 @@ export function readReportedHooks(reportText) {
 }
 
 /**
- * Names of the authored hook docs under one component-doc root. A hook doc
- * uses the same test as the docsite generator: a `use` name, `params`, or
- * `returns`. It can be a whole doc file or an entry in a doc's `components`.
- *
- * @param {string} srcDir absolute component-doc root (may not exist)
- * @returns {Promise<Set<string>>}
- */
-export async function inventoryHookDocNames(srcDir) {
-  /** @type {Set<string>} */
-  const names = new Set();
-  for (const file of walk(
-    srcDir,
-    name => name.endsWith('.doc.mjs'),
-    SRC_SKIP_DIRS,
-  )) {
-    try {
-      const {docs} = await import(pathToFileURL(file).href);
-      const entries = [
-        docs,
-        ...(Array.isArray(docs?.components) ? docs.components : []),
-      ];
-      for (const entry of entries) {
-        const isNameOnlyReference =
-          entry !== docs && Object.keys(entry ?? {}).length === 1;
-        if (entry == null || isNameOnlyReference) continue;
-        const isHookDoc =
-          entry.name?.startsWith('use') ||
-          Array.isArray(entry.params) ||
-          Array.isArray(entry.returns);
-        if (isHookDoc) names.add(entry.name);
-      }
-    } catch {
-      // A doc that does not load is reported by the docsite generator.
-    }
-  }
-  return names;
-}
-
-/**
  * @typedef {object} HookCoverage
  * @property {string} hook
  * @property {boolean} hasDoc
@@ -382,7 +345,7 @@ export async function inventoryHookDocNames(srcDir) {
 
 /**
  * @param {string[]} hooks public hook names
- * @param {Set<string>} hookDocNames
+ * @param {Set<string>} hookDocNames names of the hook pages the docsite renders
  * @param {AuthoredBlock[]} blocks
  * @returns {HookCoverage[]}
  */
