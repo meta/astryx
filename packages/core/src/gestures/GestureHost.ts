@@ -400,21 +400,20 @@ function landedOn(
 }
 
 /**
- * How long after its last event a wheel gesture ends, ms: the web reports no
- * wheel phases, so a quiet wheel is a lifted one. Provisional (owner
- * question on `spec:AST-094` FR43).
+ * How long after its last event a pinch or a mouse wheel's notches end, ms:
+ * the web reports no wheel phases, so a quiet wheel is a lifted one
+ * (`spec:AST-094` FR43).
  */
 const WHEEL_END_MS = 100;
 /**
- * How long after its last event a trackpad scroll that a pan follows
- * vertically ends, ms (a sheet's pull): a slow drag's stream pauses longer
- * than WHEEL_END_MS between events. Provisional (owner question on
- * `spec:AST-094` FR43).
+ * How long after its last event a vertical trackpad scroll ends, ms (a
+ * sheet's pull), whoever keeps it: a slow drag's stream pauses longer than
+ * WHEEL_END_MS between events (`spec:AST-094` FR43, DEC-24).
  */
 const WHEEL_FOLLOW_END_V_MS = 180;
 /**
  * The same horizontally, ms (a pager's or a row's swipe), whose slow
- * swipes pause longer still. Provisional (owner question on FR43).
+ * swipes pause longer still (`spec:AST-094` FR43, DEC-24).
  */
 const WHEEL_FOLLOW_END_MS = 220;
 /** A line-mode wheel's line, px, as the platforms scroll it. */
