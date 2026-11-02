@@ -3677,6 +3677,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
       "aliases": []
