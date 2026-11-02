@@ -3725,6 +3725,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
       "name": "example-v-stack-basic",
       "path": "examples/v-stack/basic",
       "aliases": []
