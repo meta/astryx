@@ -200,6 +200,21 @@ const flyoutStyles = stylex.create({
     borderRadius: 'var(--_dropdown-menu-radius)',
     backgroundColor: colorVars['--color-background-popover'],
     boxShadow: shadowVars['--shadow-low'],
+    // Forced colors drops box-shadow, which is this surface's only edge, so it
+    // would run straight into what is under it (WCAG 1.4.11). The border
+    // exists only in forced colors; nothing changes anywhere else.
+    borderWidth: {
+      default: 0,
+      '@media (forced-colors: active)': '1px',
+    },
+    borderStyle: {
+      default: 'none',
+      '@media (forced-colors: active)': 'solid',
+    },
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     opacity: 1,
     transitionProperty: 'opacity',
     transitionDuration: durationVars['--duration-fast'],
