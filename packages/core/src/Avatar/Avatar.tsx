@@ -56,6 +56,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Avatar/Avatar.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -824,7 +825,7 @@ export function Avatar({
           </div>
         )}
       </div>
-      {status && (
+      {isRenderable(status) && (
         <div
           {...stylex.props(
             styles.status,

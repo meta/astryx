@@ -633,7 +633,7 @@ import {isRenderable} from '@astryxdesign/core/utils';
 }
 ```
 
-The rule needs type information (`parserOptions.projectService`) and stops with an error without it, so it is not in the presets. The repository config enforces it in core, where it is an error in strict mode. Other packages read core's types from core's build output, so a core type there is `any` before a build and real after it; the rule would give a different result per build state, so they are out of scope. The guards that predate it are listed in `no-truthy-jsx-guard.baseline.json`, once per guard, and that many stay allowed until they move to `isRenderable`; one more is reported. Regenerate the list with `node internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.mjs` (`--check` verifies it). A guard that is right as written says so with `// eslint-disable-next-line @astryx/no-truthy-jsx-guard -- <reason>`. The rule also provides an ESLint suggestion that wraps the guard in `isRenderable(value)` (add the import manually).
+The rule needs type information (`parserOptions.projectService`) and stops with an error without it, so it is not in the presets. The repository config enforces it in core, where it is an error in strict mode. Other packages read core's types from core's build output, so a core type there is `any` before a build and real after it; the rule would give a different result per build state, so they are out of scope. Core has no baseline: every guard is reported. A guard that is right as written says so with `// eslint-disable-next-line @astryx/no-truthy-jsx-guard -- <reason>`. The rule also provides an ESLint suggestion that wraps the guard in `isRenderable(value)` (add the import manually).
 
 ### `@astryx/focus-outline-keyboard-only`
 

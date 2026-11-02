@@ -102,6 +102,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Tokenizer/Tokenizer.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -1400,7 +1401,7 @@ export function Tokenizer<T extends SearchableItem>({
         controlClassName,
         controlStyle,
       )}>
-      {startIcon && (
+      {isRenderable(startIcon as ReactNode) && (
         <span {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
           {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
         </span>
@@ -1631,7 +1632,7 @@ export function Tokenizer<T extends SearchableItem>({
             controlClassName,
             controlStyle,
           )}>
-          {startIcon && (
+          {isRenderable(startIcon as ReactNode) && (
             <span
               {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
               {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
@@ -1735,7 +1736,7 @@ export function Tokenizer<T extends SearchableItem>({
           )}>
           {isTruncated && (
             <>
-              {startIcon &&
+              {isRenderable(startIcon as ReactNode) &&
                 renderIconSlot(startIcon, {
                   size: 'sm',
                   color: 'secondary',

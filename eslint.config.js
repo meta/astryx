@@ -48,19 +48,6 @@ const internalBarrelBaseline = JSON.parse(
   ),
 );
 
-// Truthiness guards on ReactNode values that existed when
-// `@astryx/no-truthy-jsx-guard` arrived, by repo-relative file, once per
-// guard. The list only shrinks.
-const truthyGuardBaseline = JSON.parse(
-  readFileSync(
-    path.join(
-      import.meta.dirname,
-      'internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.json',
-    ),
-    'utf8',
-  ),
-);
-
 // Private `data-astryx-*` attributes written by hand before
 // `@astryx/no-raw-private-attribute` arrived, by repo-relative file, once per
 // site. The list only shrinks.
@@ -948,8 +935,7 @@ export default defineConfig(
   // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
   // presence is decided by `isRenderable` here too. The rule reads types, so
   // its scope is core, which the type-aware block above parses with the
-  // project service. The guards that predate the rule are listed in the
-  // baseline, once per guard; one more is reported (an error in strict mode).
+  // project service. Every guard is reported (an error in strict mode).
   {
     files: truthyGuardScope.files,
     ignores: truthyGuardScope.ignores,
@@ -957,10 +943,7 @@ export default defineConfig(
       '@astryx': astryxEslintPlugin,
     },
     rules: {
-      '@astryx/no-truthy-jsx-guard': [
-        reactSeverity,
-        {baseline: truthyGuardBaseline, root: import.meta.dirname},
-      ],
+      '@astryx/no-truthy-jsx-guard': reactSeverity,
     },
   },
   // A private `data-astryx-*` attribute is written once, in its owner module
