@@ -30,7 +30,6 @@ import {HoverCard} from '../HoverCard/HoverCard';
 import {IconButton} from '../IconButton/IconButton';
 import {Icon} from '../Icon/Icon';
 import {useClipboard} from '../hooks/useClipboard';
-import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 import {
   colorVars,
@@ -39,6 +38,13 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import type {TimestampTooltipLine} from './tooltipEntries';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Timestamp/TimestampHoverCard.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // The card is a definition list laid out as a grid so cells align into
@@ -117,7 +123,7 @@ const COPY_FEEDBACK_MS = 1500;
  * of this machinery.
  */
 function CopyButton({value}: {value: string}) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {copy, isCopied: copied} = useClipboard({
     announce: t('@astryx.timestamp.copied'),
     resetAfterMs: COPY_FEEDBACK_MS,

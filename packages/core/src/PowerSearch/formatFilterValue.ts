@@ -14,6 +14,10 @@ import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
 import {truncateCharacters} from '../utils/characters';
+import {registerEnglishFallback} from '../i18n/englishFallback';
+import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
+
+registerEnglishFallback(english);
 
 function truncate(str: string, maxLength: number): string {
   return truncateCharacters(str, maxLength);

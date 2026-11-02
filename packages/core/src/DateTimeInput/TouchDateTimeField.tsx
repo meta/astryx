@@ -34,6 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints, type ISODateString} from '../Calendar';
@@ -50,7 +51,6 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useTranslator, InternationalizationContext} from '../i18n';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -108,6 +108,14 @@ import {
   monthIndexOf,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import {InternationalizationContext} from '../i18n/InternationalizationContext';
+import english from '../i18n/generated-english/DateTimeInput/TouchDateTimeField.generated';
+
+registerEnglishFallback(english);
 
 function splitDateTime(dt: ISODateTimeString | undefined): {
   date: ISODateString | undefined;
@@ -159,17 +167,6 @@ const sizeStyles = stylex.create({
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
 const styles = stylex.create({
-  // Same as DateTimeInput's: the focus ring for a focused disabled field.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -503,7 +500,7 @@ export function TouchDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);
   const placeholder =
@@ -1346,7 +1343,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1437,7 +1434,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&

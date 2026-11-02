@@ -27,10 +27,16 @@ import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
-import {useTranslator} from '../i18n';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import type {ItemAlign} from '../Item';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CheckboxList/CheckboxListItem.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -209,7 +215,7 @@ export function CheckboxListItem({
   align,
   ...restProps
 }: CheckboxListItemProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ctx = use(CheckboxListContext);
 
   if (ctx && ctx.value !== undefined && value === undefined) {

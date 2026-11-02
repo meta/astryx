@@ -110,8 +110,14 @@ import {
   getInteractionModality,
   useInteractionModalityTracking,
 } from '../utils/interactionModality';
-import {useTranslator} from '../i18n';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DropdownMenu/DropdownMenu.generated';
+
+registerEnglishFallback(english);
 
 // The menu's own lower cap on the placement axis; the viewport cap underneath
 // it is the layer runtime's (spec:AST-059 FR3).
@@ -548,7 +554,7 @@ function DropdownMenuBottomSheet({
   'data-testid': testId,
   ...rest
 }: DropdownMenuDataProps & {presentation: 'bottom-sheet'}) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
   const backLabel = t('@astryx.dropdownMenu.back');
   const buttonRef = useRef<HTMLElement>(null);
@@ -858,7 +864,7 @@ function DropdownMenuPopover({
   'data-testid': testId,
   ...props
 }: DropdownMenuProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const button = buttonFromProps ?? {label: t(DEFAULT_BUTTON_I18N_KEY)};
 
   const items = ('items' in props ? props.items : undefined) ?? [];

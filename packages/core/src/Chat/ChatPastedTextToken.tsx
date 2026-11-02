@@ -27,8 +27,15 @@ import {
 import {Badge} from '../Badge';
 import {Button} from '../Button';
 import {HoverCard} from '../HoverCard';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
 import {useTapStop} from '../Layer/useTouchTrigger';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatPastedTextToken.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -93,7 +100,7 @@ export function ChatPastedTextToken({
   text,
   onExpand,
 }: ChatPastedTextTokenProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = formatLabel(text, t);
   // A tap on the token, by finger or pen, asks for its preview, so it stops
   // there: cancelling the mouse press the browser makes of it keeps the

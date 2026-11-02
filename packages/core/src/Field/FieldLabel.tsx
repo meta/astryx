@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, useTranslator, FormLayoutContext
+ * @input Uses React, Icon, IconType, useComponentTranslator, FormLayoutContext
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -32,10 +32,16 @@ import {Icon, renderIconSlot} from '../Icon/Icon';
 import type {IconType} from '../Icon';
 import {Tooltip} from '../Tooltip/Tooltip';
 import {useTapStop} from '../Layer/useTouchTrigger';
-import {useTranslator} from '../i18n/useTranslator';
 import {themeProps} from '../utils/themeProps';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Field/FieldLabel.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // The label and its description read as a single block, with no space
@@ -213,7 +219,7 @@ export function FieldLabel({
   ref,
   ...rest
 }: FieldLabelProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {defaultOptionality} = use(FormLayoutContext);
 
   // A form-level `defaultOptionality` means "only the exception is marked": a

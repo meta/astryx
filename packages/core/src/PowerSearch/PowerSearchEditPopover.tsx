@@ -19,7 +19,6 @@ import {Selector} from '../Selector';
 import {HStack, VStack} from '../Stack';
 import {Icon} from '../Icon';
 import {TreeList, type TreeListItemData} from '../TreeList';
-import {useTranslator} from '../i18n';
 import {isImeKeyEvent} from '../utils/ime';
 import {spacingVars, typeScaleVars} from '../theme/tokens.stylex';
 import {
@@ -35,6 +34,13 @@ import type {
   OperatorValue,
   PowerSearchOperator,
 } from './types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/PowerSearch/PowerSearchEditPopover.generated';
+
+registerEnglishFallback(english);
 
 // Below the popover layer's 400px floor (see popoverLayerStyles in
 // PowerSearch.tsx) the chip rows collapse from one line to wrapped lines.
@@ -264,7 +270,7 @@ function NestedSubFilterRow({
   maxMenuItems,
   isReadOnly,
 }: NestedSubFilterRowProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const fieldOptions = useMemo(
     () =>
       config.getVisibleFields().map(field => ({
@@ -397,7 +403,7 @@ function NestedEditor({
   maxMenuItems,
   isReadOnly,
 }: NestedEditorProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const [subFilters, setSubFilters] = useState<EditablePartialFilter[]>(() => {
     if (partialFilter.value && partialFilter.value.type === 'nested') {
       return partialFilter.value.value.map(f => initEditableFilter(config, f));
@@ -661,7 +667,7 @@ export function PowerSearchEditPopover({
   maxMenuItems,
   isReadOnly = false,
 }: PowerSearchEditPopoverProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const saveButtonLabel =
     saveButtonLabelFromProps ?? t('@astryx.powersearch.editor.apply');
   const [partialFilter, setPartialFilter] =

@@ -273,13 +273,16 @@ describe('a deferred push', () => {
       expect([ci.jobs[id].needs].flat(), id).toContain('heavy-ci');
   });
 
+  // A Lab-only change runs only fast work, so it defers nothing either
+  // (spec:AST-030 FR26).
   it.each([
-    ['true', 'false', ''],
-    ['false', 'true', HEAVY_DEFERRED_MESSAGE],
-    ['', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['true', 'false', 'false', ''],
+    ['false', 'true', 'false', ''],
+    ['false', 'false', 'true', HEAVY_DEFERRED_MESSAGE],
+    ['', '', 'true', HEAVY_DEFERRED_MESSAGE],
   ])(
-    'defers unless the change is spec-only (spec_only=%s → deferred=%s)',
-    (specOnly, deferred, summary) => {
+    'defers unless the change is spec-only or Lab-only (spec_only=%s, lab_only=%s → deferred=%s)',
+    (specOnly, labOnly, deferred, summary) => {
       const step = ci.jobs['heavy-ci'].steps.find(item => item.id === 'decide');
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'heavy-ci-'));
       try {
@@ -294,6 +297,7 @@ describe('a deferred push', () => {
             env: {
               ...process.env,
               SPEC_ONLY: specOnly,
+              LAB_ONLY: labOnly,
               GITHUB_OUTPUT: output,
               GITHUB_STEP_SUMMARY: stepSummary,
               GITHUB_RUN_ID: '7',
