@@ -1151,5 +1151,20 @@
       "overlay": "#storybook-root .astryx-stack > .astryx-stack:first-child",
       "overlayRoot": "#storybook-root .astryx-stack:has(> .astryx-stack)"
     }
+  },
+  {
+    "component": "CheckboxIndicator",
+    "storyId": "core-indicator--all-states",
+    "dims": []
+  },
+  {
+    "component": "CheckIndicator",
+    "storyId": "core-indicator--all-states",
+    "dims": []
+  },
+  {
+    "component": "RadioIndicator",
+    "storyId": "core-indicator--all-states",
+    "dims": []
   }
 ]
