@@ -17,6 +17,7 @@
  */
 
 import {useCallback, useRef, type ReactElement, type ReactNode} from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -227,7 +228,26 @@ export interface HoverCardProps extends Pick<
  * Check if children are text-only (no React elements)
  */
 function isTextOnly(children: ReactNode): boolean {
-  return typeof children === 'string' || typeof children === 'number';
+  if (typeof children === 'string' || typeof children === 'number') {
+    return true;
+  }
+  // Text written around an expression, such as `Edited {when}`, reaches React
+  // as several strings. Holes that render nothing do not change that; one
+  // element does.
+  if (!Array.isArray(children)) {
+    return false;
+  }
+  let hasText = false;
+  for (const child of children.flat(Infinity) as ReactNode[]) {
+    if (!isRenderable(child)) {
+      continue;
+    }
+    if (typeof child !== 'string' && typeof child !== 'number') {
+      return false;
+    }
+    hasText = true;
+  }
+  return hasText;
 }
 
 /**

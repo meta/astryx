@@ -747,6 +747,52 @@ describe('HoverCard', () => {
     });
   });
 
+  describe('text written around an expression', () => {
+    it('wraps several text children in one focusable trigger', async () => {
+      const when = '2 hours ago';
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Edited by Kai</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          Edited {when}
+        </HoverCard>,
+      );
+      const trigger = screen.getByText('Edited 2 hours ago');
+      expect(trigger.tagName).toBe('SPAN');
+      expect(trigger).toHaveAttribute('tabindex', '0');
+      expect(trigger).toHaveAttribute('aria-describedby');
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+    });
+
+    it('ignores holes that render nothing', () => {
+      const isDraft = false;
+      render(
+        <HoverCard label="History" content={<span>Card</span>}>
+          Edited {isDraft && 'draft'} {null}today
+        </HoverCard>,
+      );
+      expect(screen.getByText(/Edited/)).toHaveAttribute(
+        'aria-haspopup',
+        'dialog',
+      );
+    });
+
+    it('still attaches to the first element when one is present', () => {
+      render(
+        <HoverCard label="History" content={<span>Card</span>}>
+          Edited <time dateTime="2026-11-02">today</time>
+        </HoverCard>,
+      );
+      expect(screen.getByText('today')).toHaveAttribute(
+        'aria-haspopup',
+        'dialog',
+      );
+    });
+  });
+
   describe('Escape key behavior', () => {
     it('hides hover card when Escape is pressed on trigger', async () => {
       const onOpenChange = vi.fn();
