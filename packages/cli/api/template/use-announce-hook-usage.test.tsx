@@ -9,7 +9,7 @@
 import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import UseAnnounceHookUsage from './useAnnounceHookUsage';
+import UseAnnounceHookUsage from '../../assets/templates/blocks/components/Hooks/useAnnounceHookUsage';
 
 (globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean}).IS_REACT_ACT_ENVIRONMENT =
   true;
