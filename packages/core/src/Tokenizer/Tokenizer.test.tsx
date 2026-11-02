@@ -1288,7 +1288,7 @@ describe('Tokenizer', () => {
       maxEntries?: number;
       source?: () => SearchSource;
       steps: string[];
-      expanded: boolean;
+      expanded?: boolean;
       listed?: string[];
       notListed?: string[];
     };
@@ -1322,10 +1322,11 @@ describe('Tokenizer', () => {
         expanded: false,
       },
       {
-        situation: 'token picked from the list (inside add): closes, no reopen',
+        // Whether a pick keeps the list open is FR14's, not this table's.
+        situation: 'token picked from the list (inside add): not offered again',
         initial: [users[0]],
         steps: ['open', 'listed:Charlie', 'pick:Charlie'],
-        expanded: false,
+        notListed: ['Charlie'],
       },
       {
         situation: 'focus list open, slow reload: new token never listed',
@@ -1456,10 +1457,12 @@ describe('Tokenizer', () => {
         await new Promise(resolve => setTimeout(resolve, 300));
       });
 
-      expect(input).toHaveAttribute(
-        'aria-expanded',
-        row.expanded ? 'true' : 'false',
-      );
+      if (row.expanded != null) {
+        expect(input).toHaveAttribute(
+          'aria-expanded',
+          row.expanded ? 'true' : 'false',
+        );
+      }
       for (const name of row.listed ?? []) {
         expect(option(name)).toBeInTheDocument();
       }
