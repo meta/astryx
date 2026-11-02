@@ -15,9 +15,9 @@
 // The window's capture phase runs before document listeners, so an app's
 // `stopPropagation` there does not hide input from press feedback or the
 // gesture host. A claiming recognizer still needs the touch to reach its
-// element. When a type's listener is added again (a passivity switch, or a
-// new first subscriber), it goes after the app window-capture listeners
-// added meanwhile, and those then run first. Document events and element
+// element. A passivity switch or a new first subscriber adds a type's
+// listener again. App window-capture listeners added meanwhile then run
+// before it. Document events and element
 // `scroll` reach the window's capture phase too, and so does an element's
 // `blur` or `focus`. A subscriber for the window's own event checks
 // `event.target`.

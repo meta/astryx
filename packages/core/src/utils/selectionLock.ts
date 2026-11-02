@@ -19,9 +19,11 @@
 // way to refuse differs by engine:
 // - iOS WebKit fires no `selectstart` for a long press, so only
 //   `user-select` refuses it. The lock covers every held element, inline and
-//   refcounted, because a lock on only the element under the finger let a
-//   long press select a word beside it. WebKit makes every input selectable,
-//   so an input under the finger is locked too.
+//   refcounted. A lock on only the element under the finger let a long press
+//   select a word beside it. WebKit makes every input selectable, so an input
+//   under the finger is locked too.
+//
+// A mouse never takes the lock, so its released behavior stays (AST-017).
 // - Elsewhere, cancelling `selectstart` refuses the selection with no style
 //   write, so nothing repaints.
 
@@ -46,12 +48,10 @@ const TEXT_ENTRY_TYPES = new Set([
   'number',
 ]);
 
-// A mouse keeps its released behavior (AST-017).
 /**
  * Whether a contact of this pointer kind takes the lock: a finger or a pen,
  * under any primary pointer, a laptop's touchscreen and a desktop pen tablet
- * included, since a pen's hold acts as a finger's. A mouse never does: it
- * keeps its released behavior.
+ * included, since a pen's hold acts as a finger's.
  */
 export function locksSelectionFor(pointerType: string): boolean {
   return pointerType !== 'mouse';

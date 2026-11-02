@@ -18,8 +18,8 @@
 // disarms on that click, at the next `pointerdown`, or after
 // {@link CLICK_GUARD_WINDOW_MS}. After the menu press model arms it, its click
 // listener stays, so it keeps its place ahead of window listeners that the
-// page adds later (AST-057, AST-094). An arm from the gesture host lasts only
-// while the guard is armed.
+// page adds later (AST-057, AST-094). If only the gesture host arms it, the
+// click listener stays only while the guard is armed.
 //
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the

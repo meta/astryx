@@ -34,12 +34,13 @@
 // Space-key press loses `:active` too, and the controller writes the
 // attribute at once.
 //
-// Both arms paint through `--astryx-press-alpha`, a registered `<number>`
-// from 0 to 1. Gradients do not interpolate, but a registered number does.
+// The `on` and `fading` arms paint through `--astryx-press-alpha`, a
+// registered `<number>` from 0 to 1. Gradients do not interpolate, but a registered number does.
 // The touch paint is the pressed token at that strength, painted as a
 // background image, so a composer's color transition cannot fade the onset
 // in. `on` sets the strength to 1 on the first frame. `fading` animates it
-// from 1 to 0, not to the hover strength, because a finger has no hover.
+// from 1 to 0, not to the hover strength, because a finger has no hover. The
+// theme's motion tempo scales the release clock (AST-108).
 //
 // The release is an animation, not a transition. Composers own their
 // `transition-*` longhands, and StyleX is last-wins per property. A
@@ -82,7 +83,6 @@ export const pressConsts = stylex.defineConsts({
   releaseMs: 200,
 });
 
-// The theme's motion tempo scales the release clock (AST-108).
 /**
  * The release's clock as CSS, scaled by the theme's `--_astryx-motion-tempo`
  * up to 1.5, its maximum. The controller's timer reads the same property.

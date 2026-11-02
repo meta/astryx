@@ -22,9 +22,10 @@
 //
 // Where the primary pointer is fine, the controller ignores the mouse and the
 // keyboard, and CSS `:active` keeps their press. Under a coarse primary
-// pointer the CSS drops `:active`, so the controller paints every press: a
-// finger's after the delay, and a mouse, trackpad or Space press at once. The
-// controller reads the same query as the stylesheet, so they agree.
+// pointer the CSS drops `:active`, so the controller paints every press. A
+// finger's press paints after the delay. A mouse, trackpad or Space press
+// paints at once. The controller reads the same query as the stylesheet, so
+// they agree.
 //
 // A surface's hold does nothing, so it keeps the browser's long-press text
 // selection (AST-094). Only an element whose hold does something suppresses
