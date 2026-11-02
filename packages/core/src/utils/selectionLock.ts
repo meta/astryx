@@ -3,33 +3,27 @@
 /**
  * @file selectionLock.ts
  * @input The elements a held touch contact presses, and the touch's target
- * @output Exports lockSelection: no text selection and no touch callout
- *   start under the held finger until the returned release runs; and
- *   locksSelectionFor: which contacts take it
- * @position Brought by the recognizers whose hold does something (a long
- *   press, and a recognizer created with `selectionLock: lockSelection`); the
- *   gesture host calls it and never imports it (`spec:AST-094` FR41)
- *
- * A hold that does something never starts a selection or the callout under
- * the finger, a link's menu and preview included (`spec:AST-094` FR41,
- * DEC-9). A text field keeps its selection: a held finger places its caret.
- * How it is refused differs by engine, because a style change repaints
- * everything it covers:
- * - Where iOS WebKit runs (its touch callout query), only `user-select` refuses
- *   a long-press selection: WebKit fires no `selectstart` for one. It covers
- *   every held element, inline and refcounted: on the element under the
- *   finger alone, a long press selected a word beside it (iOS 26.2
- *   simulator). WebKit's own stylesheet makes every input selectable
- *   (`-webkit-user-select: text`), out of reach of an ancestor's lock, so a
- *   checkbox, a radio or a switch's input under the finger is locked too.
- * - Elsewhere a long press fires `selectstart`, and cancelling it refuses
- *   the selection with no style write, so nothing repaints (Chromium on
- *   Android re-rastered a held surface at the touch-down and the lift when
- *   the style toggled).
+ * @output lockSelection: no text selection and no touch callout under the
+ *   held finger until the release runs; and locksSelectionFor: which contacts
+ *   take it
+ * @position Brought by the recognizers whose hold does something. The gesture
+ *   host calls it and never imports it.
  *
  * SYNC: When modified, update GestureHost.ts and utils/pressFeedback.ts; the
  * iOS query matches utils/touchPresentation.ts.
  */
+
+// A hold that does something never starts a selection or the callout under
+// the finger (AST-094). A text field keeps its selection, because a held
+// finger places its caret. A style change repaints what it covers, so the
+// way to refuse differs by engine:
+// - iOS WebKit fires no `selectstart` for a long press, so only
+//   `user-select` refuses it. The lock covers every held element, inline and
+//   refcounted, because a lock on only the element under the finger let a
+//   long press select a word beside it. WebKit makes every input selectable,
+//   so an input under the finger is locked too.
+// - Elsewhere, cancelling `selectstart` refuses the selection with no style
+//   write, so nothing repaints.
 
 import {containsAlongFlatTree} from './flatTree';
 import {isIosWebKit} from './touchQueries';
@@ -52,11 +46,12 @@ const TEXT_ENTRY_TYPES = new Set([
   'number',
 ]);
 
+// A mouse keeps its released behavior (AST-017).
 /**
  * Whether a contact of this pointer kind takes the lock: a finger or a pen,
  * under any primary pointer, a laptop's touchscreen and a desktop pen tablet
- * included, since a pen's hold acts as a finger's (`spec:AST-094` FR41). A
- * mouse never does: it keeps its released behavior (`spec:AST-017` FR59).
+ * included, since a pen's hold acts as a finger's. A mouse never does: it
+ * keeps its released behavior.
  */
 export function locksSelectionFor(pointerType: string): boolean {
   return pointerType !== 'mouse';
