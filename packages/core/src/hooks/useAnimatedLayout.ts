@@ -7,8 +7,7 @@
  * @input React (useMemo), motion/animatedLayout.ts
  * @output Exports `useAnimatedLayout` and the opaque `AnimatedLayout` handle
  *   type
- * @position Public hook (`spec:AST-105`) over the one size-change module
- *   (`architecture:react-component-runtime` INV12)
+ * @position Public hook over the one size-change module
  *
  * SYNC: When modified, update /packages/core/src/motion/animatedLayout.ts
  */

@@ -6,14 +6,9 @@
  * @file useOverflow.ts
  * @input Uses React useState, useCallback, useRef; useIsomorphicLayoutEffect
  * @output Exports useOverflow hook for measuring and managing horizontal overflow
- * @position Core hook; used by OverflowList and consumers for overflow patterns
- *
- * Measures children rendered in a hidden container to determine how many fit
- * in the available width, without flickering. Observes both the visible and
- * hidden measurement containers so changes to available width or measured child
- * sizes recalculate the result. Supports an optional item cap (`maxVisibleItems`)
- * and bounded multi-row wrapping (`maxRows`); the fit/clamp/row-packing math
- * lives in the pure `computeOverflow` helper.
+ * @position Core hook; used by OverflowList and consumers for overflow patterns.
+ *   Hidden copies of the children are measured, so nothing flickers. The
+ *   fit, clamp and row math lives in the pure `computeOverflow` helper.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts

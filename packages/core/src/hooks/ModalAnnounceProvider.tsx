@@ -57,10 +57,9 @@ export function ModalAnnounceProvider({
 }: {
   dialogRef: RefObject<HTMLDialogElement | null>;
   /**
-   * The owner's intent for this render: open as a modal (or presented as a
-   * modal step). A non-modal surface — a scrimless Drawer shown with
-   * `showPopover()`, a scrimless sheet — passes `false`: it is not an FR14
-   * modal, and callers inside it route as the page does.
+   * The owner's intent for this render: open as a modal, or presented as a
+   * modal step. A non-modal surface, such as a scrimless Drawer or sheet,
+   * passes `false`. Callers inside it route as the page does.
    */
   isOpen: boolean;
   children: ReactNode;
@@ -77,12 +76,10 @@ export function ModalAnnounceProvider({
   useIsomorphicLayoutEffect(() => {
     scope.isOpen = isOpen;
   }, [scope, isOpen]);
-  // The presentation watch is a session: it starts when the owner intends
-  // the dialog open (or finds it already open), follows `open`, `inert` and
-  // `aria-hidden` through the exit, and ends once the dialog has really
-  // closed, or when the provider unmounts. A closed dialog at rest — a
-  // preloaded sheet, a Drawer never shown — holds no observer
-  // (`architecture:react-component-runtime` INV5).
+  // The presentation watch is a session. It starts when the owner intends the
+  // dialog open, or finds it open. It follows `open`, `inert` and
+  // `aria-hidden` through the exit, and it ends when the dialog really closes
+  // or the provider unmounts. A closed dialog at rest holds no observer.
   const sessionRef = useRef<{
     dialog: HTMLDialogElement;
     stop: () => void;

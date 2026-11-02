@@ -22,9 +22,7 @@ interface UseHighlightedOptionScrollOptions {
   getOptionId: (index: number) => string;
   /**
    * Current option count, when the list can change while open (filtered or
-   * min/max-clamped lists). A count change re-runs the scroll, matching the
-   * list-length dependency the per-component effects carried before this hook
-   * existed.
+   * min/max-clamped lists). A count change runs the scroll again.
    */
   itemCount?: number;
 }
