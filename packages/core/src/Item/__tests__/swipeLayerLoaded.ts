@@ -7,13 +7,9 @@
  *   has rendered it into every row that waits for it
  * @position Test helper for Item's and List's swipe tests
  *
- * Item loads its swipe layer with `import()` the first time a row has swipe
- * actions, and renders the row's panels once that module is in. On a loaded
- * machine the load can take longer than any fixed wait, so a test that polls
- * for a panel on a clock (`waitFor`'s second) reads nothing. This awaits the
- * module the row's import loads, inside `act`, which then renders what the
- * load let through: the panels are in the DOM when it resolves, however long
- * the load took.
+ * On a loaded machine the load can outlast any fixed wait, so a test that
+ * polls for a panel on a clock reads nothing. This awaits the module inside
+ * `act`. `act` then renders what the load let through.
  */
 
 import {act} from '@testing-library/react';

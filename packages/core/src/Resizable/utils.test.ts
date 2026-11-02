@@ -3,11 +3,6 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe, expect, it} from 'vitest';
-// The package's root entry and this subpath, loaded with the file rather than
-// inside a test: the root brings every module in Core, a cold load that on a
-// loaded machine takes longer than a test's time limit.
-import * as root from '@astryxdesign/core';
-import * as utilsEntry from '@astryxdesign/core/Resizable/utils';
 import {pixel as tablePixel} from '../Table/utils';
 import {percent as barrelPercent} from './index';
 import {percent, pixel} from './utils';
@@ -42,15 +37,19 @@ describe('Resizable structured sizing helpers', () => {
     expect(values).toHaveLength(6);
   });
 
-  it('re-exports Table pixel and percent without a root collision', () => {
+  it('re-exports Table pixel and percent without a root collision', async () => {
+    const [module, root] = await Promise.all([
+      import('@astryxdesign/core/Resizable/utils'),
+      import('@astryxdesign/core'),
+    ]);
     const source = readFileSync(
       join(process.cwd(), 'packages/core/src/Resizable/utils.ts'),
       'utf8',
     );
 
     expect(pixel).toBe(tablePixel);
-    expect(utilsEntry.pixel).toBe(tablePixel);
-    expect(utilsEntry.percent).toBe(percent);
+    expect(module.pixel).toBe(tablePixel);
+    expect(module.percent).toBe(percent);
     expect(root.pixel).toBe(tablePixel);
     expect(root.percent).toBe(percent);
     expect(barrelPercent).toBe(percent);

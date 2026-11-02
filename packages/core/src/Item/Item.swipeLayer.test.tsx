@@ -3,9 +3,9 @@
 /**
  * @file Item.swipeLayer.test.tsx
  * @input Item with and without swipe actions; the swipe layer module, spied
- * @output Verifies a row without swipe actions never renders the swipe layer,
- *   and a row with them renders it into the root once it has loaded, however
- *   long the load takes
+ * @output Verifies a row without swipe actions never renders the swipe layer.
+ *   A row with them renders it into the root once it has loaded, however long
+ *   the load takes.
  * @position Companion to Item.test.tsx for the lazily loaded swipe layer
  */
 
@@ -16,13 +16,18 @@ import {Item} from './Item';
 import type {ItemSwipeLayerProps} from './ItemSwipeLayer';
 import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 
-const {layerRenders} = vi.hoisted(() => ({layerRenders: vi.fn()}));
+const {layerRenders, layerLoad} = vi.hoisted(() => {
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  return {layerRenders: vi.fn(), layerLoad: {held, release: () => release()}};
+});
 
 vi.mock('./ItemSwipeLayer', async importOriginal => {
-  // The module loads 1.5 s late, as on a loaded machine: longer than
-  // `waitFor`'s second, so only a test that waits for the load itself sees
-  // the panel.
-  await new Promise(resolve => setTimeout(resolve, 1500));
+  // The module loads only when the test releases it. A cold load on a loaded
+  // machine is as late, so a wait on a clock would read nothing.
+  await layerLoad.held;
   const actual = await importOriginal<{
     default: (props: ItemSwipeLayerProps) => ReactNode;
   }>();
@@ -68,6 +73,7 @@ describe('Item and the swipe layer', () => {
     const row = screen.getByTestId('row');
     // The layer's module is still loading: nothing is drawn yet.
     expect(row.querySelector('[data-swipe-panel]')).toBeNull();
+    layerLoad.release();
     await swipeLayerLoaded();
     const panel = row.querySelector('[data-swipe-panel="trailing"]');
     expect(panel).not.toBeNull();

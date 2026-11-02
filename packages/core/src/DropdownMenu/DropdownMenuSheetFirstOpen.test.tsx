@@ -5,10 +5,9 @@
  * @input vitest (jsdom), Testing Library, DropdownMenu, module mocks that
  *   record when the lazily loaded sheet modules are requested and loaded
  * @output Checks that a bottom-sheet DropdownMenu loads its sheet and rows at
- *   rest, so the first open renders the actions in the same commit, cold (no
- *   warm-up). It waits for the dropdown's own requests and the loads
- *   themselves, never a clock: a cold load can take longer than any fixed wait
- *   on a loaded machine.
+ *   rest. So the first open renders the actions in the same commit, cold (no
+ *   warm-up). It waits on the dropdown's own requests and on the loads, never
+ *   on a clock. A cold load can outlast any fixed wait on a loaded machine.
  * @position Testing for DropdownMenu.tsx and lazyMenuBottomSheet.ts
  */
 
@@ -79,9 +78,9 @@ it('loads the sheet and its rows at rest, so the first open renders the actions 
       import('./MenuBottomSheet'),
       import('./MenuBottomSheetActionList'),
     ]);
-    // A task boundary, not a wait: what the loads let through (the dropdown
-    // keeping the rows' module, the lazy sheet resolving) runs in microtasks,
-    // which have all run once the next task starts.
+    // A task boundary, not a wait. What the loads let through runs in
+    // microtasks: the dropdown keeps the rows' module, and the lazy sheet
+    // resolves. They have all run once the next task starts.
     await new Promise(resolve => setTimeout(resolve, 0));
   });
   expect([...modules.loaded].sort()).toEqual(['rows', 'sheet']);
