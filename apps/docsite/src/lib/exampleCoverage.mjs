@@ -38,6 +38,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {pathToFileURL} from 'node:url';
+import {parseReport} from '../../../../scripts/api-report/changes.mjs';
 
 /**
  * Basename prefix reserved for the automaticity test fixture
@@ -314,26 +315,19 @@ export function formatCoverageReport(packageName, coverage, blocks) {
 }
 
 /**
- * Hook names that an API report lists in its Hooks sections. An overloaded
- * hook has one line per overload, and an entry point that re-exports a hook
- * lists it again, so names are deduplicated.
+ * Hook names that an API report lists in its Hooks sections, sorted and
+ * listed once each.
  *
  * @param {string} reportText content of a committed api-report.md
- * @returns {string[]} sorted unique hook names
+ * @returns {string[]}
  */
 export function readReportedHooks(reportText) {
-  /** @type {Set<string>} */
-  const hooks = new Set();
-  let inHooksSection = false;
-  for (const line of reportText.split('\n')) {
-    if (line.startsWith('#')) {
-      inHooksSection = line === '### Hooks';
-      continue;
-    }
-    const match = inHooksSection ? /^hook (\w+)/.exec(line) : null;
-    if (match != null) hooks.add(match[1]);
-  }
-  return [...hooks].sort();
+  const hookRows = [...parseReport(reportText).values()].filter(
+    row => row.section === 'Hooks' && row.member == null,
+  );
+  return [
+    ...new Set(hookRows.map(row => row.item.replace(/^hook /, ''))),
+  ].sort();
 }
 
 /**
