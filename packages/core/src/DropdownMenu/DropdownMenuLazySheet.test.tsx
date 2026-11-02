@@ -7,11 +7,11 @@
  * @position Test file for DropdownMenu
  *
  * It checks that importing DropdownMenu and opening a popover menu never
- * request the sheet, and each test holds the sheet modules until it releases
- * them, so it exercises the path a real page takes while the sheet's code is
- * still downloading. The sheet modules' own code is loaded once up front, past
- * the hold, so a test's timer covers what the menu does after the release,
- * never a cold module load on a busy machine.
+ * request the sheet. Each test holds the sheet modules until it releases them.
+ * So it exercises the path a real page takes while the sheet's code still
+ * downloads. The sheet modules' own code loads once up front, past the hold.
+ * A test's timer then covers only what the menu does after the release, never
+ * a cold module load on a busy machine.
  */
 
 import {describe, it, expect, vi, beforeAll, beforeEach} from 'vitest';
@@ -57,8 +57,8 @@ vi.mock('./MenuBottomSheetActionList', async importOriginal => {
 let DropdownMenu: typeof DropdownMenuComponent;
 
 // If any module the dropdown loads imported the sheet eagerly, this import
-// would wait on the held sheet forever: fail the moment a sheet module is
-// requested instead, so the check does not depend on how long the import takes
+// would wait on the held sheet forever. So the hook fails the moment a sheet
+// module is requested. The check does not depend on how long the import takes
 // on a busy machine. The hook timeout is only a backstop.
 beforeAll(async () => {
   const loaded = await Promise.race([
@@ -71,11 +71,11 @@ beforeAll(async () => {
     );
   }
   ({DropdownMenu} = loaded.module);
-  // The sheet modules' own code, loaded once and untimed. `importActual` skips
-  // the mocks above, so `requested` stays empty and the hold still decides
-  // when the sheet arrives; the mocks' `importOriginal` then returns these
+  // The sheet modules' own code loads here, once and untimed. `importActual`
+  // skips the mocks above, so `requested` stays empty. The hold still decides
+  // when the sheet arrives. The mocks' `importOriginal` then returns these
   // modules. A cold load of the sheet's module graph takes seconds on a busy
-  // machine, and inside a test it would land in the wait after the release.
+  // machine. Inside a test, it would land in the wait after the release.
   await vi.importActual('./MenuBottomSheet');
   await vi.importActual('./MenuBottomSheetActionList');
 }, 120_000);
