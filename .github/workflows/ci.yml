@@ -742,6 +742,41 @@ jobs:
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
 
+      # A spec-only change runs no other test here, so it runs the tests that
+      # read a record it changes: a record such a test reads can break it, and
+      # the break would otherwise show first on main (spec:AST-030 FR2). One
+      # leg runs this project's readers; the lister needs only git and Node,
+      # so a change no test here reads sets up nothing.
+      - name: Check out the change for the tests that read its records
+        if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: List the tests that read a changed record
+        id: spec-readers
+        if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
+        run: |
+          node .github/scripts/fs-guard-tests.mjs --spec-readers --project ui --changed HEAD^1 > "$RUNNER_TEMP/spec-readers.txt"
+          echo "UI tests that read a changed record:"
+          cat "$RUNNER_TEMP/spec-readers.txt"
+          if [ -s "$RUNNER_TEMP/spec-readers.txt" ]; then
+            echo 'any=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'any=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/setup
+        if: steps.spec-readers.outputs.any == 'true'
+
+      # No --passWithNoTests: the list holds this project's tests only, so a
+      # run that finds none is a lister fault.
+      - name: Run the UI tests that read a changed record
+        if: steps.spec-readers.outputs.any == 'true'
+        run: |
+          mapfile -t READERS < "$RUNNER_TEMP/spec-readers.txt"
+          pnpm test:ui "${READERS[@]}"
+
       # Two commits: a pull request's merge commit and its base parent, the
       # diff a scoped run follows.
       - uses: actions/checkout@v7
@@ -866,6 +901,41 @@ jobs:
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
+
+      # A spec-only change runs no other test here, so it runs the tests that
+      # read a record it changes: a record such a test reads can break it, and
+      # the break would otherwise show first on main (spec:AST-030 FR2). One
+      # leg runs this project's readers; the lister needs only git and Node,
+      # so a change no test here reads sets up nothing.
+      - name: Check out the change for the tests that read its records
+        if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: List the tests that read a changed record
+        id: spec-readers
+        if: matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'
+        run: |
+          node .github/scripts/fs-guard-tests.mjs --spec-readers --project node --changed HEAD^1 > "$RUNNER_TEMP/spec-readers.txt"
+          echo "Node tests that read a changed record:"
+          cat "$RUNNER_TEMP/spec-readers.txt"
+          if [ -s "$RUNNER_TEMP/spec-readers.txt" ]; then
+            echo 'any=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'any=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: ./.github/actions/setup
+        if: steps.spec-readers.outputs.any == 'true'
+
+      # No --passWithNoTests: the list holds this project's tests only, so a
+      # run that finds none is a lister fault.
+      - name: Run the Node tests that read a changed record
+        if: steps.spec-readers.outputs.any == 'true'
+        run: |
+          mapfile -t READERS < "$RUNNER_TEMP/spec-readers.txt"
+          pnpm test:node "${READERS[@]}"
 
       - uses: actions/checkout@v7
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'

@@ -33,6 +33,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -149,18 +150,6 @@ export type {
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   row: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -1692,7 +1681,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1841,7 +1830,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&

@@ -27,6 +27,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {
@@ -48,7 +49,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
 import {useLocale, useTranslator} from '../i18n';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {colorVars, sizeVars, spacingVars} from '../theme/tokens.stylex';
+import {sizeVars, spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
@@ -75,17 +76,6 @@ const sizeStyles = stylex.create({
 });
 
 const styles = stylex.create({
-  // Same as TimeInput's: the focus ring for a focused disabled field.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -468,7 +458,7 @@ export function TouchTimeField({
           inputWrapperStyles.base,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
-          isDisabled && styles.disabledFocusRing,
+          isDisabled && inputDisabledFocusStyles.withinRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
