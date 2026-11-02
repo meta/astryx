@@ -6,7 +6,8 @@
  * @file outsidePress.ts
  * @input Listens for pointerdown, pointerup and pointercancel on a document
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
- *   for a component: start on show, stop on hide, stop on unmount
+ *   for a component: start on show, stop on hide, stop on unmount; and
+ *   isFocusInsideOwnedLayer, the focus-leave test each owner runs on blur
  * @position Internal to Layer; the outside-press dismissal for a manual
  *   popover whose owner decides what counts as inside (a combobox's field
  *   and its list). Not exported from the package.
@@ -96,4 +97,41 @@ export function useOutsidePress(): OutsidePressWatch {
   );
   useEffect(() => stop, [stop]);
   return useMemo(() => ({start, stop}), [start, stop]);
+}
+
+/** Whether `node` is the layer with this id, or inside it across shadow roots. */
+function isWithinLayer(node: Node, layerId: string): boolean {
+  for (
+    let current: Node | null = node;
+    current != null;
+    current =
+      current.parentNode ??
+      (current instanceof ShadowRoot ? current.host : null)
+  ) {
+    if (current instanceof Element && current.id === layerId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Whether focus moving to `next` stays with a text field's own layer: on the
+ * field, or in the layer, which may be hosted outside the field or inside a
+ * shadow root. Each owner decides what a blur that fails this means
+ * (`family:overlay-dismissal` AV4), including when `next` is null.
+ *
+ * @param next - The blur's `relatedTarget`.
+ * @param field - The field that owns the layer.
+ * @param layerId - The layer element's id.
+ */
+export function isFocusInsideOwnedLayer(
+  next: EventTarget | null,
+  field: Element | null | undefined,
+  layerId: string,
+): boolean {
+  return (
+    next instanceof Node &&
+    (field?.contains(next) === true || isWithinLayer(next, layerId))
+  );
 }

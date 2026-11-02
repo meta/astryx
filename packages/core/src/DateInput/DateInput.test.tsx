@@ -497,6 +497,34 @@ describe('DateInput', () => {
       expect(document.activeElement).toBe(end);
     });
 
+    it('closes the calendar when focus leaves the field from its clear button', async () => {
+      render(
+        <>
+          <DateInput
+            label="Start"
+            value="2026-01-15"
+            hasClear
+            onChange={() => {}}
+          />
+          <DateInput label="End" onChange={() => {}} />
+        </>,
+      );
+      const [start, end] = screen.getAllByRole('combobox');
+      start.focus();
+      fireEvent.keyDown(start, {key: 'ArrowDown'});
+      expect(start).toHaveAttribute('aria-expanded', 'true');
+      // Tab from the text lands on the clear button, still in the field.
+      const clear = screen.getByRole('button', {name: /clear/i});
+      clear.focus();
+      expect(start).toHaveAttribute('aria-expanded', 'true');
+      // The next Tab leaves the field from the clear button.
+      end.focus();
+      await waitFor(() => {
+        expect(start).toHaveAttribute('aria-expanded', 'false');
+      });
+      expect(document.activeElement).toBe(end);
+    });
+
     it('keeps the calendar open on a press on its label', () => {
       render(<DateInput label="Date" onChange={() => {}} />);
       const input = screen.getByRole('combobox');

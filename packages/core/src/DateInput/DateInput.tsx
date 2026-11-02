@@ -63,7 +63,7 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {usePopover} from '../Popover';
-import {useOutsidePress} from '../Layer/outsidePress';
+import {isFocusInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
 import {NativeDateField} from './NativeDateField';
 import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
@@ -830,30 +830,31 @@ function PointerDateField({
     locale,
   ]);
 
-  // Handle blur - validate, check constraints, and clear pending input. Focus
-  // that moves from the input to anything outside the field and its calendar
-  // (Tab to the next field) also closes the calendar: a manual popover has no
-  // auto-popover exclusivity to close it when that field opens its own, and
-  // outside dismissal is the member's to own (family:overlay-dismissal AV4).
-  // Focus going nowhere (a window switch) leaves it open.
-  const handleBlur = useCallback(
-    (e: React.FocusEvent<HTMLInputElement>) => {
-      commitPendingInput();
+  // Handle blur - validate, check constraints, and clear pending input.
+  const handleBlur = useCallback(() => {
+    commitPendingInput();
+  }, [commitPendingInput]);
+
+  // Focus that moves from anywhere in the field (its text, clear button or
+  // calendar button) to anything outside the field and its calendar (Tab to
+  // the next field) closes the calendar: a manual popover has no auto-popover
+  // exclusivity to close it when that field opens its own, and outside
+  // dismissal is the member's to own (family:overlay-dismissal AV4). Focus
+  // going nowhere (a window switch) leaves it open.
+  const handleFieldBlur = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
       const next = e.relatedTarget;
-      if (!popover.isOpen || !(next instanceof Node)) {
-        return;
-      }
-      // The calendar may be hosted outside the field, including inside a
-      // shadow root, so it is found from the focus target itself.
-      const isInCalendar =
-        next instanceof Element && next.closest('[popover]')?.id === popover.id;
-      if (fieldElementRef.current?.contains(next) || isInCalendar) {
+      if (
+        !popover.isOpen ||
+        next == null ||
+        isFocusInsideOwnedLayer(next, fieldElementRef.current, popover.id)
+      ) {
         return;
       }
       isFocusMovingAwayRef.current = true;
       popover.hide();
     },
-    [commitPendingInput, popover],
+    [popover],
   );
 
   // Handle keyboard events on input
@@ -898,6 +899,7 @@ function PointerDateField({
         // compose, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
+      onBlur={handleFieldBlur}
       {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {

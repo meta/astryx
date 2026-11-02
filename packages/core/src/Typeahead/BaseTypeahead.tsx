@@ -39,7 +39,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {useOutsidePress} from '../Layer/outsidePress';
+import {isFocusInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
@@ -1322,13 +1322,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (!popover.isOpen) {
         return;
       }
-      const next = e.relatedTarget as Node | null;
-      if (next) {
-        const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
-        const popoverEl = document.getElementById(popover.id);
-        if (anchorEl?.contains(next) || popoverEl?.contains(next)) {
-          return;
-        }
+      const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
+      if (isFocusInsideOwnedLayer(e.relatedTarget, anchorEl, popover.id)) {
+        return;
       }
       popover.hide();
     },

@@ -64,7 +64,7 @@ import {
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
-import {useOutsidePress} from '../Layer/outsidePress';
+import {isFocusInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
 import {useTooltip} from '../Tooltip';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -1448,18 +1448,15 @@ function PointerDateTimeField({
       // on the layer stack, so a focus move that is neither — Tab handled
       // elsewhere, or a programmatic focus — would strand the listbox open. Focus landing inside the
       // field or the popup itself is not a leave. Mirrors BaseTypeahead.
-      if (timePopover.isOpen) {
-        const next = e.relatedTarget as Node | null;
-        const popoverEl = next ? document.getElementById(timePopover.id) : null;
-        if (
-          !next ||
-          !(
-            timeContainerRef.current?.contains(next) ||
-            popoverEl?.contains(next)
-          )
-        ) {
-          timePopover.hide();
-        }
+      if (
+        timePopover.isOpen &&
+        !isFocusInsideOwnedLayer(
+          e.relatedTarget,
+          timeContainerRef.current,
+          timePopover.id,
+        )
+      ) {
+        timePopover.hide();
       }
 
       if (timePendingInput === null) {
