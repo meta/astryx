@@ -262,6 +262,59 @@ site, and never add one.
 `node internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.mjs`
 rewrites the list from the source (`--check` verifies it).
 
+### `@astryx/no-comment-provenance`
+
+Reports provenance in source comments. A comment explains only what the code
+cannot show: a reason, a constraint, an invariant, or a platform quirk. The
+record links the code, so `pnpm specs:for <path>` finds it; a citation in a
+comment goes stale and duplicates that link. The "Source comments" rule in
+`docs/architecture/knowledge-contracts.md` is the authority.
+
+```ts
+// flagged
+// Matches spec:AST-108 FR4 and component:Button (#9428).
+// Decided 2026-10-31; true as of Oct 2026.
+// The panel MUST close when focus leaves it.
+
+// fine
+// Safari fires blur before click, so the close waits a frame.
+```
+
+It finds four kinds of text, in comments only, never in strings:
+
+- record ids (`spec:AST-108`, `component:Button`, `module:Icon/registry`,
+  `architecture:…`, `family:…`, `design:…`, `theme:…`, a bare `AST-094`) and
+  claim ids with a known prefix (`FR12`, `INV3`, `DEC-4`, `AR2`, `DR1`, …);
+- pull request and issue references: `#1234`, `PR #77`, `issue 12`, and GitHub
+  pull request, issue, discussion, and commit URLs. A bare `#123` with 3, 6, or
+  8 digits can be a hex colour, so it is not reported;
+- date stamps: an ISO date outside quotes (`2026-10-31`) and `as of Oct 2026`;
+- quote blocks: a comment block with `MUST` or `SHALL` in capitals, or a block
+  of more than six prose lines that also cites a record or a claim. The block
+  is reported once, as `spec quote`, beside its citations.
+
+These comments are not checked, because they stay: the copyright line; the file
+header lines `@input`, `@output`, `@position`, `@pr-a11y`, and `SYNC:`, with
+their continuation lines; lint, TypeScript, and other tool directives (with
+their `--` reasons); JSDoc on an exported declaration or a member of one; the
+comment before an Effect that names the system it syncs; and code samples
+(`@example` sections and fenced code). Adjacent line comments in one column are
+one block.
+
+When a citation is the file's only link to a record or a claim, link the file
+from a record first, then remove the citation: the source-comments rule says
+which field to use. A claim citation that `pnpm check:knowledge` cannot resolve
+yet stays in the baseline until it can.
+
+The repo config turns it on for `packages/*/src`, outside tests, stories and
+test helpers, at the strict-mode severity (an error in CI). Sites that existed
+when the rule arrived are listed by file in
+`no-comment-provenance.baseline.json`, once per site, and that many stay
+allowed until they are removed; remove an entry when you remove its site, and
+never add one.
+`node internal/eslint-plugin-astryx/no-comment-provenance.baseline.mjs`
+rewrites the list from the source (`--check` verifies it).
+
 ### `@astryx/no-core-internal-import`
 
 Reports imports of Core's internal subpaths (`@astryxdesign/core/internal` and
