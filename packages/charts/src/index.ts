@@ -1,6 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 export {Chart, type ChartProps} from './Chart';
+export {AreaChart, type AreaChartProps} from './AreaChart';
+export {LineChart, type LineChartProps} from './LineChart';
+export {Sparkline, type SparklineProps} from './Sparkline';
+export {
+  MetricTile,
+  type MetricTileProps,
+  type MetricTileDelta,
+  type MetricTileDeltaDirection,
+  type MetricTileDeltaSentiment,
+  type MetricTileSize,
+} from './MetricTile';
 export {ChartAxis, type ChartAxisProps} from './ChartAxis';
 export {ChartGrid, type ChartGridProps} from './ChartGrid';
 export {

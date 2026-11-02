@@ -218,6 +218,14 @@ describe('area', () => {
     expect(paths[0]).toHaveAttribute('fill-opacity', '0.3');
     expect(paths[1]).toHaveAttribute('fill', 'none');
     expect(paths[1]).toHaveAttribute('stroke', '#00aa00');
+    expect(paths[1]).toHaveAttribute('stroke-width', '2');
+  });
+
+  it('strokes at the configured width when one is given', () => {
+    const {plot} = renderMarks([area('v', {strokeWidth: 1.5})]);
+    const paths = plot.querySelectorAll('path');
+    expect(paths).toHaveLength(2);
+    expect(paths[1]).toHaveAttribute('stroke-width', '1.5');
   });
 
   it('omits the stroke path when stroke is disabled', () => {

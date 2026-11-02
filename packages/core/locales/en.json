@@ -359,6 +359,18 @@
     "defaultMessage": "{label} data",
     "description": "Screen-reader-only caption for the small-data table that mirrors a Chart. `{label}` is the Chart's resolved accessible name."
   },
+  "@astryx.chart.deltaFlat": {
+    "defaultMessage": "flat",
+    "description": "Screen-reader text announced after a MetricTile delta value when the metric is unchanged."
+  },
+  "@astryx.chart.deltaTrendingDown": {
+    "defaultMessage": "trending down",
+    "description": "Screen-reader text announced after a MetricTile delta value when the metric is falling."
+  },
+  "@astryx.chart.deltaTrendingUp": {
+    "defaultMessage": "trending up",
+    "description": "Screen-reader text announced after a MetricTile delta value when the metric is rising."
+  },
   "@astryx.chartLegend.label": {
     "defaultMessage": "Chart legend",
     "description": "Screen-reader-only accessible name for the list of series labels and swatches rendered by ChartLegend."
