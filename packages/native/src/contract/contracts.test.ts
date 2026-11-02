@@ -267,6 +267,26 @@ describe('native contracts', () => {
     );
   });
 
+  it('gives List its padded and flush edges and keeps listStyle in the core', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const list = contracts.find(contract => contract.name === 'List');
+    expect(list).toBeDefined();
+    expect(list!.core.edge?.type).toEqual({
+      kind: 'enum',
+      values: ['padded', 'flush'],
+    });
+    // A `…Style` prop whose type is a closed set of words is a semantic
+    // choice, not a styling input.
+    expect(list!.core.listStyle?.type).toEqual({
+      kind: 'enum',
+      values: ['none', 'disc', 'decimal', 'circle'],
+    });
+    expect(list!.core.header?.type).toEqual({kind: 'content'});
+    expect(list!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining(['edgeCompensation', 'xstyle']),
+    );
+  });
+
   it('reports naming and portability errors', () => {
     const bad: ComponentContract = {
       name: 'Bad',
